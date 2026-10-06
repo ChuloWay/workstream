@@ -188,3 +188,15 @@ def submitted_bundle_port(session: AsyncSession) -> SubmittedBundlePort:
     """Compose the exact immutable Submission read without private owner imports in ART."""
     from app.modules.tasks.submitted_bundle import SubmittedBundleReader
     return SubmittedBundleReader(session)
+
+
+def routing_source_preparer(session):
+    """Compose exact hidden source preparation through existing owner ports."""
+    from app.adapters.checkers import evaluation_coordinator
+    from app.adapters.projects import project_locked_policy_context_port
+    from app.modules.tasks.post_submit_routing.source import TaskRoutingSourcePreparer
+
+    return TaskRoutingSourcePreparer(
+        session, evaluations=evaluation_coordinator(session),
+        projects=project_locked_policy_context_port(session),
+    )

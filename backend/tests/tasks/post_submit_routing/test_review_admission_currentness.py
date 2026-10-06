@@ -40,9 +40,12 @@ async def _read(session, h, reader):
         result = await coordinator.read_current_result(h.request)
         assert result.result == h.result
     else:
-        assert await coordinator.require_current_completion(
+        verified = await coordinator.require_current_completion(
             h.source["completion_event_id"], completion_for(h),
-        ) == h.request.submission_version
+        )
+        assert verified.submission_version == h.request.submission_version
+        assert verified.completion == completion_for(h)
+        assert verified.material.model_dump(mode="json") == h.material
 
 
 async def _admit(session, queue, admission):

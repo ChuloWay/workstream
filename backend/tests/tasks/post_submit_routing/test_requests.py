@@ -143,7 +143,8 @@ async def test_reservation_holds_currentness_lock(tmp_path, isolated_database_en
                         await other.execute(text(f"SELECT 1 FROM public.{table} WHERE {key}=:id FOR UPDATE NOWAIT"), {"id": value})
 
 
-async def test_cross_project_cannot_lock_foreign_task(tmp_path, isolated_database_env):
+@pytest.mark.parametrize("entry", ["request", "source"])
+async def test_cross_project_cannot_lock_foreign_task(tmp_path, isolated_database_env, entry):
     async with completed_source(tmp_path / "one", isolated_database_env) as first:
         async with completed_source(tmp_path / "two", isolated_database_env, provision_services=False, storage_settings=first.settings) as second:
             assert first.request.project_id != second.request.project_id
@@ -153,8 +154,13 @@ async def test_cross_project_cannot_lock_foreign_task(tmp_path, isolated_databas
                 async with first.factory() as intruder, intruder.begin():
                     await intruder.execute(text("SET LOCAL lock_timeout = '250ms'"))
                     # A SQL timeout is deliberately not accepted as concealed denial.
-                    with pytest.raises(TaskRoutingRequestUnavailable, match="routing_request_unavailable"):
-                        await stage(intruder, first, mixed)
+                    message = "routing_request_unavailable" if entry == "request" else "routing_source_unavailable"
+                    with pytest.raises(TaskRoutingRequestUnavailable, match=message):
+                        if entry == "request":
+                            await stage(intruder, first, mixed)
+                        else:
+                            from app.adapters.tasks import routing_source_preparer
+                            await routing_source_preparer(intruder).prepare(first.source["completion_event_id"], mixed)
 
 
 async def test_replay_rejects_older_still_submitted_version(tmp_path, isolated_database_env):
@@ -187,17 +193,22 @@ def untrusted_completion():
     )
 
 
+@pytest.mark.parametrize("entry", ["request", "source"])
 @pytest.mark.parametrize("kind", [
     "missing", "session_nested", "raw_session", "raw_connection", "raw_driver",
     "external_connection_nested", "external_create_savepoint",
 ])
-async def test_request_requires_database_root_transaction(isolated_database_env, kind):
+async def test_request_requires_database_root_transaction(isolated_database_env, kind, entry):
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     engine = create_async_engine(isolated_database_env)
     event, completion = untrusted_completion()
     async def rejected(session):
         with pytest.raises(TaskRoutingRequestUnavailable, match="routing_request_caller_transaction_required"):
-            await TaskRoutingRequests(session, evaluation_coordinator(session)).stage(event, completion)
+            if entry == "request":
+                await TaskRoutingRequests(session, evaluation_coordinator(session)).stage(event, completion)
+            else:
+                from app.adapters.tasks import routing_source_preparer
+                await routing_source_preparer(session).prepare(event, completion)
     try:
         if kind.startswith("external_"):
             async with engine.connect() as connection:

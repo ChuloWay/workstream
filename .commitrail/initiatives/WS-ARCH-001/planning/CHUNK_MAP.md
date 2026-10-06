@@ -1,4 +1,12 @@
 # WS-ARCH-001 — Current remaining change map
+[ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
+TASK, CHECKERS and historical PROJECTS policy facts. It stages only the existing
+routing request; proposed source facts have no fabricated creation timestamp.
+Remaining handlers, source publication, current pointers and authority/effect
+activation are still required. False composition must acquire its REV lifecycle
+fence before TASK and revalidate policy under TASK custody; true admission
+remains independent of that fence.
+
 
 [AUTH-19A](../../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
 planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
@@ -60,7 +68,7 @@ currentness proof stay within 04E1B-B, before activation and live composition.
 | [WS-ARCH-001-04D1](../WS-ARCH-001-04D1.md) | Canonical terminal ART material custody | L1 | Complete; valid retained history preserved; invalid upgrades refused |
 | [WS-ARCH-001-04D2](../WS-ARCH-001-04D2.md) | AUTH exact fixed-service post-submit activation (replaces XINT-06B) | L1 | Complete: exact input, execute and finalize authority; output write/bind remains unavailable |
 | [WS-ARCH-001-04E1A](../WS-ARCH-001-04E1A.md) | Route-neutral immutable source schema and shared accepted-effects types | L1 | Complete; REV-04C uses a bounded exact-source verifier, with no general routing publication writer/reader, routing authority or current pointer; its hidden effects participant does not make false routing available |
-| [WS-ARCH-001-04E](chunks/WS-ARCH-001-04E-canonical-allow-review.md) | TASK current routing: true to canonical `allow_review`, false/pass to shared acceptance | L1 | Both branches: delivered 04E1A/04D2/OUTBOX-02, request reservation 04E1B-A and AUTH preparation 04E2-A -> hidden handlers/currentness proof 04E1B-B -> authority/evidence closure and activation 04E2-B -> live 04E3. False uses delivered REV-04C participation and additionally needs mandatory exact receipt/database/audit closure, fulfillment-root ordinal custody and scoped lifecycle activation; true does not depend on CON. False guide activation also requires 04F remediation |
+| [WS-ARCH-001-04E](chunks/WS-ARCH-001-04E-canonical-allow-review.md) | TASK current routing: true to canonical `allow_review`, false/pass to shared acceptance | L1 | Both branches: delivered 04E1A/04D2/OUTBOX-02, request reservation 04E1B-A and AUTH preparation 04E2-A; exact source preparation [04E1B-B2](../WS-ARCH-001-04E1BB2.md) -> remaining handlers/currentness proof 04E1B-B -> authority/evidence closure and activation 04E2-B -> live 04E3. False uses delivered REV-04C participation and additionally needs mandatory exact receipt/database/audit closure, fulfillment-root ordinal custody and scoped lifecycle activation; true does not depend on CON. False guide activation also requires 04F remediation |
 | [WS-ARCH-001-03D](../WS-ARCH-001-03D.md) | Exact activated historical guide through hidden durable intake; obsolete lookup removed | L1 | Complete; hidden exact post-submit materialization, ARCH-04B2 output custody, ARCH-04C execution, ARCH-04D1/04D2 custody/authority and ARCH-04E1A source-only facts/types delivered; public cutover remains deferred |
 | [WS-ARCH-001-04F](chunks/WS-ARCH-001-04F-checker-remediation.md) | Contributor-correctable checker failures and same-lineage admission-backed replacement Submission | L1 | Planned after 04E; replaces XINT-05C, required before public 02I, not before REV begins from `allow_review` |
 
