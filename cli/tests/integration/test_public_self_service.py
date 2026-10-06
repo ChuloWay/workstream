@@ -18,6 +18,8 @@ from task_journey import exercise_manager_task_reads
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND / "scripts"))
+# Canonical backend test helpers also use their pytest-root sibling imports.
+sys.path.insert(0, str(BACKEND / "tests"))
 from api_contract_e2e import (  # noqa: E402
     api_environment,
     assert_isolated_database_url,
@@ -25,6 +27,7 @@ from api_contract_e2e import (  # noqa: E402
     flow_settings,
     issue_flow_token,
 )
+from contributor_task_journey import exercise_contributor_task_reads  # noqa: E402
 
 
 async def _ready(url: str, process: subprocess.Popen[bytes]) -> None:
@@ -65,6 +68,10 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
     tmp_path: Path, cli
 ) -> None:
     env = api_environment()
+    # Reused canonical activation fixtures arrange identities at this issuer.
+    # This remains a local HMAC verifier, not a deployed Flow certification.
+    env["WORKSTREAM_E2E_FLOW_ISSUER"] = "https://identity.flowresearch.tech"
+    env["WORKSTREAM_FLOW_AUTH_ISSUER"] = env["WORKSTREAM_E2E_FLOW_ISSUER"]
     assert_isolated_database_url(env["WORKSTREAM_DATABASE_URL"])
     issuer, audience, secret = flow_settings(env)
     tokens = {
@@ -117,6 +124,8 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             for path in (
                 "/api/v1/projects/{project_id}/tasks",
                 "/api/v1/projects/{project_id}/tasks/{task_id}",
+                "/api/v1/projects/{project_id}/tasks/ready",
+                "/api/v1/tasks/{task_id}",
             ):
                 assert "get" in specification.json()["paths"][path]
             profiles: dict[str, dict] = {}
@@ -381,6 +390,9 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             )
             assert issued.status_code == 201, issued.text
             assert issued.json()["status"] == "active"
+            await exercise_contributor_task_reads(
+                direct, cli, origin, tokens, profiles, env, qualification
+            )
             for command in (("tasks", project_id), ("task", project_id, task_ids[0])):
                 denied_manager_read = cli(
                     origin, tokens["cli-outsider"], "project", *command, "-o", "json"

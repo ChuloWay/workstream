@@ -2,7 +2,8 @@
 
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
-plus exact-project inspection, authority reads and manager task browsing:
+plus exact-project inspection, authority reads, manager task browsing and
+contributor work discovery:
 
 | Command | Public API |
 |---|---|
@@ -12,6 +13,8 @@ plus exact-project inspection, authority reads and manager task browsing:
 | `workstream project show PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID` |
 | `workstream project tasks PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
+| `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
+| `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 
 Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
@@ -119,6 +122,38 @@ malformed replies fail with empty stdout. The existing 64 KiB response bound
 applies to a whole page: an oversized response fails without partial output;
 request a smaller `--limit` if needed.
 
+## Discover work as a contributor
+
+```sh
+workstream task ready PROJECT_ID --limit 10 --output json
+workstream task ready PROJECT_ID --limit 10 --cursor PREVIOUS_NEXT_CURSOR --output json
+workstream task show TASK_ID --output json
+```
+
+These are contributor routes, not aliases for manager browsing. The ready queue
+requires an active project and its exact active Submitter grant; Manager or
+Reviewer authority alone does not permit it. It lists only unassigned ready
+tasks. Contributor detail shows unassigned ready work or the caller's own active
+assignment under current Submitter authority. It does not expose management
+source/actor/assignment metadata, and a different same-project Submitter cannot
+read your claimed task. Workstream makes these decisions on every request.
+
+The same one-page limit/cursor bounds, UUID selector encoding, strict response
+validation and safe text/raw-JSON output apply. Ready summaries contain task and
+project IDs, title, nullable type/difficulty/estimated minutes, skills and creation
+time. Detail adds instructions, criteria, status, deadline and update time;
+nullable detail fields may be omitted by the API and display as `—`.
+`task show` takes only a task selector; Workstream resolves its project and
+authorizes that resource. No project preflight or locally inferred permission
+is added. Management-only fields in a contributor reply are rejected rather
+than silently displayed or ignored.
+
+Discovery is live, not a reservation or a claimability guarantee. A later claim
+must revalidate current authority and state. Cursors are action/project/limit
+bound and cannot be reused as manager cursors; the CLI never decodes them or
+automatically fetches another page. These commands do not claim/start tasks,
+upload submissions or complete unfinished acceptance integration.
+
 ## Edit your profile
 
 ```sh
@@ -169,6 +204,15 @@ It separates signed-cursor substitution (authorized caller receives 422) from
 foreign authority denial, and proves a restored grant permits both reads before
 suspension denies them. Hostile HTTP process tests validate complete field
 output, one-request pagination, malformed/substituted replies and redirect refusal.
+Contributor proof reuses that API process and bootstrap, arranging approved
+upstream guide inputs through canonical fixtures. Guide inference and storage
+are scripted prerequisites, not live-provider proof; real AUTH activates the
+projects. Public task create/screen/release/claim operations supply persisted
+ready and assigned work. Reads prove pagination parity, draft/claimed exclusion,
+same-project non-owner concealment, independent authorized cursor substitution,
+exact Submitter grants, Reviewer-only/foreign/revoked denial and suspension after
+restored positive authority. The process fixture verifies the separate contributor
+shapes, complete field output and refusal of management-only data.
 Local Flow-compatible tokens are test fixtures, not deployed-provider proof.
 No coverage percentage or test-count target is used.
 

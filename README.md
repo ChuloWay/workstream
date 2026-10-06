@@ -313,6 +313,8 @@ caller-owned human display fields, through the currently public REST API.
 the caller's current authority, preserving contributor-minimal disclosure.
 `workstream project tasks PROJECT_ID` and `project task PROJECT_ID TASK_ID`
 provide a paginated manager list-to-detail journey through public reads.
+`workstream task ready PROJECT_ID` and `task show TASK_ID` provide contributor
+discovery and instructions, with live Submitter authority and no task claim.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
