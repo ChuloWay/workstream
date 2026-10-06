@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
+from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 from tests.post_submit_materialization_helpers import material_fixture
 from types import SimpleNamespace
@@ -53,7 +54,9 @@ async def retained_snapshot(factory):
 async def test_retained_material_upgrade(tmp_path, isolated_database_env, migration_lock, outcome, valid):
     with migration_lock():
         await predecessor_database(isolated_database_env)
+        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             await reserve(h)
             lease = await predecessor_lease(h)
             facts = terminal_facts(h, lease, outcome)
@@ -103,7 +106,9 @@ async def test_upgrade_excludes_writer_until_guard_is_installed(
 
     with migration_lock():
         await predecessor_database(isolated_database_env)
+        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             await reserve(h)
             lease = await predecessor_lease(h)
             facts = terminal_facts(h, lease, "completed")

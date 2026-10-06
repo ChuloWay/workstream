@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
+from app.modules.artifacts.submission_manifest import SubmissionManifest
 from app.modules.artifacts.models import (
     PreSubmitEvidenceResult,
     PreSubmitEvidenceSet,
@@ -283,6 +284,12 @@ class PreSubmitAttemptStore:
             or evidence.packet_sha256 != row.request_json.get("packet_sha256")
         ):
             raise PreSubmitEvidenceConflict("pre_submit_attempt_evidence_invalid")
+        try:
+            SubmissionManifest.from_dict(
+                evidence.semantic_manifest_body, sha256=evidence.semantic_manifest_sha256,
+            )
+        except (TypeError, ValueError) as exc:
+            raise PreSubmitEvidenceConflict("pre_submit_attempt_manifest_invalid") from exc
         rows = tuple(
             (
                 await self._session.scalars(

@@ -11,7 +11,8 @@ from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspector,
     SubmissionArchiveLimits,
 )
-from app.modules.artifacts.submission_manifest import build_submission_manifest
+from app.modules.artifacts.submission_manifest import SubmissionManifest, build_submission_manifest
+from app.core.hashing import canonical_json_hash
 
 
 def _archive(
@@ -65,6 +66,37 @@ def test_manifest_is_closed_sorted_and_derived_from_member_bytes() -> None:
         ],
     }
     assert manifest.sha256.startswith("sha256:")
+
+
+def test_stored_manifest_round_trip_retains_unicode_files_and_directories() -> None:
+    manifest = _manifest(_archive([("café/α.txt", b"verified"), ("empty/", b"")]))
+    assert SubmissionManifest.from_dict(manifest.as_dict(), sha256=manifest.sha256) == manifest
+    body = manifest.as_dict()
+    body["entries"][-1]["entry_type"] = "file"
+    with pytest.raises(ValueError):
+        SubmissionManifest.from_dict(body, sha256=manifest.sha256)
+
+
+@pytest.mark.parametrize("corruption", ["missing", "extra", "duplicate", "order", "boolean_size", "hash"])
+def test_stored_manifest_rejects_independent_invalid_metadata(corruption) -> None:
+    manifest = _manifest(_archive([("a.txt", b"a"), ("z.txt", b"z")]))
+    body = manifest.as_dict()
+    if corruption == "missing":
+        del body["entries"][0]["executable"]
+    elif corruption == "extra":
+        body["entries"][0]["content"] = "must not be retained"
+    elif corruption == "duplicate":
+        body["entries"][1] = body["entries"][0].copy()
+    elif corruption == "order":
+        body["entries"].reverse()
+    elif corruption == "boolean_size":
+        body["entries"][0]["byte_count"] = True
+    else:
+        body["entries"][0]["sha256"] = "sha256:" + "a" * 64
+    # Shape cases have a matching hash, so they cannot fail on stale digest alone.
+    digest = manifest.sha256 if corruption == "hash" else canonical_json_hash(body)
+    with pytest.raises(ValueError):
+        SubmissionManifest.from_dict(body, sha256=digest)
 
 
 def test_packaging_changes_do_not_change_semantic_identity() -> None:

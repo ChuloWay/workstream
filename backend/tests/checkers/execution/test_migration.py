@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.core.identifiers import new_record_id
+from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config, current_schema_revision
 from tests.post_submit_materialization_helpers import material_fixture
 
@@ -28,7 +29,9 @@ async def test_migration_refuses_retained_history(tmp_path, isolated_database_en
         finally:
             await conn.close()
         await asyncio.to_thread(command.upgrade, _config(), "0007_checker_output_custody")
+        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session, session.begin():
                 source = await session.scalar(
                     text("select to_jsonb(s) from submissions s where id=:id"),

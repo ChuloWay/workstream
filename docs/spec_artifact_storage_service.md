@@ -1339,6 +1339,15 @@ stale_at                       = timestamp | null
 stale_reason                   = bounded token | null
 ```
 
+The immutable pre-submit evidence set retains the canonical inspected semantic
+manifest body, including file hashes/sizes and directory entries, once. The
+admission references its identity and hash. Consumption validates that body and
+returns detached file metadata with archive commitments only for a consumed
+result or exact replay; stale results contain no material. Consumption performs
+no provider read. Older retained evidence without metadata stays unchanged and
+cannot supply current consumption. This storage guarantee does not activate
+initial dispatch; its composition must reconcile ART and CHECKERS request limits.
+
 It records preparation actor/profile and identity-link provenance, project,
 task, assignment, immediate predecessor, exact locked task/guide/policy context,
 `ArtifactContent`, `SubmissionBundleManifest`, immutable pre-submit evidence-set

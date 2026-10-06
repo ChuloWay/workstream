@@ -11,6 +11,7 @@ from app.modules.artifacts.pre_submit_evidence import (
     PreSubmitEvidenceService,
 )
 from app.modules.tasks.api import TaskSubmissionContextUnavailable
+from tests.test_submission_manifest import _archive, _manifest
 
 
 @pytest.mark.asyncio
@@ -38,20 +39,22 @@ async def test_stale_task_relock_denies_before_evidence_or_pass_capability(
     )
     service._repository.persist = AsyncMock()  # type: ignore[method-assign]
     monkeypatch.setattr(pre_submit_evidence, "_validate_execution", lambda *_: None)
+    manifest = _manifest(_archive([("answer.txt", b"verified")]))
     custody = SimpleNamespace(
         storage_scheme="s3",
         prepared_generation_id="generation",
         archive_sha256="archive",
         archive_byte_count=1,
-        semantic_manifest_sha256="manifest",
+        semantic_manifest_sha256=manifest.sha256,
     )
     request = SimpleNamespace(
+        manifest=manifest,
         plan=object(),
         execution=SimpleNamespace(custody=custody),
         prepared_generation_id="generation",
         archive_sha256="archive",
         archive_byte_count=1,
-        semantic_manifest_sha256="manifest",
+        semantic_manifest_sha256=manifest.sha256,
         task_id="task",
         assignment_id="assignment",
         actor_profile_id="actor",

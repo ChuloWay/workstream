@@ -263,6 +263,8 @@ class PreSubmitEvidenceSet(Base):
     archive_byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
     semantic_manifest_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    # Null only for retained evidence predating metadata custody; new inserts require it.
+    semantic_manifest_body: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     guide_id: Mapped[str] = mapped_column(
         ForeignKey("project_guides.id", ondelete="RESTRICT"), nullable=False
     )

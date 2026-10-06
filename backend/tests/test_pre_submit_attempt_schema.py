@@ -141,3 +141,112 @@ async def test_new_result_rows_require_valid_order_and_bounded_metadata(
                 await transaction.rollback()
     finally:
         await harness.close()
+
+
+async def test_manifest_metadata_is_hash_bound_on_insert_and_immutable(
+    tmp_path, isolated_database_env,
+):
+    """Real inspected evidence is the valid control for direct storage rejections."""
+    import json
+    from copy import deepcopy
+    from app.core.hashing import canonical_json_hash
+
+    harness = await _harness(tmp_path, isolated_database_env)
+    try:
+        async with harness.factory() as session:
+            workflow = harness.workflow(session, [])
+            reservation = await _reserve(workflow, harness.request, harness.preparation_request)
+            completed = await workflow.execute_reserved(
+                harness.request, reservation, preparation_request=harness.preparation_request,
+            )
+        evidence_id = str(completed.evidence.evidence_set_id)
+        async with harness.factory() as session:
+            body, digest = (await session.execute(text(
+                "select semantic_manifest_body,semantic_manifest_sha256 "
+                "from pre_submit_evidence_sets where id=:id"
+            ), {"id": evidence_id})).one()
+        assert canonical_json_hash(body) == digest
+        from tests.test_submission_manifest import _archive, _manifest
+        unicode_manifest = _manifest(_archive([("café/α.txt", b"verified")]))
+        malformed = deepcopy(body)
+        malformed["entries"][0]["content"] = "not metadata"
+        async with harness.factory() as session, session.begin():
+            for candidate, commitment, valid in (
+                (body, digest, True), (unicode_manifest.as_dict(), unicode_manifest.sha256, True),
+                (body, "sha256:" + "f" * 64, False),
+                (None, digest, False), (malformed, canonical_json_hash(malformed), False),
+            ):
+                assert await session.scalar(text(
+                    "select public.submission_manifest_metadata_valid(cast(:body as jsonb),:digest)"
+                ), {"body": json.dumps(candidate), "digest": commitment}) is valid
+            for candidate in (None, malformed):
+                with pytest.raises(DBAPIError, match="pre-submit manifest metadata invalid"):
+                    async with session.begin_nested():
+                        await session.execute(text(
+                            "insert into pre_submit_evidence_sets select "
+                            "(jsonb_populate_record(null::pre_submit_evidence_sets,to_jsonb(e)||"
+                            "jsonb_build_object('semantic_manifest_body',cast(:body as jsonb)))).* "
+                            "from pre_submit_evidence_sets e where e.id=:id"
+                        ), {"body": json.dumps(candidate), "id": evidence_id})
+            with pytest.raises(DBAPIError, match="immutable"):
+                async with session.begin_nested():
+                    await session.execute(text(
+                        "update pre_submit_evidence_sets set semantic_manifest_body=null where id=:id"
+                    ), {"id": evidence_id})
+            assert await session.scalar(text(
+                "select semantic_manifest_body from pre_submit_evidence_sets where id=:id"
+            ), {"id": evidence_id}) == body
+    finally:
+        await harness.close()
+
+
+async def test_manifest_upgrade_preserves_old_evidence_without_inventing_metadata(
+    tmp_path, isolated_database_env, migration_lock,
+):
+    import asyncio
+    import asyncpg
+    from alembic import command
+    from app.db import session as db_session
+    from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidenceConflict
+    from tests.migration_fixtures import (
+        _config, add_current_art_seed_column, restore_predecessor_evidence_schema,
+    )
+
+    with migration_lock():
+        await db_session.dispose_engine()
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            await connection.execute("drop schema public cascade; create schema public")
+        finally:
+            await connection.close()
+        await asyncio.to_thread(command.upgrade, _config(), "0020_review_admission_lock_order")
+        original_columns = await add_current_art_seed_column(isolated_database_env)
+        harness = await _harness(tmp_path, isolated_database_env)
+        try:
+            calls = []
+            async with harness.factory() as session:
+                workflow = harness.workflow(session, calls)
+                reservation = await _reserve(workflow, harness.request, harness.preparation_request)
+                completed = await workflow.execute_reserved(
+                    harness.request, reservation, preparation_request=harness.preparation_request,
+                )
+            evidence_id = str(completed.evidence.evidence_set_id)
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
+            async with harness.factory() as session:
+                before = await session.scalar(text(
+                    "select to_jsonb(e) from pre_submit_evidence_sets e where id=:id"
+                ), {"id": evidence_id})
+            await asyncio.to_thread(command.upgrade, _config(), "head")
+            async with harness.factory() as session:
+                after = await session.scalar(text(
+                    "select to_jsonb(e) from pre_submit_evidence_sets e where id=:id"
+                ), {"id": evidence_id})
+            assert after.pop("semantic_manifest_body") is None
+            assert after == before
+            async with harness.factory() as session:
+                workflow = harness.workflow(session, calls)
+                with pytest.raises(PreSubmitEvidenceConflict, match="pre_submit_attempt_manifest_invalid"):
+                    await _reserve(workflow, harness.request, harness.preparation_request)
+            assert calls == [1]
+        finally:
+            await harness.close()

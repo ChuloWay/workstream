@@ -304,3 +304,44 @@ async def test_provider_stream_has_no_selection_transaction_and_rejects_drift(tm
                 operation.cancel()
             await asyncio.gather(operation, return_exceptions=True)
             await selection_engine.dispose()
+
+
+async def test_consumption_retains_inspected_manifest_and_replays_without_provider_reads(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    from app.adapters.artifacts.local import LocalStorageAdapter
+    from app.modules.artifacts.submission_bindings import SubmissionAdmissionConsumptionService
+
+    consume = SubmissionAdmissionConsumptionService.consume
+    observed = []
+
+    def forbidden_read(*args, **kwargs):
+        raise AssertionError("admission consumption must not read object bytes")
+
+    async def capture(service, request):
+        with monkeypatch.context() as patch:
+            patch.setattr(LocalStorageAdapter, "open", forbidden_read)
+            first = await consume(service, request)
+            replay = await consume(service, request)
+        assert not first.replayed and replay.replayed
+        assert replay.material == first.material
+        observed.append(first)
+        return first
+
+    monkeypatch.setattr(SubmissionAdmissionConsumptionService, "consume", capture)
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        assert len(observed) == 1
+        material = observed[0].material
+        assert material.archive_sha256 == h.request.content_sha256
+        assert material.archive_byte_count == len(h.data)
+        assert material.semantic_manifest_sha256 == h.manifest.sha256
+        assert [(item.normalized_path, item.sha256, item.byte_count) for item in material.files] == [
+            (entry.normalized_path, entry.sha256, entry.byte_count)
+            for entry in h.manifest.entries if entry.sha256 is not None
+        ]
+        async with h.factory() as session:
+            body = await session.scalar(text(
+                "select e.semantic_manifest_body from pre_submit_evidence_sets e "
+                "join submission_bundle_admissions a on a.pre_submit_evidence_set_id=e.id where a.id=:id"
+            ), {"id": str(h.created.admission_id)})
+        assert body == h.manifest.as_dict()

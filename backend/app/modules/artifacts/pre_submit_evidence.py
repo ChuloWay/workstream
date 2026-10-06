@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.models import PreSubmitEvidenceResult, PreSubmitEvidenceSet
 from app.modules.artifacts.sources import ArtifactCommitment
+from app.modules.artifacts.submission_manifest import SubmissionManifest
 from app.modules.checkers.api import (
     ALLOWED_PRE_SUBMIT_STORAGE_SCHEMES,
     EffectivePreSubmissionExecutionPlan,
@@ -224,6 +225,7 @@ class PreSubmitEvidencePersistenceRequest(PreSubmitEvidenceInput):
 
     execution: PreSubmitExecutionResult
     attempt: PreSubmitAttemptClaim
+    manifest: SubmissionManifest
 
 
 @dataclass(frozen=True, slots=True)
@@ -466,6 +468,7 @@ class _PreSubmitEvidenceRepository:
         attempt_id: UUID,
         attempt_request_digest: str,
         packet_sha256: str,
+        manifest: SubmissionManifest,
     ) -> PersistedPreSubmitEvidence:
         """Write the winning attempt's result once; the attempt owner handles replay."""
         transaction = self._session.sync_session.get_transaction()
@@ -483,7 +486,10 @@ class _PreSubmitEvidenceRepository:
         values = self._set_values(context, plan, execution, operation_identity)
         ArtifactCommitment.validate_sha256(packet_sha256)
         values.update(attempt_id=str(attempt_id), attempt_request_digest=attempt_request_digest,
-                      packet_sha256=packet_sha256)
+                      packet_sha256=packet_sha256,
+                      semantic_manifest_body=SubmissionManifest.from_dict(
+                          manifest.as_dict(), sha256=context.semantic_manifest_sha256,
+                      ).as_dict())
         evidence_set_id = new_record_id()
         await self._session.execute(
             insert(PreSubmitEvidenceSet).values(id=str(evidence_set_id), **values)
@@ -671,6 +677,14 @@ class PreSubmitEvidenceService:
             raise RuntimeError("pre-submit evidence requires one root transaction")
         _validate_execution(request.plan, request.execution)
         custody = request.execution.custody
+        if type(request.manifest) is not SubmissionManifest:
+            raise PreSubmitEvidenceConflict("pre_submit_manifest_invalid")
+        try:
+            SubmissionManifest.from_dict(
+                request.manifest.as_dict(), sha256=request.semantic_manifest_sha256,
+            )
+        except (TypeError, ValueError) as exc:
+            raise PreSubmitEvidenceConflict("pre_submit_manifest_invalid") from exc
         if (
             request.prepared_generation_id != custody.prepared_generation_id
             or request.archive_sha256 != custody.archive_sha256
@@ -691,6 +705,7 @@ class PreSubmitEvidenceService:
             attempt_id=request.attempt.attempt_id,
             attempt_request_digest=request.attempt.request_digest,
             packet_sha256=request.attempt.packet_sha256,
+            manifest=request.manifest,
         )
         await request.attempt.complete(self._session, evidence.evidence_set_id)
         pass_capability = (

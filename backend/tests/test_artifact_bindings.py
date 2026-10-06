@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import UUID
 from app.core.identifiers import new_record_id
+from tests.test_submission_manifest import _archive, _manifest
 
 import pytest
 
@@ -57,6 +58,7 @@ def _request(*, submission_id=None) -> SubmissionAdmissionConsumptionRequest:
 def _lineage(request: SubmissionAdmissionConsumptionRequest):
     context = request.task_context
     refs = context.locked_project_context
+    manifest = _manifest(_archive([("answer.txt", b"verified")]))
     content_id = str(new_record_id())
     evidence_id = str(new_record_id())
     admission = SimpleNamespace(
@@ -73,7 +75,7 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
         artifact_content_id=content_id,
         locked_policy_context_hash=_sha("5"),
         semantic_manifest_id=str(new_record_id()),
-        semantic_manifest_sha256=_sha("6"),
+        semantic_manifest_sha256=manifest.sha256,
         archive_sha256=_sha("4"),
         archive_byte_count=9,
         consumed_at=None,
@@ -101,6 +103,7 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
         locked_policy_context_hash=admission.locked_policy_context_hash,
         semantic_manifest_id=admission.semantic_manifest_id,
         semantic_manifest_sha256=admission.semantic_manifest_sha256,
+        semantic_manifest_body=manifest.as_dict(),
         archive_sha256=admission.archive_sha256,
         archive_byte_count=admission.archive_byte_count,
         guide_id=str(new_record_id()),
@@ -240,6 +243,7 @@ async def test_proven_task_lineage_change_marks_ready_admission_stale() -> None:
     result = await SubmissionAdmissionConsumptionService(session, authority).consume(request)
 
     assert result.status == "stale"
+    assert result.material is None
     assert result.binding_id is None
     assert admission.stale_reason == "locked_submission_context_changed"
     assert admission.stale_at == now
@@ -362,3 +366,23 @@ async def test_consumption_requires_caller_owned_root_transaction() -> None:
         await SubmissionAdmissionConsumptionService(session, _Allow()).consume(request)
 
     session.scalar.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("corruption", ["absent", "file_hash", "foreign_body"])
+async def test_consumption_rejects_invalid_manifest_before_binding(corruption):
+    request = _request()
+    admission, evidence, content = _lineage(request)
+    if corruption == "absent":
+        evidence.semantic_manifest_body = None
+    elif corruption == "file_hash":
+        evidence.semantic_manifest_body["entries"][0]["sha256"] = "sha256:" + "f" * 64
+    else:
+        evidence.semantic_manifest_body = _manifest(_archive([("foreign.txt", b"other")])).as_dict()
+    session = _session(admission, evidence, content)
+    authority = _Allow()
+    with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
+        await SubmissionAdmissionConsumptionService(session, authority).consume(request)
+    session.add.assert_not_called()
+    session.flush.assert_not_awaited()
+    authority.consume.assert_not_awaited()
