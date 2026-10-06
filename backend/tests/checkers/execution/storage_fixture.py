@@ -7,7 +7,7 @@ from app.modules.artifacts.models import ArtifactContent, SubmissionBundleAdmiss
 from app.modules.checkers.api.execution import FinalizeFacts, VerifiedMaterialFacts
 from app.modules.checkers.api.post_submit import ExpectedPostSubmitContext, PostSubmitMemberResult
 from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
-from app.modules.checkers.execution_coordination import EvaluationCoordinator
+from app.adapters.checkers import evaluation_coordinator
 from app.modules.checkers.post_submit_contracts import (
     make_post_submit_request,
     make_post_submit_result,
@@ -70,7 +70,7 @@ async def storage_request(session, submission_id, *, generation=1):
 async def seed_storage_run(factory, submission_id, *, failures=(), state="completed", generation=1):
     async with factory() as session, session.begin():
         request = await storage_request(session, submission_id, generation=generation)
-        receipt = await EvaluationCoordinator(session).reserve_current_evaluation(request)
+        receipt = await evaluation_coordinator(session).reserve_current_evaluation(request)
     if state == "queued":
         return str(receipt.attempt_id)
     await provision_checker_service(factory)

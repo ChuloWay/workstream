@@ -12,7 +12,7 @@ from app.modules.checkers.api.execution import (
     FinalizeFacts,
     VerifiedMaterialFacts,
 )
-from app.modules.checkers.execution_coordination import EvaluationCoordinator
+from app.adapters.checkers import evaluation_coordinator
 from app.modules.checkers.models import CheckerRun
 from tests.checkers.post_submit.support import change_request
 from tests.checkers.post_submit.test_result_contract import result
@@ -101,7 +101,7 @@ async def test_stale_worker_cannot_finalize_after_takeover(
         if old_first:
             await executor.finalize(current_facts)
         async with h.factory() as session, session.begin():
-            stored = await EvaluationCoordinator(session).read_current_result(h.request)
+            stored = await evaluation_coordinator(session).read_current_result(h.request)
             assert stored.result == current_facts.result
 
 
@@ -137,7 +137,7 @@ async def test_generation_advance_and_finalize_serialize(
                 await session.execute(
                     text("select set_config('application_name',:name,true)"), {"name": advance_name}
                 )
-                return await EvaluationCoordinator(session).reserve_current_evaluation(successor)
+                return await evaluation_coordinator(session).reserve_current_evaluation(successor)
 
         async def waiting(name):
             await asyncio.wait_for(
@@ -162,7 +162,7 @@ async def test_generation_advance_and_finalize_serialize(
             await advancing
         else:
             async with h.factory() as session, session.begin():
-                await EvaluationCoordinator(session).reserve_current_evaluation(successor)
+                await evaluation_coordinator(session).reserve_current_evaluation(successor)
                 completing = asyncio.create_task(executor.finalize(facts))
                 await waiting(completion_name)
                 assert not completing.done()

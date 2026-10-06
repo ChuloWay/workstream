@@ -218,11 +218,24 @@ def test_contributor_reads_reject_malformed_and_management_disclosure(cli):
                 "invalid_api_response",
             )
         # limit=2 lets the duplicate reach identity validation, not page-size rejection.
-        response["body"] = json.dumps(page | {"items": [READY, READY]}).encode()
-        assert_failure(
-            cli(origin, TOKEN, "task", "ready", PROJECT, "--limit", "2", "-o", "json"),
-            "invalid_api_response",
-        )
+        for duplicate_id in (TASK, TASK.replace("-", "")):
+            response["body"] = json.dumps(
+                page | {"items": [READY, READY | {"task_id": duplicate_id}]}
+            ).encode()
+            assert_failure(
+                cli(
+                    origin,
+                    TOKEN,
+                    "task",
+                    "ready",
+                    PROJECT,
+                    "--limit",
+                    "2",
+                    "-o",
+                    "json",
+                ),
+                "invalid_api_response",
+            )
         response["body"] = json.dumps(
             page | {"items": [READY, READY | {"task_id": ACTOR}]}
         ).encode()

@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable, CheckerRequestConflict
-from app.modules.checkers.execution_coordination import EvaluationCoordinator
+from app.adapters.checkers import evaluation_coordinator
 from app.modules.checkers.models import CheckerRun, CheckerSubmissionFence
 from tests.checkers.post_submit.support import change_request
 from tests.post_submit_materialization_helpers import material_fixture
@@ -16,7 +16,9 @@ async def test_reservation_replay_rejects_changed_envelope(tmp_path, isolated_da
     async with material_fixture(tmp_path, isolated_database_env) as h:
         first = await reserve(h)
         assert await reserve(h) == first
-        changed = change_request(h.request, assignment_id=new_record_id())
+        changed = change_request(h.request, structural_input=h.request.structural_input.model_copy(
+            update={"summary": "Changed request with the same exact owner lineage."}
+        ))
         with pytest.raises(CheckerRequestConflict, match="checker_request_conflict"):
             await reserve(h, changed)
         async with h.factory() as session:
@@ -24,10 +26,10 @@ async def test_reservation_replay_rejects_changed_envelope(tmp_path, isolated_da
         async with h.factory() as session, session.begin():
             async with session.begin_nested():
                 with pytest.raises(CheckerExecutionUnavailable, match="caller_transaction"):
-                    await EvaluationCoordinator(session).reserve_current_evaluation(h.request)
+                    await evaluation_coordinator(session).reserve_current_evaluation(h.request)
         with pytest.raises(CheckerExecutionUnavailable, match="caller_transaction"):
             async with h.factory() as session:
-                await EvaluationCoordinator(session).reserve_current_evaluation(h.request)
+                await evaluation_coordinator(session).reserve_current_evaluation(h.request)
 
 
 async def test_reservation_rollback_and_exact_successor(tmp_path, isolated_database_env):
@@ -38,7 +40,7 @@ async def test_reservation_rollback_and_exact_successor(tmp_path, isolated_datab
         )
         async with h.factory() as session:
             await session.begin()
-            second = await EvaluationCoordinator(session).reserve_current_evaluation(next_request)
+            second = await evaluation_coordinator(session).reserve_current_evaluation(next_request)
             assert second.attempt_id != first.attempt_id
             await session.rollback()
         async with h.factory() as session:
@@ -82,7 +84,8 @@ async def test_current_result_conceals_foreign_lineage(tmp_path, isolated_databa
             else:
                 bad = change_request(first.request, **{field: getattr(foreign.request, field)})
             async with first.factory() as session, session.begin():
-                valid = await EvaluationCoordinator(session).read_current_result(first.request)
+                valid = await evaluation_coordinator(session).read_current_result(first.request)
                 assert valid.reference.request_id == first.request.evaluation_request_id
-                with pytest.raises(CheckerExecutionUnavailable, match="current_request"):
-                    await EvaluationCoordinator(session).read_current_result(bad)
+                error = "current_request" if field == "evaluation_request_id" else "reservation_scope"
+                with pytest.raises(CheckerExecutionUnavailable, match=error):
+                    await evaluation_coordinator(session).read_current_result(bad)

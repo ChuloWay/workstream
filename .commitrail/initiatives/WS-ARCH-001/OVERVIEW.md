@@ -97,6 +97,12 @@ can proceed after its own prerequisites without CON/shared acceptance or
 scoped lifecycle activation. False routing adds those requirements. Human final
 acceptance later uses the same authorized shared acceptance/CON operation.
 
+ARCH-04E1B-B1 delivers TASK-before-CHECKERS reservation/current-read custody
+and ordered review admission INSERTs, including intermediate admission waits,
+terminal read-only replay and both mechanical race controls. The
+remaining 04E1B-B handler work and full authorized currentness proof stay next;
+no handler or action is activated by this prerequisite.
+
 ## Delivered and remaining
 
 - Canonical module registry, frozen general/AUTH edge ledgers, CI enforcement,
