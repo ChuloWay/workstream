@@ -1498,6 +1498,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/source.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/queue_router.py"
     },
     {
@@ -1665,7 +1669,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "97f3bee29efd7d0d2214bf11cf1406172feb9375ab157287dc487163a1dfacd2",
+  "authority_digest": "95fa9e2fa5e30557c54a51940b41141a4ebc67f083345ff66fc359d854525070",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

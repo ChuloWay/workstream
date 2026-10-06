@@ -541,8 +541,8 @@ ARCH-04E1B-A provides caller-owned request preparation for an exact current
 completed `allow_review` evaluation. TASK locks the project-qualified Task and
 its latest submitted Submission before CHECKERS locks its fence and run. The
 CHECKERS public coordination port verifies the supplied completion against
-retained result, event, phase receipts and material, returning the stored
-Submission version. Neither completion values nor request facts grant authority.
+retained result, event, phase receipts and material, returning closed verified
+completion facts with the stored Submission version and material custody. Neither completion values nor request facts grant authority.
 
 `task_post_submit_routing_requests` reserves distinct generated routing-operation
 and future manifest UUIDv7 identities. Its canonical digest binds the exact owner,
@@ -556,3 +556,14 @@ publication, TASK transition, Review, FinalAcceptance or ContributionRecord is
 created. ARCH-04E2-A delivers strict hidden AUTH preparation and receipt-staging
 contracts; routing remains unavailable. Later atomic publication must bind the
 manifest to the reserved identity and verify genuine immutable AUTH evidence.
+
+
+ARCH-04E1B-B2 adds hidden exact source preparation. It requires the task's
+`evaluation_pending` state and active accepted assignment, resolves historical
+PROJECTS policy after TASK locks and before CHECKERS custody, and combines the
+verified completion with the existing reservation. A proposal contains semantic
+source facts only; the persisted manifest additionally requires its database
+creation time. No source INSERT or authority follows from constructing a proposal.
+The current hidden intake does not yet set `evaluation_pending`; the later atomic
+dispatch composition owns that transition. Mechanical preparation tests explicitly
+arrange that state and the claim timestamp, without claiming live dispatch/claim.

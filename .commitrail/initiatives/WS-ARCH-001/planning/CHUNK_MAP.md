@@ -1,4 +1,12 @@
 # WS-ARCH-001 — Current remaining change map
+[ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
+TASK, CHECKERS and historical PROJECTS policy facts. It stages only the existing
+routing request; proposed source facts have no fabricated creation timestamp.
+Remaining handlers, source publication, current pointers and authority/effect
+activation are still required. False composition must acquire its REV lifecycle
+fence before TASK and revalidate policy under TASK custody; true admission
+remains independent of that fence.
+
 
 [AUTH-19A](../../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
 planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
