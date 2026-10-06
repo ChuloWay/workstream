@@ -3,7 +3,7 @@
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
 plus exact-project inspection, authority reads, manager task browsing and
-contributor work discovery:
+contributor work discovery, claim and start:
 
 | Command | Public API |
 |---|---|
@@ -15,6 +15,8 @@ contributor work discovery:
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
+| `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
+| `workstream task start TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/start` |
 
 Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
@@ -151,8 +153,46 @@ than silently displayed or ignored.
 Discovery is live, not a reservation or a claimability guarantee. A later claim
 must revalidate current authority and state. Cursors are action/project/limit
 bound and cannot be reused as manager cursors; the CLI never decodes them or
-automatically fetches another page. These commands do not claim/start tasks,
+automatically fetches another page. These reads do not claim/start tasks,
 upload submissions or complete unfinished acceptance integration.
+
+## Claim and start contributor work
+
+```sh
+workstream task claim TASK_ID --idempotency-key CLAIM_UUID --reason 'Begin this work' --output json
+workstream task start TASK_ID --idempotency-key START_UUID --output json
+```
+
+Supply your own UUID key and retain it with the action, task and optional reason.
+These commands send exactly one public POST, with no preflight, automatic key,
+retry or operator override. Reason is optional (at most 1000 UTF-8 characters);
+an omitted flag sends `{}`, while an explicit empty flag sends an empty string.
+The caller's Flow bearer and key are forwarded unchanged. Only Workstream
+decides whether current identity, lifecycle, exact Submitter grant, task state,
+assignment ownership and locked policy permit the write.
+
+Claim returns the contributor-safe task and its assignment; start returns the
+contributor-safe task in progress. The CLI validates the requested task identity,
+assignment/task/project/policy consistency, claim contributor/assigner identity,
+active/unreleased assignment and required timestamps before output. It rejects
+management-only fields. JSON preserves the API object; text prints every public
+field with escaped terminal controls. This does not expose submission or review
+commands, or activate unfinished product lifecycle work.
+
+The API scopes keys by actor and action, and checks current authority before
+recovering a committed result. An exact retry can recover the same result only
+while the required state remains current. Changed reason/task conflicts;
+claim replay after start can be denied. A key never grants permission. Revocation
+and suspension deny further writes/replays; assignment invalidation is a separate
+asynchronous consequence, not a CLI effect or immediate API guarantee.
+
+If the response is lost, malformed, oversized, redirected, an unexpected success
+status, a server error or a noncanonical/intermediary denial, the CLI exits
+nonzero with `error.outcome_unknown: true`. Only a complete strictly decoded
+canonical Workstream 4xx error envelope establishes a known denial. Inspect with
+`workstream task show TASK_ID`; this observes current state, not rollback or
+global ordering. If manually retrying, preserve the unchanged action, task,
+reason and key. Do not invent a new key or assume recovery will still succeed.
 
 ## Edit your profile
 
@@ -213,6 +253,13 @@ same-project non-owner concealment, independent authorized cursor substitution,
 exact Submitter grants, Reviewer-only/foreign/revoked denial and suspension after
 restored positive authority. The process fixture verifies the separate contributor
 shapes, complete field output and refusal of management-only data.
+Contributor mutation proof extends the same API/bootstrap journey with CLI
+claim/start, persisted assignment and locked lineage, exact replay parity,
+reason/task mismatch, same-project non-owner denial, foreign/Reviewer-only
+authority, revocation and suspension. Denied writes are compared with the
+publicly observed post-administration task baseline, not an assumed pre-revoke
+state. Process tests prove the exact POST/key/body, strict claim/start response
+identity, safe text, canonical errors and uncertain/no-retry behavior.
 Local Flow-compatible tokens are test fixtures, not deployed-provider proof.
 No coverage percentage or test-count target is used.
 

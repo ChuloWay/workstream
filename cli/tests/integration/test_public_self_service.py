@@ -128,6 +128,13 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
                 "/api/v1/tasks/{task_id}",
             ):
                 assert "get" in specification.json()["paths"][path]
+            for operation in ("claim", "start"):
+                assert (
+                    "post"
+                    in specification.json()["paths"][
+                        f"/api/v1/tasks/{{task_id}}/{operation}"
+                    ]
+                )
             profiles: dict[str, dict] = {}
             for name, token in tokens.items():
                 result = cli(origin, token, "whoami", "--output", "json")

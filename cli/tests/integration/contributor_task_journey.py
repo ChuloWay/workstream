@@ -1,4 +1,4 @@
-"""Real public contributor reads over canonical approved-guide prerequisites.
+"""Real public contributor discovery and writes over approved prerequisites.
 
 Only upstream guide inference/storage are scripted fixtures. Task, assignment,
 grant and lifecycle operations exercise the real API with no route overrides.
@@ -34,6 +34,35 @@ async def exercise_contributor_task_reads(
             assert result.returncode == 1 and result.stdout == "", result.stderr
             assert json.loads(result.stderr)["error"]["status"] == status
             return None
+        assert result.returncode == 0 and result.stderr == "", result.stderr
+        return json.loads(result.stdout)
+
+    async def mutate(action, task_id, key, reason=None, presented=token, status=None):
+        # Read the current public management projection AFTER administrator
+        # changes; async invalidation is not simulated in this fixture.
+        path = f"/api/v1/projects/{project}/tasks/{task_id}"
+        before = await direct.get(path, headers=manager)
+        assert before.status_code == 200, before.text
+        flags = () if reason is None else ("--reason", reason)
+        result = cli(
+            origin,
+            presented,
+            "task",
+            action,
+            task_id.replace("-", ""),
+            "--idempotency-key",
+            str(key),
+            *flags,
+            "-o",
+            "json",
+        )
+        if status is not None:
+            assert result.returncode == 1 and result.stdout == "", result.stderr
+            error = json.loads(result.stderr)["error"]
+            assert error["status"] == status and "outcome_unknown" not in error
+            after = await direct.get(path, headers=manager)
+            assert after.status_code == 200 and after.json() == before.json()
+            return error
         assert result.returncode == 0 and result.stderr == "", result.stderr
         return json.loads(result.stdout)
 
@@ -104,6 +133,10 @@ async def exercise_contributor_task_reads(
         )
         actor_id = profiles["cli-outsider"]["actor_profile_id"]
 
+        # Ready persisted work does not permit writes without Submitter authority.
+        for action in ("claim", "start"):
+            await mutate(action, ready_ids[0], uuid4(), status=403)
+
         # Stored ready resources exist, but no matching grant permits either read.
         read(("ready", project), status=404)
         read(("show", ready_ids[0]), status=404)
@@ -112,6 +145,14 @@ async def exercise_contributor_task_reads(
         await grant(project, peer_profiles["cli-task-reviewer"], role="reviewer")
         for command in (("ready", project), ("show", ready_ids[0])):
             read(command, peer_tokens["cli-task-reviewer"], status=404)
+        for action in ("claim", "start"):
+            await mutate(
+                action,
+                ready_ids[0],
+                uuid4(),
+                presented=peer_tokens["cli-task-reviewer"],
+                status=403,
+            )
 
         cursor = None
         observed = []
@@ -164,6 +205,33 @@ async def exercise_contributor_task_reads(
         read(("show", draft["id"]), status=404)
         read(("ready", foreign_project), status=404)
         read(("show", foreign_task_id), status=404)
+        # The same caller has Submitter A, but not B. Use B's management baseline.
+        for action in ("claim", "start"):
+            before = await direct.get(
+                f"/api/v1/projects/{foreign_project}/tasks/{foreign_task_id}",
+                headers=manager,
+            )
+            denied = cli(
+                origin,
+                token,
+                "task",
+                action,
+                foreign_task_id,
+                "--idempotency-key",
+                str(uuid4()),
+                "-o",
+                "json",
+            )
+            assert denied.returncode == 1 and denied.stdout == ""
+            assert json.loads(denied.stderr)["error"]["status"] == 403
+            after = await direct.get(
+                f"/api/v1/projects/{foreign_project}/tasks/{foreign_task_id}",
+                headers=manager,
+            )
+            assert (
+                before.status_code == after.status_code == 200
+                and before.json() == after.json()
+            )
         # Each cursor substitution retains authority before testing the codec.
         await grant(foreign_project, actor_id)
         read(("ready", foreign_project))
@@ -207,12 +275,25 @@ async def exercise_contributor_task_reads(
         assert management.returncode == 1 and management.stdout == ""
         assert json.loads(management.stderr)["error"]["status"] == 422
 
-        claimed = await post(
-            f"/api/v1/tasks/{ready_ids[0]}/claim",
-            {"reason": "Assignment visibility control"},
-            {"Authorization": f"Bearer {token}"},
-        )
+        claim_key, start_key = uuid4(), uuid4()
+        reason = "Assignment visibility control"
+        claimed = await mutate("claim", ready_ids[0], claim_key, reason)
         assert claimed["assignment"]["contributor_id"] == actor_id
+        assert claimed["assignment"]["task_id"] == claimed["task"]["id"] == ready_ids[0]
+        assert (
+            claimed["assignment"]["project_id"]
+            == claimed["task"]["project_id"]
+            == project
+        )
+        assert (
+            claimed["assignment"]["submitter_contribution_policy_version_id"]
+            == claimed["task"]["locked_contribution_policy_version_id"]
+        )
+        assert await mutate("claim", ready_ids[0], claim_key, reason) == claimed
+        mismatch = await mutate("claim", ready_ids[0], claim_key, "Changed", status=409)
+        assert mismatch["code"] == "idempotency_mismatch"
+        mismatch = await mutate("claim", ready_ids[1], claim_key, reason, status=409)
+        assert mismatch["code"] == "idempotency_mismatch"
         assert (await detail(ready_ids[0]))["status"] == "claimed"
         # Same-project authority was demonstrated before and after this ownership change.
         read(("show", ready_ids[0]), peer_tokens["cli-task-peer"], status=404)
@@ -221,16 +302,42 @@ async def exercise_contributor_task_reads(
             page = read(("ready", project), presented)
             assert {item["task_id"] for item in page["items"]} == set(ready_ids[1:])
 
+        await mutate(
+            "start",
+            ready_ids[0],
+            uuid4(),
+            presented=peer_tokens["cli-task-peer"],
+            status=403,
+        )
+        started = await mutate("start", ready_ids[0], start_key, reason)
+        assert started["id"] == ready_ids[0] and started["status"] == "in_progress"
+        assert (
+            started["locked_contribution_policy_version_id"]
+            == claimed["task"]["locked_contribution_policy_version_id"]
+        )
+        assert (await detail(ready_ids[0]))["status"] == "in_progress"
+        assert await mutate("start", ready_ids[0], start_key, reason) == started
+        assert (await mutate("start", ready_ids[0], start_key, "Changed", status=409))[
+            "code"
+        ] == "idempotency_mismatch"
+        await mutate("claim", ready_ids[0], claim_key, reason, status=403)
+
         await post(
             f"/api/v1/projects/{project}/role-grants/{first_grant['id']}/revoke",
             {"reason": "Discovery must reauthorize"},
         )
         read(("ready", project, "--limit", "1", "--cursor", first_cursor), status=404)
         read(("show", ready_ids[1]), status=404)
+        await mutate("start", ready_ids[0], start_key, reason, status=403)
+        await mutate("claim", ready_ids[1], uuid4(), status=403)
         # Manager authority cannot substitute for a revoked Submitter grant.
         await grant(project, actor_id)
         read(("ready", project, "--limit", "1", "--cursor", first_cursor))
         await detail(ready_ids[1])
+        # Establish fresh successful write authority before lifecycle denial.
+        second_key = uuid4()
+        second_claim = await mutate("claim", ready_ids[1], second_key)
+        assert second_claim["assignment"]["contributor_id"] == actor_id
         # The same freshly authorized actor is suspended: stale revocation cannot
         # masquerade as lifecycle denial. Restore it for the outer journey.
         await post(
@@ -240,6 +347,8 @@ async def exercise_contributor_task_reads(
         )
         read(("ready", project), status=404)
         read(("show", ready_ids[1]), status=404)
+        await mutate("claim", ready_ids[1], second_key, status=403)
+        await mutate("start", ready_ids[1], uuid4(), status=403)
         await post(
             f"/api/v1/actors/{actor_id}/reactivate",
             {"reason": "Continue independent CLI proof"},
