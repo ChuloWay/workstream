@@ -227,7 +227,15 @@ def test_task_mutation_malformed_and_substituted_success_is_unknown(cli):
             {"created_at": "bad"},
             {"updated_at": None},
             {"deadline_at": "bad"},
-            *[{field: None} for field in ("base_amount", "currency", "payout_type", "locked_payment_policy_version")],
+            *[
+                {field: None}
+                for field in (
+                    "base_amount",
+                    "currency",
+                    "payout_type",
+                    "locked_payment_policy_version",
+                )
+            ],
             {"estimated_time_minutes": "10"},
         ]
         for action in ("claim", "start"):
