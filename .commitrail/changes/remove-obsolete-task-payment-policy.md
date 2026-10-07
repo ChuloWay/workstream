@@ -1,10 +1,10 @@
 # Remove obsolete TASK payment policy storage
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: TASK and Submission no longer retain or expose the superseded guide-keyed PaymentPolicy path; current ContributionPolicy and award lineage remain unchanged.
 
-## Intent and current behavior
+## Intent
 
 The user requested removal of TASK's obsolete `base_amount`, `currency`,
 `payout_type` and `locked_payment_policy_version`, together with the unused
@@ -15,7 +15,7 @@ Submission construction copies the obsolete stamp. CHECKERS already removed it.
 Guide test fixtures still insert PaymentPolicy by default despite no production
 writer; tests of that mutable upsert preserve obsolete behavior.
 
-## Design and boundaries
+## Bounded change
 
 Remove the model, exports, repository upsert/read, TASK columns/response fields,
 Submission stamp and associated named foreign/unique constraints. Remove affected
@@ -73,7 +73,7 @@ checker behavior change, public intake activation, CI gate weakening or unrelate
 cleanup. Do not remove a test's authorization, privacy, immutable-lineage or
 transaction proof merely because its fixture contains a removed field.
 
-## Acceptance and verification
+## Acceptance criteria
 
 1. No production model/repository/response/CLI consumer retains the obsolete path.
    Public TASK create/screen/release/claim/start/start-override responses and
@@ -85,7 +85,7 @@ transaction proof merely because its fixture contains a removed field.
 3. Independently populated obsolete policy row, each TASK field and Submission
    stamp and obsolete root/nested receipt keys refuse upgrade without changing retained data; assertions identify the
    intended migration refusal. Test setup uses the pre-migration schema and valid
-   parent lineage, not an unrelated FK failure. Valid empty control succeeds. Build the isolated predecessor directly at0022,
+   parent lineage, not an unrelated FK failure. Valid empty control succeeds. Build the isolated predecessor directly at 0022,
    never downgrade; seed valid policy/TASK/Submission relations without disabling
    guards. Use actual migration operations for each refusal and full Alembic
    upgrade for the positive control. Test direct/nested replay substitutions
@@ -98,7 +98,7 @@ transaction proof merely because its fixture contains a removed field.
    boundaries, test structure/ownership/lane inventory, docs links/stale wording
    and Commitrail pass. Hosted full-suite completeness remains required.
 
-## Risk and review
+## Risk and review routing
 
 L1 bounded schema/public-contract cleanup with data-preservation and compensation
 adjacency. Before implementation: focused architecture/security and QA/test-delta
@@ -107,3 +107,14 @@ Shared checks run once on a clean target; reviewers inspect scoped risk and
 relevant unchanged current compensation owners. Human focus: no data deletion,
 complete consumer removal and preserved ContributionPolicy/award truth.
 The user authorized this removal; no additional product decision is required.
+
+## Evidence
+
+Discovery traced production models, TASK command receipts, Submission construction,
+CLI decoding/rendering and affected fixtures. Focused PostgreSQL proof exercises
+actual migration operations from 0022 and full upgrade, including preservation on
+refusal. Current-shape replay and obsolete-key rejection are covered independently
+for all six actions. Removing direct response strictness makes all six regressions
+fail at the intended denial assertion. Public command tests retain live authority
+and exact contribution-lineage assertions. Full hosted and final reviewer evidence
+will be reported against the clean PR head; this record does not claim readiness.
