@@ -3259,12 +3259,19 @@ async def test_project_guide_rejects_unknown_non_contract_fields(
         assert field in response.text
 
 
+@pytest.mark.parametrize("field,value", [
+    ("guide_setup_checklist", ["summary"]),
+    ("payment_policy", {"base_amount": "100.00", "currency": "USD", "payout_type": "fixed",
+                        "revision_payment_rule": "none", "rejection_payment_rule": "none",
+                        "accepted_payment_rule": "pay base amount"}),
+])
 async def test_project_guide_update_rejects_unknown_non_contract_fields(
-    project_client: AsyncClient,
+    project_client: AsyncClient, field: str, value: Any,
 ) -> None:
     project = await create_project(project_client)
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    payload = {"guide_setup_checklist": ["summary"]}
+    await read_guide_source_snapshot(project["id"], guide["id"])
+    payload = {field: value}
 
     response = await project_client.patch(
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}",
@@ -3273,7 +3280,7 @@ async def test_project_guide_update_rejects_unknown_non_contract_fields(
     )
 
     assert response.status_code == 422
-    assert "guide_setup_checklist" in response.text
+    assert field in response.text
 
 
 async def test_guide_documents_requires_at_least_one_uploaded_source_item(

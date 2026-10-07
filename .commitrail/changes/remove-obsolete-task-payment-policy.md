@@ -115,6 +115,9 @@ CLI decoding/rendering and affected fixtures. Focused PostgreSQL proof exercises
 actual migration operations from 0022 and full upgrade, including preservation on
 refusal. Current-shape replay and obsolete-key rejection are covered independently
 for all six actions. Removing direct response strictness makes all six regressions
-fail at the intended denial assertion. Public command tests retain live authority
+fail at the intended denial assertion. Review retained the explicit PATCH rejection
+for the removed payment field in the existing closed-request test, alongside POST
+rejection. Migration receipt fixtures distinguish direct creation from nested claim
+actions. Public command tests retain live authority
 and exact contribution-lineage assertions. Full hosted and final reviewer evidence
 will be reported against the clean PR head; this record does not claim readiness.

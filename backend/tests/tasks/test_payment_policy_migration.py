@@ -96,11 +96,14 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
                             payload = {field: None} if nested == "False" else {"task": {field: None}}
                             await connection.execute(text("""INSERT INTO public.task_command_receipts
                                 (id,actor_profile_id,action_id,idempotency_key,request_digest,task_id,status,
-                                 locked_context_hash,response,committed_at)
-                                VALUES(:id,:actor,'project.task.create',:key,:digest,:task,'committed',
-                                       :digest,CAST(:response AS jsonb),CURRENT_TIMESTAMP)"""),
+                                 assignment_id,contributor_id,locked_context_hash,response,committed_at)
+                                VALUES(:id,:actor,:action,:key,:digest,:task,'committed',
+                                       :assignment,:contributor,:digest,CAST(:response AS jsonb),CURRENT_TIMESTAMP)"""),
                                 {"id": new_record_id(), "actor": task["assigned_to"], "key": new_record_id(),
                                  "digest": "sha256:" + "a" * 64, "task": h.request.task_id,
+                                 "action": "task.claim" if nested == "True" else "project.task.create",
+                                 "assignment": h.request.assignment_id if nested == "True" else None,
+                                 "contributor": task["assigned_to"] if nested == "True" else None,
                                  "response": json.dumps(payload)})
                         # All pre-existing FKs must pass before the intended refusal.
                         await connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
