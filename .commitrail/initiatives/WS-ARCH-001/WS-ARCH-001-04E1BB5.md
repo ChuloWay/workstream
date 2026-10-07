@@ -34,7 +34,9 @@ container limits are not a promise that every archive fits the evaluation contra
   projection to compare every locked identity/hash/generation against PROJECTS
   before capacity approval; do not defer this comparison to dispatch. The exact
   PROJECTS activation receipt supplies policy-context values only after that
-  equality check. This pure projection grants no execution or dispatch authority.
+  equality check. Stored nullable criteria map `None` to the empty checker text;
+  both missing forms retain the existing missing-criteria outcome, never a
+  fabricated requirement. This pure projection grants no execution or dispatch authority.
 - Manifest entries represent every inspected file, without truncation. Evidence
   entries represent only policy-required keys whose canonical `evidence/{key}`
   file exists in that verified manifest, with the actual path/hash and key.
@@ -85,6 +87,8 @@ this is representability checking, not post-submit evaluation during upload.
    both entry paths, with Unicode and escaped text measured as canonical UTF-8.
 4. Shared projection uses exact stored criteria, locked policy identities and
    inspected file hashes/sizes; evidence keys map only to matching verified files.
+   Stored null and empty criteria both produce the existing missing-criteria
+   checker outcome, without treating the capacity check as substantive evaluation.
    Independently changed TASK post/review/revision IDs, versions/generations,
    hashes and body reject before effects. Foreign project/context substitutions
    reject. No arbitrary evidence is added.
