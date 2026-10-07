@@ -36,10 +36,13 @@ class SubmissionAdmissionConsumptionRequest:
     submission_id: UUID
     submission_version: int
     task_context: TaskSubmissionContextFacts
+    packet_sha256: str
 
     def __post_init__(self) -> None:
         if type(self.submission_version) is not int or self.submission_version < 1:
             raise ValueError("submission version is invalid")
+        if type(self.packet_sha256) is not str or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.packet_sha256):
+            raise ValueError("submission packet digest is invalid")
 
 
 @dataclass(frozen=True, slots=True)

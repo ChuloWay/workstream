@@ -92,6 +92,7 @@ class SubmissionArtifactAdmissionRequest:
     submission_id: UUID
     submission_version: int
     task_context: TaskSubmissionContextFacts
+    packet_sha256: str
 
 
 @dataclass(frozen=True, slots=True)

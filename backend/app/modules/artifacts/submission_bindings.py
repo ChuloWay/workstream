@@ -160,6 +160,8 @@ class SubmissionAdmissionConsumptionService:
             )
         except (TypeError, ValueError) as exc:
             raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable") from exc
+        if evidence.packet_sha256 != request.packet_sha256:
+            raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable")
         if admission.status == "consumed":
             return await self._consumed_replay(admission, evidence, request)
         if not self._task_lineage_matches(admission, evidence, request):

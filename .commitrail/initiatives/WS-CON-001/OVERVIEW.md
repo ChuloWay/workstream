@@ -1,5 +1,7 @@
 # WS-CON-001 — Contribution and conditional compensation
 
+Delivery priority follows the [first complete contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone): contribute only prerequisites of that public backend path; live human review/revision and external integrations remain later work.
+
 [AUTH-19A](../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
 planned router identity. TASK request and future source-ID reservation
 (ARCH-04E1B-A) and strict hidden AUTH preparation (ARCH-04E2-A) are delivered.
@@ -65,7 +67,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [CON-07](WS-CON-001-07.md) adds hidden source-neutral submitter participation
   and complete frozen award-set staging/replay; no recognition route or
   fulfillment operation is live.
-- Next usable boundary: ARCH-04E1B-B hidden routing handlers using the shared
+- Next usable boundary: capacity alignment, then atomic initial Submission/dispatch,
+  before ARCH-04E1B-B hidden routing handlers using the shared
   participant. The complete authorized operation still requires a mandatory
   same-input AUTH receipt, database complete-set enforcement, audit/outbox and
   currentness proof before either trigger can consume it in production.

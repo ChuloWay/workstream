@@ -1,6 +1,6 @@
 # Chunk Contract: WS-ARCH-001-04F Checker Remediation Handoff
 
-Disposition: Planned. Non-executable coordination parent after 04E, to be
+Disposition: Planned. Non-executable coordination parent using the required hidden 04E result/handler contracts, to be
 split into owner-sized hidden behavior, authority and live integration changes
 before implementation; not one combined multi-owner PR. Risk: L1. Outcome: final
 current contributor-correctable checker outcomes create one bounded,
@@ -18,7 +18,9 @@ run and blocking findings; replay and concurrency create one projection;
 superseded or stale runs cannot remain current; contributor visibility is
 bounded to their own Submission. This chunk is required before public 02I but
 does not block REV beginning from the separate canonical `allow_review`
-manifest.
+manifest. Its hidden implementation and authority proof precede production
+false-policy activation; it does not depend on an already-live false branch.
+Follow the [first-layer sequence](../PLAN.md#first-complete-contributor-milestone).
 
 This is the sole replacement for historical XINT-05C checker-remediation
 submission work. TASKS owns predecessor/current-assignment validation and the

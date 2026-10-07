@@ -116,7 +116,7 @@ model.
 
 Source-agnostic does not mean every source adapter is already implemented.
 v0.1 remains manual-first with controlled manual, Markdown, and CSV intake.
-External origin onboarding, automated routing, and execution workspaces remain
+External origin onboarding, external task-routing systems, and execution workspaces remain
 later adapters. Revision and reassignment belong to the governed lifecycle;
 adjudication remains a separately approved future capability rather than a
 claim about current v0.1 behavior.
@@ -188,7 +188,9 @@ ARCH-04E1B-B1 requires TASK locking before checker reservation, current-result
 reads and review admission INSERTs, preserving exact read-only reservation replay
 after acceptance. ARCH-04E1B-B3 retains the inspected ZIP file metadata with immutable
 ART evidence and returns it on consumption without another storage read. Initial
-Submission/dispatch composition remains pending. ARCH-04E1B-B2 prepares exact source proposals from current
+Submission/dispatch composition remains pending. ARCH-04E1B-B4 binds the
+Submission summary and attestation to the packet that passed intake, with
+service and database enforcement. ARCH-04E1B-B2 prepares exact source proposals from current
 CHECKERS custody and historical PROJECTS policy, without inserting a manifest
 or granting authority. Hidden handlers still need complete
 authorized currentness proof. These prerequisites do not require live
@@ -738,7 +740,8 @@ without creating a REV queue dependency. The false branch binds exact
 without fabricating a Review. CON-07 now supplies the hidden source-neutral
 submitter participant and complete frozen award-set staging/replay. REV-04C now
 composes FinalAcceptance, TASK terminal effects and that CON participant in one
-hidden caller-owned transaction for either source. Hidden handlers are next.
+hidden caller-owned transaction for either source. Capacity alignment and atomic
+initial Submission/dispatch come next, before the hidden handlers.
 The mandatory exact AUTH receipt must become required on the same strict input,
 with no optional/default path, before production consumption; database
 FinalAcceptance/TASK/CON closure, TASK-before-CHECKERS race proof, shared

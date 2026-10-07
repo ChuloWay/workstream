@@ -212,8 +212,8 @@ async def test_composed_final_denial_rolls_back_task_and_art_rows(
         request = SubmissionCreationRequest(
             admission_id=art_request.admission_id, task_id=context.task_id,
             assignment_id=context.assignment_id, contributor_id=context.contributor_id,
-            predecessor_submission_id=None, summary="summary",
-            contributor_attestation="attestation",
+            predecessor_submission_id=None, summary="Prepared summary",
+            contributor_attestation="Prepared attestation",
         )
         async with factory() as session:
             await session.execute(text(f'set search_path to "{schema}"'))
@@ -242,6 +242,7 @@ async def test_postgresql_consumption_is_concurrent_and_rollback_safe(
 ) -> None:
     request = _request()
     request = type(request)(
+        packet_sha256=request.packet_sha256,
         admission_id=request.admission_id,
         submission_id=request.submission_id,
         submission_version=2,
@@ -430,8 +431,8 @@ def _wire_hidden_authority(monkeypatch: pytest.MonkeyPatch):
     request = SubmissionCreationRequest(
         admission_id=art_request.admission_id, task_id=context.task_id,
         assignment_id=context.assignment_id, contributor_id=context.contributor_id,
-        predecessor_submission_id=None, summary="summary",
-        contributor_attestation="attestation",
+        predecessor_submission_id=None, summary="Prepared summary",
+        contributor_attestation="Prepared attestation",
     )
     return art_request, human, request, request_id, correlation_id
 

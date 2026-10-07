@@ -1,5 +1,7 @@
 # WS-POL-003 — Unified project-guide compilation
 
+Delivery priority follows the [first complete contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone): contribute only prerequisites of that public backend path; live human review/revision and external integrations remain later work.
+
 [AUTH-19A](../WS-AUTH-001/WS-AUTH-001-19A.md) delivers inert exact source/receipt contracts and the
 planned router identity. ARCH-04E1B-A delivers caller-owned routing-request and
 future source-identity reservation. ARCH-04E2-A now delivers strict hidden
@@ -85,7 +87,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: ARCH-04E1B-B hidden handlers using the delivered
+- Next usable boundary: capacity alignment, then atomic initial Submission/dispatch,
+  before ARCH-04E1B-B hidden handlers using the delivered
   REV-04C participant, then mandatory AUTH receipt/database closure and
   activation at 04E2-B before 04E3.
   ARCH-04F remediation still precedes enabling false.
