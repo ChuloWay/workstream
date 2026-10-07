@@ -406,7 +406,9 @@ async def test_changed_packet_denies_before_binding_or_consumed_replay(status, f
     packet = SubmissionPacketView("Prepared summary", "Prepared attestation")
     changed = replace(packet, **{field: "Different valid contributor text"})
     request = replace(original, packet_sha256=changed.sha256)
-    session = _session(admission, evidence, content)
+    binding = SimpleNamespace(id=str(new_record_id()), content_id=admission.artifact_content_id)
+    continuation = (binding,) if status == "consumed" else (None, datetime.now(UTC))
+    session = _session(admission, evidence, content, *continuation)
     authority = _Allow()
     with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
         await SubmissionAdmissionConsumptionService(session, authority).consume(request)
