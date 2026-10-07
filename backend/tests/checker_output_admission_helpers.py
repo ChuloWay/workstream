@@ -27,7 +27,7 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputSlot,
 )
 from app.modules.checkers.models import CheckerRun
-from app.modules.checkers.post_submit_contracts import make_post_submit_request
+from app.modules.checkers.api.post_submit import make_post_submit_request
 from app.modules.tasks.models import Submission, WorkstreamTask
 from tests.checkers.post_submit.support import request as checker_evaluation_request
 

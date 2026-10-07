@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
+
+from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
 from uuid import UUID
 
 from sqlalchemy import Row, Select, and_, or_, select, tuple_
@@ -487,6 +491,18 @@ class TaskRepository:
         if any(value is None for value in locked_values):
             raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
         try:
+            locked_policy = TaskPolicyLineage.model_validate_json(json.dumps({
+                key: str(value) if isinstance(value, UUID) else value
+                for key in TaskPolicyLineage.model_fields
+                for value in (getattr(task, key),)
+            }))
+            post_policy = CompiledPostSubmitPolicy.model_validate_json(
+                json.dumps(task.locked_post_submit_checker_policy_body),
+            )
+            if (post_policy.policy_hash != locked_policy.locked_post_submit_checker_policy_hash
+                    or post_policy.project_id != UUID(task.project_id)
+                    or post_policy.guide_version != locked_policy.locked_guide_version):
+                raise ValueError("task post-submit policy body differs from locked identity")
             locked_project_context = TaskLockedProjectContextReferences(
                 project_id=UUID(task.project_id),
                 locked_contribution_policy_version_id=task.locked_contribution_policy_version_id,
@@ -518,6 +534,8 @@ class TaskRepository:
                 kind="revision" if predecessor is not None else "initial",
                 predecessor=predecessor,
                 locked_project_context=locked_project_context,
+                locked_policy=locked_policy,
+                acceptance_criteria=task.acceptance_criteria,
                 submitter_contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
             )
         except (TypeError, ValueError) as exc:

@@ -22,6 +22,8 @@ from app.modules.tasks.api import (
     TaskSubmissionContextPort,
 )
 from app.modules.tasks.repository import TaskRepository
+from app.modules.tasks.api import TaskSubmissionContextFacts
+from app.modules.projects.api import ProjectLockedPolicyContextFacts
 from app.modules.tasks.service import TaskService
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api import TaskAuthorizationPort, TaskTransitionAuditPort
@@ -201,3 +203,8 @@ def routing_source_preparer(session):
         session, evaluations=evaluation_coordinator(session),
         projects=project_locked_policy_context_port(session),
     )
+
+
+def validate_submission_policy_context(task_context: TaskSubmissionContextFacts, project_context: ProjectLockedPolicyContextFacts) -> None:
+    """Use TASK's canonical stamp projection without exposing its implementation."""
+    TaskService.validate_submission_policy_context(task_context, project_context)

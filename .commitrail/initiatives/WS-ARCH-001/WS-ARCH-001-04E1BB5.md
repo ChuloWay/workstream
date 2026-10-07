@@ -1,7 +1,7 @@
 # ARCH-04E1B-B5 — Reject unrepresentable evaluation input before admission
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: hidden preparation checks the same bounded evaluation content that initial dispatch will consume, before any durable upload intent or ready admission.
 
 ## Intent
@@ -115,8 +115,15 @@ preservation and absence of premature dispatch or authorization.
 Discovery confirms the mismatch in `artifacts/submission_archive.py`, core
 configuration and CHECKERS `api/post_submit.py`/`api/post_submit_catalogue.py`.
 Preparation's inspection-to-evidence-reservation boundary is the earliest point
-with verified complete file metadata and no durable put intent. Plan review must
-confirm the typed adapter, evidence projection and envelope proof before code.
+with verified complete file metadata and no durable put intent. Plan review confirmed the typed adapter, evidence projection and envelope proof.
+The real ZIP regression covers 1,025 files and a portable 1,001-character path,
+each retried without attempt/provider/admission effects, alongside verified ready
+admission for valid input. Shared-boundary tests exercise canonical UTF-8 size,
+one-byte overflow and the maximum identity envelope. Projection tests cover
+exact file evidence, absent criteria, independent locked stamp substitutions and
+both review modes as detached facts; they do not claim false-policy activation.
+Existing packet-length tests retain their earlier boundary; they are not evidence
+that this new capacity call rejects packet text first.
 
 ## Next dependency
 

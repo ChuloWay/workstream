@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Protocol, Self
 
-from pydantic import Field, StrictInt, StrictStr, model_validator
+from pydantic import TypeAdapter, Field, StrictInt, StrictStr, model_validator
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.post_submit_catalogue import (
@@ -122,7 +122,37 @@ class PostSubmissionStructuralInput(PostSubmitValue):
     observed_context: ObservedPostSubmitContext
 
 
-class PostSubmissionEvaluationRequest(PostSubmitValue):
+# Keep the locked catalogue's 1 MiB request ceiling; reserve its finite envelope.
+POST_SUBMIT_CONTENT_BYTE_LIMIT = 1_048_576 - 1024
+
+
+class PostSubmissionEvaluationContent(PostSubmitValue):
+    """Exact bounded content shared by admission and later identified execution."""
+
+    project_id: ResourceId
+    expected_context: ExpectedPostSubmitContext
+    catalogue: PostSubmitCatalogue
+    policy: CompiledPostSubmitPolicy
+    structural_input: PostSubmissionStructuralInput
+
+    @model_validator(mode="after")
+    def validate_content(self) -> Self:
+        """Reject impossible content before any record identities are allocated."""
+        if len(canonical_post_submit_bytes(
+            self, include=set(PostSubmissionEvaluationContent.model_fields),
+        )) > POST_SUBMIT_CONTENT_BYTE_LIMIT:
+            raise ValueError("post-submit content capacity exceeded")
+        if self.project_id != self.policy.project_id:
+            raise ValueError("post-submit request project mismatch")
+        if self.policy.guide_version != self.expected_context.guide_version:
+            raise ValueError("post-submit request guide version mismatch")
+        if self.policy.policy_hash != self.expected_context.post_policy_hash:
+            raise ValueError("post-submit request policy hash mismatch")
+        self.policy.validate_catalogue(self.catalogue)
+        return self
+
+
+class PostSubmissionEvaluationRequest(PostSubmissionEvaluationContent):
     """Hash-bound value consistency, never stored ownership or execution authority."""
 
     schema_version: Literal["post_submit_evaluation_request"] = (
@@ -130,7 +160,6 @@ class PostSubmissionEvaluationRequest(PostSubmitValue):
     )
     evaluation_request_id: ResourceId
     evaluation_generation: VersionNumber
-    project_id: ResourceId
     task_id: ResourceId
     assignment_id: ResourceId
     submission_id: ResourceId
@@ -139,24 +168,13 @@ class PostSubmissionEvaluationRequest(PostSubmitValue):
     binding_id: ResourceId
     content_sha256: Sha256
     byte_count: ByteCount
-    expected_context: ExpectedPostSubmitContext
-    catalogue: PostSubmitCatalogue
-    policy: CompiledPostSubmitPolicy
-    structural_input: PostSubmissionStructuralInput
     request_sha256: Sha256
 
     @model_validator(mode="after")
     def validate_request(self) -> Self:
-        """Reject inconsistent duplicated facts before execution."""
+        """Retain the full envelope ceiling and exact request digest."""
         if len(canonical_post_submit_bytes(self)) > 1_048_576:
             raise ValueError("post-submit request capacity exceeded")
-        if self.project_id != self.policy.project_id:
-            raise ValueError("post-submit request project mismatch")
-        if self.policy.guide_version != self.expected_context.guide_version:
-            raise ValueError("post-submit request guide version mismatch")
-        if self.policy.policy_hash != self.expected_context.post_policy_hash:
-            raise ValueError("post-submit request policy hash mismatch")
-        self.policy.validate_catalogue(self.catalogue)
         expected = canonical_json_hash(self.model_dump(mode="json", exclude={"request_sha256"}))
         if self.request_sha256 != expected:
             raise ValueError("post-submit request digest mismatch")
@@ -331,3 +349,24 @@ class PostSubmissionExecutionPort(Protocol):
     ) -> PostSubmissionEvaluationResult:
         """Evaluate one request after later owner resolution and authority checks."""
         ...
+
+
+_REQUEST_FIELDS = {
+    name: TypeAdapter(field.rebuild_annotation())
+    for name, field in PostSubmissionEvaluationRequest.model_fields.items()
+}
+
+def make_post_submit_request(**fields: object) -> PostSubmissionEvaluationRequest:
+    """Compute identity and then validate every field; this grants no authority."""
+    if "request_sha256" in fields:
+        raise ValueError("request identity is derived, not caller selected")
+    fields = {
+        name: _REQUEST_FIELDS[name].validate_python(value) if name in _REQUEST_FIELDS else value
+        for name, value in fields.items()
+    }
+    candidate = PostSubmissionEvaluationRequest.model_construct(
+        **fields, request_sha256="sha256:" + "0" * 64
+    )
+    body = candidate.model_dump(mode="json", exclude={"request_sha256"})
+    fields["request_sha256"] = canonical_json_hash(body)
+    return PostSubmissionEvaluationRequest.model_validate(fields)

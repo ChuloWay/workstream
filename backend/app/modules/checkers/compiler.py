@@ -13,7 +13,7 @@ from app.modules.checkers.catalogue import (
     PreSubmissionCheckerCatalogue,
     build_pre_submission_checker_catalogue,
 )
-from app.modules.checkers.api.artifact_paths import is_canonical_relative_path
+from app.modules.checkers.api.artifact_paths import is_canonical_relative_path, required_evidence_path
 
 PRE_SUBMIT_COMPILER_VERSION = "workstream-pre-submit-compiler-v0.1"
 PRE_SUBMIT_BUNDLE_SCHEMA_VERSION = "pre_submit_checker_bundle.v1"
@@ -91,7 +91,7 @@ def build_project_pre_submit_checker_spec(
     if required_evidence:
         evidence_paths = _project_unique_paths(
             required_evidence,
-            projector=_required_evidence_path,
+            projector=lambda item: required_evidence_path(item.get("key")),
             field="required_evidence",
         )
         rules.append(
@@ -404,7 +404,7 @@ def _validate_rule_coverage(effective_policy: dict[str, Any], rules: list[dict[s
             for evidence in effective_policy.get("required_evidence", [])
             if evidence.get("required", True)
         ],
-        projector=_required_evidence_path,
+        projector=lambda item: required_evidence_path(item.get("key")),
         field="required_evidence",
     )
     if required_evidence_paths:
@@ -613,34 +613,15 @@ def _project_unique_paths(
     field: str,
 ) -> list[str]:
     """Project policy identities into unique canonical server-owned paths."""
-    paths = [projector(item) for item in items]
+    try:
+        paths = [projector(item) for item in items]
+    except ValueError as exc:
+        raise PreSubmitCheckerCompilerError(str(exc)) from exc
     if len(paths) != len(set(paths)):
         raise PreSubmitCheckerCompilerError(
             f"effective project submission artifact policy {field} paths are ambiguous"
         )
     return paths
-
-
-def _required_evidence_path(item: dict[str, Any]) -> str:
-    """Project an evidence identity into Workstream's closed evidence namespace."""
-    key = item.get("key")
-    if (
-        not isinstance(key, str)
-        or not key
-        or any(
-            not (character.isascii() and (character.isalnum() or character in "._-"))
-            for character in key
-        )
-    ):
-        raise PreSubmitCheckerCompilerError(
-            "effective project submission evidence key is unmappable"
-        )
-    path = f"evidence/{key}"
-    if not is_canonical_relative_path(path):
-        raise PreSubmitCheckerCompilerError(
-            "effective project submission evidence key is unmappable"
-        )
-    return path
 
 
 def _checker_names_for_rules(rules: list[dict[str, Any]]) -> list[str]:

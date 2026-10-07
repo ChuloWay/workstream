@@ -2,6 +2,8 @@
 
 from uuid import UUID, uuid4
 
+from submission_context_fixtures import submission_context_facts
+
 import pytest
 from sqlalchemy import select
 
@@ -11,7 +13,7 @@ from app.modules.authorization.submission_creation_authorization import (
 )
 from app.modules.tasks.api import (
     SubmissionCreationAuthorityFacts, SubmissionCreationUnavailable,
-    TaskLockedProjectContextReferences, TaskSubmissionContextFacts,
+    TaskLockedProjectContextReferences,
 )
 from app.modules.tasks.models import AuditEvent
 from tests.authorization.admin_access.support import create_project
@@ -21,7 +23,7 @@ from tests.authorization.task_authority.test_postgresql import context, grant, p
 def authority_facts(actor_id, project_id):
     """Supply TASK-port facts; this fixture does not claim to load or lock TASK rows."""
     task_id, assignment_id = uuid4(), uuid4()
-    task_context = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+    task_context = submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=task_id, assignment_id=assignment_id, contributor_id=actor_id,
         status="in_progress", kind="initial", predecessor=None,
         locked_project_context=TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),

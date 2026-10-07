@@ -27,7 +27,7 @@ from app.modules.checkers.api import (
     CompiledPostSubmitPolicy, ExpectedPostSubmitContext, ObservedPostSubmitContext,
     PostSubmissionStructuralInput, PostSubmitManifestEntry, PostSubmitPolicyInputs,
 )
-from app.modules.checkers.post_submit_contracts import make_post_submit_request
+from app.modules.checkers.api.post_submit import make_post_submit_request
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
 from app.modules.tasks.models import Submission

@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.artifacts.api import (
+    SubmissionBundleFile,
     SubmissionBundlePreparationRejected,
     SubmissionBundlePreparationInfrastructureUnavailable,
     SubmissionBundlePreparationRequest,
@@ -66,6 +67,7 @@ from app.modules.artifacts.submission_materialization import (
     PreparedBundlePreSubmitEvidenceService,
     PreSubmissionEvaluationPort,
 )
+from app.modules.checkers.api.post_submit import PostSubmissionEvaluationContent
 from app.modules.checkers.api import (
     EffectivePreSubmissionExecutionPlan,
     EffectivePreSubmissionPlanLineage,
@@ -453,6 +455,10 @@ class SubmissionBundlePreparationRuntime:
     evidence: PreparedBundlePreSubmitEvidenceService
     checker_service: PreSubmissionEvaluationPort
     durable_put: SubmissionBundleDurablePutService
+    evaluation_content: Callable[
+        [TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts, SubmissionPacketView,
+         tuple[SubmissionBundleFile, ...], str], PostSubmissionEvaluationContent,
+    ]
 
 
 class PreparedSubmissionBundlePreparationCommand:
@@ -503,7 +509,7 @@ class PreparedSubmissionBundlePreparationCommand:
                     media_type="application/zip",
                 )
                 async with self._session.begin():
-                    await self._lock_authorized_context(request)
+                    task_context, project_context = await self._lock_authorized_context(request)
                     materialization_handle = await runtime.materialization.prepare_authorization(
                         task_id=request.task_id,
                         assignment_id=request.assignment_id,
@@ -515,6 +521,17 @@ class PreparedSubmissionBundlePreparationCommand:
                     )
                     inspection = await prepared.inspect(runtime.inspector)
                     manifest = build_submission_manifest(inspection)
+                    packet = SubmissionPacketView(
+                        summary=request.summary, contributor_attestation=request.contributor_attestation,
+                    )
+                    try:
+                        runtime.evaluation_content(
+                            task_context, project_context, packet, manifest.file_facts(), prepared.commitment.sha256,
+                        )
+                    except (ValueError, TypeError, KeyError) as exc:
+                        raise SubmissionBundlePreparationRejected(
+                            "submission_evaluation_content_invalid"
+                        ) from exc
                     change_gate = evaluate_submission_change(
                         commitment=prepared.commitment,
                         manifest=manifest,
@@ -538,10 +555,7 @@ class PreparedSubmissionBundlePreparationCommand:
                         inspection=inspection,
                         manifest=manifest,
                         change_gate=change_gate,
-                        packet=SubmissionPacketView(
-                            summary=request.summary,
-                            contributor_attestation=request.contributor_attestation,
-                        ),
+                        packet=packet,
                     )
                     reserved = await runtime.evidence.reserve(
                         materialization_request, preparation_request=request,

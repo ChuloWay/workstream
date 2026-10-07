@@ -1,6 +1,8 @@
 """Focused proof for ART-owned ready-admission consumption and binding."""
 
 from __future__ import annotations
+from submission_context_fixtures import submission_context_facts
+
 
 from datetime import UTC, datetime
 from dataclasses import replace
@@ -22,7 +24,6 @@ from app.modules.artifacts.submission_bindings import (
 )
 from app.modules.tasks.api import (
     TaskLockedProjectContextReferences,
-    TaskSubmissionContextFacts,
 )
 
 
@@ -46,7 +47,7 @@ def _request(*, submission_id=None) -> SubmissionAdmissionConsumptionRequest:
         admission_id=new_record_id(),
         submission_id=submission_id or new_record_id(),
         submission_version=1,
-        task_context=TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+        task_context=submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
             task_id=new_record_id(),
             assignment_id=new_record_id(),
             contributor_id=new_record_id(),

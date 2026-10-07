@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from typing import Literal, Protocol, get_args
 from uuid import UUID
 
+from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+
 TaskSubmissionContextKind = Literal["initial", "revision"]
 TaskSubmissionContextStatus = Literal["in_progress", "needs_revision"]
 TaskSubmissionContextFailure = Literal[
@@ -88,6 +90,8 @@ class TaskSubmissionContextFacts:
     predecessor: SubmissionPredecessorFacts | None
     submitter_contribution_policy_version_id: UUID
     locked_project_context: TaskLockedProjectContextReferences
+    locked_policy: TaskPolicyLineage
+    acceptance_criteria: str | None
 
     def __post_init__(self) -> None:
         """Enforce the exact initial-or-revision lifecycle shape."""
@@ -97,6 +101,21 @@ class TaskSubmissionContextFacts:
             != self.locked_project_context.locked_contribution_policy_version_id
         ):
             raise ValueError("assignment contribution policy differs from task")
+        if self.acceptance_criteria is not None and type(self.acceptance_criteria) is not str:
+            raise ValueError("task acceptance criteria is invalid")
+        reference_fields = {
+            "guide_version": "locked_guide_version",
+            "source_snapshot_id": "locked_guide_source_snapshot_id",
+            "source_snapshot_hash": "locked_guide_source_snapshot_hash",
+            "effective_policy_id": "locked_effective_project_submission_artifact_policy_id",
+            "effective_policy_hash": "locked_effective_project_submission_artifact_policy_hash",
+            "pre_submit_policy_id": "locked_pre_submit_checker_policy_id",
+            "pre_submit_policy_bundle_hash": "locked_pre_submit_checker_bundle_hash",
+            "locked_contribution_policy_version_id": "locked_contribution_policy_version_id",
+        }
+        if any(getattr(self.locked_project_context, ref) != getattr(self.locked_policy, stamp)
+               for ref, stamp in reference_fields.items()):
+            raise ValueError("task submission context policy references differ")
         is_initial = (
             self.status == "in_progress"
             and self.kind == "initial"

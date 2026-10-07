@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
@@ -186,7 +187,9 @@ async def _configure_participants(
     )
     second_workflow._materialization._authorization = second_materializer
     evidence_owner = _CompleteBeforeDurable(second_workflow)
+    from app.adapters.checkers import submission_evaluation_content
     runtime = SubmissionBundlePreparationRuntime(
+        evaluation_content=submission_evaluation_content,
         preparation=_PauseAfterSpool(harness.preparation, spooled, resume_spool),
         inspector=harness.inspector,
         catalogue=harness.catalogue,

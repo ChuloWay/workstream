@@ -575,3 +575,15 @@ actual Submission request to ART. Consumption rejects a different packet before
 binding or consumed replay. PostgreSQL also checks the final bound Submission
 against retained pre-submit evidence at commit, permitting the existing atomic
 insert-then-bind sequence. This does not activate dispatch or expose public intake.
+
+
+### Submission evaluation input facts
+
+ARCH-04E1B-B5 extends the locked submission-context port with nullable acceptance
+criteria and the complete `TaskPolicyLineage`. TASK validates its retained
+post-policy body against its locked digest and uses the existing activation-stamp
+projection to reconcile every identity/hash/generation with historical PROJECTS
+facts. Missing criteria become empty checker text; no requirement is fabricated.
+The [ART capacity check](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission)
+consumes these facts before durable admission. Initial Submission/dispatch must
+reuse that bounded content with real record identities and fresh authorization.
