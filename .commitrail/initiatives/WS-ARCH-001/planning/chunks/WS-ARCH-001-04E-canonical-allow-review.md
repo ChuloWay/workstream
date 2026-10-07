@@ -108,7 +108,11 @@ creating human admission, acceptance or contribution effects.
    acceptance-first reservation rejection and successor-first stale completion
    rejection. [04E1B-B2](../../WS-ARCH-001-04E1BB2.md) supplies exact
    semantic source preparation from current CHECKERS and historical PROJECTS
-   custody, without source publication or authority. The full authorized
+   custody, without source publication or authority.
+   [04E1B-B3](../../WS-ARCH-001-04E1BB3.md) retains inspected ZIP metadata
+   for admission consumption. Initial Submission/dispatch composition must
+   reconcile ART/CHECKERS input limits and retain exact creation/binding receipts.
+   The full authorized
    handler races remain required. False composition must take the REV lifecycle
    fence before TASK and revalidate the policy after locking; source preparation
    does not acquire that fence or authorize later lock-order inversion. After 04E1B-A/04E2-A and

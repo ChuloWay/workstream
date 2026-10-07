@@ -13,6 +13,8 @@ from app.modules.artifacts.submission_archive import (
     SubmissionArchiveEntry,
     SubmissionArchiveEntryType,
     SubmissionArchiveInspectionResult,
+    normalize_submission_archive_path,
+    validate_submission_archive_inventory,
 )
 
 
@@ -93,6 +95,7 @@ class SubmissionManifest:
                 raise ValueError("submission file identity is incomplete")
             else:
                 ArtifactCommitment.validate_sha256(entry.sha256)
+        validate_submission_archive_inventory(self.entries)
         files = sum(
             entry.entry_type is SubmissionArchiveEntryType.FILE for entry in self.entries
         )
@@ -116,6 +119,53 @@ class SubmissionManifest:
     def as_dict(self) -> dict[str, Any]:
         """Return a fresh JSON-compatible closed manifest body."""
         return _manifest_body(self.entries)
+
+    @classmethod
+    def from_dict(cls, body: object, *, sha256: str) -> SubmissionManifest:
+        """Recover the sole canonical manifest, checking closed stored metadata."""
+        if (
+            type(body) is not dict
+            or set(body) != {"schema_version", "entries"}
+            or body["schema_version"] != SUBMISSION_MANIFEST_SCHEMA_VERSION
+            or type(body["entries"]) is not list
+            or len(body["entries"]) > 100_000
+        ):
+            raise ValueError("submission manifest body is invalid")
+        entries = []
+        paths = set()
+        for value in body["entries"]:
+            if type(value) is not dict:
+                raise ValueError("submission manifest entry is invalid")
+            kind = value.get("entry_type")
+            fields = {"normalized_path", "entry_type"}
+            if kind == "file":
+                fields |= {"sha256", "byte_count", "executable"}
+            elif kind != "directory":
+                raise ValueError("submission manifest entry is invalid")
+            path = value.get("normalized_path")
+            if set(value) != fields or type(path) is not str or not path or path in paths:
+                raise ValueError("submission manifest entry is invalid")
+            if normalize_submission_archive_path(
+                path, maximum_path_bytes=4096, maximum_path_depth=256,
+            ) != path:
+                raise ValueError("submission manifest path is not normalized")
+            paths.add(path)
+            size = value["byte_count"] if kind == "file" else 0
+            if type(size) is not int or not 0 <= size <= 512 * 1024 * 1024:
+                raise ValueError("submission manifest file size is invalid")
+            entries.append(SubmissionArchiveEntry(
+                normalized_path=path, entry_type=SubmissionArchiveEntryType(kind),
+                byte_count=size, sha256=value.get("sha256"), executable=value.get("executable"),
+            ))
+        files = sum(entry.entry_type is SubmissionArchiveEntryType.FILE for entry in entries)
+        expanded = sum(entry.byte_count for entry in entries)
+        if expanded > 512 * 1024 * 1024:
+            raise ValueError("submission manifest expansion is invalid")
+        return cls(
+            sha256=sha256, entries=tuple(entries), entry_count=len(entries),
+            file_count=files, directory_count=len(entries) - files,
+            total_expanded_bytes=expanded,
+        )
 
 
 @dataclass(frozen=True, slots=True)

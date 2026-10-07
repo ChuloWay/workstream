@@ -492,7 +492,8 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
-# The routing PREP proofs reuse the same real completion fixture on this lane.
+# Routing PREP proofs stay together on task C, which has measured headroom
+# after task A reached the unchanged execution cap.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
     "tests/authorization/post_submit_routing/test_prepared.py",
@@ -543,6 +544,6 @@ LANES = (
     *(TestLane(
         name,
         TASK_MODULES
-        + (ROUTING_AUTH_PREPARATION_MODULES if name == "task_lifecycle_a" else ()),
+        + (ROUTING_AUTH_PREPARATION_MODULES if name == "task_lifecycle_c" else ()),
     ) for name in PARTITIONED_TASK_LANES),
 )

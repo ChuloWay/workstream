@@ -141,3 +141,273 @@ async def test_new_result_rows_require_valid_order_and_bounded_metadata(
                 await transaction.rollback()
     finally:
         await harness.close()
+
+
+async def test_manifest_metadata_is_hash_bound_on_insert_and_immutable(
+    tmp_path, isolated_database_env,
+):
+    """Real inspected evidence is the valid control for direct storage rejections."""
+    import json
+    from copy import deepcopy
+    from app.core.hashing import canonical_json_hash
+
+    harness = await _harness(tmp_path, isolated_database_env)
+    try:
+        async with harness.factory() as session:
+            workflow = harness.workflow(session, [])
+            reservation = await _reserve(workflow, harness.request, harness.preparation_request)
+            completed = await workflow.execute_reserved(
+                harness.request, reservation, preparation_request=harness.preparation_request,
+            )
+        evidence_id = str(completed.evidence.evidence_set_id)
+        async with harness.factory() as session:
+            body, digest = (await session.execute(text(
+                "select semantic_manifest_body,semantic_manifest_sha256 "
+                "from pre_submit_evidence_sets where id=:id"
+            ), {"id": evidence_id})).one()
+        assert canonical_json_hash(body) == digest
+        from tests.test_submission_manifest import _archive, _manifest
+        unicode_manifest = _manifest(_archive([("café/α.txt", b"verified")]))
+        malformed = deepcopy(body)
+        malformed["entries"][0]["content"] = "not metadata"
+        async with harness.factory() as session, session.begin():
+            for candidate, commitment, valid in (
+                (body, digest, True), (unicode_manifest.as_dict(), unicode_manifest.sha256, True),
+                (body, "sha256:" + "f" * 64, False),
+                (None, digest, False), (malformed, canonical_json_hash(malformed), False),
+            ):
+                assert await session.scalar(text(
+                    "select public.submission_manifest_metadata_valid(cast(:body as jsonb),:digest)"
+                ), {"body": json.dumps(candidate), "digest": commitment}) is valid
+            for path in ("../outside.txt", "/absolute.txt", "dir\\file.txt", "a//b", "a/./b", "a./b", "drive:c/file", "cafe\u0301.txt", "x" * 4097):
+                candidate = deepcopy(unicode_manifest.as_dict())
+                candidate["entries"] = [candidate["entries"][-1]]
+                candidate["entries"][0]["normalized_path"] = path
+                assert not await session.scalar(text(
+                    "select public.submission_manifest_metadata_valid(cast(:body as jsonb),:digest)"
+                ), {"body": json.dumps(candidate), "digest": canonical_json_hash(candidate)})
+            for candidate, commitment in ((None, digest), (malformed, digest), (body, "sha256:" + "f" * 64)):
+                with pytest.raises(DBAPIError, match="pre-submit manifest metadata invalid"):
+                    async with session.begin_nested():
+                        await session.execute(text(
+                            "insert into pre_submit_evidence_sets select "
+                            "(jsonb_populate_record(null::pre_submit_evidence_sets,to_jsonb(e)||"
+                            "jsonb_build_object('semantic_manifest_body',cast(:body as jsonb),"
+                            "'semantic_manifest_sha256',cast(:digest as text),'created_at',transaction_timestamp()))).* "
+                            "from pre_submit_evidence_sets e where e.id=:id"
+                        ), {"body": json.dumps(candidate), "digest": commitment, "id": evidence_id})
+            with pytest.raises(DBAPIError, match="immutable"):
+                async with session.begin_nested():
+                    await session.execute(text(
+                        "update pre_submit_evidence_sets set semantic_manifest_body=null where id=:id"
+                    ), {"id": evidence_id})
+            assert await session.scalar(text(
+                "select semantic_manifest_body from pre_submit_evidence_sets where id=:id"
+            ), {"id": evidence_id}) == body
+    finally:
+        await harness.close()
+
+
+async def test_manifest_upgrade_preserves_old_evidence_without_inventing_metadata(
+    tmp_path, isolated_database_env, migration_lock,
+):
+    import asyncio
+    import asyncpg
+    from alembic import command
+    from app.db import session as db_session
+    from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidenceConflict
+    from tests.migration_fixtures import (
+        _config, add_current_art_seed_column, restore_predecessor_evidence_schema,
+    )
+
+    with migration_lock():
+        await db_session.dispose_engine()
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            await connection.execute("drop schema public cascade; create schema public")
+        finally:
+            await connection.close()
+        await asyncio.to_thread(command.upgrade, _config(), "0020_review_admission_lock_order")
+        original_columns = await add_current_art_seed_column(isolated_database_env)
+        harness = await _harness(tmp_path, isolated_database_env)
+        try:
+            calls = []
+            async with harness.factory() as session:
+                workflow = harness.workflow(session, calls)
+                reservation = await _reserve(workflow, harness.request, harness.preparation_request)
+                completed = await workflow.execute_reserved(
+                    harness.request, reservation, preparation_request=harness.preparation_request,
+                )
+            evidence_id = str(completed.evidence.evidence_set_id)
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
+            async with harness.factory() as session:
+                before = await session.scalar(text(
+                    "select to_jsonb(e) from pre_submit_evidence_sets e where id=:id"
+                ), {"id": evidence_id})
+            await asyncio.to_thread(command.upgrade, _config(), "head")
+            async with harness.factory() as session:
+                after = await session.scalar(text(
+                    "select to_jsonb(e) from pre_submit_evidence_sets e where id=:id"
+                ), {"id": evidence_id})
+            assert after.pop("semantic_manifest_body") is None
+            assert after == before
+            async with harness.factory() as session:
+                workflow = harness.workflow(session, calls)
+                with pytest.raises(PreSubmitEvidenceConflict, match="pre_submit_attempt_manifest_invalid"):
+                    await _reserve(workflow, harness.request, harness.preparation_request)
+            assert calls == [1]
+        finally:
+            await harness.close()
+
+
+async def test_upgraded_consumed_admission_without_metadata_is_unavailable(
+    tmp_path, isolated_database_env, migration_lock, monkeypatch,
+):
+    """Real retained admission recovery denies without rewriting its consumed facts."""
+    import asyncio
+    import asyncpg
+    from alembic import command
+    from app.db import session as db_session
+    from app.modules.artifacts.api import SubmissionAdmissionConsumptionError
+    from app.modules.artifacts.submission_bindings import SubmissionAdmissionConsumptionService
+    from tests.migration_fixtures import (
+        _config, add_current_art_seed_column, restore_predecessor_evidence_schema,
+    )
+    from tests.post_submit_materialization_helpers import material_fixture
+    from tests.test_artifact_bindings import _Allow
+
+    consume = SubmissionAdmissionConsumptionService.consume
+    requests = []
+
+    async def capture(service, request):
+        requests.append(request)
+        return await consume(service, request)
+
+    monkeypatch.setattr(SubmissionAdmissionConsumptionService, "consume", capture)
+    with migration_lock():
+        await db_session.dispose_engine()
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            await connection.execute("drop schema public cascade; create schema public")
+        finally:
+            await connection.close()
+        await asyncio.to_thread(command.upgrade, _config(), "0020_review_admission_lock_order")
+        original_columns = await add_current_art_seed_column(isolated_database_env)
+        async with material_fixture(tmp_path, isolated_database_env) as h:
+            assert len(requests) == 1
+            request = requests[0]
+            # Committed, real metadata reaches the successful replay branch first.
+            async with h.factory() as session, session.begin():
+                result = await consume(SubmissionAdmissionConsumptionService(session, _Allow()), request)
+                assert result.replayed and result.material is not None
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
+            async with h.factory() as session:
+                before = await session.scalar(text(
+                    "select to_jsonb(a) from submission_bundle_admissions a where id=:id"
+                ), {"id": str(request.admission_id)})
+                bindings = await session.scalar(text("select count(*) from artifact_bindings"))
+            await asyncio.to_thread(command.upgrade, _config(), "head")
+            authority = _Allow()
+            async with h.factory() as session, session.begin():
+                with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
+                    await consume(SubmissionAdmissionConsumptionService(session, authority), request)
+                assert await session.scalar(text(
+                    "select to_jsonb(a) from submission_bundle_admissions a where id=:id"
+                ), {"id": str(request.admission_id)}) == before
+                assert await session.scalar(text("select count(*) from artifact_bindings")) == bindings
+            authority.consume.assert_not_awaited()
+            assert h.store.opens == []
+
+
+async def _create_manifest_insert_probe(connection):
+    """Use the real column types and INSERT guard without unrelated parent constraints."""
+    await connection.execute(
+        'CREATE TEMP TABLE manifest_insert_probe AS SELECT semantic_manifest_body, '
+        'semantic_manifest_sha256 FROM public.pre_submit_evidence_sets WITH NO DATA'
+    )
+    await connection.execute(
+        'CREATE TRIGGER manifest_probe BEFORE INSERT ON manifest_insert_probe '
+        'FOR EACH ROW EXECUTE FUNCTION public.guard_submission_manifest_metadata()'
+    )
+
+
+async def test_native_json_insert_recovers_the_validated_numeric_representation(isolated_database_env):
+    import asyncpg
+    import json
+    from app.modules.artifacts.submission_manifest import SubmissionManifest
+    from app.core.hashing import canonical_json_hash
+    from tests.test_submission_manifest import _archive, _manifest
+
+    connection = await asyncpg.connect(isolated_database_env.replace('+asyncpg', ''))
+    try:
+        await _create_manifest_insert_probe(connection)
+        for count, literal in ((1, '1'), (1, '1e0'), (10, '1e1')):
+            manifest = _manifest(_archive([('a', b'x' * count)]))
+            native_json = json.dumps(manifest.as_dict()).replace(f'"byte_count": {count}', f'"byte_count": {literal}')
+            assert f'"byte_count": {literal}' in native_json
+            if 'e' in literal:
+                assert type(json.loads(native_json)['entries'][0]['byte_count']) is float
+            stored = await connection.fetchval(
+                'INSERT INTO manifest_insert_probe VALUES ($1::json,$2) RETURNING semantic_manifest_body',
+                native_json, manifest.sha256,
+            )
+            recovered = json.loads(stored)
+            assert type(recovered['entries'][0]['byte_count']) is int
+            assert SubmissionManifest.from_dict(recovered, sha256=manifest.sha256) == manifest
+        for literal in ('1.0', '1.5'):
+            manifest = _manifest(_archive([('a', b'x')]))
+            native_json = json.dumps(manifest.as_dict()).replace('"byte_count": 1', f'"byte_count": {literal}')
+            with pytest.raises(asyncpg.CheckViolationError, match='pre-submit manifest metadata invalid'):
+                await connection.execute('INSERT INTO manifest_insert_probe VALUES ($1::json,$2)', native_json, canonical_json_hash(json.loads(native_json)))
+    finally:
+        await connection.close()
+
+
+async def test_manifest_insert_guard_rejects_hash_consistent_inventory_collisions(isolated_database_env):
+    import asyncpg
+    import json
+    from app.core.hashing import canonical_json_hash
+    from tests.test_submission_manifest import _archive, _manifest
+
+    connection = await asyncpg.connect(isolated_database_env.replace('+asyncpg', ''))
+    try:
+        await _create_manifest_insert_probe(connection)
+        valid = _manifest(_archive([('café/a', b'x'), ('cafe', b'x')]))
+        await connection.execute('INSERT INTO manifest_insert_probe VALUES ($1::json,$2)', json.dumps(valid.as_dict()), valid.sha256)
+        template = _manifest(_archive([('safe', b'x')])).as_dict()
+        entry = template['entries'][0]
+        for paths in (('A', 'a'), ('dir', 'dir/x'), ('DIR/x', 'dir'), ('STRASSE', 'Straße'), ('Σ', 'ς'), ('İ', 'i\u0307')):
+            body = dict(template, entries=sorted([dict(entry, normalized_path=path) for path in paths], key=lambda item: item['normalized_path']))
+            with pytest.raises(asyncpg.CheckViolationError, match='pre-submit manifest metadata invalid'):
+                await connection.execute('INSERT INTO manifest_insert_probe VALUES ($1::json,$2)', json.dumps(body), canonical_json_hash(body))
+        assert await connection.fetchval('SELECT count(*) FROM manifest_insert_probe') == 1
+    finally:
+        await connection.close()
+
+
+async def test_database_casefold_matches_frozen_unicode_15(isolated_database_env):
+    import asyncpg
+    import hashlib
+    import importlib.util
+    import json
+    from pathlib import Path
+    import unicodedata
+
+    spec = importlib.util.spec_from_file_location('manifest_migration', Path(__file__).parents[1] / 'alembic/versions/0021_submission_manifest.py')
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    mapping = json.loads(migration._UNICODE_15_CASEFOLD_JSON)
+    assert unicodedata.unidata_version == '15.0.0'
+    assert len(mapping) == 1530
+    assert hashlib.sha256(migration._UNICODE_15_CASEFOLD_JSON.encode()).hexdigest() == 'c0d6e0ca212805674e7443c1212d732e11fb9faf16d92326aa1a9536caadbf3a'
+    expected = {chr(i): chr(i).casefold() for i in range(0x110000) if chr(i).casefold() != chr(i)}
+    assert mapping == expected
+    connection = await asyncpg.connect(isolated_database_env.replace('+asyncpg', ''))
+    try:
+        values = list(mapping) + ['', 'café/cafe', 'dir/file', '123', '中', '🙂', 'Straße/İΣ']
+        observed = await connection.fetch(
+            'SELECT value,public.submission_archive_casefold(value) AS folded FROM unnest($1::text[]) AS values(value)', values,
+        )
+        assert [(row['value'], row['folded']) for row in observed] == [(value, value.casefold()) for value in values]
+    finally:
+        await connection.close()

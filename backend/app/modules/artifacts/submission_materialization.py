@@ -511,5 +511,5 @@ class PreparedBundlePreSubmitEvidenceService:
             await self._lock_authorized_context(request, preparation_request)
             return await self._evidence_service().persist(PreSubmitEvidencePersistenceRequest(
                 **{name: getattr(values, name) for name in values.__dataclass_fields__},
-                execution=execution, attempt=claim,
+                execution=execution, attempt=claim, manifest=request.manifest,
             ))

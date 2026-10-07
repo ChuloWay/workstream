@@ -1,4 +1,6 @@
 # WS-ARCH-001 — Current delivery plan through allow_review
+
+[ARCH-04E1B-B3](../WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. Initial Submission/dispatch composition is next; it must reconcile existing ART/CHECKERS size limits and retain exact creation/binding receipts. No dispatch or routing authority is activated.
 [ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
 TASK, CHECKERS and historical PROJECTS policy facts. It stages only the existing
 routing request; proposed source facts have no fabricated creation timestamp.
@@ -91,6 +93,7 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-04E2-A](../WS-ARCH-001-04E2A.md) | ARCH-04E1B-A | Complete: strict AUTH-private resource/request/consequence matcher and nominal fixed-router adapter through canonical PREP; action stays planned/unavailable, with no handle, allow, receipt, source write or effect |
 | [ARCH-04E1B-B1](../WS-ARCH-001-04E1BB1.md) | REV-04C and existing CHECKERS coordinator | Complete: required TASK reservation/current-read guard, ordered admission INSERTs, exact terminal replay and mechanical race proof; no handler or activation |
 | [ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) | 04E1B-B1, existing historical PROJECTS context | Complete: exact detached source preparation and reserved identity; no publication, authority or handler effect |
+| [ARCH-04E1B-B3](../WS-ARCH-001-04E1BB3.md) | Existing ART inspected manifest and evidence custody | Complete: retained verified ZIP metadata and consumed-only projection; initial Submission/dispatch composition is next |
 | ARCH-04E1B-B | ARCH-04E2-A and CON-02B; false additionally uses delivered REV-04C shared acceptance participation | Hidden TASK handlers plus TASK-before-CHECKERS currentness and both successor-generation race orders; durable receipt proof follows at exact activation |
 | Scoped XINT-003-08B controller activation | Existing REV-12A foundation, delivered REV-04C hidden participant and remaining real-writer observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
 | ARCH-04E2-B | ARCH-04E1B-B; scoped XINT-003-08B controller activation for false | Require the exact AUTH receipt on the same strict input; add database complete-set and audit/outbox closure; genuine allow commits with all governed effects |

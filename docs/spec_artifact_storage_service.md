@@ -1339,6 +1339,21 @@ stale_at                       = timestamp | null
 stale_reason                   = bounded token | null
 ```
 
+The immutable pre-submit evidence set retains the canonical inspected semantic
+manifest body as JSONB, including file hashes/sizes and directory entries, once.
+Database validation and recovery therefore use the same numeric representation.
+Inspection, recovery and the database guard require unique Unicode-case-folded
+paths and exact-spelling directory ancestors. PostgreSQL 16 uses the frozen
+Unicode 15 mapping that matches the backend, rather than locale-dependent lowercase.
+The admission references its identity and hash. Consumption validates that body and
+returns detached file metadata with archive commitments only for a consumed
+result or exact replay; stale results contain no material. Consumption performs
+no provider read. Older retained evidence without metadata stays unchanged and
+cannot supply current consumption. Existing post-submit material selection keeps
+its exact immutable ART lineage and inspected-byte checks; it does not use this
+new consumption projection. This storage guarantee does not activate
+initial dispatch; its composition must reconcile ART and CHECKERS request limits.
+
 It records preparation actor/profile and identity-link provenance, project,
 task, assignment, immediate predecessor, exact locked task/guide/policy context,
 `ArtifactContent`, `SubmissionBundleManifest`, immutable pre-submit evidence-set
