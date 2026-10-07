@@ -109,7 +109,8 @@ async def test_projection_exact_files_criteria_and_all_locked_stamps(isolated_da
         assert [(m.artifact, m.hash, m.size_bytes) for m in content.structural_input.manifest] == [
             (f.normalized_path, f.sha256, f.byte_count) for f in (evidence_file, other_file)]
         assert [(e.key, e.uri, e.hash) for e in content.structural_input.evidence] == [
-            ("results", evidence_file.normalized_path, evidence_file.sha256)]
+            (json.loads(project.effective_policy.value)["required_evidence"][0]["key"],
+             evidence_file.normalized_path, evidence_file.sha256)]
         # Detached false-policy facts prove the same capacity rules, not live activation.
         for required in (True, False):
             semantics = ReviewPolicySemantics(**{**json.loads(project.review_policy.value), "human_review_required": required})
