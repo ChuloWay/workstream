@@ -74,8 +74,11 @@ func (c *Client) CreateGuide(ctx context.Context, project string, body json.RawM
 	if !validUUID(project) || len(project) > 100 || !validUUID(key) || len(key) > 100 {
 		return result, errors.New("PROJECT_ID and --idempotency-key must be UUIDs")
 	}
+	if len(body) > MaxGuideInputBytes {
+		return result, errors.New("--input must contain a bounded public guide declaration")
+	}
 	input, examples, err := decodeGuideInput(body)
-	if err != nil || len(body) > MaxGuideInputBytes {
+	if err != nil {
 		return result, errors.New("--input must contain a bounded public guide declaration")
 	}
 	raw, err := c.requestWithResponseLimit(ctx, http.MethodPost,
