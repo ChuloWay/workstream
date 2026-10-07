@@ -116,7 +116,7 @@ model.
 
 Source-agnostic does not mean every source adapter is already implemented.
 v0.1 remains manual-first with controlled manual, Markdown, and CSV intake.
-External origin onboarding, automated routing, and execution workspaces remain
+External origin onboarding, external task-routing systems, and execution workspaces remain
 later adapters. Revision and reassignment belong to the governed lifecycle;
 adjudication remains a separately approved future capability rather than a
 claim about current v0.1 behavior.

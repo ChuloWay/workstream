@@ -43,7 +43,7 @@ Attributable human Review is required when the locked project mode requires it;
 automated acceptance records its own authorized decision and evidence instead.
 
 Marketplace expansion, blockchain settlement, external source adapters,
-automated routing, agent workspaces, and runtime reputation projection remain
+external task-routing systems, agent workspaces, and runtime reputation projection remain
 outside v0.1.
 
 ## Status Vocabulary

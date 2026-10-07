@@ -67,7 +67,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [CON-07](WS-CON-001-07.md) adds hidden source-neutral submitter participation
   and complete frozen award-set staging/replay; no recognition route or
   fulfillment operation is live.
-- Next usable boundary: ARCH-04E1B-B hidden routing handlers using the shared
+- Next usable boundary: capacity alignment, then atomic initial Submission/dispatch,
+  before ARCH-04E1B-B hidden routing handlers using the shared
   participant. The complete authorized operation still requires a mandatory
   same-input AUTH receipt, database complete-set enforcement, audit/outbox and
   currentness proof before either trigger can consume it in production.
