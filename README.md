@@ -387,7 +387,12 @@ secret generation, identities, grants, isolation and teardown.
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 ```
+
+The `chmod` command applies to Linux, macOS and Git Bash. PowerShell users must
+restrict the copied file to their Windows user with an equivalent private NTFS
+ACL before adding secrets.
 
 Then build the native-architecture Linux images and start the API, prefork
 worker, scheduler, PostgreSQL, Redis and MinIO:
@@ -438,11 +443,20 @@ an x86_64 or aarch64 machine. Docker is still used for backing services.
 Confirm that `python3 --version` reports Python 3.11 or 3.12 before creating
 the environment. Install uv 0.12.3 and use the
 committed lockfile; an unconstrained pip install is not a supported setup path.
+Create and secure the root Compose configuration before its first command, as
+described in the [local pilot runbook](docs/engineering/local-pilot.md). Give it
+a unique project name, replace every required secret and choose unused backing
+service host ports. The separate `backend/.env` configures the native process.
 
 ```bash
+cp .env.example .env
+chmod 600 .env
+# Edit root .env before continuing.
 docker compose up -d --wait postgres redis
 cd backend
 cp .env.example .env
+chmod 600 .env
+# Edit backend/.env before continuing.
 python3 --version
 uv --version
 uv sync --locked --extra dev --python python3
@@ -461,9 +475,15 @@ Verify the API from another terminal with:
 curl --fail http://127.0.0.1:8000/api/v1/health
 ```
 
-`backend/.env` is ignored. Its checked-in example contains only public,
-local-development values; replace those values when specifically testing key
-rotation, and never reuse them in a shared or hosted environment.
+Both files are ignored. In `backend/.env`, set `WORKSTREAM_DATABASE_URL` to the
+root file's PostgreSQL password and selected loopback host port, and set
+`WORKSTREAM_CELERY_BROKER_URL` to its Redis loopback host port. When native
+artifact storage is enabled, also select the MinIO profile and copy the root
+file's bucket and credentials while using the selected MinIO API host port in
+the loopback endpoint. These native process URLs use `localhost`; Compose
+containers continue to use internal service names and ports. The `chmod`
+commands are for POSIX shells; PowerShell users need equivalent private NTFS
+ACLs.
 
 ### Native Unified Guide Inference
 
@@ -501,8 +521,8 @@ and on-demand profiling procedure. Implemented instrumentation does not imply a
 collector or monitoring service is configured or deployed.
 
 ```bash
-docker compose logs -f backend worker beat
-docker compose down
+docker compose --profile backend logs -f backend worker beat
+docker compose --profile backend down
 ```
 
 For the native workflow, stop Uvicorn with `Ctrl+C` before running

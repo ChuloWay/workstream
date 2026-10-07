@@ -88,6 +88,7 @@ services:
       - --pool=prefork
       - --concurrency=${WORKSTREAM_CELERY_WORKER_CONCURRENCY:-2}
       - --hostname=worker@%h
+      - --pidfile=/tmp/celery-worker.pid
       - --loglevel=INFO
     depends_on:
       backend:
@@ -99,10 +100,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - >-
-          celery -A app.workers.celery_app inspect ping
-          --destination "worker@$${HOSTNAME}" --timeout 5
-          | grep -q pong
+        - test -s /tmp/celery-worker.pid && kill -0 "$$(cat /tmp/celery-worker.pid)"
       interval: 10s
       timeout: 8s
       retries: 12
@@ -118,7 +116,7 @@ services:
       - app.workers.celery_app
       - beat
       - --schedule=/workspace/scratch/celerybeat-schedule
-      - --pidfile=/workspace/scratch/celerybeat.pid
+      - --pidfile=/tmp/celerybeat.pid
       - --loglevel=INFO
     depends_on:
       backend:
@@ -130,7 +128,7 @@ services:
     healthcheck:
       test:
         - CMD-SHELL
-        - test -s /workspace/scratch/celerybeat.pid && kill -0 "$$(cat /workspace/scratch/celerybeat.pid)"
+        - test -s /tmp/celerybeat.pid && kill -0 "$$(cat /tmp/celerybeat.pid)"
       interval: 10s
       timeout: 5s
       retries: 12

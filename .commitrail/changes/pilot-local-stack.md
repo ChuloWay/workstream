@@ -63,11 +63,11 @@ bootstrap and authorized grant APIs remain the only way to confer authority.
 ## Acceptance criteria
 
 - [x] Compose declares API, prefork worker, beat, PostgreSQL, Redis and MinIO with API, database, broker and both MinIO ports configurable.
-- [ ] API, worker and beat share one `s3_compatible` MinIO configuration and project-scoped scratch; startup creates and verifies the private bucket.
+- [x] API, worker and beat share one `s3_compatible` MinIO configuration and project-scoped scratch; startup creates and verifies the private bucket.
 - [x] The token CLI emits distinct, short-lived Flow-HMAC identities without authority claims.
 - [x] The runbook uses the existing trust-root and grant operations, prepares a draft project for guide upload, and does not fabricate guide approval.
-- [ ] Two differently named stacks can run simultaneously; stopping one does not stop or erase the other.
-- [ ] Linux proof exercises live API, prefork worker, beat recovery, PostgreSQL, Redis and MinIO behavior.
+- [x] Two differently named stacks can run simultaneously; stopping one does not stop or erase the other.
+- [x] Linux proof exercises live API, prefork worker, beat recovery, PostgreSQL, Redis and MinIO behavior.
 - [x] Docker Desktop/macOS support is documented with explicit unverified runtime limits when no macOS host is available.
 
 ## Risk and review routing
@@ -80,16 +80,22 @@ bootstrap and authorized grant APIs remain the only way to confer authority.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Rendered isolation and topology | `docker compose --profile backend config` | Six services, prefork worker, configurable loopback ports and project-scoped resources render from one local `.env`. | Runtime proof is still required. |
-| Local helper contracts | `uv run --project backend --locked --extra dev pytest -q backend/tests/test_local_pilot_scripts.py backend/tests/test_api_contract_e2e.py` | 18 tests pass, including the unchanged API-drill token consumers. | This focused test does not replace the live MinIO/API proof. |
+| Rendered isolation and topology | `docker compose --profile backend config`; Compose-resolved project name plus label-filtered resources | Six services, prefork worker, configurable loopback ports and four project-scoped volumes render; supported name/resource inspection commands execute successfully. | Compose rendering is Linux-host evidence only. |
+| Local helper contracts | `uv run --project backend --locked --extra dev pytest -q backend/tests/test_local_pilot_scripts.py backend/tests/test_api_contract_e2e.py` | 19 tests pass, including the unchanged API-drill token consumers and a transient first-listener retry. | This focused test supplements the live MinIO/API proof. |
 | CI catalogue custody | `uv run --project backend --locked --extra dev pytest -q backend/tests/test_ci_lane_catalogue.py` | 42 tests pass; the new module belongs to the shared-foundation partition. | Hosted lane execution remains external. |
-| Linux live stack | Commands in `docs/engineering/local-pilot.md` | Pending the active pinned-source MinIO and backend build. | Docker Engine Linux only; no macOS host is available. |
-| Two-stack isolation | Two explicit Compose project names and disjoint ports, then project-scoped teardown | Pending live execution. | Single Linux Docker daemon, not two physical hosts. |
+| Linux live stack | Pinned-source build, six-service `up --wait`, Celery inspect, public Flow identity/bootstrap/grant calls, real PDF upload, MinIO `HEAD`/`GET` and forced worker/beat restarts | All six services become healthy; the worker reports prefork concurrency two and `pong`; five distinct humans, all six fixed service actors, two projects and two scoped submitter grants use existing public operations; the 855-byte guide object survives restart with its digest unchanged; the same durable setup ID remains reserved when missing provider credentials stop compilation; beat recovers from `SIGKILL` with its retained schedule. | No provider credential was available, so a successful model-backed compilation is not claimed. Docker Engine Linux only; no macOS host is available. |
+| Runtime image contract | Backend image build and no-dispatch runtime construction; missing-credential construction probe; fresh UID 501/GID 20 scratch-volume write | The committed Agents SDK extra is installed; dummy-key construction succeeds without provider I/O; absent credentials fail closed; an existing Debian numeric group and non-root UID own and write the copied-up scratch volume without broad permissions. | Actual provider dispatch remains outside this proof. |
+| Two-stack isolation | `ws-pilot-runtime-dev` and `ws-pilot-runtime-peer` with disjoint ports, label-scoped inspection, full-profile shutdown/restart and exact peer disposal | Both six-service stacks are healthy together. Stopping the primary leaves peer API, worker topology, PostgreSQL head, Redis marker and MinIO marker intact; restarting the primary restores its two projects, Redis marker and guide object; peer disposal leaves the primary healthy. | Single Linux Docker daemon, not two physical hosts. |
 
 ## Review findings
 
-Material findings are recorded here only when they change the durable design or
-remaining boundary.
+Full-stack lifecycle commands include the backend profile, and resource
+inspection resolves the project name through Compose rather than an unexported
+shell variable. The image installs the committed agent runtime and supports an
+existing numeric host group. Worker and beat PID files are container-local,
+while scratch artifacts and the beat schedule remain project-volume state. The
+runbook provisions all six existing guide/artifact service identities and
+secures ignored environment copies before secrets are added.
 
 ## Reconciliation
 

@@ -18,9 +18,12 @@ Install Docker Compose v2, `curl`, `jq` and OpenSSL. From the repository root:
 
 ```bash
 cp .env.example .env
+chmod 600 .env
 ```
 
-`.env` is ignored. Edit it before startup:
+Those are POSIX-shell commands. In Windows PowerShell, use `Copy-Item` and a
+private NTFS ACL for the current user instead of `chmod`. `.env` is ignored.
+Edit it before startup:
 
 - give `COMPOSE_PROJECT_NAME` a unique lowercase name such as
   `ws-pilot-alex-api`;
@@ -48,8 +51,8 @@ do not alter service-to-service URLs.
 ```bash
 docker compose --profile backend up --build --wait
 docker compose --profile backend ps
-docker compose exec -T worker celery -A app.workers.celery_app inspect ping
-docker compose exec -T backend python scripts/ensure_local_minio_bucket.py
+docker compose --profile backend exec -T worker celery -A app.workers.celery_app inspect ping
+docker compose --profile backend exec -T backend python scripts/ensure_local_minio_bucket.py
 ```
 
 `ps` must show `backend`, `worker`, `beat`, `postgres`, `redis` and `minio`
@@ -61,19 +64,20 @@ volume; only the API performs idempotent bucket provisioning before startup.
 Resolve the configured client endpoints without assuming default ports:
 
 ```bash
-API_URL="http://$(docker compose port backend 8000)"
-MINIO_URL="http://$(docker compose port minio 9000)"
-MINIO_CONSOLE_URL="http://$(docker compose port minio 9001)"
+API_URL="http://$(docker compose --profile backend port backend 8000)"
+MINIO_URL="http://$(docker compose --profile backend port minio 9000)"
+MINIO_CONSOLE_URL="http://$(docker compose --profile backend port minio 9001)"
 curl --fail --silent --show-error "$API_URL/api/v1/health"
 curl --fail --silent --show-error "$MINIO_URL/minio/health/ready"
 ```
 
-Inspect `docker compose logs backend worker beat` if startup fails. A disabled
-artifact backend is intentionally invalid for this stack. This probe must exit
-nonzero and report that the artifact-store adapter is unavailable:
+Inspect `docker compose --profile backend logs backend worker beat` if startup fails. A disabled
+artifact backend is intentionally incompatible with this stack's retained
+MinIO settings. This probe must exit nonzero before constructing an adapter and
+report that static artifact credentials require MinIO storage:
 
 ```bash
-docker compose run --rm --no-deps \
+docker compose --profile backend run --rm --no-deps \
   -e WORKSTREAM_ARTIFACT_STORE_BACKEND=disabled \
   worker python -c \
   'from app.adapters.artifacts import create_artifact_store_bootstrap; from app.core.config import get_settings; create_artifact_store_bootstrap(get_settings())'
@@ -86,11 +90,11 @@ already consumed by `FlowAuthVerifier`. It always emits empty role claims;
 tokens identify actors but do not grant authority.
 
 ```bash
-ADMIN_TOKEN="$(docker compose exec -T backend python scripts/issue_local_flow_token.py --subject pilot-access-admin)"
-MANAGER_TOKEN="$(docker compose exec -T backend python scripts/issue_local_flow_token.py --subject pilot-project-manager)"
-CONTRIBUTOR_ONE_TOKEN="$(docker compose exec -T backend python scripts/issue_local_flow_token.py --subject pilot-contributor-one)"
-CONTRIBUTOR_TWO_TOKEN="$(docker compose exec -T backend python scripts/issue_local_flow_token.py --subject pilot-contributor-two)"
-FINANCE_TOKEN="$(docker compose exec -T backend python scripts/issue_local_flow_token.py --subject pilot-finance)"
+ADMIN_TOKEN="$(docker compose --profile backend exec -T backend python scripts/issue_local_flow_token.py --subject pilot-access-admin)"
+MANAGER_TOKEN="$(docker compose --profile backend exec -T backend python scripts/issue_local_flow_token.py --subject pilot-project-manager)"
+CONTRIBUTOR_ONE_TOKEN="$(docker compose --profile backend exec -T backend python scripts/issue_local_flow_token.py --subject pilot-contributor-one)"
+CONTRIBUTOR_TWO_TOKEN="$(docker compose --profile backend exec -T backend python scripts/issue_local_flow_token.py --subject pilot-contributor-two)"
+FINANCE_TOKEN="$(docker compose --profile backend exec -T backend python scripts/issue_local_flow_token.py --subject pilot-finance)"
 ```
 
 Create each actor profile through the public identity boundary and retain only
@@ -113,7 +117,7 @@ The first Access Administrator transition is irreversible. Run it once on a
 new database using the existing bootstrap operation:
 
 ```bash
-docker compose exec -T backend python scripts/bootstrap_access_administrator.py \
+docker compose --profile backend exec -T backend python scripts/bootstrap_access_administrator.py \
   --actor-profile-id "$ADMIN_ID" --execute
 ```
 
@@ -121,7 +125,7 @@ Issue the Project Manager and Finance grants through the authorized API. The
 token claims remain empty:
 
 ```bash
-new_key() { docker compose exec -T backend python -c 'import uuid; print(uuid.uuid4())'; }
+new_key() { docker compose --profile backend exec -T backend python -c 'import uuid; print(uuid.uuid4())'; }
 curl --fail --silent --show-error -X POST \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "Content-Type: application/json" -H "Idempotency-Key: $(new_key)" \
@@ -138,7 +142,13 @@ Provision the fixed service identities required by the existing guide artifact
 and setup operations. This is also an authorized API operation:
 
 ```bash
-for identity in artifact.put_resolver artifact.guide_reader project.setup; do
+for identity in \
+  artifact.put_resolver \
+  artifact.verifier \
+  artifact.scheduler \
+  artifact.binding \
+  artifact.guide_reader \
+  project.setup; do
   curl --fail --silent --show-error -X POST \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
     -H "Content-Type: application/json" -H "Idempotency-Key: $(new_key)" \
@@ -232,7 +242,7 @@ assuming checker/provider success:
 curl --fail --silent --show-error \
   -H "Authorization: Bearer $MANAGER_TOKEN" \
   "$API_URL/api/v1/projects/$PROJECT_ID/guides/$GUIDE_ID/setup-runs/latest" | jq
-docker compose logs --since 10m worker beat
+docker compose --profile backend logs --since 10m worker beat
 ```
 
 With a valid `OPENAI_API_KEY`, poll that endpoint until `finished_at` is set and
@@ -241,22 +251,30 @@ provider outcome is evidence to diagnose, not acceptance. Restart the worker
 during a pending run and observe the same setup ID afterward to exercise the
 existing recovery scans:
 
+Without a provider key, the real worker records the durable setup and
+compilation reservation, then stops before dispatch. The latest setup can
+therefore remain `compilation_reserved` with no sufficiency report; preserving
+the same setup ID across restart proves recovery identity, not successful model
+compilation.
+
 ```bash
-docker compose kill -s KILL worker
-docker compose up -d --wait worker
+docker compose --profile backend kill -s KILL worker
+docker compose --profile backend up -d --wait worker
 curl --fail --silent --show-error \
   -H "Authorization: Bearer $MANAGER_TOKEN" \
   "$API_URL/api/v1/projects/$PROJECT_ID/guides/$GUIDE_ID/setup-runs/latest" | jq
 ```
 
 Exercise scheduler recovery separately. A forced beat restart must become
-healthy again and continue using the same project-scoped schedule volume:
+healthy again and continue using the same project-scoped schedule volume. The
+schedule is durable, while the process PID file is container-local so a killed
+container cannot strand a reusable PID in the volume:
 
 ```bash
-docker compose kill -s KILL beat
-docker compose up -d --wait beat
-docker compose ps beat
-docker compose logs --since 2m beat
+docker compose --profile backend kill -s KILL beat
+docker compose --profile backend up -d --wait beat
+docker compose --profile backend ps beat
+docker compose --profile backend logs --since 2m beat
 ```
 
 ## Prove two stacks do not interfere
@@ -273,14 +291,15 @@ Create a different project in each stack, then record the project IDs and
 container/volume names:
 
 ```bash
-docker compose ps --format json | jq -r '.[].Name'
-docker volume ls --format '{{.Name}}' | grep "^${COMPOSE_PROJECT_NAME}_"
+PROJECT_NAME="$(docker compose --profile backend config --format json | jq -er '.name')"
+docker compose --profile backend ps --format '{{.Name}}'
+docker volume ls --filter "label=com.docker.compose.project=$PROJECT_NAME" --format '{{.Name}}'
 ```
 
 From the first checkout, stop only its project without deleting volumes:
 
 ```bash
-docker compose down
+docker compose --profile backend down
 ```
 
 In the second checkout, all six services must remain healthy, its project must
@@ -289,10 +308,10 @@ still be readable, and its bucket must still be present:
 ```bash
 docker compose --profile backend ps
 curl --fail --silent --show-error "$API_URL/api/v1/health"
-docker compose exec -T backend python scripts/ensure_local_minio_bucket.py
+docker compose --profile backend exec -T backend python scripts/ensure_local_minio_bucket.py
 ```
 
-Never use `docker compose down` without first confirming the checkout's
+Never use `docker compose --profile backend down` without first confirming the checkout's
 `COMPOSE_PROJECT_NAME`. Do not use `docker system prune`, `docker volume prune`,
 or remove another checkout's containers or volumes.
 
@@ -302,17 +321,19 @@ Normal shutdown retains PostgreSQL, Redis, MinIO and scratch data for the exact
 Compose project:
 
 ```bash
-docker compose down
+docker compose --profile backend down
 ```
 
-`docker compose up --wait` later reuses those named volumes. To delete all data
+`docker compose --profile backend up --wait` later reuses those named volumes. To delete all data
 owned by this exact local project, first print and verify the project name and
 resources, then remove its containers and named volumes:
 
 ```bash
-docker compose config | sed -n '1p'
-docker compose ps -a
-docker compose down --volumes
+PROJECT_NAME="$(docker compose --profile backend config --format json | jq -er '.name')"
+printf 'Compose project: %s\n' "$PROJECT_NAME"
+docker compose --profile backend ps -a
+docker volume ls --filter "label=com.docker.compose.project=$PROJECT_NAME" --format '{{.Name}}'
+docker compose --profile backend down --volumes
 ```
 
 That final command permanently removes this project's database, broker state,

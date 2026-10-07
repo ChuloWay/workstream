@@ -43,23 +43,27 @@ async def ensure_local_minio_bucket(
     if access_key is None or secret_key is None or bucket is None:
         raise RuntimeError("local MinIO bucket provisioning is incomplete")
 
-    session = session_factory()
-    session.set_credentials(access_key.get_secret_value(), secret_key.get_secret_value())
-    async with session.create_client(
-        "s3",
-        endpoint_url=settings.artifact_s3_endpoint_url,
-        region_name=settings.artifact_s3_region,
-    ) as client:
+    for attempt in range(1, 11):
+        session = session_factory()
+        session.set_credentials(access_key.get_secret_value(), secret_key.get_secret_value())
         try:
-            await client.create_bucket(Bucket=bucket)
-        except ClientError as error:
-            code = str(error.response.get("Error", {}).get("Code", ""))
-            if code != "BucketAlreadyOwnedByYou":
-                raise RuntimeError("local MinIO bucket creation failed") from None
-        try:
-            await client.head_bucket(Bucket=bucket)
-        except ClientError:
-            raise RuntimeError("local MinIO bucket verification failed") from None
+            async with session.create_client(
+                "s3",
+                endpoint_url=settings.artifact_s3_endpoint_url,
+                region_name=settings.artifact_s3_region,
+            ) as client:
+                try:
+                    await client.create_bucket(Bucket=bucket)
+                except ClientError as error:
+                    code = str(error.response.get("Error", {}).get("Code", ""))
+                    if code != "BucketAlreadyOwnedByYou":
+                        raise
+                await client.head_bucket(Bucket=bucket)
+            break
+        except Exception:
+            if attempt == 10:
+                raise RuntimeError("local MinIO bucket provisioning failed") from None
+            await asyncio.sleep(1)
     return bucket
 
 

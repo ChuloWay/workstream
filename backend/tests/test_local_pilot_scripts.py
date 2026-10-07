@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import importlib
+from types import SimpleNamespace
 
 import jwt
 import pytest
@@ -51,6 +52,50 @@ def test_bucket_helper_rejects_non_compose_or_disabled_targets(field: str, value
     settings = minio_settings().model_copy(update={field: value})
     with pytest.raises(RuntimeError, match="local MinIO bucket provisioning is not configured"):
         bucket_script._validate_local_minio(settings)
+
+
+async def test_bucket_helper_retries_transient_first_connection(monkeypatch) -> None:
+    attempts = SimpleNamespace(create=0, sleep=0)
+
+    class Client:
+        async def create_bucket(self, **kwargs: str) -> None:
+            assert kwargs == {"Bucket": "workstream-local"}
+            attempts.create += 1
+            if attempts.create == 1:
+                raise OSError("MinIO listener is not accepting requests yet")
+
+        async def head_bucket(self, **kwargs: str) -> None:
+            assert kwargs == {"Bucket": "workstream-local"}
+
+    class ClientContext:
+        async def __aenter__(self) -> Client:
+            return Client()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class Session:
+        def set_credentials(self, access_key: str, secret_key: str) -> None:
+            assert (access_key, secret_key) == ("local-key", "local-secret")
+
+        def create_client(self, service: str, **kwargs: object) -> ClientContext:
+            assert service == "s3"
+            assert kwargs == {
+                "endpoint_url": "http://minio:9000",
+                "region_name": "us-east-1",
+            }
+            return ClientContext()
+
+    async def no_wait(_seconds: float) -> None:
+        attempts.sleep += 1
+
+    monkeypatch.setattr(bucket_script.asyncio, "sleep", no_wait)
+    bucket = await bucket_script.ensure_local_minio_bucket(
+        minio_settings(), session_factory=Session
+    )
+
+    assert bucket == "workstream-local"
+    assert (attempts.create, attempts.sleep) == (2, 1)
 
 
 def test_token_helper_issues_distinct_identity_without_authority_claims(monkeypatch) -> None:
