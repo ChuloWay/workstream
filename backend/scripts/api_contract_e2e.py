@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
-import hmac
 import json
 import os
 import socket
@@ -18,6 +17,8 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
+
+from local_flow_tokens import issue_flow_token
 from alembic import command
 from alembic.config import Config
 from pydantic import SecretStr
@@ -122,31 +123,6 @@ TEST_MINIO_ACCESS_KEY = "workstream-minio"
 TEST_MINIO_SECRET_KEY = "workstream-minio-secret-key"
 
 
-def base64url_json(payload: dict) -> str:
-    """Encode a JSON payload as an unpadded base64url segment.
-
-    Args:
-        payload: JSON-serializable payload.
-
-    Returns:
-        Encoded JWT segment.
-    """
-    raw = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode()
-    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
-
-
-def base64url_bytes(payload: bytes) -> str:
-    """Encode bytes as an unpadded base64url segment.
-
-    Args:
-        payload: Raw bytes to encode.
-
-    Returns:
-        Encoded JWT segment.
-    """
-    return base64.urlsafe_b64encode(payload).rstrip(b"=").decode()
-
-
 def flow_settings(env: dict[str, str]) -> tuple[str, str, str]:
     """Resolve local Flow settings from the runtime environment.
 
@@ -161,61 +137,6 @@ def flow_settings(env: dict[str, str]) -> tuple[str, str, str]:
         env.get("WORKSTREAM_E2E_FLOW_AUDIENCE", DEFAULT_FLOW_AUDIENCE),
         env.get("WORKSTREAM_E2E_FLOW_SECRET", f"local-flow-e2e-{uuid4().hex}"),
     )
-
-
-def issue_flow_token(
-    subject: str,
-    roles: list[str],
-    *,
-    issuer: str,
-    audience: str,
-    secret: str,
-    issued_at: datetime | None = None,
-    expires_at: datetime | None = None,
-    not_before: datetime | None = None,
-    subject_kind: str = "human",
-) -> str:
-    """Issue a local Flow-compatible signed token for one QA actor.
-
-    Args:
-        subject: External Flow subject.
-        roles: Trusted v0.1 bootstrap role claims for this actor.
-        issuer: Flow issuer claim.
-        audience: Flow audience claim.
-        secret: HMAC secret shared with the local Flow verifier.
-        issued_at: Optional issued-at timestamp override.
-        expires_at: Optional expiration timestamp override.
-        not_before: Optional not-before timestamp override.
-        subject_kind: Canonical human or fixed-service token kind.
-
-    Returns:
-        HMAC-signed bearer token consumed by ``FlowAuthVerifier``.
-    """
-    now = issued_at or datetime.now(UTC)
-    header = base64url_json({"alg": "HS256", "typ": "JWT"})
-    claims = {
-        "iss": issuer,
-        "aud": audience,
-        "sub": subject,
-        "jti": f"local-e2e-{uuid4()}",
-        "subject_kind": subject_kind,
-        "scope": "workstream:service" if subject_kind == "service" else "workstream:access",
-        "iat": int(now.timestamp()),
-        "nbf": int((not_before or (now - timedelta(seconds=5))).timestamp()),
-        "exp": int((expires_at or (now + timedelta(minutes=30))).timestamp()),
-    }
-    if subject_kind == "human":
-        claims.update(
-            {
-                "email": f"{subject}@flow.local",
-                "name": subject.replace("-", " ").title(),
-                "roles": roles,
-            }
-        )
-    payload = base64url_json(claims)
-    signed_content = f"{header}.{payload}".encode()
-    signature = hmac.new(secret.encode(), signed_content, hashlib.sha256).digest()
-    return f"{header}.{payload}.{base64url_bytes(signature)}"
 
 
 def auth_headers(token: str) -> dict[str, str]:

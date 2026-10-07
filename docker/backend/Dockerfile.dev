@@ -15,14 +15,20 @@ ENV PATH="/opt/venv/bin:$PATH" \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_PYTHON_DOWNLOADS=never
 
+ARG LOCAL_UID=1000
+ARG LOCAL_GID=1000
+
 # Docker Desktop ARM VMs can advertise OpenSSL acceleration capabilities that
 # still SIGILL when PyCA's bundled OpenSSL dispatches to them. The generic
 # implementation is slower but deterministic and sufficient for local dev.
 
-RUN groupadd --gid 1000 workstream \
-    && useradd --uid 1000 --gid workstream --create-home --shell /bin/bash workstream
+RUN groupadd --gid "${LOCAL_GID}" workstream \
+    && useradd --uid "${LOCAL_UID}" --gid workstream --create-home --shell /bin/bash workstream
 
 WORKDIR /workspace/backend
+
+RUN mkdir --parents /workspace/scratch \
+    && chown --recursive workstream:workstream /workspace/scratch
 
 COPY backend/ ./
 

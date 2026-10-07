@@ -219,7 +219,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Contribution and compensation truth | **Hidden shared participant plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage; CON-07 source-neutral submitter participant and complete award sets; REV-04C composes it with FinalAcceptance/TASK effects in the caller transaction | Add authority/evidence and complete-set database closure before production consumption. Only actual Reviews create reviewer records. Add audit/outbox and fulfillment-root/ordinal custody before activation; no public recognition or fulfillment route is live |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove diagnostics during the release drill; no deployed monitoring claim |
-| Frontend and pilot | **Planned after stable backend contracts** | React + Vite + TypeScript stack decision | Implement only stable backed surfaces, run the real internal pilot, repair findings, and complete release drills |
+| Frontend and pilot | **Local runtime foundation; product pilot planned** | Checkout-isolated Docker Compose API, prefork worker, beat, PostgreSQL, Redis and MinIO stack with local Flow-HMAC identities, existing authority bootstrap/grants, configurable loopback ports and project-scoped state; React + Vite + TypeScript stack decision | Complete provider-backed guide/recovery and scoped task-denial proof on the base stack, implement only stable backed frontend surfaces, run the real internal pilot, repair findings, and complete release drills; Docker Desktop/macOS runtime proof remains |
 
 ## What Has Been Completed
 
@@ -238,6 +238,12 @@ cannot be reused as post-submission review-gate evidence. See the
   natural keys and external request tokens retain their semantics. Old stamped
   development databases require explicitly scoped recreation, not conversion or
   compatibility stamping. Local Compose uses a separate UUIDv7 database volume.
+- The [local pilot stack](engineering/local-pilot.md) runs API, the existing
+  prefork Celery topology, its recovery scheduler, PostgreSQL, Redis and MinIO
+  under one explicit Compose project. Every published port is checkout-local;
+  containers, network, retained data and bounded scratch are project-scoped.
+  Its Flow-HMAC helper creates identity only, while the existing trust-root and
+  grant operations remain the sole local authority path.
 - AWS S3 is the hosted artifact target, MinIO proves the storage protocol in
   development and CI, and all storage access stays behind `ArtifactStore`.
   Development/CI MinIO uses a shared pinned-source build; existing artifact
@@ -619,9 +625,10 @@ The broader v0.1 sequence below retains later scope:
    rebase a continuing TaskAssignment only at the controlled human-revision
    boundary when the complete governed context changed. Finish recovery,
    fulfillment, reconciliation, audit, release controls, and legacy cleanup.
-7. **Release proof.** Expose stable APIs and frontend surfaces, exercise the
-    complete path through real database, durable-job, storage, security, failure,
-    and recovery tests, then run the internal pilot.
+7. **Release proof.** The isolated six-service local stack is available; use it
+    to expose stable APIs and frontend surfaces, exercise the complete path
+    through real database, durable-job, storage, security, failure, and recovery
+    tests, then run the internal pilot. Compose health alone is not journey proof.
 
 ## Engineering Quality Alongside Product Work
 
@@ -801,6 +808,11 @@ v0.1 is not ready until all of the following are true:
 The [observability foundation record](../.commitrail/changes/observability-foundation.md)
 and [operator guide](engineering/observability.md) define diagnostic scope and
 remaining deployment responsibilities.
+
+The [local pilot stack record](../.commitrail/changes/pilot-local-stack.md) and
+[runbook](engineering/local-pilot.md) define the checkout-isolated runtime,
+authority bootstrap, retained-data boundary and remaining platform/journey
+proof.
 
 Internal chunk identifiers are useful for implementation traceability, but a
 reader does not need internal engineering records to understand the roadmap
