@@ -79,6 +79,21 @@ def normalize_submission_archive_path(
     return normalized
 
 
+def validate_submission_archive_inventory(entries: tuple[SubmissionArchiveEntry, ...]) -> None:
+    """Require one unambiguous path per entry and exact directory ancestry."""
+    kinds = {entry.normalized_path: entry.entry_type for entry in entries}
+    folded_paths: set[str] = set()
+    for entry in entries:
+        folded = unicodedata.normalize("NFC", entry.normalized_path).casefold()
+        if folded in folded_paths:
+            raise SubmissionArchiveRejectedError(SubmissionArchiveFailureCode.COLLISION)
+        folded_paths.add(folded)
+        parts = entry.normalized_path.split("/")
+        for depth in range(1, len(parts)):
+            if kinds.get("/".join(parts[:depth])) is not SubmissionArchiveEntryType.DIRECTORY:
+                raise SubmissionArchiveRejectedError(SubmissionArchiveFailureCode.COLLISION)
+
+
 @dataclass(frozen=True, slots=True)
 class SubmissionArchiveInspectionResult:
     """Non-durable structural facts for the later semantic-manifest chunk."""
@@ -269,6 +284,7 @@ class SubmissionArchiveInspector:
                     archive, infos, directory_offset=layout.directory_offset
                 )
                 entries = self._read_entries(archive, infos, started=started)
+                validate_submission_archive_inventory(tuple(entries))
         except SubmissionArchiveRejectedError:
             raise
         except (OSError, ValueError, zipfile.BadZipFile, RuntimeError):

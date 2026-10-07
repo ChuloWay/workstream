@@ -14,6 +14,7 @@ from app.modules.artifacts.submission_archive import (
     SubmissionArchiveEntryType,
     SubmissionArchiveInspectionResult,
     normalize_submission_archive_path,
+    validate_submission_archive_inventory,
 )
 
 
@@ -94,6 +95,7 @@ class SubmissionManifest:
                 raise ValueError("submission file identity is incomplete")
             else:
                 ArtifactCommitment.validate_sha256(entry.sha256)
+        validate_submission_archive_inventory(self.entries)
         files = sum(
             entry.entry_type is SubmissionArchiveEntryType.FILE for entry in self.entries
         )

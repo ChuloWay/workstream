@@ -317,3 +317,97 @@ async def test_upgraded_consumed_admission_without_metadata_is_unavailable(
                 assert await session.scalar(text("select count(*) from artifact_bindings")) == bindings
             authority.consume.assert_not_awaited()
             assert h.store.opens == []
+
+
+async def _create_manifest_insert_probe(connection):
+    """Use the real column types and INSERT guard without unrelated parent constraints."""
+    await connection.execute(
+        'CREATE TEMP TABLE manifest_insert_probe AS SELECT semantic_manifest_body, '
+        'semantic_manifest_sha256 FROM public.pre_submit_evidence_sets WITH NO DATA'
+    )
+    await connection.execute(
+        'CREATE TRIGGER manifest_probe BEFORE INSERT ON manifest_insert_probe '
+        'FOR EACH ROW EXECUTE FUNCTION public.guard_submission_manifest_metadata()'
+    )
+
+
+async def test_native_json_insert_recovers_the_validated_numeric_representation(isolated_database_env):
+    import asyncpg
+    import json
+    from app.modules.artifacts.submission_manifest import SubmissionManifest
+    from app.core.hashing import canonical_json_hash
+    from tests.test_submission_manifest import _archive, _manifest
+
+    connection = await asyncpg.connect(isolated_database_env.replace('+asyncpg', ''))
+    try:
+        await _create_manifest_insert_probe(connection)
+        for count, literal in ((1, '1'), (1, '1e0'), (10, '1e1')):
+            manifest = _manifest(_archive([('a', b'x' * count)]))
+            native_json = json.dumps(manifest.as_dict()).replace(f'"byte_count": {count}', f'"byte_count": {literal}')
+            assert f'"byte_count": {literal}' in native_json
+            if 'e' in literal:
+                assert type(json.loads(native_json)['entries'][0]['byte_count']) is float
+            stored = await connection.fetchval(
+                'INSERT INTO manifest_insert_probe VALUES ($1::json,$2) RETURNING semantic_manifest_body',
+                native_json, manifest.sha256,
+            )
+            recovered = json.loads(stored)
+            assert type(recovered['entries'][0]['byte_count']) is int
+            assert SubmissionManifest.from_dict(recovered, sha256=manifest.sha256) == manifest
+        for literal in ('1.0', '1.5'):
+            manifest = _manifest(_archive([('a', b'x')]))
+            native_json = json.dumps(manifest.as_dict()).replace('"byte_count": 1', f'"byte_count": {literal}')
+            with pytest.raises(asyncpg.CheckViolationError, match='pre-submit manifest metadata invalid'):
+                await connection.execute('INSERT INTO manifest_insert_probe VALUES ($1::json,$2)', native_json, canonical_json_hash(json.loads(native_json)))
+    finally:
+        await connection.close()
+
+
+async def test_manifest_insert_guard_rejects_hash_consistent_inventory_collisions(isolated_database_env):
+    import asyncpg
+    import json
+    from app.core.hashing import canonical_json_hash
+    from tests.test_submission_manifest import _archive, _manifest
+
+    connection = await asyncpg.connect(isolated_database_env.replace('+asyncpg', ''))
+    try:
+        await _create_manifest_insert_probe(connection)
+        valid = _manifest(_archive([('café/a', b'x'), ('cafe', b'x')]))
+        await connection.execute('INSERT INTO manifest_insert_probe VALUES ($1::json,$2)', json.dumps(valid.as_dict()), valid.sha256)
+        template = _manifest(_archive([('safe', b'x')])).as_dict()
+        entry = template['entries'][0]
+        for paths in (('A', 'a'), ('dir', 'dir/x'), ('DIR/x', 'dir'), ('STRASSE', 'Straße'), ('Σ', 'ς'), ('İ', 'i\u0307')):
+            body = dict(template, entries=sorted([dict(entry, normalized_path=path) for path in paths], key=lambda item: item['normalized_path']))
+            with pytest.raises(asyncpg.CheckViolationError, match='pre-submit manifest metadata invalid'):
+                await connection.execute('INSERT INTO manifest_insert_probe VALUES ($1::json,$2)', json.dumps(body), canonical_json_hash(body))
+        assert await connection.fetchval('SELECT count(*) FROM manifest_insert_probe') == 1
+    finally:
+        await connection.close()
+
+
+async def test_database_casefold_matches_frozen_unicode_15(isolated_database_env):
+    import asyncpg
+    import hashlib
+    import importlib.util
+    import json
+    from pathlib import Path
+    import unicodedata
+
+    spec = importlib.util.spec_from_file_location('manifest_migration', Path(__file__).parents[1] / 'alembic/versions/0021_submission_manifest.py')
+    migration = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migration)
+    mapping = json.loads(migration._UNICODE_15_CASEFOLD_JSON)
+    assert unicodedata.unidata_version == '15.0.0'
+    assert len(mapping) == 1530
+    assert hashlib.sha256(migration._UNICODE_15_CASEFOLD_JSON.encode()).hexdigest() == 'c0d6e0ca212805674e7443c1212d732e11fb9faf16d92326aa1a9536caadbf3a'
+    expected = {chr(i): chr(i).casefold() for i in range(0x110000) if chr(i).casefold() != chr(i)}
+    assert mapping == expected
+    connection = await asyncpg.connect(isolated_database_env.replace('+asyncpg', ''))
+    try:
+        values = list(mapping) + ['', 'café/cafe', 'dir/file', '123', '中', '🙂', 'Straße/İΣ']
+        observed = await connection.fetch(
+            'SELECT value,public.submission_archive_casefold(value) AS folded FROM unnest($1::text[]) AS values(value)', values,
+        )
+        assert [(row['value'], row['folded']) for row in observed] == [(value, value.casefold()) for value in values]
+    finally:
+        await connection.close()

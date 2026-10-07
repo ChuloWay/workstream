@@ -26,7 +26,7 @@ async def add_current_art_seed_column(database_url):
             "WHERE table_schema='public' AND table_name='pre_submit_evidence_sets' ORDER BY ordinal_position")
         names = tuple(row[0] for row in columns)
         assert "semantic_manifest_body" not in names
-        await connection.execute("ALTER TABLE public.pre_submit_evidence_sets ADD COLUMN semantic_manifest_body json")
+        await connection.execute("ALTER TABLE public.pre_submit_evidence_sets ADD COLUMN semantic_manifest_body jsonb")
         return names
     finally:
         await connection.close()

@@ -141,3 +141,14 @@ to task lane C after measured execution reached A's unchanged 1,200-second cap.
 Keep all nine lanes, exact-once inventory, assertions and timeout unchanged;
 verify complete hosted execution after redistribution. This is test scheduling,
 not reduced coverage or a product behavior change.
+
+External review correction: store the new manifest column as JSONB so its
+validated representation is also the representation recovered by ART. Prove
+native JSON exponent input cannot persist an unrecoverable float. Inspection
+and recovery share final-inventory validation for folded path uniqueness and
+exact directory ancestry. PostgreSQL must independently reject these collisions;
+its version 16 has no full Unicode case-folding primitive, so 0021 installs a
+bounded immutable helper containing a frozen Unicode 15 case-fold mapping.
+No table, runtime lookup, locale fallback or alternate implementation is added.
+Verify ASCII and non-ASCII collisions, file ancestors, valid directories, and
+SQL/Python fold parity; preserve exact bytes, hashes and retained data.

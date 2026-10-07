@@ -173,3 +173,35 @@ def test_recovered_manifest_accepts_supported_configured_long_path():
     body["entries"][0]["normalized_path"] = "x" * 1025
     recovered = SubmissionManifest.from_dict(body, sha256=canonical_json_hash(body))
     assert recovered.as_dict() == body
+
+
+@pytest.mark.parametrize('paths', [
+    ('A', 'a'), ('dir', 'dir/x'), ('DIR/x', 'dir'),
+    ('STRASSE', 'Straße'), ('Σ', 'ς'), ('İ', 'i\u0307'),
+])
+def test_manifest_and_zip_reject_cross_entry_collisions(paths):
+    from app.modules.artifacts.submission_archive import SubmissionArchiveRejectedError
+
+    body = _manifest(_archive([('safe', b'x')])).as_dict()
+    entry = body['entries'][0]
+    body['entries'] = sorted(
+        [dict(entry, normalized_path=path) for path in paths],
+        key=lambda item: item['normalized_path'],
+    )
+    with pytest.raises(SubmissionArchiveRejectedError, match='submission_archive_collision'):
+        SubmissionManifest.from_dict(body, sha256=canonical_json_hash(body))
+    with pytest.raises(SubmissionArchiveRejectedError, match='submission_archive_collision'):
+        _manifest(_archive([(path, b'x') for path in paths]))
+
+
+@pytest.mark.parametrize('paths', [('Dir/a', 'dir/'), ('Dir/a', 'dir/b')])
+def test_inspector_rejects_case_aliases_of_implicit_directories(paths):
+    from app.modules.artifacts.submission_archive import SubmissionArchiveRejectedError
+
+    with pytest.raises(SubmissionArchiveRejectedError, match='submission_archive_collision'):
+        _manifest(_archive([(path, b'' if path.endswith('/') else b'x') for path in paths]))
+
+
+def test_inventory_preserves_distinct_unicode_and_exact_directory_parents():
+    manifest = _manifest(_archive([('café/', b''), ('café/a', b'x'), ('cafe', b'y')]))
+    assert SubmissionManifest.from_dict(manifest.as_dict(), sha256=manifest.sha256) == manifest
