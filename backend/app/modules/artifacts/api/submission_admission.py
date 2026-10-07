@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Protocol, get_args
 from uuid import UUID
+import re
 
 from app.modules.tasks.api import TaskSubmissionContextFacts
 
@@ -42,6 +43,47 @@ class SubmissionAdmissionConsumptionRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class SubmissionBundleFile:
+    """Detached inspected file metadata, without bytes or storage coordinates."""
+
+    normalized_path: str
+    sha256: str
+    byte_count: int
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.normalized_path) is not str or not self.normalized_path
+            or len(self.normalized_path.encode("utf-8")) > 4096
+            or type(self.sha256) is not str or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.sha256)
+            or type(self.byte_count) is not int or not 0 <= self.byte_count <= 512 * 1024 * 1024
+        ):
+            raise ValueError("submission file metadata is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class SubmissionAdmissionMaterial:
+    """Verified admission metadata; values alone confer no dispatch authority."""
+
+    archive_sha256: str
+    archive_byte_count: int
+    semantic_manifest_sha256: str
+    files: tuple[SubmissionBundleFile, ...]
+
+    def __post_init__(self) -> None:
+        if (
+            any(type(value) is not str or not re.fullmatch(r"sha256:[0-9a-f]{64}", value)
+                for value in (self.archive_sha256, self.semantic_manifest_sha256))
+            or type(self.archive_byte_count) is not int or self.archive_byte_count < 0
+            or type(self.files) is not tuple or len(self.files) > 100_000
+            or any(type(item) is not SubmissionBundleFile for item in self.files)
+        ):
+            raise ValueError("submission admission material is invalid")
+        paths = tuple(item.normalized_path for item in self.files)
+        if paths != tuple(sorted(set(paths))):
+            raise ValueError("submission admission files are not canonical")
+
+
+@dataclass(frozen=True, slots=True)
 class SubmissionAdmissionConsumptionResult:
     """Bounded terminal ART facts returned to transaction composition."""
 
@@ -52,6 +94,14 @@ class SubmissionAdmissionConsumptionResult:
     submission_version: int
     status: SubmissionAdmissionConsumptionStatus
     replayed: bool
+    material: SubmissionAdmissionMaterial | None
+
+    def __post_init__(self) -> None:
+        if self.status == "consumed":
+            if self.binding_id is None or type(self.material) is not SubmissionAdmissionMaterial:
+                raise ValueError("consumed admission requires verified material")
+        elif self.status != "stale" or self.material is not None or self.binding_id is not None:
+            raise ValueError("stale admission has no material")
 
 
 class SubmissionAdmissionConsumptionPort(Protocol):

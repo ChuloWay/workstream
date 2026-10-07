@@ -14,6 +14,8 @@ from app.modules.artifacts.api.submission_admission import (
     SubmissionAdmissionConsumptionPort,
     SubmissionAdmissionConsumptionRequest,
     SubmissionAdmissionConsumptionResult,
+    SubmissionAdmissionMaterial,
+    SubmissionBundleFile,
     SubmissionAdmissionConsumptionStatus,
 )
 
@@ -44,5 +46,7 @@ __all__ = (
     "SubmissionAdmissionConsumptionPort",
     "SubmissionAdmissionConsumptionRequest",
     "SubmissionAdmissionConsumptionResult",
+    "SubmissionAdmissionMaterial",
+    "SubmissionBundleFile",
     "SubmissionAdmissionConsumptionStatus",
 )

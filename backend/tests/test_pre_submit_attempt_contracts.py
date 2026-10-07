@@ -24,6 +24,7 @@ from app.modules.checkers.api import SubmissionPacketView
 from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
 from tests.test_default_pre_submit_execution import _plan, _request
 from tests.test_effective_pre_submit_execution import _context
+from tests.test_submission_manifest import _archive, _manifest
 
 
 def test_attempt_claim_cannot_be_constructed_or_serialized() -> None:
@@ -182,11 +183,14 @@ async def test_completed_replay_rejects_missing_result_metadata_before_capabilit
     plan = _plan(build_pre_submission_checker_catalogue())
     attempt_id, evidence_id = str(new_record_id()), str(new_record_id())
     request_digest = "sha256:" + "a" * 64
+    manifest = _manifest(_archive([("answer.txt", b"verified")]))
     evidence = SimpleNamespace(
+        semantic_manifest_body=manifest.as_dict(),
         id=evidence_id,
         attempt_id=attempt_id,
         attempt_request_digest=request_digest,
         packet_sha256="sha256:" + "b" * 64,
+        semantic_manifest_sha256=manifest.sha256,
     )
     row = SimpleNamespace(
         id=attempt_id,
@@ -215,14 +219,16 @@ async def test_completed_replay_rejects_nonnull_corrupt_result_before_capability
     context = _context()
     attempt_id, evidence_id = str(new_record_id()), str(new_record_id())
     request_digest = "sha256:" + "a" * 64
+    manifest = _manifest(_archive([("answer.txt", b"verified")]))
     evidence = SimpleNamespace(
+        semantic_manifest_body=manifest.as_dict(),
         id=evidence_id,
         attempt_id=attempt_id,
         attempt_request_digest=request_digest,
         packet_sha256="sha256:" + "b" * 64,
         archive_sha256=context.archive_sha256,
         archive_byte_count=context.archive_byte_count,
-        semantic_manifest_sha256=context.semantic_manifest_sha256,
+        semantic_manifest_sha256=manifest.sha256,
         storage_scheme=context.storage_scheme,
         effective_plan_sha256=plan.plan_sha256,
         eligible=True,

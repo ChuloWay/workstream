@@ -15,7 +15,11 @@ from app.modules.artifacts.api import (
     SubmissionAdmissionConsumptionRequest,
     SubmissionAdmissionConsumptionResult,
     SubmissionAdmissionConsumptionStatus,
+    SubmissionAdmissionMaterial,
+    SubmissionBundleFile,
 )
+from app.modules.artifacts.submission_manifest import SubmissionManifest
+from app.modules.artifacts.submission_archive import SubmissionArchiveEntryType
 from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
@@ -150,6 +154,12 @@ class SubmissionAdmissionConsumptionService:
             raise SubmissionAdmissionConsumptionError(
                 "submission_bundle_admission_unavailable"
             )
+        try:
+            SubmissionManifest.from_dict(
+                evidence.semantic_manifest_body, sha256=evidence.semantic_manifest_sha256,
+            )
+        except (TypeError, ValueError) as exc:
+            raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable") from exc
         if admission.status == "consumed":
             return await self._consumed_replay(admission, evidence, request)
         if not self._task_lineage_matches(admission, evidence, request):
@@ -158,7 +168,7 @@ class SubmissionAdmissionConsumptionService:
             admission.stale_at = now
             admission.stale_reason = "locked_submission_context_changed"
             await self._session.flush()
-            return self._result(admission, request, binding=None, replayed=False)
+            return self._result(admission, request, evidence, binding=None, replayed=False)
 
         await self._lock_binding_scope(admission, request)
         existing = await self._session.scalar(
@@ -181,6 +191,7 @@ class SubmissionAdmissionConsumptionService:
             return self._result(
                 admission,
                 request,
+                evidence,
                 binding=None,
                 replayed=False,
             )
@@ -208,7 +219,7 @@ class SubmissionAdmissionConsumptionService:
         admission.consumed_by_submission_id = str(request.submission_id)
         admission.consumed_by_submission_version = request.submission_version
         await self._session.flush()
-        return self._result(admission, request, binding=binding, replayed=False)
+        return self._result(admission, request, evidence, binding=binding, replayed=False)
 
     async def _lock_binding_scope(
         self,
@@ -259,7 +270,7 @@ class SubmissionAdmissionConsumptionService:
         await self._authorization.consume(
             self._authority_facts(admission, evidence, request)
         )
-        return self._result(admission, request, binding=binding, replayed=True)
+        return self._result(admission, request, evidence, binding=binding, replayed=True)
 
     @staticmethod
     def _art_lineage_is_intact(
@@ -363,10 +374,25 @@ class SubmissionAdmissionConsumptionService:
     def _result(
         admission: SubmissionBundleAdmission,
         request: SubmissionAdmissionConsumptionRequest,
+        evidence: PreSubmitEvidenceSet,
         *,
         binding: ArtifactBinding | None,
         replayed: bool,
     ) -> SubmissionAdmissionConsumptionResult:
+        material = None
+        if admission.status == "consumed":
+            manifest = SubmissionManifest.from_dict(
+                evidence.semantic_manifest_body, sha256=evidence.semantic_manifest_sha256,
+            )
+            material = SubmissionAdmissionMaterial(
+                archive_sha256=admission.archive_sha256,
+                archive_byte_count=admission.archive_byte_count,
+                semantic_manifest_sha256=manifest.sha256,
+                files=tuple(SubmissionBundleFile(
+                    normalized_path=item.normalized_path, sha256=item.sha256,
+                    byte_count=item.byte_count,
+                ) for item in manifest.entries if item.entry_type is SubmissionArchiveEntryType.FILE),
+            )
         return SubmissionAdmissionConsumptionResult(
             admission_id=UUID(admission.id),
             binding_id=UUID(binding.id) if binding is not None else None,
@@ -375,4 +401,5 @@ class SubmissionAdmissionConsumptionService:
             submission_version=request.submission_version,
             status=cast("SubmissionAdmissionConsumptionStatus", admission.status),
             replayed=replayed,
+            material=material,
         )

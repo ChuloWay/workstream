@@ -8,6 +8,7 @@ from alembic import command
 from sqlalchemy.exc import IntegrityError
 
 from app.db import session as db_session
+from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 from tests.checkers.execution.predecessor_support import predecessor_lease
 from tests.checkers.execution.test_material_migration import retained_snapshot
@@ -27,7 +28,9 @@ async def test_actual_upgrade_preserves_or_refuses_without_repair(tmp_path, isol
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
+        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             await reserve(h)
             if unprovable_receipt:
                 await predecessor_lease(h)
@@ -56,7 +59,9 @@ async def test_upgrade_excludes_writer_across_receipt_preflight(tmp_path, isolat
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
+        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             reserved = await reserve(h)
             scanned, resume = threading.Event(), threading.Event()
             execute = Operations.execute

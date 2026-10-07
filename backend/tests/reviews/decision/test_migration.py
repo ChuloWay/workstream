@@ -7,6 +7,7 @@ import pytest
 from alembic import command
 
 from app.db import session as db_session
+from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 from tests.reviews.decision.support import review_source
 
@@ -42,7 +43,9 @@ async def test_review_upgrade_preserves_owners(tmp_path, isolated_database_env, 
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0012_review_packet")
+        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with review_source(tmp_path, isolated_database_env):
+            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             connection = await asyncpg.connect(url)
             try:
                 before = await snapshot(connection)
