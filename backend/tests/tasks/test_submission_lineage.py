@@ -72,7 +72,7 @@ async def _prepared_packet(isolated_database_env, tmp_path):
             assignment_id=assignment_id,
             predecessor_submission_id=None,
             idempotency_key=new_record_id(),
-            summary='Completed the "required" café project work in folder \\results with evidence.',
+            summary='Completed the "required" project work in folder \\results with evidence.',
             contributor_attestation="I confirm no confidential client data, credentials, or copied source material is included in this submission; rights_confirmed. "
             + " ".join(policy["attestation_terms"]),
             media_type="application/zip",
