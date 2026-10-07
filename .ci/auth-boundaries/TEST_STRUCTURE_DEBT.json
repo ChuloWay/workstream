@@ -110,11 +110,11 @@
     },
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "83039919be2cab268bb5023481c37e728a70ef0442bb9045a4d7e608209aaa28",
-      "end_line": 2780,
+      "content_sha256": "41bd64fb1e109d4fdd0bdaa865d4aac798cd89d0143972214d1cbc132d6664da",
+      "end_line": 2779,
       "hard_limit": 1200,
       "kind": "test_file",
-      "observed_lines": 2780,
+      "observed_lines": 2779,
       "path": "backend/tests/test_artifact_admission.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -158,11 +158,11 @@
     },
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "ef3ce96162cef9cf178d67f2d2aca4494272577af533431e7b08e4838191667b",
-      "end_line": 5942,
+      "content_sha256": "6a468487f95cf504425abb5d2fc10a799aabdbb7ff7bd6c15d0f303f4285f637",
+      "end_line": 5814,
       "hard_limit": 1200,
       "kind": "test_file",
-      "observed_lines": 5942,
+      "observed_lines": 5814,
       "path": "backend/tests/test_projects.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -447,26 +447,26 @@
     {
       "capability": "oversized_authorization_structure",
       "content_sha256": "e723bd10cd20ba716fb75edda2a5b0c21a78dfce771efd55154834063c08b4b4",
-      "end_line": 2292,
+      "end_line": 2211,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 128,
       "path": "backend/tests/test_projects.py",
       "qualified_symbol": "test_guide_mutation_service_executes_all_three_authorized_happy_paths",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 2165
+      "start_line": 2084
     },
     {
       "capability": "oversized_authorization_structure",
       "content_sha256": "a801cae6e9f200073a42b7a2cb94edd614480899288fbe78783ea78fffe859c7",
-      "end_line": 1115,
+      "end_line": 1035,
       "hard_limit": 120,
       "kind": "test_function",
       "observed_lines": 137,
       "path": "backend/tests/test_projects.py",
       "qualified_symbol": "test_project_role_grant_repository_filters_and_uses_strict_keyset",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 979
+      "start_line": 899
     },
     {
       "capability": "oversized_authorization_structure",

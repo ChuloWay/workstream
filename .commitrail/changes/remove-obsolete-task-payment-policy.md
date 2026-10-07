@@ -54,8 +54,12 @@ or introduce another payment subsystem.
   required rejection/privacy assertions even when the obsolete field disappears.
 - `tests/conftest.py` reset-table list and recomputed schema fingerprint; both
   PROJECTS and AUTH guide-activation PostgreSQL modules; TASK command-replay tests
-  and authorization task-read/privacy assertions. Historical 0008 tests remain.
-- Existing lane catalogue/inventory and ownership registration only for new proof.
+  and authorization task-read/privacy assertions; existing management/contributor/
+  operator command tests receive obsolete-field absence assertions. Historical
+  0008 tests remain.
+- Existing lane catalogue/inventory and ownership registration only for new proof;
+  refresh the structural-debt ledger only to record actual shrinking files, never
+  change its policy or allow debt growth.
 - CLI typed TASK response, decoder and command renderer, plus affected
   contract/integration fixtures. Preserve strict unexpected-field rejection.
 - Current PROJECTS/TASK/Submission/CHECKERS specs, data-model/README/roadmap claims
