@@ -12,8 +12,8 @@ not the current implementation or compensation authority. Migration
 `0023_remove_task_payment_policy` removes the obsolete guide-keyed policy table,
 TASK payment fields, and Submission payment stamp after refusing retained facts
 or immutable receipts that still use them. The
-[cleanup record](../.commitrail/changes/remove-obsolete-task-payment-policy.md)
-owns that delivered removal; CON-05A/05B and CP09 are historical groupings, not
+[migration](../backend/alembic/versions/0023_remove_task_payment_policy.py)
+implements that delivered removal; CON-05A/05B and CP09 are historical groupings, not
 outstanding authority to remove the same storage again. ContributionPolicy
 versions and immutable awards remain the compensation boundary. Physical cleanup
 does not activate contribution recognition or external fulfillment.
@@ -1133,7 +1133,7 @@ lineage. These owner paths replace the superseded guide-bound economic policy.
 
 Migration `0023_remove_task_payment_policy` completes physical removal of the
 unused `payment_policies` table, TASK's `base_amount`, `currency`, `payout_type`
-and `locked_payment_policy_version`, and Submission's copied payment stamp.
+and payment-version stamp, and Submission's copied payment stamp.
 The same cleanup removes mutable repository methods, response/CLI fields and
 obsolete fixture behavior. It adds no alias, fallback, dual read/write,
 automatic conversion or compatibility response.
@@ -1145,8 +1145,8 @@ that guard requires an explicit verified inventory and human-owned preservation
 design; do not infer policy for historical work or fabricate a backfill.
 Fresh-install parity alone is not preservation proof.
 
-The [cleanup record](../.commitrail/changes/remove-obsolete-task-payment-policy.md)
-records this delivered boundary. Earlier CON-05A/05B and CP09 sequencing does not
+The [migration](../backend/alembic/versions/0023_remove_task_payment_policy.py)
+implements this delivered boundary. Earlier CON-05A/05B and CP09 sequencing does not
 schedule another removal or make public intake a prerequisite for this completed
 cleanup. The [current dependency contract](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 continues to govern acceptance authority, atomic contribution/award effects and

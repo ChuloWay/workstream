@@ -833,7 +833,7 @@ remaining trace sequence is:
   and minimal Task/Assignment/Submission writers together without superseded economic
   readiness. Atomic assignment-invalidation publication and delivery are complete
   in `ARCH-03C2`, following real authority in `ARCH-03C1` and
-  `ARCH-03B1` metadata and ARCH-03B2/03B3 hidden queues and ARCH-03B4 hidden detail and ARCH-03B5 current work context, ARCH-03B6 locked-context and ARCH-03B7 requirements and ARCH-03B8 hidden audit evidence and ARCH-03B9 hidden assignment invalidation, and authorization/public cutover in `ARCH-03C`. The [completed physical cleanup](../.commitrail/changes/remove-obsolete-task-payment-policy.md)
+  `ARCH-03B1` metadata and ARCH-03B2/03B3 hidden queues and ARCH-03B4 hidden detail and ARCH-03B5 current work context, ARCH-03B6 locked-context and ARCH-03B7 requirements and ARCH-03B8 hidden audit evidence and ARCH-03B9 hidden assignment invalidation, and authorization/public cutover in `ARCH-03C`. The [completed physical cleanup](../backend/alembic/versions/0023_remove_task_payment_policy.py)
   removes unused guide-keyed payment storage and TASK/Submission fields through
   migration 0023, with retained-data refusal. Historical CP09 sequencing is no
   longer a pending removal or an `allow_review` activation dependency.

@@ -71,7 +71,7 @@ award retain the prior lease version; the next Submission and ReviewLease use
 the rebased version. Prior contributions and awards are never rewritten.
 
 The owner-sized CP06/CP07/CP08 and ARCH replacements establish canonical policy
-binding and locked lineage. The [completed cleanup](../.commitrail/changes/remove-obsolete-task-payment-policy.md)
+binding and locked lineage. The [completed cleanup](../backend/alembic/versions/0023_remove_task_payment_policy.py)
 removes the unused guide-bound economic-policy storage and remaining response,
 repository and CLI consumers through migration 0023. CON-05A/05B and CP09 are
 historical groupings, not another pending removal or an activation gate. No
