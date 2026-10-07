@@ -511,7 +511,16 @@ Exact post-submit service authority and ARCH-04E1A source-only facts/types are
 implemented; automatic dispatch, routing and acceptance remain unavailable.
 Live setup does not wait for downstream task/checker execution.
 
-The next dependency-safe product sequence is:
+The [first complete contributor milestone](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone)
+is the immediate delivery sequence and exit test: checked input, capacity alignment,
+atomic Submission/dispatch, hidden handlers, authorized outcomes, remediation,
+live activation, public intake and a real end-to-end drill. Human review/revision
+runtime follows that milestone. Initial public intake covers initial submissions
+and checker remediation; the historical requirement to complete human-review
+revisions before any public intake is not adopted. Prove remediation against hidden
+handlers before activating false; do not make it depend on an already-live false path.
+
+The broader v0.1 sequence below retains later scope:
 
 1. **Integrate the delivered guide/task foundations.** CP08 lineage and
    ARCH-03B1–03B9 owner operations are delivered at the exposure boundaries
@@ -692,14 +701,16 @@ Delivered foundations (not a claim of full public integration)
   ARCH-04E1B-B2 exact source proposal + B3 ZIP metadata + B4 checked packet custody (no dispatch/publication authority)
 
 Remaining integration
-  both branches: handlers 04E1B-B -> activation 04E2-B -> live 04E3 dispatch/routing
+  both branches: hidden handlers 04E1B-B -> authority/consequence proof 04E2-B
+  production false path additionally requires remediation before live activation
   true: own routing prerequisites; no CON/shared acceptance prerequisite
   selected false path first: delivered shared participant -> handler
     -> mandatory same-input AUTH receipt + DB complete-set closure
     -> TASK-before-CHECKERS race proof + shared audit/outbox
     -> fulfillment-root ordinal custody and authorized lifecycle activation
-  -> 04F remediation
-  -> public intake and immutable admitted Submission cutover
+  -> 04F hidden remediation + authorized recovery proof
+  -> 04E3 live composition and false-policy readiness
+  -> public initial/checker-remediation intake and immutable admitted Submission cutover
   -> automatically consume the durable current result + required checks pass
        |
        +-- locked true -> allow_review -> human Review

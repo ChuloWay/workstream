@@ -36,9 +36,10 @@ TASK submission command contract/composition and adapters/tasks; ART consumption
 contract/service, packet hashing caller and directly affected exports; CHECKERS public packet value helper; one migration after 0021, test_alembic and schema
 fingerprint; focused binding/composition and real PostgreSQL submission tests plus
 their affected canonical fixtures; exact lane/ownership registration; this record,
-parent 04E contract and affected ARCH/AUTH/POL current navigation, README,
+parent 04E contract and affected ARCH/AUTH/POL/CON/REV current navigation, README,
 TASK/ART specifications and roadmap. The user's explicit delivery-priority
-instruction also updates the existing AGENTS.md v0.1 rule in this same PR: focus
+instruction also reconciles the existing first-layer sequence, roadmap/navigation,
+04F dependencies and the existing AGENTS.md v0.1 rule in this same PR: focus
 on the first complete public backend contributor path and defer unrelated work.
 
 ## Prohibited changes
