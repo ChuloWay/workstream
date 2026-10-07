@@ -118,6 +118,9 @@ for all six actions. Removing direct response strictness makes all six regressio
 fail at the intended denial assertion. Review retained the explicit PATCH rejection
 for the removed payment field in the existing closed-request test, alongside POST
 rejection. Migration receipt fixtures distinguish direct creation from nested claim
-actions. Public command tests retain live authority
+actions. The existing packet-custody migration proof remains bound to its own
+0022 transition with exact row equality, then restores the latest schema; the new
+cleanup test owns 0022-to-head preservation with obsolete empty columns removed.
+Public command tests retain live authority
 and exact contribution-lineage assertions. Full hosted and final reviewer evidence
 will be reported against the clean PR head; this record does not claim readiness.
