@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from scripts.identifier_inventory import (
     FORMAT,
     _string_uuid_references,
@@ -319,3 +321,45 @@ def test_routing_operation_key_classification_is_owner_and_shape_scoped() -> Non
     assert _key(table, False)["classification"] == "unresolved"
     assert _key(table | {"name": "unowned_requests"}, True)["classification"] == "unresolved"
     assert _key(table | {"primary_key": ["unexpected_id"]}, True)["classification"] == "unresolved"
+
+
+@pytest.mark.parametrize("migration,unowned", [
+    ("def upgrade():\n    op.drop_table('retired')", False),
+    ("def upgrade():\n    op.drop_table('retired', schema='public')", False),
+    ("def upgrade():\n    op.drop_table('retired')\n    op.create_table('retired', sa.Column('id', sa.Uuid(), primary_key=True))", True),
+    ("def upgrade():\n    op.create_table('retired', sa.Column('id', sa.Uuid(), primary_key=True))\n    op.drop_table('retired')", False),
+    ("def downgrade():\n    op.drop_table('retired')", True),
+    ("def helper():\n    op.drop_table('retired')\ndef upgrade():\n    helper()", True),
+    ("def upgrade():\n    if enabled:\n        op.drop_table('retired')", True),
+    ("def upgrade():\n    other.drop_table('retired')", True),
+    ("def upgrade():\n    op.drop_table('retired', schema='other')", True),
+    ("def upgrade():\n    op.drop_table(table_name)", True),
+    ("def upgrade():\n    op.drop_table('retired', schema=schema_name)", True),
+    ("def upgrade():\n    op.drop_table('retired', **options)", True),
+])
+def test_inventory_only_retires_explicit_public_upgrade_drops(tmp_path, migration, unowned):
+    backend = tmp_path / "backend"
+    _write(backend / "alembic/baseline/v01_baseline_manifest.json", json.dumps({
+        "tables": [{"name": "retired"}],
+        "columns": [{"table_name": "retired", "name": "id", "data_type": "uuid"}],
+        "constraints": [{"kind": "p", "table_name": "retired", "definition": "PRIMARY KEY (id)"}],
+    }))
+    _write(backend / "alembic/versions/0002_retire.py", "from alembic import op\nimport sqlalchemy as sa\n" + migration)
+    report = build_inventory(backend)
+    assert report["summary"]["schema_tables"] == int(unowned)
+    assert report["unresolved"] == ([{
+        "kind": "table_key", "table": "retired", "reason": "schema table has no ORM owner",
+    }] if unowned else [])
+
+    # Recreation in a later migration must also remain visible to the guard.
+    _write(backend / "alembic/versions/0003_recreate.py", """
+from alembic import op
+import sqlalchemy as sa
+def upgrade():
+    op.create_table('retired', sa.Column('id', sa.Uuid(), primary_key=True))
+""")
+    recreated = build_inventory(backend)
+    assert recreated["summary"]["schema_tables"] == 1
+    assert recreated["unresolved"] == [{
+        "kind": "table_key", "table": "retired", "reason": "schema table has no ORM owner",
+    }]

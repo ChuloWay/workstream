@@ -125,6 +125,9 @@ rejection. Migration receipt fixtures distinguish direct creation from nested cl
 actions. The existing packet-custody migration proof remains bound to its own
 0022 transition with exact row equality, then restores the latest schema; the new
 cleanup test owns 0022-to-head preservation with obsolete empty columns removed.
+The identifier inventory follows explicit unconditional public-table drops in
+upgrade source order, while misleading drops remain unresolved and later creates
+remain visible. Its current-repository and synthetic controls protect that boundary.
 Public command tests retain live authority
 and exact contribution-lineage assertions. Full hosted and final reviewer evidence
 will be reported against the clean PR head; this record does not claim readiness.
