@@ -166,7 +166,12 @@ def submission_evaluation_content(
     files: tuple[SubmissionBundleFile, ...],
     archive_sha256: str,
 ) -> PostSubmissionEvaluationContent:
-    """Project exact inspected files and locked policies without executing a checker."""
+    """Project inspected files and locked policies without executing a checker.
+
+    Before admission, observed context is the locked TASK context. A dispatcher
+    must first verify stored Submission lineage against these same facts; this
+    projection never proves stored ownership or replaces the evaluation guard.
+    """
     from app.adapters.tasks import validate_submission_policy_context
 
     validate_submission_policy_context(task_context, project_context)

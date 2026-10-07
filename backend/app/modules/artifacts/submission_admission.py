@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from dataclasses import dataclass, replace
 import json
 from uuid import UUID
@@ -486,7 +486,6 @@ class PreparedSubmissionBundlePreparationCommand:
     ) -> SubmissionBundlePreparationResult:
         if type(request) is not SubmissionBundlePreparationRequest:
             raise TypeError("invalid submission bundle preparation request")
-        prepared = None
         try:
             await self._authority.preflight(request=request)
             validate_submission_packet_headers(
@@ -495,7 +494,7 @@ class PreparedSubmissionBundlePreparationCommand:
             )
             if request.media_type.partition(";")[0].strip().lower() != "application/zip":
                 raise SubmissionBundlePreparationRejected("submission_bundle_media_type_invalid")
-            async with self._runtime_factory() as runtime:
+            async with self._runtime_factory() as runtime, AsyncExitStack() as scratch_cleanup:
                 async with self._session.begin():
                     task_context, project_context = await self._lock_authorized_context(request)
                     plan = self._compile_plan(
@@ -508,6 +507,7 @@ class PreparedSubmissionBundlePreparationCommand:
                     request.byte_source,
                     media_type="application/zip",
                 )
+                scratch_cleanup.push_async_callback(prepared.close)
                 async with self._session.begin():
                     task_context, project_context = await self._lock_authorized_context(request)
                     materialization_handle = await runtime.materialization.prepare_authorization(
@@ -573,7 +573,6 @@ class PreparedSubmissionBundlePreparationCommand:
                             "pre_submission_checked_custody_unavailable"
                         )
                     await prepared.close()
-                    prepared = None
                     return replay
                 replay_intent_id = await self._matching_replay_intent(
                     evidence.evidence.evidence_set_id
@@ -588,7 +587,6 @@ class PreparedSubmissionBundlePreparationCommand:
                             replay_durable_intent_id=replay_intent_id,
                         )
                     )
-                prepared = None
                 result = await runtime.durable_put.publish_after_commit(
                     retained,
                     evidence.evidence.evidence_set_id,
@@ -602,8 +600,6 @@ class PreparedSubmissionBundlePreparationCommand:
                 "submission bundle preparation is unavailable"
             ) from exc
         finally:
-            if prepared is not None:
-                await prepared.close()
             self._authority.close()
 
     async def _matching_replay_intent(self, evidence_id: UUID) -> UUID | None:

@@ -829,4 +829,6 @@ The typed adapter projects every verified file and only required evidence with
 matching verified `evidence/{key}` files. Missing criteria remain empty text for
 the existing post-submit checker. This check does not execute evaluators or
 supply authority. See [the ART admission boundary](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission)
-for timing and cleanup. Initial dispatch must reuse the same projection.
+for timing and cleanup. Initial dispatch must verify stored Submission lineage
+against the locked context before reusing the projection. Preparation has no
+stored Submission to observe; it never replaces the TASK evaluation guard.

@@ -18,7 +18,10 @@ container limits are not a promise that every archive fits the evaluation contra
 - CHECKERS owns one immutable evaluation-content value containing the existing
   project, expected context, catalogue, compiled policy and structural input.
   The full evaluation request uses that same value/validation and adds real
-  record identities. Move its existing project/policy/version/hash/catalogue
+  record identities. Before dispatch reuses this projection, verify the stored
+  Submission context against these same locked facts; preparation has no stored
+  Submission observation, and projection is not a substitute for the existing
+  TASK evaluation guard. Move its existing project/policy/version/hash/catalogue
   consistency checks into this base so preparation also rejects impossible
   content. Preserve existing request serialization and digest semantics.
 - Reserve 1,024 bytes of the existing 1 MiB envelope for finite UUID, version,
@@ -122,6 +125,9 @@ admission for valid input. Shared-boundary tests exercise canonical UTF-8 size,
 one-byte overflow and the maximum identity envelope. Projection tests cover
 exact file evidence, absent criteria, independent locked stamp substitutions and
 both review modes as detached facts; they do not claim false-policy activation.
+The real oversized-ZIP test exposed prepared scratch closing after its runtime
+manager. Preparation now registers release inside the runtime lifetime, before
+manager shutdown on rejection, failure or cancellation.
 Existing packet-length tests retain their earlier boundary; they are not evidence
 that this new capacity call rejects packet text first.
 
