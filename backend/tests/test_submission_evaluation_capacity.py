@@ -48,6 +48,13 @@ async def test_real_zip_capacity_rejects_before_effects_and_valid_control_passes
         path = "/".join(["a" * 200] * 4 + ["b" * 197])
         assert len(path) == 1001
         long_path = _archive(evidence_path=h.policy["evidence_path"], extra_path=path)
+        models = (ArtifactPutAttempt, PreSubmitExecutionAttempt, PreSubmitEvidenceSet,
+                  SubmissionBundleDurableIntent, SubmissionBundleAdmission)
+        async with h.factory() as session:
+            # Guide setup already uploaded its own documents; retain that custody.
+            before = {model: await session.scalar(select(func.count()).select_from(model)) for model in models}
+            assert await session.scalar(select(func.count()).select_from(ArtifactPutAttempt).where(
+                ArtifactPutAttempt.task_id == str(h.request.task_id))) == 0
         for payload in (many.getvalue(), long_path):
             key = new_record_id()
             for _ in range(2):
@@ -60,9 +67,8 @@ async def test_real_zip_capacity_rejects_before_effects_and_valid_control_passes
                     reserve.assert_not_called()
                     put.assert_not_called()
                 async with h.factory() as session:
-                    for model in (ArtifactPutAttempt, PreSubmitExecutionAttempt, PreSubmitEvidenceSet,
-                                  SubmissionBundleDurableIntent, SubmissionBundleAdmission):
-                        assert await session.scalar(select(func.count()).select_from(model)) == 0
+                    for model in models:
+                        assert await session.scalar(select(func.count()).select_from(model)) == before[model], model.__tablename__
                 for folder in ("files", "workspaces"):
                     assert list((h.settings.artifact_scratch_root / folder).iterdir()) == []
         admission = await _verified_admission(h.factory, h.store, h.namespace, h.settings, h.context,
@@ -135,7 +141,7 @@ async def test_projection_exact_files_criteria_and_all_locked_stamps(isolated_da
         with pytest.raises(ValueError, match="65536"):
             project_content(replace(task, acceptance_criteria="x" * 65537))
         # Every selected downstream identity/generation/hash is varied independently.
-        for field in task.locked_policy.model_fields:
+        for field in type(task.locked_policy).model_fields:
             if not field.startswith(("locked_post_", "locked_review_", "locked_revision_")):
                 continue
             value = getattr(task.locked_policy, field)
