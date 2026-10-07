@@ -737,7 +737,8 @@ without creating a REV queue dependency. The false branch binds exact
 without fabricating a Review. CON-07 now supplies the hidden source-neutral
 submitter participant and complete frozen award-set staging/replay. REV-04C now
 composes FinalAcceptance, TASK terminal effects and that CON participant in one
-hidden caller-owned transaction for either source. Hidden handlers are next.
+hidden caller-owned transaction for either source. Capacity alignment and atomic
+initial Submission/dispatch come next, before the hidden handlers.
 The mandatory exact AUTH receipt must become required on the same strict input,
 with no optional/default path, before production consumption; database
 FinalAcceptance/TASK/CON closure, TASK-before-CHECKERS race proof, shared

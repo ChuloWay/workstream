@@ -77,7 +77,8 @@ then live 04E3; true admission does not depend on CON/shared acceptance.
 ARCH-04E1B-B1 delivers TASK-before-CHECKERS reservation/current-read guards
 and ordered review admission INSERTs,
 including terminal read-only replay and both mechanical race controls. The
-remaining 04E1B-B handler work and full authorized currentness proof stay next;
+next steps are capacity alignment and atomic initial Submission/dispatch, then
+remaining 04E1B-B handlers and full authorized currentness proof;
 no handler or action is activated by this prerequisite.
 
 ## Current dependency contract
