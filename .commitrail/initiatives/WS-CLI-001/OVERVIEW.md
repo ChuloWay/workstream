@@ -11,7 +11,8 @@
   [WS-CLI-001-04](WS-CLI-001-04.md), public manager task pagination and detail;
   [WS-CLI-001-05](WS-CLI-001-05.md), contributor ready-task discovery and instructions;
   [WS-CLI-001-06](WS-CLI-001-06.md), public contributor claim/start with explicit retry keys;
-  [WS-CLI-001-07](WS-CLI-001-07.md), contributor governing context and locked intake requirements.
+  [WS-CLI-001-07](WS-CLI-001-07.md), contributor governing context and locked intake requirements;
+  [WS-CLI-001-08](WS-CLI-001-08.md), draft project shell creation with explicit caller-owned replay.
 
 ## Current boundary
 
@@ -35,6 +36,9 @@ Exact caller keys support manual replay; uncertainty never triggers automatic re
 `task context TASK_ID` and `task requirements TASK_ID` read governing guide,
 policy selectors, server action hints and locked intake rules. Hints are not
 authority; these reads do not expose the hidden submission intake.
+`project create --name TEXT --slug TEXT --idempotency-key UUID` creates a draft
+shell through the public POST. The API owns system-scoped creation authority
+and committed recovery; guide upload, approval and activation are not added.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -85,11 +89,14 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 7. **WS-CLI-001-07:** Inspect contributor work context and exact submission
    requirements through public reads. Preserve historical selectors, server
    hints and contributor disclosure without fetching files or evaluating policy.
-8. **Later governed-work commands:** Add project setup, submission,
+8. **WS-CLI-001-08:** Create a draft project shell through the public POST with
+   explicit caller-supplied keys, exact 201/full-response validation and unknown
+   outcomes. Reuse project inspection parsing/output; no guide activation.
+9. **Later governed-work commands:** Add further project setup, submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-9. **Optional TUI:** Add a focused public queue/evidence view after its API
+10. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof

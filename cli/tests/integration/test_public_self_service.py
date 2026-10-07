@@ -14,6 +14,7 @@ import httpx
 import pytest
 
 from task_journey import exercise_manager_task_reads
+from project_create_journey import exercise_project_creation
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / "backend"
@@ -121,6 +122,7 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             assert (
                 "get" in specification.json()["paths"]["/api/v1/projects/{project_id}"]
             )
+            assert "post" in specification.json()["paths"]["/api/v1/projects"]
             for path in (
                 "/api/v1/projects/{project_id}/tasks",
                 "/api/v1/projects/{project_id}/tasks/{task_id}",
@@ -259,6 +261,10 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
             )
             assert project.status_code == 201, project.text
             project_id = project.json()["id"]
+
+            await exercise_project_creation(
+                direct, cli, origin, tokens, profiles, project_id
+            )
 
             for selector in (project_id, project_id.replace("-", "")):
                 shown = cli(

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"mime"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -82,7 +81,7 @@ func (c *Client) taskWrite(ctx context.Context, selector, action, key string, re
 	if err != nil || len(body) > maxUpdateBytes {
 		return nil, errors.New("task request exceeds the request size limit")
 	}
-	raw, err := c.requestWithKey(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(selector)+"/"+action, "", body, key)
+	raw, err := c.requestWithKey(ctx, http.MethodPost, "/api/v1/tasks/"+url.PathEscape(selector)+"/"+action, "", body, key, http.StatusOK)
 	return raw, taskWriteFailure(err)
 }
 
@@ -165,30 +164,4 @@ func sameUUID(left, right string) bool {
 	a, validA := uuidIdentity(left)
 	b, validB := uuidIdentity(right)
 	return validA && validB && a == b
-}
-
-// A task write needs a complete public ApiError, not a gateway's code-shaped
-// JSON. Profile PATCH deliberately retains its existing response contract.
-func canonicalTaskError(raw []byte, contentType string) bool {
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil || mediaType != "application/json" {
-		return false
-	}
-	var envelope struct {
-		Error  json.RawMessage `json:"error"`
-		Detail json.RawMessage `json:"detail"`
-	}
-	if decode(raw, &envelope, []string{"error"}, nil) != nil {
-		return false
-	}
-	var value struct {
-		Code          *string                    `json:"code"`
-		Message       *string                    `json:"message"`
-		Details       map[string]json.RawMessage `json:"details"`
-		CorrelationID *string                    `json:"correlation_id"`
-		Retryable     *bool                      `json:"retryable"`
-	}
-	return decode(envelope.Error, &value, []string{"code", "message", "details", "correlation_id", "retryable"}, nil) == nil &&
-		value.Code != nil && *value.Code != "" && value.Message != nil && value.Details != nil &&
-		value.CorrelationID != nil && validUUID(*value.CorrelationID) && value.Retryable != nil
 }
