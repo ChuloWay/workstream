@@ -138,7 +138,8 @@ and administrative read tools through WS-MCP-002-03. The
 [Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
 reads plus human self-profile editing, exact-project inspection and manager
 task queue/detail reads, contributor ready-work/instruction reads and public
-claim/start commands with caller-supplied retry keys, with
+claim/start commands with caller-supplied retry keys, plus governing work-context
+and locked intake-requirement reads, with
 text/JSON output. Project inspection preserves
 server-selected full/minimal fields; no public project-list route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -316,6 +317,10 @@ cannot be reused as post-submission review-gate evidence. See the
   [CLI contributor claim/start](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-06.md)
   adds the existing public writes with explicit retry keys, server-owned
   assignment/lineage, fresh-authority replay and uncertain-outcome handling.
+  [CLI contributor context](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-07.md)
+  adds the governing guide, exact policy selectors, server hints and locked
+  intake requirements through public reads. Hints are not authority; no files
+  are fetched, no policy is evaluated locally and hidden submission remains hidden.
   Built-binary HTTP
   integration and isolated real-API proof accompany
   the package. Further public commands, optional TUI and binary distribution

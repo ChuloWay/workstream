@@ -20,6 +20,13 @@ async def exercise_contributor_task_reads(
     admin = {"Authorization": f"Bearer {tokens['cli-admin']}"}
     token = tokens["cli-outsider"]
     issuer, audience, secret = flow_settings(env)
+    specification = await direct.get("/openapi.json", timeout=60)
+    assert specification.status_code == 200
+    for suffix in ("work-context", "submission-requirements"):
+        assert (
+            "get"
+            in specification.json()["paths"][f"/api/v1/tasks/{{task_id}}/{suffix}"]
+        )
 
     async def post(path, body, headers=manager):
         response = await direct.post(
@@ -36,6 +43,39 @@ async def exercise_contributor_task_reads(
             return None
         assert result.returncode == 0 and result.stderr == "", result.stderr
         return json.loads(result.stdout)
+
+    async def context_reads(task_id, presented=token, denied=False):
+        values = {}
+        for command, suffix in (
+            ("context", "work-context"),
+            ("requirements", "submission-requirements"),
+        ):
+            expected = await direct.get(
+                f"/api/v1/tasks/{task_id}/{suffix}",
+                headers={"Authorization": f"Bearer {presented}"},
+            )
+            if denied:
+                # Each real route owns concealment; do not assume the same
+                # status for work-context's command and requirements' read port.
+                assert expected.status_code in (403, 404), expected.text
+                read((command, task_id), presented, status=expected.status_code)
+                continue
+            assert expected.status_code == 200, expected.text
+            value = read((command, task_id.replace("-", "")), presented)
+            assert value == expected.json()
+            values[command] = value
+        if not denied:
+            context, requirements = values["context"], values["requirements"]
+            assert context["task"]["task_id"] == requirements["task_id"] == task_id
+            assert (
+                context["task"]["project_id"]
+                == context["project"]["id"]
+                == context["guide"]["project_id"]
+                == requirements["project_id"]
+                == project
+            )
+            assert context["guide"]["version"] == requirements["guide_version"]
+        return values
 
     async def mutate(action, task_id, key, reason=None, presented=token, status=None):
         # Read the current public management projection AFTER administrator
@@ -140,11 +180,13 @@ async def exercise_contributor_task_reads(
         # Stored ready resources exist, but no matching grant permits either read.
         read(("ready", project), status=404)
         read(("show", ready_ids[0]), status=404)
+        await context_reads(ready_ids[0], denied=True)
         first_grant = await grant(project, actor_id)
         await grant(project, peer_profiles["cli-task-peer"])
         await grant(project, peer_profiles["cli-task-reviewer"], role="reviewer")
         for command in (("ready", project), ("show", ready_ids[0])):
             read(command, peer_tokens["cli-task-reviewer"], status=404)
+        await context_reads(ready_ids[0], peer_tokens["cli-task-reviewer"], denied=True)
         for action in ("claim", "start"):
             await mutate(
                 action,
@@ -202,6 +244,14 @@ async def exercise_contributor_task_reads(
 
         await detail(ready_ids[0])
         await detail(ready_ids[0], peer_tokens["cli-task-peer"])
+        ready_context = await context_reads(ready_ids[0])
+        assert ready_context["context"]["lifecycle"] == {
+            "assigned_to_current_actor": False,
+            "next_actions": ["claim"],
+        }
+        await context_reads(ready_ids[0], peer_tokens["cli-task-peer"])
+        await context_reads(draft["id"], denied=True)
+        await context_reads(foreign_task_id, denied=True)
         read(("show", draft["id"]), status=404)
         read(("ready", foreign_project), status=404)
         read(("show", foreign_task_id), status=404)
@@ -295,9 +345,31 @@ async def exercise_contributor_task_reads(
         mismatch = await mutate("claim", ready_ids[1], claim_key, reason, status=409)
         assert mismatch["code"] == "idempotency_mismatch"
         assert (await detail(ready_ids[0]))["status"] == "claimed"
+        claimed_context = await context_reads(ready_ids[0])
+        assert claimed_context["context"]["lifecycle"] == {
+            "assigned_to_current_actor": True,
+            "next_actions": ["start"],
+        }
+        assert claimed_context["requirements"] == ready_context["requirements"]
+        assert (
+            claimed_context["context"]["guide"]["version"]
+            == claimed["task"]["locked_guide_version"]
+        )
+        assert (
+            claimed_context["context"]["contribution_policy_version_id"]
+            == claimed["task"]["locked_contribution_policy_version_id"]
+        )
+        for kind in ("review", "revision"):
+            assert claimed_context["context"][f"{kind}_policy"] == {
+                "policy_id": claimed["task"][f"locked_{kind}_policy_id"],
+                "generation": claimed["task"][f"locked_{kind}_policy_generation"],
+                "policy_hash": claimed["task"][f"locked_{kind}_policy_hash"],
+            }
         # Same-project authority was demonstrated before and after this ownership change.
         read(("show", ready_ids[0]), peer_tokens["cli-task-peer"], status=404)
         await detail(ready_ids[1], peer_tokens["cli-task-peer"])
+        await context_reads(ready_ids[0], peer_tokens["cli-task-peer"], denied=True)
+        await context_reads(ready_ids[1], peer_tokens["cli-task-peer"])
         for presented in (token, peer_tokens["cli-task-peer"]):
             page = read(("ready", project), presented)
             assert {item["task_id"] for item in page["items"]} == set(ready_ids[1:])
@@ -316,6 +388,19 @@ async def exercise_contributor_task_reads(
             == claimed["task"]["locked_contribution_policy_version_id"]
         )
         assert (await detail(ready_ids[0]))["status"] == "in_progress"
+        started_context = await context_reads(ready_ids[0])
+        assert started_context["context"]["lifecycle"] == {
+            "assigned_to_current_actor": True,
+            "next_actions": [],
+        }
+        assert started_context["requirements"] == ready_context["requirements"]
+        for field in (
+            "guide",
+            "review_policy",
+            "revision_policy",
+            "contribution_policy_version_id",
+        ):
+            assert started_context["context"][field] == ready_context["context"][field]
         assert await mutate("start", ready_ids[0], start_key, reason) == started
         assert (await mutate("start", ready_ids[0], start_key, "Changed", status=409))[
             "code"
@@ -328,12 +413,14 @@ async def exercise_contributor_task_reads(
         )
         read(("ready", project, "--limit", "1", "--cursor", first_cursor), status=404)
         read(("show", ready_ids[1]), status=404)
+        await context_reads(ready_ids[1], denied=True)
         await mutate("start", ready_ids[0], start_key, reason, status=403)
         await mutate("claim", ready_ids[1], uuid4(), status=403)
         # Manager authority cannot substitute for a revoked Submitter grant.
         await grant(project, actor_id)
         read(("ready", project, "--limit", "1", "--cursor", first_cursor))
         await detail(ready_ids[1])
+        await context_reads(ready_ids[1])
         # Establish fresh successful write authority before lifecycle denial.
         second_key = uuid4()
         second_claim = await mutate("claim", ready_ids[1], second_key)
@@ -347,6 +434,7 @@ async def exercise_contributor_task_reads(
         )
         read(("ready", project), status=404)
         read(("show", ready_ids[1]), status=404)
+        await context_reads(ready_ids[1], denied=True)
         await mutate("claim", ready_ids[1], second_key, status=403)
         await mutate("start", ready_ids[1], uuid4(), status=403)
         await post(
@@ -356,3 +444,4 @@ async def exercise_contributor_task_reads(
         )
         read(("ready", project))
         await detail(ready_ids[1])
+        await context_reads(ready_ids[1])
