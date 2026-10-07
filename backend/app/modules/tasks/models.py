@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
@@ -15,7 +14,6 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
-    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -180,11 +178,6 @@ class WorkstreamTask(Base):
             name="fk_workstream_tasks_locked_revision_policy",
         ),
         ForeignKeyConstraint(
-            ["project_id", "locked_payment_policy_version"],
-            ["payment_policies.project_id", "payment_policies.guide_version"],
-            name="fk_workstream_tasks_locked_payment_policy",
-        ),
-        ForeignKeyConstraint(
             ["locked_guide_source_snapshot_id", "locked_guide_source_snapshot_hash"],
             ["guide_source_snapshots.id", "guide_source_snapshots.bundle_hash"],
             name="fk_workstream_tasks_locked_source_snapshot_hash",
@@ -227,11 +220,6 @@ class WorkstreamTask(Base):
             "locked_revision_policy_generation",
             "locked_revision_policy_hash",
             name="uq_workstream_tasks_id_locked_revision_policy",
-        ),
-        UniqueConstraint(
-            "id",
-            "locked_payment_policy_version",
-            name="uq_workstream_tasks_id_locked_payment_policy",
         ),
         UniqueConstraint(
             "id",
@@ -295,7 +283,6 @@ class WorkstreamTask(Base):
     locked_revision_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_revision_policy_generation: Mapped[int | None] = mapped_column(Integer)
     locked_revision_policy_hash: Mapped[str | None] = mapped_column(String(71))
-    locked_payment_policy_version: Mapped[str | None] = mapped_column(String(50))
     locked_guide_source_snapshot_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_guide_source_snapshot_hash: Mapped[str | None] = mapped_column(String(71))
     locked_effective_project_submission_artifact_policy_id: Mapped[str | None] = mapped_column(
@@ -319,9 +306,6 @@ class WorkstreamTask(Base):
     difficulty: Mapped[str | None] = mapped_column(String(50))
     skill_tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     estimated_time_minutes: Mapped[int | None] = mapped_column(Integer)
-    base_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
-    currency: Mapped[str | None] = mapped_column(String(20))
-    payout_type: Mapped[str | None] = mapped_column(String(50))
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
     acceptance_criteria: Mapped[str | None] = mapped_column(Text)
     rejection_criteria: Mapped[str | None] = mapped_column(Text)
@@ -458,11 +442,6 @@ class Submission(Base):
                 "workstream_tasks.locked_revision_policy_hash",
             ],
             name="fk_submissions_task_locked_revision_policy",
-        ),
-        ForeignKeyConstraint(
-            ["task_id", "locked_payment_policy_version"],
-            ["workstream_tasks.id", "workstream_tasks.locked_payment_policy_version"],
-            name="fk_submissions_task_locked_payment_policy",
         ),
         ForeignKeyConstraint(
             ["task_id", "locked_guide_source_snapshot_id", "locked_guide_source_snapshot_hash"],
@@ -619,7 +598,6 @@ class Submission(Base):
     locked_revision_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_revision_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_revision_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    locked_payment_policy_version: Mapped[str | None] = mapped_column(String(50))
     locked_guide_source_snapshot_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     locked_guide_source_snapshot_hash: Mapped[str | None] = mapped_column(String(71))
     locked_effective_project_submission_artifact_policy_id: Mapped[str | None] = mapped_column(

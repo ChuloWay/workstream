@@ -82,7 +82,6 @@ RESETTABLE_TEST_TABLES = (
     "legacy_workflow_eligibility",
     "outbox_delivery_attempts",
     "outbox_events",
-    "payment_policies",
     "policy_mutation_idempotency_records",
     "pre_submit_checker_policies",
     "pre_submit_evidence_results",

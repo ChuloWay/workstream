@@ -200,7 +200,6 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
             )
             assert admission.status == "consumed"
             assert admission.consumed_by_submission_id == submission.id
-            assert submission.locked_payment_policy_version is None
             assert await session.scalar(select(func.count()).select_from(Submission)) == 1
         await _assert_bound_packet_immutable(h, created)
 
