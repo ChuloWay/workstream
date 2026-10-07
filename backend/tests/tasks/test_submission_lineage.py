@@ -202,34 +202,39 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
             assert admission.consumed_by_submission_id == submission.id
             assert submission.locked_payment_policy_version is None
             assert await session.scalar(select(func.count()).select_from(Submission)) == 1
-        # Existing owner immutability is part of the new cross-row guarantee.
-        for update in (
-            "submission_bundle_admission_id=NULL, artifact_binding_id=NULL, artifact_content_id=NULL",
-            "submission_bundle_admission_id=:foreign",
-            "artifact_binding_id=:foreign",
-            "artifact_content_id=:foreign",
-        ):
-            with pytest.raises(DBAPIError, match="submission contribution identity is immutable"):
-                async with factory.begin() as session:
-                    await session.execute(text(f"UPDATE public.submissions SET {update} WHERE id=:id"),
-                                          {"id": created.submission_id, "foreign": new_record_id()})
-        for statement, message in (
-            ("UPDATE public.pre_submit_evidence_sets SET packet_sha256='sha256:' || repeat('0',64) "
-             "WHERE id=(SELECT pre_submit_evidence_set_id FROM public.submission_bundle_admissions WHERE id=:id)",
-             "pre_submit_evidence_sets rows are immutable"),
-            ("UPDATE public.submission_bundle_admissions SET pre_submit_evidence_set_id=:foreign WHERE id=:id",
-             "submission bundle admission lineage is immutable"),
-        ):
-            with pytest.raises(DBAPIError, match=message):
-                async with factory.begin() as session:
-                    await session.execute(text(statement), {"id": admission_id, "foreign": new_record_id()})
-        async with factory() as session:
-            retained = await session.get(Submission, str(created.submission_id))
-            assert retained.summary == creation.summary
-            assert retained.worker_attestation == creation.contributor_attestation
-            assert retained.submission_bundle_admission_id == str(admission_id)
-            assert retained.artifact_binding_id == str(created.artifact_binding_id)
-            assert retained.artifact_content_id == str(created.artifact_content_id)
+        await _assert_bound_packet_immutable(h, created)
+
+
+async def _assert_bound_packet_immutable(h, created):
+    factory, admission_id, creation = h.factory, h.admission_id, h.creation
+    # Existing owner immutability is part of the new cross-row guarantee.
+    for update in (
+        "submission_bundle_admission_id=NULL, artifact_binding_id=NULL, artifact_content_id=NULL",
+        "submission_bundle_admission_id=:foreign",
+        "artifact_binding_id=:foreign",
+        "artifact_content_id=:foreign",
+    ):
+        with pytest.raises(DBAPIError, match="submission contribution identity is immutable"):
+            async with factory.begin() as session:
+                await session.execute(text(f"UPDATE public.submissions SET {update} WHERE id=:id"),
+                                      {"id": created.submission_id, "foreign": new_record_id()})
+    for statement, message in (
+        ("UPDATE public.pre_submit_evidence_sets SET packet_sha256='sha256:' || repeat('0',64) "
+         "WHERE id=(SELECT pre_submit_evidence_set_id FROM public.submission_bundle_admissions WHERE id=:id)",
+         "pre_submit_evidence_sets rows are immutable"),
+        ("UPDATE public.submission_bundle_admissions SET pre_submit_evidence_set_id=:foreign WHERE id=:id",
+         "submission bundle admission lineage is immutable"),
+    ):
+        with pytest.raises(DBAPIError, match=message):
+            async with factory.begin() as session:
+                await session.execute(text(statement), {"id": admission_id, "foreign": new_record_id()})
+    async with factory() as session:
+        retained = await session.get(Submission, str(created.submission_id))
+        assert retained.summary == creation.summary
+        assert retained.worker_attestation == creation.contributor_attestation
+        assert retained.submission_bundle_admission_id == str(admission_id)
+        assert retained.artifact_binding_id == str(created.artifact_binding_id)
+        assert retained.artifact_content_id == str(created.artifact_content_id)
 
 
 @pytest.mark.postgres_schema_contract

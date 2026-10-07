@@ -94,7 +94,25 @@ definition or ownership boundary of Workstream.
   -> submission -> post-submission work evaluation -> review
   -> revision -> contribution records -> conditional compensation
   awards/fulfillment -> contribution evidence for a future reputation
-  projection. Runtime reputation projection remains deferred.
+  projection. The immediate delivery priority is the first complete backend
+  journey: approved project guide and locked policies -> task creation -> claim
+  and start -> upload ZIP -> actionable pre-check feedback or verified immutable
+  Submission -> automatic post-checking -> governed outcome. For a project with
+  `human_review_required=false`, passing required checks must reach the shared
+  authorized FinalAcceptance and submitter ContributionRecord, with applicable
+  conditional awards committed atomically; never fabricate a Review or reviewer
+  contribution. Failed checks and infrastructure failures need distinct,
+  recoverable outcomes. Preserve the default-true human-review branch and its
+  existing guards; prioritize live human review/revision after this first path.
+  Before selecting each chunk, review the current plan against merged owners and
+  identify the concrete gap it closes in this journey and its end-to-end proof.
+  Take prerequisite work only when that path cannot safely proceed without it;
+  do not expand foundations for hypothetical later use. Completion means a
+  realistic drill through public backend APIs and durable workers, including
+  failure/retry and exact contribution-record evidence, not hidden storage or
+  individually passing module tests alone. External integrations, frontend
+  expansion, contributor claim expiry/skip, runtime reputation and unrelated
+  cleanup remain deferred unless the user explicitly changes this priority.
 - Review decision stored values are only accept, needs_revision, or reject.
 - Frontend is locked as React + Vite + TypeScript.
 - Backend API is locked as Python with FastAPI.
@@ -120,7 +138,9 @@ definition or ownership boundary of Workstream.
 - Bounded private ephemeral processing scratch is not artifact storage. It may
   use local files only through the canonical `ArtifactScratchManager` with
   aggregate quotas, crash cleanup, and no durable product reference.
-- Do not expand into blockchain settlement, marketplace, external source adapters, automated routing, or agent workspace until the internal loop is proven.
+- Do not expand into blockchain settlement, marketplace, external source adapters,
+  external task-routing systems or agent workspace until the internal loop is
+  proven. Internal policy-governed post-check routing is part of that loop.
 - External integrations must follow ADR 0014: extend the shared
   `ExternalServiceAdapter` convention through a typed capability port and use a
   typed `ExternalServiceAdapterFactory[TAdapter]` with explicit

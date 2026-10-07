@@ -4,7 +4,7 @@
 - Durable disposition: `Complete`
 - Intended merge outcome: admission consumption and persisted Submission text must match the exact packet retained by pre-submission checking.
 
-## Intent and discovery
+## Intent
 
 Initial dispatch must use exactly the input that passed preparation. Plan review
 found that TASK forwards no packet commitment to ART consumption: prepared summary
@@ -12,7 +12,7 @@ and attestation A can be replaced with B when creating a Submission. The existin
 pre-submit evidence already stores their canonical packet hash. Enforce that
 existing commitment before building dispatch on this boundary.
 
-## Bounded design
+## Bounded change
 
 - Forward the canonical hash of the actual creation request's summary and
   contributor attestation through existing TASK and ART consumption requests.
@@ -37,7 +37,9 @@ contract/service, packet hashing caller and directly affected exports; CHECKERS 
 fingerprint; focused binding/composition and real PostgreSQL submission tests plus
 their affected canonical fixtures; exact lane/ownership registration; this record,
 parent 04E contract and affected ARCH/AUTH/POL current navigation, README,
-TASK/ART specifications and roadmap.
+TASK/ART specifications and roadmap. The user's explicit delivery-priority
+instruction also updates the existing AGENTS.md v0.1 rule in this same PR: focus
+on the first complete public backend contributor path and defer unrelated work.
 
 ## Prohibited changes
 
@@ -46,7 +48,7 @@ AUTH replay activation, routing/acceptance/review effects, public route, claim
 expiry, provider read, retained data rewrite/delete, compatibility path, weakened
 CI or skipped tests. Preserve unrelated CLI work.
 
-## Acceptance and proof
+## Acceptance criteria
 
 1. Exact prepared packet creates a Submission through real hidden TASK/ART/AUTH.
    Changing only summary or only attestation rejects and rolls back Submission,
@@ -64,7 +66,7 @@ CI or skipped tests. Preserve unrelated CLI work.
    stale wording/link/Commitrail checks and full hosted completeness. Coverage is
    diagnostic. Tests protect outcomes; no mirrored implementation-only cases.
 
-## Risk and reviewers
+## Risk and review routing
 
 L1. Architecture/security/reuse and QA/test-delta plan review before code.
 Implementation reviews additionally include CI-integrity and docs/product ops.
@@ -92,3 +94,10 @@ only the first concrete boundary. Both plan reviews found it feasible. Reuse
 `protect_submission_contribution_stamp` for once-bound identity and existing ART
 immutable evidence/admission guards; do not duplicate them. The real test keeps
 preparation artifacts/evidence intact while proving creation-side rollback.
+
+## Evidence
+
+Use the focused binding/composition suite and isolated PostgreSQL lineage and
+upgrade tests, plus the shared checks listed above. Verify the service and
+database predicates independently with guard-removal probes. Exact heads and
+transient run results belong in the PR, not this record.
