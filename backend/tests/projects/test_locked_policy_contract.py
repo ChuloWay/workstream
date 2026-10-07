@@ -115,6 +115,37 @@ def test_context_preserves_persisted_review_semantics(semantics_format):
         _policy_body("review", policy, selection, guide)
 
 
+def test_context_rejects_unsupported_second_review_lineage():
+    """The shared locked-policy caller cannot project an unsupported retained flag."""
+    from types import SimpleNamespace
+    from app.modules.projects.api.guide_activation_context import GuidePolicySelection
+    from app.modules.projects.locked_policy_projection import _policy_body
+    from app.modules.projects.api.policy_lineage import ReviewPolicySemantics, policy_digest
+
+    semantics = ReviewPolicySemantics(
+        review_preference_window_seconds=3600,
+        review_lease_duration_seconds=1800,
+        allowed_decisions=("accept", "needs_revision", "reject"),
+    )
+    identity = uuid4()
+    digest = policy_digest("review", semantics)
+    guide = SimpleNamespace(project_id=str(uuid4()), version="retained-guide")
+    policy = SimpleNamespace(
+        id=str(identity),
+        project_id=guide.project_id,
+        guide_version=guide.version,
+        policy_generation=1,
+        policy_hash=digest,
+        semantics_status="complete",
+        semantics_format="v2",
+        **semantics.model_dump(),
+    )
+    policy.requires_second_review = True
+    selection = GuidePolicySelection(policy_id=identity, generation=1, policy_hash=digest)
+    with pytest.raises(ValueError, match="policy semantics are incomplete"):
+        _policy_body("review", policy, selection, guide)
+
+
 def test_project_context_contract_does_not_cycle_agent_port_import():
     import subprocess
     import sys
