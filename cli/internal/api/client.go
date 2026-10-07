@@ -309,6 +309,10 @@ func (c *Client) request(ctx context.Context, method, path, query string, body [
 }
 
 func (c *Client) requestWithKey(ctx context.Context, method, path, query string, body []byte, key string, successStatus int) (json.RawMessage, error) {
+	return c.requestWithResponseLimit(ctx, method, path, query, body, key, successStatus, maxResponseBytes)
+}
+
+func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
 	mutation := method == http.MethodPatch || method == http.MethodPost
 	target := c.origin + path
 	if query != "" {
@@ -342,8 +346,8 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 		return nil, &Failure{Code: "service_unavailable", OutcomeUnknown: mutation}
 	}
 	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
-	if err != nil || len(responseBody) > maxResponseBytes {
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, int64(responseLimit)+1))
+	if err != nil || len(responseBody) > responseLimit {
 		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, OutcomeUnknown: mutation}
 	}
 	correlation := response.Header.Get("X-Correlation-ID")

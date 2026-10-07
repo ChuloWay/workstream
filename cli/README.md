@@ -2,7 +2,7 @@
 
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
-plus draft project creation, exact-project inspection, authority reads, manager task browsing and
+plus draft project/guide declaration, exact-project inspection, authority reads, manager task browsing and
 contributor work discovery, claim/start and governing context/intake requirements:
 
 | Command | Public API |
@@ -12,6 +12,7 @@ contributor work discovery, claim/start and governing context/intake requirement
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
 | `workstream project show PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID` |
 | `workstream project create --name TEXT --slug TEXT --idempotency-key UUID` | `POST /api/v1/projects` |
+| `workstream project guide create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides` |
 | `workstream project tasks PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
@@ -92,6 +93,54 @@ invalid timestamps or mismatched identity. JSON output preserves that API
 object; text escapes terminal controls. Foreign or revoked authority remains
 a server denial with empty stdout, not an empty successful project.
 This command does not list projects, edit setup, activate guides or claim tasks.
+
+## Declare a guide and its setup inputs
+
+```sh
+workstream project guide create PROJECT_ID --input guide.json --idempotency-key GUIDE_CREATE_UUID --output json
+```
+
+The regular UTF-8 JSON file contains the public guide-creation request, not the
+guide document's contents or a storage URL. For example:
+
+```json
+{
+  "version": "evaluation-guide",
+  "change_summary": "Initial project instructions",
+  "task_examples": [
+    {"content": "Evaluate the supplied experiment's evidence.", "title": "Evidence evaluation", "labels": ["research"]}
+  ],
+  "documents": [
+    {"label": "Guide.pdf", "media_type": "application/pdf"}
+  ]
+}
+```
+
+`version`, `task_examples` and `documents` are required. `change_summary` and
+example `title` may be omitted or null; example `labels` defaults to an empty
+array. Unknown/duplicate members, malformed JSON and null required fields or
+array members are rejected. The file is sent unchanged; the API owns semantic
+limits and validation. PDF, DOCX and PPTX declarations use the media types in
+OpenAPI. The API normalizes document-label whitespace; example text is preserved.
+
+The CLI bounds this input to 1MiB and this response to 2MiB because declarations
+include example text and document selectors. These are client wire envelopes,
+not backend policy limits. Existing operations retain their 64KiB response
+limit and small mutations their 8KiB input limit.
+
+The API checks current Project Manager authority for the exact project, including
+manual replay. A successful HTTP 201 returns the complete draft creation receipt,
+declared document IDs and `setup.status = awaiting_documents`. JSON output
+preserves the response; text renders every field with terminal escaping.
+The command does not upload files, poll setup, approve policies or activate a
+guide. The stored creation receipt is not a live readiness or authority snapshot.
+
+Retain the project selector, exact input contents and caller-owned UUID key.
+There is no preflight, generated key or automatic retry, including HTTP/2 replay.
+Changed input conflicts. Lost, malformed, redirected or unexpected replies
+report an unknown outcome, not rollback; manually replay only the unchanged
+input and key. A complete canonical 4xx is a known denial. Local file errors
+never echo file paths, contents or OS error details.
 
 ## Create a draft project shell
 

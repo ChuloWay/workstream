@@ -12,7 +12,8 @@
   [WS-CLI-001-05](WS-CLI-001-05.md), contributor ready-task discovery and instructions;
   [WS-CLI-001-06](WS-CLI-001-06.md), public contributor claim/start with explicit retry keys;
   [WS-CLI-001-07](WS-CLI-001-07.md), contributor governing context and locked intake requirements;
-  [WS-CLI-001-08](WS-CLI-001-08.md), draft project shell creation with explicit caller-owned replay.
+  [WS-CLI-001-08](WS-CLI-001-08.md), draft project shell creation with explicit caller-owned replay;
+  [WS-CLI-001-09](WS-CLI-001-09.md), guide declaration, illustrative tasks and document upload selectors.
 
 ## Current boundary
 
@@ -39,6 +40,10 @@ authority; these reads do not expose the hidden submission intake.
 `project create --name TEXT --slug TEXT --idempotency-key UUID` creates a draft
 shell through the public POST. The API owns system-scoped creation authority
 and committed recovery; guide upload, approval and activation are not added.
+`project guide create PROJECT_ID --input FILE --idempotency-key UUID` declares
+a draft guide, task examples and document targets; setup awaits document upload.
+This is a stored creation receipt, not live readiness. The API reauthorizes
+guide creation replay, unlike project-shell committed recovery.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -92,11 +97,14 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 8. **WS-CLI-001-08:** Create a draft project shell through the public POST with
    explicit caller-supplied keys, exact 201/full-response validation and unknown
    outcomes. Reuse project inspection parsing/output; no guide activation.
-9. **Later governed-work commands:** Add further project setup, submission,
+9. **WS-CLI-001-09:** Declare a guide, required illustrative tasks and source
+   document targets through public POST using an exact bounded JSON file.
+   Actual document upload, setup inspection, approval and activation remain.
+10. **Later governed-work commands:** Add further project setup, submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-10. **Optional TUI:** Add a focused public queue/evidence view after its API
+11. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof
