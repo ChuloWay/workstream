@@ -3,6 +3,8 @@
 from copy import deepcopy
 import json
 
+import pytest
+
 from test_contributor_task_http import CONTRIBUTOR
 from test_http_boundary import ACTOR, PROJECT, TOKEN, assert_failure, http_fixture
 from test_task_http_boundary import TASK
@@ -207,6 +209,73 @@ def test_context_reads_preserve_wire_complete_output_and_optional_fields(cli):
         response["body"] = json.dumps(requirements).encode()
         result = cli(origin, TOKEN, "task", "requirements", TASK, "-o", "json")
         assert result.returncode == 0 and json.loads(result.stdout) == requirements
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "maximum_file_size_bytes",
+        "maximum_package_size_bytes",
+        "maximum_archive_entries",
+        "maximum_archive_size_bytes",
+    ),
+)
+def test_requirements_preserve_backend_integer_limits(cli, field):
+    from app.modules.projects.schemas import SubmissionArtifactPolicyInput
+    from app.modules.tasks.schemas import ContributorTaskSubmissionRequirements
+
+    with http_fixture() as (origin, response, requests):
+        for limit in (None, 1, 2**63 - 1, 2**63, 2**64 + 1, 10**100 + 1):
+            policy = SubmissionArtifactPolicyInput.model_validate({field: limit})
+            assert getattr(policy, field) == limit
+            value = REQUIREMENTS | {field: limit}
+            backend = ContributorTaskSubmissionRequirements.model_validate_json(
+                json.dumps(value)
+            )
+            assert getattr(backend, field) == limit
+            response["body"] = backend.model_dump_json().encode()
+            expected = json.loads(response["body"])
+            for flags in (("-o", "json"), ()):
+                before = len(requests)
+                result = cli(origin, TOKEN, "task", "requirements", TASK, *flags)
+                assert result.returncode == 0 and result.stderr == "", (
+                    field,
+                    limit,
+                    result.stderr,
+                )
+                if flags:
+                    assert result.stdout.strip().encode() == response["body"]
+                else:
+                    assert [
+                        json.loads(line.split(": ", 1)[1])
+                        for line in result.stdout.splitlines()
+                    ] == list(expected.values())
+                assert requests[before:] == [
+                    (
+                        "GET",
+                        f"/api/v1/tasks/{TASK}/submission-requirements",
+                        "Bearer " + TOKEN,
+                    )
+                ]
+
+        # Omission stays distinct from a concrete integer; text displays null.
+        value = {key: item for key, item in REQUIREMENTS.items() if key != field}
+        response["body"] = json.dumps(value).encode()
+        result = cli(origin, TOKEN, "task", "requirements", TASK, "-o", "json")
+        assert result.returncode == 0 and json.loads(result.stdout) == value
+        result = cli(origin, TOKEN, "task", "requirements", TASK)
+        assert result.returncode == 0 and result.stderr == ""
+        label = REQUIREMENT_LABELS[list(REQUIREMENTS).index(field)]
+        assert f"{label}: null" in result.stdout.splitlines()
+
+        # Arbitrary precision must not mean accepting arbitrary JSON values.
+        for token in ('"9223372036854775808"', "true", "1.5", "1e3", "{}", "[]"):
+            body = json.dumps(REQUIREMENTS | {field: "invalid-limit-marker"})
+            response["body"] = body.replace('"invalid-limit-marker"', token).encode()
+            assert_failure(
+                cli(origin, TOKEN, "task", "requirements", TASK, "-o", "json"),
+                "invalid_api_response",
+            )
 
 
 def test_work_context_rejects_foreign_guide_project(cli):

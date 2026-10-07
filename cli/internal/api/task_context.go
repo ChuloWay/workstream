@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
 	"errors"
+	"math/big"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -65,10 +66,10 @@ type SubmissionRequirements struct {
 	ArtifactHashAlgorithm   string                `json:"artifact_hash_algorithm"`
 	AllowedStorageSchemes   []string              `json:"allowed_storage_schemes"`
 	StorageReferenceRules   StorageReferenceRules `json:"storage_reference_rules"`
-	MaximumFileSizeBytes    *int64                `json:"maximum_file_size_bytes"`
-	MaximumPackageSizeBytes *int64                `json:"maximum_package_size_bytes"`
-	MaximumArchiveEntries   *int64                `json:"maximum_archive_entries"`
-	MaximumArchiveSizeBytes *int64                `json:"maximum_archive_size_bytes"`
+	MaximumFileSizeBytes    *big.Int              `json:"maximum_file_size_bytes"`
+	MaximumPackageSizeBytes *big.Int              `json:"maximum_package_size_bytes"`
+	MaximumArchiveEntries   *big.Int              `json:"maximum_archive_entries"`
+	MaximumArchiveSizeBytes *big.Int              `json:"maximum_archive_size_bytes"`
 	Packaging               PackagingRequirements `json:"packaging"`
 }
 

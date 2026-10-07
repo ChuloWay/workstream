@@ -193,7 +193,9 @@ identities; requirements bind the selected task identity and validate the return
 project UUID shape, without independently resolving its project. Both reject
 malformed nested members, null required fields, duplicate/unknown fields and
 management-only task metadata before success.
-Optional null/omitted fields remain valid. The CLI checks public response
+Optional null/omitted fields remain valid. The four optional limits preserve
+backend integer precision in JSON and human output without a 64-bit ceiling or
+floating-point conversion. Non-integer values remain invalid. The CLI checks public response
 shape, not business policy or contributor eligibility.
 
 ## Claim and start contributor work
