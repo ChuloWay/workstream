@@ -1,5 +1,53 @@
 # WS-ARCH-001 — Current delivery plan through allow_review
 
+## First complete contributor milestone
+
+This is the governing delivery order for the first usable backend journey, not
+nine promised PRs. Review each bounded change against merged owners and name the
+step it closes, its concrete prerequisite and its observable proof. Existing
+hidden foundations are reused; a new foundation is justified only by a demonstrated
+blocker to this journey. Completion of an implementation PR is not completion of
+the milestone. Open PRs describe transient work; records describe intended merged
+outcomes.
+
+| Order | Work and existing owner boundary | Required outcome |
+| --- | --- | --- |
+| 1 | [Checked packet custody, ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) | Actual Submission summary/attestation match retained intake evidence; service and database rejection preserve rollback and retained data. |
+| 2 | Input capacity within remaining ARCH-04E1B-B | Preparation and dispatch use the same bounded request rules. Oversized inputs fail before ready admission, without truncation or a stranded successful preparation. |
+| 3 | Initial Submission/dispatch within ARCH-04E1B-B | Submission, ART binding, exact creation/binding receipts, initial evaluation reservation and shared outbox event commit together. Fresh-authorized replay returns original identities after a lost response. |
+| 4 | Hidden request/completion handlers within ARCH-04E1B-B | Reuse shared outbox and CHECKERS execution. Verify exact bytes, locked policies and current generation; duplicate/stale delivery has no additional effect. |
+| 5 | Authorized governed outcomes, ARCH-04E2-B and existing shared participants | Genuine authority commits with its full consequence. False/pass atomically creates FinalAcceptance, accepted TASK state, submitter ContributionRecord and applicable awards; true preserves its independent human-review handoff. Include exact receipt, database closure, audit/outbox, lock-race and required fulfillment-root custody. Exercise the existing scoped controller action with a valid generation in the isolated hidden-composition proof; this does not enable the path in production. |
+| 6 | [Checker remediation and recovery, ARCH-04F](chunks/WS-ARCH-001-04F-checker-remediation.md) | Contributor-correctable failure has bounded findings and same-policy replacement ZIP intake. Infrastructure recovery and project/setup faults remain separate, with correct authorized retry and immutable prior evidence. |
+| 7 | Live composition, ARCH-04E3, and false-policy readiness | Register proven handlers; enable the false-policy path only after success, remediation and the existing scoped lifecycle activation/drain controls are proven. Preserve default-true policy and deny unsupported paths. |
+| 8 | Public intake, ARCH-02I | Expose initial upload/preparation, verification progress, feedback, admission-backed creation and checker-remediation resubmission through exact authorized APIs and outcome reads. Remove superseded touched paths; no provider coordinates or compatibility route. |
+| 9 | First-layer integration drill | One real project completes guide approval, task creation/claim/start, upload, failed intake/correction, verified Submission, automatic checking, post-check remediation and false-policy acceptance with exact ContributionRecord evidence. Exercise real PostgreSQL, S3-compatible storage and broker/workers, lost responses, duplicate delivery, restart, revocation/isolation and recovery. |
+
+The first public intake scope is **initial submissions and checker remediation**.
+The historical pre-cutover ARCH-02I contract's requirement to implement human
+review revisions before any public intake is not adopted for this milestone.
+Human-review revision remains unavailable until its own live authority and
+lineage are implemented through the same canonical intake operation; it gains no
+permissive placeholder or alternate endpoint. The current bounded ARCH-02I record
+must use this scope when implementation starts.
+
+ARCH-04F can be implemented and proven against hidden current-result and routing
+participants before production false-policy activation. Its dependency is the
+required 04E handler/result contracts, not a fully live false branch. This avoids
+a cycle: prove success and failure paths first, then activate the connected runtime.
+True human-review handoff remains independent of CON/shared acceptance and is not
+a requirement to activate human review queues for this first milestone.
+
+Live human review/decisions and reviewer contributions, controlled human revision,
+contributor claim expiry/skip, external integrations, frontend expansion, runtime
+reputation and unrelated cleanup follow later unless the user changes priority.
+Applicable award facts stay atomic in step 5; broader external payment fulfillment
+is not required to prove an unpaid project's first usable path. Supported registered
+checks must genuinely meet the selected project's requirements: structural checks
+must not be advertised as substantive judges, and an unsupported required evaluator
+blocks that project rather than being silently omitted.
+
+[ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. Initial dispatch remains next and must reconcile capacity, exact receipts and fresh-authorized replay before connecting workers.
+
 [ARCH-04E1B-B3](../WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. Initial Submission/dispatch composition is next; it must reconcile existing ART/CHECKERS size limits and retain exact creation/binding receipts. No dispatch or routing authority is activated.
 [ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
 TASK, CHECKERS and historical PROJECTS policy facts. It stages only the existing
@@ -29,7 +77,8 @@ then live 04E3; true admission does not depend on CON/shared acceptance.
 ARCH-04E1B-B1 delivers TASK-before-CHECKERS reservation/current-read guards
 and ordered review admission INSERTs,
 including terminal read-only replay and both mechanical race controls. The
-remaining 04E1B-B handler work and full authorized currentness proof stay next;
+next steps are capacity alignment and atomic initial Submission/dispatch, then
+remaining 04E1B-B handlers and full authorized currentness proof;
 no handler or action is activated by this prerequisite.
 
 ## Current dependency contract
@@ -94,12 +143,13 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-04E1B-B1](../WS-ARCH-001-04E1BB1.md) | REV-04C and existing CHECKERS coordinator | Complete: required TASK reservation/current-read guard, ordered admission INSERTs, exact terminal replay and mechanical race proof; no handler or activation |
 | [ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) | 04E1B-B1, existing historical PROJECTS context | Complete: exact detached source preparation and reserved identity; no publication, authority or handler effect |
 | [ARCH-04E1B-B3](../WS-ARCH-001-04E1BB3.md) | Existing ART inspected manifest and evidence custody | Complete: retained verified ZIP metadata and consumed-only projection; initial Submission/dispatch composition is next |
+| [ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) | Existing intake packet commitment and hidden Submission composition | Complete: service/database checked-packet custody; capacity and initial dispatch remain next |
 | ARCH-04E1B-B | ARCH-04E2-A and CON-02B; false additionally uses delivered REV-04C shared acceptance participation | Hidden TASK handlers plus TASK-before-CHECKERS currentness and both successor-generation race orders; durable receipt proof follows at exact activation |
-| Scoped XINT-003-08B controller activation | Existing REV-12A foundation, delivered REV-04C hidden participant and remaining real-writer observation proof | Existing Operator lifecycle-control action for the bounded shared manifest, not human runtime |
-| ARCH-04E2-B | ARCH-04E1B-B; scoped XINT-003-08B controller activation for false | Require the exact AUTH receipt on the same strict input; add database complete-set and audit/outbox closure; genuine allow commits with all governed effects |
+| Scoped XINT-003-08B controller activation | Existing REV-12A foundation, delivered REV-04C hidden participant and remaining real-writer observation proof | Existing Operator lifecycle-control action for the bounded shared manifest: isolated authorized proof before step 5, production enablement at step 7; not human runtime |
+| ARCH-04E2-B | ARCH-04E1B-B; valid scoped XINT-003-08B controller generation in hidden false-branch proof | Require the exact AUTH receipt on the same strict input; add database complete-set and audit/outbox closure; genuine allow commits with all governed effects |
 | ARCH-04E3 | ARCH-04E2, ARCH-04D2, AUTH-OUTBOX-02; shared acceptance proof for false | TASK live dispatch/routing composition: true to allow_review, false/pass to shared acceptance when proven |
 | ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
-| ARCH-04F (later public-cutover prerequisite) | ARCH-04E | CHECKER failure facts and TASK/ART remediation resubmission, not REV |
+| ARCH-04F (before false activation and public intake) | Required hidden 04E result/handler contracts; no live false-branch prerequisite | CHECKER failure facts and TASK/ART remediation resubmission, not REV |
 
 False guide activation additionally requires shared acceptance, exact AUTH,
 a valid generation through scoped XINT-003-08B controller activation and
@@ -111,7 +161,7 @@ The first complete contributor milestone includes public claim/upload/pre-check
 feedback, immutable Submission, automatic checking, failure remediation and, for
 locked false, shared FinalAcceptance plus the submitter ContributionRecord and
 applicable awards. Complete it before live human review/revision; independent
-review foundations may proceed in another worktree without blocking that path.
+review work requires an explicitly assigned parallel scope and must not delay that path.
 
 CP05 and ARCH-04A have independent prerequisites. POL-04B consumes the corrected
 ARCH-04A catalogue/schema before producing approval-eligible generations. Owners may
@@ -138,7 +188,8 @@ and [CON-02B](../../WS-CON-001/OVERVIEW.md#con-02b-current-dispatcher-contract).
 REV-12A1 delivers disabled controller/fence mechanics, CON-07 delivers the
 hidden source-neutral submitter participant and complete frozen award-set owner,
 and REV-04C composes hidden FinalAcceptance/TASK/CON effects. The current
-false-branch priority is hidden routing handlers.
+false-branch priority follows the first-layer sequence: capacity alignment and
+initial atomic Submission/dispatch before the remaining hidden routing handlers.
 Both branches have request reservation 04E1B-A and hidden AUTH preparation
 04E2-A delivered before handlers 04E1B-B, activation 04E2-B and live 04E3; true routing can proceed after its own prerequisites without CON or
 shared acceptance. False adds those participants and scoped lifecycle activation.

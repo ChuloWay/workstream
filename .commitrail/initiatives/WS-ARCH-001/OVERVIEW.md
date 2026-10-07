@@ -1,5 +1,9 @@
 # WS-ARCH-001 — Modular monolith boundaries
 
+Delivery priority: [first complete contributor milestone](planning/PLAN.md#first-complete-contributor-milestone). Use its nine-step order and end-to-end exit proof when selecting the next bounded change; live human review/revision and external integration are later work.
+
+[ARCH-04E1B-B4](WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. Initial dispatch remains next and must reconcile capacity, exact receipts and fresh-authorized replay before connecting workers.
+
 [ARCH-04E1B-B3](WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. Initial Submission/dispatch composition is next; it must reconcile existing ART/CHECKERS size limits and retain exact creation/binding receipts. No dispatch or routing authority is activated.
 
 [ARCH-04E1B-B2](WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
@@ -66,11 +70,14 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or a production writer.
-- Next usable boundary: ARCH-04E1B-B hidden handlers using the delivered
-  REV-04C participant, then mandatory exact AUTH receipt input, database closure,
-  audit/outbox, TASK-before-CHECKERS currentness race proof and activation at
-  ARCH-04E2-B before 04E3 and ARCH-04F. Output-file
-  authority remains unavailable for the zero-output catalogue.
+- Next usable boundary: capacity alignment and atomic initial Submission/dispatch,
+  then the remaining hidden 04E1B-B handlers. ARCH-04E2-B proves genuine authority
+  with exact receipt/database/effect closure under a valid scoped controller
+  generation for false. Prove ARCH-04F remediation before production false-policy
+  enablement and ARCH-04E3 live composition. True handoff remains independent of
+  CON/shared acceptance. Public intake and the first-layer drill follow the
+  [governing sequence](planning/PLAN.md#first-complete-contributor-milestone).
+  Output-file authority remains unavailable for the zero-output catalogue.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers public manager activation
   context and exact guide activation using the existing CP07 operation.
   [CP05A](WS-ARCH-001-CP05A.md) supplies public Finance policy administration and recoverable draft selectors.
@@ -110,7 +117,8 @@ acceptance later uses the same authorized shared acceptance/CON operation.
 ARCH-04E1B-B1 delivers TASK-before-CHECKERS reservation/current-read custody
 and ordered review admission INSERTs, including intermediate admission waits,
 terminal read-only replay and both mechanical race controls. The
-remaining 04E1B-B handler work and full authorized currentness proof stay next;
+next steps are capacity alignment and atomic initial Submission/dispatch, then
+remaining 04E1B-B handlers and full authorized currentness proof;
 no handler or action is activated by this prerequisite.
 
 ## Delivered and remaining

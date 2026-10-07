@@ -202,6 +202,16 @@ class SubmissionPacketView:
             if type(value) is not str or len(value.encode("utf-8")) > 64 * 1024:
                 raise ValueError("submission packet text is invalid")
 
+    @property
+    def sha256(self) -> str:
+        """Commit to the same exact text at preparation and Submission creation."""
+        from app.core.hashing import canonical_json_hash
+
+        return canonical_json_hash({
+            "summary": self.summary,
+            "contributor_attestation": self.contributor_attestation,
+        })
+
 
 @dataclass(frozen=True, slots=True)
 class PreSubmissionExecutionEntryFacts:

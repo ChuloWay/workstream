@@ -2,10 +2,13 @@
 
 import asyncio
 from dataclasses import replace
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from app.core.identifiers import new_record_id
 
 import pytest
-from sqlalchemy import select, func
+from sqlalchemy import select, func, event, text
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.deps.authorization import compose_hidden_submission_creation_command
@@ -19,7 +22,7 @@ from app.modules.artifacts.models import (
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.tasks.api import SubmissionCreationRequest, TaskSubmissionContextUnavailable
-from app.modules.tasks.models import Submission, TaskAssignment, WorkstreamTask
+from app.modules.tasks.models import AuditEvent, Submission, TaskAssignment, WorkstreamTask
 from tests.pre_submit_test_helpers import approved_pre_submit_fixture
 from tests.submission_preparation_auth_helpers import install_submitter_grant
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
@@ -36,10 +39,8 @@ from tests.test_default_pre_submit_execution import _archive, _bytes
 from tests.tasks.submission_lineage_support import _seed_services, _verified_admission
 
 
-async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
-    isolated_database_env,
-    tmp_path,
-):
+@asynccontextmanager
+async def _prepared_packet(isolated_database_env, tmp_path):
     engine = create_async_engine(isolated_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     settings = _settings(tmp_path, maximum_bytes=1024 * 1024)
@@ -71,7 +72,7 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
             assignment_id=assignment_id,
             predecessor_submission_id=None,
             idempotency_key=new_record_id(),
-            summary="Completed the required project work and included evidence.",
+            summary='Completed the "required" project work in folder \\results with evidence.',
             contributor_attestation="I confirm no confidential client data, credentials, or copied source material is included in this submission; rights_confirmed. "
             + " ".join(policy["attestation_terms"]),
             media_type="application/zip",
@@ -89,6 +90,22 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
             summary=request.summary,
             contributor_attestation=request.contributor_attestation,
         )
+        yield SimpleNamespace(
+            factory=factory, context=context, task_id=task_id, assignment_id=assignment_id,
+            admission_id=admission_id, creation=creation,
+        )
+    finally:
+        bootstrap.close()
+        await engine.dispose()
+
+
+async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
+    isolated_database_env, tmp_path,
+):
+    async with _prepared_packet(isolated_database_env, tmp_path) as h:
+        factory, context = h.factory, h.context
+        task_id, assignment_id = h.task_id, h.assignment_id
+        admission_id, creation = h.admission_id, h.creation
         # ART rejection occurs after TASK insertion; the command must roll the
         # entire root transaction back without stranding a staged Submission.
         async with factory() as session:
@@ -103,6 +120,47 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
             assert await session.scalar(select(func.count()).select_from(Submission)) == 0
             admission = await session.get(SubmissionBundleAdmission, str(admission_id))
             assert admission.status == "ready"
+
+        async def assert_unconsumed():
+            async with factory() as check:
+                assert await check.scalar(select(func.count()).select_from(Submission)) == 0
+                assert await check.scalar(select(func.count()).select_from(ArtifactBinding).where(
+                    ArtifactBinding.resource_type == "submission",
+                )) == 0
+                assert await check.scalar(select(func.count()).select_from(AuditEvent).where(
+                    AuditEvent.action_id.in_(["submission.create", "artifact.submission.binding.create"]),
+                )) == 0
+                assert (await check.get(SubmissionBundleAdmission, str(admission_id))).status == "ready"
+                assert (await check.get(WorkstreamTask, str(task_id))).status == "in_progress"
+
+        # Each field is independently bound to the packet that actually passed.
+        for field in ("summary", "contributor_attestation"):
+            async with factory() as session:
+                with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
+                    await compose_hidden_submission_creation_command(
+                        session, context, request_id=new_record_id(), correlation_id=new_record_id(),
+                    ).create(replace(creation, **{field: getattr(creation, field) + " Changed."}))
+            await assert_unconsumed()
+
+        # Stage valid creation, then change only stored text using SQL before the
+        # root commit. This reaches the deferred packet guard, not the ART check.
+        for column in ("summary", "worker_attestation"):
+            async with factory() as session:
+                def substitute_packet(sync_session):
+                    sync_session.connection().execute(text(
+                        f"UPDATE public.submissions SET {column} = {column} || ' Changed.' "
+                        "WHERE submission_bundle_admission_id = :admission"
+                    ), {"admission": admission_id})
+
+                event.listen(session.sync_session, "before_commit", substitute_packet)
+                try:
+                    with pytest.raises(IntegrityError, match="submission packet differs from checked evidence"):
+                        await compose_hidden_submission_creation_command(
+                            session, context, request_id=new_record_id(), correlation_id=new_record_id(),
+                        ).create(creation)
+                finally:
+                    event.remove(session.sync_session, "before_commit", substitute_packet)
+            await assert_unconsumed()
 
         async def create():
             async with factory() as session:
@@ -144,6 +202,78 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
             assert admission.consumed_by_submission_id == submission.id
             assert submission.locked_payment_policy_version is None
             assert await session.scalar(select(func.count()).select_from(Submission)) == 1
-    finally:
-        bootstrap.close()
-        await engine.dispose()
+        await _assert_bound_packet_immutable(h, created)
+
+
+async def _assert_bound_packet_immutable(h, created):
+    factory, admission_id, creation = h.factory, h.admission_id, h.creation
+    # Existing owner immutability is part of the new cross-row guarantee.
+    for update in (
+        "submission_bundle_admission_id=NULL, artifact_binding_id=NULL, artifact_content_id=NULL",
+        "submission_bundle_admission_id=:foreign",
+        "artifact_binding_id=:foreign",
+        "artifact_content_id=:foreign",
+    ):
+        with pytest.raises(DBAPIError, match="submission contribution identity is immutable"):
+            async with factory.begin() as session:
+                await session.execute(text(f"UPDATE public.submissions SET {update} WHERE id=:id"),
+                                      {"id": created.submission_id, "foreign": new_record_id()})
+    for statement, message in (
+        ("UPDATE public.pre_submit_evidence_sets SET packet_sha256='sha256:' || repeat('0',64) "
+         "WHERE id=(SELECT pre_submit_evidence_set_id FROM public.submission_bundle_admissions WHERE id=:id)",
+         "pre_submit_evidence_sets rows are immutable"),
+        ("UPDATE public.submission_bundle_admissions SET pre_submit_evidence_set_id=:foreign WHERE id=:id",
+         "submission bundle admission lineage is immutable"),
+    ):
+        with pytest.raises(DBAPIError, match=message):
+            async with factory.begin() as session:
+                await session.execute(text(statement), {"id": admission_id, "foreign": new_record_id()})
+    async with factory() as session:
+        retained = await session.get(Submission, str(created.submission_id))
+        assert retained.summary == creation.summary
+        assert retained.worker_attestation == creation.contributor_attestation
+        assert retained.submission_bundle_admission_id == str(admission_id)
+        assert retained.artifact_binding_id == str(created.artifact_binding_id)
+        assert retained.artifact_content_id == str(created.artifact_content_id)
+
+
+@pytest.mark.postgres_schema_contract
+async def test_packet_custody_upgrade_preserves_retained_submission(
+    isolated_database_env, tmp_path, migration_lock,
+):
+    import asyncpg
+    from alembic import command
+    from app.db import session as db_session
+    from tests.migration_fixtures import _config
+
+    with migration_lock():
+        await db_session.dispose_engine()
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            await connection.execute("drop schema public cascade; create schema public")
+        finally:
+            await connection.close()
+        await asyncio.to_thread(command.upgrade, _config(), "0021_submission_manifest")
+        async with _prepared_packet(isolated_database_env, tmp_path) as h:
+            async with h.factory() as session:
+                created = await compose_hidden_submission_creation_command(
+                    session, h.context, request_id=new_record_id(), correlation_id=new_record_id(),
+                ).create(h.creation)
+            # The predecessor allowed this mismatch. Upgrade must neither invent
+            # evidence nor rewrite/delete retained text, even when inconsistent.
+            async with h.factory.begin() as session:
+                await session.execute(text(
+                    "UPDATE public.submissions SET summary = summary || ' Historical.' WHERE id=:id"
+                ), {"id": created.submission_id})
+                before = await session.scalar(text(
+                    "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                ), {"id": created.submission_id})
+            await asyncio.to_thread(command.upgrade, _config(), "head")
+            async with h.factory() as session:
+                after = await session.scalar(text(
+                    "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                ), {"id": created.submission_id})
+                assert after == before
+                assert await session.scalar(text(
+                    "SELECT count(*) FROM pg_catalog.pg_trigger WHERE tgname='submission_packet_custody'"
+                )) == 1

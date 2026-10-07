@@ -22,8 +22,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, continue canonical boundary recovery through CON-07/shared acceptance
-  foundations and later ARCH-04E1B-B/04E2-B/04E3 routing.
+- Next usable boundary: follow the [first contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone):
+  capacity alignment and atomic initial Submission/dispatch before hidden handlers
+  and exact authority/effect closure. CON-07/shared acceptance foundations are
+  delivered; production consumption and scoped lifecycle activation remain gated.
   Submission/checker history uses canonical authority; the alternate gate lifecycle
   is removed. Continue shrinking the canonical import ledger as implementation
   reaches each remaining consumer.

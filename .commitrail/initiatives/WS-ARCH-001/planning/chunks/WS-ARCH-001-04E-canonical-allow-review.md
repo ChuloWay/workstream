@@ -314,3 +314,13 @@ composition phases above; only false handlers add shared acceptance.
 ## Merge state
 
 - Outcome on merge: `planned`
+
+### Checked packet prerequisite
+
+[ARCH-04E1B-B4](../../WS-ARCH-001-04E1BB4.md) binds Submission text to the
+canonical packet retained by preparation, through ART consumption and a deferred
+storage guard. Initial dispatch must next reconcile capacity before ready
+admission, retain exact creation/binding receipts and define fresh-authorized
+same-admission replay after creation. Do not broaden the initial/revision context
+validator to treat evaluation_pending as a new submission window. No dispatch
+handler, routing authority or public intake is delivered by this correction.

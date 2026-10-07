@@ -9,6 +9,7 @@ from uuid import UUID
 from tests.retained_material_fixtures import retained_admission, RetainedBindingAuthority
 from app.modules.artifacts.submission_bindings import SubmissionAdmissionConsumptionService
 from app.modules.artifacts.api import SubmissionAdmissionConsumptionRequest
+from app.modules.checkers.api import SubmissionPacketView
 from app.modules.tasks.api import TaskSubmissionContextRequest
 from app.modules.tasks.repository import TaskRepository
 from app.core.config import get_settings
@@ -83,6 +84,7 @@ async def seed_retained_submission(
             session, RetainedBindingAuthority(),
         ).consume(SubmissionAdmissionConsumptionRequest(
             UUID(admission_id), UUID(submission_id), submission.version, context,
+            SubmissionPacketView(packet.summary, packet.worker_attestation).sha256,
         ))
         assert consumed.status == "consumed"
         submission.submission_bundle_admission_id = admission_id

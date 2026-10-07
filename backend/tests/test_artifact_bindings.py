@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from dataclasses import replace
+from app.modules.checkers.api import SubmissionPacketView
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import UUID
@@ -40,6 +42,7 @@ def _request(*, submission_id=None) -> SubmissionAdmissionConsumptionRequest:
         pre_submit_policy_bundle_hash=_sha("3"),
     )
     return SubmissionAdmissionConsumptionRequest(
+        packet_sha256=SubmissionPacketView("Prepared summary", "Prepared attestation").sha256,
         admission_id=new_record_id(),
         submission_id=submission_id or new_record_id(),
         submission_version=1,
@@ -85,6 +88,7 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
         stale_reason=None,
     )
     evidence = SimpleNamespace(
+        packet_sha256=request.packet_sha256,
         id=evidence_id,
         actor_profile_id=admission.actor_profile_id,
         identity_link_id=admission.identity_link_id,
@@ -316,6 +320,7 @@ async def test_consumed_admission_rejects_different_submission() -> None:
 async def test_consumed_admission_rejects_wrong_submission_version() -> None:
     original = _request()
     replay = SubmissionAdmissionConsumptionRequest(
+        packet_sha256=original.packet_sha256,
         admission_id=original.admission_id,
         submission_id=original.submission_id,
         submission_version=2,
@@ -386,3 +391,28 @@ async def test_consumption_rejects_invalid_manifest_before_binding(corruption):
     session.add.assert_not_called()
     session.flush.assert_not_awaited()
     authority.consume.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["ready", "consumed"])
+@pytest.mark.parametrize("field", ["summary", "contributor_attestation"])
+async def test_changed_packet_denies_before_binding_or_consumed_replay(status, field):
+    original = _request()
+    admission, evidence, content = _lineage(original)
+    admission.status = status
+    if status == "consumed":
+        admission.consumed_by_submission_id = str(original.submission_id)
+        admission.consumed_by_submission_version = original.submission_version
+    packet = SubmissionPacketView("Prepared summary", "Prepared attestation")
+    changed = replace(packet, **{field: "Different valid contributor text"})
+    request = replace(original, packet_sha256=changed.sha256)
+    binding = SimpleNamespace(id=str(new_record_id()), content_id=admission.artifact_content_id)
+    continuation = (binding,) if status == "consumed" else (None, datetime.now(UTC))
+    session = _session(admission, evidence, content, *continuation)
+    authority = _Allow()
+    with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
+        await SubmissionAdmissionConsumptionService(session, authority).consume(request)
+    authority.consume.assert_not_awaited()
+    session.add.assert_not_called()
+    session.flush.assert_not_awaited()
+    assert admission.status == status

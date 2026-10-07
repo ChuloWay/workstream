@@ -567,3 +567,11 @@ creation time. No source INSERT or authority follows from constructing a proposa
 The current hidden intake does not yet set `evaluation_pending`; the later atomic
 dispatch composition owns that transition. Mechanical preparation tests explicitly
 arrange that state and the claim timestamp, without claiming live dispatch/claim.
+
+### Checked packet custody at hidden creation
+
+ARCH-04E1B-B4 forwards the canonical summary/attestation commitment from the
+actual Submission request to ART. Consumption rejects a different packet before
+binding or consumed replay. PostgreSQL also checks the final bound Submission
+against retained pre-submit evidence at commit, permitting the existing atomic
+insert-then-bind sequence. This does not activate dispatch or expose public intake.

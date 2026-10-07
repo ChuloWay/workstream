@@ -59,7 +59,7 @@ def logical_request(
     return {
         **values,
         "effective_plan_sha256": plan.plan_sha256,
-        "packet_sha256": canonical_json_hash(asdict(packet)),
+        "packet_sha256": packet.sha256,
     }
 
 
@@ -95,7 +95,7 @@ class PreSubmitAttemptClaim:
     @property
     def packet_sha256(self) -> str:
         """Capture the packet actually passed to this claim's checker invocation."""
-        return canonical_json_hash(asdict(self._request.packet))
+        return self._request.packet.sha256
 
     async def _reserved(
         self,

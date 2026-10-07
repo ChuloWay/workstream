@@ -168,6 +168,8 @@ async def test_command_orders_authority_task_art_persistence_and_final_consumpti
 
     class Admissions:
         async def consume(self, value):
+            from app.modules.checkers.api import SubmissionPacketView
+            assert value.packet_sha256 == SubmissionPacketView(request.summary, request.contributor_attestation).sha256
             events.append(("art", value.submission_version))
             return SubmissionArtifactAdmissionResult(binding_id=new_record_id(), content_id=new_record_id())
 

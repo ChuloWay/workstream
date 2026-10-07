@@ -20,6 +20,7 @@ from app.modules.tasks.api import (
     SubmissionCreationResult,
     TaskSubmissionContextRequest,
 )
+from app.modules.checkers.api import SubmissionPacketView
 from app.modules.tasks.models import EvidenceItem, Submission
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.service import TaskService
@@ -153,6 +154,9 @@ class TaskSubmissionCreationService:
                     submission_id=submission_id,
                     submission_version=version,
                     task_context=context,
+                    packet_sha256=SubmissionPacketView(
+                        request.summary, request.contributor_attestation,
+                    ).sha256,
                 )
             )
             if (
