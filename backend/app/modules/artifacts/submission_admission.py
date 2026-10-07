@@ -572,7 +572,6 @@ class PreparedSubmissionBundlePreparationCommand:
                         raise SubmissionBundlePreparationInfrastructureUnavailable(
                             "pre_submission_checked_custody_unavailable"
                         )
-                    await prepared.close()
                     return replay
                 replay_intent_id = await self._matching_replay_intent(
                     evidence.evidence.evidence_set_id

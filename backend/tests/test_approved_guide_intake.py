@@ -160,6 +160,9 @@ async def test_final_intake_rejects_invalid_owner_context(tmp_path, isolated_dat
                     foreign = new_record_id()
                     substituted = replace(facts,
                         submitter_contribution_policy_version_id=foreign,
+                        locked_policy=facts.locked_policy.model_copy(update={
+                            "locked_contribution_policy_version_id": foreign,
+                        }),
                         locked_project_context=replace(facts.locked_project_context,
                             locked_contribution_policy_version_id=foreign))
                     async def wrong_context(_):
