@@ -32,7 +32,8 @@ predecessor and owns the separate obsolete TASK payment cleanup.
 - Alembic accepted-revision registration, graph proof, PostgreSQL 16 schema
   fingerprint, semantic test-lane registration and the external API drill.
 - Focused input/hash, shared projection, public API, raw-write and real
-  predecessor-upgrade tests.
+  predecessor-upgrade tests, plus the existing payment-cleanup full-head
+  migration proof's current-revision assertion.
 - Current README, architecture, review lifecycle, guide template and roadmap
   statements affected by the supported ReviewPolicy contract.
 
@@ -87,5 +88,7 @@ No material finding is recorded in this durable change record.
 ## Reconciliation
 
 - Current-source reconciliation: stacked on the current obsolete-payment cleanup branch; 0024 extends its 0023 head without changing that migration or cleanup behavior.
+- The existing payment-cleanup proof still upgrades through full Alembic head
+  and now checks that result against the canonical current revision lookup.
 - Next usable boundary: second-review/adjudication behavior remains deferred; other pilot work proceeds only after this pull request is merged.
 - Remaining risks: a database containing retained true policies cannot upgrade until an explicit preservation/disposition design is approved.
