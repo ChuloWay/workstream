@@ -137,3 +137,7 @@ External documentation review reconciled canonical compensation precedence and
 cutover claims, ADR 0016, and linked current CON/ARCH navigation. Migration 0023
 completes physical removal; future acceptance/fulfillment authority is separate.
 Historical pre-cutover records remain unchanged.
+
+External inventory review added downgrade CREATE exclusions: upgrade inventory
+must not restore a dropped table from reverse-migration code. Tests cover both
+Alembic and SQL CREATE forms while retaining module-level SQL discovery.

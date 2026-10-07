@@ -300,9 +300,16 @@ def parse_schema(backend_root: Path) -> dict[str, dict[str, Any]]:
             and isinstance(statement.value, ast.Call)
             and ast.unparse(statement.value.func) == "op.drop_table"
         }
+        downgrade_nodes = {
+            node for function in tree.body
+            if isinstance(function, ast.FunctionDef) and function.name == "downgrade"
+            for node in ast.walk(function)
+        }
         for item in sorted(ast.walk(tree), key=lambda node: (
             getattr(node, "lineno", 0), getattr(node, "col_offset", 0),
         )):
+            if item in downgrade_nodes:
+                continue
             if item in drops and item.args and (table_name := _string(item.args[0])):
                 if all(keyword.arg is not None and (
                     keyword.arg != "schema" or _string(keyword.value) == "public"
