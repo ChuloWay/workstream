@@ -57,6 +57,10 @@ or introduce another payment subsystem.
   and authorization task-read/privacy assertions; existing management/contributor/
   operator command tests receive obsolete-field absence assertions. Historical
   0008 tests remain.
+- Identifier inventory parser and its focused tests: recognize explicit literal
+  public-table drops in the upgrade body, preserving unresolved-table errors for
+  unsupported/conditional drops and ignoring downgrade/helper code. Source order
+  must preserve later recreation; no table-name exemption or baseline rewrite.
 - Existing lane catalogue/inventory and ownership registration only for new proof;
   refresh the structural-debt ledger only to record actual shrinking files, never
   change its policy or allow debt growth.
