@@ -136,6 +136,7 @@ class _ArtifactAdmissionAdapter:
                 submission_id=request.submission_id,
                 submission_version=request.submission_version,
                 task_context=request.task_context,
+                packet_sha256=request.packet_sha256,
             )
         )
         if result.binding_id is None or result.status != "consumed":

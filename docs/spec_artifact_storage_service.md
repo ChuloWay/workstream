@@ -1348,7 +1348,11 @@ Unicode 15 mapping that matches the backend, rather than locale-dependent lowerc
 The admission references its identity and hash. Consumption validates that body and
 returns detached file metadata with archive commitments only for a consumed
 result or exact replay; stale results contain no material. Consumption performs
-no provider read. Older retained evidence without metadata stays unchanged and
+no provider read. Consumption also requires the canonical hash of the exact
+Submission summary and contributor attestation to match retained pre-submit
+evidence, before either new binding or consumed replay. A deferred database
+guard compares the final bound Submission text with that evidence; the existing
+lineage guard prevents clearing or replacing a bound admission. Older retained evidence without metadata stays unchanged and
 cannot supply current consumption. Existing post-submit material selection keeps
 its exact immutable ART lineage and inspected-byte checks; it does not use this
 new consumption projection. This storage guarantee does not activate

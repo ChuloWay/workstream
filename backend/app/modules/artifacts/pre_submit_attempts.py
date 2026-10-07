@@ -59,7 +59,7 @@ def logical_request(
     return {
         **values,
         "effective_plan_sha256": plan.plan_sha256,
-        "packet_sha256": canonical_json_hash(asdict(packet)),
+        "packet_sha256": packet.sha256,
     }
 
 

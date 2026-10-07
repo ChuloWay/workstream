@@ -1,5 +1,7 @@
 # WS-ARCH-001 — Modular monolith boundaries
 
+[ARCH-04E1B-B4](WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. Initial dispatch remains next and must reconcile capacity, exact receipts and fresh-authorized replay before connecting workers.
+
 [ARCH-04E1B-B3](WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. Initial Submission/dispatch composition is next; it must reconcile existing ART/CHECKERS size limits and retain exact creation/binding receipts. No dispatch or routing authority is activated.
 
 [ARCH-04E1B-B2](WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
