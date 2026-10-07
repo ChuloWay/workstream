@@ -708,7 +708,8 @@ Delivered foundations (not a claim of full public integration)
   ARCH-04E1B-B2 exact source proposal + B3 ZIP metadata + B4 checked packet custody + B5 bounded evaluation content (no dispatch/publication authority)
 
 Remaining integration
-  both branches: hidden handlers 04E1B-B -> authority/consequence proof 04E2-B
+  both branches: atomic initial Submission/dispatch -> hidden handlers 04E1B-B
+    -> authority/consequence proof 04E2-B
   production false path additionally requires remediation before live activation
   true: own routing prerequisites; no CON/shared acceptance prerequisite
   selected false path first: delivered shared participant -> handler
