@@ -329,9 +329,12 @@ not invent or delete retained data. ARCH-04C implements hidden durable execution
 ARCH-04D2 supplies exact input, execute and finalize service authority. Migration 0009 validates
 all terminal non-null material custody against ART's immutable consumed admission,
 binding, content and verified-replica lineage; current replica health is separate. The superseded CheckerRun
-payment column is removed; retained nullable Submission payment columns require
-no invented economic configuration.
-CP09 owns physical economic-schema removal after its remaining consumers change.
+payment column is removed. Migration `0023_remove_task_payment_policy` also
+removes the obsolete guide-keyed policy table and TASK/Submission payment fields.
+It refuses retained values or obsolete immutable receipt keys before DDL; it
+does not invent economic configuration or delete retained facts. Current
+ContributionPolicy lineage and immutable awards remain unchanged, and physical
+cleanup does not activate compensation fulfillment.
 
 The upgrade refuses before DDL if any non-draft Task, assignment or Submission
 already exists: earlier attempts lack defensible contribution-policy provenance.

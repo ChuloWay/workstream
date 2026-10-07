@@ -833,8 +833,10 @@ remaining trace sequence is:
   and minimal Task/Assignment/Submission writers together without superseded economic
   readiness. Atomic assignment-invalidation publication and delivery are complete
   in `ARCH-03C2`, following real authority in `ARCH-03C1` and
-  `ARCH-03B1` metadata and ARCH-03B2/03B3 hidden queues and ARCH-03B4 hidden detail and ARCH-03B5 current work context, ARCH-03B6 locked-context and ARCH-03B7 requirements and ARCH-03B8 hidden audit evidence and ARCH-03B9 hidden assignment invalidation, and authorization/public cutover in `ARCH-03C`. `CP09` physical cleanup waits for all remaining
-  legacy consumers to be replaced; it is outside the `allow_review` critical path.
+  `ARCH-03B1` metadata and ARCH-03B2/03B3 hidden queues and ARCH-03B4 hidden detail and ARCH-03B5 current work context, ARCH-03B6 locked-context and ARCH-03B7 requirements and ARCH-03B8 hidden audit evidence and ARCH-03B9 hidden assignment invalidation, and authorization/public cutover in `ARCH-03C`. The [completed physical cleanup](../.commitrail/changes/remove-obsolete-task-payment-policy.md)
+  removes unused guide-keyed payment storage and TASK/Submission fields through
+  migration 0023, with retained-data refusal. Historical CP09 sequencing is no
+  longer a pending removal or an `allow_review` activation dependency.
   Shared dispatch authority is delivered by AUTH-OUTBOX-02. Live assignment
   invalidation has atomic producer fan-out and registered delivery in ARCH-03C2.
   Manager readiness commands are public with exact authority in ARCH-03C3;

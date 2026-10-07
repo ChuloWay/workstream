@@ -8,7 +8,10 @@ AUTH, REV, migration, evidence, and joint release gates pass.
 
 ## Context
 
-The implemented backend still carries guide-bound payment terms. The archival
+At adoption, the backend carried guide-bound payment terms. Migration
+`0023_remove_task_payment_policy` now removes that obsolete storage and its
+remaining runtime consumers, refusing retained facts or receipts before DDL.
+This physical cleanup does not activate recognition or external fulfillment. The archival
 WS-CON input proposed a broader compensation model, mandatory artifact-backed
 contribution evidence, and authorization assumptions that no longer match the
 merged AUTH, REV, ART, and cross-initiative contracts.
@@ -67,11 +70,13 @@ context for the next submission attempt. The completed Review and reviewer
 award retain the prior lease version; the next Submission and ReviewLease use
 the rebased version. Prior contributions and awards are never rewritten.
 
-The retired guide-bound economic-policy aggregate and all semantic and physical
-consumers are removed through the owner-sized CP06-CP09/ARCH replacements
-identified in the current contribution specification. CON-05A/05B are the
-historical grouping, not a second implementation lane. No alias, fallback, dual read/write,
-or implicit unpaid behavior survives.
+The owner-sized CP06/CP07/CP08 and ARCH replacements establish canonical policy
+binding and locked lineage. The [completed cleanup](../.commitrail/changes/remove-obsolete-task-payment-policy.md)
+removes the unused guide-bound economic-policy storage and remaining response,
+repository and CLI consumers through migration 0023. CON-05A/05B and CP09 are
+historical groupings, not another pending removal or an activation gate. No
+alias, fallback, dual read/write or implicit unpaid behavior is introduced.
+Current ContributionPolicy and immutable award semantics remain unchanged.
 
 ### Transaction ownership
 

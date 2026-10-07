@@ -1,38 +1,29 @@
-# Chunk Contract: WS-ARCH-001-CP09 — Legacy Economic Path Removal
+# Chunk Contract: WS-ARCH-001-CP09 — Economic Path Removal Coordination
 
-Disposition: Planned. Non-executable cleanup coordination after replacement
-consumers, including CHECKERS and the public Submission path, are cut over.
+Disposition: Superseded by the [completed bounded cleanup](../../../../changes/remove-obsolete-task-payment-policy.md).
 Risk: L1.
 
-CP07 removes the legacy economic readiness guard from the new activation
-command before AUTH-12H; ARCH-03B removes semantic reads/writes from replacement
-task/assignment/submission commands before ARCH-03C. CP09 is not a prerequisite
-for either activation or `allow_review`. `ARCH-03C` alone is insufficient:
-CHECKERS currently reads locked payment snapshots and legacy public Submission
-remains until 02I. Before physical deletion, prove no runtime, response schema,
-checker snapshot or public legacy route consumes the fields. If any remains,
-its owning delivery boundary removes that consumer first. Remove the remaining retired guide-bound economic schema, fields, services, API vocabulary,
-checker snapshots, and remaining semantic consumers after the canonical
-ContributionPolicy lineage is the sole live path. Update the consolidated v0.1
-baseline and fresh-install parity directly through the repository's bounded
-schema workflow. Do not preserve aliases, dual reads/writes, compatibility
-columns, historical backfills, or guessed conversion behavior.
+The original coordination contract postponed physical removal until CHECKERS
+and public Submission cutover. Current owner inspection found the payment
+storage unused after the canonical ContributionPolicy replacements; public
+intake activation is not a prerequisite for removing it.
 
-Zero live consumers is necessary but not sufficient for deletion. Inventory
-retained setup values and operation/evidence facts before dropping storage.
-For any retained legacy rows, map each required historical fact to an existing
-immutable receipt, separate operation record or explicitly retained archive,
-and prove it remains readable/recoverable after the proposed deletion. Never
-fabricate a receipt or rewrite old authority to make that mapping pass.
-Fresh-install baseline work assumes no deployed-history conversion. If real
-retained data lacks a proven preservation mapping, physical deletion stops
-until a separately bounded preservation/migration decision exists; the
-no-backfill rule does not authorize data loss. Neither that later decision nor
-CP09 blocks the pre-review path.
+Migration `0023_remove_task_payment_policy` removes the obsolete guide-keyed
+policy table and TASK/Submission payment fields. The same change removes the
+remaining repository, response and CLI consumers. It preserves historical
+migration files rather than rewriting the baseline and introduces no alias,
+fallback, dual read/write or guessed conversion.
 
-The chunk must be split further if current-main discovery shows removal crosses
-more than one safely reviewable product boundary.
+The migration locks affected storage and refuses retained policy rows, populated
+removed fields or obsolete immutable receipt keys before DDL. Such retained
+facts require a separately bounded, human-owned preservation design; the cleanup
+does not delete, backfill or rewrite them. The implementation and verification
+are owned by the linked cleanup record, not another CP09 implementation.
 
-## Merge state
+Physical cleanup neither activates contribution recognition or fulfillment nor
+blocks the remaining canonical `allow_review`/automated-acceptance integration.
 
-- Outcome on merge: `planned`
+## Durable outcome
+
+Superseded. Use the cleanup record for delivered removal and the current
+architecture plan for remaining runtime boundaries.

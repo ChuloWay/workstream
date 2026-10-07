@@ -7,12 +7,16 @@ contribution and compensation boundary. It implements ADR 0016 and reconciles
 the accepted WS-XINT, WS-REV, WS-AUTH, and ADR 0014 contracts.
 
 The files under `docs/reference_specs/` are immutable archival inputs. Older
-chunk specifications that describe the currently implemented guide-bound
-payment fields remain useful runtime history, but they do not control the
-target contribution or compensation architecture. The clean cut from those
-fields is implemented only by the approved `WS-CON-001-05A` and
-`WS-CON-001-05B` chunks; this specification does not claim that migration has
-already occurred.
+chunk specifications describing guide-bound payment fields are historical,
+not the current implementation or compensation authority. Migration
+`0023_remove_task_payment_policy` removes the obsolete guide-keyed policy table,
+TASK payment fields, and Submission payment stamp after refusing retained facts
+or immutable receipts that still use them. The
+[cleanup record](../.commitrail/changes/remove-obsolete-task-payment-policy.md)
+owns that delivered removal; CON-05A/05B and CP09 are historical groupings, not
+outstanding authority to remove the same storage again. ContributionPolicy
+versions and immutable awards remain the compensation boundary. Physical cleanup
+does not activate contribution recognition or external fulfillment.
 
 No route, model, action, service identity, or runtime behavior described here
 exists merely because it appears in this document. Each behavior remains
@@ -1120,36 +1124,33 @@ Missing provisioned service rows keep readiness false but do not block startup
 or administrative provisioning. Optional evidence and ART are not readiness
 dependencies.
 
-## Legacy Economic Schema Cutover
+## Obsolete Economic Schema Removal
 
-`ContributionPolicy` is the sole target award-eligibility policy. The existing
-guide-bound economic-policy aggregate, its locked version fields, copied task
-economic terms, and every semantic consumer are retired.
+`ContributionPolicy` is the sole award-eligibility policy. CP06/CP07 and
+AUTH-12H deliver validation and authorized guide binding; CP08 and the ARCH
+integration deliver locked Task/Assignment/Submission contribution-policy
+lineage. These owner paths replace the superseded guide-bound economic policy.
 
-The clean cut is mandatory and split:
+Migration `0023_remove_task_payment_policy` completes physical removal of the
+unused `payment_policies` table, TASK's `base_amount`, `currency`, `payout_type`
+and `locked_payment_policy_version`, and Submission's copied payment stamp.
+The same cleanup removes mutable repository methods, response/CLI fields and
+obsolete fixture behavior. It adds no alias, fallback, dual read/write,
+automatic conversion or compatibility response.
 
-1. CP06/CP07 provide CON validation and PROJECTS hidden activation/binding;
-   AUTH-12H activates that exact complete command. CP08 supplies TASK lineage
-   fields, and ARCH-03B writes readiness/claim/Submission locks before ARCH-03C
-   activation. Each replacement consumer removes its legacy semantic dependency
-   when its own canonical path is installed; no fallback becomes an authority.
-2. CP09 coordinates physical removal only after all consumers, including
-   CHECKERS and public ARCH-02I, are replaced and retained history remains
-   recoverable. It is not an upstream activation or `allow_review` dependency.
-   Historical CON-05A/05B are superseded implementation groupings, not parallel
-   lanes. The [current dependency contract](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
-   records the owner-sized replacements.
+The migration locks affected storage and refuses populated removed fields,
+policy rows, or obsolete keys in immutable TASK receipts before dropping empty
+storage. Retained evidence is not rewritten or deleted. A database refused by
+that guard requires an explicit verified inventory and human-owned preservation
+design; do not infer policy for historical work or fabricate a backfill.
+Fresh-install parity alone is not preservation proof.
 
-No alias, dual read, dual write, automatic conversion, compatibility response,
-or historical executable fallback may remain. Until those chunks merge, old
-runtime-oriented chunk specifications describe current implementation only and
-are subordinate to this target contract.
-
-Any migration affecting retained legacy rows requires an explicit verified
-inventory and human-owned disposition before changing or deleting that data.
-Ambiguous rows fail closed; do not infer current policy for historical work or
-fabricate a backfill to permit deletion. Fresh-install parity is not proof of
-retained-history preservation.
+The [cleanup record](../.commitrail/changes/remove-obsolete-task-payment-policy.md)
+records this delivered boundary. Earlier CON-05A/05B and CP09 sequencing does not
+schedule another removal or make public intake a prerequisite for this completed
+cleanup. The [current dependency contract](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
+continues to govern acceptance authority, atomic contribution/award effects and
+later fulfillment activation. Removing unused storage does not activate them.
 
 ## Human And AUTH Gates
 
@@ -1159,9 +1160,9 @@ answers:
 1. D11 must select the exact AdminRole candidates for project award detail,
    delivery recovery, and CON audit read/export before CON-10A/10B or related
    AUTH registration starts.
-2. The human must classify all pre-production legacy economic rows for
-   deterministic rebuild or explicit migration before a replacement migration
-   or CP09 cleanup changes those rows.
+2. If migration 0023 refuses retained economic facts or receipts, a human-owned
+   preservation design is required before any later migration changes them.
+   The delivered cleanup neither classifies nor deletes retained data.
 3. AUTH-OUTBOX-01 delivered the exact dispatcher contract; CON-02B delivered
    hidden delivery mechanics. AUTH-OUTBOX-02 delivers the live evaluator,
    immutable phase audit custody and Celery delivery/recovery composition.
@@ -1201,7 +1202,7 @@ below describes the human branch, not a second acceptance implementation.
 
 The historical CON-numbered sequence below preserves the broader REV/CON
 interleaving. Its pre-review CON-05A/05B labels are replaced by CP06/CP07,
-CP08/ARCH-03B/03C and later CP09 as specified above. Current shared-dispatch
+CP08/ARCH-03B/03C and the completed physical cleanup described above. Current shared-dispatch
 delivery also precedes live task invalidation and ARCH-04E routing; it does
 not wait for contribution/award persistence or REV decisions.
 

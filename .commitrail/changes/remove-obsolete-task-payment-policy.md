@@ -66,7 +66,8 @@ or introduce another payment subsystem.
   change its policy or allow debt growth.
 - CLI typed TASK response, decoder and command renderer, plus affected
   contract/integration fixtures. Preserve strict unexpected-field rejection.
-- Current PROJECTS/TASK/Submission/CHECKERS specs, data-model/README/roadmap claims
+- Current PROJECTS/TASK/Submission/CHECKERS and contribution/compensation specs,
+  ADR 0016, CON overview/conformance and ARCH plan/chunk map/CP09 contract, data-model/README/roadmap claims
   affected by the removal; this record. Historical records remain unchanged.
 
 ## Prohibited changes
@@ -131,3 +132,8 @@ remain visible. Its current-repository and synthetic controls protect that bound
 Public command tests retain live authority
 and exact contribution-lineage assertions. Full hosted and final reviewer evidence
 will be reported against the clean PR head; this record does not claim readiness.
+
+External documentation review reconciled canonical compensation precedence and
+cutover claims, ADR 0016, and linked current CON/ARCH navigation. Migration 0023
+completes physical removal; future acceptance/fulfillment authority is separate.
+Historical pre-cutover records remain unchanged.
