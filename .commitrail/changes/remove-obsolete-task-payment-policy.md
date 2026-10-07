@@ -67,7 +67,7 @@ or introduce another payment subsystem.
 - CLI typed TASK response, decoder and command renderer, plus affected
   contract/integration fixtures. Preserve strict unexpected-field rejection.
 - Current PROJECTS/TASK/Submission/CHECKERS and contribution/compensation specs,
-  ADR 0016, CON overview/conformance and ARCH plan/chunk map/CP09 contract, data-model/README/roadmap claims
+  ADR 0016, CON overview/conformance and ARCH overview/plan/chunk map/CP09 contract, data-model/README/roadmap claims
   affected by the removal; this record. Historical records remain unchanged.
 
 ## Prohibited changes

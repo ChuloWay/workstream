@@ -166,7 +166,8 @@ Positive:
 Tradeoffs:
 
 - REV, CON, AUTH, task, and outbox chunks must interleave in an exact order;
-- the old guide-bound economic schema requires an explicit clean-cut migration;
+- migration 0023 removes unused economic storage but refuses retained facts or
+  receipts until an explicit preservation design is approved;
 - protected background handlers require separate service authorities instead of
   inheriting dispatcher access;
 - public surfaces stay hidden until the complete joint gate passes.
@@ -175,8 +176,8 @@ Tradeoffs:
 
 Before their dependent chunks begin, the human owner must approve:
 
-- the deterministic classification or migration of pre-production legacy
-  economic rows;
+- a preservation design if migration 0023 refuses retained economic facts or
+  immutable receipts;
 - exact D11 AdminRole candidates for award detail, delivery recovery, and CON
   audit surfaces;
 - exact AUTH ServiceIdentity/ActionId/static-row contracts for protected
