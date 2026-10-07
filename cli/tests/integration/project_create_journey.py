@@ -139,10 +139,12 @@ async def exercise_project_creation(direct, cli, origin, tokens, profiles, proje
     )
     assert saved.status_code == 200 and saved.json() == second
     await lifecycle("suspend")
+    # Profile reads and creation PREP expose different canonical denial codes.
+    denied(cli(origin, token, "-o", "json", "whoami"), 403, "actor_suspended")
     denied(
         create(token, body | {"slug": f"cli-suspended-{uuid4().hex}"}, str(uuid4())),
         403,
-        "actor_suspended",
+        "permission_not_granted",
     )
     # Preserve the original manager/task fixture's active, ungranted baseline.
     await lifecycle("reactivate")
