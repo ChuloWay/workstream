@@ -305,10 +305,10 @@ func (c *Client) safeMetadata(value string) bool {
 }
 
 func (c *Client) request(ctx context.Context, method, path, query string, body []byte) (json.RawMessage, error) {
-	return c.requestWithKey(ctx, method, path, query, body, "")
+	return c.requestWithKey(ctx, method, path, query, body, "", http.StatusOK)
 }
 
-func (c *Client) requestWithKey(ctx context.Context, method, path, query string, body []byte, key string) (json.RawMessage, error) {
+func (c *Client) requestWithKey(ctx context.Context, method, path, query string, body []byte, key string, successStatus int) (json.RawMessage, error) {
 	mutation := method == http.MethodPatch || method == http.MethodPost
 	target := c.origin + path
 	if query != "" {
@@ -353,7 +353,7 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 			correlation = ""
 		}
 	}
-	if response.StatusCode != http.StatusOK {
+	if response.StatusCode != successStatus {
 		code := "api_error"
 		knownEnvelope := false
 		if response.StatusCode >= 300 && response.StatusCode < 400 {
@@ -370,7 +370,7 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 			}
 		}
 		if method == http.MethodPost {
-			knownEnvelope = canonicalTaskError(responseBody, response.Header.Get("Content-Type"))
+			knownEnvelope = canonicalMutationError(responseBody, response.Header.Get("Content-Type"))
 		}
 		// A complete API 4xx envelope is a known denial, independent of code
 		// spelling/redaction. A gateway reply without it cannot prove rollback.
@@ -382,4 +382,30 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: correlation, OutcomeUnknown: mutation}
 	}
 	return json.RawMessage(responseBody), nil
+}
+
+// POST writes need a complete public ApiError, not a gateway's code-shaped
+// JSON. Profile PATCH deliberately retains its existing response contract.
+func canonicalMutationError(raw []byte, contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil || mediaType != "application/json" {
+		return false
+	}
+	var envelope struct {
+		Error  json.RawMessage `json:"error"`
+		Detail json.RawMessage `json:"detail"`
+	}
+	if decode(raw, &envelope, []string{"error"}, nil) != nil {
+		return false
+	}
+	var value struct {
+		Code          *string                    `json:"code"`
+		Message       *string                    `json:"message"`
+		Details       map[string]json.RawMessage `json:"details"`
+		CorrelationID *string                    `json:"correlation_id"`
+		Retryable     *bool                      `json:"retryable"`
+	}
+	return decode(envelope.Error, &value, []string{"code", "message", "details", "correlation_id", "retryable"}, nil) == nil &&
+		value.Code != nil && *value.Code != "" && value.Message != nil && value.Details != nil &&
+		value.CorrelationID != nil && validUUID(*value.CorrelationID) && value.Retryable != nil
 }

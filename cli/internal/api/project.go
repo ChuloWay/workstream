@@ -31,7 +31,7 @@ type Project struct {
 
 func (c *Client) Project(ctx context.Context, selector string) (Result[Project], error) {
 	var result Result[Project]
-	selectedID, valid := uuidIdentity(selector)
+	_, valid := uuidIdentity(selector)
 	if len(selector) > 100 || !valid {
 		return result, errors.New("PROJECT_ID must be a UUID")
 	}
@@ -39,9 +39,18 @@ func (c *Client) Project(ctx context.Context, selector string) (Result[Project],
 	if err != nil {
 		return result, err
 	}
+	project, err := decodeProject(raw)
+	if err != nil || !sameUUID(project.ID, selector) {
+		return result, &Failure{Code: "invalid_api_response"}
+	}
+	return Result[Project]{Raw: raw, Value: project}, nil
+}
+
+func decodeProject(raw json.RawMessage) (Project, error) {
+	var project Project
 	var fields map[string]json.RawMessage
 	if err := jsonv2.Unmarshal(raw, &fields); err != nil || fields == nil {
-		return result, &Failure{Code: "invalid_api_response"}
+		return project, &Failure{Code: "invalid_api_response"}
 	}
 	requiredStrings := []string{"id", "name", "status"}
 	if len(fields) != 3 {
@@ -50,10 +59,10 @@ func (c *Client) Project(ctx context.Context, selector string) (Result[Project],
 	for _, key := range requiredStrings {
 		var value *string
 		if err := jsonv2.Unmarshal(fields[key], &value); err != nil || value == nil {
-			return result, &Failure{Code: "invalid_api_response"}
+			return project, &Failure{Code: "invalid_api_response"}
 		}
 	}
-	var project Project
+	var err error
 	if len(fields) == 3 {
 		err = decode(raw, &project.ProjectIdentity, requiredStrings, nil)
 	} else {
@@ -63,13 +72,12 @@ func (c *Client) Project(ctx context.Context, selector string) (Result[Project],
 		}
 		err = decode(raw, &full, append(requiredStrings, "description"), nil)
 		if !validTime(full.CreatedAt) || !validTime(full.UpdatedAt) {
-			return result, &Failure{Code: "invalid_api_response"}
+			return project, &Failure{Code: "invalid_api_response"}
 		}
 		project = Project{ProjectIdentity: full.ProjectIdentity, Metadata: &full.ProjectMetadata}
 	}
-	returnedID, valid := uuidIdentity(project.ID)
-	if err != nil || !valid || returnedID != selectedID {
-		return result, &Failure{Code: "invalid_api_response"}
+	if err != nil || !validUUID(project.ID) {
+		return project, &Failure{Code: "invalid_api_response"}
 	}
-	return Result[Project]{Raw: raw, Value: project}, nil
+	return project, nil
 }

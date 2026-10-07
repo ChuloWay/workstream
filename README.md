@@ -327,6 +327,9 @@ explicit caller retry keys and uncertain-outcome reporting without automatic ret
 `workstream task context TASK_ID` and `task requirements TASK_ID` inspect the
 governing guide/policy selectors, server action hints and locked intake rules.
 Hints do not grant authority; requirements do not expose hidden submission upload.
+`workstream project create --name TEXT --slug TEXT --idempotency-key UUID`
+creates a draft project shell through the public API, with explicit manual
+replay and uncertain-outcome handling; it does not approve or activate a guide.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
