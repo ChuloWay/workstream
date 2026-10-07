@@ -152,15 +152,11 @@ func decodeCreatedGuide(raw json.RawMessage, project string, input guideCreateIn
 		return value, errors.New("invalid guide receipt")
 	}
 	value.TaskExamples = returnedExamples
-	for _, id := range []*string{value.ContributionPolicyID, value.ContributionPolicyVersionID, value.ActivationOperationID, value.ApprovedBy} {
-		if id != nil && !validUUID(*id) {
-			return value, errors.New("invalid guide identity")
-		}
-	}
-	for _, timestamp := range []*string{value.EffectiveAt, value.SupersededAt} {
-		if timestamp != nil && !validTime(*timestamp) {
-			return value, errors.New("invalid guide time")
-		}
+	// Creation and its stored exact replay precede approval/activation. Valid
+	// UUIDs and times are still invalid here when they imply those later facts.
+	if value.ContributionPolicyID != nil || value.ContributionPolicyVersionID != nil ||
+		value.ActivationOperationID != nil || value.ApprovedBy != nil || value.EffectiveAt != nil || value.SupersededAt != nil {
+		return value, errors.New("contradictory draft guide receipt")
 	}
 	if _, err := contextObject(fields["setup"], &value.Setup, []string{"id", "status"}, nil); err != nil ||
 		!validUUID(value.Setup.ID) || value.Setup.Status != "awaiting_documents" {

@@ -315,6 +315,52 @@ def test_guide_create_rejects_malformed_substituted_or_incomplete_receipt(
         assert len(requests) == len(variants) + 1
 
 
+def test_guide_create_rejects_valid_activation_facts_on_draft(cli, tmp_path):
+    path = write_input(tmp_path)
+    facts = {
+        "contribution_policy_id": ACTOR,
+        "contribution_policy_version_id": PROJECT,
+        "activation_operation_id": KEY,
+        "approved_by": ACTOR,
+        "effective_at": PROFILE["created_at"],
+        "superseded_at": PROFILE["updated_at"],
+    }
+    bindings = (
+        *(dict([item]) for item in facts.items()),
+        {
+            key: facts[key]
+            for key in ("contribution_policy_id", "contribution_policy_version_id")
+        },
+        {
+            key: facts[key]
+            for key in ("contribution_policy_id", "activation_operation_id")
+        },
+        {
+            key: facts[key]
+            for key in ("contribution_policy_version_id", "activation_operation_id")
+        },
+        {
+            key: facts[key]
+            for key in (
+                "contribution_policy_id",
+                "contribution_policy_version_id",
+                "activation_operation_id",
+            )
+        },
+        facts,
+    )
+    with http_fixture() as (origin, response, requests):
+        response.update(status=201, body=json.dumps(receipt()).encode())
+        positive = invoke(cli, origin, path)
+        assert positive.returncode == 0 and positive.stderr == "", positive.stderr
+        for binding in bindings:
+            response["body"] = json.dumps(receipt() | binding).encode()
+            result = invoke(cli, origin, path)
+            assert_failure(result, "invalid_api_response")
+            assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
+        assert len(requests) == len(bindings) + 1
+
+
 def test_guide_create_normalized_duplicate_document_identity_and_order(cli, tmp_path):
     body = deepcopy(DECLARATION)
     body["documents"].append(

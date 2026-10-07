@@ -71,7 +71,8 @@ and preserving the successful API JSON.
 
 Exit status is `0` for success, `1` for API/network/response failure, and `2`
 for invalid arguments or configuration. A request times out after 12 seconds;
-responses are bounded to 64 KiB and requests are not automatically retried.
+responses default to a 64 KiB bound (guide declaration uses the documented
+2MiB exception below), and requests are not automatically retried.
 Use `--help`, `--version` and `completion bash|zsh|fish|powershell` without a
 credential or network connection.
 
@@ -132,6 +133,8 @@ The API checks current Project Manager authority for the exact project, includin
 manual replay. A successful HTTP 201 returns the complete draft creation receipt,
 declared document IDs and `setup.status = awaiting_documents`. JSON output
 preserves the response; text renders every field with terminal escaping.
+Policy, activation, approval, effective and supersession fields must be null
+in this fixed creation receipt, including stored replay.
 The command does not upload files, poll setup, approve policies or activate a
 guide. The stored creation receipt is not a live readiness or authority snapshot.
 
