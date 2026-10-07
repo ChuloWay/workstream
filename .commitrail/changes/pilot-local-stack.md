@@ -78,8 +78,11 @@ bootstrap and authorized grant APIs remain the only way to confer authority.
 ## Risk and review routing
 
 - Risk class: `L1`
-- Required reviewers: `architecture`, `security`, `product_ops`, `documentation`, `qa`, `test_delta`
+- Required reviewers: `architecture`, `security`, `product_ops`, `documentation`, `qa`, `test_delta`, `ci_integrity`
 - Human review focus: Compose process topology, bucket startup/readiness, secret and authority boundaries, project isolation, retained-volume teardown semantics, and the limits of the live guide/macOS evidence.
+  CI integrity review must confirm the technical-service-token matcher retains
+  human/identifier/argument rejection and the ownership partition changes only
+  the three declared shared helpers.
 
 ## Evidence
 
