@@ -139,7 +139,8 @@ and administrative read tools through WS-MCP-002-03. The
 reads plus human self-profile editing, exact-project inspection and manager
 task queue/detail reads, contributor ready-work/instruction reads and public
 claim/start commands with caller-supplied retry keys, plus governing work-context
-and locked intake-requirement reads, with
+and locked intake-requirement reads and draft project creation with an explicit
+caller-owned retry key, with
 text/JSON output. Project inspection preserves
 server-selected full/minimal fields; no public project-list route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -321,6 +322,11 @@ cannot be reused as post-submission review-gate evidence. See the
   adds the governing guide, exact policy selectors, server hints and locked
   intake requirements through public reads. Hints are not authority; no files
   are fetched, no policy is evaluated locally and hidden submission remains hidden.
+  [CLI project creation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-08.md)
+  creates a draft shell through the public POST, with exact 201 response,
+  caller-owned replay custody and explicit uncertain outcomes. It does not upload,
+  approve or activate a guide. Committed recovery follows the existing project's
+  API contract, not task replay authorization semantics.
   Built-binary HTTP
   integration and isolated real-API proof accompany
   the package. Further public commands, optional TUI and binary distribution

@@ -109,6 +109,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 
 	project := &cobra.Command{Use: "project", Short: "Project-scoped public operations"}
 	addTaskReads(project, client, &output, stdout)
+	addProjectCreate(project, client, &output, stdout)
 	project.AddCommand(&cobra.Command{
 		Use:   "show PROJECT_ID",
 		Short: "Inspect the project fields your current authority permits",
@@ -122,20 +123,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 			if err != nil {
 				return err
 			}
-			if output == "json" {
-				return writeJSON(stdout, result.Raw)
-			}
-			p := result.Value
-			if _, err := fmt.Fprintf(stdout, "Project: %s\nName: %s\nStatus: %s\n",
-				safeText(p.ID), safeText(p.Name), safeText(p.Status)); err != nil {
-				return err
-			}
-			if p.Metadata != nil {
-				_, err = fmt.Fprintf(stdout, "Slug: %s\nDescription: %s\nCreated: %s\nUpdated: %s\n",
-					safeText(p.Metadata.Slug), optional(p.Metadata.Description),
-					safeText(p.Metadata.CreatedAt), safeText(p.Metadata.UpdatedAt))
-			}
-			return err
+			return writeProject(stdout, output, result)
 		},
 	})
 	project.AddCommand(&cobra.Command{
