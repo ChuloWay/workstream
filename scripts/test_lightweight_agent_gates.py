@@ -51,6 +51,44 @@ class LightweightAgentGateTests(unittest.TestCase):
         failures = scan_authorization_text("docs/new-guide.md", "Call /v1/tasks.")
         self.assertIn("docs/new-guide.md:1: NON_CANONICAL_API_PREFIX", failures)
 
+    def test_stale_authorization_allows_exact_compose_worker_service(self) -> None:
+        commands = (
+            "docker compose --profile backend exec -T worker "
+            "celery -A app.workers.celery_app inspect ping",
+            "docker compose --profile backend logs -f backend worker beat",
+            "Inspect `docker compose --profile backend logs --since 10m worker beat`.",
+            "docker compose --profile backend run --rm --no-deps "
+            "-e WORKSTREAM_ARTIFACT_STORE_BACKEND=disabled worker python -c 'pass'",
+            "docker compose --profile backend kill -s KILL worker",
+            "docker compose --profile backend up -d --wait worker",
+        )
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertEqual(scan_authorization_text("docs/new-guide.md", command), [])
+
+    def test_stale_authorization_rejects_human_worker_vocabulary(self) -> None:
+        examples = (
+            "The worker can approve project work.",
+            "# docker compose --profile backend exec -T worker",
+            "docker compose --profile backend exec -T backend echo worker",
+            "docker compose --profile backend logs --since worker",
+            "Use docker compose when the worker approves.",
+            "docker compose --profile backend exec -T worker_id echo ok",
+        )
+        for example in examples:
+            with self.subTest(example=example):
+                failures = scan_authorization_text("docs/new-guide.md", example)
+                self.assertTrue(
+                    any(
+                        code in failure
+                        for failure in failures
+                        for code in (
+                            "HUMAN_WORKER_VOCABULARY",
+                            "HUMAN_WORKER_IDENTIFIER",
+                        )
+                    )
+                )
+
     def test_stale_artifact_rejects_reached_phase_term(self) -> None:
         failures = scan_artifact_text(
             "README.md", "Use S3" + "ArtifactStore.", "artifact_store_cutover"

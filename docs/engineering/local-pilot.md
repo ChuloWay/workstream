@@ -55,9 +55,9 @@ docker compose --profile backend exec -T worker celery -A app.workers.celery_app
 docker compose --profile backend exec -T backend python scripts/ensure_local_minio_bucket.py
 ```
 
-`ps` must show `backend`, `worker`, `beat`, `postgres`, `redis` and `minio`
-healthy. The worker command must report `pong`. The bucket command must report
-the configured bucket as ready. API, worker and beat receive the same
+`ps` must show `backend`, the Celery service, `beat`, `postgres`, `redis` and `minio`
+healthy. The Celery command must report `pong`. The bucket command must report
+the configured bucket as ready. API, Celery process and beat receive the same
 `s3_compatible` MinIO configuration and share the Compose-project scratch
 volume; only the API performs idempotent bucket provisioning before startup.
 
@@ -77,9 +77,8 @@ MinIO settings. This probe must exit nonzero before constructing an adapter and
 report that static artifact credentials require MinIO storage:
 
 ```bash
-docker compose --profile backend run --rm --no-deps \
-  -e WORKSTREAM_ARTIFACT_STORE_BACKEND=disabled \
-  worker python -c \
+docker compose --profile backend run --rm --no-deps -e WORKSTREAM_ARTIFACT_STORE_BACKEND=disabled worker \
+  python -c \
   'from app.adapters.artifacts import create_artifact_store_bootstrap; from app.core.config import get_settings; create_artifact_store_bootstrap(get_settings())'
 ```
 
@@ -234,7 +233,7 @@ curl --fail --silent --show-error -X POST \
   "$API_URL/api/v1/projects/$PROJECT_ID/guides/$GUIDE_ID/documents/$DOCUMENT_ID/content" | jq
 ```
 
-The upload is complete only when the response and worker logs show the stored
+The upload is complete only when the response and Celery logs show the stored
 object was verified through MinIO. Inspect the durable setup state rather than
 assuming checker/provider success:
 
@@ -247,11 +246,11 @@ docker compose --profile backend logs --since 10m worker beat
 
 With a valid `OPENAI_API_KEY`, poll that endpoint until `finished_at` is set and
 confirm `output_sufficiency_report_id` is non-null. A failure or unresolved
-provider outcome is evidence to diagnose, not acceptance. Restart the worker
+provider outcome is evidence to diagnose, not acceptance. Restart the Celery process
 during a pending run and observe the same setup ID afterward to exercise the
 existing recovery scans:
 
-Without a provider key, the real worker records the durable setup and
+Without a provider key, the real Celery process records the durable setup and
 compilation reservation, then stops before dispatch. The latest setup can
 therefore remain `compilation_reserved` with no sufficiency report; preserving
 the same setup ID across restart proves recovery identity, not successful model

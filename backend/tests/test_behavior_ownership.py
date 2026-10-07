@@ -325,6 +325,27 @@ def test_partition_allows_the_module_boundary_foundation_target(
     }
 
 
+def test_partition_allows_only_the_exact_local_pilot_helpers() -> None:
+    """The local pilot adds three shared helper targets without wider custody."""
+    existing = "backend/scripts/existing.py"
+    expected = {
+        "backend/scripts/ensure_local_minio_bucket.py",
+        "backend/scripts/issue_local_flow_token.py",
+        "backend/scripts/local_flow_tokens.py",
+    }
+    assert ownership.LOCAL_PILOT_HELPER_TARGETS == expected
+    trusted = _partition([existing])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({existing, *expected})),
+        trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted({existing, *expected, "backend/scripts/pilot_extra.py"})),
+            trusted,
+        )
+
+
 @pytest.mark.parametrize("case", ("extra", "removal", "reassignment", "trusted_digest", "base"))
 def test_partition_additive_transition_rejects_custody_drift(
     tmp_path: Path,

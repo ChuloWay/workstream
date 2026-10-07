@@ -395,7 +395,7 @@ restrict the copied file to their Windows user with an equivalent private NTFS
 ACL before adding secrets.
 
 Then build the native-architecture Linux images and start the API, prefork
-worker, scheduler, PostgreSQL, Redis and MinIO:
+Celery process, scheduler, PostgreSQL, Redis and MinIO:
 
 ```bash
 docker compose --profile backend up --build --wait
@@ -415,7 +415,7 @@ Invoke-RestMethod http://127.0.0.1:<WORKSTREAM_API_HOST_PORT>/api/v1/health
 
 Replace the placeholder with the port selected in root `.env`. The expected
 response is `{"status":"ok"}`. The backend applies Alembic migrations before
-serving and all published services bind only to host loopback. API, worker and
+serving and all published services bind only to host loopback. API, Celery process and
 beat use the same S3-compatible MinIO and local Flow-HMAC settings. Startup
 creates and verifies the checkout-local bucket; authority still comes only from
 the existing trust-root and grant operations.
@@ -572,7 +572,7 @@ use the internal DNS names and ports.
 
 MinIO uses checkout-local static credentials and the private bucket selected in
 root `.env`. API startup creates and verifies that bucket before migrations;
-the application and worker continue to access objects only through the
+the application and Celery process continue to access objects only through the
 canonical `ArtifactStore`. Configure a native runtime with the exact
 [artifact storage settings](docs/spec_artifact_storage_service.md#s3-compatible-adapter)
 and the same private bucket.
