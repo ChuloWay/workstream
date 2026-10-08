@@ -608,3 +608,16 @@ TASK evaluation_pending and one shared request event. Admission-scoped replay
 validates the original immutable owners under live authority without reserve or
 append calls; it cannot reset a later generation. Every new predecessor-linked
 Submission uses the same writer. Public intake and delivery activation remain deferred.
+
+### Hidden initial evaluation delivery
+
+ARCH-04E1B-B7 recovers the exact immutable dispatch event and CHECKERS request.
+An independent committed-invocation read precedes execution. Each phase acquires
+TASK custody, fresh fixed-service AUTH, CHECKERS currentness, then the shared
+outbox invocation fence. Transactions close before ART provider/scratch work.
+Terminal replay validates retained execute/finalize receipts without reopening
+bytes. Uncertain execution does not renew an expired lease or request a retry;
+shared UNKNOWN handling preserves it for later authorized recovery.
+
+The handler is unregistered. Completion routing, governed outcomes, remediation
+and public intake remain separate boundaries; this adds no Review or acceptance.

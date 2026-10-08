@@ -53,3 +53,8 @@ def outbox_append(session: AsyncSession) -> OutboxAppendPort:
     from app.modules.outbox.service import OutboxService
 
     return OutboxService(session)
+
+
+def committed_invocation_reader(sessions):
+    """Expose the existing independent observer without private cross-owner imports."""
+    return CommittedInvocationReader(sessions)
