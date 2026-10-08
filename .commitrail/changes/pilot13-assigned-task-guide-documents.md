@@ -83,13 +83,14 @@ review/rebase implementation, frontend/MCP, dependencies, CI weakening or merge.
   hashes/sizes; real downloads reproduce original bytes. No task examples leak.
 - Stored Bob/foreign-project/unassigned actors, inactive grant/profile/link and
   unauthenticated callers cannot read; a stored foreign-snapshot document is denied.
-- Activating a newer guide does not change current task reads. An exact task
-  lock update representing the existing rebase boundary changes document membership;
-  this does not claim to implement PILOT-08 or invent history authority.
+- Activating a newer guide does not change current task reads. A PROJECTS port
+  contract test resolves alternate exact locked selectors; it is not a product
+  rebase test. Actual changed-membership/rebase ordering awaits PILOT-08, which
+  owns the not-yet-implemented task rebase operation.
 - Missing bytes, digest/size drift and namespace/receipt substitution never serve
   partial successful content; failed preparation releases owned scratch/provider.
-- Real PostgreSQL proves exact stored lineage, authorization and read/rebase or
-  revocation ordering; MinIO proves retained original readback/integrity.
+- Real PostgreSQL proves exact stored lineage, authorization and read/revocation
+  ordering; MinIO proves retained original readback/integrity.
 - Built CLI process tests prove metadata validation, safe file publication,
   malicious labels/URLs, overwrite/symlink refusal, size/hash mismatch, cleanup,
   and authentication. Existing public real-API journey remains complete.
@@ -112,6 +113,13 @@ Future implementation proof paths: `backend/tests/tasks/test_guide_documents.py`
 `cli/tests/integration/test_task_guide_http.py` and the extended existing public
 API CLI journey. Fixtures must use real original ingest/confirmed receipts; a
 mock guide or successful label alone cannot certify storage/assignment isolation.
+Build a composite fixture from existing public guide creation/content upload to
+MinIO and compilation/finalization/policy approval/activation helpers, followed
+by public task creation, screening, release, claim and start. Independently
+assert the stored confirmed receipt/object commitment before testing contributor
+list/download. Existing activation fixtures alone script provider access;
+existing MinIO intake fixtures alone stop before activation. Neither certifies
+this complete boundary without connecting their real operations.
 Run these through the existing isolated PostgreSQL/MinIO runner, Go build/vet/
 module verification, Ruff, module-boundary checks, documentation checks and full
 hosted suites. Prior missing-document context is the live-defect negative control;
