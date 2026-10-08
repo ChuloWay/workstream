@@ -6,6 +6,7 @@ import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from threading import Thread
+from time import sleep
 from uuid import uuid4
 
 import pytest
@@ -36,6 +37,9 @@ def guide_http():
         "bytes": ORIGINAL,
         "status": 200,
         "headers": {"Content-Type": "application/pdf"},
+        "delay_context": 0,
+        "delay_headers": 0,
+        "delay_body": 0,
     }
     requests = []
 
@@ -43,12 +47,14 @@ def guide_http():
         def do_GET(self):  # noqa: N802
             requests.append((self.path, self.headers.get("Authorization")))
             if self.path.endswith("/work-context"):
+                sleep(state["delay_context"])
                 status, body, headers = (
                     200,
                     json.dumps(state["context"]).encode(),
                     {"Content-Type": "application/json"},
                 )
             else:
+                sleep(state["delay_headers"])
                 status, body, headers = (
                     state["status"],
                     state["bytes"],
@@ -59,6 +65,12 @@ def guide_http():
                 self.send_header(name, value)
             self.end_headers()
             try:
+                if not self.path.endswith("/work-context") and state["delay_body"]:
+                    midpoint = len(body) // 2
+                    self.wfile.write(body[:midpoint])
+                    self.wfile.flush()
+                    sleep(state["delay_body"])
+                    body = body[midpoint:]
                 self.wfile.write(body)
             except (BrokenPipeError, ConnectionResetError):
                 pass
@@ -115,6 +127,26 @@ def test_assigned_guide_list_and_verified_private_download(cli, tmp_path):
         )
         assert refused.returncode != 0 and target.read_bytes() == ORIGINAL
         assert len(requests) == before + 1  # No second download attempt or overwrite.
+
+
+@pytest.mark.parametrize("phase", ("headers", "body", "context"))
+def test_guide_download_has_its_own_deadline_but_json_keeps_twelve_seconds(
+    cli, tmp_path, phase,
+):
+    with guide_http() as (origin, state, requests):
+        state["delay_" + phase] = 13
+        result = cli(
+            origin, TOKEN, "task", "guide", TASK, "--download", str(tmp_path),
+            "-o", "json",
+        )
+        if phase == "context":
+            assert result.returncode == 1 and result.stdout == ""
+            assert json.loads(result.stderr)["error"]["code"] == "service_unavailable"
+            assert len(requests) == 1 and list(tmp_path.iterdir()) == []
+        else:
+            assert result.returncode == 0, result.stderr
+            assert (tmp_path / f"{ACTOR}.pdf").read_bytes() == ORIGINAL
+            assert len(requests) == 2
 
 
 def test_full_document_list_uses_bounded_context_not_small_page_limit(cli):

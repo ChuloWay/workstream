@@ -80,7 +80,7 @@ func (c *Client) DownloadGuideDocument(ctx context.Context, taskID string, docum
 		document.ReadReference != guideDocumentPath(taskID, document.DocumentID) {
 		return &Failure{Code: "invalid_api_response"}
 	}
-	response, err := c.openRequest(ctx, http.MethodGet, guideDocumentPath(taskID, document.DocumentID), "", nil, "", document.MediaType)
+	response, err := c.openRequest(ctx, c.guideHTTP, http.MethodGet, guideDocumentPath(taskID, document.DocumentID), "", nil, "", document.MediaType)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,13 @@ func (c *Client) DownloadGuideDocument(ctx context.Context, taskID string, docum
 	}
 	digest := sha256.New()
 	count, err := io.Copy(io.MultiWriter(target, digest), io.LimitReader(response.Body, document.ByteCount+1))
-	if err != nil || count != document.ByteCount || "sha256:"+hex.EncodeToString(digest.Sum(nil)) != document.SHA256 {
+	if err != nil {
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			return &Failure{Code: "guide_document_integrity_mismatch"}
+		}
+		return &Failure{Code: "guide_document_download_failed"}
+	}
+	if count != document.ByteCount || "sha256:"+hex.EncodeToString(digest.Sum(nil)) != document.SHA256 {
 		return &Failure{Code: "guide_document_integrity_mismatch"}
 	}
 	return nil

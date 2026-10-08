@@ -311,6 +311,106 @@ async def test_cancelled_original_read_releases_preparation(task_client, guide_w
         manager.close()
 
 
+async def test_original_port_readers_share_custody_but_fence_replica_writers(
+    task_client, guide_world, task_database_env, monkeypatch
+):
+    """Exercise new PROJECTS/ART locks; existing TASK/AUTH fences remain unchanged."""
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+    from auth_concurrency_support import wait_for_named_database_lock
+    from app.adapters.artifacts import task_guide_documents_port
+    from app.modules.artifacts.preparation import ArtifactPreparationService
+    from app.modules.projects.models import GuideSourceSnapshot
+    from app.modules.tasks.api.guide_documents import TaskGuideSelection
+
+    world = guide_world
+    async with db_session.get_session_factory()() as session:
+        snapshot = await session.scalar(select(GuideSourceSnapshot).where(
+            GuideSourceSnapshot.guide_id == world.guide["id"],
+        ))
+        selection = TaskGuideSelection(
+            UUID(world.project["id"]), UUID(world.guide["id"]), "v1",
+            UUID(snapshot.id), snapshot.bundle_hash,
+        )
+        attempt = await session.scalar(select(ArtifactPutAttempt).where(
+            ArtifactPutAttempt.guide_source_item_id == world.guide["documents"][0]["document_id"],
+        ))
+        replica_id = attempt.replica_id
+    entered, release = asyncio.Event(), asyncio.Event()
+    readers = 0
+    original = ArtifactPreparationService.prepare
+
+    async def hold(service, *args, **kwargs):
+        nonlocal readers
+        prepared = await original(service, *args, **kwargs)
+        readers += 1
+        if readers == 2:
+            entered.set()
+        try:
+            await release.wait()
+        except BaseException:
+            await prepared.close()
+            raise
+        return prepared
+
+    monkeypatch.setattr(ArtifactPreparationService, "prepare", hold)
+    name = "pilot13-replica-writer-" + uuid4().hex
+    engine = create_async_engine(
+        task_database_env, connect_args={"server_settings": {"application_name": name}}
+    )
+
+    async def read():
+        async with db_session.get_session_factory()() as session, session.begin():
+            port = task_guide_documents_port(session, get_settings())
+            async with port.open(
+                UUID(world.task["id"]), UUID(world.guide["documents"][0]["document_id"]), selection,
+            ) as prepared:
+                return b"".join([chunk async for chunk in prepared.stream])
+
+    async def invalidate():
+        async with AsyncSession(engine) as session, session.begin():
+            replica = await session.get(ArtifactReplica, replica_id, with_for_update=True)
+            replica.integrity_state = "invalid"
+
+    pending = [asyncio.create_task(read()), asyncio.create_task(read())]
+    try:
+        await asyncio.wait_for(entered.wait(), 30)
+        pending.append(asyncio.create_task(invalidate()))
+        await asyncio.wait_for(wait_for_named_database_lock(task_database_env, name), 30)
+        release.set()
+        first, second, _ = await asyncio.wait_for(asyncio.gather(*pending), 30)
+        assert first == second == world.originals[0]
+    finally:
+        release.set()
+        for running in pending:
+            if not running.done():
+                running.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)
+        await engine.dispose()
+    response = await task_client.get(content_path(world), headers=auth_headers())
+    assert response.status_code == 503 and b"%PDF" not in response.content
+
+
+async def test_replica_invalidation_before_shared_lock_is_not_hidden_by_identity_map(
+    task_client, guide_world, monkeypatch
+):
+    from app.modules.artifacts.guide_documents import SqlAlchemyGuideDocumentManifest
+
+    original = SqlAlchemyGuideDocumentManifest.versions
+
+    async def invalidate_after_resolution(manifest, *args):
+        versions = await original(manifest, *args)
+        async with db_session.get_session_factory()() as session, session.begin():
+            replica = await session.get(ArtifactReplica, str(versions[0].replica_id))
+            replica.integrity_state = "invalid"
+        return versions
+
+    monkeypatch.setattr(SqlAlchemyGuideDocumentManifest, "versions", invalidate_after_resolution)
+    response = await task_client.get(content_path(guide_world), headers=auth_headers())
+    assert response.status_code == 503, response.text
+    assert response.json()["error"]["code"] == "guide_document_integrity_unavailable"
+    assert b"%PDF" not in response.content
+
+
 async def test_public_original_disconnect_closes_provider_and_scratch(
     task_client, guide_world, monkeypatch
 ):

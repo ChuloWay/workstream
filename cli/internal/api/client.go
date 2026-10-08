@@ -58,9 +58,10 @@ func (f *Failure) Error() string {
 }
 
 type Client struct {
-	origin string
-	token  string
-	http   *http.Client
+	origin    string
+	token     string
+	http      *http.Client
+	guideHTTP *http.Client
 }
 
 type Profile struct {
@@ -110,17 +111,21 @@ func New(origin, token string) (*Client, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
-	return &Client{
-		origin: normalized,
-		token:  token,
-		http: &http.Client{
-			Transport: transport,
-			Timeout:   12 * time.Second,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   12 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
-	}, nil
+	}
+	// Binary reads include server-side whole-original verification and transfers
+	// up to 512 MiB. Keep them bounded without applying the JSON deadline.
+	guideTransport := transport.Clone()
+	guideTransport.ResponseHeaderTimeout = 2 * time.Minute
+	guideHTTP := *client
+	guideHTTP.Transport = guideTransport
+	guideHTTP.Timeout = 10 * time.Minute
+	return &Client{origin: normalized, token: token, http: client, guideHTTP: &guideHTTP}, nil
 }
 
 func validateOrigin(raw string) (string, error) {
@@ -314,7 +319,7 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 
 func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
 	mutation := method == http.MethodPatch || method == http.MethodPost
-	response, err := c.openRequest(ctx, method, path, query, body, key, "application/json")
+	response, err := c.openRequest(ctx, c.http, method, path, query, body, key, "application/json")
 	if err != nil {
 		return nil, err
 	}
@@ -333,7 +338,7 @@ func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, que
 	return json.RawMessage(responseBody), nil
 }
 
-func (c *Client) openRequest(ctx context.Context, method, path, query string, body []byte, key, accept string) (*http.Response, error) {
+func (c *Client) openRequest(ctx context.Context, requestClient *http.Client, method, path, query string, body []byte, key, accept string) (*http.Response, error) {
 	mutation := method == http.MethodPatch || method == http.MethodPost
 	target := c.origin + path
 	if query != "" {
@@ -362,7 +367,7 @@ func (c *Client) openRequest(ctx context.Context, method, path, query string, bo
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	response, err := c.http.Do(req)
+	response, err := requestClient.Do(req)
 	if err != nil {
 		return nil, &Failure{Code: "service_unavailable", OutcomeUnknown: mutation}
 	}

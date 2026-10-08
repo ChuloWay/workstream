@@ -111,12 +111,15 @@ class ArtifactTaskGuideDocuments:
                         raise TaskGuideDocumentNotFound("task guide document not found")
                     document, version = member
                     replica = await self._session.get(
-                        ArtifactReplica, str(version.replica_id), with_for_update=True
+                        ArtifactReplica, str(version.replica_id),
+                        with_for_update={"read": True}, populate_existing=True,
                     )
                     persisted = await self._session.get(
                         ArtifactStorageNamespace, version.storage_namespace_id
                     )
-                    if replica is None or persisted is None:
+                    if (replica is None or persisted is None
+                        or replica.integrity_state == "invalid"
+                        or replica.availability_state not in ("unknown", "available")):
                         raise TaskGuideUnavailable("guide document integrity unavailable")
                     validate_artifact_replica_execution_namespace(
                         replica=replica,

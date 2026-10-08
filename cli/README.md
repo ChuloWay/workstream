@@ -72,10 +72,13 @@ UUID identity rather than spelling, while sending the supplied selector unchange
 and preserving the successful API JSON.
 
 Exit status is `0` for success, `1` for API/network/response failure, and `2`
-for invalid arguments or configuration. A request times out after 12 seconds;
+for invalid arguments or configuration. JSON requests time out after 12 seconds;
 JSON responses default to a 64 KiB bound (guide declaration and document-bearing
 work context use 2 MiB wire bounds). Original downloads stream to private files,
-bounded by the advertised byte count and ART's 512 MiB hard ceiling. Requests
+bounded by the advertised byte count and ART's 512 MiB hard ceiling. Downloads
+allow up to two minutes for verified-response headers and ten minutes overall,
+including transfer; connection/TLS timeouts and redirect/proxy refusal remain.
+Interrupted transfers are not reported as a digest mismatch or published. Requests
 are not automatically retried by the CLI.
 Use `--help`, `--version` and `completion bash|zsh|fish|powershell` without a
 credential or network connection.

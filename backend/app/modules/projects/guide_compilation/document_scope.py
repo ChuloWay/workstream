@@ -39,7 +39,7 @@ class SqlAlchemyProjectGuideDocumentScope:
                 GuideSourceSnapshot.project_id == ProjectGuide.project_id,
                 GuideSourceSnapshot.guide_version == ProjectGuide.version,
                 GuideSourceSnapshot.bundle_hash == request.source_snapshot_hash,
-            ).with_for_update(of=(ProjectGuide, GuideSourceSnapshot))
+            ).with_for_update(read=True, of=(ProjectGuide, GuideSourceSnapshot))
         )).one_or_none()
         if row is None:
             raise GuideDocumentUnavailable("guide_source_stale")
@@ -50,7 +50,7 @@ class SqlAlchemyProjectGuideDocumentScope:
             select(GuideSourceSnapshotItem)
             .where(GuideSourceSnapshotItem.source_snapshot_id == snapshot.id)
             .order_by(GuideSourceSnapshotItem.item_order, GuideSourceSnapshotItem.id)
-            .with_for_update()
+            .with_for_update(read=True)
         )).all()
         manifest_items = snapshot.manifest_json.get("items")
         stored_items = [{
@@ -65,7 +65,7 @@ class SqlAlchemyProjectGuideDocumentScope:
             if item.source_kind != "document" or item.ingestion_adapter != "upload":
                 raise GuideDocumentUnavailable("guide_document_format_unsupported")
             ingest = await self._session.scalar(select(GuideSourceArtifactIngest).where(
-                GuideSourceArtifactIngest.source_item_id == item.id).with_for_update())
+                GuideSourceArtifactIngest.source_item_id == item.id).with_for_update(read=True))
             if ingest is None or ingest.media_type != item.media_type:
                 raise GuideDocumentUnavailable("guide_documents_incomplete")
             originals.append(LabeledGuideOriginal(item.source_label, ProjectGuideDocumentSource(

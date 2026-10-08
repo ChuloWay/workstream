@@ -76,7 +76,11 @@ adapter change.
 - `GET /api/v1/tasks/{task_id}/guide/documents/{document_id}/content` prepares the
   entire original against its retained digest/size using canonical ART scratch.
   Missing/corrupt bytes become a structured integrity error before headers/body.
-  AUTH/TASK/PROJECTS locks cover selection and verification; commit authorized
+  AUTH/TASK and existing historical policy-resolution fences cover selection and
+  verification. The newly introduced document/replica locks use shared read mode
+  and fence writers without adding exclusive locks. Existing policy resolution
+  still serializes same-project contributor reads; changing that complete lock
+  chain is outside this bounded change. Commit authorized
   read evidence before serving immutable prepared bytes. A request-scoped yield
   dependency owns provider/preparation cleanup even on disconnect/cancellation.
   No unauthenticated URL, ranges, caller provider key or first-pass streaming.
@@ -90,6 +94,11 @@ adapter change.
   bearing work context (2 MiB); other read envelopes keep 64 KiB. Binary downloads
   stream to disk and cannot exceed ART's existing 512 MiB hard ceiling. Reuse the
   existing shared error redaction and one-shot mutation transport unchanged.
+- Binary downloads retain a separate bounded client: two-minute response-header
+  and ten-minute whole-transfer deadlines, inherited connection/TLS bounds and
+  identical redirect/proxy refusal. JSON requests keep twelve seconds. Slow valid
+  headers/body reads must succeed beyond the JSON deadline; stalled JSON must
+  still fail. Never report a timed-out transfer as a content digest mismatch.
 - MCP's existing authorization-context response transitively references AUTH's
   closed `ActionId` enum. Adding `task.guide.read` therefore updates that selected
   contract snapshot and its canonical digest; otherwise valid self-authority
