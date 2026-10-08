@@ -26,6 +26,7 @@ from app.modules.tasks.api.guide_documents import (
     TaskGuideDocumentNotFound,
     TaskGuideUnavailable,
     VerifiedTaskGuideRead,
+    TaskGuideSelection,
 )
 
 
@@ -53,11 +54,19 @@ class ArtifactTaskGuideDocuments:
         )
 
     async def _resolve(
-        self, task_id: UUID, request: LockedGuideOriginalsRequest
+        self, task_id: UUID, request: TaskGuideSelection
     ) -> tuple[tuple[ContributorGuideDocument, GuideDocumentVersion], ...]:
         if not self._session.in_transaction():
             raise TaskGuideUnavailable("guide document transaction is unavailable")
-        originals = await self._scope.lock_task_originals(request)
+        originals = await self._scope.lock_task_originals(
+            LockedGuideOriginalsRequest(
+                project_id=request.project_id,
+                guide_id=request.guide_id,
+                guide_version=request.guide_version,
+                source_snapshot_id=request.source_snapshot_id,
+                source_snapshot_hash=request.source_snapshot_hash,
+            )
+        )
         versions = await self._manifest.versions(
             request.project_id, tuple(item.source for item in originals)
         )
@@ -78,7 +87,7 @@ class ArtifactTaskGuideDocuments:
         )
 
     async def list(
-        self, task_id: UUID, request: LockedGuideOriginalsRequest
+        self, task_id: UUID, request: TaskGuideSelection
     ) -> tuple[ContributorGuideDocument, ...]:
         try:
             return tuple(document for document, _ in await self._resolve(task_id, request))
@@ -87,7 +96,7 @@ class ArtifactTaskGuideDocuments:
 
     @asynccontextmanager
     async def open(
-        self, task_id: UUID, document_id: UUID, request: LockedGuideOriginalsRequest
+        self, task_id: UUID, document_id: UUID, request: TaskGuideSelection
     ) -> AsyncIterator[VerifiedTaskGuideRead]:
         try:
             async with self._runtime() as (store, namespace, preparation):

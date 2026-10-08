@@ -26,9 +26,8 @@ from app.modules.tasks.api.task_detail import (
     ContributorTaskDetail, ContributorTaskDetailRequest, ManagementTaskDetail, ManagementTaskDetailRequest,
 )
 from app.modules.tasks.api.guide_documents import (
-    TaskGuideDocumentsPort, TaskGuideDocumentNotFound, VerifiedTaskGuideRead,
+    TaskGuideDocumentsPort, TaskGuideDocumentNotFound, VerifiedTaskGuideRead, TaskGuideSelection,
 )
-from app.modules.projects.api.guide_documents import LockedGuideOriginalsRequest
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage, TaskTransitionAuditPort, TaskTransitionFacts
 from app.modules.tasks.api.audit_evidence import AuditTaskEvidenceRequest, AuditTaskEvidencePage, TaskEvidenceInvalid
 from app.modules.tasks.models import TaskAssignment, TaskCommandReceipt, WorkstreamTask
@@ -442,8 +441,8 @@ class AuthorizedTaskCommands:
         return response
 
     @staticmethod
-    def _guide_request(task: WorkstreamTask, context: LockedTaskContext) -> LockedGuideOriginalsRequest:
-        return LockedGuideOriginalsRequest(
+    def _guide_request(task: WorkstreamTask, context: LockedTaskContext) -> TaskGuideSelection:
+        return TaskGuideSelection(
             project_id=UUID(task.project_id), guide_id=context.facts.guide.id,
             guide_version=task.locked_guide_version,
             source_snapshot_id=UUID(task.locked_guide_source_snapshot_id),

@@ -265,7 +265,8 @@ workstream task requirements TASK_ID
 ```
 
 Each command makes one existing public contributor GET, with the same selector,
-bearer, response bounds and safe errors as `task show`. Workstream checks current
+bearer and safe errors as `task show`. Document-bearing work context has a
+2 MiB response bound; requirements retain the 64 KiB default. Workstream checks current
 Submitter authority and assignment visibility on each read. Other roles alone,
 foreign-project or peer-owned work, revoked grants and suspension do not confer
 access. Denial statuses follow the individual API contract; a denied read is

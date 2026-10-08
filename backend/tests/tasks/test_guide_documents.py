@@ -311,6 +311,69 @@ async def test_cancelled_original_read_releases_preparation(task_client, guide_w
         manager.close()
 
 
+async def test_public_original_disconnect_closes_provider_and_scratch(
+    task_client, guide_world, monkeypatch
+):
+    """Exercise native FastAPI yield cleanup after StreamingResponse starts."""
+    from app.adapters.artifacts import create_artifact_scratch_manager
+    from app.adapters.artifacts.s3_compatible import S3CompatibleArtifactStoreBootstrap
+
+    body_started = asyncio.Event()
+    provider_closed = []
+    original_close = S3CompatibleArtifactStoreBootstrap.close
+
+    def observe_close(bootstrap):
+        original_close(bootstrap)
+        provider_closed.append(bootstrap)
+
+    monkeypatch.setattr(S3CompatibleArtifactStoreBootstrap, "close", observe_close)
+    received_request = False
+    statuses = []
+
+    async def receive():
+        nonlocal received_request
+        if not received_request:
+            received_request = True
+            return {"type": "http.request", "body": b"", "more_body": False}
+        await body_started.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        if message["type"] == "http.response.start":
+            statuses.append(message["status"])
+        elif message["type"] == "http.response.body" and message.get("body"):
+            assert statuses == [200]
+            assert guide_world.originals[0].startswith(message["body"])
+            body_started.set()
+            # Response producer is cancelled by the native disconnect listener.
+            await asyncio.Event().wait()
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": content_path(guide_world),
+        "raw_path": content_path(guide_world).encode(),
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (name.lower().encode(), value.encode()) for name, value in auth_headers().items()
+        ],
+        "server": ("testserver", 80),
+        "client": ("127.0.0.1", 4242),
+    }
+    await asyncio.wait_for(task_client._transport.app(scope, receive, send), timeout=30)
+    assert body_started.is_set() and statuses == [200]
+    assert len(provider_closed) == 1
+    manager = create_artifact_scratch_manager(get_settings())
+    try:
+        assert (await manager.usage()).reservation_count == 0
+    finally:
+        manager.close()
+
+
 @pytest.mark.parametrize("damage", ("missing", "digest", "size"))
 async def test_damaged_stored_original_never_serves_partial_bytes(task_client, guide_world, damage):
     world = guide_world

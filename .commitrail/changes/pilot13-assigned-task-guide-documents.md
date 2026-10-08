@@ -63,6 +63,9 @@ review/rebase implementation, frontend/MCP, dependencies, CI weakening or merge.
   exact-snapshot metadata capability and ART's reused confirmed-version resolver.
   New ports are necessary because existing setup grants require a draft/run,
   while assigned work must retain an activated historical snapshot.
+  TASK's frozen selection and response contracts remain owner-local; ART
+  translates selectors to the PROJECTS port rather than importing PROJECTS
+  contracts into TASK's public API.
 - `GET /api/v1/tasks/{task_id}/guide/documents/{document_id}/content` prepares the
   entire original against its retained digest/size using canonical ART scratch.
   Missing/corrupt bytes become a structured integrity error before headers/body.
@@ -138,6 +141,10 @@ Observe a named PostgreSQL revocation waiter while a verified read retains AUTH
 locks, then show revocation can commit before immutable prepared bytes finish
 serving. Verify that a later request is denied and cancellation/integrity errors
 release scratch reservations. No product rebase behavior is claimed.
+Public ASGI disconnect proof additionally traverses FastAPI's yield dependency
+and StreamingResponse after response start/first body, then checks provider
+closure and zero retained scratch reservations. This is framework-composition
+proof; the real CLI journey separately exercises the HTTP network boundary.
 Run these through the existing isolated PostgreSQL/MinIO runner, Go build/vet/
 module verification, Ruff, module-boundary checks, documentation checks and full
 hosted suites. Prior missing-document context is the live-defect negative control;
