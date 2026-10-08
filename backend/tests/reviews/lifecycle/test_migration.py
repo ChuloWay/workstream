@@ -7,6 +7,7 @@ import asyncpg
 import pytest
 from alembic import command
 
+from tests.historical_submission_fixtures import historical_material_fixture
 from app.db import session as db_session
 from tests.contributions.records.support import (
     award_values,
@@ -41,7 +42,7 @@ async def test_lifecycle_upgrade_preserves_sources(tmp_path, isolated_database_e
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0015_contribution_awards")
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with contribution_source(tmp_path, isolated_database_env, paid=True) as h:
+        async with contribution_source(tmp_path, isolated_database_env, paid=True, material_source=historical_material_fixture) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session:
                 for record in (h.reviewer_record, h.submitter_record):

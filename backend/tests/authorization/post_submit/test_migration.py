@@ -13,7 +13,7 @@ from tests.migration_fixtures import _config
 from tests.checkers.execution.predecessor_support import predecessor_lease
 from tests.checkers.execution.test_material_migration import retained_snapshot
 from tests.checkers.execution.support import reserve
-from tests.post_submit_materialization_helpers import material_fixture
+from tests.historical_submission_fixtures import historical_material_fixture
 
 pytestmark = pytest.mark.postgres_schema_contract
 
@@ -29,7 +29,7 @@ async def test_actual_upgrade_preserves_or_refuses_without_repair(tmp_path, isol
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
+        async with historical_material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             await reserve(h)
             if unprovable_receipt:
@@ -60,7 +60,7 @@ async def test_upgrade_excludes_writer_across_receipt_preflight(tmp_path, isolat
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
+        async with historical_material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             reserved = await reserve(h)
             scanned, resume = threading.Event(), threading.Event()

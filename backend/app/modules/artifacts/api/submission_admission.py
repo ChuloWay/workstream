@@ -46,6 +46,30 @@ class SubmissionAdmissionConsumptionRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class ConsumedSubmissionAdmissionRequest:
+    """Exact historical ownership selectors, never a current pre-submit context."""
+
+    admission_id: UUID
+    project_id: UUID
+    task_id: UUID
+    assignment_id: UUID
+    contributor_id: UUID
+    submission_id: UUID
+    submission_version: int
+    packet_sha256: str
+
+    def __post_init__(self) -> None:
+        if any(not isinstance(getattr(self, field), UUID) for field in (
+            "admission_id", "project_id", "task_id", "assignment_id", "contributor_id", "submission_id",
+        )):
+            raise ValueError("consumed admission identity is invalid")
+        if type(self.submission_version) is not int or self.submission_version < 1:
+            raise ValueError("submission version is invalid")
+        if type(self.packet_sha256) is not str or not re.fullmatch(r"sha256:[0-9a-f]{64}", self.packet_sha256):
+            raise ValueError("submission packet digest is invalid")
+
+
+@dataclass(frozen=True, slots=True)
 class SubmissionBundleFile:
     """Detached inspected file metadata, without bytes or storage coordinates."""
 
@@ -98,10 +122,11 @@ class SubmissionAdmissionConsumptionResult:
     status: SubmissionAdmissionConsumptionStatus
     replayed: bool
     material: SubmissionAdmissionMaterial | None
+    binding_decision_id: UUID | None
 
     def __post_init__(self) -> None:
         if self.status == "consumed":
-            if self.binding_id is None or type(self.material) is not SubmissionAdmissionMaterial:
+            if not isinstance(self.binding_decision_id, UUID) or not isinstance(self.binding_id, UUID) or type(self.material) is not SubmissionAdmissionMaterial:
                 raise ValueError("consumed admission requires verified material")
         elif self.status != "stale" or self.material is not None or self.binding_id is not None:
             raise ValueError("stale admission has no material")
@@ -115,3 +140,8 @@ class SubmissionAdmissionConsumptionPort(Protocol):
         request: SubmissionAdmissionConsumptionRequest,
     ) -> SubmissionAdmissionConsumptionResult:
         """Apply one terminal admission transition without provider I/O."""
+
+    async def read_consumed(
+        self, request: ConsumedSubmissionAdmissionRequest,
+    ) -> SubmissionAdmissionConsumptionResult:
+        """Read scoped retained material and freshly validate its original binding allow."""

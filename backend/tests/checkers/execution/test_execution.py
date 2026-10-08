@@ -5,6 +5,7 @@ from sqlalchemy import select, func
 
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable, COMPLETION_EVENT
 from app.adapters.checkers import evaluation_coordinator
+from app.core.identifiers import new_record_id
 from app.modules.checkers.models import CheckerRun, CheckerResult
 from app.modules.outbox.models import OutboxEvent
 from tests.post_submit_materialization_helpers import material_fixture
@@ -365,7 +366,7 @@ async def test_unreadable_stored_bytes_terminalize_and_replay(
             assert run.finalize_evidence_id is not None
             assert run.routing_recommendation == "not_evaluated"
             assert await session.scalar(select(func.count()).select_from(CheckerResult)) == 0
-            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 0
+            assert list(await session.scalars(select(OutboxEvent.event_id))) == [h.created.evaluation_event_id]
             with pytest.raises(CheckerExecutionUnavailable, match="current_result"):
                 await evaluation_coordinator(session).read_current_result(h.request)
 
@@ -384,7 +385,8 @@ async def test_nonrecordable_material_failure_leaves_attempt_recoverable(
         if failure == "cleanup":
             from tests.checkers.post_submit.support import change_request
 
-            h.request = change_request(h.request, structural_input=h.request.structural_input.model_copy(
+            h.request = change_request(h.request, evaluation_request_id=new_record_id(),
+                evaluation_generation=2, structural_input=h.request.structural_input.model_copy(
                 update={"manifest": ()},
             ))
         reservation = await reserve(h)
@@ -429,4 +431,4 @@ async def test_nonrecordable_material_failure_leaves_attempt_recoverable(
             assert run.status == "running" and run.result_json is None
             assert run.finalize_evidence_id is None and run.completion_event_id is None
             assert await session.scalar(select(func.count()).select_from(CheckerResult)) == 0
-            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 0
+            assert list(await session.scalars(select(OutboxEvent.event_id))) == [h.created.evaluation_event_id]

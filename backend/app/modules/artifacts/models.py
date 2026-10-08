@@ -1674,3 +1674,18 @@ Index(
     ArtifactBinding.logical_role,
     ArtifactBinding.scope_version.desc(),
 )
+
+
+class SubmissionBindingReceipt(Base):
+    """ART's immutable once-only witness for a consumed admission binding."""
+
+    __tablename__ = "submission_binding_receipts"
+    admission_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("submission_bundle_admissions.id", ondelete="RESTRICT"), primary_key=True,
+    )
+    binding_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("artifact_bindings.id", ondelete="RESTRICT"), nullable=False, unique=True,
+    )
+    decision_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False, unique=True,
+    )

@@ -20,38 +20,14 @@ from .test_requests import effect_snapshot
 
 @asynccontextmanager
 async def routing_source(tmp_path, database_url):
-    """Real completed evaluation with future dispatch state explicitly seeded.
-
-    This proves mechanical preparation, not live dispatch or routing authority.
-    """
+    """Real completed evaluation with its canonical pending state and claim."""
     async with completed_source(tmp_path, database_url) as h:
         async with h.factory() as session, session.begin():
-            # Establish the claim precondition first: the status denial must not
-            # succeed because accepted_at is also absent.
             started = await session.execute(text(
                 "UPDATE public.task_assignments SET accepted_at=clock_timestamp() "
                 "WHERE id=:id AND accepted_at IS NULL"
             ), {"id": h.request.assignment_id})
             assert started.rowcount == 1
-            before = await effect_snapshot(session)
-            with pytest.raises(TaskRoutingRequestUnavailable, match="routing_source_unavailable"):
-                await prepare(session, h)
-            assert await effect_snapshot(session) == before
-            assert await session.scalar(select(func.count()).select_from(TaskRoutingRequest)) == 0
-            changed = await session.execute(text(
-                "UPDATE public.workstream_tasks SET status='evaluation_pending' "
-                "WHERE id=:id AND status='in_progress'"
-            ), {"id": h.request.task_id})
-            assert changed.rowcount == 1
-            # Isolate missing accepted_at under an otherwise eligible state.
-            await session.execute(text(
-                "UPDATE public.task_assignments SET accepted_at=NULL WHERE id=:id"
-            ), {"id": h.request.assignment_id})
-            with pytest.raises(TaskRoutingRequestUnavailable, match="routing_source_unavailable"):
-                await prepare(session, h)
-            await session.execute(text(
-                "UPDATE public.task_assignments SET accepted_at=clock_timestamp() WHERE id=:id"
-            ), {"id": h.request.assignment_id})
         yield h
 
 
@@ -59,6 +35,30 @@ async def prepare(session, h, completion=None):
     return await routing_source_preparer(session).prepare(
         h.source["completion_event_id"], completion or completion_for(h),
     )
+
+
+@pytest.mark.parametrize("ineligible", ["task_status", "unaccepted_assignment"])
+async def test_ineligible_source_rejects_without_effects(tmp_path, isolated_database_env, ineligible):
+    async with routing_source(tmp_path, isolated_database_env) as h:
+        async with h.factory() as session:
+            await session.begin()
+            statement = (
+                "UPDATE public.workstream_tasks SET status='in_progress' WHERE id=:id"
+                if ineligible == "task_status" else
+                "UPDATE public.task_assignments SET accepted_at=NULL WHERE id=:id"
+            )
+            identifier = h.request.task_id if ineligible == "task_status" else h.request.assignment_id
+            changed = await session.execute(text(statement), {"id": identifier})
+            assert changed.rowcount == 1
+            before = await effect_snapshot(session)
+            with pytest.raises(TaskRoutingRequestUnavailable, match="routing_source_unavailable"):
+                await prepare(session, h)
+            assert await effect_snapshot(session) == before
+            assert await session.scalar(select(func.count()).select_from(TaskRoutingRequest)) == 0
+            await session.rollback()
+        async with h.factory() as session, session.begin():
+            valid = await prepare(session, h)
+            assert valid.source.submission_id == h.request.submission_id
 
 
 async def test_exact_proposal_replay_and_rollback(tmp_path, isolated_database_env):
@@ -99,7 +99,9 @@ async def test_mixed_stored_sources_reject_without_effects(tmp_path, isolated_da
     async with routing_source(tmp_path, isolated_database_env) as h:
         sibling = await completed_sibling_source(h)
         async with h.factory() as session, session.begin():
-            await session.execute(text("UPDATE public.workstream_tasks SET status='evaluation_pending' WHERE id=:id"), {"id": sibling.request.task_id})
+            assert await session.scalar(text(
+                "SELECT status FROM public.workstream_tasks WHERE id=:id"
+            ), {"id": sibling.request.task_id}) == "evaluation_pending"
             await session.execute(text("UPDATE public.task_assignments SET accepted_at=clock_timestamp() WHERE id=:id"), {"id": sibling.request.assignment_id})
         async with h.factory() as session:
             await session.begin()
@@ -147,11 +149,9 @@ async def test_successor_preparation_matches_stored_predecessor(tmp_path, isolat
         successor = await completed_successor_source(original)
         expected = await joined_source_facts(successor, successor.source | {"created_at": datetime.now(UTC)})
         async with original.factory() as session, session.begin():
-            changed = await session.execute(text(
-                "UPDATE public.workstream_tasks SET status='evaluation_pending' "
-                "WHERE id=:id AND status='needs_revision'"
-            ), {"id": original.request.task_id})
-            assert changed.rowcount == 1
+            assert await session.scalar(text(
+                "SELECT status FROM public.workstream_tasks WHERE id=:id"
+            ), {"id": original.request.task_id}) == "evaluation_pending"
         async with original.factory() as session, session.begin():
             before = await effect_snapshot(session)
             prepared = await prepare(session, successor)

@@ -60,7 +60,7 @@ async def test_savepoints_cannot_release_reservation_locks(tmp_path, isolated_da
                 await getattr(evaluation_coordinator(session), operation)(h.request)
             await session.rollback()
         async with h.factory() as session, session.begin():
-            assert list(await session.scalars(select(CheckerRun.id))) == []
+            assert list(await session.scalars(select(CheckerRun.id))) == [str(h.created.evaluation_attempt_id)]
             created = await evaluation_coordinator(session).reserve_current_evaluation(h.request)
             assert created.evaluation_generation == 1
 
@@ -69,14 +69,14 @@ async def test_stale_identity_map_cannot_hide_ineligible_task(tmp_path, isolated
     async with material_fixture(tmp_path, isolated_database_env) as h:
         async with h.factory() as stale:
             loaded = await stale.get(WorkstreamTask, str(h.request.task_id))
-            assert loaded.status == "in_progress"
+            assert loaded.status == "evaluation_pending"
             async with h.factory() as writer, writer.begin():
                 await writer.execute(text("UPDATE public.workstream_tasks SET status='draft' WHERE id=:id"),
                                      {"id": h.request.task_id})
             with pytest.raises(CheckerExecutionUnavailable, match="checker_reservation_scope_unavailable"):
                 await evaluation_coordinator(stale).reserve_current_evaluation(h.request)
             assert loaded.status == "draft"
-            assert list(await stale.scalars(select(CheckerRun.id))) == []
+            assert list(await stale.scalars(select(CheckerRun.id))) == [str(h.created.evaluation_attempt_id)]
             await stale.rollback()
 
 
@@ -84,6 +84,7 @@ async def test_valid_foreign_selectors_fail_before_foreign_task_lock(tmp_path, i
     async with material_fixture(tmp_path / "one", isolated_database_env) as first:
         async with material_fixture(tmp_path / "two", isolated_database_env,
                                     provision_services=False, storage_settings=first.settings) as foreign:
+            expected_runs = {str(first.created.evaluation_attempt_id), str(foreign.created.evaluation_attempt_id)}
             mixed_project = change_request(foreign.request, task_id=first.request.task_id,
                                            submission_id=first.request.submission_id)
             async with first.factory() as blocker, blocker.begin():
@@ -93,13 +94,13 @@ async def test_valid_foreign_selectors_fail_before_foreign_task_lock(tmp_path, i
                     await session.execute(text("SET LOCAL lock_timeout='250ms'"))
                     with pytest.raises(CheckerExecutionUnavailable, match="checker_reservation_scope_unavailable"):
                         await evaluation_coordinator(session).reserve_current_evaluation(mixed_project)
-                    assert list(await session.scalars(select(CheckerRun.id))) == []
+                    assert set(await session.scalars(select(CheckerRun.id))) == expected_runs
             for field in ("task_id", "submission_id", "assignment_id", "binding_id", "content_id"):
                 changed = change_request(first.request, **{field: getattr(foreign.request, field)})
                 async with first.factory() as session, session.begin():
                     with pytest.raises(CheckerExecutionUnavailable, match="checker_reservation_scope_unavailable"):
                         await evaluation_coordinator(session).reserve_current_evaluation(changed)
-                    assert list(await session.scalars(select(CheckerRun.id))) == []
+                    assert set(await session.scalars(select(CheckerRun.id))) == expected_runs
             async with first.factory() as session, session.begin():
                 control = await evaluation_coordinator(session).reserve_current_evaluation(first.request)
                 assert control.request_id == first.request.evaluation_request_id
@@ -136,4 +137,5 @@ async def test_superseded_submission_cannot_reserve_or_replay(tmp_path, isolated
             valid = await storage_request(session, successor.submission_id)
             result = await evaluation_coordinator(session).reserve_current_evaluation(valid)
             assert result.request_id == valid.evaluation_request_id
-            assert len(list(await session.scalars(select(CheckerRun.id)))) == len(before) + 1
+            assert set(await session.scalars(select(CheckerRun.id))) == set(before)
+            assert result.attempt_id == successor.evaluation_attempt_id

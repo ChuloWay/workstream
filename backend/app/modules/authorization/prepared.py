@@ -122,6 +122,7 @@ from app.modules.authorization.domain.post_submit_routing import (
 )
 from app.modules.tasks.api.post_submit_routing import TaskRoutingRequestFacts
 from app.modules.authorization.domain.post_submit import POST_SUBMIT_ACTIONS, PostSubmitResourceContext, post_submit_prepare_matches
+from app.modules.authorization.prepared_submission_replay import validate_submission_replay
 from app.modules.authorization.prepared_post_submit_replay import validate_post_submit_replay
 from app.modules.authorization.pre_submit_materialization import (
     parse_prepared_artifact_bindings,
@@ -720,7 +721,7 @@ class PreparedAuthorizationService:
         issuance = self._live_issuance(handle)
         self._issued[handle] = _CONSUMED
         try:
-            replay = validate_post_submit_replay if expected_action_id in POST_SUBMIT_ACTIONS else validate_review_replay if expected_action_id in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_ACTION_IDS | {ActionId.PROJECT_GUIDE_ACTIVATE} else validate_projection_replay
+            replay = validate_submission_replay if expected_action_id in {ActionId.SUBMISSION_CREATE, ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE} else validate_post_submit_replay if expected_action_id in POST_SUBMIT_ACTIONS else validate_review_replay if expected_action_id in GUIDE_PROPOSAL_ACTION_IDS | POST_POLICY_ACTION_IDS | {ActionId.PROJECT_GUIDE_ACTIVATE} else validate_projection_replay
             await replay(
                 self,
                 issuance,
