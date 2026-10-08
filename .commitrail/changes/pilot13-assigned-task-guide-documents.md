@@ -40,13 +40,17 @@ identity and completely hash/count bounded bytes in canonical scratch.
   lane catalogue and existing exact behavior-ownership partition registration
   for the two new Python modules, current API/CLI docs, affected roadmap claims
   and this standalone record.
+- Existing MCP authorization-context snapshot: synchronize only its transitive
+  `ActionId` enum, canonical digest and backend capture reference; no new tools.
 
 ### Not allowed
 
 No examples in contributor projections; no new guide/lock/storage tables or
 per-task copies; no draft/newer/foreign reads; no broad management authority,
 setup-agent changes, upload/presigned-URL subsystem, compatibility variants,
-review/rebase implementation, frontend/MCP, dependencies, CI weakening or merge.
+review/rebase implementation, frontend/MCP capabilities, dependencies, CI
+weakening or merge. The existing MCP snapshot synchronization above is the only
+adapter change.
 
 ## Design and decisions
 
@@ -84,6 +88,11 @@ review/rebase implementation, frontend/MCP, dependencies, CI weakening or merge.
   bearing work context (2 MiB); other read envelopes keep 64 KiB. Binary downloads
   stream to disk and cannot exceed ART's existing 512 MiB hard ceiling. Reuse the
   existing shared error redaction and one-shot mutation transport unchanged.
+- MCP's existing authorization-context response transitively references AUTH's
+  closed `ActionId` enum. Adding `task.guide.read` therefore updates that selected
+  contract snapshot and its canonical digest; otherwise valid self-authority
+  responses can be rejected by the existing adapter's response validator. Keep
+  the backend OpenAPI drift check intact; do not add a guide MCP tool here.
 - This single user-requested outcome crosses four existing owner boundaries and
   includes its requested CLI consumer. The diff exceeds the preferred small L1
   size because ports, catalogue/schema guards and retained constructor fixtures
