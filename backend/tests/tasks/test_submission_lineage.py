@@ -21,7 +21,7 @@ from app.modules.artifacts.models import (
     ArtifactBinding,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.tasks.api import SubmissionCreationRequest, TaskSubmissionContextUnavailable
+from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.models import AuditEvent, Submission, TaskAssignment, WorkstreamTask
 from tests.pre_submit_test_helpers import approved_pre_submit_fixture
 from tests.submission_preparation_auth_helpers import install_submitter_grant
@@ -147,10 +147,18 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
         for column in ("summary", "worker_attestation"):
             async with factory() as session:
                 def substitute_packet(sync_session):
+                    # Isolate the deferred checked-packet guard from the newer
+                    # immediate dispatch seal; failed commit rolls this DDL back.
+                    sync_session.connection().execute(text(
+                        "ALTER TABLE public.submissions DISABLE TRIGGER submission_dispatch_parent_immutable"
+                    ))
                     sync_session.connection().execute(text(
                         f"UPDATE public.submissions SET {column} = {column} || ' Changed.' "
                         "WHERE submission_bundle_admission_id = :admission"
                     ), {"admission": admission_id})
+                    sync_session.connection().execute(text(
+                        "SET CONSTRAINTS submission_packet_custody IMMEDIATE"
+                    ))
 
                 event.listen(session.sync_session, "before_commit", substitute_packet)
                 try:
@@ -176,8 +184,8 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
         )
         successes = [value for value in results if not isinstance(value, BaseException)]
         failures = [value for value in results if isinstance(value, BaseException)]
-        assert len(successes) == len(failures) == 1, results
-        assert isinstance(failures[0], TaskSubmissionContextUnavailable), results
+        assert len(successes) == 2 and not failures, results
+        assert successes[0] == successes[1]
         created = successes[0]
         async with factory() as session:
             task = await session.get(WorkstreamTask, str(task_id))
@@ -254,10 +262,8 @@ async def test_packet_custody_upgrade_preserves_retained_submission(
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0021_submission_manifest")
         async with _prepared_packet(isolated_database_env, tmp_path) as h:
-            async with h.factory() as session:
-                created = await compose_hidden_submission_creation_command(
-                    session, h.context, request_id=new_record_id(), correlation_id=new_record_id(),
-                ).create(h.creation)
+            from tests.historical_submission_fixtures import write_historical_submission
+            created = await write_historical_submission(h.factory, h.context, h.creation)
             # The predecessor allowed this mismatch. Upgrade must neither invent
             # evidence nor rewrite/delete retained text, even when inconsistent.
             async with h.factory.begin() as session:

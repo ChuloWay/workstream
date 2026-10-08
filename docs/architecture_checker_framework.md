@@ -358,7 +358,7 @@ The post command validates and delegates CHECKER's closed value contract.
 Production composes the canonical executor with separate exact execute and
 finalize authority through AUTH/PREP. ARCH-04C reserves the exact request, fences execution attempts and
 atomically persists complete closed member results and a completion event; it
-does not activate automatic dispatch. ARCH-04B supplies the hidden ART input port: exact consumed
+does not activate automatic request delivery. ARCH-04B supplies the hidden ART input port: exact consumed
 Submission bytes, rebuilt manifest, async scoped file access and cleanup, followed
 by a fresh material-selection check. ARCH-04D2 supplies fresh fixed-service materialization authority before and after I/O.
 ARCH-04B2 now supplies hidden typed output storage, byte-free recovery and
@@ -553,7 +553,7 @@ severities.
 
 The following is the intended end-to-end lifecycle. Pre-submit intake and
 retained-history reads are implemented. Hidden durable post-submit execution is
-implemented with ARCH-04D2 exact service authority; automatic dispatch and result
+implemented with ARCH-04D2 exact service authority; automatic request delivery and result
 routing remain unavailable pending ARCH-04E. Known missing or corrupt input after ART authorization records a
 terminal infrastructure failure only after cleanup and fresh finalization
 authorization; it does not route the task. Exact replay does not reread storage.
@@ -835,6 +835,6 @@ Submission transaction. The same commit retains exact creation/binding AUTH
 receipts and a bounded `PostSubmissionEvaluationRequested` outbox event.
 Select-only creation replay checks the original request and event without
 changing the current-generation fence. Request/completion handlers remain
-unregistered; this stored intent alone does not start a worker or accept work.
+unregistered; this stored intent alone does not invoke checker execution or accept work.
 Preparation has no stored Submission to observe and never replaces the TASK
 evaluation guard.

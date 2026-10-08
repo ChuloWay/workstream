@@ -207,7 +207,7 @@ class SubmissionAdmissionConsumptionService:
         admission.consumed_by_submission_version = request.submission_version
         await self._session.flush()
         self._session.add(SubmissionBindingReceipt(
-            admission_id=request.admission_id, binding_id=UUID(binding.id), decision_id=binding_decision_id,
+            admission_id=str(request.admission_id), binding_id=binding.id, decision_id=str(binding_decision_id),
         ))
         await self._session.flush()
         return self._result(admission, request, evidence, binding=binding, replayed=False,
@@ -252,7 +252,7 @@ class SubmissionAdmissionConsumptionService:
         ).with_for_update().execution_options(populate_existing=True))
         if admission is None:
             raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable")
-        receipt = await self._session.get(SubmissionBindingReceipt, request.admission_id,
+        receipt = await self._session.get(SubmissionBindingReceipt, str(request.admission_id),
                                           populate_existing=True)
         if receipt is None:
             raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable")
@@ -272,16 +272,16 @@ class SubmissionAdmissionConsumptionService:
         if (
             evidence is None or content is None or binding is None
             or binding.content_id != admission.artifact_content_id
-            or UUID(binding.id) != receipt.binding_id
+            or binding.id != receipt.binding_id
             or not self._art_lineage_is_intact(admission, evidence, content)
             or evidence.packet_sha256 != request.packet_sha256
         ):
             raise SubmissionAdmissionConsumptionError("submission_bundle_admission_context_changed")
         await self._authorization.validate_replay(
-            self._authority_facts(admission, evidence, request), receipt.decision_id,
+            self._authority_facts(admission, evidence, request), UUID(receipt.decision_id),
         )
         return self._result(admission, request, evidence, binding=binding, replayed=True,
-                            binding_decision_id=receipt.decision_id)
+                            binding_decision_id=UUID(receipt.decision_id))
 
     @staticmethod
     def _art_lineage_is_intact(

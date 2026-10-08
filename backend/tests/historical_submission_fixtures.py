@@ -28,7 +28,9 @@ async def write_historical_submission(factory, context, request):
         revision = await session.scalar(text("SELECT version_num FROM public.alembic_version"))
         assert revision in {
             "0007_checker_output_custody", "0008_checker_execution", "0009_checker_material_lineage",
-            "0010_post_submit_authority", "0017_acceptance_source_contracts",
+            "0010_post_submit_authority", "0011_task_routing_source", "0012_review_packet",
+            "0013_review_source", "0014_final_acceptance", "0015_contribution_awards",
+            "0017_acceptance_source_contracts", "0018_task_routing_request",
             "0020_review_admission_lock_order", "0021_submission_manifest",
             "0022_submission_packet_custody", "0023_remove_task_payment_policy",
         }, "historical seeder cannot write the current schema"
@@ -55,8 +57,9 @@ async def write_historical_submission(factory, context, request):
             resource_type="submission", resource_id=str(submission_id), logical_role="submission_bundle_original",
             scope_version=1, actor_id=admission.actor_profile_id, attribution_type="contributor",
         ))
+        consumed_at = await session.scalar(select(func.now()))
         admission.status = "consumed"
-        admission.consumed_at = await session.scalar(select(func.now()))
+        admission.consumed_at = consumed_at
         admission.consumed_by_submission_id = str(submission_id)
         admission.consumed_by_submission_version = version
         submission.submission_bundle_admission_id = admission.id

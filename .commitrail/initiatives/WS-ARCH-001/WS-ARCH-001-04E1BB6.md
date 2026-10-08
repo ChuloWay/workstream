@@ -109,7 +109,7 @@ content. Reuse them rather than adding another intake or checker implementation.
 - CHECKERS `api/execution.py`, coordination/repository reservation verification;
   shared outbox API/service/repository select-only exact-event verification.
 - One additive Alembic migration and actual PostgreSQL schema fingerprint/reset
-  metadata, Alembic head/allowlist and exact migration-chain tests; model registration and identifier/ownership inventories if required.
+  metadata, Alembic head/allowlist and exact migration-chain tests; model registration and identifier/ownership inventories if required. Reconcile unchanged AUTH structural-debt line spans without changing content hashes or limits.
 - Focused TASK/ART/AUTH/CHECKERS/outbox tests and real PostgreSQL composition,
   replay, concurrency, rollback and direct-SQL tests; new-test lane registration.
   Update current materialization/review/routing fixtures to use the stored request
@@ -117,7 +117,7 @@ content. Reuse them rather than adding another intake or checker implementation.
   use an explicit test-only predecessor-schema seeder preserving their original
   retained-data assertions; no production schema detection or fallback creator.
 - This record, affected current ARCH/AUTH/POL/CON/REV navigation, README,
-  submission/checker/artifact specifications and roadmap; local exports if present.
+  submission/checker/artifact specifications, current system-flow/architecture brief (including its regenerated PDF) and operating manual, and roadmap; local exports if present.
 
 ## Prohibited changes
 
@@ -209,3 +209,13 @@ compatibility path.
   identifier, behavior-ownership and test-lane checks remain required. Exact-head
   hosted completeness, current review conclusions and their provenance belong in
   the PR trust summary rather than durable navigation.
+
+Downstream fixture reconciliation retains the routing status and accepted-assignment
+preconditions as explicit negative cases with no-effects assertions and valid
+controls. CHECKERS tests compare exact committed initial run/request-event IDs
+instead of obsolete empty totals. Sibling and successor fixtures read their actual
+committed requests; only genuine later-generation cases allocate a new request.
+Predecessor migration callers explicitly select the revision-gated historical
+seeder, including Review/Contribution fixture chains. Receipt columns retain their
+referenced owners' canonical-string Python identities and convert at typed UUID
+API boundaries; the native UUID and identity-family tests remain enforced.

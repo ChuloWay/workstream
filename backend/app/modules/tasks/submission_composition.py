@@ -218,17 +218,17 @@ class TaskSubmissionCreationService:
                     or reservation.evaluation_generation != 1):
                 raise SubmissionCreationUnavailable("submission creation is unavailable")
             receipt = SubmissionDispatch(
-                submission_id=submission_id, submission_version=version,
-                project_id=context.locked_project_context.project_id,
-                task_id=request.task_id, assignment_id=request.assignment_id,
-                contributor_id=request.contributor_id, admission_id=request.admission_id,
-                artifact_binding_id=consumed.binding_id, artifact_content_id=consumed.content_id,
-                creation_decision_id=creation_decision_id, binding_decision_id=consumed.binding_decision_id,
+                submission_id=str(submission_id), submission_version=version,
+                project_id=str(context.locked_project_context.project_id),
+                task_id=str(request.task_id), assignment_id=str(request.assignment_id),
+                contributor_id=str(request.contributor_id), admission_id=str(request.admission_id),
+                artifact_binding_id=str(consumed.binding_id), artifact_content_id=str(consumed.content_id),
+                creation_decision_id=str(creation_decision_id), binding_decision_id=str(consumed.binding_decision_id),
                 request_digest=creation_request_digest(request),
                 creation_kind=context.kind, creation_status=context.status,
-                evaluation_request_id=reservation.request_id,
+                evaluation_request_id=str(reservation.request_id),
                 evaluation_request_digest=reservation.request_digest,
-                evaluation_attempt_id=reservation.attempt_id, evaluation_result_id=reservation.result_id,
+                evaluation_attempt_id=str(reservation.attempt_id), evaluation_result_id=str(reservation.result_id),
             )
             event = await self._events.append(evaluation_request_event(receipt))
             receipt.evaluation_event_id = event.event_id
@@ -246,34 +246,34 @@ class TaskSubmissionCreationService:
             task_id=request.task_id, assignment_id=request.assignment_id,
             contributor_id=request.contributor_id, admission_id=request.admission_id,
             predecessor_submission_id=request.predecessor_submission_id,
-            submission_id=receipt.submission_id, submission_version=receipt.submission_version,
+            submission_id=UUID(receipt.submission_id), submission_version=receipt.submission_version,
             task_context=context,
         )
         prepared = await self._authorization.prepare(facts)
         try:
-            await self._authorization.validate_replay(prepared, facts, receipt.creation_decision_id)
+            await self._authorization.validate_replay(prepared, facts, UUID(receipt.creation_decision_id))
             consumed = await self._admissions.read_consumed(SubmissionArtifactReplayRequest(
-                admission_id=request.admission_id, project_id=receipt.project_id,
+                admission_id=request.admission_id, project_id=UUID(receipt.project_id),
                 task_id=request.task_id, assignment_id=request.assignment_id,
-                contributor_id=request.contributor_id, submission_id=receipt.submission_id,
+                contributor_id=request.contributor_id, submission_id=UUID(receipt.submission_id),
                 submission_version=receipt.submission_version,
                 packet_sha256=SubmissionPacketView(request.summary, request.contributor_attestation).sha256,
             ))
             if (consumed.binding_id, consumed.content_id, consumed.binding_decision_id) != (
-                receipt.artifact_binding_id, receipt.artifact_content_id, receipt.binding_decision_id,
+                UUID(receipt.artifact_binding_id), UUID(receipt.artifact_content_id), UUID(receipt.binding_decision_id),
             ):
                 raise SubmissionCreationUnavailable("submission creation is unavailable")
             stored = await self._evaluations.read_reserved_evaluation(
-                project_id=receipt.project_id, task_id=receipt.task_id,
-                submission_id=receipt.submission_id, request_id=receipt.evaluation_request_id,
+                project_id=UUID(receipt.project_id), task_id=UUID(receipt.task_id),
+                submission_id=UUID(receipt.submission_id), request_id=UUID(receipt.evaluation_request_id),
             )
             evaluation, reservation = stored.request, stored.reservation
             if (
                 reservation.request_digest != receipt.evaluation_request_digest
-                or reservation.attempt_id != receipt.evaluation_attempt_id
-                or reservation.result_id != receipt.evaluation_result_id
+                or reservation.attempt_id != UUID(receipt.evaluation_attempt_id)
+                or reservation.result_id != UUID(receipt.evaluation_result_id)
                 or reservation.evaluation_generation != 1
-                or evaluation.assignment_id != receipt.assignment_id
+                or evaluation.assignment_id != UUID(receipt.assignment_id)
                 or evaluation.submission_version != receipt.submission_version
                 or evaluation.binding_id != consumed.binding_id
                 or evaluation.content_id != consumed.content_id

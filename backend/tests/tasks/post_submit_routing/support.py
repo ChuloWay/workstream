@@ -1,29 +1,23 @@
 """Real completed checker sources and direct-SQL routing-source helpers."""
 
 from contextlib import asynccontextmanager
-from dataclasses import asdict
 from types import SimpleNamespace
 from uuid import UUID
 
 from sqlalchemy import select, text
 
-from app.adapters.tasks import submitted_bundle_port
+from app.adapters.checkers import evaluation_coordinator
 from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorIdentityLink
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.checkers.api import (
-    ExpectedPostSubmitContext,
-    ObservedPostSubmitContext,
-)
 from app.modules.checkers.models import CheckerRun
 from app.modules.projects.models import (
     ReviewPolicy,
 )
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.api.post_submit_routing import TaskPostSubmitManifestFacts
-from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.models import Submission, TaskAssignment, WorkstreamTask
 from tests.checkers.execution.support import live_executor, reserve
@@ -337,39 +331,18 @@ async def completed_sibling_source(h):
         )
 
     created = await _create_submission(h, context, task_id, assignment_id)
-    async with h.factory() as session:
-        facts = await submitted_bundle_port(session).read(
-            SubmittedBundleRequest(
-                h.request.project_id,
-                task_id,
-                created.submission_id,
-            )
+    async with h.factory() as session, session.begin():
+        stored = await evaluation_coordinator(session).read_reserved_evaluation(
+            project_id=h.request.project_id, task_id=task_id,
+            submission_id=created.submission_id, request_id=created.evaluation_request_id,
         )
-    expected = ExpectedPostSubmitContext(**asdict(facts.context))
-    structural_input = h.request.structural_input.model_copy(
-        update={"observed_context": ObservedPostSubmitContext(**asdict(facts.context))}
-    )
-    request = change_request(
-        h.request,
-        evaluation_request_id=new_record_id(),
-        evaluation_generation=1,
-        project_id=facts.project_id,
-        task_id=facts.task_id,
-        assignment_id=facts.assignment_id,
-        submission_id=facts.submission_id,
-        submission_version=facts.submission_version,
-        content_id=facts.content_id,
-        binding_id=facts.binding_id,
-        expected_context=expected,
-        structural_input=structural_input,
-    )
+        request = stored.request
     sibling = SimpleNamespace(
         factory=h.factory,
         service=h.service,
         request=request,
         source={},
     )
-    await reserve(sibling)
     result = await live_executor(sibling).evaluate_post_submission(request)
     async with h.factory() as session:
         run = await session.get(CheckerRun, str(result.attempt_id))
@@ -561,8 +534,6 @@ def revision_archive(data):
 
 async def completed_successor_source(h):
     """Evaluate a real successor created through verified ZIP admission."""
-    from app.adapters.checkers import evaluation_coordinator
-
     created = await successor_submission(h)
     data = revision_archive(h.data)
     async with h.factory() as session, session.begin():

@@ -731,24 +731,24 @@ class SubmissionDispatch(Base):
         CheckConstraint("creation_decision_id <> binding_decision_id", name="distinct_authority"),
     )
 
-    submission_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    submission_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     submission_version: Mapped[int] = mapped_column(Integer, nullable=False)
-    project_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
-    task_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
-    assignment_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
-    contributor_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
-    admission_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("submission_bundle_admissions.id", ondelete="RESTRICT"), nullable=False, unique=True)
-    artifact_binding_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("artifact_bindings.id", ondelete="RESTRICT"), nullable=False, unique=True)
-    artifact_content_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("artifact_contents.id", ondelete="RESTRICT"), nullable=False)
-    creation_decision_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False, unique=True)
-    binding_decision_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    assignment_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    contributor_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    admission_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("submission_bundle_admissions.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    artifact_binding_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("artifact_bindings.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    artifact_content_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("artifact_contents.id", ondelete="RESTRICT"), nullable=False)
+    creation_decision_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    binding_decision_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False, unique=True)
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     creation_kind: Mapped[str] = mapped_column(String(16), nullable=False)
     creation_status: Mapped[str] = mapped_column(String(24), nullable=False)
-    evaluation_request_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, unique=True)
+    evaluation_request_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, unique=True)
     evaluation_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
-    evaluation_attempt_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("checker_runs.id", ondelete="RESTRICT"), nullable=False, unique=True)
-    evaluation_result_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, unique=True)
+    evaluation_attempt_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("checker_runs.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    evaluation_result_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, unique=True)
     evaluation_event_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("outbox_events.event_id", ondelete="RESTRICT"), nullable=False, unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
@@ -756,5 +756,6 @@ class SubmissionDispatch(Base):
         """Expose only committed identities, never private request or policy bodies."""
         from app.modules.tasks.api import SubmissionCreationResult
         return SubmissionCreationResult(**{
-            name: getattr(self, name) for name in SubmissionCreationResult.__dataclass_fields__
+            name: UUID(str(getattr(self, name))) if name.endswith("_id") else getattr(self, name)
+            for name in SubmissionCreationResult.__dataclass_fields__
         })

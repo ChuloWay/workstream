@@ -101,7 +101,7 @@ async def test_missing_retained_owners_never_trigger_repair(tmp_path, isolated_d
                 return await original_scalar(session, statement, *args, **kwargs)
             async def read_get(session, entity, ident, **kwargs):
                 if missing == "binding_receipt" and entity is SubmissionBindingReceipt:
-                    assert ident == h.created.admission_id
+                    assert ident == str(h.created.admission_id)
                     seen.append(missing)
                     return None
                 return await original_get(session, entity, ident, **kwargs)

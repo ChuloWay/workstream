@@ -528,12 +528,12 @@ The [dependency and ownership plan](../.commitrail/initiatives/WS-ARCH-001/plann
 owns implementation sequencing. The existing checker phase service supports
 hidden pre-submit execution/replay and hidden durable post-submit execution.
 Exact post-submit service authority and ARCH-04E1A source-only facts/types are
-implemented; automatic dispatch, routing and acceptance remain unavailable.
+implemented; automatic request delivery, routing and acceptance remain unavailable.
 Live setup does not wait for downstream task/checker execution.
 
 The [first complete contributor milestone](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone)
-records the delivered checked-input and capacity steps. Remaining work is
-atomic Submission/dispatch, hidden handlers, authorized outcomes, remediation,
+records the delivered checked-input, capacity and atomic Submission/request
+steps. Remaining work is hidden handlers, authorized outcomes, remediation,
 live activation, public intake and a real end-to-end drill. Human review/revision
 runtime follows that milestone. Initial public intake covers initial submissions
 and checker remediation; the historical requirement to complete human-review
@@ -912,3 +912,5 @@ decisions, use the [Historical Planning Index](historical_planning.md).
 AUTH-19A source-contract boundary: [exact commitments and remaining custody](../.commitrail/initiatives/WS-AUTH-001/WS-AUTH-001-19A.md).
 
 ARCH-04E1B-B3 proof: [verified ZIP metadata custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB3.md).
+
+ARCH-04E1B-B6 proof: [atomic Submission, exact receipts and initial request custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB6.md).

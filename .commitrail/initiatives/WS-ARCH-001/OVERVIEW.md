@@ -4,7 +4,7 @@
 
 Delivery priority: [first complete contributor milestone](planning/PLAN.md#first-complete-contributor-milestone). Use its nine-step order and end-to-end exit proof when selecting the next bounded change; live human review/revision and external integration are later work.
 
-[ARCH-04E1B-B4](WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. Initial dispatch remains next and must bind exact receipts and fresh-authorized replay before connecting workers.
+[ARCH-04E1B-B4](WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. B6 now commits the initial reservation and request event with exact receipts and fresh-authorized replay. Delivery handlers remain next.
 
 [ARCH-04E1B-B3](WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. ARCH-04E1B-B6 commits that content, exact authority, generation-one reservation and shared request event with each new Submission. No delivery handler or routing authority is activated.
 

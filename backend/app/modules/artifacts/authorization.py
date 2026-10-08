@@ -614,7 +614,7 @@ class _PreparedArtifactServiceAuthorization:
         facts: GuideSourceReadAuthorityFacts
         | PreSubmitMaterializationAuthorityFacts
         | SubmissionBindingAuthorityFacts,
-    ) -> UUID:
+    ) -> UUID | None:
         """Consume only the exact handle and facts prepared by this adapter."""
         if (
             self._prepared is None
@@ -631,7 +631,9 @@ class _PreparedArtifactServiceAuthorization:
                 self._input,
                 _artifact_service_resource_context(facts),
             )
-            return decision.decision_id
+            if self._action_id is ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE:
+                return decision.decision_id
+            return None
         except (AuthorizationDenied, PreparedAuthorizationHandleInvalid, ValidationError) as exc:
             raise ArtifactAuthorityDeniedError("artifact service authority is unavailable") from exc
         finally:
@@ -705,7 +707,10 @@ class PreparedSubmissionBindingAuthorization:
             handle = await self._delegate.prepare(
                 facts=facts, idempotency_key=facts.admission_id
             )
-            return await self._delegate.consume(prepared_authorization=handle, facts=facts)
+            decision_id = await self._delegate.consume(prepared_authorization=handle, facts=facts)
+            if not isinstance(decision_id, UUID):
+                raise ArtifactAuthorityDeniedError("artifact binding receipt is unavailable")
+            return decision_id
         except ArtifactAuthorityDeniedError as exc:
             raise SubmissionAdmissionConsumptionError(
                 "submission_bundle_admission_unavailable"

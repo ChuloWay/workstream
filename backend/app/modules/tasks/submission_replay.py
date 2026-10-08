@@ -19,11 +19,11 @@ async def read_creation_replay(
 ) -> tuple[SubmissionDispatch, TaskSubmissionContextFacts] | None:
     """Caller holds TASK; scope all replay selectors before taking child locks."""
     receipt = await session.scalar(select(SubmissionDispatch).where(
-        SubmissionDispatch.project_id == UUID(task.project_id),
-        SubmissionDispatch.task_id == request.task_id,
-        SubmissionDispatch.assignment_id == request.assignment_id,
-        SubmissionDispatch.contributor_id == request.contributor_id,
-        SubmissionDispatch.admission_id == request.admission_id,
+        SubmissionDispatch.project_id == task.project_id,
+        SubmissionDispatch.task_id == str(request.task_id),
+        SubmissionDispatch.assignment_id == str(request.assignment_id),
+        SubmissionDispatch.contributor_id == str(request.contributor_id),
+        SubmissionDispatch.admission_id == str(request.admission_id),
     ).execution_options(populate_existing=True))
     if receipt is None:
         return None

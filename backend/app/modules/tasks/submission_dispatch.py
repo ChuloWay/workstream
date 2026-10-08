@@ -22,7 +22,7 @@ def evaluation_request_event(receipt: SubmissionDispatch) -> OutboxAppendInput:
     """Publish identifiers only; the later handler must recover and reauthorize owners."""
     return OutboxAppendInput(
         event_type=REQUEST_EVENT, event_version=1, aggregate_type="submission",
-        aggregate_id=receipt.submission_id, project_id=receipt.project_id,
+        aggregate_id=UUID(receipt.submission_id), project_id=UUID(receipt.project_id),
         correlation_id=str(receipt.evaluation_request_id),
         idempotency_key="submission-evaluation:" + str(receipt.submission_id),
         payload={

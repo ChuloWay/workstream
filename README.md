@@ -166,8 +166,9 @@ submission packets, immutable artifact storage, pre-submit intake checks,
 and authorized retained submission/checker history. ARCH-04C implements hidden
 durable post-submit execution and unfinished-attempt recovery. ARCH-04D2 supplies
 exact service authority. ARCH-04E1A adds immutable route-neutral TASK source
-storage, detached source facts and accepted-effects contracts;
-automatic dispatch, routing and acceptance remain unavailable. Project-guide ingestion stores original documents,
+storage, detached source facts and accepted-effects contracts. B6 commits each
+new hidden Submission with its initial checker reservation and outbox request;
+automatic request delivery, routing and acceptance remain unavailable. Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
 unified setup agent. Guide metadata in PostgreSQL also holds at least one required
 task example; the agent assesses the examples with the uploaded guide documents.
