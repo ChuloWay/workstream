@@ -221,13 +221,13 @@ coverage tampering before coverage combination.
   lane completion cannot compensate. A lower coverage percentage is not a failure.
 
 After diagnosing a transient failure on the same exact head, rerun only failed
-jobs and their dependents with `gh run rerun RUN_ID --failed`; do not use
-`--all`. Successful lanes not rerun retain their previous attempt's evidence,
-while a rerun lane's newest bundle must independently pass all existing checks.
-The required aggregate job selects those bundles and revalidates the complete
-exact-head union. A failed, cancelled or skipped required job still blocks
-fan-in. Never edit or upload evidence manually. A repeated timeout requires
-diagnosis rather than retries until green.
+jobs and their dependents with `gh run rerun RUN_ID --failed`; avoid the bare
+whole-workflow rerun command for that case. Successful lanes not rerun retain
+their previous attempt's evidence, while a rerun lane's newest bundle must
+independently pass all existing checks. The required aggregate job selects those
+bundles and revalidates the complete exact-head union. A failed, cancelled or
+skipped required job still blocks fan-in. Never edit or upload evidence
+manually. A repeated timeout requires diagnosis rather than retries until green.
 Review submission or dismissal does not rerun Backend because
 it does not change the tested tree. A new PR commit starts a new run and cancels
 the superseded same-PR run. Every new commit requires complete evidence because

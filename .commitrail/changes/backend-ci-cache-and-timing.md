@@ -49,6 +49,8 @@ run only; this record makes no hosted performance claim before a candidate run.
 - `docs/operations_backend_testing.md`: extend the canonical failure/rerun owner
   with the exact failed-job command, repeated-timeout diagnosis, fresh-current-
   tree rule and explicit limits on what the cache optimization can improve.
+- `docker/minio/README.md`: describe trusted-main cache publication, exact
+  content/workflow/platform reuse and the separate per-run artifact binding.
 - `CONTRIBUTING.md`: link contributors to that canonical Backend rerun guidance
   without copying its operational contract.
 - This standalone Commitrail record.
@@ -116,7 +118,7 @@ promise an eight-minute Backend completion time.
 ## Risk and review routing
 
 - Risk class: `L1`
-- Required reviewers: `ci_integrity`, `qa`, `test_delta`
+- Required reviewers: `ci_integrity`, `security`, `qa`, `test_delta`
 - Human review focus: Cross-commit cache trust and invalidation, fresh-install
   preservation, exact artifact/runtime verification, unchanged gate propagation,
   and whether duration output remains diagnostic rather than authoritative.
@@ -126,7 +128,7 @@ promise an eight-minute Backend completion time.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Measured bottlenecks | Inspect PR #507 Backend run `37784941972` job/step timestamps from `/tmp/ws-ci-507-jobs.json` | MinIO build took 145 seconds; repeated lane installs took about 25--28 seconds | Hosted queue and runner variability are uncontrolled |
-| Cache custody | `python -m unittest -v scripts.test_lightweight_agent_gates`; checksum-verified actionlint 1.7.7; cache-key and invalid-context mutants | 19 workflow gates passed; candidate linted cleanly; both mutants were rejected | A real cross-commit hit requires a trusted-main seed and later hosted run |
+| Cache custody | `python -m unittest -v scripts.test_lightweight_agent_gates`; checksum-verified actionlint 1.7.7; cache-key, invalid-context and per-job-install relocation mutants | 19 workflow gates passed; candidate linted cleanly; all three cache/install mutants were rejected | A real cross-commit hit requires a trusted-main seed and later hosted run |
 | Lane diagnostics | Focused lane/evidence pytest batch plus duration-option mutant | 123 tests passed; reverting both commands to `--durations=25` failed the exact lane-command regression | A timed-out pytest process cannot print its final duration table |
 | Full gate preservation | Workflow inventory/fan-in tests, exact diff inspection, Commitrail and Markdown gates | Existing lane count, selection, timeouts, permissions, fan-in and fresh installs remain; repository gates passed | Root owns hosted aggregate validation |
 
@@ -138,6 +140,15 @@ Initial workflow review found that `runner.temp` is not an allowed workflow-leve
 that regression is rejected. Cache trust review also changed both caches to
 restore-only on pull requests and save-on-miss only after trusted-main
 verification.
+
+Documentation review also corrected the `gh` command description: `--failed`
+is the selective form, while the bare command is the whole-workflow rerun; there
+is no `--all` option. The MinIO owner documentation now distinguishes the
+trusted cross-commit cache from each SHA-and-attempt-bound artifact.
+QA review found that a repository-wide install count could miss moving the
+aggregate install into preflight. The regression now inspects preflight, lane
+and aggregate blocks independently and requires exactly one cache restore,
+environment export and fresh install in order; the relocation mutant fails it.
 
 ## Reconciliation
 

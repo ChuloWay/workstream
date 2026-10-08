@@ -295,13 +295,21 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow.count("uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830"),
             2,
         )
-        self.assertEqual(workflow.count('python -m pip install -e ".[dev,agents]"'), 3)
-        self.assertEqual(
-            workflow.count(
-                'echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"'
-            ),
-            3,
+        install = 'python -m pip install -e ".[dev,agents]"'
+        cache_env = 'echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"'
+        job_blocks = (
+            workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split("\n  lanes:\n", 1)[0],
+            workflow.split("\n  lanes:\n", 1)[1].split("\n  cli-public-contract:\n", 1)[0],
+            workflow.split("\n  test:\n", 1)[1],
         )
+        for job in job_blocks:
+            self.assertEqual(job.count("Restore exact backend pip downloads from trusted cache"), 1)
+            self.assertEqual(job.count(install), 1)
+            self.assertEqual(job.count(cache_env), 1)
+            self.assertLess(job.index("Restore exact backend pip downloads"), job.index(cache_env))
+            self.assertLess(job.index(cache_env), job.index(install))
+        self.assertEqual(workflow.count(install), 3)
+        self.assertEqual(workflow.count(cache_env), 3)
         root_env = workflow.split("\nenv:\n", 1)[1].split("\njobs:\n", 1)[0]
         self.assertNotIn("runner.", root_env)
         pip_save = workflow.split(
