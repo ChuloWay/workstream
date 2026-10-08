@@ -25,6 +25,13 @@ PILOT00_RUN_ID=repro ./experiments/pilot00_gvisor_offline/probe.sh all
 PILOT00_RUN_ID=repro ./experiments/pilot00_gvisor_offline/probe.sh cleanup
 ```
 
+The bounded shell regression for daemon readiness uses stubs and requires no
+Docker resources:
+
+```bash
+./experiments/pilot00_gvisor_offline/test_probe.sh
+```
+
 `prepare` is the only network-using phase. It downloads the exact gVisor
 release, pulls digest-pinned harness/builder/base images, and warms the base
 cache. The harness itself starts with `--network none`. `run` mounts the sealed
@@ -37,6 +44,8 @@ lowercase letters, digits or hyphens. The optional `PILOT00_EVIDENCE_ID`
 accepts an ASCII letter or digit followed by at most 47 ASCII letters, digits or
 hyphens; its default is the UTC timestamp form `YYYYMMDDTHHMMSSZ`. Both values
 are rejected before their corresponding resource or evidence path is used.
+Harness startup makes 45 bounded inner-daemon readiness attempts and reports a
+specific readiness failure before any runtime inventory query.
 
 The probe also distinguishes an intentional Dockerfile exit from cache-miss,
 deadline, memory and output-disk failures. It is deliberately small; its

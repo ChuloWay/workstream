@@ -21,6 +21,8 @@ readonly CACHE_DIR="${STATE_DIR}/cache"
 readonly RESULTS_DIR="${STATE_DIR}/results"
 readonly DAEMON_CONFIG="${STATE_DIR}/daemon.json"
 readonly OWNER_LABEL="org.workstream.pilot00.run=${RUN_ID}"
+# shellcheck source=daemon_ready.sh
+source "${SCRIPT_DIR}/daemon_ready.sh"
 
 require_command() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -172,13 +174,7 @@ start_harness() {
       --config-file=/etc/docker/pilot-daemon.json >/dev/null
   fi
 
-  local attempt
-  for attempt in $(seq 1 45); do
-    if docker exec "${DIND_NAME}" docker info >/dev/null 2>&1; then
-      break
-    fi
-    sleep 1
-  done
+  wait_for_daemon "${DIND_NAME}"
   docker exec "${DIND_NAME}" docker info --format '{{json .Runtimes}}' \
     | grep -F 'ws-pilot00-runsc' >/dev/null
 

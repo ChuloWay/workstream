@@ -64,16 +64,20 @@ Installing or registering a runtime on the development host is probe setup, not 
 | Isolation and resources | Builder/oracle launch inspections, in-sandbox assertions and sampled stats under `/tmp/ws-pilot00-replay1/results/20261008T120000Z/` | `runsc`, network none, no socket, builder non-privileged with four bounded in-sandbox capabilities; oracle UID 65532/capability-free; one-CPU build peak sample 27,283,948 bytes and 35 PIDs | Trusted outer DIND is privileged development infrastructure; representative sizing is unproved |
 | Failure classification | Intentional exit, empty cache, forced stop, 16 MiB and 1 MiB output probes in the same replay | Exit 42 stayed a work failure; cache/deadline/OOM/disk cases remained infrastructure candidates | PILOT-04 owns final transport-neutral mapping and retry policy |
 | Rootless BuildKit comparison | Pinned rootless image under gVisor plus ordinary `runc` control | Both controls failed RootlessKit user-namespace setup on this host; no isolation relaxation was adopted | Not a general result for every configured Linux host |
-| Collision and input guards | Same-name foreign-volume probe plus fake-Docker `../../` evidence-ID probe | Exit 73 left the foreign label/data unchanged and created no harness container; exit 64 made zero Docker calls and created no escaped path | Concurrent hostile Docker administration is outside this local experiment |
+| Collision, input and startup guards | Same-name foreign-volume probe, fake-Docker `../../` evidence-ID probe and `experiments/pilot00_gvisor_offline/test_probe.sh` | Exit 73 left the foreign label/data unchanged and created no harness container; exit 64 made zero Docker calls and created no escaped path; immediate and 45-attempt daemon-readiness paths passed | Concurrent hostile Docker administration is outside this local experiment |
 | macOS behavior | Official gVisor platform constraints and honest host inventory | Linux proof only; ordinary Docker Desktop is an explicitly recorded `docker-dev` fallback, not gVisor | No macOS host was available; Apple Silicon and custom VM runtime paths are unverified |
 
 ## Review findings
 
 - A pre-existing same-name outer volume was reusable before its ownership label was checked. The probe now refuses a foreign volume before mounting or starting the privileged harness and rechecks ownership immediately after creation.
 - An operator-supplied evidence ID could escape its results directory. The probe now accepts only a bounded ASCII alphanumeric/hyphen grammar and rejects invalid input before filesystem or Docker access.
+- Exhausted inner-daemon readiness checks previously fell through to an opaque runtime-inventory failure. The probe now stops with an explicit bounded-readiness diagnostic, with stubbed immediate-success and 45-failure controls.
 
 ## Reconciliation
 
-- Current-source reconciliation: Based on `main` `9f774cbbaa84583e19042affc22c7f78b87b50d1`, which includes the merged local pilot stack and fixed-false second-review boundary. The spike changes no backend contract, migration, authority, product composition or workflow.
+- Current-source reconciliation: Reconciled with `main`
+  `b169e83f816bba417fc0618a6e2d419acb2f94ed`, retaining the merged local pilot,
+  checker-delivery and lane-catalogue owners. The spike changes no backend
+  contract, migration, authority, product composition or workflow.
 - Next usable boundary: After review and issue linkage, PILOT-04 can adopt the sealed-cache Kaniko builder and separate gVisor oracle boundary; PILOT-06 still owns checker images and representative fixtures.
 - Remaining risks: Actual hosted infrastructure, representative Terminal-Bench resource limits, cleanup after host loss, byte-reproducible image output and macOS Docker Desktop behavior remain unproved.
