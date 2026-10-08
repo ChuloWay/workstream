@@ -1736,5 +1736,6 @@ retains an immutable admission/binding/decision receipt, required by a deferred
 database guard on each new consumed admission. Existing retained rows are not
 backfilled or deleted; absent receipt custody cannot use current consumed replay.
 The hidden caller transaction commits this receipt with the Submission and its
-initial evaluation request. Delivery, routing authority and public intake remain
-separate pending work.
+initial evaluation request. ARCH-04E1B-B7 consumes that request through a hidden
+handler and the existing exact-byte materializer. Production delivery registration,
+completion routing authority and public intake remain separate pending work.
