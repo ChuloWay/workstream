@@ -40,8 +40,8 @@ contributor original reads and CLI downloads with the same closed media type.
   graph/schema consumers and direct PostgreSQL refusal/acceptance proof.
 - The Go guide-declaration client and current CLI/API documentation for
   `text/markdown`. The merged PILOT-13 task guide DTO/extension/download consumers,
-  their real upload/read fixtures and direct tests are reconciled without copying
-  its implementation.
+  task-read public route metadata, real upload/read fixtures and direct tests are
+  reconciled without copying its implementation.
 - Existing guide API, real PostgreSQL/MinIO intake fixtures, format, setup
   workspace, review-packet, CLI declaration and later PILOT-13 contributor-read
   tests; current README, artifact/guide specifications, roadmap and this record.
@@ -124,6 +124,9 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
 - The CLI public-contract formatter found the Markdown download journey was not
   in canonical Ruff form. The focused integration source is now formatted and
   remains covered by the built-CLI HTTP journey.
+- Final OpenAPI review found the existing task-original GET still advertised
+  only the three predecessor binary formats. Its response metadata and an exact
+  generated-schema regression now include the already-supported Markdown original.
 
 ## Reconciliation
 

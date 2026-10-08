@@ -167,3 +167,25 @@ def test_document_upload_openapi_binary_body_and_bounded_responses():
         assert responses[code]["description"]
         assert responses[code]["content"]["application/json"]["schema"] == {
             "$ref": "#/components/schemas/ApiErrorResponse"}
+
+
+def test_task_guide_download_openapi_lists_exact_supported_original_media_types():
+    from app.core.config import Settings
+    from app.main import create_app
+
+    document = create_app(Settings(environment="test")).openapi()
+    operation = document["paths"][
+        "/api/v1/tasks/{task_id}/guide/documents/{document_id}/content"
+    ]["get"]
+    content = operation["responses"]["200"]["content"]
+
+    assert set(content) == {
+        "application/pdf",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "text/markdown",
+    }
+    assert all(
+        value["schema"] == {"type": "string", "format": "binary"}
+        for value in content.values()
+    )
