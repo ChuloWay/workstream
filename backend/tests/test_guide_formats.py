@@ -237,6 +237,7 @@ def test_fixed_v01_limits_accept_exact_values_and_reject_one_over() -> None:
     (b'{"answer":42}', "application/json", "json"),
     (b"a,b\n1,2\n", "text/csv", "csv"),
     (b"Guide", "text/plain", "upload"),
+    (b"<html><body>Guide</body></html>", "text/html", "upload"),
     (b"\x89PNG\r\n\x1a\n", "image/png", "upload"),
     (b"ID3\x00", "audio/mpeg", "upload"),
     (b"\xff\xfe", "text/plain", "upload"),

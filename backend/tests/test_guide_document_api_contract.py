@@ -27,7 +27,7 @@ def test_current_guide_response_excludes_retained_body():
 @pytest.mark.parametrize("patch", [
     {"source_kind": "url_doc"}, {"source_kind": "rubric"},
     {"ingestion_adapter": "manual_import"},
-    {"media_type": "text/plain"}, {"media_type": "image/png"},
+    {"media_type": "text/plain"}, {"media_type": "text/html"}, {"media_type": "image/png"},
     {"media_type": "audio/wav"}, {"media_type": "application/vnd.ms-powerpoint"},
 ])
 def test_source_metadata_rejects_superseded_or_unsupported_ingress(patch):
