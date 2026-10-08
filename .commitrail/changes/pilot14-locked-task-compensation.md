@@ -55,12 +55,12 @@ migration.
 
 ## Acceptance criteria
 
-- [ ] Unpaid locked rules show `unpaid` for both contribution types in ready and detail responses.
-- [ ] Paid manual-export fixtures show each exact instrument, unit and decimal-string quantity.
-- [ ] Publishing a successor policy cannot move an already-released task's displayed terms.
-- [ ] Active exact-project Submitters and Reviewers see identical terms; absent, revoked and foreign-project roles receive the existing concealed response.
-- [ ] Responses and CLI output contain no adapter binding ID, route key, binding status, policy lifecycle status or other Finance internals.
-- [ ] CLI `task ready` and `task show` validate and display the block through public HTTP.
+- [x] Unpaid locked rules show `unpaid` for both contribution types in ready and detail responses.
+- [x] Paid manual-export fixtures show each exact instrument, unit and decimal-string quantity.
+- [x] Publishing a successor policy cannot move an already-released task's displayed terms.
+- [x] Active exact-project Submitters and Reviewers see identical terms; absent, revoked and foreign-project roles receive the existing concealed response.
+- [x] Responses and CLI output contain no adapter binding ID, route key, binding status, policy lifecycle status or other Finance internals.
+- [x] CLI `task ready` and `task show` validate and display the block through public HTTP.
 
 ## Risk and review routing
 
@@ -72,16 +72,21 @@ migration.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Locked compensation is exact and concealed | Focused real-PostgreSQL API tests | Planned | Final hosted environment remains CI-owned. |
-| CLI validates and renders public output | Built CLI HTTP process tests | Planned | None after the exact-head run. |
-| Repository contracts remain consistent | Required backend, CLI and Agent Gates checks | Planned | Full hosted CI remains external evidence. |
+| Locked compensation is exact and concealed | Isolated real-PostgreSQL locked terms, ready/detail/work-context/public-queue and changed AUTH matrix tests | Passed: 2 locked-term cases, 60 owner projection cases and 7 matrix cases | Full hosted suite remains CI-owned. |
+| CLI validates and renders public output | Built CLI HTTP process tests plus `go test ./...`, `go vet ./...`, `go mod verify` and build | Passed: 12 process cases and all Go checks | None after the post-reconciliation exact-head run. |
+| Repository contracts remain consistent | Ruff, compile, and architecture/module boundary tests | Passed: 39 architecture tests and focused static checks | Agent Gates and full hosted CI remain external evidence. |
 
 ## Review findings
 
-Pending exact-head impact-routed review coordinated by the lead.
+The architecture check found that the first TASK response contract directly
+referenced the CONTRIBUTIONS result type. TASK now owns its immutable response
+DTO and maps from the existing CONTRIBUTIONS public port in repository
+composition; the full module-boundary suite passes. Remaining exact-head
+impact-routed review is coordinated by the lead.
 
 ## Reconciliation
 
-- Current-source reconciliation: Based on `main` at `9f774cbb`; reconcile with merged PR #505 before final freeze.
+- Current-source reconciliation: Rebased on `main` at `3fa0dfb9`, preserving
+  PR #504 submission dispatch; reconcile with merged PR #505 before final freeze.
 - Next usable boundary: Human merge of this bounded PR; payment and fulfillment remain separate work.
 - Remaining risks: None beyond final PR #505 reconciliation, independent review and hosted CI.
