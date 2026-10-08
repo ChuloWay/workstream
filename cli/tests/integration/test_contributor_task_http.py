@@ -223,11 +223,9 @@ def test_contributor_reads_reject_malformed_and_management_disclosure(cli):
             READY | {"compensation": COMPENSATION | {"route_key": "private"}},
             READY
             | {
-                "compensation": COMPENSATION
-                | {"contribution_policy_version_id": "bad"}
+                "compensation": COMPENSATION | {"contribution_policy_version_id": "bad"}
             },
-            READY
-            | {"compensation": COMPENSATION | {"accepted_submission": 2.125}},
+            READY | {"compensation": COMPENSATION | {"accepted_submission": 2.125}},
             READY | {"compensation": COMPENSATION | {"accepted_submission": []}},
             READY
             | {
@@ -239,10 +237,7 @@ def test_contributor_reads_reject_malformed_and_management_disclosure(cli):
                 }
             },
             READY
-            | {
-                "compensation": COMPENSATION
-                | {"accepted_submission": "compensated"}
-            },
+            | {"compensation": COMPENSATION | {"accepted_submission": "compensated"}},
             READY
             | {
                 "compensation": COMPENSATION
@@ -311,11 +306,7 @@ def test_contributor_reads_reject_malformed_and_management_disclosure(cli):
             CONTRIBUTOR | {"project_id": "bad"},
             CONTRIBUTOR | {"deadline_at": "bad"},
             CONTRIBUTOR | {"skill_tags": [None]},
-            CONTRIBUTOR
-            | {
-                "compensation": COMPENSATION
-                | {"binding_status": "active"}
-            },
+            CONTRIBUTOR | {"compensation": COMPENSATION | {"binding_status": "active"}},
         ]
         required = (
             "task_id",

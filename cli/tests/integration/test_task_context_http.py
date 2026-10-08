@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from test_contributor_task_http import COMPENSATION, CONTRIBUTOR
+from test_contributor_task_http import CONTRIBUTOR
 from test_http_boundary import ACTOR, PROJECT, TOKEN, assert_failure, http_fixture
 from test_task_http_boundary import TASK
 

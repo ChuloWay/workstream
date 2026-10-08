@@ -186,7 +186,10 @@ async def exercise_contributor_task_reads(
         await grant(project, peer_profiles["cli-task-reviewer"], role="reviewer")
         reviewer_ready = read(("ready", project), peer_tokens["cli-task-reviewer"])
         reviewer_detail = read(("show", ready_ids[0]), peer_tokens["cli-task-reviewer"])
-        assert reviewer_ready["items"][0]["compensation"] == reviewer_detail["compensation"]
+        assert (
+            reviewer_ready["items"][0]["compensation"]
+            == reviewer_detail["compensation"]
+        )
         await context_reads(ready_ids[0], peer_tokens["cli-task-reviewer"], denied=True)
         for action in ("claim", "start"):
             await mutate(
