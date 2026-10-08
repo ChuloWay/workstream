@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 // MaxGuideDocumentBytes is ART's hard transfer ceiling, not the configured
@@ -27,7 +28,7 @@ type GuideUploadReceipt struct {
 
 // UploadGuideDocument sends the exact original once. Its receipt proves only
 // stored bytes, not setup completion, policy approval or guide activation.
-func (c *Client) UploadGuideDocument(ctx context.Context, project, guide, document string, source io.ReadSeeker, size int64, mediaType, key string) (Result[GuideUploadReceipt], error) {
+func (c *Client) UploadGuideDocument(ctx context.Context, project, guide, document string, source *os.File, size int64, mediaType, key string) (Result[GuideUploadReceipt], error) {
 	var result Result[GuideUploadReceipt]
 	if !validUUID(project) || !validUUID(guide) || !validUUID(document) || !validUUID(key) ||
 		len(project) > 100 || len(guide) > 100 || len(document) > 100 || len(key) > 100 || !guideMediaType(mediaType) {
@@ -36,22 +37,18 @@ func (c *Client) UploadGuideDocument(ctx context.Context, project, guide, docume
 	if source == nil || size <= 0 || size > MaxGuideDocumentBytes {
 		return result, errors.New("upload requires a nonempty bounded original")
 	}
-	digest := sha256.New()
-	if _, err := source.Seek(0, io.SeekStart); err != nil {
-		return result, errors.New("cannot read original")
-	}
-	count, err := io.Copy(digest, io.LimitReader(source, size+1))
-	if err != nil || count != size {
+	initial, err := source.Stat()
+	if err != nil || !initial.Mode().IsRegular() || initial.Size() != size {
 		return result, errors.New("cannot read unchanged original")
 	}
-	expectedHash := "sha256:" + hex.EncodeToString(digest.Sum(nil))
-	if _, err := source.Seek(0, io.SeekStart); err != nil {
-		return result, errors.New("cannot rewind original")
+	expectedHash, err := guideOriginalHash(source, size)
+	if err != nil {
+		return result, err
 	}
 	path := "/api/v1/projects/" + url.PathEscape(project) + "/guides/" + url.PathEscape(guide) +
 		"/documents/" + url.PathEscape(document) + "/content"
 	response, err := c.openBodyRequest(ctx, c.guideHTTP, http.MethodPost, path, "",
-		io.LimitReader(source, size), size, key, "application/json", mediaType)
+		io.NewSectionReader(source, 0, size), size, key, "application/json", mediaType)
 	if err != nil {
 		return result, guideUploadFailure(err)
 	}
@@ -78,7 +75,26 @@ func (c *Client) UploadGuideDocument(ctx context.Context, project, guide, docume
 	if value.Status != "document_stored" && value.Status != "object_confirmed" {
 		return result, guideUploadFailure(&Failure{Code: "guide_document_upload_unconfirmed", Status: response.StatusCode, OutcomeUnknown: true})
 	}
+	// A receipt can confirm the initial prefix even if the caller appended to or
+	// rewrote the local file. Re-read the whole bounded original before success.
+	// Section readers use independent offsets; an early response cannot race a
+	// shared Seek with the HTTP transport's body reader.
+	finalHash, hashErr := guideOriginalHash(source, size)
+	final, statErr := source.Stat()
+	if hashErr != nil || statErr != nil || final.Size() != initial.Size() ||
+		!final.ModTime().Equal(initial.ModTime()) || finalHash != expectedHash {
+		return result, guideUploadFailure(&Failure{Code: "guide_document_upload_source_changed", Status: response.StatusCode, OutcomeUnknown: true})
+	}
 	return Result[GuideUploadReceipt]{Raw: json.RawMessage(raw), Value: value}, nil
+}
+
+func guideOriginalHash(source *os.File, size int64) (string, error) {
+	digest := sha256.New()
+	count, err := io.Copy(digest, io.NewSectionReader(source, 0, size+1))
+	if err != nil || count != size {
+		return "", errors.New("cannot read unchanged original")
+	}
+	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), nil
 }
 
 func guideUploadFailure(err error) error {

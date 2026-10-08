@@ -48,7 +48,8 @@ This is a stored creation receipt, not live readiness. The API reauthorizes
 guide creation replay, unlike project-shell committed recovery.
 `project guide upload PROJECT_ID GUIDE_ID DOCUMENT_ID --file FILE --media-type
 MIME --idempotency-key UUID` streams one declared original through the public
-binary POST. Its exact-byte receipt establishes storage only, not setup readiness,
+binary POST and rechecks the open original's size, modification time and full hash
+before success. Its exact-byte receipt establishes storage only, not setup readiness,
 approval or activation; unconfirmed outcomes require deliberate unchanged-input
 replay. `task guide TASK_ID [--download DIR]` lists or downloads the assigned
 task's locked originals with verified byte identity; setup examples stay private.

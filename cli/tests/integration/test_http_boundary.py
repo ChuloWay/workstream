@@ -90,6 +90,8 @@ def http_fixture():
             response.setdefault("content_lengths", []).append(
                 self.headers.get("Content-Length")
             )
+            if after_body := response.get("after_body"):
+                after_body()
             self.do_GET()
 
         def do_CONNECT(self):  # noqa: N802 - captures attempted HTTPS proxy use

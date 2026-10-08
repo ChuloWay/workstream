@@ -145,7 +145,7 @@ claim/start commands with caller-supplied retry keys, plus governing work-contex
 and locked intake-requirement reads, assigned locked-original listing/download,
 draft project creation, guide declaration
 with illustrative tasks/document selectors, and declared-original upload with
-hash/size-bound storage receipts, using explicit
+hash/size-bound storage receipts and a local-original recheck before success, using explicit
 caller-owned retry keys, with
 text/JSON output. Project inspection preserves
 server-selected full/minimal fields; no public project-list route is invented.

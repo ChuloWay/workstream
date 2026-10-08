@@ -165,6 +165,11 @@ OpenAPI. The CLI sends raw original bytes, not extracted text, JSON or multipart
 It requires a nonempty regular file up to ART's 512MiB hard ceiling; Workstream
 can enforce smaller configured document or aggregate limits. Files are hashed
 and streamed through the same open descriptor without whole-file buffering.
+Before confirming storage, the CLI rechecks that descriptor's size,
+modification time and full hash. An observed change fails with
+`guide_document_upload_source_changed`, `outcome_unknown: true` and no success
+output, because the server may have stored the original bytes already. This is
+not a filesystem lock or an immutable local snapshot.
 Keep the file unchanged during the operation and any later manual replay.
 
 The API owns current exact-project authority, declared-document membership,

@@ -5,6 +5,8 @@ import json
 import os
 from urllib.parse import quote
 
+import pytest
+
 from http2_fixture import goaway_fixture
 from test_contributor_task_mutations import KEY, canonical_error
 from test_guide_create_http import DOCUMENT, GUIDE
@@ -144,6 +146,39 @@ def test_guide_upload_bad_local_files_and_selectors_send_nothing(cli, tmp_path):
         assert_failure(rejected, "invalid_arguments", 2)
         assert "private-file-canary" not in rejected.stderr
         assert requests == []
+
+
+@pytest.mark.parametrize("change", ("append", "truncate", "overwrite_restored_mtime"))
+def test_guide_upload_changed_original_never_confirms_storage(cli, tmp_path, change):
+    path = tmp_path / "changed-original.pdf"
+    path.write_bytes(ORIGINAL)
+    original_stat = path.stat()
+    mutations = []
+
+    def mutate():
+        # The server has received the original bytes, but has not sent
+        # its receipt. No timing sleep or racing test thread is needed.
+        if change == "append":
+            with path.open("ab") as file:
+                file.write(b"appended-but-not-uploaded")
+        elif change == "truncate":
+            with path.open("r+b") as file:
+                file.truncate(len(ORIGINAL) - 1)
+        else:
+            path.write_bytes(b"!" + ORIGINAL[1:])
+            os.utime(path, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+        mutations.append(change)
+
+    with http_fixture() as (origin, response, requests):
+        response.update(status=202, body=json.dumps(receipt()).encode())
+        response["after_body"] = mutate
+        result = invoke(cli, origin, path)
+        assert mutations == [change]
+        assert response["raw_commands"] == [ORIGINAL]
+        assert len(requests) == 1  # No upload retry after a source change.
+        assert_failure(result, "guide_document_upload_source_changed")
+        assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
+        assert str(path) not in result.stderr
 
 
 def test_guide_upload_rejects_receipt_substitution_and_unconfirmed_storage(
