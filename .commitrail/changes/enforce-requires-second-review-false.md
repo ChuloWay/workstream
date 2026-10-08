@@ -18,8 +18,8 @@ policy facts.
 field as an unrestricted boolean. `ReviewPolicy` stores it as a non-null boolean
 without a false-only constraint. The authorized policy writer hashes the field,
 shared locked-policy projection validates it, and the external API drill
-currently submits true on replacement. Migration 0023 is the current stacked
-predecessor and owns the separate obsolete TASK payment cleanup.
+currently submits true on replacement. Migration 0023 is the merged predecessor
+and owns the separate obsolete TASK payment cleanup.
 
 ## Bounded change
 
@@ -87,7 +87,10 @@ No material finding is recorded in this durable change record.
 
 ## Reconciliation
 
-- Current-source reconciliation: stacked on the current obsolete-payment cleanup branch; 0024 extends its 0023 head without changing that migration or cleanup behavior.
+- Current-source reconciliation: current `main` at `235f9e1b` includes the
+  merged obsolete-payment cleanup, local runtime, evaluation-capacity and guide
+  CLI work. Migration 0024 extends the merged 0023 head without changing that
+  migration or cleanup behavior.
 - The existing payment-cleanup proof still upgrades through full Alembic head
   and now checks that result against the canonical current revision lookup.
 - Next usable boundary: second-review/adjudication behavior remains deferred; other pilot work proceeds only after this pull request is merged.
