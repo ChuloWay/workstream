@@ -93,7 +93,11 @@ def test_guide_upload_exact_binary_selectors_receipt_and_safe_text(cli, tmp_path
                     + "/content",
                     "Bearer " + TOKEN,
                 )
-                assert response["commands"][-1] == (media, [KEY.replace("-", "")], ORIGINAL)
+                assert response["commands"][-1] == (
+                    media,
+                    [KEY.replace("-", "")],
+                    ORIGINAL,
+                )
                 assert response["raw_commands"][-1] == ORIGINAL
                 assert response["content_lengths"][-1] == str(len(ORIGINAL))
         response["body"] = json.dumps(
@@ -101,7 +105,9 @@ def test_guide_upload_exact_binary_selectors_receipt_and_safe_text(cli, tmp_path
         ).encode()
         text = invoke(cli, origin, original, output="text")
         assert text.returncode == 0 and text.stderr == "", text.stderr
-        assert text.stdout.startswith("Guide original storage receipt (not guide approval): ")
+        assert text.stdout.startswith(
+            "Guide original storage receipt (not guide approval): "
+        )
         assert text.stdout.count("\n") == 1 and "\x1b" not in text.stdout
         assert all(f'"{field}"' in text.stdout for field in receipt())
         assert len(requests) == 13  # One body per invocation, no authority preflight.
@@ -122,7 +128,9 @@ def test_guide_upload_bad_local_files_and_selectors_send_nothing(cli, tmp_path):
             {"media": "application/pdf\r\nX-Injected: yes"},
         ):
             assert_failure(invoke(cli, origin, path, **kwargs), "invalid_arguments", 2)
-        assert_failure(invoke(cli, origin, tmp_path / "missing"), "invalid_arguments", 2)
+        assert_failure(
+            invoke(cli, origin, tmp_path / "missing"), "invalid_arguments", 2
+        )
         assert_failure(invoke(cli, origin, tmp_path), "invalid_arguments", 2)
         path.write_bytes(b"")
         assert_failure(invoke(cli, origin, path), "invalid_arguments", 2)
@@ -138,7 +146,9 @@ def test_guide_upload_bad_local_files_and_selectors_send_nothing(cli, tmp_path):
         assert requests == []
 
 
-def test_guide_upload_rejects_receipt_substitution_and_unconfirmed_storage(cli, tmp_path):
+def test_guide_upload_rejects_receipt_substitution_and_unconfirmed_storage(
+    cli, tmp_path
+):
     path = tmp_path / "original.pdf"
     path.write_bytes(ORIGINAL)
     invalid = [b"null", b"[]", b"{}", b"{} {}", b"\xff", b"x" * (64 * 1024 + 1)]
@@ -214,7 +224,8 @@ def test_guide_upload_denial_ambiguity_and_credential_reflections(cli, tmp_path)
             (422, canonical_error("invalid_document"), {}, False),
             (
                 403,
-                canonical_error() | {"error": canonical_error()["error"] | {"details": None}},
+                canonical_error()
+                | {"error": canonical_error()["error"] | {"details": None}},
                 {},
                 True,
             ),
@@ -234,7 +245,10 @@ def test_guide_upload_denial_ambiguity_and_credential_reflections(cli, tmp_path)
             previous = len(requests)
             result = invoke(cli, origin, path)
             assert result.returncode == 1 and result.stdout == ""
-            assert json.loads(result.stderr)["error"].get("outcome_unknown", False) is unknown
+            assert (
+                json.loads(result.stderr)["error"].get("outcome_unknown", False)
+                is unknown
+            )
             assert len(requests) == previous + 1
         for token in ("credential_canary_AAA", KEY):
             response.update(

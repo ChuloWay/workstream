@@ -70,14 +70,20 @@ async def guide_world(task_client, monkeypatch):
 
 async def exercise_original_upload(cli, origin, world, tmp_path, monkeypatch):
     """Public creation/upload plus independent stored-original parity; no fake ART."""
-    set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
+    set_dev_actor(
+        monkeypatch, roles="project_manager", subject="project-manager-subject"
+    )
     declaration = tmp_path / "guide.json"
     declaration.write_text(
         json.dumps(
             {
                 "version": "cli-original-upload",
-                "task_examples": [{"content": "Evaluate the evidence against the guide."}],
-                "documents": [{"label": "Instructions.pdf", "media_type": "application/pdf"}],
+                "task_examples": [
+                    {"content": "Evaluate the evidence against the guide."}
+                ],
+                "documents": [
+                    {"label": "Instructions.pdf", "media_type": "application/pdf"}
+                ],
             }
         )
     )
@@ -98,7 +104,9 @@ async def exercise_original_upload(cli, origin, world, tmp_path, monkeypatch):
     )
     assert created.returncode == 0, created.stderr
     guide = json.loads(created.stdout)
-    assert guide["status"] == "draft" and guide["setup"]["status"] == "awaiting_documents"
+    assert (
+        guide["status"] == "draft" and guide["setup"]["status"] == "awaiting_documents"
+    )
     document = guide["documents"][0]["document_id"]
     original = world.originals[0]
     path = tmp_path / "original.pdf"
@@ -148,7 +156,10 @@ async def exercise_original_upload(cli, origin, world, tmp_path, monkeypatch):
         ).one()
         replica = await session.get(ArtifactReplica, put.replica_id)
         assert put.status == "object_confirmed"
-        assert (put.sha256, put.byte_count) == (receipt["sha256"], receipt["byte_count"])
+        assert (put.sha256, put.byte_count) == (
+            receipt["sha256"],
+            receipt["byte_count"],
+        )
         object_ref = replica.provider_object_ref
         attempt_id = put.id
     bootstrap, store = _open_store(get_settings())
@@ -159,7 +170,10 @@ async def exercise_original_upload(cli, origin, world, tmp_path, monkeypatch):
         bootstrap.close()
     replay = await upload()
     assert replay.returncode == 0, replay.stderr
-    assert json.loads(replay.stdout) == receipt | {"status": "object_confirmed", "replayed": True}
+    assert json.loads(replay.stdout) == receipt | {
+        "status": "object_confirmed",
+        "replayed": True,
+    }
     path.write_bytes(original + b"changed")
     conflict = await upload()
     assert conflict.returncode == 1 and conflict.stdout == ""
@@ -180,7 +194,10 @@ async def exercise_original_upload(cli, origin, world, tmp_path, monkeypatch):
             )
         ).one()
         assert current.id == attempt_id and current.replica_id == replica.id
-        assert (current.sha256, current.byte_count) == (receipt["sha256"], len(original))
+        assert (current.sha256, current.byte_count) == (
+            receipt["sha256"],
+            len(original),
+        )
 
 
 @pytest.mark.asyncio
@@ -232,9 +249,16 @@ async def test_installed_cli_reads_and_downloads_real_assigned_originals(
         documents = json.loads(result.stdout)
         assert len(documents) == len(guide_world.originals) == 2
         for document, original in zip(documents, guide_world.originals, strict=True):
-            assert (directory / f"{document['document_id']}.pdf").read_bytes() == original
-        assert "task_examples" not in result.stdout and "PRIVATE SETUP EXAMPLE" not in result.stdout
-        set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
+            assert (
+                directory / f"{document['document_id']}.pdf"
+            ).read_bytes() == original
+        assert (
+            "task_examples" not in result.stdout
+            and "PRIVATE SETUP EXAMPLE" not in result.stdout
+        )
+        set_dev_actor(
+            monkeypatch, roles="project_manager", subject="project-manager-subject"
+        )
         revoke = await task_client.post(
             f"/api/v1/projects/{guide_world.project['id']}/role-grants/{guide_world.grant['grant_id']}/revoke",
             headers=auth_headers(),
