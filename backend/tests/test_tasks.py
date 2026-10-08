@@ -1510,9 +1510,6 @@ async def test_screening_locks_exact_activated_policy_context(
         persisted_task.locked_post_submit_checker_policy_hash
         == expected_post_submit_policy["policy_hash"]
     )
-    assert persisted_task.base_amount is None
-    assert persisted_task.currency is None
-    assert persisted_task.payout_type is None
 
 
 async def test_release_rejects_crossed_post_submit_policy_sidecar(
@@ -2411,7 +2408,6 @@ async def test_database_rejects_submission_without_post_submit_policy_context(
             locked_revision_policy_id=task.locked_revision_policy_id,
             locked_revision_policy_generation=task.locked_revision_policy_generation,
             locked_revision_policy_hash=task.locked_revision_policy_hash,
-            locked_payment_policy_version=task.locked_payment_policy_version,
             locked_guide_source_snapshot_id=task.locked_guide_source_snapshot_id,
             locked_guide_source_snapshot_hash=task.locked_guide_source_snapshot_hash,
             locked_effective_project_submission_artifact_policy_id=(
@@ -2913,7 +2909,7 @@ async def test_released_assignment_does_not_block_new_active_assignment(
         await session.commit()
 
 
-async def test_task_metadata_round_trips_without_obsolete_payment_stamping(task_client: AsyncClient) -> None:
+async def test_task_metadata_round_trips(task_client: AsyncClient) -> None:
     project = await create_active_project(task_client)
     ready_task = await create_ready_task(task_client, project["id"])
 
@@ -2923,7 +2919,6 @@ async def test_task_metadata_round_trips_without_obsolete_payment_stamping(task_
     assert task is not None
     assert task.skill_tags == ["stem", "proofs"]
     assert task.source_payload_hash == "hash-123"
-    assert task.base_amount is None
 
 
 @pytest.mark.parametrize("transition", ("screen", "release"))

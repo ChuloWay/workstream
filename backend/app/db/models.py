@@ -51,7 +51,6 @@ from app.modules.projects.models import (  # noqa: F401
     GuideSourceSnapshot,
     GuideSourceSnapshotItem,
     GuideSufficiencyReport,
-    PaymentPolicy,
     PostSubmitCheckerPolicy,
     PreSubmitCheckerPolicy,
     Project,

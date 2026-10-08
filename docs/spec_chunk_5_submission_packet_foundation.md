@@ -70,7 +70,6 @@ Chunk 5 stores package and evidence references. Actual file storage still belong
 - `locked_revision_policy_id`
 - `locked_revision_policy_generation`
 - `locked_revision_policy_hash`
-- `locked_payment_policy_version`
 - `submitted_at`
 - `locked_at`
 - `supersedes_submission_id`
@@ -216,17 +215,17 @@ Chunk 5 writes task audit events with submission identifiers in `event_payload`.
   version `1` after blocking pre-submit checks pass
 - Contributor does not provide locked guide source snapshot, effective project
   submission artifact policy, project pre-submit checker, or
-  guide/checker/review/revision/payment policy context
+  guide/checker/review/revision/contribution policy context
 - Contributor-provided locked guide source snapshot, effective project
   submission artifact policy, project pre-submit checker, or
-  guide/checker/review/revision/payment policy context fields are rejected by
+  guide/checker/review/revision/contribution policy context fields are rejected by
   the API schema
 - Contributor-provided submission version fields are rejected by the API schema
 - Contributor-provided checker names, checker outcomes, evidence ids, and
   checker run ids are rejected by the API schema
 - no standalone JSON precheck route or response schema remains
 - blocking hidden ZIP preparation returns `pre_submission_checker_failed`, creates no submission row or version, and emits no submission-created event; structured public feedback remains pending
-- Workstream stamps locked guide source snapshot ids/hashes, effective project submission artifact policy ids/hashes, project pre-submit checker policy ids/bundle hashes, and guide/checker/review/revision/payment policy versions from task context
+- Workstream stamps locked guide source snapshot ids/hashes, effective project submission artifact policy ids/hashes, project pre-submit checker policy ids/bundle hashes, and guide/checker/review/revision/contribution policy versions from task context
 - task moves to `SUBMITTED`
 - submitted packet is automatically locked and enters the current post-submit checker gate
 - dispatch failures after packet locking are visible as repairable automatic

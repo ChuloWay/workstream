@@ -53,12 +53,12 @@ currentness proof stay within 04E1B-B, before activation and live composition.
 | [WS-ARCH-001-03B7](../WS-ARCH-001-03B7.md) | Immutable contributor and management requirements through one historical translator and scoped lock | L1 | Complete; exact Contributor and Manager requirements authority/public access delivered by 03C5 |
 | [WS-ARCH-001-03B8](../WS-ARCH-001-03B8.md) | Bounded immutable task audit evidence with atomic project scope and exact transition references | L1 | Complete; Audit Authority/public activation delivered by 03C7; assignment hidden invalidation delivered by 03B9; 03C1 exact feature authority complete; producer/registration complete in 03C2 |
 | [WS-ARCH-001-03B9](../WS-ARCH-001-03B9.md) | Hidden exact-assignment authority invalidation with committed cause, chronology and same-transaction delivery fence | L1 | Complete; 03C1 authority and 03C2 atomic publication/registration delivered |
-| `WS-ARCH-001-02I` | Admission-only public API/dispatch cutover and removal of legacy route reachability; physical economic cleanup remains CP09 after zero consumers | L1 | Planned after first-layer runtime and checker remediation; initial and checker-remediation intake only. Human-review revisions follow their own live boundary |
+| `WS-ARCH-001-02I` | Admission-only public API/dispatch cutover and removal of legacy route reachability; obsolete economic storage removal is complete through migration 0023 and is separate from this public cutover | L1 | Planned after first-layer runtime and checker remediation; initial and checker-remediation intake only. Human-review revisions follow their own live boundary |
 | [WS-ARCH-001-CP05](../WS-ARCH-001-CP05.md) | AUTH exact ContributionPolicy activation | L1 | Complete; exact policy authority delivered in PR #387 |
 | [WS-ARCH-001-CP06](../WS-ARCH-001-CP06.md) | CON guide-activation/revision policy-validation port | L1 | Complete; explicit version/purpose validation and shared current resource fences |
 | [WS-ARCH-001-CP07](../WS-ARCH-001-CP07.md) | PROJECTS hidden activation/binding and replacement readiness guard | L1 | Complete; AUTH-12H authority and AUTH-18 public manager activation/context delivered |
 | [WS-ARCH-001-CP08](chunks/WS-ARCH-001-CP08-task-attempt-policy-lineage.md) | TASK/Assignment/Submission policy-lineage schema, public facts and minimal existing writers | L1 | Complete; schema and minimal writers delivered together; public TASK authority delivered through 03C7 |
-| [WS-ARCH-001-CP09](chunks/WS-ARCH-001-CP09-legacy-economic-removal.md) | Physical retired economic-path cleanup coordination | L1 | Planned after all legacy consumers, including CHECKERS/public 02I, are replaced; not an allow_review dependency |
+| [WS-ARCH-001-CP09](chunks/WS-ARCH-001-CP09-legacy-economic-removal.md) | Historical economic-path cleanup coordination | L1 | Superseded by migration 0023 and the completed bounded cleanup; no pending removal or public 02I prerequisite |
 | [WS-ARCH-001-03A](chunks/WS-ARCH-001-03A-project-current-generation-api.md) | PROJECT current approved unified-generation public facts | L1 | Complete; active/frozen context reuses activation custody; CP08 lineage and public TASK consumers delivered |
 | [WS-ARCH-001-03B](chunks/WS-ARCH-001-03B-task-assignment-api.md) | TASK readiness, claim, assignment and locked-context public commands/facts | L1 | Complete through 03B9; public TASK authority and exposure delivered through 03C7 |
 | [WS-ARCH-001-03C1](../WS-ARCH-001-03C1.md) | Exact fixed-service assignment reconciliation authority and decision-bound receipts | L1 | Complete; no producer or production handler registration |
@@ -80,8 +80,9 @@ currentness proof stay within 04E1B-B, before activation and live composition.
 | [WS-ARCH-001-03D](../WS-ARCH-001-03D.md) | Exact activated historical guide through hidden durable intake; obsolete lookup removed | L1 | Complete; hidden exact post-submit materialization, ARCH-04B2 output custody, ARCH-04C execution, ARCH-04D1/04D2 custody/authority and ARCH-04E1A source-only facts/types delivered; public cutover remains deferred |
 | [WS-ARCH-001-04F](chunks/WS-ARCH-001-04F-checker-remediation.md) | Contributor-correctable checker failures and same-lineage admission-backed replacement Submission | L1 | Planned from required hidden 04E result/handler contracts; before false-policy activation and public 02I, without requiring live human review |
 
-CP09, 04E and 04F are coordination parents, not permission for multi-owner PRs.
-Only CP09 and 04F are outside the `allow_review` critical path; 04E's children
+CP09 coordination is superseded by the completed physical cleanup. 04E and 04F
+remain coordination parents, not permission for multi-owner PRs.
+04F is outside the `allow_review` critical path; 04E's children
 deliver that boundary. Each remaining implementation
 expands its current child contract into one existing-initiative change record
 with exact paths, schema head, proof commands and impact-routed reviewers.

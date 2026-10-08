@@ -10,7 +10,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 from app.db import session as db_session
-from app.modules.projects.models import PaymentPolicy, ProjectGuide
+from app.modules.projects.models import ProjectGuide
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask
 from tests.test_tasks import (
     task_database_env as task_database_env,
@@ -43,13 +43,7 @@ async def test_no_payment_screen_claim_and_start_copy_exact_guide_policy(task_cl
         )
         assert assignment.project_id == project["id"]
         assert stored.status == "in_progress"
-        assert stored.locked_payment_policy_version is None
-        assert (
-            await session.scalar(
-                select(PaymentPolicy).where(PaymentPolicy.project_id == project["id"])
-            )
-            is None
-        )
+
 
 
 async def test_assignment_insert_rejects_same_project_wrong_stamp_direct_sql(task_client):

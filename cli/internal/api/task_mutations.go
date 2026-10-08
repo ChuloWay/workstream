@@ -23,7 +23,6 @@ type MutationTask struct {
 	LockedRevisionPolicyID            string   `json:"locked_revision_policy_id"`
 	LockedRevisionPolicyGeneration    int      `json:"locked_revision_policy_generation"`
 	LockedRevisionPolicyHash          string   `json:"locked_revision_policy_hash"`
-	LockedPaymentPolicyVersion        *string  `json:"locked_payment_policy_version"`
 	SourceType                        string   `json:"source_type"`
 	Title                             string   `json:"title"`
 	Description                       string   `json:"description"`
@@ -31,9 +30,6 @@ type MutationTask struct {
 	Difficulty                        *string  `json:"difficulty"`
 	SkillTags                         []string `json:"skill_tags"`
 	EstimatedTimeMinutes              *int     `json:"estimated_time_minutes"`
-	BaseAmount                        *string  `json:"base_amount"`
-	Currency                          *string  `json:"currency"`
-	PayoutType                        *string  `json:"payout_type"`
 	Status                            string   `json:"status"`
 	AcceptanceCriteria                *string  `json:"acceptance_criteria"`
 	RejectionCriteria                 *string  `json:"rejection_criteria"`
@@ -61,7 +57,6 @@ type ClaimedTask struct {
 }
 
 var policyHash = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-var decimalAmount = regexp.MustCompile(`^[+-]?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$`)
 
 func (c *Client) taskWrite(ctx context.Context, selector, action, key string, reason *string) (json.RawMessage, error) {
 	if _, ok := uuidIdentity(selector); !ok || len(selector) > 100 {
@@ -148,8 +143,7 @@ func decodeMutationTask(raw json.RawMessage, selector, status string) (MutationT
 		task.LockedReviewPolicyGeneration < 1 || task.LockedRevisionPolicyGeneration < 1 ||
 		!policyHash.MatchString(task.LockedReviewPolicyHash) || !policyHash.MatchString(task.LockedRevisionPolicyHash) ||
 		task.Status != status || !validTime(task.CreatedAt) || !validTime(task.UpdatedAt) ||
-		(task.DeadlineAt != nil && !validTime(*task.DeadlineAt)) ||
-		(task.BaseAmount != nil && !decimalAmount.MatchString(*task.BaseAmount)) {
+		(task.DeadlineAt != nil && !validTime(*task.DeadlineAt)) {
 		return task, &Failure{Code: "invalid_api_response"}
 	}
 	return task, nil

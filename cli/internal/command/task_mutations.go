@@ -62,7 +62,7 @@ func writeMutationTask(w io.Writer, t api.MutationTask) error {
 	}); err != nil {
 		return err
 	}
-	_, err := fmt.Fprintf(w, "Description: %s\nAcceptance criteria: %s\nRejection criteria: %s\nSource type: %s\nContribution policy: %s\nGuide version: %s\nReview policy: %s\nReview generation: %d\nReview hash: %s\nRevision policy: %s\nRevision generation: %d\nRevision hash: %s\nPayment policy: %s\nBase amount: %s\nCurrency: %s\nPayout type: %s\n",
-		safeText(t.Description), optional(t.AcceptanceCriteria), optional(t.RejectionCriteria), safeText(t.SourceType), safeText(t.LockedContributionPolicyVersionID), safeText(t.LockedGuideVersion), safeText(t.LockedReviewPolicyID), t.LockedReviewPolicyGeneration, safeText(t.LockedReviewPolicyHash), safeText(t.LockedRevisionPolicyID), t.LockedRevisionPolicyGeneration, safeText(t.LockedRevisionPolicyHash), optional(t.LockedPaymentPolicyVersion), optional(t.BaseAmount), optional(t.Currency), optional(t.PayoutType))
+	_, err := fmt.Fprintf(w, "Description: %s\nAcceptance criteria: %s\nRejection criteria: %s\nSource type: %s\nContribution policy: %s\nGuide version: %s\nReview policy: %s\nReview generation: %d\nReview hash: %s\nRevision policy: %s\nRevision generation: %d\nRevision hash: %s\n",
+		safeText(t.Description), optional(t.AcceptanceCriteria), optional(t.RejectionCriteria), safeText(t.SourceType), safeText(t.LockedContributionPolicyVersionID), safeText(t.LockedGuideVersion), safeText(t.LockedReviewPolicyID), t.LockedReviewPolicyGeneration, safeText(t.LockedReviewPolicyHash), safeText(t.LockedRevisionPolicyID), t.LockedRevisionPolicyGeneration, safeText(t.LockedRevisionPolicyHash))
 	return err
 }

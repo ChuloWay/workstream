@@ -13,6 +13,11 @@ Manager task detail and requirements. ARCH-03C6 exposes the three distinct
 locked-context reads with exact current grants. Public Submission cutover remains pending;
 the [capability ledger](roadmap_status.md) identifies its owner.
 
+Task responses and immutable command receipts contain no task-local payment
+amount, currency, payout type or guide-keyed payment-policy stamp. Compensation
+terms are governed by the locked ContributionPolicyVersion and resulting awards.
+TASK and Submission storage do not retain a parallel PaymentPolicy lineage.
+
 ## Records and ownership
 
 - `ActorProfile` and `ActorIdentityLink` are canonical actor and external
