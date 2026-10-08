@@ -106,3 +106,27 @@ async def test_new_false_request_requires_current_project_manager_authority(
     assert denied.status_code == 403, denied.text
     current = await _selected(project["id"], guide["version"])
     assert current.id == prior.id and current.human_review_required is True
+
+
+async def test_public_policy_input_rejects_second_review_before_any_write(project_client):
+    project = await create_project(project_client)
+    guide = await create_guide(project_client, project["id"], complete_guide_payload())
+    prior = await _selected(project["id"], guide["version"])
+    response = await project_client.put(
+        f"/api/v1/projects/{project['id']}/guides/{guide['id']}/review-policy",
+        headers=auth_headers()
+        | {
+            "If-Match": policy_selector_etag(
+                prior.id, prior.policy_generation, prior.policy_hash
+            )
+        },
+        json={
+            "review_preference_window_seconds": 3600,
+            "review_lease_duration_seconds": 1800,
+            "requires_second_review": True,
+        },
+    )
+    assert response.status_code == 422, response.text
+    assert "requires_second_review" in response.text
+    current = await _selected(project["id"], guide["version"])
+    assert (current.id, current.policy_hash) == (prior.id, prior.policy_hash)

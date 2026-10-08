@@ -35,12 +35,25 @@ def test_policy_input_retains_presence_and_boolean(value):
     assert "human_review_required" in explicit.model_fields_set
 
 
+def test_second_review_is_false_in_input_and_immutable_lineage():
+    values = _review_payload().model_dump()
+    assert ReviewPolicyInput.model_validate(values).requires_second_review is False
+    assert ReviewPolicySemantics.model_validate(values).requires_second_review is False
+    for model in (ReviewPolicyInput, ReviewPolicySemantics):
+        with pytest.raises(ValidationError, match="requires_second_review"):
+            model.model_validate({**values, "requires_second_review": True})
+
+
 def test_v1_exact_hash_and_v2_modes_are_distinct():
     values = _review_payload().model_dump(exclude={"human_review_required"})
     legacy_hash = canonical_json_hash(
         {"domain": "workstream.review_policy.v1", "semantics": values}
     )
     current = ReviewPolicySemantics.model_validate(values)
+    assert legacy_hash == "sha256:82f8328a9f177d2449a95da4a5a806d7d5bfc086a2c872a6e49d8f1f058c6274"
+    assert policy_digest("review", current) == (
+        "sha256:e34f508e9e70e107d55271e1656f759d35b16b96a5a72c6ba87d28f2e5ee05de"
+    )
     assert policy_digest("review", current, review_semantics_format="v1") == legacy_hash
     require_complete_policy(
         kind="review",

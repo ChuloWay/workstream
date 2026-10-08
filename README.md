@@ -58,7 +58,11 @@ Pre-submission and post-submission checking are different stages:
 The v0.1 project setting `human_review_required` defaults to `true` in the
 existing locked ReviewPolicy. After required post-submit checks pass, true
 requires human review; false uses an authorized automated FinalAcceptance and
-submitter ContributionRecord, with no reviewer contribution. This branch is
+submitter ContributionRecord, with no reviewer contribution.
+The separate `requires_second_review` policy field is [fixed to `false`](.commitrail/changes/enforce-requires-second-review-false.md)
+at input, immutable lineage, and database boundaries; second-review and
+adjudication behavior remain deferred.
+This branch is
 not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is implemented for configuration, and the hidden submitter participant can
 stage or exactly replay its complete frozen award set. Shared acceptance, TASK

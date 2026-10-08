@@ -80,6 +80,8 @@ automated acceptance path. This is
 guide-bound policy configuration, not permission granted by writing this
 template. False produces no reviewer contribution; adjudication is not part
 of this v0.1 setting.
+Set `requires_second_review: false`; this is the only supported v0.1 value and
+does not create a second review or adjudication path.
 
 Accepted work must be specific, auditable, and aligned with this guide. Avoid broad statements like "good quality" unless they are backed by concrete criteria.
 
