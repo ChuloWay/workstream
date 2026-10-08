@@ -79,8 +79,11 @@ PILOT00_RUN_ID=repro ./experiments/pilot00_gvisor_offline/probe.sh cleanup
 `prepare` is the network-using trusted phase. `run` is offline and produces
 machine-readable results, launch inspection, logs and point-in-time resource
 samples. `cleanup` removes only the labeled outer container and volume for its
-run ID. The script rejects run IDs outside its narrow naming grammar and refuses
-to clean a container or volume without its ownership label.
+run ID. Run IDs accept a lowercase letter or digit plus up to 30 lowercase
+letters, digits or hyphens. Optional evidence IDs accept an ASCII letter or
+digit plus up to 47 ASCII letters, digits or hyphens. The script validates each
+before using it and refuses to mount, start or clean a container or volume
+without its ownership label.
 
 The final Linux replay used these identities:
 

@@ -64,11 +64,13 @@ Installing or registering a runtime on the development host is probe setup, not 
 | Isolation and resources | Builder/oracle launch inspections, in-sandbox assertions and sampled stats under `/tmp/ws-pilot00-replay1/results/20261008T120000Z/` | `runsc`, network none, no socket, builder non-privileged with four bounded in-sandbox capabilities; oracle UID 65532/capability-free; one-CPU build peak sample 27,283,948 bytes and 35 PIDs | Trusted outer DIND is privileged development infrastructure; representative sizing is unproved |
 | Failure classification | Intentional exit, empty cache, forced stop, 16 MiB and 1 MiB output probes in the same replay | Exit 42 stayed a work failure; cache/deadline/OOM/disk cases remained infrastructure candidates | PILOT-04 owns final transport-neutral mapping and retry policy |
 | Rootless BuildKit comparison | Pinned rootless image under gVisor plus ordinary `runc` control | Both controls failed RootlessKit user-namespace setup on this host; no isolation relaxation was adopted | Not a general result for every configured Linux host |
+| Collision and input guards | Same-name foreign-volume probe plus fake-Docker `../../` evidence-ID probe | Exit 73 left the foreign label/data unchanged and created no harness container; exit 64 made zero Docker calls and created no escaped path | Concurrent hostile Docker administration is outside this local experiment |
 | macOS behavior | Official gVisor platform constraints and honest host inventory | Linux proof only; ordinary Docker Desktop is an explicitly recorded `docker-dev` fallback, not gVisor | No macOS host was available; Apple Silicon and custom VM runtime paths are unverified |
 
 ## Review findings
 
-No review finding has produced a durable source change.
+- A pre-existing same-name outer volume was reusable before its ownership label was checked. The probe now refuses a foreign volume before mounting or starting the privileged harness and rechecks ownership immediately after creation.
+- An operator-supplied evidence ID could escape its results directory. The probe now accepts only a bounded ASCII alphanumeric/hyphen grammar and rejects invalid input before filesystem or Docker access.
 
 ## Reconciliation
 

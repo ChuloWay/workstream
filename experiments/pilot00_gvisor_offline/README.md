@@ -32,6 +32,12 @@ cache read-only and produces JSON, logs, launch inspection and sampled resource
 statistics beneath `/tmp/ws-pilot00-<run-id>/results/`. `cleanup` removes only
 the labeled container and volume for that run ID and retains the evidence.
 
+`PILOT00_RUN_ID` accepts a lowercase letter or digit followed by at most 30
+lowercase letters, digits or hyphens. The optional `PILOT00_EVIDENCE_ID`
+accepts an ASCII letter or digit followed by at most 47 ASCII letters, digits or
+hyphens; its default is the UTC timestamp form `YYYYMMDDTHHMMSSZ`. Both values
+are rejected before their corresponding resource or evidence path is used.
+
 The probe also distinguishes an intentional Dockerfile exit from cache-miss,
 deadline, memory and output-disk failures. It is deliberately small; its
 measurements are a feasibility floor, not Terminal-Bench production sizing.

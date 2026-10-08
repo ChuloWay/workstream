@@ -41,6 +41,26 @@ assert_owned_container() {
   [[ "$(docker inspect --format '{{index .Config.Labels "org.workstream.pilot00.run"}}' "${name}")" == "${RUN_ID}" ]]
 }
 
+assert_owned_volume() {
+  local name="$1"
+  [[ "$(docker volume inspect --format '{{index .Labels "org.workstream.pilot00.run"}}' "${name}")" == "${RUN_ID}" ]]
+}
+
+ensure_owned_volume() {
+  if docker volume inspect "${DIND_VOLUME}" >/dev/null 2>&1; then
+    assert_owned_volume "${DIND_VOLUME}" || {
+      echo "refusing volume not owned by this probe: ${DIND_VOLUME}" >&2
+      exit 73
+    }
+  else
+    docker volume create --label "${OWNER_LABEL}" "${DIND_VOLUME}" >/dev/null
+    assert_owned_volume "${DIND_VOLUME}" || {
+      echo "refusing volume not owned by this probe: ${DIND_VOLUME}" >&2
+      exit 73
+    }
+  fi
+}
+
 prepare_tools() {
   mkdir -p "${TOOLS_DIR}"
   if [[ ! -f "${TOOLS_DIR}/gvisor.tar.zstd" ]]; then
@@ -124,6 +144,7 @@ JSON
 start_harness() {
   mkdir -p "${RESULTS_DIR}"
   write_daemon_config
+  ensure_owned_volume
   if docker inspect "${DIND_NAME}" >/dev/null 2>&1; then
     assert_owned_container "${DIND_NAME}" || {
       echo "refusing container not owned by this probe: ${DIND_NAME}" >&2
@@ -133,7 +154,6 @@ start_harness() {
       docker start "${DIND_NAME}" >/dev/null
     fi
   else
-    docker volume create --label "${OWNER_LABEL}" "${DIND_VOLUME}" >/dev/null
     docker run -d \
       --name "${DIND_NAME}" \
       --label "${OWNER_LABEL}" \
@@ -263,11 +283,15 @@ capture_builder_boundary() {
 }
 
 run_probe() {
+  local evidence_id="${PILOT00_EVIDENCE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
+  [[ "${evidence_id}" =~ ^[A-Za-z0-9][A-Za-z0-9-]{0,47}$ ]] || {
+    echo "PILOT00_EVIDENCE_ID must match [A-Za-z0-9][A-Za-z0-9-]{0,47}" >&2
+    exit 64
+  }
   assert_owned_container "${DIND_NAME}" || {
     echo "run prepare first" >&2
     exit 69
   }
-  local evidence_id="${PILOT00_EVIDENCE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
   local host_result_dir="${RESULTS_DIR}/${evidence_id}"
   local inner_result_dir="/evidence/results/${evidence_id}"
   local inner_output_dir="${inner_result_dir}/output"
@@ -513,7 +537,7 @@ cleanup() {
     docker rm "${DIND_NAME}" >/dev/null
   fi
   if docker volume inspect "${DIND_VOLUME}" >/dev/null 2>&1; then
-    [[ "$(docker volume inspect --format '{{index .Labels "org.workstream.pilot00.run"}}' "${DIND_VOLUME}")" == "${RUN_ID}" ]] || {
+    assert_owned_volume "${DIND_VOLUME}" || {
       echo "refusing volume not owned by this probe: ${DIND_VOLUME}" >&2
       exit 73
     }
