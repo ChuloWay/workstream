@@ -42,13 +42,16 @@ identity and completely hash/count bounded bytes in canonical scratch.
   and this standalone record.
 - Existing MCP authorization-context snapshot: synchronize only its transitive
   `ActionId` enum, canonical digest and backend capture reference; no new tools.
+- Existing FastAPI requirement and lock metadata: require at least 0.118.0 for
+  request-yield resource lifetime during streaming; retain the resolved version
+  and dependency graph.
 
 ### Not allowed
 
 No examples in contributor projections; no new guide/lock/storage tables or
 per-task copies; no draft/newer/foreign reads; no broad management authority,
 setup-agent changes, upload/presigned-URL subsystem, compatibility variants,
-review/rebase implementation, frontend/MCP capabilities, dependencies, CI
+review/rebase implementation, frontend/MCP capabilities, new dependencies, CI
 weakening or merge. The existing MCP snapshot synchronization above is the only
 adapter change.
 
@@ -84,6 +87,10 @@ adapter change.
   read evidence before serving immutable prepared bytes. A request-scoped yield
   dependency owns provider/preparation cleanup even on disconnect/cancellation.
   No unauthenticated URL, ranges, caller provider key or first-pass streaming.
+  FastAPI must be at least 0.118.0: earlier supported versions could close
+  yielded resources before delivery. The existing resolved dependency version
+  remains unchanged; the native response/disconnect proof guards this lifetime.
+  See the [upstream streaming dependency contract](https://fastapi.tiangolo.com/advanced/advanced-dependencies/#dependencies-with-yield-and-streamingresponse-technical-details).
 - CLI downloads only fixed same-origin public paths reconstructed from validated
   task/document UUIDs; never follow arbitrary response URLs or redirects. Use
   generated UUID/media-extension names, private bounded temporary files, verify
