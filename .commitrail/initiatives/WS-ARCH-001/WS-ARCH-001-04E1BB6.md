@@ -1,14 +1,14 @@
 # ARCH-04E1B-B6 — Atomic Submission and initial evaluation dispatch
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: the existing hidden Submission command commits
   verified admission consumption, immutable Submission/binding, their exact AUTH
   receipts, the initial CHECKERS reservation, TASK evaluation-pending state and
   one shared outbox request together. Exact replay revalidates authority without
   another allow, generation, binding or event.
 
-## Intent and concrete gap
+## Intent
 
 Complete step 3 of the [first contributor milestone](planning/PLAN.md#first-complete-contributor-milestone).
 The existing creator allocates a new Submission on every call, discards creation
@@ -18,7 +18,7 @@ append can create missing rows, so they cannot establish complete stored replay.
 B3/B4/B5 already supply exact files, checked packet custody and representable
 content. Reuse them rather than adding another intake or checker implementation.
 
-## Bounded design
+## Bounded change
 
 1. Extend `TaskSubmissionCreationService` and its existing transactional adapter;
    do not retain a second creator. The command uses admission identity as
@@ -128,7 +128,7 @@ intake path, compatibility alias, retained-data rewrite or weakened test/CI gate
 Required existing successor lineage proofs remain and use this same creator;
 this chunk does not authorize live human revision.
 
-## Acceptance and proof
+## Acceptance criteria
 
 1. Real PostgreSQL and a genuinely prepared/verified ZIP produce exactly one
    Submission, consumed admission, binding, human/binding allow, initial request/
@@ -160,7 +160,7 @@ this chunk does not authorize live human revision.
    still seed genuine predecessor storage and exercise the actual migration; they
    do not call a current writer against an incompatible earlier schema.
 
-## Risk, verification and review
+## Risk and review routing
 
 L1: bounded multi-owner transaction, authorization receipts, replay and storage.
 Plan review: architecture/security and QA feasibility. Implementation: security,
@@ -189,3 +189,23 @@ lifecycle, foreign actor, policy failure/handle cleanup and malformed ART-result
 unit tests remain. Historical migration seeders are test-only, refuse current
 schema writes and retain predecessor constraints; they do not provide a product
 compatibility path.
+
+## Evidence
+
+- `tests/tasks/submission_dispatch/` covers real prepared ZIP creation, exact
+  original replay, valid foreign lineage, missing-owner read faults, current
+  authority, five staged participant failures, unmanaged savepoint denial,
+  independent-session same/different-admission contention and real project-role
+  issuance/revocation. SQL tests bind individual receipt members, reject an
+  unrelated stored allow and freeze retained receipt/Submission fields.
+- The additive upgrade test snapshots actual predecessor rows and proves no
+  invented dispatch or binding-receipt backfill. Existing older migration tests
+  keep their retained-data refusal/preservation requirements.
+- A local isolated predicate-removal probe makes the unrelated-allow commit
+  regression fail on acceptance of that allow; setup and cleanup both complete.
+  This distinguishes receipt validation from an earlier missing-field/FK guard.
+- Existing Local/MinIO execution, historical-owner reads and predecessor Review
+  composition use the committed request. Unit, module/AUTH/test-boundary,
+  identifier, behavior-ownership and test-lane checks remain required. Exact-head
+  hosted completeness, current review conclusions and their provenance belong in
+  the PR trust summary rather than durable navigation.
