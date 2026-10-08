@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
@@ -16,7 +15,6 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
-    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -866,32 +864,6 @@ class RevisionPolicy(Base):
         default=list,
     )
     reviewer_reassignment_rule: Mapped[str | None] = mapped_column(Text)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-
-class PaymentPolicy(Base):
-    """Payment rules attached to a project guide version."""
-
-    __tablename__ = "payment_policies"
-    __table_args__ = (
-        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
-        ForeignKeyConstraint(
-            ["project_id", "guide_version"],
-            ["project_guides.project_id", "project_guides.version"],
-            name="fk_payment_policies_project_guide",
-        ),
-        UniqueConstraint("project_id", "guide_version", name="uq_payment_policies_project_version"),
-    )
-
-    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
-    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
-    guide_version: Mapped[str] = mapped_column(String(50), nullable=False)
-    base_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
-    currency: Mapped[str | None] = mapped_column(String(20))
-    payout_type: Mapped[str | None] = mapped_column(String(50))
-    revision_payment_rule: Mapped[str | None] = mapped_column(Text)
-    rejection_payment_rule: Mapped[str | None] = mapped_column(Text)
-    accepted_payment_rule: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

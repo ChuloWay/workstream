@@ -10,7 +10,6 @@ from sqlalchemy import select
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.authorization.models import AdminRoleGrant
-from app.modules.projects.models import PaymentPolicy
 from projects.client_fixtures import auth_headers, ensure_access_administrator_bootstrap
 
 
@@ -93,7 +92,6 @@ async def create_guide(client: AsyncClient, project_id: str, payload: dict) -> d
     request_payload.setdefault("documents", complete_guide_payload()["documents"])
     review_policy = request_payload.pop("review_policy", "default")
     revision_policy = request_payload.pop("revision_policy", "default")
-    payment_policy = request_payload.pop("payment_policy", "default")
     response = await client.post(
         f"/api/v1/projects/{project_id}/guides",
         headers=auth_headers(),
@@ -145,28 +143,5 @@ async def create_guide(client: AsyncClient, project_id: str, payload: dict) -> d
             json=values,
         )
         assert policy_response.status_code == 200, policy_response.text
-    async with db_session.get_session_factory()() as session:
-        if payment_policy is not None:
-            values = (
-                payment_policy
-                if isinstance(payment_policy, dict)
-                else {
-                    "base_amount": "25.00",
-                    "currency": "USD",
-                    "payout_type": "fixed",
-                    "revision_payment_rule": "none",
-                    "rejection_payment_rule": "none",
-                    "accepted_payment_rule": "pay base amount",
-                }
-            )
-            session.add(
-                PaymentPolicy(
-                    id=str(new_record_id()),
-                    project_id=project_id,
-                    guide_version=guide["version"],
-                    **values,
-                )
-            )
-        await session.commit()
     await add_project_manager_admin_grant(project_id)
     return guide

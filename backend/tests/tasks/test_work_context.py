@@ -2,7 +2,6 @@
 
 from dataclasses import FrozenInstanceError, asdict, replace
 from datetime import UTC, datetime
-from decimal import Decimal
 import re
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -165,7 +164,6 @@ async def test_work_context_public_projections(task_client, monkeypatch):
     factory = db_session.get_session_factory()
     async with factory() as session, session.begin():
         row = await session.get(WorkstreamTask, task["id"])
-        row.base_amount, row.currency, row.payout_type = Decimal("125.00"), "USD", "flat"
         row.source_ref = row.source_payload_hash = row.import_batch_id = row.external_task_id = "PRIVATE"
         row.deadline_at = datetime(2030, 1, 1, tzinfo=UTC)
     for management in (True, False):
@@ -176,7 +174,7 @@ async def test_work_context_public_projections(task_client, monkeypatch):
         path = f"/api/v1/projects/{project['id']}" if management else "/api/v1"
         before, previous = await snapshot(factory, task["id"])
         stored = before[0][0]
-        assert stored["base_amount"] == Decimal("125.00") and stored["source_ref"] == "PRIVATE"
+        assert stored["source_ref"] == "PRIVATE"
         assert stored["assigned_to"] == grant["actor_profile_id"] and stored["status"] == "claimed"
         response = await task_client.get(f"{path}/tasks/{task['id']}/work-context", headers=auth_headers())
         assert response.status_code == 200, response.text

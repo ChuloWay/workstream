@@ -644,7 +644,7 @@ class TaskService:
         }
 
     def _stamp_locked_context(self, task: WorkstreamTask, facts: ProjectLockedPolicyContextFacts) -> None:
-        """Copy the exact activated context without obsolete PaymentPolicy readiness."""
+        """Copy the exact activated guide and contribution-policy context."""
         for name, value in self._policy_stamps(facts).items():
             setattr(task, name, value)
 

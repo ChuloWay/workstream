@@ -14,7 +14,6 @@ from app.modules.projects.models import (
     GuideSourceSnapshot,
     GuideSourceSnapshotItem,
     GuideSufficiencyReport,
-    PaymentPolicy,
     PostSubmitCheckerPolicy,
     PreSubmitCheckerPolicy,
     Project,
@@ -1031,46 +1030,3 @@ class ProjectRepository:
     async def get_revision_policy_by_id(self, policy_id: str) -> RevisionPolicy | None:
         """Load one immutable revision-policy version by exact identity."""
         return await self._session.get(RevisionPolicy, policy_id)
-
-    async def upsert_payment_policy(self, policy: PaymentPolicy) -> PaymentPolicy:
-        """Create or replace a payment policy for one guide version.
-
-        Args:
-            policy: Payment policy model carrying the desired values.
-
-        Returns:
-            Persisted payment policy model.
-        """
-        existing = await self.get_payment_policy(policy.project_id, policy.guide_version)
-        if existing is None:
-            self._session.add(policy)
-            await self._session.flush()
-            await self._session.refresh(policy)
-            return policy
-        existing.base_amount = policy.base_amount
-        existing.currency = policy.currency
-        existing.payout_type = policy.payout_type
-        existing.revision_payment_rule = policy.revision_payment_rule
-        existing.rejection_payment_rule = policy.rejection_payment_rule
-        existing.accepted_payment_rule = policy.accepted_payment_rule
-        await self._session.flush()
-        await self._session.refresh(existing)
-        return existing
-
-    async def get_payment_policy(self, project_id: str, guide_version: str) -> PaymentPolicy | None:
-        """Load a payment policy by project and guide version.
-
-        Args:
-            project_id: Project id that owns the policy.
-            guide_version: Guide version the policy applies to.
-
-        Returns:
-            Payment policy when found; otherwise ``None``.
-        """
-        result = await self._session.execute(
-            select(PaymentPolicy).where(
-                PaymentPolicy.project_id == project_id,
-                PaymentPolicy.guide_version == guide_version,
-            )
-        )
-        return result.scalar_one_or_none()

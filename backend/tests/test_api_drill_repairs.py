@@ -475,7 +475,6 @@ async def test_guide_content_null_has_no_state_then_recovery_and_omission_succee
     seed_payload = complete_guide_payload() | {
         "review_policy": None,
         "revision_policy": None,
-        "payment_policy": None,
     }
     guide = await create_guide(project_client, project["id"], seed_payload)
     path = f"/api/v1/projects/{project['id']}/guides/{guide['id']}"

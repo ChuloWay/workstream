@@ -290,7 +290,32 @@ def parse_schema(backend_root: Path) -> dict[str, dict[str, Any]]:
     for path in sorted((backend_root / "alembic/versions").glob("*.py")):
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         relative = path.relative_to(backend_root).as_posix()
-        for item in ast.walk(tree):
+        # Only explicit unconditional upgrade operations can retire a table.
+        drops = {
+            statement.value
+            for function in tree.body
+            if isinstance(function, ast.FunctionDef) and function.name == "upgrade"
+            for statement in function.body
+            if isinstance(statement, ast.Expr)
+            and isinstance(statement.value, ast.Call)
+            and ast.unparse(statement.value.func) == "op.drop_table"
+        }
+        downgrade_nodes = {
+            node for function in tree.body
+            if isinstance(function, ast.FunctionDef) and function.name == "downgrade"
+            for node in ast.walk(function)
+        }
+        for item in sorted(ast.walk(tree), key=lambda node: (
+            getattr(node, "lineno", 0), getattr(node, "col_offset", 0),
+        )):
+            if item in downgrade_nodes:
+                continue
+            if item in drops and item.args and (table_name := _string(item.args[0])):
+                if all(keyword.arg is not None and (
+                    keyword.arg != "schema" or _string(keyword.value) == "public"
+                ) for keyword in item.keywords):
+                    tables.pop(table_name, None)
+                continue
             if (
                 isinstance(item, ast.Constant)
                 and isinstance(item.value, str)

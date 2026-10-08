@@ -140,10 +140,6 @@ def test_task_write_text_is_complete_and_escaped(cli):
         "deadline_at": "2026-10-03T00:00:00Z",
         "acceptance_criteria": "Accurate",
         "rejection_criteria": "Missing",
-        "locked_payment_policy_version": "payment\n",
-        "base_amount": "12.50",
-        "currency": "USD\n",
-        "payout_type": "fixed\n",
     }
     with http_fixture() as (origin, response, requests):
         for action in ("claim", "start"):
@@ -161,7 +157,6 @@ def test_task_write_text_is_complete_and_escaped(cli):
                 f"Contribution policy: {POLICY}\nGuide version: guide é\\u000A\n"
                 f"Review policy: {POLICY}\nReview generation: 1\nReview hash: sha256:{'a' * 64}\n"
                 f"Revision policy: {POLICY}\nRevision generation: 2\nRevision hash: sha256:{'b' * 64}\n"
-                "Payment policy: payment\\u000A\nBase amount: 12.50\nCurrency: USD\\u000A\nPayout type: fixed\\u000A\n"
             )
             if action == "claim":
                 expected += (
@@ -232,7 +227,15 @@ def test_task_mutation_malformed_and_substituted_success_is_unknown(cli):
             {"created_at": "bad"},
             {"updated_at": None},
             {"deadline_at": "bad"},
-            {"base_amount": "NaN"},
+            *[
+                {field: None}
+                for field in (
+                    "base_amount",
+                    "currency",
+                    "payout_type",
+                    "locked_payment_policy_version",
+                )
+            ],
             {"estimated_time_minutes": "10"},
         ]
         for action in ("claim", "start"):
