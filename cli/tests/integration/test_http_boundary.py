@@ -82,8 +82,13 @@ def http_fixture():
                 (
                     self.headers.get("Content-Type"),
                     self.headers.get_all("Idempotency-Key"),
-                    json.loads(body),
+                    json.loads(body)
+                    if self.headers.get("Content-Type") == "application/json"
+                    else body,
                 )
+            )
+            response.setdefault("content_lengths", []).append(
+                self.headers.get("Content-Length")
             )
             self.do_GET()
 
