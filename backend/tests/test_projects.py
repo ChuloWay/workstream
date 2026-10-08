@@ -9,7 +9,6 @@ import types
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -44,7 +43,6 @@ from app.modules.projects.models import (
     GuideSourceSnapshot,
     GuideSourceSnapshotItem,
     GuideSufficiencyReport,
-    PaymentPolicy,
     PolicyMutationIdempotencyRecord,
     PostSubmitCheckerPolicy,
     PreSubmitCheckerPolicy,
@@ -164,84 +162,6 @@ async def test_project_policy_lock_queries_lock_only_policy_rows() -> None:
     assert "FOR UPDATE OF project_guides" not in rendered[0]
     assert "FOR UPDATE OF revision_policies" in rendered[1]
     assert "FOR UPDATE OF project_guides" not in rendered[1]
-
-
-@pytest.mark.asyncio
-async def test_payment_policy_upsert_inserts_and_refreshes_new_policy() -> None:
-    calls: list[tuple[str, Any]] = []
-
-    class Session:
-        def add(self, value: Any) -> None:
-            calls.append(("add", value))
-
-        async def flush(self) -> None:
-            calls.append(("flush", None))
-
-        async def refresh(self, value: Any) -> None:
-            calls.append(("refresh", value))
-
-    policy = SimpleNamespace(project_id="project-1", guide_version="v1")
-    repository = ProjectRepository(cast(Any, Session()))
-
-    async def get_missing_policy(*_args: Any) -> None:
-        return None
-
-    repository.get_payment_policy = get_missing_policy
-
-    result = await repository.upsert_payment_policy(cast(Any, policy))
-
-    assert result is policy
-    assert calls == [("add", policy), ("flush", None), ("refresh", policy)]
-
-
-@pytest.mark.asyncio
-async def test_payment_policy_upsert_replaces_mutable_terms_on_existing_policy() -> None:
-    refreshed: list[Any] = []
-
-    class Session:
-        async def flush(self) -> None:
-            return None
-
-        async def refresh(self, value: Any) -> None:
-            refreshed.append(value)
-
-    existing = SimpleNamespace(
-        base_amount=Decimal("1"),
-        currency="USD",
-        payout_type="fixed",
-        revision_payment_rule="old revision",
-        rejection_payment_rule="old rejection",
-        accepted_payment_rule="old acceptance",
-    )
-    replacement = SimpleNamespace(
-        project_id="project-1",
-        guide_version="v1",
-        base_amount=Decimal("25.50"),
-        currency="NGN",
-        payout_type="milestone",
-        revision_payment_rule="hold",
-        rejection_payment_rule="void",
-        accepted_payment_rule="release",
-    )
-    repository = ProjectRepository(cast(Any, Session()))
-
-    async def get_existing_policy(*_args: Any) -> Any:
-        return existing
-
-    repository.get_payment_policy = get_existing_policy
-
-    result = await repository.upsert_payment_policy(cast(Any, replacement))
-
-    assert result is existing
-    assert vars(existing) == {
-        "base_amount": Decimal("25.50"),
-        "currency": "NGN",
-        "payout_type": "milestone",
-        "revision_payment_rule": "hold",
-        "rejection_payment_rule": "void",
-        "accepted_payment_rule": "release",
-    }
-    assert refreshed == [existing]
 
 
 @pytest.mark.asyncio
@@ -1149,7 +1069,6 @@ def test_policy_models_have_project_guide_foreign_keys() -> None:
         PostSubmitCheckerPolicy: "fk_checker_policies_project_guide",
         ReviewPolicy: "fk_review_policies_project_guide",
         RevisionPolicy: "fk_revision_policies_project_guide",
-        PaymentPolicy: "fk_payment_policies_project_guide",
         PreSubmitCheckerPolicy: "fk_pre_submit_checker_policies_project_guide",
     }
 
@@ -3243,7 +3162,7 @@ async def test_project_create_rejects_payment_fields(project_client: AsyncClient
         json={
             "name": "Payment Field Project",
             "slug": "payment-field-project",
-            "description": "Payment belongs to PaymentPolicy.",
+            "description": "Compensation belongs to the contribution policy.",
             "base_amount": "25.00",
             "currency": "USD",
         },
@@ -3340,12 +3259,19 @@ async def test_project_guide_rejects_unknown_non_contract_fields(
         assert field in response.text
 
 
+@pytest.mark.parametrize("field,value", [
+    ("guide_setup_checklist", ["summary"]),
+    ("payment_policy", {"base_amount": "100.00", "currency": "USD", "payout_type": "fixed",
+                        "revision_payment_rule": "none", "rejection_payment_rule": "none",
+                        "accepted_payment_rule": "pay base amount"}),
+])
 async def test_project_guide_update_rejects_unknown_non_contract_fields(
-    project_client: AsyncClient,
+    project_client: AsyncClient, field: str, value: Any,
 ) -> None:
     project = await create_project(project_client)
     guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    payload = {"guide_setup_checklist": ["summary"]}
+    await read_guide_source_snapshot(project["id"], guide["id"])
+    payload = {field: value}
 
     response = await project_client.patch(
         f"/api/v1/projects/{project['id']}/guides/{guide['id']}",
@@ -3354,7 +3280,7 @@ async def test_project_guide_update_rejects_unknown_non_contract_fields(
     )
 
     assert response.status_code == 422
-    assert "guide_setup_checklist" in response.text
+    assert field in response.text
 
 
 async def test_guide_documents_requires_at_least_one_uploaded_source_item(
@@ -4669,32 +4595,6 @@ async def test_inline_guide_body_is_rejected_after_source_snapshot(
     assert "content_markdown" in response.text
 
 
-async def test_removed_payment_policy_edit_after_source_snapshot_is_rejected(
-    project_client: AsyncClient,
-) -> None:
-    project = await create_project(project_client)
-    guide = await create_guide(project_client, project["id"], complete_guide_payload())
-    await read_guide_source_snapshot(project["id"], guide["id"])
-    payment_policy = {
-        "base_amount": "25.00",
-        "currency": "USD",
-        "payout_type": "fixed",
-        "revision_payment_rule": "none",
-        "rejection_payment_rule": "none",
-        "accepted_payment_rule": "pay base amount",
-    }
-    payment_policy["base_amount"] = "100.00"
-
-    response = await project_client.patch(
-        f"/api/v1/projects/{project['id']}/guides/{guide['id']}",
-        headers=auth_headers(),
-        json={"payment_policy": payment_policy},
-    )
-
-    assert response.status_code == 422
-    assert "payment_policy" in response.text
-
-
 async def test_manual_submission_artifact_policy_create_rejects_default_weakening(
     project_client: AsyncClient,
 ) -> None:
@@ -5313,27 +5213,6 @@ async def test_review_policy_rejects_invalid_decision_names(project_client: Asyn
     assert "review_policy" in detail["loc"]
     assert detail["input"] == "redacted"
     assert "hold" not in response.text
-
-
-async def test_activation_requires_complete_payment_policy(project_client: AsyncClient) -> None:
-    project = await create_project(project_client)
-    payload = complete_guide_payload()
-    payload["payment_policy"] = {
-        "base_amount": "25.00",
-        "currency": "USD",
-        "payout_type": "fixed",
-        "revision_payment_rule": "none",
-        "rejection_payment_rule": "none",
-        "accepted_payment_rule": None,
-    }
-    response = await project_client.post(
-        f"/api/v1/projects/{project['id']}/guides",
-        headers=auth_headers(),
-        json=payload,
-    )
-
-    assert response.status_code == 422
-    assert "payment_policy" in response.text
 
 
 async def test_activation_requires_complete_revision_policy(project_client: AsyncClient) -> None:

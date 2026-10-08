@@ -200,7 +200,6 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
             )
             assert admission.status == "consumed"
             assert admission.consumed_by_submission_id == submission.id
-            assert submission.locked_payment_policy_version is None
             assert await session.scalar(select(func.count()).select_from(Submission)) == 1
         await _assert_bound_packet_immutable(h, created)
 
@@ -268,7 +267,8 @@ async def test_packet_custody_upgrade_preserves_retained_submission(
                 before = await session.scalar(text(
                     "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
                 ), {"id": created.submission_id})
-            await asyncio.to_thread(command.upgrade, _config(), "head")
+            # Bind this preservation proof to the packet-custody migration.
+            await asyncio.to_thread(command.upgrade, _config(), "0022_submission_packet_custody")
             async with h.factory() as session:
                 after = await session.scalar(text(
                     "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
@@ -277,3 +277,4 @@ async def test_packet_custody_upgrade_preserves_retained_submission(
                 assert await session.scalar(text(
                     "SELECT count(*) FROM pg_catalog.pg_trigger WHERE tgname='submission_packet_custody'"
                 )) == 1
+        await asyncio.to_thread(command.upgrade, _config(), "head")

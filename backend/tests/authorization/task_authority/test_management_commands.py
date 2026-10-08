@@ -30,6 +30,7 @@ async def test_create_draft_without_guide(task_client):
     payload = complete_task_payload()
     created = await task_client.post(path, headers=headers, json=payload)
     assert created.status_code == 201, created.text
+    assert {"base_amount", "currency", "payout_type", "locked_payment_policy_version"}.isdisjoint(created.json())
     replay = await task_client.post(path, headers=headers, json=payload)
     assert replay.status_code == 201, replay.text
     assert replay.json() == created.json()
@@ -74,6 +75,7 @@ async def test_screen_and_release_lock_approved_context(task_client):
             path, headers=headers, json={"reason": "Manager decision"}
         )
         assert response.status_code == 200, response.text
+        assert {"base_amount", "currency", "payout_type", "locked_payment_policy_version"}.isdisjoint(response.json())
         replay = await task_client.post(path, headers=headers, json={"reason": "Manager decision"})
         assert replay.status_code == 200, replay.text
         assert replay.json() == response.json()

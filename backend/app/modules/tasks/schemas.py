@@ -6,7 +6,6 @@ from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.api import ReadyTaskSummary, ManagementTaskSummary, OperationalTaskSummary
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 from urllib.parse import unquote, urlparse
@@ -212,7 +211,7 @@ class SubmissionCreate(BaseModel):
 class TaskResponse(BaseModel):
     """Response schema for task records."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, extra="forbid")
 
     id: str
     project_id: str
@@ -224,7 +223,6 @@ class TaskResponse(BaseModel):
     locked_revision_policy_id: str | None
     locked_revision_policy_generation: int | None
     locked_revision_policy_hash: str | None
-    locked_payment_policy_version: str | None
     locked_guide_source_snapshot_id: str | None
     locked_guide_source_snapshot_hash: str | None
     locked_effective_project_submission_artifact_policy_id: str | None
@@ -242,9 +240,6 @@ class TaskResponse(BaseModel):
     difficulty: str | None
     skill_tags: list[str]
     estimated_time_minutes: int | None
-    base_amount: Decimal | None
-    currency: str | None
-    payout_type: str | None
     status: str
     acceptance_criteria: str | None
     rejection_criteria: str | None
@@ -400,6 +395,8 @@ class AssignmentResponse(BaseModel):
 
 class TaskWithAssignmentResponse(BaseModel):
     """Response schema for a task operation that creates or uses an assignment."""
+
+    model_config = ConfigDict(extra="forbid")
 
     task: TaskResponse
     assignment: AssignmentResponse

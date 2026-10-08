@@ -5,7 +5,7 @@ shapes; it is not the current remaining-work plan. For the replacement unified
 path, use the [current dependency contract](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#current-dependency-contract),
 [checker architecture](architecture_checker_framework.md) and
 [contribution specification](spec_contribution_compensation.md).
-In particular, historical PaymentPolicy and separate-inference requirements
+In particular, historical separate-inference requirements
 do not govern the new activation command. Historical migration names below
 must not be allocated again against the current baseline.
 
@@ -62,7 +62,6 @@ Architecture target:
 - `checker_policies`
 - `review_policies`
 - `revision_policies`
-- `payment_policies`
 
 Current v0.1 implementation note: project guide rows store human-facing guide
 content only. Submission artifact requirements live in `SubmissionArtifactPolicy`
@@ -88,7 +87,7 @@ The canonical CP07 guide activation operation, exposed by AUTH-18, requires:
 - the exact expected prior active guide and generation, if replacing one
 - a nominal prepared activation authority participant and immutable audit receipt
 
-No PaymentPolicy row, Task, Submission, provider invocation or completed checker
+No Task, Submission, provider invocation or completed checker
 run is required. Default composition denies activation; AUTH-12H supplies the
 live manager authority for this same operation.
 
@@ -307,3 +306,8 @@ reads require this operation custody instead of role-string approval fields.
 AUTH-12G and POL-06B supply live post-policy authority and public exposure.
 AUTH-12H supplies live exact-project manager authority for the existing internal
 complete-guide activation operation; AUTH-18 exposes its exact-authorized HTTP endpoint.
+
+The superseded guide-keyed PaymentPolicy table and mutable repository path are
+removed. Migration refuses retained payment terms or obsolete immutable TASK
+response keys; it never rewrites them into ContributionPolicy facts. Current
+compensation remains owned by [ContributionPolicy](spec_contribution_compensation.md).

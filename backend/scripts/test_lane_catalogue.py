@@ -414,6 +414,8 @@ TASK_MODULES = (
     "tests/authorization/task_queues/test_transactions.py",
     "tests/authorization/task_queues/test_concurrency.py",
     "tests/tasks/test_command_replay.py",
+    "tests/tasks/test_payment_policy_removal.py",
+    "tests/tasks/test_payment_policy_migration.py",
     "tests/tasks/test_contribution_lineage.py",
     "tests/tasks/test_project_display.py",
     "tests/tasks/test_ready_queue.py",

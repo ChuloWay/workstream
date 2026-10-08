@@ -21,7 +21,7 @@ async def test_complete_activation_and_exact_replay(clean_postgres_database):
         policy,
     ):
         async with factory() as session:
-            for table in ("payment_policies", "workstream_tasks", "submissions"):
+            for table in ("workstream_tasks", "submissions"):
                 assert await session.scalar(text(f"SELECT count(*) FROM {table}")) == 0
         async with factory() as session, session.begin():
             receipt = await activation_service(session, actor, command, grant).activate(

@@ -117,6 +117,7 @@ async def test_project_grant_drives_claim_start_and_current_action_hints(task_cl
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["assignment"]["contributor_id"] == actor_id
     assert claimed.json()["task"]["status"] == "claimed"
+    assert {"base_amount", "currency", "payout_type", "locked_payment_policy_version"}.isdisjoint(claimed.json()["task"])
     context = await task_client.get(f"/api/v1/tasks/{task_id}/work-context", headers=auth_headers())
     assert context.status_code == 200, context.text
     assert context.json()["lifecycle"] == {"assigned_to_current_actor": True, "next_actions": ["start"]}
@@ -140,6 +141,7 @@ async def test_project_grant_drives_claim_start_and_current_action_hints(task_cl
     )
     started = await task_client.post(f"/api/v1/tasks/{task_id}/start", headers=auth_headers())
     assert started.status_code == 200, started.text
+    assert {"base_amount", "currency", "payout_type", "locked_payment_policy_version"}.isdisjoint(started.json())
     assert started.json()["status"] == "in_progress"
     context = await task_client.get(f"/api/v1/tasks/{task_id}/work-context", headers=auth_headers())
     assert context.status_code == 200, context.text
@@ -441,6 +443,7 @@ async def test_manager_context_and_system_operator_override_are_distinct(task_cl
         json={"reason": reason},
     )
     assert started.status_code == 200, started.text
+    assert {"base_amount", "currency", "payout_type", "locked_payment_policy_version"}.isdisjoint(started.json())
     replayed = await task_client.post(
         f"/api/v1/operations/tasks/{task_id}/start", headers=start_headers, json={"reason": reason},
     )

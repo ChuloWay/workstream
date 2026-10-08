@@ -80,7 +80,7 @@ def _task():
         "locked_review_policy_hash": "sha256:" + "5" * 64,
         "locked_revision_policy_id": str(new_record_id()), "locked_revision_policy_generation": 1,
         "locked_revision_policy_hash": "sha256:" + "6" * 64,
-        "locked_payment_policy_version": "1", "locked_guide_source_snapshot_id": str(new_record_id()),
+        "locked_guide_source_snapshot_id": str(new_record_id()),
         "locked_guide_source_snapshot_hash": "sha256:" + "7" * 64,
         "locked_effective_project_submission_artifact_policy_id": str(new_record_id()),
         "locked_effective_project_submission_artifact_policy_hash": "sha256:" + "8" * 64,
