@@ -27,7 +27,8 @@ currently accept only an active exact-project Submitter grant.
   grants.
 - CLI `task ready` and `task show` response validation and text display.
 - Focused real-PostgreSQL and CLI HTTP process proof, current API/CLI,
-  authorization, compensation and roadmap documentation, and this record.
+  authorization, compensation and roadmap documentation, required test-lane
+  catalogue registration, and this record.
 
 ### Not allowed
 
