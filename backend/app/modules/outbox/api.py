@@ -427,6 +427,10 @@ class OutboxAppendResult(BaseModel):
 
 
 class OutboxAppendPort(Protocol):
+    async def require_existing(self, event_id: UUID, value: OutboxAppendInput) -> None:
+        """Require exact retained custody without appending or repairing an event."""
+        ...
+
     async def append(self, value: OutboxAppendInput) -> OutboxAppendResult:
         """Flush an exact event in the caller transaction without committing."""
         ...

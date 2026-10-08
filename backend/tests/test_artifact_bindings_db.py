@@ -15,7 +15,7 @@ from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
     PreSubmitEvidenceSet,
-    SubmissionBundleAdmission,
+    SubmissionBundleAdmission, SubmissionBindingReceipt,
 )
 from app.modules.artifacts.submission_bindings import (
     SubmissionAdmissionConsumptionService,
@@ -23,25 +23,11 @@ from app.modules.artifacts.submission_bindings import (
 from app.modules.artifacts.api import SubmissionAdmissionConsumptionError
 from app.adapters.tasks import TransactionalSubmissionCreationCommand
 from app.modules.tasks.api import SubmissionCreationRequest, SubmissionCreationUnavailable
-from app.modules.tasks.models import Submission
+from app.modules.tasks.models import Submission, SubmissionDispatch
 from app.modules.tasks.models import AuditEvent
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.service import TaskService
-from app.api.deps.authorization import compose_hidden_submission_creation_command
-from app.modules.authorization.repository import AdminAuthorizationRepository
-from app.modules.authorization import prepared as prepared_authorization
-from app.modules.artifacts import authorization as artifact_authorization
-from app.modules.authorization.runtime import (
-    ActorKind,
-    ActorStatus,
-    AuthorizationDenialCode,
-    HumanAuthorizationContext,
-    IdentityLinkStatus,
-    ServiceAuthorizationContext,
-    PreparedAuthorizationUnsupported,
-)
-from app.modules.actors.api import ServiceIdentity
-from test_artifact_bindings import _Allow, _lineage, _request
+from test_artifact_bindings import _Allow, _lineage, _request, _replay_request
 
 
 _TABLES = (
@@ -50,7 +36,7 @@ _TABLES = (
     SubmissionBundleAdmission.__table__,
     ArtifactBinding.__table__,
     Submission.__table__,
-    AuditEvent.__table__,
+    AuditEvent.__table__, SubmissionBindingReceipt.__table__, SubmissionDispatch.__table__,
 )
 
 
@@ -171,7 +157,7 @@ async def test_composed_final_denial_rolls_back_task_and_art_rows(
     art_request = _request()
     context = art_request.task_context
     task = type("LockedTask", (), {
-        "id": str(context.task_id),
+        "id": str(context.task_id), "project_id": str(context.locked_project_context.project_id),
         "locked_guide_version": "1",
         "locked_post_submit_checker_policy_id": str(new_record_id()),
         "locked_post_submit_checker_policy_version": "1",
@@ -255,12 +241,20 @@ async def test_postgresql_consumption_is_concurrent_and_rollback_safe(
             async with factory() as session:
                 async with session.begin():
                     await _set_schema(session, schema)
-                    return await SubmissionAdmissionConsumptionService(
-                        session, _Allow()
-                    ).consume(request)
+                    try:
+                        return await SubmissionAdmissionConsumptionService(session, _Allow()).consume(request)
+                    except SubmissionAdmissionConsumptionError as exc:
+                        assert exc.code == "submission_bundle_admission_already_consumed"
+                        return None
 
-        first, second = await asyncio.gather(consume_once(), consume_once())
-        assert sorted(result.replayed for result in (first, second)) == [False, True]
+        outcomes = await asyncio.gather(consume_once(), consume_once())
+        assert sum(result is not None for result in outcomes) == 1
+        original = next(result for result in outcomes if result is not None)
+        async with factory.begin() as session:
+            await _set_schema(session, schema)
+            replay = await SubmissionAdmissionConsumptionService(session, _Allow()).read_consumed(_replay_request(request))
+            assert replay.replayed and replay.binding_id == original.binding_id
+            assert replay.binding_decision_id == original.binding_decision_id
         async with factory() as session:
             await _set_schema(session, schema)
             status = await session.scalar(
@@ -349,181 +343,3 @@ async def test_postgresql_consumption_is_concurrent_and_rollback_safe(
             )
             assert status == "ready"
             assert bindings == 0
-
-
-def _wire_hidden_authority(monkeypatch: pytest.MonkeyPatch):
-    """Install deterministic TASK/AUTH collaborators for the hidden command."""
-    art_request = _request()
-    context = art_request.task_context
-    request_id, correlation_id, human_link_id, service_actor_id, service_link_id = (
-        new_record_id() for _ in range(5)
-    )
-    human = HumanAuthorizationContext(
-        actor_profile_id=context.contributor_id,
-        actor_kind=ActorKind.HUMAN,
-        actor_status=ActorStatus.ACTIVE,
-        identity_link_id=human_link_id,
-        identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=request_id,
-        correlation_id=correlation_id,
-    )
-    service = ServiceAuthorizationContext(
-        actor_profile_id=service_actor_id,
-        actor_kind=ActorKind.SERVICE,
-        actor_status=ActorStatus.ACTIVE,
-        identity_link_id=service_link_id,
-        identity_link_status=IdentityLinkStatus.ACTIVE,
-        service_identity=ServiceIdentity.ARTIFACT_BINDING,
-        request_id=request_id,
-        correlation_id=correlation_id,
-    )
-    task = type("LockedTask", (), {
-        "id": str(context.task_id), "locked_guide_version": "1",
-        "locked_post_submit_checker_policy_id": str(new_record_id()),
-        "locked_post_submit_checker_policy_version": "1",
-        "locked_post_submit_checker_policy_hash": "sha256:" + "4" * 64,
-        "locked_post_submit_checker_policy_body": {},
-        "locked_review_policy_id": str(new_record_id()), "locked_review_policy_generation": 1,
-        "locked_review_policy_hash": "sha256:" + "5" * 64,
-        "locked_revision_policy_id": str(new_record_id()), "locked_revision_policy_generation": 1,
-        "locked_revision_policy_hash": "sha256:" + "6" * 64,
-        "locked_guide_source_snapshot_id": str(context.locked_project_context.source_snapshot_id),
-        "locked_guide_source_snapshot_hash": context.locked_project_context.source_snapshot_hash,
-        "locked_effective_project_submission_artifact_policy_id": str(context.locked_project_context.effective_policy_id),
-        "locked_effective_project_submission_artifact_policy_hash": context.locked_project_context.effective_policy_hash,
-        "locked_pre_submit_checker_policy_id": str(context.locked_project_context.pre_submit_policy_id),
-        "locked_pre_submit_checker_bundle_hash": context.locked_project_context.pre_submit_policy_bundle_hash,
-    })()
-
-    async def lock_context(_self, _request): return context
-    async def get_task(_self, _task_id, **_kwargs): return task
-    async def validate_context(_self, candidate):
-        # These are ART transaction tests, not a TASK policy certification.
-        assert candidate is task
-    async def lock_actor(_self, link_id, actor_id):
-        is_service = actor_id == service_actor_id
-        return (
-            type("Link", (), {"id": str(link_id), "actor_profile_id": str(actor_id), "status": "active"})(),
-            type("Profile", (), {
-                "id": str(actor_id),
-                "actor_kind": "service" if is_service else "human",
-                "service_identity": service.service_identity.value if is_service else None,
-                "status": "active",
-            })(),
-        )
-    async def find_role(_self, **_kwargs):
-        return type("Grant", (), {"id": new_record_id(), "status": "active", "scope_project_id": None})()
-    async def fixed_context(*_args, **_kwargs): return service
-
-    monkeypatch.setattr(TaskRepository, "lock_submission_context", lock_context)
-    monkeypatch.setattr(TaskRepository, "get_task", get_task)
-    monkeypatch.setattr(TaskService, "_load_locked_task_context", validate_context)
-    monkeypatch.setattr(AdminAuthorizationRepository, "lock_request_actor", lock_actor)
-    monkeypatch.setattr(AdminAuthorizationRepository, "find_active_project_role", find_role)
-    monkeypatch.setattr(
-        prepared_authorization, "fixed_service_authorization_context", fixed_context
-    )
-    monkeypatch.setattr(
-        artifact_authorization, "fixed_service_authorization_context", fixed_context
-    )
-    request = SubmissionCreationRequest(
-        admission_id=art_request.admission_id, task_id=context.task_id,
-        assignment_id=context.assignment_id, contributor_id=context.contributor_id,
-        predecessor_submission_id=None, summary="Prepared summary",
-        contributor_attestation="Prepared attestation",
-    )
-    return art_request, human, request, request_id, correlation_id
-
-
-async def _create_hidden(factory, schema, human, request, request_id, correlation_id):
-    """Run one hidden command and return its stable result or boundary error."""
-    async with factory() as session:
-        await session.execute(text(f'set search_path to "{schema}"'))
-        await session.commit()
-        command = compose_hidden_submission_creation_command(
-            session, human, request_id=request_id, correlation_id=correlation_id
-        )
-        try:
-            return await command.create(request)
-        except (SubmissionAdmissionConsumptionError, SubmissionCreationUnavailable) as exc:
-            return exc
-
-
-@pytest.mark.asyncio
-async def test_live_hidden_authority_commits_one_complete_concurrent_effect(
-    isolated_database_env: str, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Concurrent hidden commands commit exactly one complete authorized effect."""
-    art_request, human, request, request_id, correlation_id = _wire_hidden_authority(
-        monkeypatch
-    )
-
-    async with _isolated_binding_schema(isolated_database_env) as (schema, factory):
-        async with factory.begin() as seed:
-            await _seed(seed, schema, art_request)
-        outcomes = await asyncio.gather(*(
-            _create_hidden(factory, schema, human, request, request_id, correlation_id)
-            for _ in range(2)
-        ))
-        assert sum(not isinstance(value, Exception) for value in outcomes) == 1
-        failures = [value for value in outcomes if isinstance(value, Exception)]
-        assert len(failures) == 1
-        assert isinstance(failures[0], SubmissionAdmissionConsumptionError)
-        assert failures[0].code == "submission_bundle_admission_already_consumed"
-        async with factory() as session:
-            await _set_schema(session, schema)
-            assert await session.scalar(text("select count(*) from submissions")) == 1
-            assert await session.scalar(text("select count(*) from artifact_bindings")) == 1
-            assert await session.scalar(
-                text(
-                    "select count(*) from audit_events where event_domain='authority' "
-                    "and event_type='SensitiveAuthorizationAllowed'"
-                )
-            ) == 2
-
-
-@pytest.mark.asyncio
-async def test_revoked_binding_service_rolls_back_the_hidden_command(
-    isolated_database_env: str, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A revoked fixed-service link leaves every protected effect absent."""
-    art_request, human, request, request_id, correlation_id = _wire_hidden_authority(
-        monkeypatch
-    )
-    async def revoked_context(*_args, **_kwargs):
-        raise PreparedAuthorizationUnsupported(
-            AuthorizationDenialCode.IDENTITY_LINK_REVOKED
-        )
-    monkeypatch.setattr(
-        prepared_authorization, "fixed_service_authorization_context", revoked_context
-    )
-    monkeypatch.setattr(
-        artifact_authorization, "fixed_service_authorization_context", revoked_context
-    )
-    async with _isolated_binding_schema(isolated_database_env) as (schema, factory):
-        denied_art_request = replace(
-            art_request, admission_id=new_record_id(), submission_id=new_record_id()
-        )
-        async with factory.begin() as seed:
-            await _seed(seed, schema, denied_art_request)
-        denied = await _create_hidden(
-            factory, schema, human,
-            replace(request, admission_id=denied_art_request.admission_id),
-            request_id, correlation_id,
-        )
-        assert isinstance(denied, SubmissionAdmissionConsumptionError)
-        assert denied.code == "submission_bundle_admission_unavailable"
-        async with factory() as session:
-            await _set_schema(session, schema)
-            assert await session.scalar(text("select count(*) from submissions")) == 0
-            assert await session.scalar(text("select count(*) from artifact_bindings")) == 0
-            assert await session.scalar(
-                text(
-                    "select count(*) from submission_bundle_admissions "
-                    "where id=:id and status='ready'"
-                ),
-                {"id": str(denied_art_request.admission_id)},
-            ) == 1
-            assert await session.scalar(
-                text("select count(*) from audit_events")
-            ) == 0

@@ -331,11 +331,14 @@ async def test_consumption_retains_inspected_manifest_and_replays_without_provid
         assert len(observed) == 1
         request, first = observed[0]
         material = first.material
-        from tests.test_artifact_bindings import _Allow
+        from tests.test_artifact_bindings import _replay_request
+        from app.modules.artifacts.authorization import PreparedSubmissionBindingAuthorization
         async with h.factory() as session, session.begin():
             with monkeypatch.context() as patch:
                 patch.setattr(LocalStorageAdapter, "open", forbidden_read)
-                replay = await consume(SubmissionAdmissionConsumptionService(session, _Allow()), request)
+                replay = await SubmissionAdmissionConsumptionService(session, PreparedSubmissionBindingAuthorization(
+                    session, request_id=new_record_id(), correlation_id=new_record_id(),
+                )).read_consumed(_replay_request(request))
         assert replay.replayed and replay.material == material
         assert material.archive_sha256 == h.request.content_sha256
         assert material.archive_byte_count == len(h.data)

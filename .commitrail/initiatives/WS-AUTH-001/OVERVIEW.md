@@ -78,7 +78,8 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: atomic initial Submission/dispatch,
+- Next usable boundary: hidden request/completion handlers after delivered
+  ARCH-04E1B-B6 atomic Submission/dispatch,
   before hidden ARCH-04E1B-B routing handlers using the REV-04C
   participant; ARCH-04E2-B then owns mandatory same-input receipt custody,
   database closure, audit/outbox and exact routing activation before 04E3 live composition.

@@ -6,15 +6,8 @@ lineage. They do not expose public intake or claim live post-submit authority.
 """
 
 from uuid import UUID
-from tests.retained_material_fixtures import retained_admission, RetainedBindingAuthority
-from app.modules.artifacts.submission_bindings import SubmissionAdmissionConsumptionService
-from app.modules.artifacts.api import SubmissionAdmissionConsumptionRequest
-from app.modules.checkers.api import SubmissionPacketView
-from app.modules.tasks.api import TaskSubmissionContextRequest
-from app.modules.tasks.repository import TaskRepository
-from app.core.config import get_settings
+from tests.retained_material_fixtures import retained_admission
 
-from app.adapters.tasks import task_service
 
 from sqlalchemy import select
 
@@ -32,7 +25,6 @@ async def seed_retained_submission(
 ) -> str:
     """Seed a retained locked packet with guards enabled; not an intake proof."""
     packet = SubmissionCreate.model_validate(payload)
-    submission_id = str(new_record_id())
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, task_id)
         assert task is not None
@@ -55,48 +47,57 @@ async def seed_retained_submission(
         admission_id = await retained_admission(
             db_session.get_session_factory(), task, assignment, link, packet, predecessor_id,
         )
-        task = await session.get(WorkstreamTask, task_id)
-        context = await TaskRepository(session).lock_submission_context(TaskSubmissionContextRequest(
-            UUID(task_id), UUID(assignment.id), UUID(task.assigned_to),
-            UUID(predecessor_id) if predecessor_id else None,
+        # Retained history includes private packet fields absent from the hidden
+        # input DTO. Seed those fixture-only values before the real atomic writer
+        # seals the row; all ownership, authority and dispatch guards stay enabled.
+        from unittest.mock import patch
+        from app.api.deps.authorization import compose_hidden_submission_creation_command
+        from app.modules.tasks.api import SubmissionCreationRequest
+        from app.modules.actors.api.service_identities import ServiceIdentity
+        from app.modules.actors.models import ActorProfile
+        from tests.test_artifact_admission import _context
+        service = await session.scalar(select(ActorProfile).where(
+            ActorProfile.service_identity == ServiceIdentity.ARTIFACT_BINDING.value,
         ))
-        service = task_service(session, settings=get_settings())
-        await service._load_locked_task_context(task)
-        submission = build_submission(
-            submission_id=submission_id, task=task, contributor_id=task.assigned_to,
-            task_assignment_id=assignment.id,
-            contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
-            # Retained packet projection; ART supplies the canonical byte references.
-            version=predecessor.version + 1 if predecessor else 1, summary=packet.summary,
-            worker_attestation=packet.worker_attestation,
-            package_uri=packet.package_uri, package_hash=packet.package_hash,
-            artifact_hash_manifest=[entry.model_dump() for entry in packet.artifact_hash_manifest],
-            supersedes_submission_id=predecessor_id,
-            evidence_items=[EvidenceItem(
-                id=str(new_record_id()), submission_id=submission_id, type=item.type,
-                label=item.label, uri=item.uri, hash=item.hash,
-                size_bytes=item.size_bytes, metadata_json=item.metadata,
-            ) for item in packet.evidence_items],
-        )
-        session.add(submission)
-        await session.flush()
-        consumed = await SubmissionAdmissionConsumptionService(
-            session, RetainedBindingAuthority(),
-        ).consume(SubmissionAdmissionConsumptionRequest(
-            UUID(admission_id), UUID(submission_id), submission.version, context,
-            SubmissionPacketView(packet.summary, packet.worker_attestation).sha256,
-        ))
-        assert consumed.status == "consumed"
-        submission.submission_bundle_admission_id = admission_id
-        submission.artifact_binding_id = str(consumed.binding_id)
-        submission.artifact_content_id = str(consumed.content_id)
-        task.status = "submitted"
-        await session.flush()
-        locked_at = datetime.now(UTC)
-        submission.locked_at = locked_at
-        for item in submission.evidence_items:
-            item.locked_at = locked_at
+        if service is None:
+            service_id = str(new_record_id())
+            session.add(ActorProfile(
+                id=service_id, actor_kind="service", status="active",
+                provisioning_method="manual_service_provisioning",
+                service_identity=ServiceIdentity.ARTIFACT_BINDING.value,
+                created_by="retained-history-fixture",
+            ))
+            session.add(ActorIdentityLink(
+                id=str(new_record_id()), actor_profile_id=service_id,
+                issuer="flow-test", subject=service_id, subject_kind="service",
+                status="active", linked_by="retained-history-fixture",
+            ))
         await session.commit()
+
+        def retained_packet(**values):
+            identifier = values["submission_id"]
+            return build_submission(
+                **values, package_uri=packet.package_uri, package_hash=packet.package_hash,
+                artifact_hash_manifest=[entry.model_dump() for entry in packet.artifact_hash_manifest],
+                evidence_items=[EvidenceItem(
+                    id=str(new_record_id()), submission_id=identifier, type=item.type,
+                    label=item.label, uri=item.uri, hash=item.hash,
+                    size_bytes=item.size_bytes, metadata_json=item.metadata,
+                    locked_at=datetime.now(UTC),
+                ) for item in packet.evidence_items],
+            )
+
+        with patch("app.modules.tasks.submission_composition.build_submission", retained_packet):
+            created = await compose_hidden_submission_creation_command(
+                session, _context(actor_profile_id=UUID(task.assigned_to), identity_link_id=UUID(link.id)),
+                request_id=new_record_id(), correlation_id=new_record_id(),
+            ).create(SubmissionCreationRequest(
+                admission_id=UUID(admission_id), task_id=UUID(task_id),
+                assignment_id=UUID(assignment.id), contributor_id=UUID(task.assigned_to),
+                predecessor_submission_id=UUID(predecessor_id) if predecessor_id else None,
+                summary=packet.summary, contributor_attestation=packet.worker_attestation,
+            ))
+        submission_id = str(created.submission_id)
     return submission_id
 
 

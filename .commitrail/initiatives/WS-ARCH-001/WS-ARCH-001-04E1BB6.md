@@ -56,8 +56,10 @@ content. Reuse them rather than adding another intake or checker implementation.
    events under fresh authority. Verify actor/service identity, exact resource,
    action/permission, project and canonical resource digest. No fabricated allow,
    receipt-shaped value as authority, or duplicate authorization on replay.
-   ART persists its binding receipt with consumption and returns it through its
-   existing port. Its consumed replay validates that receipt instead of consuming
+   ART persists one immutable binding receipt (admission, binding and decision)
+   with consumption and returns it through its existing port. A separate owner
+   receipt keeps historical admission row shapes unchanged; every current
+   consumption requires it, without a nullable receipt fallback. Its consumed replay validates that receipt instead of consuming
    again. Add explicit PREP replay branches for `submission.create` and
    `artifact.submission.binding.create`. Reconstruct the original resource from
    immutable owner facts; never treat audit JSON as the source of product truth.
@@ -102,6 +104,8 @@ content. Reuse them rather than adding another intake or checker implementation.
   authorization and admission model; affected consumed-material callers/tests.
 - AUTH submission creation/resource contracts, canonical PREP replay dispatch
   and a focused submission receipt validator; exact affected adapter tests.
+  Shared AUDIT resource-name validation gains the two exact submission resource
+  kinds so retained receipts carry their real project/resource identities.
 - CHECKERS `api/execution.py`, coordination/repository reservation verification;
   shared outbox API/service/repository select-only exact-event verification.
 - One additive Alembic migration and actual PostgreSQL schema fingerprint/reset
@@ -172,3 +176,16 @@ revocation/creation, and no premature exposure or delivery.
 Step 4 consumes these committed exact request IDs through hidden request/completion
 handlers. It must use current CHECKERS/ART/AUTH custody and shared outbox delivery;
 this record alone does not claim automatic evaluation, outcomes or a public journey.
+
+## Retained test behavior
+
+The former mock-only command-order and predecessor tests are replaced by the real
+atomic creation/participant rollback tests and the existing real Review predecessor
+chain test, now consuming each successor's committed request. The mini-schema
+hidden-concurrency/service tests previously mocked TASK locks and AUTH admission;
+their required behavior moves to real-AUTH concurrent creation and revoked-binding
+identity tests. ART-only binding serialization/rollback tests remain. Early human
+lifecycle, foreign actor, policy failure/handle cleanup and malformed ART-result
+unit tests remain. Historical migration seeders are test-only, refuse current
+schema writes and retain predecessor constraints; they do not provide a product
+compatibility path.

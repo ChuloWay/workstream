@@ -1,69 +1,34 @@
 """Closed history with canonical stored ART lineage and real fixed-service phase authority."""
 
-import json
 from app.modules.checkers.api.post_submit import make_post_submit_request
 from uuid import UUID
 
-from app.modules.artifacts.models import ArtifactContent, SubmissionBundleAdmission
+from app.modules.artifacts.models import SubmissionBundleAdmission
 from app.modules.checkers.api.execution import FinalizeFacts, VerifiedMaterialFacts
-from app.modules.checkers.api.post_submit import ExpectedPostSubmitContext, PostSubmitMemberResult
-from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
+from app.modules.checkers.api.post_submit import PostSubmitMemberResult
 from app.adapters.checkers import evaluation_coordinator
 from app.modules.checkers.post_submit_contracts import (
     make_post_submit_result,
 )
-from app.modules.tasks.models import Submission, WorkstreamTask
-from tests.checkers.post_submit.support import request as value_request
+from app.modules.tasks.models import Submission
 from tests.checkers.post_submit.test_result_contract import result as value_result
 from tests.checkers.execution.support import live_executor, provision_checker_service
 from types import SimpleNamespace
 
 
 async def storage_request(session, submission_id, *, generation=1):
-    submission = await session.get(Submission, str(submission_id))
-    task = await session.get(WorkstreamTask, submission.task_id)
-    source = value_request(project_id=UUID(task.project_id))
-    content = await session.get(ArtifactContent, submission.artifact_content_id)
-    context = ExpectedPostSubmitContext.model_validate_json(
-        json.dumps(
-            dict(
-                guide_version=submission.locked_guide_version,
-                source_id=submission.locked_guide_source_snapshot_id,
-                source_hash=submission.locked_guide_source_snapshot_hash,
-                effective_policy_id=submission.locked_effective_project_submission_artifact_policy_id,
-                effective_policy_hash=submission.locked_effective_project_submission_artifact_policy_hash,
-                pre_policy_id=submission.locked_pre_submit_checker_policy_id,
-                pre_policy_hash=submission.locked_pre_submit_checker_bundle_hash,
-                post_policy_id=submission.locked_post_submit_checker_policy_id,
-                post_policy_version=submission.locked_post_submit_checker_policy_version,
-                post_policy_hash=submission.locked_post_submit_checker_policy_hash,
-                review_policy_id=submission.locked_review_policy_id,
-                review_generation=submission.locked_review_policy_generation,
-                review_hash=submission.locked_review_policy_hash,
-                revision_policy_id=submission.locked_revision_policy_id,
-                revision_generation=submission.locked_revision_policy_generation,
-                revision_hash=submission.locked_revision_policy_hash,
-            )
-        )
+    from app.modules.tasks.models import SubmissionDispatch
+    from app.core.identifiers import new_record_id
+    receipt = await session.get(SubmissionDispatch, UUID(str(submission_id)))
+    assert receipt is not None
+    stored = await evaluation_coordinator(session).read_reserved_evaluation(
+        project_id=receipt.project_id, task_id=receipt.task_id,
+        submission_id=receipt.submission_id, request_id=receipt.evaluation_request_id,
     )
-    body = source.model_dump(exclude={"request_sha256"})
-    body["content_sha256"], body["byte_count"] = content.sha256, content.byte_count
-    body["structural_input"]["package_hash"] = content.sha256
-    body["structural_input"]["summary"] = "PRIVATE_CHECKER_PACKET_SENTINEL"
-    body["structural_input"]["observed_context"] = context.model_dump()
-    body.update(
-        evaluation_generation=generation,
-        task_id=UUID(task.id),
-        assignment_id=UUID(submission.task_assignment_id),
-        submission_id=UUID(submission.id),
-        submission_version=submission.version,
-        content_id=UUID(submission.artifact_content_id),
-        binding_id=UUID(submission.artifact_binding_id),
-        expected_context=context,
-        policy=CompiledPostSubmitPolicy.model_validate_json(
-            json.dumps(submission.locked_post_submit_checker_policy_body)
-        ),
-    )
+    if generation == 1:
+        return stored.request
+    body = stored.request.model_dump(exclude={"request_sha256"})
+    body.update(evaluation_generation=generation, evaluation_request_id=new_record_id())
     return make_post_submit_request(**body)
 
 

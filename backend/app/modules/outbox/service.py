@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import NoReturn
+from uuid import UUID
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,6 +75,17 @@ class OutboxService:
     def __init__(self, session: AsyncSession) -> None:
         """Bind the participant to one caller session; never commit or publish."""
         self._repository = OutboxRepository(session)
+
+    async def require_existing(self, event_id: UUID, value: OutboxAppendInput) -> None:
+        """Validate exact immutable custody without inserting or locking delivery state."""
+        validated = _validated_input(value)
+        digest = canonical_json_hash(validated.payload)
+        try:
+            record = await self._repository.read_exact(event_id, validated)
+        except SQLAlchemyError:
+            _raise_persistence_error()
+        if record is None or not _matches(record, validated, digest):
+            _raise_idempotency_conflict()
 
     async def append(self, value: OutboxAppendInput) -> OutboxAppendResult:
         """Create one event or return its exact idempotent replay."""

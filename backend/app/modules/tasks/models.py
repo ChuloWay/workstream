@@ -710,3 +710,51 @@ class AuditEvent(Base):
     invalidation_target_ref: Mapped[str | None] = mapped_column(String(100))
     before_facts: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
     after_facts: Mapped[dict | None] = mapped_column(JSON(none_as_null=True))
+
+
+class SubmissionDispatch(Base):
+    """One committed creation result; CHECKERS and outbox retain operational state."""
+
+    __tablename__ = "submission_dispatches"
+    __table_args__ = (
+        ForeignKeyConstraint(["task_id", "project_id"],
+            ["workstream_tasks.id", "workstream_tasks.project_id"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["submission_id", "task_id", "submission_version"],
+            ["submissions.id", "submissions.task_id", "submissions.version"], ondelete="RESTRICT"),
+        ForeignKeyConstraint(["assignment_id", "task_id", "contributor_id"],
+            ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"], ondelete="RESTRICT"),
+        CheckConstraint("request_digest ~ '^sha256:[0-9a-f]{64}$' and "
+                        "evaluation_request_digest ~ '^sha256:[0-9a-f]{64}$'", name="sha256_shapes"),
+        CheckConstraint("(submission_version = 1 and creation_kind = 'initial' and creation_status = 'in_progress') "
+                        "or (submission_version > 1 and creation_kind = 'revision' and creation_status = 'needs_revision')",
+                        name="creation_shape"),
+        CheckConstraint("creation_decision_id <> binding_decision_id", name="distinct_authority"),
+    )
+
+    submission_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True)
+    submission_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    project_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    task_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    assignment_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    contributor_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    admission_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("submission_bundle_admissions.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    artifact_binding_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("artifact_bindings.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    artifact_content_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("artifact_contents.id", ondelete="RESTRICT"), nullable=False)
+    creation_decision_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    binding_decision_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    creation_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    creation_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    evaluation_request_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, unique=True)
+    evaluation_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    evaluation_attempt_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("checker_runs.id", ondelete="RESTRICT"), nullable=False, unique=True)
+    evaluation_result_id: Mapped[UUID] = mapped_column(Uuid, nullable=False, unique=True)
+    evaluation_event_id: Mapped[UUID] = mapped_column(Uuid, ForeignKey("outbox_events.event_id", ondelete="RESTRICT"), nullable=False, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    def result(self):
+        """Expose only committed identities, never private request or policy bodies."""
+        from app.modules.tasks.api import SubmissionCreationResult
+        return SubmissionCreationResult(**{
+            name: getattr(self, name) for name in SubmissionCreationResult.__dataclass_fields__
+        })

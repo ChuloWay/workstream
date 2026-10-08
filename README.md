@@ -187,8 +187,9 @@ currentness race proof, shared audit/outbox and lifecycle activation remain.
 ARCH-04E1B-B1 requires TASK locking before checker reservation, current-result
 reads and review admission INSERTs, preserving exact read-only reservation replay
 after acceptance. ARCH-04E1B-B3 retains the inspected ZIP file metadata with immutable
-ART evidence and returns it on consumption without another storage read. Initial
-Submission/dispatch composition remains pending. ARCH-04E1B-B4 binds the
+ART evidence and returns it on consumption without another storage read. ARCH-04E1B-B6 commits each new Submission, verified binding, exact AUTH receipts,
+generation-one evaluation reservation and one shared outbox request atomically.
+Fresh-authorized replay returns the original identities without recreating rows. ARCH-04E1B-B4 binds the
 Submission summary and attestation to the packet that passed intake, with
 service and database enforcement. ARCH-04E1B-B5 rejects evaluation content that
 exceeds the locked checker limits before any pre-check attempt or durable upload
@@ -743,8 +744,9 @@ without fabricating a Review. CON-07 now supplies the hidden source-neutral
 submitter participant and complete frozen award-set staging/replay. REV-04C now
 composes FinalAcceptance, TASK terminal effects and that CON participant in one
 hidden caller-owned transaction for either source. B5 supplies bounded evaluation
-content before durable admission. Atomic initial Submission/dispatch comes next,
-before the hidden handlers.
+content before durable admission; B6 uses it with real record identities in the
+atomic Submission/dispatch command. Hidden request/completion handlers come next;
+the committed request events are not registered for delivery.
 The mandatory exact AUTH receipt must become required on the same strict input,
 with no optional/default path, before production consumption; database
 FinalAcceptance/TASK/CON closure, TASK-before-CHECKERS race proof, shared

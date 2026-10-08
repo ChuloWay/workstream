@@ -15,6 +15,7 @@ from tests.test_submission_manifest import _archive, _manifest
 
 import pytest
 
+from app.modules.artifacts.api.submission_admission import ConsumedSubmissionAdmissionRequest
 from app.modules.artifacts.api import (
     SubmissionAdmissionConsumptionError,
     SubmissionAdmissionConsumptionRequest,
@@ -126,7 +127,8 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
 class _Allow:
     def __init__(self) -> None:
         self.authorize = AsyncMock()
-        self.consume = AsyncMock()
+        self.consume = AsyncMock(return_value=new_record_id())
+        self.validate_replay = AsyncMock()
 
 
 class _DenyFinal(_Allow):
@@ -146,12 +148,13 @@ def _session(*values):
         scalar=AsyncMock(side_effect=values),
         execute=AsyncMock(),
         add=Mock(),
+        get=AsyncMock(),
         flush=AsyncMock(),
     )
 
 
 @pytest.mark.asyncio
-async def test_default_consumption_denies_before_admission_disclosure() -> None:
+async def test_explicit_denial_precedes_admission_disclosure() -> None:
     request = _request()
     session = _session()
 
@@ -159,7 +162,9 @@ async def test_default_consumption_denies_before_admission_disclosure() -> None:
         SubmissionAdmissionConsumptionError,
         match="submission_bundle_admission_unavailable",
     ):
-        await SubmissionAdmissionConsumptionService(session).consume(request)
+        authority = _Allow()
+        authority.authorize.side_effect = SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable")
+        await SubmissionAdmissionConsumptionService(session, authority).consume(request)
 
     session.scalar.assert_not_awaited()
 
@@ -174,7 +179,7 @@ async def test_ready_admission_creates_exact_binding_and_consumes_once() -> None
     authority = _Allow()
     result = await SubmissionAdmissionConsumptionService(session, authority).consume(request)
 
-    binding = session.add.call_args.args[0]
+    binding = session.add.call_args_list[0].args[0]
     assert result.status == "consumed"
     assert result.replayed is False
     assert result.binding_id.hex == binding.id.replace("-", "")
@@ -213,7 +218,11 @@ async def test_ready_admission_creates_exact_binding_and_consumes_once() -> None
     assert facts.sha256 == admission.archive_sha256
     assert facts.byte_count == admission.archive_byte_count
     assert facts.logical_role == "submission_bundle_original"
-    session.flush.assert_awaited_once_with()
+    assert session.flush.await_count == 2
+    receipt = session.add.call_args_list[1].args[0]
+    assert receipt.admission_id == request.admission_id
+    assert receipt.binding_id == result.binding_id
+    assert receipt.decision_id == result.binding_decision_id == authority.consume.return_value
 
 
 @pytest.mark.asyncio
@@ -282,18 +291,22 @@ async def test_matching_consumed_admission_replays_exact_binding() -> None:
     request = _request()
     admission, evidence, content = _lineage(request)
     admission.status = "consumed"
+    decision_id = new_record_id()
     admission.consumed_by_submission_id = str(request.submission_id)
     admission.consumed_by_submission_version = request.submission_version
     binding = SimpleNamespace(id=str(new_record_id()), content_id=admission.artifact_content_id)
     session = _session(admission, evidence, content, binding)
+    session.get.return_value = SimpleNamespace(binding_id=UUID(binding.id), decision_id=decision_id)
 
     authority = _Allow()
-    result = await SubmissionAdmissionConsumptionService(session, authority).consume(request)
+    result = await SubmissionAdmissionConsumptionService(session, authority).read_consumed(_replay_request(request))
 
     assert result.status == "consumed"
     assert result.replayed is True
     assert result.binding_id.hex == binding.id.replace("-", "")
-    assert authority.consume.await_args.args[0].submission_id == request.submission_id
+    authority.consume.assert_not_awaited()
+    assert authority.validate_replay.await_args.args[0].submission_id == request.submission_id
+    assert authority.validate_replay.await_args.args[1] == decision_id
     session.add.assert_not_called()
     session.flush.assert_not_awaited()
 
@@ -335,7 +348,7 @@ async def test_consumed_admission_rejects_wrong_submission_version() -> None:
 
     with pytest.raises(
         SubmissionAdmissionConsumptionError,
-        match="submission_bundle_admission_context_changed",
+        match="submission_bundle_admission_already_consumed",
     ):
         await SubmissionAdmissionConsumptionService(session, _Allow()).consume(replay)
 
@@ -410,10 +423,26 @@ async def test_changed_packet_denies_before_binding_or_consumed_replay(status, f
     binding = SimpleNamespace(id=str(new_record_id()), content_id=admission.artifact_content_id)
     continuation = (binding,) if status == "consumed" else (None, datetime.now(UTC))
     session = _session(admission, evidence, content, *continuation)
+    session.get.return_value = SimpleNamespace(binding_id=UUID(binding.id), decision_id=new_record_id())
     authority = _Allow()
-    with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
-        await SubmissionAdmissionConsumptionService(session, authority).consume(request)
+    expected = "submission_bundle_admission_unavailable" if status == "ready" else "submission_bundle_admission_context_changed"
+    with pytest.raises(SubmissionAdmissionConsumptionError, match=expected):
+        service = SubmissionAdmissionConsumptionService(session, authority)
+        if status == "ready":
+            await service.consume(request)
+        else:
+            await service.read_consumed(_replay_request(request))
     authority.consume.assert_not_awaited()
     session.add.assert_not_called()
     session.flush.assert_not_awaited()
     assert admission.status == status
+
+
+def _replay_request(request):
+    context = request.task_context
+    return ConsumedSubmissionAdmissionRequest(
+        admission_id=request.admission_id, project_id=context.locked_project_context.project_id,
+        task_id=context.task_id, assignment_id=context.assignment_id, contributor_id=context.contributor_id,
+        submission_id=request.submission_id, submission_version=request.submission_version,
+        packet_sha256=request.packet_sha256,
+    )

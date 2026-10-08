@@ -44,7 +44,8 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: atomic initial Submission/dispatch,
+- Next usable boundary: hidden request/completion handlers after delivered
+  ARCH-04E1B-B6 atomic Submission/dispatch,
   before ARCH-04E1B-B hidden routing handlers using the delivered
   REV-04C participant. They must prove TASK-before-CHECKERS currentness and both
   successor-generation race orders; human hidden behavior may continue independently behind exact AUTH,

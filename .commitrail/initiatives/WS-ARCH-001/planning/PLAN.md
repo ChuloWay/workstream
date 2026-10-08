@@ -14,7 +14,7 @@ outcomes.
 | --- | --- | --- |
 | 1 | [Checked packet custody, ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) | Actual Submission summary/attestation match retained intake evidence; service and database rejection preserve rollback and retained data. |
 | 2 | [Bounded evaluation content, ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) | Complete: preparation validates the shared content contract before durable admission; later dispatch must reuse it with real record identities. No truncation or stranded successful preparation. |
-| 3 | Initial Submission/dispatch within ARCH-04E1B-B | Submission, ART binding, exact creation/binding receipts, initial evaluation reservation and shared outbox event commit together. Fresh-authorized replay returns original identities after a lost response. |
+| 3 | [Atomic Submission/dispatch, ARCH-04E1B-B6](../WS-ARCH-001-04E1BB6.md) | Complete: Submission, ART binding, exact creation/binding receipts, initial evaluation reservation and shared outbox event commit together. Fresh-authorized replay returns original identities after a lost response. |
 | 4 | Hidden request/completion handlers within ARCH-04E1B-B | Reuse shared outbox and CHECKERS execution. Verify exact bytes, locked policies and current generation; duplicate/stale delivery has no additional effect. |
 | 5 | Authorized governed outcomes, ARCH-04E2-B and existing shared participants | Genuine authority commits with its full consequence. False/pass atomically creates FinalAcceptance, accepted TASK state, submitter ContributionRecord and applicable awards; true preserves its independent human-review handoff. Include exact receipt, database closure, audit/outbox, lock-race and required fulfillment-root custody. Exercise the existing scoped controller action with a valid generation in the isolated hidden-composition proof; this does not enable the path in production. |
 | 6 | [Checker remediation and recovery, ARCH-04F](chunks/WS-ARCH-001-04F-checker-remediation.md) | Contributor-correctable failure has bounded findings and same-policy replacement ZIP intake. Infrastructure recovery and project/setup faults remain separate, with correct authorized retry and immutable prior evidence. |
@@ -46,11 +46,11 @@ checks must genuinely meet the selected project's requirements: structural check
 must not be advertised as substantive judges, and an unsupported required evaluator
 blocks that project rather than being silently omitted.
 
-[ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. Atomic initial Submission/dispatch is next; its writer must reuse this projection with real record identities.
+[ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. ARCH-04E1B-B6 reuses this projection in atomic Submission/dispatch creation with exact AUTH receipts and select-only replay. Hidden request/completion handlers are next.
 
 [ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. Initial dispatch remains next and must bind exact receipts and fresh-authorized replay before connecting workers.
 
-[ARCH-04E1B-B3](../WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. Initial Submission/dispatch composition is next; it must reuse the B5 bounded content contract and retain exact creation/binding receipts. No dispatch or routing authority is activated.
+[ARCH-04E1B-B3](../WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. ARCH-04E1B-B6 commits that content, exact authority, generation-one reservation and shared request event with each new Submission. No delivery handler or routing authority is activated.
 [ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
 TASK, CHECKERS and historical PROJECTS policy facts. It stages only the existing
 routing request; proposed source facts have no fabricated creation timestamp.
@@ -79,7 +79,7 @@ then live 04E3; true admission does not depend on CON/shared acceptance.
 ARCH-04E1B-B1 delivers TASK-before-CHECKERS reservation/current-read guards
 and ordered review admission INSERTs,
 including terminal read-only replay and both mechanical race controls. The
-next steps are atomic initial Submission/dispatch, then
+next steps after ARCH-04E1B-B6 atomic Submission/dispatch are
 remaining 04E1B-B handlers and full authorized currentness proof;
 no handler or action is activated by this prerequisite.
 
@@ -144,9 +144,10 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-04E2-A](../WS-ARCH-001-04E2A.md) | ARCH-04E1B-A | Complete: strict AUTH-private resource/request/consequence matcher and nominal fixed-router adapter through canonical PREP; action stays planned/unavailable, with no handle, allow, receipt, source write or effect |
 | [ARCH-04E1B-B1](../WS-ARCH-001-04E1BB1.md) | REV-04C and existing CHECKERS coordinator | Complete: required TASK reservation/current-read guard, ordered admission INSERTs, exact terminal replay and mechanical race proof; no handler or activation |
 | [ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) | 04E1B-B1, existing historical PROJECTS context | Complete: exact detached source preparation and reserved identity; no publication, authority or handler effect |
-| [ARCH-04E1B-B3](../WS-ARCH-001-04E1BB3.md) | Existing ART inspected manifest and evidence custody | Complete: retained verified ZIP metadata and consumed-only projection; initial Submission/dispatch composition is next |
-| [ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) | Existing intake packet commitment and hidden Submission composition | Complete: service/database checked-packet custody; initial dispatch remains next |
-| [ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) | Existing inspected FILE metadata and exact TASK/PROJECTS facts | Complete: shared bounded evaluation content before durable admission; initial Submission/dispatch must reuse it |
+| [ARCH-04E1B-B3](../WS-ARCH-001-04E1BB3.md) | Existing ART inspected manifest and evidence custody | Complete: retained verified ZIP metadata and consumed-only projection; B6 supplies atomic Submission/dispatch |
+| [ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) | Existing intake packet commitment and hidden Submission composition | Complete: service/database checked-packet custody; B6 supplies atomic Submission/dispatch |
+| [ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) | Existing inspected FILE metadata and exact TASK/PROJECTS facts | Complete: shared bounded evaluation content before durable admission; reused by B6 atomic Submission/dispatch |
+| [ARCH-04E1B-B6](../WS-ARCH-001-04E1BB6.md) | B3/B4/B5 plus existing TASK/ART/AUTH/CHECKERS/outbox owners | Complete: atomic new Submission, exact creation/binding receipts, generation-one request and shared event; fresh-authorized select-only replay; handlers remain unregistered |
 | ARCH-04E1B-B | ARCH-04E2-A and CON-02B; false additionally uses delivered REV-04C shared acceptance participation | Hidden TASK handlers plus TASK-before-CHECKERS currentness and both successor-generation race orders; durable receipt proof follows at exact activation |
 | Scoped XINT-003-08B controller activation | Existing REV-12A foundation, delivered REV-04C hidden participant and remaining real-writer observation proof | Existing Operator lifecycle-control action for the bounded shared manifest: isolated authorized proof before step 5, production enablement at step 7; not human runtime |
 | ARCH-04E2-B | ARCH-04E1B-B; valid scoped XINT-003-08B controller generation in hidden false-branch proof | Require the exact AUTH receipt on the same strict input; add database complete-set and audit/outbox closure; genuine allow commits with all governed effects |

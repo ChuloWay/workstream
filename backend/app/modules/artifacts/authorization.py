@@ -614,7 +614,7 @@ class _PreparedArtifactServiceAuthorization:
         facts: GuideSourceReadAuthorityFacts
         | PreSubmitMaterializationAuthorityFacts
         | SubmissionBindingAuthorityFacts,
-    ) -> None:
+    ) -> UUID:
         """Consume only the exact handle and facts prepared by this adapter."""
         if (
             self._prepared is None
@@ -625,12 +625,13 @@ class _PreparedArtifactServiceAuthorization:
             raise ArtifactAuthorityDeniedError("artifact service authority is invalid")
         prepared = self._prepared
         try:
-            await prepared.consume(
+            decision = await prepared.consume(
                 prepared_authorization,
                 self._action_id,
                 self._input,
                 _artifact_service_resource_context(facts),
             )
+            return decision.decision_id
         except (AuthorizationDenied, PreparedAuthorizationHandleInvalid, ValidationError) as exc:
             raise ArtifactAuthorityDeniedError("artifact service authority is unavailable") from exc
         finally:
@@ -639,6 +640,23 @@ class _PreparedArtifactServiceAuthorization:
             self._input = None
             self._handle = None
             self._facts = None
+
+    async def validate_binding_replay(self, handle, facts, decision_id: UUID) -> None:
+        """The closed binding action is the only ART receipt replayed here."""
+        if (self._action_id is not ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE
+                or self._prepared is None or self._handle is not handle
+                or not _prepared_artifact_facts_match(self._facts, facts)):
+            raise ArtifactAuthorityDeniedError("artifact service authority is invalid")
+        try:
+            await self._prepared.validate_replay(
+                handle, self._action_id, self._input,
+                _artifact_service_resource_context(facts), decision_id,
+            )
+        except (AuthorizationDenied, PreparedAuthorizationHandleInvalid,
+                PreparedAuthorizationUnsupported, ValidationError) as exc:
+            raise ArtifactAuthorityDeniedError("artifact service authority is unavailable") from exc
+        finally:
+            self.close()
 
     def close(self) -> None:
         """Invalidate an unconsumed capability."""
@@ -681,17 +699,27 @@ class PreparedSubmissionBindingAuthorization:
                 "submission_bundle_admission_unavailable"
             ) from exc
 
-    async def consume(self, facts: SubmissionBindingAuthorityFacts) -> None:
+    async def consume(self, facts: SubmissionBindingAuthorityFacts) -> UUID:
         """Prepare and immediately consume within the protected transaction."""
         try:
             handle = await self._delegate.prepare(
                 facts=facts, idempotency_key=facts.admission_id
             )
-            await self._delegate.consume(prepared_authorization=handle, facts=facts)
+            return await self._delegate.consume(prepared_authorization=handle, facts=facts)
         except ArtifactAuthorityDeniedError as exc:
             raise SubmissionAdmissionConsumptionError(
                 "submission_bundle_admission_unavailable"
             ) from exc
+        finally:
+            self._delegate.close()
+
+    async def validate_replay(self, facts: SubmissionBindingAuthorityFacts, decision_id: UUID) -> None:
+        """Validate stored binding authority after locking current service admission."""
+        try:
+            handle = await self._delegate.prepare(facts=facts, idempotency_key=facts.admission_id)
+            await self._delegate.validate_binding_replay(handle, facts, decision_id)
+        except ArtifactAuthorityDeniedError as exc:
+            raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable") from exc
         finally:
             self._delegate.close()
 

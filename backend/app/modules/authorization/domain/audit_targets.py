@@ -40,6 +40,7 @@ def project_authority_audit_target(
     )
     from app.modules.authorization.runtime import (
         PreSubmitCheckerInputResourceContext, ProjectSubmissionArtifactPolicyMutationResourceContext,
+        SubmissionCreationResourceContext, SubmissionBindingResourceContext,
         ProjectGuideActivationResourceContext,
     )
 
@@ -71,7 +72,7 @@ def project_authority_audit_target(
         resource,
         (
             PreSubmitCheckerInputResourceContext,
-            ProjectGuideCompilationRequestResourceContext,
+            SubmissionCreationResourceContext, SubmissionBindingResourceContext,            ProjectGuideCompilationRequestResourceContext,
             ProjectGuideCompilationExecuteResourceContext,
             ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext,
             AdapterBindingReadResourceContext,

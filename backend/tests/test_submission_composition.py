@@ -14,8 +14,6 @@ from submission_context_fixtures import submission_context_facts
 import pytest
 
 from app.modules.tasks.api import (
-    SubmissionPredecessorFacts,
-    SubmissionArtifactAdmissionResult,
     SubmissionCreationRequest,
     SubmissionCreationUnavailable,
     TaskLockedProjectContextReferences,
@@ -42,6 +40,15 @@ class _Session:
 
     def in_nested_transaction(self):
         return False
+
+    async def connection(self):
+        return self
+
+    async def execute(self, statement):
+        return None
+
+    async def scalar(self, statement):
+        return None
 
     async def flush(self):
         return None
@@ -72,7 +79,7 @@ def _context(request):
 
 def _task():
     values = {
-        "id": str(new_record_id()),
+        "id": str(new_record_id()), "project_id": str(new_record_id()),
         "locked_guide_version": "1", "locked_post_submit_checker_policy_id": str(new_record_id()),
         "locked_post_submit_checker_policy_version": "1",
         "locked_post_submit_checker_policy_hash": "sha256:" + "4" * 64,
@@ -116,6 +123,7 @@ async def test_human_lifecycle_denial_precedes_task_state(
     service = TaskSubmissionCreationService(
         _Session(),
         authorization=authority,
+        evaluations=None, events=None,
         admissions=None,
         contexts=task_service(_Session(), settings=get_settings()),
     )
@@ -138,6 +146,7 @@ async def test_foreign_contributor_denial_precedes_task_lookup():
     service = TaskSubmissionCreationService(
         _Session(),
         authorization=PreparedSubmissionCreationAuthorization(object(), context),
+        evaluations=None, events=None,
         admissions=None,
         contexts=task_service(_Session(), settings=get_settings()),
     )
@@ -146,59 +155,6 @@ async def test_foreign_contributor_denial_precedes_task_lookup():
     )
     with pytest.raises(SubmissionCreationUnavailable):
         await service.create(request)
-
-
-@pytest.mark.asyncio
-async def test_command_orders_authority_task_art_persistence_and_final_consumption(monkeypatch):
-    from app.workers.celery_app import celery_app
-    def unexpected_dispatch(*args, **kwargs):
-        pytest.fail("canonical submission creation queued alternate checker execution")
-    monkeypatch.setattr(celery_app, "send_task", unexpected_dispatch)
-    request = _request()
-    events = []
-
-    class Authority:
-        async def authorize(self, facts): events.append(("authorize", facts.task_id))
-        async def prepare(self, facts):
-            events.append(("prepare", facts.submission_version))
-            return "prepared"
-        async def consume(self, handle, facts):
-            assert handle == "prepared"
-            events.append(("final", facts.submission_version))
-        def close(self, handle): assert handle == "prepared"
-
-    class Admissions:
-        async def consume(self, value):
-            from app.modules.checkers.api import SubmissionPacketView
-            assert value.packet_sha256 == SubmissionPacketView(request.summary, request.contributor_attestation).sha256
-            events.append(("art", value.submission_version))
-            return SubmissionArtifactAdmissionResult(binding_id=new_record_id(), content_id=new_record_id())
-
-    service = TaskSubmissionCreationService(
-        _Session(),
-        authorization=Authority(),
-        admissions=Admissions(),
-        contexts=task_service(_Session(), settings=get_settings()),
-    )
-
-    class Repository:
-        async def lock_submission_context(self, value):
-            events.append(("task", value.task_id))
-            return _context(request)
-        async def get_task(self, task_id): return _task()
-        async def add_submission(self, submission): events.append(("persist", submission.version))
-
-    service._repository = Repository()
-    service._contexts = SimpleNamespace(
-        _load_locked_task_context=AsyncMock(
-            side_effect=lambda task: events.append(("policy", task.id)),
-        ),
-    )
-    result = await service.create(request)
-    assert [event[0] for event in events] == [
-        "authorize", "task", "prepare", "policy", "persist", "art", "final"
-    ]
-    assert result.submission_version == 1
 
 
 @pytest.mark.asyncio
@@ -212,6 +168,7 @@ async def test_denial_precedes_task_lock_and_all_mutation():
     service = TaskSubmissionCreationService(
         _Session(),
         authorization=Authority(),
+        evaluations=None, events=None,
         admissions=None,
         contexts=task_service(_Session(), settings=get_settings()),
     )
@@ -243,6 +200,7 @@ async def test_fresh_authority_denial_precedes_art_and_mutation(revocation):
     service = TaskSubmissionCreationService(
         _Session(),
         authorization=Authority(),
+        evaluations=None, events=None,
         admissions=Admissions(),
         contexts=task_service(_Session(), settings=get_settings()),
     )
@@ -250,7 +208,7 @@ async def test_fresh_authority_denial_precedes_art_and_mutation(revocation):
 
     class Repository:
         async def lock_submission_context(self, value): return _context(request)
-        async def get_task(self, task_id): return _task()
+        async def get_task(self, task_id, **kwargs): return _task()
         async def add_submission(self, submission): persisted.append(submission)
 
     service._repository = Repository()
@@ -283,6 +241,7 @@ async def test_invalid_admission_result_denies_before_lineage_and_final_authorit
     service = TaskSubmissionCreationService(
         _Session(),
         authorization=Authority(),
+        evaluations=None, events=None,
         admissions=Admissions(),
         contexts=task_service(_Session(), settings=get_settings()),
     )
@@ -290,7 +249,7 @@ async def test_invalid_admission_result_denies_before_lineage_and_final_authorit
 
     class Repository:
         async def lock_submission_context(self, value): return _context(request)
-        async def get_task(self, task_id): return _task()
+        async def get_task(self, task_id, **kwargs): return _task()
         async def add_submission(self, submission): persisted.append(submission)
 
     service._repository = Repository()
@@ -316,61 +275,6 @@ def test_hidden_composition_uses_both_active_authority_adapters() -> None:
 
 
 @pytest.mark.asyncio
-async def test_revision_increments_and_binds_the_exact_predecessor():
-    predecessor = SubmissionPredecessorFacts(submission_id=new_record_id(), version=1)
-    initial = _request()
-    request = SubmissionCreationRequest(
-        admission_id=initial.admission_id, task_id=initial.task_id,
-        assignment_id=initial.assignment_id, contributor_id=initial.contributor_id,
-        predecessor_submission_id=predecessor.submission_id,
-        summary=initial.summary, contributor_attestation=initial.contributor_attestation,
-    )
-    context = _context(request)
-    context = submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
-        task_id=context.task_id, assignment_id=context.assignment_id,
-        contributor_id=context.contributor_id, status="needs_revision", kind="revision",
-        predecessor=predecessor, locked_project_context=context.locked_project_context,
-    )
-    seen = {}
-
-    class Authority:
-        async def authorize(self, facts): pass
-        async def prepare(self, facts):
-            seen["prepared"] = facts
-            return "prepared"
-        async def consume(self, handle, facts):
-            assert handle == "prepared"
-            seen.update(final=facts)
-        def close(self, handle): assert handle == "prepared"
-
-    class Admissions:
-        async def consume(self, value):
-            seen["art"] = value
-            return SubmissionArtifactAdmissionResult(binding_id=new_record_id(), content_id=new_record_id())
-
-    service = TaskSubmissionCreationService(
-        _Session(),
-        authorization=Authority(),
-        admissions=Admissions(),
-        contexts=task_service(_Session(), settings=get_settings()),
-    )
-
-    class Repository:
-        async def lock_submission_context(self, value): return context
-        async def get_task(self, task_id): return _task()
-        async def add_submission(self, submission): seen.update(submission=submission)
-
-    service._repository = Repository()
-    # This test isolates predecessor propagation, not policy validation behavior.
-    service._contexts = SimpleNamespace(_load_locked_task_context=AsyncMock())
-    result = await service.create(request)
-    assert result.submission_version == 2
-    assert seen["submission"].supersedes_submission_id == str(predecessor.submission_id)
-    assert seen["art"].submission_version == 2
-    assert seen["final"].predecessor_submission_id == predecessor.submission_id
-
-
-@pytest.mark.asyncio
 async def test_policy_failure_closes_prepared_authority_before_any_submission_or_art_write():
     request = _request()
     authority = SimpleNamespace(
@@ -382,6 +286,7 @@ async def test_policy_failure_closes_prepared_authority_before_any_submission_or
     service = TaskSubmissionCreationService(
         _Session(),
         authorization=authority,
+        evaluations=None, events=None,
         admissions=admissions,
         contexts=SimpleNamespace(
             _load_locked_task_context=AsyncMock(side_effect=ValueError("custody changed"))

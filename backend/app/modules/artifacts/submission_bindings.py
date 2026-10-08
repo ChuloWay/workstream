@@ -17,12 +17,14 @@ from app.modules.artifacts.api import (
     SubmissionAdmissionConsumptionStatus,
     SubmissionAdmissionMaterial,
 )
+from app.modules.artifacts.api.submission_admission import ConsumedSubmissionAdmissionRequest
 from app.modules.artifacts.submission_manifest import SubmissionManifest
 from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
     PreSubmitEvidenceSet,
     SubmissionBundleAdmission,
+    SubmissionBindingReceipt,
 )
 
 _LOGICAL_ROLE = "submission_bundle_original"
@@ -66,24 +68,11 @@ class SubmissionAdmissionConsumptionAuthorization(Protocol):
     async def authorize(self, request: SubmissionAdmissionConsumptionRequest) -> None:
         """Deny before ART reveals or mutates admission state."""
 
-    async def consume(self, facts: SubmissionBindingAuthorityFacts) -> None:
+    async def consume(self, facts: SubmissionBindingAuthorityFacts) -> UUID:
         """Consume exact binding authority in the protected transaction."""
 
-
-class DenySubmissionAdmissionConsumptionAuthorization:
-    """Keep consumption unavailable until the later AUTH activation chunk."""
-
-    async def authorize(self, request: SubmissionAdmissionConsumptionRequest) -> None:
-        del request
-        raise SubmissionAdmissionConsumptionError(
-            "submission_bundle_admission_unavailable"
-        )
-
-    async def consume(self, facts: SubmissionBindingAuthorityFacts) -> None:
-        del facts
-        raise SubmissionAdmissionConsumptionError(
-            "submission_bundle_admission_unavailable"
-        )
+    async def validate_replay(self, facts: SubmissionBindingAuthorityFacts, decision_id: UUID) -> None:
+        """Verify a retained binding allow under fresh authority without consuming."""
 
 
 class SubmissionAdmissionConsumptionService:
@@ -92,18 +81,16 @@ class SubmissionAdmissionConsumptionService:
     def __init__(
         self,
         session: AsyncSession,
-        authorization: SubmissionAdmissionConsumptionAuthorization | None = None,
+        authorization: SubmissionAdmissionConsumptionAuthorization,
     ) -> None:
         self._session = session
-        self._authorization = (
-            authorization or DenySubmissionAdmissionConsumptionAuthorization()
-        )
+        self._authorization = authorization
 
     async def consume(
         self,
         request: SubmissionAdmissionConsumptionRequest,
     ) -> SubmissionAdmissionConsumptionResult:
-        """Authorize, lock ART lineage, then bind, consume, replay, or stale."""
+        """Authorize, lock ART lineage, then bind and consume or mark stale."""
         if (
             not self._session.in_transaction()
             or self._session.in_nested_transaction()
@@ -161,7 +148,7 @@ class SubmissionAdmissionConsumptionService:
         if evidence.packet_sha256 != request.packet_sha256:
             raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable")
         if admission.status == "consumed":
-            return await self._consumed_replay(admission, evidence, request)
+            raise SubmissionAdmissionConsumptionError("submission_bundle_admission_already_consumed")
         if not self._task_lineage_matches(admission, evidence, request):
             now = await self._session.scalar(select(func.now()))
             admission.status = "stale"
@@ -196,7 +183,7 @@ class SubmissionAdmissionConsumptionService:
                 replayed=False,
             )
 
-        await self._authorization.consume(
+        binding_decision_id = await self._authorization.consume(
             self._authority_facts(admission, evidence, request)
         )
 
@@ -219,7 +206,12 @@ class SubmissionAdmissionConsumptionService:
         admission.consumed_by_submission_id = str(request.submission_id)
         admission.consumed_by_submission_version = request.submission_version
         await self._session.flush()
-        return self._result(admission, request, evidence, binding=binding, replayed=False)
+        self._session.add(SubmissionBindingReceipt(
+            admission_id=request.admission_id, binding_id=UUID(binding.id), decision_id=binding_decision_id,
+        ))
+        await self._session.flush()
+        return self._result(admission, request, evidence, binding=binding, replayed=False,
+                            binding_decision_id=binding_decision_id)
 
     async def _lock_binding_scope(
         self,
@@ -240,37 +232,56 @@ class SubmissionAdmissionConsumptionService:
             {"key": key},
         )
 
-    async def _consumed_replay(
-        self,
-        admission: SubmissionBundleAdmission,
-        evidence: PreSubmitEvidenceSet,
-        request: SubmissionAdmissionConsumptionRequest,
+    async def read_consumed(
+        self, request: ConsumedSubmissionAdmissionRequest,
     ) -> SubmissionAdmissionConsumptionResult:
-        binding = await self._session.scalar(
-            select(ArtifactBinding).where(
-                ArtifactBinding.project_id == admission.project_id,
-                ArtifactBinding.resource_type == "submission",
-                ArtifactBinding.resource_id == str(request.submission_id),
-                ArtifactBinding.logical_role == _LOGICAL_ROLE,
-                ArtifactBinding.scope_version == 1,
-            )
-        )
+        """Verify retained ownership first, then freshly authorize its original receipt."""
+        if (not self._session.in_transaction() or self._session.in_nested_transaction()
+                or type(request) is not ConsumedSubmissionAdmissionRequest):
+            raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable")
+        await self._authorization.authorize(request)
+        admission = await self._session.scalar(select(SubmissionBundleAdmission).where(
+            SubmissionBundleAdmission.id == str(request.admission_id),
+            SubmissionBundleAdmission.project_id == str(request.project_id),
+            SubmissionBundleAdmission.task_id == str(request.task_id),
+            SubmissionBundleAdmission.assignment_id == str(request.assignment_id),
+            SubmissionBundleAdmission.actor_profile_id == str(request.contributor_id),
+            SubmissionBundleAdmission.consumed_by_submission_id == str(request.submission_id),
+            SubmissionBundleAdmission.consumed_by_submission_version == request.submission_version,
+            SubmissionBundleAdmission.status == "consumed",
+        ).with_for_update().execution_options(populate_existing=True))
+        if admission is None:
+            raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable")
+        receipt = await self._session.get(SubmissionBindingReceipt, request.admission_id,
+                                          populate_existing=True)
+        if receipt is None:
+            raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable")
+        evidence = await self._session.scalar(select(PreSubmitEvidenceSet).where(
+            PreSubmitEvidenceSet.id == admission.pre_submit_evidence_set_id,
+        ).with_for_update().execution_options(populate_existing=True))
+        content = await self._session.scalar(select(ArtifactContent).where(
+            ArtifactContent.id == admission.artifact_content_id,
+        ).with_for_update().execution_options(populate_existing=True))
+        binding = await self._session.scalar(select(ArtifactBinding).where(
+            ArtifactBinding.project_id == str(request.project_id),
+            ArtifactBinding.resource_type == "submission",
+            ArtifactBinding.resource_id == str(request.submission_id),
+            ArtifactBinding.logical_role == _LOGICAL_ROLE,
+            ArtifactBinding.scope_version == 1,
+        ).execution_options(populate_existing=True))
         if (
-            admission.consumed_by_submission_version != request.submission_version
-            or binding is None
+            evidence is None or content is None or binding is None
             or binding.content_id != admission.artifact_content_id
+            or UUID(binding.id) != receipt.binding_id
+            or not self._art_lineage_is_intact(admission, evidence, content)
+            or evidence.packet_sha256 != request.packet_sha256
         ):
-            raise SubmissionAdmissionConsumptionError(
-                "submission_bundle_admission_context_changed"
-            )
-        if not self._task_lineage_matches(admission, evidence, request):
-            raise SubmissionAdmissionConsumptionError(
-                "submission_bundle_admission_context_changed"
-            )
-        await self._authorization.consume(
-            self._authority_facts(admission, evidence, request)
+            raise SubmissionAdmissionConsumptionError("submission_bundle_admission_context_changed")
+        await self._authorization.validate_replay(
+            self._authority_facts(admission, evidence, request), receipt.decision_id,
         )
-        return self._result(admission, request, evidence, binding=binding, replayed=True)
+        return self._result(admission, request, evidence, binding=binding, replayed=True,
+                            binding_decision_id=receipt.decision_id)
 
     @staticmethod
     def _art_lineage_is_intact(
@@ -335,7 +346,7 @@ class SubmissionAdmissionConsumptionService:
     def _authority_facts(
         admission: SubmissionBundleAdmission,
         evidence: PreSubmitEvidenceSet,
-        request: SubmissionAdmissionConsumptionRequest,
+        request: SubmissionAdmissionConsumptionRequest | ConsumedSubmissionAdmissionRequest,
     ) -> SubmissionBindingAuthorityFacts:
         return SubmissionBindingAuthorityFacts(
             admission_id=request.admission_id,
@@ -373,11 +384,12 @@ class SubmissionAdmissionConsumptionService:
     @staticmethod
     def _result(
         admission: SubmissionBundleAdmission,
-        request: SubmissionAdmissionConsumptionRequest,
+        request: SubmissionAdmissionConsumptionRequest | ConsumedSubmissionAdmissionRequest,
         evidence: PreSubmitEvidenceSet,
         *,
         binding: ArtifactBinding | None,
         replayed: bool,
+        binding_decision_id: UUID | None = None,
     ) -> SubmissionAdmissionConsumptionResult:
         material = None
         if admission.status == "consumed":
@@ -399,4 +411,5 @@ class SubmissionAdmissionConsumptionService:
             status=cast("SubmissionAdmissionConsumptionStatus", admission.status),
             replayed=replayed,
             material=material,
+            binding_decision_id=binding_decision_id,
         )

@@ -110,16 +110,17 @@ creating human admission, acceptance or contribution effects.
    semantic source preparation from current CHECKERS and historical PROJECTS
    custody, without source publication or authority.
    [04E1B-B3](../../WS-ARCH-001-04E1BB3.md) retains inspected ZIP metadata
-   for admission consumption. Initial Submission/dispatch composition must
-   reuse the B5 bounded content projection and retain exact creation/binding receipts.
+   for admission consumption. [04E1B-B6](../../WS-ARCH-001-04E1BB6.md) reuses
+   B5 bounded content in atomic Submission/dispatch creation, retaining exact
+   creation/binding receipts, generation one and a shared outbox request.
+   Its select-only replay verifies the original commit under fresh authority.
    The full authorized
    handler races remain required. False composition must take the REV lifecycle
    fence before TASK and revalidate the policy after locking; source preparation
    does not acquire that fence or authorize later lock-order inversion. After 04E1B-A/04E2-A and
    CON-02B's handler/claim contract (plus delivered REV-04C acceptance foundations
-   for false), TASK implements unavailable request/event
-   production for its own evaluation-request event and the TASK consumer of
-   04C's already-defined final-result notification, exact public facts, currentness protocol
+   for false), TASK implements the still-unregistered request handler and the
+   consumer of 04C's already-defined final-result notification, exact public facts, currentness protocol
    and transaction proof described below. No live worker or action activation.
    Initial checker evaluation-request reservation is a bounded atomic consequence of the existing
    exact `submission.create` command, not an authority token sent to the worker.

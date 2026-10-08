@@ -158,13 +158,3 @@ async def retained_admission(factory, task, assignment, link, packet, predecesso
                 return admission.id
         finally:
             manager.close()
-
-
-class RetainedBindingAuthority:
-    """Controlled binding participant; this fixture does not claim AUTH proof."""
-
-    async def authorize(self, request):
-        assert request.submission_version > 0
-
-    async def consume(self, facts):
-        assert facts.logical_role == "submission_bundle_original"

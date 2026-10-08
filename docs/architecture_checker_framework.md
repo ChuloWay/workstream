@@ -829,6 +829,12 @@ The typed adapter projects every verified file and only required evidence with
 matching verified `evidence/{key}` files. Missing criteria remain empty text for
 the existing post-submit checker. This check does not execute evaluators or
 supply authority. See [the ART admission boundary](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission)
-for timing and cleanup. Initial dispatch must verify stored Submission lineage
-against the locked context before reusing the projection. Preparation has no
-stored Submission to observe; it never replaces the TASK evaluation guard.
+for timing and cleanup. ARCH-04E1B-B6 reuses this projection with actual record
+identities and reserves generation one through the required TASK guard in the
+Submission transaction. The same commit retains exact creation/binding AUTH
+receipts and a bounded `PostSubmissionEvaluationRequested` outbox event.
+Select-only creation replay checks the original request and event without
+changing the current-generation fence. Request/completion handlers remain
+unregistered; this stored intent alone does not start a worker or accept work.
+Preparation has no stored Submission to observe and never replaces the TASK
+evaluation guard.

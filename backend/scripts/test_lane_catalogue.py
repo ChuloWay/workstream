@@ -251,6 +251,14 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    # Atomic submission composition shares the existing multi-owner project lanes;
+    # task C and schema are close to their cap on the merged baseline.
+    "tests/tasks/submission_dispatch/test_composition.py",
+    "tests/tasks/submission_dispatch/test_concurrency.py",
+    "tests/tasks/submission_dispatch/test_migration.py",
+    "tests/tasks/submission_dispatch/test_replay.py",
+    "tests/tasks/submission_dispatch/test_rollback.py",
+    "tests/tasks/submission_dispatch/test_storage.py",
     "tests/reviews/acceptance/test_participant_contracts.py",
     "tests/reviews/acceptance/test_participation.py",
     "tests/reviews/acceptance/test_participation_transactions.py",

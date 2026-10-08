@@ -13,6 +13,7 @@ from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable,
     CompletedEvaluation,
     EvaluationReservation,
+    ReservedEvaluation,
     EvaluationCompletion,
     EvaluationTaskGuard,
     VerifiedMaterialFacts,
@@ -132,6 +133,30 @@ class EvaluationCoordinator:
             # The caller owns rollback, including a cross-submission request-key collision.
             raise CheckerRequestConflict("checker_request_conflict") from None
         return reservation(run)
+
+    async def read_reserved_evaluation(
+        self, *, project_id: UUID, task_id: UUID, submission_id: UUID, request_id: UUID,
+    ) -> ReservedEvaluation:
+        """Read all owner selectors together; missing custody is never repaired."""
+        require_transaction(self._session)
+        run = await self._session.scalar(select(CheckerRun).where(
+            CheckerRun.project_id == str(project_id),
+            CheckerRun.task_id == str(task_id),
+            CheckerRun.submission_id == str(submission_id),
+            CheckerRun.evaluation_request_id == str(request_id),
+            CheckerRun.phase == "post_submission",
+        ).execution_options(populate_existing=True))
+        if run is None:
+            raise CheckerExecutionUnavailable("checker_reservation_unavailable")
+        request = stored_request(run)
+        if (
+            request.project_id != project_id or request.task_id != task_id
+            or request.submission_id != submission_id
+            or request.evaluation_request_id != request_id
+            or request.request_sha256 != run.request_digest
+        ):
+            raise CheckerExecutionUnavailable("checker_reservation_unavailable")
+        return ReservedEvaluation(request=request, reservation=reservation(run))
 
     async def _lock_task_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
         """Retain root-transaction TASK custody before any coordination fence lock."""
