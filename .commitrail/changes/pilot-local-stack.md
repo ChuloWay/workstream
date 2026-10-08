@@ -26,12 +26,15 @@ and authorized grant APIs already exist in the real API drills and backend.
 
 - Configure `docker-compose.yml`, `docker/backend/Dockerfile.dev` and the root
   `.env.example` for a project-scoped six-service local stack with configurable
-  published ports and non-root writable scratch.
+  published ports and non-root writable scratch, including existing non-root
+  host UID/GID reuse with an explicit UID-zero refusal.
 - Add a local-only MinIO bucket readiness helper, extract the existing
   Flow-HMAC test signer for reuse by its real API drill, and add a CLI wrapper
   with focused tests; move that signer's unchanged UUID-generation
   classification to its extracted module.
-- Add `docs/engineering/local-pilot.md` for clean start, identities, existing authority bootstrap, project/guide setup, recovery, isolation and teardown.
+- Add `docs/engineering/local-pilot.md` for clean start, identities, existing authority bootstrap, project/guide setup, recovery, isolation and teardown;
+  keep authenticated curl headers out of process arguments and clean their
+  private temporary files on success, failure and handled signals.
 - Reconcile only the Docker/local-storage quickstart in `README.md` with the
   required ignored root environment and six-service stack.
 - Reconcile only the affected local-runtime and pilot claims in `docs/roadmap_status.md`.
@@ -75,6 +78,9 @@ bootstrap and authorized grant APIs remain the only way to confer authority.
 - [x] Two differently named stacks can run simultaneously; stopping one does not stop or erase the other.
 - [x] Linux proof exercises live API, prefork worker, beat recovery, PostgreSQL, Redis and MinIO behavior.
 - [x] Docker Desktop/macOS support is documented with explicit unverified runtime limits when no macOS host is available.
+- [x] Existing non-root host UIDs are supported without permitting UID zero,
+  and authenticated runbook requests do not expose bearer values through curl
+  arguments, exported environment or shell tracing.
 
 ## Risk and review routing
 
@@ -95,7 +101,8 @@ bootstrap and authorized grant APIs remain the only way to confer authority.
 | Repository gate custody | `python3 scripts/check_stale_authorization_docs.py`; `python3 -m unittest scripts.test_lightweight_agent_gates`; behavior-ownership validation and focused partition test | Technical Compose service tokens pass while comments, option/command arguments, identifiers and human authority prose remain rejected; the ownership partition adds exactly the three shared local helpers and rejects a fourth target. | Hosted gate replay remains external. |
 | Identifier inventory | `uv run --project backend --locked --extra dev pytest -q backend/tests/test_identifier_inventory.py`; exact classification diff | The extracted signer retains the same owner, expression key and external-identity-fixture classification at its new module path; no stale or unowned generation site remains. | Classification movement does not change generated token claims. |
 | Linux live stack | Pinned-source build, six-service `up --wait`, Celery inspect, public Flow identity/bootstrap/grant calls, real PDF upload, MinIO `HEAD`/`GET` and forced worker/beat restarts | All six services become healthy; the worker reports prefork concurrency two and `pong`; five distinct humans, all six fixed service actors, two projects and two scoped submitter grants use existing public operations; the 855-byte guide object survives restart with its digest unchanged; the same durable setup ID remains reserved when missing provider credentials stop compilation; beat recovers from `SIGKILL` with its retained schedule. | No provider credential was available, so a successful model-backed compilation is not claimed. Docker Engine Linux only; no macOS host is available. |
-| Runtime image contract | Backend image build and no-dispatch runtime construction; missing-credential construction probe; fresh UID 501/GID 20 scratch-volume write | The committed Agents SDK extra is installed; dummy-key construction succeeds without provider I/O; absent credentials fail closed; an existing Debian numeric group and non-root UID own and write the copied-up scratch volume without broad permissions. | Actual provider dispatch remains outside this proof. |
+| Runtime image contract | Backend image build and no-dispatch runtime construction; missing-credential construction probe; fresh UID 501/GID 20 scratch-volume write; cached-image counterfactual plus candidate UID 1/GID 20 and UID-zero builds | The committed Agents SDK extra is installed; dummy-key construction succeeds without provider I/O; absent credentials fail closed; existing numeric groups and non-root UIDs, including an already assigned UID, own and write the copied-up scratch volume without broad permissions. The old `useradd` form rejects UID 1, the candidate accepts that non-root collision, and a UID-zero candidate build fails before account creation. | Actual provider dispatch remains outside this proof. |
+| Authenticated runbook requests | Focused local-pilot tests execute the documented helper with a fake curl process on success, curl status 23 and parent `SIGTERM` | The temporary header is mode 600; its bearer value is absent from curl arguments, the exported environment and captured output; cleanup occurs in all three cases while curl statuses 23 and 143 are retained. Every authenticated runbook request uses the helper. | As with any local secret, `SIGKILL` cannot run shell cleanup; the ignored environment and short-lived tokens remain checkout-local controls. |
 | Two-stack isolation | `ws-pilot-runtime-dev` and `ws-pilot-runtime-peer` with disjoint ports, label-scoped inspection, full-profile shutdown/restart and exact peer disposal | Both six-service stacks are healthy together. Stopping the primary leaves peer API, worker topology, PostgreSQL head, Redis marker and MinIO marker intact; restarting the primary restores its two projects, Redis marker and guide object; peer disposal leaves the primary healthy. | Single Linux Docker daemon, not two physical hosts. |
 
 ## Review findings
@@ -106,10 +113,16 @@ shell variable. The image installs the committed agent runtime and supports an
 existing numeric host group. Worker and beat PID files are container-local,
 while scratch artifacts and the beat schedule remain project-volume state. The
 runbook provisions all six existing guide/artifact service identities and
-secures ignored environment copies before secrets are added.
+secures ignored environment copies before secrets are added. Image account
+creation now permits a colliding non-root host UID but refuses UID zero, and
+authenticated curl examples use private, signal-cleaned header files rather
+than bearer-valued arguments.
 
 ## Reconciliation
 
-- Current-source reconciliation: Base and open pull requests were inspected at `c0c4fe70`; open PRs #485, #486 and #487 do not supply or overlap this runtime stack.
+- Current-source reconciliation: Current `main` at `66a26d8d` includes merged
+  PRs #485, #486 and #487. Their evaluation-capacity, CLI guide-declaration
+  and payment-cleanup changes remain intact and do not replace the local stack
+  owners changed here.
 - Next usable boundary: Use the stack for genuine guide setup/recovery and cross-project authorization proof, then complete the public pilot journey in its separately owned chunks. Runner and model-proxy services remain deferred to PILOT-04/PILOT-05.
 - Remaining risks: A real Docker Desktop/macOS run and a provider-backed completed guide setup were not available on this Linux host and must not be inferred from Compose or Linux evidence.

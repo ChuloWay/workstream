@@ -25,7 +25,11 @@ ARG LOCAL_GID=1000
 RUN if ! getent group "${LOCAL_GID}" >/dev/null; then \
         groupadd --gid "${LOCAL_GID}" workstream; \
     fi \
-    && useradd --uid "${LOCAL_UID}" --gid "${LOCAL_GID}" --create-home --shell /bin/bash workstream
+    && if [ "${LOCAL_UID}" -eq 0 ]; then \
+        echo "LOCAL_UID=0 would run workstream as root" >&2; \
+        exit 1; \
+    fi \
+    && useradd --non-unique --uid "${LOCAL_UID}" --gid "${LOCAL_GID}" --create-home --shell /bin/bash workstream
 
 WORKDIR /workspace/backend
 

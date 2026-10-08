@@ -88,7 +88,42 @@ The helper signs short-lived tokens using the exact local Flow-HMAC settings
 already consumed by `FlowAuthVerifier`. It always emits empty role claims;
 tokens identify actors but do not grant authority.
 
+Keep shell tracing disabled while tokens are in scope. The request helper writes
+each Authorization header to a mode-600 temporary file, gives `curl` only the
+file path, removes the file after success or failure and returns `curl`'s exact
+status.
+
 ```bash
+set +x
+set -o pipefail
+
+curl_with_token() {
+  local token="$1" header_file status
+  shift
+  header_file="$(mktemp "${TMPDIR:-/tmp}/workstream-auth.XXXXXXXX")" || return
+  trap 'rm -f "$header_file"' HUP INT TERM
+  chmod 600 "$header_file" || {
+    status=$?
+    rm -f "$header_file"
+    trap - HUP INT TERM
+    return "$status"
+  }
+  printf 'Authorization: Bearer %s\n' "$token" >"$header_file" || {
+    status=$?
+    rm -f "$header_file"
+    trap - HUP INT TERM
+    return "$status"
+  }
+  if curl --header "@$header_file" "$@"; then
+    status=0
+  else
+    status=$?
+  fi
+  rm -f "$header_file"
+  trap - HUP INT TERM
+  return "$status"
+}
+
 ADMIN_TOKEN="$(docker compose --profile backend exec -T backend python scripts/issue_local_flow_token.py --subject pilot-access-admin)"
 MANAGER_TOKEN="$(docker compose --profile backend exec -T backend python scripts/issue_local_flow_token.py --subject pilot-project-manager)"
 CONTRIBUTOR_ONE_TOKEN="$(docker compose --profile backend exec -T backend python scripts/issue_local_flow_token.py --subject pilot-contributor-one)"
@@ -101,8 +136,7 @@ the returned IDs in the shell:
 
 ```bash
 actor_id() {
-  curl --fail --silent --show-error \
-    -H "Authorization: Bearer $1" \
+  curl_with_token "$1" --fail --silent --show-error \
     "$API_URL/api/v1/actors/me" | jq -r .actor_profile_id
 }
 ADMIN_ID="$(actor_id "$ADMIN_TOKEN")"
@@ -125,13 +159,11 @@ token claims remain empty:
 
 ```bash
 new_key() { docker compose --profile backend exec -T backend python -c 'import uuid; print(uuid.uuid4())'; }
-curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+curl_with_token "$ADMIN_TOKEN" --fail --silent --show-error -X POST \
   -H "Content-Type: application/json" -H "Idempotency-Key: $(new_key)" \
   -d "{\"target_actor_profile_id\":\"$MANAGER_ID\",\"role\":\"project_manager\",\"scope_type\":\"system\",\"reason\":\"Local pilot project administration\"}" \
   "$API_URL/api/v1/admin-role-grants" | jq
-curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
+curl_with_token "$ADMIN_TOKEN" --fail --silent --show-error -X POST \
   -H "Content-Type: application/json" -H "Idempotency-Key: $(new_key)" \
   -d "{\"target_actor_profile_id\":\"$FINANCE_ID\",\"role\":\"finance_authority\",\"scope_type\":\"system\",\"reason\":\"Local pilot finance administration\"}" \
   "$API_URL/api/v1/admin-role-grants" | jq
@@ -148,8 +180,7 @@ for identity in \
   artifact.binding \
   artifact.guide_reader \
   project.setup; do
-  curl --fail --silent --show-error -X POST \
-    -H "Authorization: Bearer $ADMIN_TOKEN" \
+  curl_with_token "$ADMIN_TOKEN" --fail --silent --show-error -X POST \
     -H "Content-Type: application/json" -H "Idempotency-Key: $(new_key)" \
     -d "{\"service_identity\":\"workstream.$identity\",\"subject\":\"local-pilot-$identity\",\"reason\":\"Local pilot durable guide setup\"}" \
     "$API_URL/api/v1/service-actors" | jq
@@ -162,15 +193,13 @@ Create two draft projects. The first is the guide-upload target; the second is
 an authorization isolation control:
 
 ```bash
-PROJECT="$(curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $MANAGER_TOKEN" \
+PROJECT="$(curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error -X POST \
   -H "Content-Type: application/json" -H "Idempotency-Key: $(new_key)" \
   -d '{"name":"Local pilot","slug":"local-pilot","description":"Checkout-local pilot evidence"}' \
   "$API_URL/api/v1/projects")"
 PROJECT_ID="$(jq -r .id <<<"$PROJECT")"
 
-OTHER_PROJECT="$(curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $MANAGER_TOKEN" \
+OTHER_PROJECT="$(curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error -X POST \
   -H "Content-Type: application/json" -H "Idempotency-Key: $(new_key)" \
   -d '{"name":"Local pilot isolation","slug":"local-pilot-isolation","description":"Cross-project denial control"}' \
   "$API_URL/api/v1/projects")"
@@ -183,8 +212,7 @@ reputation records; it does not fabricate evidence:
 
 ```bash
 grant_submitter() {
-  curl --fail --silent --show-error -X POST \
-    -H "Authorization: Bearer $MANAGER_TOKEN" \
+  curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error -X POST \
     -H "Content-Type: application/json" -H "Idempotency-Key: $(new_key)" \
     -d "{\"target_actor_profile_id\":\"$1\",\"role\":\"submitter\",\"qualification\":{\"skills_snapshot\":{\"availability\":\"unavailable\",\"reference_ids\":[],\"unavailable_reason\":\"no_record\"},\"reputation_snapshot\":{\"availability\":\"unavailable\",\"reference_ids\":[],\"unavailable_reason\":\"no_record\"},\"prior_project_work_refs\":[],\"external_expertise_refs\":[]},\"reason\":\"Local pilot contributor\"}" \
     "$API_URL/api/v1/projects/$PROJECT_ID/role-grants" | jq
@@ -197,11 +225,9 @@ Both contributors can read the granted project and are concealed from the
 ungranted project:
 
 ```bash
-curl --fail --silent --show-error \
-  -H "Authorization: Bearer $CONTRIBUTOR_ONE_TOKEN" \
+curl_with_token "$CONTRIBUTOR_ONE_TOKEN" --fail --silent --show-error \
   "$API_URL/api/v1/projects/$PROJECT_ID" | jq -e ".id == \"$PROJECT_ID\""
-test "$(curl --silent --output /dev/null --write-out '%{http_code}' \
-  -H "Authorization: Bearer $CONTRIBUTOR_ONE_TOKEN" \
+test "$(curl_with_token "$CONTRIBUTOR_ONE_TOKEN" --silent --output /dev/null --write-out '%{http_code}' \
   "$API_URL/api/v1/projects/$OTHER_PROJECT_ID")" = 404
 ```
 
@@ -218,16 +244,14 @@ flow does not approve or activate it.
 ```bash
 GUIDE_PDF=/absolute/path/to/project-guide.pdf
 test -f "$GUIDE_PDF"
-GUIDE="$(curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $MANAGER_TOKEN" \
+GUIDE="$(curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error -X POST \
   -H "Content-Type: application/json" -H "Idempotency-Key: $(new_key)" \
   -d "{\"version\":\"initial\",\"change_summary\":\"Initial local pilot source\",\"task_examples\":[{\"title\":\"Pilot contribution\",\"labels\":[\"pilot\"],\"content\":\"Complete the assigned pilot work and return the required evidence.\"}],\"documents\":[{\"label\":\"$(basename "$GUIDE_PDF")\",\"media_type\":\"application/pdf\"}]}" \
   "$API_URL/api/v1/projects/$PROJECT_ID/guides")"
 GUIDE_ID="$(jq -r .id <<<"$GUIDE")"
 DOCUMENT_ID="$(jq -r '.documents[0].document_id' <<<"$GUIDE")"
 
-curl --fail --silent --show-error -X POST \
-  -H "Authorization: Bearer $MANAGER_TOKEN" \
+curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error -X POST \
   -H "Content-Type: application/pdf" -H "Idempotency-Key: $(new_key)" \
   --data-binary "@$GUIDE_PDF" \
   "$API_URL/api/v1/projects/$PROJECT_ID/guides/$GUIDE_ID/documents/$DOCUMENT_ID/content" | jq
@@ -238,8 +262,7 @@ object was verified through MinIO. Inspect the durable setup state rather than
 assuming checker/provider success:
 
 ```bash
-curl --fail --silent --show-error \
-  -H "Authorization: Bearer $MANAGER_TOKEN" \
+curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error \
   "$API_URL/api/v1/projects/$PROJECT_ID/guides/$GUIDE_ID/setup-runs/latest" | jq
 docker compose --profile backend logs --since 10m worker beat
 ```
@@ -259,8 +282,7 @@ compilation.
 ```bash
 docker compose --profile backend kill -s KILL worker
 docker compose --profile backend up -d --wait worker
-curl --fail --silent --show-error \
-  -H "Authorization: Bearer $MANAGER_TOKEN" \
+curl_with_token "$MANAGER_TOKEN" --fail --silent --show-error \
   "$API_URL/api/v1/projects/$PROJECT_ID/guides/$GUIDE_ID/setup-runs/latest" | jq
 ```
 
