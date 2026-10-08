@@ -553,8 +553,10 @@ severities.
 
 The following is the intended end-to-end lifecycle. Pre-submit intake and
 retained-history reads are implemented. Hidden durable post-submit execution is
-implemented with ARCH-04D2 exact service authority; automatic request delivery and result
-routing remain unavailable pending ARCH-04E. Known missing or corrupt input after ART authorization records a
+implemented with ARCH-04D2 exact service authority. ARCH-04E1B-B7 adds a hidden
+request handler that verifies committed outbox invocation, recovers B6's exact
+request and fences both execution and terminal replay/publication. It remains
+unregistered; automatic delivery and result routing are unavailable. Known missing or corrupt input after ART authorization records a
 terminal infrastructure failure only after cleanup and fresh finalization
 authorization; it does not route the task. Exact replay does not reread storage.
 Denied material access and unexpected failures remain nonterminal. ARCH-04F adds
