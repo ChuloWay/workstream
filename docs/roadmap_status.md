@@ -730,9 +730,9 @@ Delivered foundations (not a claim of full public integration)
   ARCH-04E1B-B1 ordered reservation/current reads + admission INSERTs (no activation)
   ARCH-04E1B-B2 exact source proposal + B3 ZIP metadata + B4 checked packet custody + B5 bounded evaluation content
   ARCH-04E1B-B6 atomic Submission/dispatch + exact AUTH receipts + replay (no delivery/publication authority)
+  ARCH-04E1B-B7 hidden request delivery (unregistered)
 
 Remaining integration
-  B7 hidden request delivery (unregistered)
   both branches: hidden completion routing 04E1B-B
     -> authority/consequence proof 04E2-B
   production false path additionally requires remediation before live activation

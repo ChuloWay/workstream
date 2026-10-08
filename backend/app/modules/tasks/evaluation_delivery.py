@@ -1,6 +1,7 @@
 """Recover the committed initial evaluation; outbox values never grant authority."""
 
 from collections.abc import Callable
+import json
 from uuid import UUID
 
 from sqlalchemy import select
@@ -40,11 +41,16 @@ class EvaluationDeliveryRequestReader:
         if receipt is None:
             raise EvaluationDeliveryUnavailable("evaluation_delivery_unavailable")
         expected = evaluation_request_event(receipt)
+        expected_payload = json.dumps(
+            expected.payload, sort_keys=True, separators=(",", ":"),
+            ensure_ascii=False, allow_nan=False,
+        )
         if (
             any(getattr(envelope, name) != getattr(expected, name) for name in (
                 "event_type", "event_version", "aggregate_type", "aggregate_id",
                 "correlation_id", "causation_event_id", "idempotency_key",
             ))
+            or envelope.payload_json != expected_payload
             or envelope.claim.payload_digest != canonical_json_hash(expected.payload)
         ):
             raise EvaluationDeliveryUnavailable("evaluation_delivery_unavailable")

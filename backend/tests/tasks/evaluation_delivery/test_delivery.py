@@ -1,13 +1,18 @@
 """Actual request delivery, exact terminal replay, and hidden production scope."""
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.adapters.outbox import production_outbox_delivery
 from app.modules.actors.api import ServiceIdentity
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable, REQUEST_EVENT
 from app.modules.outbox.api import FinalizationCause, HandlerOutcome
 from app.modules.tasks.models import WorkstreamTask
+from app.modules.tasks.post_submit_routing.models import TaskRoutingRequest, TaskPostSubmitRoutingManifest
+from app.modules.reviews.decision.models import Review
+from app.modules.reviews.acceptance.models import FinalAcceptance
+from app.modules.contributions.records.models import ContributionRecord
+from app.modules.compensation.awards.models import CompensationAward
 from tests.checkers.execution.support import service_link_state
 from tests.post_submit_materialization_helpers import material_fixture
 from .support import delivery_fixture, invoked, state, outcome
@@ -40,6 +45,9 @@ async def test_shared_delivery_runs_exact_request_once(tmp_path, isolated_databa
         assert await state(h) == saved
         assert len(h.store.opens) == 1 and not h.preparation._active
         async with h.factory() as session:
+            for model in (TaskRoutingRequest, TaskPostSubmitRoutingManifest, Review,
+                          FinalAcceptance, ContributionRecord, CompensationAward):
+                assert await session.scalar(select(func.count()).select_from(model)) == 0
             assert await session.scalar(select(WorkstreamTask.status).where(
                 WorkstreamTask.id == str(h.request.task_id),
             )) == "evaluation_pending"
