@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from app.core.identifiers import new_record_id
 
 import pytest
-from sqlalchemy import select, func, event, text
+from sqlalchemy import select, func, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -100,7 +100,7 @@ async def _prepared_packet(isolated_database_env, tmp_path):
 
 
 async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
-    isolated_database_env, tmp_path,
+    isolated_database_env, tmp_path, monkeypatch,
 ):
     async with _prepared_packet(isolated_database_env, tmp_path) as h:
         factory, context = h.factory, h.context
@@ -142,32 +142,28 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
                     ).create(replace(creation, **{field: getattr(creation, field) + " Changed."}))
             await assert_unconsumed()
 
-        # Stage valid creation, then change only stored text using SQL before the
-        # root commit. This reaches the deferred packet guard, not the ART check.
+        # Change only the stored packet after real ART/AUTH consumption, before
+        # dispatch sealing. Force only the deferred checked-packet constraint
+        # so a later dispatch constraint cannot mask this independent proof.
+        from app.modules.authorization.submission_creation_authorization import PreparedSubmissionCreationAuthorization
+        consume = PreparedSubmissionCreationAuthorization.consume
         for column in ("summary", "worker_attestation"):
-            async with factory() as session:
-                def substitute_packet(sync_session):
-                    # Isolate the deferred checked-packet guard from the newer
-                    # immediate dispatch seal; failed commit rolls this DDL back.
-                    sync_session.connection().execute(text(
-                        "ALTER TABLE public.submissions DISABLE TRIGGER submission_dispatch_parent_immutable"
-                    ))
-                    sync_session.connection().execute(text(
-                        f"UPDATE public.submissions SET {column} = {column} || ' Changed.' "
-                        "WHERE submission_bundle_admission_id = :admission"
-                    ), {"admission": admission_id})
-                    sync_session.connection().execute(text(
-                        "SET CONSTRAINTS submission_packet_custody IMMEDIATE"
-                    ))
+            async def substitute_packet(owner, handle, facts):
+                decision = await consume(owner, handle, facts)
+                await owner._session.execute(text(
+                    f"UPDATE public.submissions SET {column} = {column} || ' Changed.' "
+                    "WHERE submission_bundle_admission_id = :admission"
+                ), {"admission": admission_id})
+                await owner._session.execute(text("SET CONSTRAINTS submission_packet_custody IMMEDIATE"))
+                return decision
 
-                event.listen(session.sync_session, "before_commit", substitute_packet)
-                try:
+            with monkeypatch.context() as patch:
+                patch.setattr(PreparedSubmissionCreationAuthorization, "consume", substitute_packet)
+                async with factory() as session:
                     with pytest.raises(IntegrityError, match="submission packet differs from checked evidence"):
                         await compose_hidden_submission_creation_command(
                             session, context, request_id=new_record_id(), correlation_id=new_record_id(),
                         ).create(creation)
-                finally:
-                    event.remove(session.sync_session, "before_commit", substitute_packet)
             await assert_unconsumed()
 
         async def create():
