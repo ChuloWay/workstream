@@ -42,7 +42,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     )
 
 
-def test_checker_delivery_and_routing_preparation_keep_exact_exclusive_owners() -> None:
+def test_checker_delivery_and_routing_preparation_partition_every_node_once() -> None:
     delivery = {
         "tests/checkers/execution/test_results.py",
         "tests/checkers/execution/test_execution.py",
@@ -60,19 +60,27 @@ def test_checker_delivery_and_routing_preparation_keep_exact_exclusive_owners() 
     }
     assert set(catalogue.CHECKER_DELIVERY_MODULES) == delivery
     groups = (
-        (delivery, "project_lifecycle_a"),
-        (set(catalogue.ROUTING_AUTH_PREPARATION_MODULES), "project_lifecycle_c"),
+        delivery,
+        set(catalogue.ROUTING_AUTH_PREPARATION_MODULES),
     )
-    for modules, owner in groups:
+    for modules in groups:
         assert not modules & set(catalogue.TASK_MODULES)
-        assert not modules & set(catalogue.PARTITION_LANES_BY_MODULE)
+        assert all(
+            catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_LANES
+            for module in modules
+        )
         for module in modules:
-            assert [lane.name for lane in LANES if module in lane.modules] == [owner]
-        nodes = [f"{module}::test_custody[{index}]" for module in modules for index in range(3)]
+            assert (
+                tuple(lane.name for lane in LANES if module in lane.modules)
+                == catalogue.PARTITIONED_PROJECT_LANES
+            )
+        nodes = [f"{module}::test_custody[{index}]" for module in modules for index in range(256)]
         manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
         assert len(manifest["nodes"]) == len(nodes)
         assert {row["nodeid"] for row in manifest["nodes"]} == set(nodes)
-        assert {row["lane"] for row in manifest["nodes"]} == {owner}
+        assert {row["lane"] for row in manifest["nodes"]} == set(
+            catalogue.PARTITIONED_PROJECT_LANES
+        )
 
 
 def test_measured_hotspots_have_explicit_semantic_owners() -> None:
@@ -80,10 +88,12 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     modules_by_lane = {lane.name: set(lane.modules) for lane in LANES}
 
     assert (
-        modules_by_lane["project_lifecycle_a"] - set(catalogue.CHECKER_DELIVERY_MODULES)
+        modules_by_lane["project_lifecycle_a"]
         == modules_by_lane["project_lifecycle_b"]
-        == modules_by_lane["project_lifecycle_c"] - set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
-        == {
+        == modules_by_lane["project_lifecycle_c"]
+        == set(catalogue.CHECKER_DELIVERY_MODULES)
+        | set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
+        | {
             "tests/tasks/evaluation_delivery/test_custody.py",
             "tests/tasks/evaluation_delivery/test_delivery.py",
             "tests/tasks/evaluation_delivery/test_isolation.py",
@@ -812,7 +822,7 @@ def test_observability_proofs_use_schema_lane_with_measured_headroom():
     assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
 
 
-def test_routing_authorization_proofs_run_once_on_project_c():
+def test_routing_authorization_proofs_use_the_project_partition():
     expected = {
         "tests/authorization/post_submit_routing/test_contracts.py",
         "tests/authorization/post_submit_routing/test_prepared.py",
@@ -820,9 +830,12 @@ def test_routing_authorization_proofs_run_once_on_project_c():
     assert set(catalogue.ROUTING_AUTH_PREPARATION_MODULES) == expected
     for lane in LANES:
         assert set(lane.modules) & expected == (
-            expected if lane.name == "project_lifecycle_c" else set()
+            expected if lane.name in catalogue.PARTITIONED_PROJECT_LANES else set()
         )
-    assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_LANES
+        for module in expected
+    )
 
 
 def test_shared_acceptance_owner_proofs_are_in_partitioned_project_lanes():

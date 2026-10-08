@@ -43,7 +43,7 @@ run only; this record makes no hosted performance claim before a candidate run.
   timeout or treating those logs as fan-in evidence.
 - `backend/scripts/test_lane_catalogue.py` and
   `backend/tests/test_ci_lane_catalogue.py`: rebalance measured checker-delivery
-  and routing-preparation workloads into existing project-lane capacity;
+  and routing-preparation workloads into the existing three-way project partition;
   preserve every test node, deterministic assignment and all nine lanes.
 - `scripts/test_lightweight_agent_gates.py` and
   `backend/tests/test_ci_test_lanes.py`: focused positive and adversarial
@@ -81,9 +81,27 @@ capacity and output-custody/storage proof together to PROJECT A, beside the
 existing initial-dispatch and evaluation-delivery owners. Move routing AUTH
 PREP proof from TASK C to PROJECT C. Keep the original per-node hash mechanism,
 UUID seed, node IDs, isolation, 1200-second limits and exact aggregate custody.
-Use catalogue/inventory regressions and a dropped/duplicated-owner mutant
-before independent CI-integrity and QA review. The recorded durations guide
-this allocation; only a fresh hosted run can establish runtime success.
+That initial allocation used catalogue/inventory regressions and a
+dropped/duplicated-owner mutant. The next measurement below supersedes its
+exclusive placement; recorded forecasts are not hosted success.
+
+
+The next hosted measurement, Backend run `37809916459` at merge
+`dbc84f10e1ca1926412856a5f34e4bc91ab49c5d`, disproved the exclusive
+PROJECT A placement: it exhausted 1200 seconds after 665 of 745 nodes, with
+80 unfinished, zero skips and confirmed PostgreSQL/MinIO cleanup. PROJECT B
+finished in 769.294 seconds and PROJECT C in 483.442 seconds. Assigning the
+entire delivery group to one runner was the incorrect assumption.
+
+Repair that allocation by partitioning all delivery and routing-preparation
+nodes across the same three PROJECT lanes using the existing exact-node hash.
+No new jobs, runtime controls, retries, skips, evidence formats or product changes
+are allowed. Update the existing ownership regressions to reject an exclusive
+placement and retain inventory, exact node identity and fan-in checks. Compare
+all 8,803 nodes from that hosted manifest before and after this repair; only these
+15 modules may change assignment. Focused tests, a regression mutant restoring
+exclusive placement, and independent CI-integrity/security/QA/test-delta review
+are required before pushing. Hosted speed remains unproven until fresh CI.
 
 ## Design and decisions
 
@@ -130,7 +148,8 @@ promise an eight-minute Backend completion time.
   timeout, log and evidence contracts.
 - [x] The nine lanes, full inventory, fan-in failure propagation, CLI dependency,
   aggregate validation, permissions and timeouts are unchanged; only the named
-  checker-delivery and routing-preparation workloads change lane ownership.
+  checker-delivery and routing-preparation workloads change lane ownership;
+  all use the existing three-way PROJECT partition.
 - [x] Contributor guidance permits only failed-job reruns for a diagnosed
   same-head transient, explains aggregate revalidation of successful lane
   evidence, and requires diagnosis or fresh current-tree CI in the other cases.
@@ -156,6 +175,11 @@ promise an eight-minute Backend completion time.
 | Timeout diagnosis and allocation | Retained summaries and complete TASK A duration phases from Backend run `37799550116` | TASK B/C interrupted at 1200 seconds; delivery-group transfer forecasts about 152/161 seconds of relief and about 1036 seconds for PROJECT A | Forecast extrapolates TASK A module costs; fresh hosted execution is required |
 | Rebalance integrity | Catalogue/runner/evidence/merge focused pytest batch; dropped and duplicated delivery-owner mutations | 124 tests passed; recursive inventory rejected both mutations; all node IDs and existing hash/UUID-seed mechanisms remain | This proves assignment and evidence contracts, not hosted speed |
 
+| Exclusive-placement diagnosis | Actual run `37809916459` PROJECT A/B/C summaries and cleanup records | A interrupted at 1200.966s with 665/745 completed; B/C passed at 769.294/483.442s; A cleanup complete | A interruption prevents a final duration table; previous cost forecast was insufficient |
+| Three-way allocation integrity | Replay the retained 8,803-node hosted manifest through the repaired catalogue; recursive inventory validator | Same IDs and execution kinds, exactly once; 127 assignments changed only within the 15 named modules; delivery A/B/C 41/32/39 and routing PREP 28/28/16 | This is a historical inventory replay, not a claim that current-head full CI completed |
+| Repair behavior and gates | Focused catalogue/runner/evidence/merge pytest batch; workflow unittest suite; Ruff | 124 passed in 46.13s and 19 workflow tests passed; lint/format clean | Fresh hosted runtime measurement remains required |
+| Exclusive-placement regression | Temporarily restore the predecessor catalogue and run the updated exact partition regression, then restore the repair | Predecessor fails because delivery has no three-way partition; restored candidate passes in 0.65s | Existing inventory and fan-in regressions retain loss/duplication/failure checks |
+
 ## Review findings
 
 Initial workflow review found that `runner.temp` is not an allowed workflow-level
@@ -177,7 +201,7 @@ environment export and fresh install in order; the relocation mutant fails it.
 ## Reconciliation
 
 - Current-source reconciliation: Reconciled with `main` at
-  `b169e83f816bba417fc0618a6e2d419acb2f94ed`; no product or migration owner is
+  `36e8a615f01801cecd6ccf83d7411235ab1cfa8f`; no product or migration owner is
   affected.
 - Next usable boundary: Validate the measured allocation in fresh hosted CI and
   measure cross-commit cache reuse before further allocation or DAG changes.

@@ -136,10 +136,10 @@ This is not a production configuration or proof of host-power-loss durability:
 An exhausted mount fails the job; it does not silently change storage or skip tests.
 
 The `project_lifecycle_a`, `project_lifecycle_b`, and `project_lifecycle_c` lanes
-partition PROJECT nodes. Project A also owns checker execution, materialization,
-evaluation capacity and output custody beside initial dispatch/delivery; project C
-owns routing AUTH preparation. These exclusive workloads use measured spare
-capacity after TASK B/C exhausted their unchanged execution cap.
+partition PROJECT nodes, checker execution, materialization, evaluation capacity,
+output custody and routing AUTH preparation beside initial dispatch/delivery.
+All use the existing exact-node hash across the three lanes: placing the entire
+checker delivery group exclusively on project A exhausted its execution cap.
 `task_lifecycle_a`, `task_lifecycle_b`, and `task_lifecycle_c` use the same
 deterministic partition mechanism for the remaining TASK and checker nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
 isolated-runner contracts. The

@@ -394,8 +394,8 @@ PROJECT_MODULES = (
     "tests/test_projects.py",
 )
 
-# Checker delivery shares the project dispatch owner and uses measured
-# project-A capacity after task B/C exhausted their unchanged execution cap.
+# Checker delivery shares project dispatch ownership and the existing
+# three-way partition; exclusive placement exceeded the hosted execution cap.
 CHECKER_DELIVERY_MODULES = (
     "tests/checkers/execution/test_results.py",
     "tests/checkers/execution/test_execution.py",
@@ -512,8 +512,7 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
-# Routing PREP proofs stay together beside project-policy preparation, using
-# measured project-C capacity after task C exhausted its execution cap.
+# Routing PREP proofs share the three-way project-policy partition.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
     "tests/authorization/post_submit_routing/test_prepared.py",
@@ -521,7 +520,10 @@ ROUTING_AUTH_PREPARATION_MODULES = (
 
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
-    (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
+    (
+        PARTITIONED_PROJECT_LANES,
+        PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
+    ),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
@@ -563,9 +565,7 @@ LANES = (
     *(
         TestLane(
             name,
-            PROJECT_MODULES
-            + (CHECKER_DELIVERY_MODULES if name == "project_lifecycle_a" else ())
-            + (ROUTING_AUTH_PREPARATION_MODULES if name == "project_lifecycle_c" else ()),
+            PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
         )
         for name in PARTITIONED_PROJECT_LANES
     ),
