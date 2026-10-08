@@ -1,7 +1,7 @@
 # PILOT-00 — Establish The Offline gVisor Build Boundary
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Preserve a reproducible feasibility result that either identifies a bounded offline image-build and oracle-test mechanism under gVisor or gives PILOT-04 and PILOT-06 concrete evidence to select a separate build boundary.
 
 ## Intent
@@ -47,7 +47,7 @@ Installing or registering a runtime on the development host is probe setup, not 
 - [x] Demonstrate a genuine Dockerfile/work failure separately from runtime, cache, builder and limit failures.
 - [x] Record a provisional tested envelope and the effect of timeout, memory and disk limits without converting infrastructure failure into contributor failure.
 - [x] State the Docker Desktop/macOS development fallback and every unverified platform limit accurately.
-- [ ] Give PILOT-04 and PILOT-06 an explicit recommendation and link the reviewed result from #491 and #493.
+- [x] Give PILOT-04 and PILOT-06 an explicit recommendation and link the reviewed result from [#491](https://github.com/Flow-Research/workstream/issues/491#issuecomment-6059462336) and [#493](https://github.com/Flow-Research/workstream/issues/493#issuecomment-6059463258).
 
 ## Risk and review routing
 
@@ -76,4 +76,4 @@ Installing or registering a runtime on the development host is probe setup, not 
 
 - Current-source reconciliation: Based on `main` `9f774cbbaa84583e19042affc22c7f78b87b50d1`, which includes the merged local pilot stack and fixed-false second-review boundary. The spike changes no backend contract, migration, authority, product composition or workflow.
 - Next usable boundary: After review and issue linkage, PILOT-04 can adopt the sealed-cache Kaniko builder and separate gVisor oracle boundary; PILOT-06 still owns checker images and representative fixtures.
-- Remaining risks: The reviewed issue links are still pending. Actual hosted infrastructure, representative Terminal-Bench resource limits, cleanup after host loss, byte-reproducible image output and macOS Docker Desktop behavior remain unproved.
+- Remaining risks: Actual hosted infrastructure, representative Terminal-Bench resource limits, cleanup after host loss, byte-reproducible image output and macOS Docker Desktop behavior remain unproved.
