@@ -858,6 +858,13 @@ action, contributor `artifact.submission_bundle.prepare`, hidden human
 `submission.create`, and fixed-service `artifact.submission.binding.create`.
 Checker, review, generic artifact-read, and the public Submission cutover remain
 planned and issue no handle.
+ARCH-04E1B-B6 retains the exact creation and binding decision IDs in their owner
+receipts. Fresh PREP authority validates those immutable events on replay,
+including exact actor/service, action, permission, project, resource and canonical
+context digest. The retained event keeps its original request/correlation IDs and
+grant provenance; fresh transport IDs do not create another allow. Missing or
+inconsistent receipts make replay unavailable. No public route is added.
+
 Actor-self preparation locks the exact caller
 profile and then its exact identity link. Administrative preparation locks
 `AuthorityControl(id=1)`, the exact request profile, exact request identity

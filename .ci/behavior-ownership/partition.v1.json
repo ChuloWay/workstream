@@ -394,6 +394,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/task_guide_documents.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/zip_safety.py"
     },
     {
@@ -707,6 +711,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/prepared_proposal_replay.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_submission_replay.py"
     },
     {
       "group": "auth",
@@ -1430,6 +1438,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/guide_documents.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/management_queue.py"
     },
     {
@@ -1526,7 +1538,19 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_dispatch.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/submission_history.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_participants.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_replay.py"
     },
     {
       "group": "lifecycle",
@@ -1681,7 +1705,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "b6f91808500d5b24ccc163305e2acd637289695ac47b45ff3a838af34b4a69ba",
+  "authority_digest": "abbc45f6152f8d788445f4c94812f340e18169154720c2c4f1b6659c2d38ca67",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

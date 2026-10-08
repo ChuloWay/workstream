@@ -8,20 +8,32 @@ from uuid import UUID
 from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text, select, func
+from sqlalchemy.exc import DBAPIError
 
 from app.modules.tasks.api import (
-    SubmissionArtifactAdmissionPort,
-    SubmissionArtifactAdmissionRequest,
-    SubmissionArtifactAdmissionResult,
     SubmissionCreationAuthorizationPort,
     SubmissionCreationAuthorityFacts,
     SubmissionCreationPreparationFacts,
     SubmissionCreationRequest,
     SubmissionCreationResult,
+    SubmissionCreationUnavailable,
     TaskSubmissionContextRequest,
 )
 from app.modules.checkers.api import SubmissionPacketView
 from app.modules.tasks.models import EvidenceItem, Submission
+from app.modules.tasks.submission_participants import (
+    SubmissionArtifactAdmissionPort, SubmissionArtifactAdmissionRequest,
+    SubmissionArtifactAdmissionResult, SubmissionArtifactReplayRequest,
+)
+from app.modules.tasks.submission_dispatch import (
+    SubmissionDispatch, creation_request_digest, evaluation_request_event,
+)
+from app.modules.tasks.submission_replay import read_creation_replay
+from app.modules.tasks.lifecycle import ensure_allowed_transition
+from app.modules.checkers.api.execution import EvaluationCoordinationPort
+from app.modules.checkers.api.post_submit import make_post_submit_request
+from app.modules.outbox.api import OutboxAppendPort
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.service import TaskService
 
@@ -92,12 +104,16 @@ class TaskSubmissionCreationService:
         authorization: SubmissionCreationAuthorizationPort,
         admissions: SubmissionArtifactAdmissionPort,
         contexts: TaskService,
+        evaluations: EvaluationCoordinationPort,
+        events: OutboxAppendPort,
     ) -> None:
         self._session = session
         self._authorization = authorization
         self._admissions = admissions
         self._repository = TaskRepository(session)
         self._contexts = contexts
+        self._evaluations = evaluations
+        self._events = events
 
     async def create(self, request: SubmissionCreationRequest) -> SubmissionCreationResult:
         """Create one Submission without opening or committing a transaction."""
@@ -111,6 +127,21 @@ class TaskSubmissionCreationService:
             predecessor_submission_id=request.predecessor_submission_id,
         )
         await self._authorization.authorize(preliminary)
+        connection = await self._session.connection()
+        if connection.in_nested_transaction():
+            raise RuntimeError("submission creation requires one root transaction")
+        try:
+            await self._session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
+        except DBAPIError as exc:
+            if getattr(exc.orig, "sqlstate", None) != "25001":
+                raise
+            raise RuntimeError("submission creation requires one root transaction") from exc
+        task = await self._repository.get_task(str(request.task_id), for_update=True)
+        if task is None:
+            raise SubmissionCreationUnavailable("submission creation is unavailable")
+        replay = await read_creation_replay(self._session, task, request)
+        if replay is not None:
+            return await self._replay(request, *replay)
         context = await self._repository.lock_submission_context(
             TaskSubmissionContextRequest(
                 task_id=request.task_id,
@@ -119,9 +150,6 @@ class TaskSubmissionCreationService:
                 predecessor_submission_id=request.predecessor_submission_id,
             )
         )
-        task = await self._repository.get_task(str(request.task_id))
-        if task is None:
-            raise RuntimeError("locked task disappeared")
         version = 1 if context.predecessor is None else context.predecessor.version + 1
         submission_id = new_record_id()
         final = SubmissionCreationAuthorityFacts(
@@ -136,7 +164,7 @@ class TaskSubmissionCreationService:
         )
         prepared_authorization = await self._authorization.prepare(final)
         try:
-            await self._contexts._load_locked_task_context(task)
+            project = await self._contexts._load_locked_task_context(task)
             submission = build_submission(
                 submission_id=str(submission_id), task=task,
                 contribution_policy_version_id=context.submitter_contribution_policy_version_id,
@@ -146,6 +174,7 @@ class TaskSubmissionCreationService:
                 supersedes_submission_id=(str(context.predecessor.submission_id)
                                           if context.predecessor else None),
             )
+            submission.locked_at = await self._session.scalar(select(func.now()))
             await self._repository.add_submission(submission)
             consumed = await self._admissions.consume(
                 SubmissionArtifactAdmissionRequest(
@@ -153,9 +182,10 @@ class TaskSubmissionCreationService:
                     submission_id=submission_id,
                     submission_version=version,
                     task_context=context,
-                    packet_sha256=SubmissionPacketView(
+                    project_context=project.facts,
+                    packet=SubmissionPacketView(
                         request.summary, request.contributor_attestation,
-                    ).sha256,
+                    ),
                 )
             )
             if (
@@ -168,13 +198,92 @@ class TaskSubmissionCreationService:
             submission.artifact_binding_id = str(consumed.binding_id)
             submission.artifact_content_id = str(consumed.content_id)
             await self._session.flush()
-            await self._authorization.consume(prepared_authorization, final)
+            creation_decision_id = await self._authorization.consume(prepared_authorization, final)
+            if not isinstance(creation_decision_id, UUID):
+                raise SubmissionCreationUnavailable("submission creation is unavailable")
+            evaluation = make_post_submit_request(
+                **consumed.evaluation_content.model_dump(),
+                evaluation_request_id=new_record_id(), evaluation_generation=1,
+                task_id=request.task_id, assignment_id=request.assignment_id,
+                submission_id=submission_id, submission_version=version,
+                content_id=consumed.content_id, binding_id=consumed.binding_id,
+                content_sha256=consumed.archive_sha256, byte_count=consumed.byte_count,
+            )
+            ensure_allowed_transition(task.status, "submitted")
+            task.status = "submitted"
+            await self._session.flush()
+            reservation = await self._evaluations.reserve_current_evaluation(evaluation)
+            if (reservation.request_id != evaluation.evaluation_request_id
+                    or reservation.request_digest != evaluation.request_sha256
+                    or reservation.evaluation_generation != 1):
+                raise SubmissionCreationUnavailable("submission creation is unavailable")
+            receipt = SubmissionDispatch(
+                submission_id=str(submission_id), submission_version=version,
+                project_id=str(context.locked_project_context.project_id),
+                task_id=str(request.task_id), assignment_id=str(request.assignment_id),
+                contributor_id=str(request.contributor_id), admission_id=str(request.admission_id),
+                artifact_binding_id=str(consumed.binding_id), artifact_content_id=str(consumed.content_id),
+                creation_decision_id=str(creation_decision_id), binding_decision_id=str(consumed.binding_decision_id),
+                request_digest=creation_request_digest(request),
+                creation_kind=context.kind, creation_status=context.status,
+                evaluation_request_id=str(reservation.request_id),
+                evaluation_request_digest=reservation.request_digest,
+                evaluation_attempt_id=str(reservation.attempt_id), evaluation_result_id=str(reservation.result_id),
+            )
+            event = await self._events.append(evaluation_request_event(receipt))
+            receipt.evaluation_event_id = event.event_id
+            self._session.add(receipt)
+            ensure_allowed_transition(task.status, "evaluation_pending")
+            task.status = "evaluation_pending"
+            await self._session.flush()
         finally:
             self._authorization.close(prepared_authorization)
-        return SubmissionCreationResult(
-            submission_id=submission_id,
-            submission_version=version,
-            admission_id=request.admission_id,
-            artifact_binding_id=consumed.binding_id,
-            artifact_content_id=consumed.content_id,
+        return receipt.result()
+
+    async def _replay(self, request, receipt, context) -> SubmissionCreationResult:
+        """Verify the complete original commit under fresh authority, without repair."""
+        facts = SubmissionCreationAuthorityFacts(
+            task_id=request.task_id, assignment_id=request.assignment_id,
+            contributor_id=request.contributor_id, admission_id=request.admission_id,
+            predecessor_submission_id=request.predecessor_submission_id,
+            submission_id=UUID(receipt.submission_id), submission_version=receipt.submission_version,
+            task_context=context,
         )
+        prepared = await self._authorization.prepare(facts)
+        try:
+            await self._authorization.validate_replay(prepared, facts, UUID(receipt.creation_decision_id))
+            consumed = await self._admissions.read_consumed(SubmissionArtifactReplayRequest(
+                admission_id=request.admission_id, project_id=UUID(receipt.project_id),
+                task_id=request.task_id, assignment_id=request.assignment_id,
+                contributor_id=request.contributor_id, submission_id=UUID(receipt.submission_id),
+                submission_version=receipt.submission_version,
+                packet_sha256=SubmissionPacketView(request.summary, request.contributor_attestation).sha256,
+            ))
+            if (consumed.binding_id, consumed.content_id, consumed.binding_decision_id) != (
+                UUID(receipt.artifact_binding_id), UUID(receipt.artifact_content_id), UUID(receipt.binding_decision_id),
+            ):
+                raise SubmissionCreationUnavailable("submission creation is unavailable")
+            stored = await self._evaluations.read_reserved_evaluation(
+                project_id=UUID(receipt.project_id), task_id=UUID(receipt.task_id),
+                submission_id=UUID(receipt.submission_id), request_id=UUID(receipt.evaluation_request_id),
+            )
+            evaluation, reservation = stored.request, stored.reservation
+            if (
+                reservation.request_digest != receipt.evaluation_request_digest
+                or reservation.attempt_id != UUID(receipt.evaluation_attempt_id)
+                or reservation.result_id != UUID(receipt.evaluation_result_id)
+                or reservation.evaluation_generation != 1
+                or evaluation.assignment_id != UUID(receipt.assignment_id)
+                or evaluation.submission_version != receipt.submission_version
+                or evaluation.binding_id != consumed.binding_id
+                or evaluation.content_id != consumed.content_id
+                or evaluation.content_sha256 != consumed.archive_sha256
+                or evaluation.byte_count != consumed.byte_count
+                or evaluation.structural_input.summary != request.summary
+                or evaluation.structural_input.worker_attestation != request.contributor_attestation
+            ):
+                raise SubmissionCreationUnavailable("submission creation is unavailable")
+            await self._events.require_existing(receipt.evaluation_event_id, evaluation_request_event(receipt))
+            return receipt.result()
+        finally:
+            self._authorization.close(prepared)

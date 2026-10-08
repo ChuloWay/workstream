@@ -775,6 +775,14 @@ async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_delet
                     "alter table review_packet_manifests drop constraint "
                     "fk_review_packet_manifests_submission_binding_id_artifa_4ee3"
                 ))
+                for table, constraint in (
+                    ("submission_binding_receipts", "fk_submission_binding_receipts_binding_id_artifact_bindings"),
+                    ("submission_dispatches", "fk_submission_dispatches_artifact_binding_id_artifact_bindings"),
+                ):
+                    # Canonical creation already retained one receipt. The
+                    # FK removal and deliberate truncation roll back together.
+                    assert await session.scalar(text(f"select count(*) from {table}")) == 1
+                    await session.execute(text(f"alter table {table} drop constraint {constraint}"))
                 with pytest.raises(DBAPIError, match="artifact_bindings rows are immutable"):
                     async with session.begin_nested():
                         await session.execute(text("truncate artifact_bindings"))
@@ -797,6 +805,8 @@ async def test_artifact_binding_truncate_custody_blocks_direct_and_cascade_delet
                 text("select count(*) from artifact_bindings where id=:id"),
                 {"id": binding_id},
             ) == 1
+            for table in ("submission_binding_receipts", "submission_dispatches"):
+                assert await session.scalar(text(f"select count(*) from {table}")) == 1
             trigger_definition = await session.scalar(
                 text(
                     "select pg_get_triggerdef(oid) from pg_trigger "

@@ -124,7 +124,7 @@ def test_command_guard_probe(monkeypatch):
 async def test_invalid_request_before_transaction():
     session = MagicMock()
     command = AuthorizedTaskCommands(session, authorization=MagicMock(), audit=MagicMock(),
-                                    actor_profile_id=new_record_id(), contexts=MagicMock())
+                                    actor_profile_id=new_record_id(), contexts=MagicMock(), guide_documents=MagicMock())
     for value in (None, {}, "bad"):
         with pytest.raises(TaskValidationError):
             await command.audit_evidence(value)

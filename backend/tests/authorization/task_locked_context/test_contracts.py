@@ -44,7 +44,7 @@ def test_locked_context_read_rejects_command_fields(kind):
 async def test_locked_context_invalid_selectors_before_transaction(kind):
     session = MagicMock()
     command = AuthorizedTaskCommands(session, authorization=MagicMock(), audit=MagicMock(),
-        actor_profile_id=new_record_id(), contexts=MagicMock())
+        actor_profile_id=new_record_id(), contexts=MagicMock(), guide_documents=MagicMock())
     for invalid in (None, "bad", str(new_record_id()), 1, True):
         for project, task in ((invalid,new_record_id()),(new_record_id(),invalid)):
             with pytest.raises(TaskValidationError, match="selectors are invalid"):

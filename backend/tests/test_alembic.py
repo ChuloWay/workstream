@@ -79,9 +79,79 @@ def test_v01_graph_has_one_root_and_head() -> None:
     script = ScriptDirectory.from_config(config)
     revisions = list(script.walk_revisions())
 
-    assert [revision.revision for revision in revisions] == [HEAD_REVISION, "0023_remove_task_payment_policy", "0022_submission_packet_custody", "0021_submission_manifest", "0020_review_admission_lock_order", "0019_submitter_awards", "0018_task_routing_request", "0017_acceptance_source_contracts", "0016_review_lifecycle_fence", "0015_contribution_awards", "0014_final_acceptance", "0013_review_source", "0012_review_packet", "0011_task_routing_source", "0010_post_submit_authority", "0009_checker_material_lineage", "0008_checker_execution", "0007_checker_output_custody", "0006_history_read_authority", "0005_task_evidence_authority", "0004_task_context_authority", "0003_task_read_authority", "0002_task_queue_authority", BASELINE_REVISION]
+    assert [revision.revision for revision in revisions] == [HEAD_REVISION, "0025_submission_dispatch", "0024_require_second_review_false", "0023_remove_task_payment_policy", "0022_submission_packet_custody", "0021_submission_manifest", "0020_review_admission_lock_order", "0019_submitter_awards", "0018_task_routing_request", "0017_acceptance_source_contracts", "0016_review_lifecycle_fence", "0015_contribution_awards", "0014_final_acceptance", "0013_review_source", "0012_review_packet", "0011_task_routing_source", "0010_post_submit_authority", "0009_checker_material_lineage", "0008_checker_execution", "0007_checker_output_custody", "0006_history_read_authority", "0005_task_evidence_authority", "0004_task_context_authority", "0003_task_read_authority", "0002_task_queue_authority", BASELINE_REVISION]
     assert revisions[-1].down_revision is None
     assert script.get_heads() == [HEAD_REVISION]
+
+
+async def test_guide_read_upgrade_targets_public_audit_with_shadow_search_path(
+    isolated_database_env, migration_lock,
+):
+    """Successful stamping must update public custody, not a visible namesake."""
+    from app.db import session as db_session
+    from scripts.run_isolated_tests import NAME_RE, ROLE_RE
+    from tests.conftest import _drop_test_database_schema
+
+    shadow = "pilot13_migration_shadow"
+    url = isolated_database_env.replace("+asyncpg", "")
+    with migration_lock():
+        await db_session.dispose_engine()
+        await _drop_test_database_schema(isolated_database_env)
+        await asyncio.to_thread(command.upgrade, _alembic_config(), "0025_submission_dispatch")
+        connection = await asyncpg.connect(url)
+        role, database = await connection.fetchrow("select current_user, current_database()")
+        assert ROLE_RE.fullmatch(role) and NAME_RE.fullmatch(database)
+        try:
+            assert await connection.fetchval(
+                "select setconfig from pg_db_role_setting "
+                "where setrole=(select oid from pg_roles where rolname=current_user) "
+                "and setdatabase=(select oid from pg_database where datname=current_database())"
+            ) is None
+            await connection.execute(f"create schema {shadow}")
+            await connection.execute(
+                f"create table {shadow}.audit_events (like public.audit_events including all)"
+            )
+
+            async def definition(schema):
+                return await connection.fetchval(
+                    "select pg_get_constraintdef(oid) from pg_constraint "
+                    "where conrelid=to_regclass($1) "
+                    "and conname='ck_audit_events_authorization_action_evidence'",
+                    f"{schema}.audit_events",
+                )
+
+            before = await definition("public")
+            assert "task.guide.read" not in before
+            assert await definition(shadow) == before
+            await connection.execute(
+                f'alter role "{role}" in database "{database}" set search_path = {shadow}, public'
+            )
+            probe = await asyncpg.connect(url)
+            try:
+                assert await probe.fetchval("select current_schema()") == shadow
+                assert await probe.fetchval("select 'audit_events'::regclass::oid") == (
+                    await probe.fetchval("select to_regclass($1)::oid", f"{shadow}.audit_events")
+                )
+            finally:
+                await probe.close()
+            await asyncio.to_thread(command.upgrade, _alembic_config(), HEAD_REVISION)
+            after = await definition("public")
+            assert after.count("task.guide.read") == 2
+            assert await definition(shadow) == before
+            assert await connection.fetchval(
+                "select version_num from public.alembic_version"
+            ) == HEAD_REVISION
+            assert await connection.fetchval(
+                "select to_regclass($1)", f"{shadow}.alembic_version"
+            ) is None
+        finally:
+            await connection.execute(
+                f'alter role "{role}" in database "{database}" reset search_path'
+            )
+            await connection.execute(f"drop schema if exists {shadow} cascade")
+            await connection.close()
+            await _drop_test_database_schema(isolated_database_env)
+            await asyncio.to_thread(command.upgrade, _alembic_config(), HEAD_REVISION)
 
 
 def test_fresh_database_matches_committed_manifest(

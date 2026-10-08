@@ -70,7 +70,9 @@ async def test_cross_submission_request_collision(tmp_path, isolated_database_en
             assert sum(isinstance(item, CheckerRequestConflict) for item in responses) == 1
             assert sum(not isinstance(item, BaseException) for item in responses) == 1
             async with h.factory() as session:
-                assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+                assert set(await session.scalars(select(CheckerRun.id))) == {
+                    str(h.created.evaluation_attempt_id), str(other.created.evaluation_attempt_id),
+                }
 
 
 @pytest.mark.parametrize("old_first", [True, False])

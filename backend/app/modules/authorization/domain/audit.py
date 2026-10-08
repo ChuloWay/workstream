@@ -12,6 +12,8 @@ from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.catalogue import ActionId, PermissionId
 
 CONTEXT_DIGEST_RESOURCE_TYPES = (
+    "submission_creation",
+    "submission_binding",
     "outbox_event",
     "checker_run",
     "task_post_submit_routing_manifest",

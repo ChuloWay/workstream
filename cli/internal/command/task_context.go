@@ -30,6 +30,7 @@ func addTaskContextReads(task *cobra.Command, client func() (*api.Client, error)
 				{"Review policy", value.ReviewPolicy}, {"Revision policy", value.RevisionPolicy},
 				{"Contribution policy version", value.ContributionPolicyVersionID},
 				{"Lifecycle (server hints, not authorization)", value.Lifecycle},
+				{"Guide documents", value.GuideDocuments},
 			})
 		},
 	})
@@ -62,6 +63,7 @@ func addTaskContextReads(task *cobra.Command, client func() (*api.Client, error)
 			})
 		},
 	})
+	addTaskGuide(task, client, output, stdout)
 }
 
 type contextField struct {

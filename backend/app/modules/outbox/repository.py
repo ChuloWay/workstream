@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -27,6 +28,16 @@ class OutboxRepository:
     def __init__(self, session: AsyncSession) -> None:
         """Bind all persistence to the caller's exact session."""
         self._session = session
+
+    async def read_exact(self, event_id: UUID, value: OutboxAppendInput) -> OutboxEvent | None:
+        """Qualify retained event identity and ownership before reading payload."""
+        return await self._session.scalar(select(OutboxEvent).where(
+            OutboxEvent.event_id == event_id,
+            OutboxEvent.project_id == str(value.project_id),
+            OutboxEvent.aggregate_type == value.aggregate_type,
+            OutboxEvent.aggregate_id == value.aggregate_id,
+            OutboxEvent.idempotency_key == value.idempotency_key,
+        ).execution_options(populate_existing=True))
 
     async def reserve(
         self,

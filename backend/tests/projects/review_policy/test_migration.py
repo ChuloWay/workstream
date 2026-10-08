@@ -31,7 +31,7 @@ from app.modules.projects.policy_mutation_service import (
 )
 from app.modules.projects.schemas import ReviewPolicyInput, ReviewPolicyResponse
 from tests.conftest import _drop_test_database_schema
-from tests.migration_fixtures import _config
+from tests.migration_fixtures import _config, current_schema_revision
 from tests.projects.guide_activation.source_fixtures import source_case
 
 pytestmark = pytest.mark.postgres_schema_contract
@@ -202,5 +202,5 @@ async def test_upgrade_installs_false_guard_without_changing_hash_or_lineage(
             assert before["policies"] == after["policies"]
             assert before["selectors"] == after["selectors"]
             assert before["version"] == "0023_remove_task_payment_policy"
-            assert after["version"] == "0024_require_second_review_false"
+            assert after["version"] == current_schema_revision()
             assert constraint == "CHECK ((NOT requires_second_review))"

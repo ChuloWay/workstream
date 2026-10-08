@@ -77,39 +77,17 @@ class SubmissionCreationAuthorizationPort(Protocol):
 
     async def consume(
         self, prepared_authorization: object, facts: SubmissionCreationAuthorityFacts
+    ) -> UUID:
+        """Consume final exact authority and return its retained decision identity."""
+
+    async def validate_replay(
+        self, prepared_authorization: object, facts: SubmissionCreationAuthorityFacts,
+        decision_id: UUID,
     ) -> None:
-        """Consume final exact authority after protected facts are known."""
+        """Verify the original allow under fresh current authority without consuming."""
 
     def close(self, prepared_authorization: object) -> None:
         """Discard process-local authority after every success or failure path."""
-
-
-@dataclass(frozen=True, slots=True)
-class SubmissionArtifactAdmissionRequest:
-    """Exact TASK allocation supplied to the artifact admission participant."""
-
-    admission_id: UUID
-    submission_id: UUID
-    submission_version: int
-    task_context: TaskSubmissionContextFacts
-    packet_sha256: str
-
-
-@dataclass(frozen=True, slots=True)
-class SubmissionArtifactAdmissionResult:
-    """Artifact identities returned after exact admission consumption."""
-
-    binding_id: UUID
-    content_id: UUID
-
-
-class SubmissionArtifactAdmissionPort(Protocol):
-    """Consume one ready artifact admission in the caller-owned transaction."""
-
-    async def consume(
-        self, request: SubmissionArtifactAdmissionRequest
-    ) -> SubmissionArtifactAdmissionResult:
-        """Return exact binding/content identity or raise an owner error."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +99,13 @@ class SubmissionCreationResult:
     admission_id: UUID
     artifact_binding_id: UUID
     artifact_content_id: UUID
+    creation_decision_id: UUID
+    binding_decision_id: UUID
+    evaluation_request_id: UUID
+    evaluation_request_digest: str
+    evaluation_attempt_id: UUID
+    evaluation_result_id: UUID
+    evaluation_event_id: UUID
 
 
 class SubmissionCreationCommand(Protocol):

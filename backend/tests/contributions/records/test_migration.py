@@ -8,6 +8,7 @@ import pytest
 from alembic import command
 from sqlalchemy.exc import DBAPIError
 
+from tests.historical_submission_fixtures import historical_material_fixture
 from app.db import session as db_session
 from tests.contributions.records.support import (
     award_values,
@@ -55,7 +56,7 @@ async def test_contribution_upgrade_preserves_sources(tmp_path, isolated_databas
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0014_final_acceptance")
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with acceptance_source(tmp_path, isolated_database_env) as h:
+        async with acceptance_source(tmp_path, isolated_database_env, material_source=historical_material_fixture) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session:
                 await insert_acceptance(session, h.acceptance)
@@ -117,7 +118,7 @@ async def test_completeness_upgrade_preserves_complete_retained_awards(
     with migration_lock():
         await _reset_to_0018(isolated_database_env)
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with contribution_source(tmp_path, isolated_database_env, paid=True) as h:
+        async with contribution_source(tmp_path, isolated_database_env, paid=True, material_source=historical_material_fixture) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session:
                 await insert_record(session, h.submitter_record)
@@ -191,7 +192,7 @@ async def test_completeness_upgrade_refuses_incomplete_retained_awards_unchanged
     with migration_lock():
         await _reset_to_0018(isolated_database_env)
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with contribution_source(tmp_path, isolated_database_env, paid=True) as h:
+        async with contribution_source(tmp_path, isolated_database_env, paid=True, material_source=historical_material_fixture) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session:
                 await insert_record(session, h.submitter_record)

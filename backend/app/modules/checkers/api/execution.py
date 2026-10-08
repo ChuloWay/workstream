@@ -21,6 +21,7 @@ from app.modules.checkers.api.post_submit_catalogue import (
     VersionNumber,
 )
 
+REQUEST_EVENT = "PostSubmissionEvaluationRequested"
 COMPLETION_EVENT = "PostSubmissionEvaluationCompleted"
 
 
@@ -40,6 +41,13 @@ class EvaluationReservation(PostSubmitValue):
     attempt_id: ResourceId
     result_id: ResourceId
     evaluation_generation: VersionNumber
+
+
+class ReservedEvaluation(PostSubmitValue):
+    """Exact retained request and identities, without a currentness assertion."""
+
+    request: PostSubmissionEvaluationRequest
+    reservation: EvaluationReservation
 
 
 class ExecutionLease(PostSubmitValue):
@@ -229,6 +237,13 @@ class EvaluationTaskGuard(Protocol):
 
 class EvaluationCoordinationPort(Protocol):
     """Reserve and read exact current evaluations in caller transactions."""
+
+    async def read_reserved_evaluation(
+        self, *, project_id: ResourceId, task_id: ResourceId,
+        submission_id: ResourceId, request_id: ResourceId,
+    ) -> ReservedEvaluation:
+        """Read scoped retained custody without reserving or advancing a fence."""
+        ...
 
     async def require_current_completion(
         self, event_id: ResourceId, completion: "EvaluationCompletion"

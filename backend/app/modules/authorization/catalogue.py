@@ -122,6 +122,7 @@ class ActionId(StrEnum):
     AUDIT_TASK_LOCKED_CONTEXT_READ = "audit.task.locked_context.read"
     AUDIT_TASK_EVIDENCE_READ = "audit.task.evidence.read"
     TASK_WORK_CONTEXT_READ = "task.work_context.read"
+    TASK_GUIDE_READ = "task.guide.read"
     PROJECT_TASK_WORK_CONTEXT_READ = "project.task.work_context.read"
 
     ACTOR_PROFILE_READ_SELF = "actor.profile.read_self"
@@ -268,6 +269,8 @@ TASK_LOCKED_CONTEXT_READ_ACTIONS = frozenset({
     ActionId.AUDIT_TASK_LOCKED_CONTEXT_READ,
 })
 TASK_CONCEALED_READ_ACTIONS = TASK_LOCKED_CONTEXT_READ_ACTIONS | frozenset({
+    ActionId.TASK_GUIDE_READ,
+    ActionId.TASK_WORK_CONTEXT_READ,
     ActionId.AUDIT_TASK_EVIDENCE_READ,
     ActionId.TASK_READ, ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
     ActionId.PROJECT_TASK_READ, ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
@@ -280,6 +283,7 @@ class ActionOwner(StrEnum):
 
     TASK_CHECKER_CLEANUP = "task-checker-auth-cleanup"
     TASK_PROJECT_GRANT = "task-project-grant-authorization"
+    PILOT_13 = "PILOT-13"
 
     AUTH_07B = "WS-AUTH-001-07B"
     AUTH_08 = "WS-AUTH-001-08"
@@ -535,6 +539,7 @@ ACTION_DEFINITIONS = (
     _active(ActionId.TASK_CLAIM, PermissionId.TASK_CLAIM, ActionOwner.TASK_PROJECT_GRANT),
     _active(ActionId.TASK_START, PermissionId.TASK_CLAIM, ActionOwner.TASK_PROJECT_GRANT),
     _active(ActionId.TASK_WORK_CONTEXT_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.TASK_PROJECT_GRANT),
+    _active(ActionId.TASK_GUIDE_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.PILOT_13),
     _active(ActionId.TASK_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.ARCH_03C5),
     _active(ActionId.TASK_SUBMISSION_REQUIREMENTS_READ, PermissionId.TASK_QUEUE_READ, ActionOwner.ARCH_03C5),
     _active(ActionId.PROJECT_TASK_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C5),
@@ -748,7 +753,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 78 or len(ACTION_IDS) != 143:
+    if len(PERMISSION_IDS) != 78 or len(ACTION_IDS) != 144:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 29:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -883,6 +888,7 @@ def _index_actions(
         if definition.availability is ActionAvailability.ACTIVE
     } != active_actions | {
         ActionId.TASK_CLAIM, ActionId.TASK_START, ActionId.TASK_WORK_CONTEXT_READ,
+        ActionId.TASK_GUIDE_READ,
         ActionId.PROJECT_TASK_WORK_CONTEXT_READ, ActionId.OPERATIONS_TASK_START_OVERRIDE,
         ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,
         ActionId.TASK_QUEUE_READ, ActionId.PROJECT_TASK_QUEUE_READ, ActionId.OPERATIONS_TASK_QUEUE_READ,

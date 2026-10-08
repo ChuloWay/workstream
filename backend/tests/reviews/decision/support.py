@@ -1,9 +1,7 @@
 """Isolated storage fixtures; these are not authorized product decisions."""
 
-import hashlib
 import zipfile
 from contextlib import asynccontextmanager
-from dataclasses import asdict
 from io import BytesIO
 from types import SimpleNamespace
 from uuid import UUID
@@ -17,11 +15,6 @@ from app.modules.actors.models import ActorIdentityLink
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
 from app.modules.artifacts.submission_manifest import build_submission_manifest
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.checkers.api import (
-    ExpectedPostSubmitContext,
-    ObservedPostSubmitContext,
-    PostSubmitManifestEntry,
-)
 from app.modules.checkers.models import CheckerRun
 from app.modules.reviews.decision.models import (
     FindingResolution,
@@ -35,7 +28,6 @@ from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
 from app.modules.tasks.models import Submission
 from tests.checkers.execution.support import live_executor, reserve
-from tests.checkers.post_submit.support import change_request
 from tests.reviews.packet.support import packet_source, prepare_packet
 from tests.tasks.post_submit_routing.support import source_values
 from tests.tasks.submission_lineage_support import _verified_admission
@@ -251,38 +243,19 @@ async def _admit_successor(h):
             SubmittedBundleRequest(h.request.project_id, h.request.task_id, created.submission_id)
         )
 
-    return facts, revised_data
+    return facts, revised_data, created
 
 
-async def _evaluate_successor(h, facts, revised_data):
+async def _evaluate_successor(h, facts, revised_data, created):
     """Run real post-submit evaluation using the new admitted content identity."""
-    digest = "sha256:" + hashlib.sha256(revised_data).hexdigest()
+    from app.adapters.checkers import evaluation_coordinator
     manifest = build_submission_manifest(h.inspector.inspect(BytesIO(revised_data)))
-    request = change_request(
-        h.request,
-        content_sha256=digest,
-        byte_count=len(revised_data),
-        evaluation_request_id=new_record_id(),
-        evaluation_generation=1,
-        submission_id=facts.submission_id,
-        submission_version=facts.submission_version,
-        content_id=facts.content_id,
-        binding_id=facts.binding_id,
-        expected_context=ExpectedPostSubmitContext(**asdict(facts.context)),
-        structural_input=h.request.structural_input.model_copy(
-            update={
-                "observed_context": ObservedPostSubmitContext(**asdict(facts.context)),
-                "package_hash": digest,
-                "manifest": tuple(
-                    PostSubmitManifestEntry(
-                        artifact=e.normalized_path, hash=e.sha256, size_bytes=e.byte_count
-                    )
-                    for e in manifest.entries
-                    if e.sha256 is not None
-                ),
-            }
-        ),
-    )
+    async with h.factory() as session, session.begin():
+        stored = await evaluation_coordinator(session).read_reserved_evaluation(
+            project_id=h.request.project_id, task_id=h.request.task_id,
+            submission_id=facts.submission_id, request_id=created.evaluation_request_id,
+        )
+        request = stored.request
     successor = SimpleNamespace(
         **{**vars(h), "request": request, "source": {}, "data": revised_data, "manifest": manifest}
     )
@@ -298,8 +271,8 @@ async def _evaluate_successor(h, facts, revised_data):
 
 async def successor_source(h, *, with_packet=True):
     """Build an admitted and evaluated successor, optionally with a retained packet."""
-    facts, revised_data = await _admit_successor(h)
-    successor = await _evaluate_successor(h, facts, revised_data)
+    facts, revised_data, created = await _admit_successor(h)
+    successor = await _evaluate_successor(h, facts, revised_data, created)
     if with_packet:
         await prepare_packet(successor)
         await attach_review_source(successor)

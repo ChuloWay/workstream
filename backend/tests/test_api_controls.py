@@ -491,13 +491,15 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     activation_route = f"POST {activation_path}"
     assert activation_route in protected_inventory
     new_manager_reads.add(activation_route)
-    assert len(route_inventory) == 93
-    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads)
-    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads)
+    guide_read = {"GET /api/v1/tasks/{task_id}/guide/documents/{document_id}/content"}
+    assert guide_read <= set(protected_inventory)
+    assert len(route_inventory) == 94
+    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read)
+    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read)
     assert sha256("\n".join(retained_routes).encode()).hexdigest() == (
         "793237012e9256d308dd5d1e9c1a65e41381cf6306888fdd175dc9794b118444"
     )
-    assert len(protected_inventory) == 91
+    assert len(protected_inventory) == 92
     assert sha256("\n".join(retained_protected).encode()).hexdigest() == (
         "0953ae6392b81a4a7ba7c9f6b7fccc17768f34cd1f958572fdc553cd204ec82e"
     )
@@ -541,6 +543,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         "GET /api/v1/audit/projects/{project_id}/tasks/{task_id}/evidence": "audit.task.evidence.read",
         "GET /api/v1/tasks/{task_id}": "task.read",
         "GET /api/v1/tasks/{task_id}/submission-requirements": "task.submission_requirements.read",
+        "GET /api/v1/tasks/{task_id}/guide/documents/{document_id}/content": "task.guide.read",
         "GET /api/v1/projects/{project_id}/tasks/{task_id}": "project.task.read",
         "GET /api/v1/projects/{project_id}/tasks/{task_id}/submission-requirements": "project.task.submission_requirements.read",
         f"GET {post_policy_prefix}": "project.guide_compilation.review_package.read",

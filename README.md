@@ -62,8 +62,7 @@ submitter ContributionRecord, with no reviewer contribution.
 The separate `requires_second_review` policy field is [fixed to `false`](.commitrail/changes/enforce-requires-second-review-false.md)
 at input, immutable lineage, and database boundaries; second-review and
 adjudication behavior remain deferred.
-This branch is
-not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
+The automated-acceptance branch is not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is implemented for configuration, and the hidden submitter participant can
 stage or exactly replay its complete frozen award set. Shared acceptance, TASK
 terminal effects, authority/source custody, routing activation and public
@@ -170,8 +169,9 @@ submission packets, immutable artifact storage, pre-submit intake checks,
 and authorized retained submission/checker history. ARCH-04C implements hidden
 durable post-submit execution and unfinished-attempt recovery. ARCH-04D2 supplies
 exact service authority. ARCH-04E1A adds immutable route-neutral TASK source
-storage, detached source facts and accepted-effects contracts;
-automatic dispatch, routing and acceptance remain unavailable. Project-guide ingestion stores original documents,
+storage, detached source facts and accepted-effects contracts. B6 commits each
+new hidden Submission with its initial checker reservation and outbox request;
+automatic request delivery, routing and acceptance remain unavailable. Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
 unified setup agent. Guide metadata in PostgreSQL also holds at least one required
 task example; the agent assesses the examples with the uploaded guide documents.
@@ -191,8 +191,9 @@ currentness race proof, shared audit/outbox and lifecycle activation remain.
 ARCH-04E1B-B1 requires TASK locking before checker reservation, current-result
 reads and review admission INSERTs, preserving exact read-only reservation replay
 after acceptance. ARCH-04E1B-B3 retains the inspected ZIP file metadata with immutable
-ART evidence and returns it on consumption without another storage read. Initial
-Submission/dispatch composition remains pending. ARCH-04E1B-B4 binds the
+ART evidence and returns it on consumption without another storage read. ARCH-04E1B-B6 commits each new Submission, verified binding, exact AUTH receipts,
+generation-one evaluation reservation and one shared outbox request atomically.
+Fresh-authorized replay returns the original identities without recreating rows. ARCH-04E1B-B4 binds the
 Submission summary and attestation to the packet that passed intake, with
 service and database enforcement. ARCH-04E1B-B5 rejects evaluation content that
 exceeds the locked checker limits before any pre-check attempt or durable upload
@@ -333,6 +334,10 @@ explicit caller retry keys and uncertain-outcome reporting without automatic ret
 `workstream task context TASK_ID` and `task requirements TASK_ID` inspect the
 governing guide/policy selectors, server action hints and locked intake rules.
 Hints do not grant authority; requirements do not expose hidden submission upload.
+`workstream task guide TASK_ID [--download DIR]` lists or downloads the original
+documents of the task's locked guide for its currently authorized assignee.
+Downloaded bytes are verified against their retained hash and size; task examples
+remain private, and newer guide activation does not change existing task locks.
 `workstream project create --name TEXT --slug TEXT --idempotency-key UUID`
 creates a draft project shell through the public API, with explicit manual
 replay and uncertain-outcome handling; it does not approve or activate a guide.
@@ -672,7 +677,7 @@ uses hidden durable execution with exact ARCH-04D2 service authority. ARCH-04E1A
 retains route-neutral source evidence. REV-04C uses its bounded exact-source
 verifier and hidden FinalAcceptance/TASK/CON participant, while no general
 routing publication writer/reader, handler or current pointer exists; automatic
-dispatch and routing remain ARCH-04E work.
+request delivery and routing remain ARCH-04E work.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no
@@ -782,8 +787,9 @@ without fabricating a Review. CON-07 now supplies the hidden source-neutral
 submitter participant and complete frozen award-set staging/replay. REV-04C now
 composes FinalAcceptance, TASK terminal effects and that CON participant in one
 hidden caller-owned transaction for either source. B5 supplies bounded evaluation
-content before durable admission. Atomic initial Submission/dispatch comes next,
-before the hidden handlers.
+content before durable admission; B6 uses it with real record identities in the
+atomic Submission/dispatch command. Hidden request/completion handlers come next;
+the committed request events are not registered for delivery.
 The mandatory exact AUTH receipt must become required on the same strict input,
 with no optional/default path, before production consumption; database
 FinalAcceptance/TASK/CON closure, TASK-before-CHECKERS race proof, shared

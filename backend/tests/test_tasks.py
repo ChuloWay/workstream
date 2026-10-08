@@ -2040,7 +2040,8 @@ async def test_submitter_without_current_project_grant_cannot_claim(
     context = await task_client.get(
         f"/api/v1/tasks/{ready_task['id']}/work-context", headers=auth_headers(),
     )
-    assert context.status_code == 403, context.text
+    assert context.status_code == 404, context.text
+    assert context.json()["error"]["code"] == "project_authorization_resource_not_found"
     async with db_session.get_session_factory()() as session:
         assert await session.scalar(select(TaskAssignment).where(
             TaskAssignment.task_id == ready_task["id"],
@@ -2077,11 +2078,15 @@ async def test_revocation_blocks_contributor_commands_without_rewriting_assignme
     )
     assert revoked.status_code == 200, revoked.text
     set_dev_actor(monkeypatch, roles="viewer", subject=subject)
-    for method, action in (("post", "start"), ("get", "work-context")):
+    for method, action, status, code in (
+        ("post", "start", 403, "permission_not_granted"),
+        ("get", "work-context", 404, "project_authorization_resource_not_found"),
+    ):
         denied = await getattr(task_client, method)(
             f"/api/v1/tasks/{task['id']}/{action}", headers=auth_headers(),
         )
-        assert denied.status_code == 403, denied.text
+        assert denied.status_code == status, denied.text
+        assert denied.json()["error"]["code"] == code
     async with db_session.get_session_factory()() as session:
         stored = await session.get(WorkstreamTask, task["id"])
         assert stored.status == state_before_revocation

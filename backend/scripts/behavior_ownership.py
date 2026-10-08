@@ -181,6 +181,12 @@ REV_04C_PARTICIPATION_TARGETS = frozenset({
 REV_04B_ACCEPTANCE_TARGETS = frozenset({"backend/app/modules/reviews/acceptance/models.py", "backend/app/modules/reviews/acceptance/schemas.py"})
 REV_04A_SOURCE_TARGETS = frozenset({"backend/app/modules/reviews/decision/models.py", "backend/app/modules/reviews/decision/schemas.py"})
 REV_03B_PACKET_TARGETS = frozenset({'backend/app/modules/reviews/packet/models.py', 'backend/app/modules/reviews/packet/repository.py', 'backend/app/modules/reviews/packet/schemas.py'})
+ARCH_04E1BB6_DISPATCH_TARGETS = frozenset({
+    "backend/app/modules/tasks/submission_dispatch.py",
+    "backend/app/modules/tasks/submission_replay.py",
+    "backend/app/modules/tasks/submission_participants.py",
+    "backend/app/modules/authorization/prepared_submission_replay.py",
+})
 ARCH_04E1BB2_SOURCE_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/source.py"})
 ARCH_04E1BB1_GUARD_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/evaluation_guard.py"})
 ARCH_04E1BA_REQUEST_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/requests.py"})
@@ -580,6 +586,10 @@ TASK_PROJECT_AUTHORITY_TARGETS = frozenset(
 TASK_COMMAND_REPLAY_TARGETS = frozenset({
     "backend/app/modules/tasks/command_replay.py",
 })
+PILOT_13_GUIDE_READ_TARGETS = frozenset({
+    "backend/app/modules/artifacts/task_guide_documents.py",
+    "backend/app/modules/tasks/api/guide_documents.py",
+})
 
 
 class BehaviorOwnershipError(RuntimeError):
@@ -801,6 +811,7 @@ def _validate_additive_partition_transition(
             | ARCH_04E1BA_REQUEST_TARGETS
             | ARCH_04E1BB1_GUARD_TARGETS
             | ARCH_04E1BB2_SOURCE_TARGETS
+            | ARCH_04E1BB6_DISPATCH_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS
@@ -817,6 +828,7 @@ def _validate_additive_partition_transition(
         | V01_BASELINE_ADDED_TARGETS
         | TASK_PROJECT_AUTHORITY_TARGETS
         | TASK_COMMAND_REPLAY_TARGETS
+        | PILOT_13_GUIDE_READ_TARGETS
     )
     expected_additions = (approved_additions & additions) - set(trusted_targets)
     if POL_03A_DECLARATIVE_MODEL_TARGET in additions:
