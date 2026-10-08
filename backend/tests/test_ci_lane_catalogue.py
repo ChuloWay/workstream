@@ -42,14 +42,47 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     )
 
 
+def test_checker_delivery_and_routing_preparation_keep_exact_exclusive_owners() -> None:
+    delivery = {
+        "tests/checkers/execution/test_results.py",
+        "tests/checkers/execution/test_execution.py",
+        "tests/checkers/execution/test_coordination.py",
+        "tests/checkers/execution/test_concurrency.py",
+        "tests/checkers/execution/test_storage.py",
+        "tests/checkers/execution/test_migration.py",
+        "tests/checkers/execution/test_material_lineage.py",
+        "tests/checkers/execution/test_material_migration.py",
+        "tests/test_post_submit_materialization.py",
+        "tests/test_post_submit_selection.py",
+        "tests/test_submission_evaluation_capacity.py",
+        "tests/test_checker_output_custody.py",
+        "tests/test_checker_output_storage.py",
+    }
+    assert set(catalogue.CHECKER_DELIVERY_MODULES) == delivery
+    groups = (
+        (delivery, "project_lifecycle_a"),
+        (set(catalogue.ROUTING_AUTH_PREPARATION_MODULES), "project_lifecycle_c"),
+    )
+    for modules, owner in groups:
+        assert not modules & set(catalogue.TASK_MODULES)
+        assert not modules & set(catalogue.PARTITION_LANES_BY_MODULE)
+        for module in modules:
+            assert [lane.name for lane in LANES if module in lane.modules] == [owner]
+        nodes = [f"{module}::test_custody[{index}]" for module in modules for index in range(3)]
+        manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
+        assert len(manifest["nodes"]) == len(nodes)
+        assert {row["nodeid"] for row in manifest["nodes"]} == set(nodes)
+        assert {row["lane"] for row in manifest["nodes"]} == {owner}
+
+
 def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     """Keep lane balance tied to subsystem ownership and measured schema cost."""
     modules_by_lane = {lane.name: set(lane.modules) for lane in LANES}
 
     assert (
-        modules_by_lane["project_lifecycle_a"]
+        modules_by_lane["project_lifecycle_a"] - set(catalogue.CHECKER_DELIVERY_MODULES)
         == modules_by_lane["project_lifecycle_b"]
-        == modules_by_lane["project_lifecycle_c"]
+        == modules_by_lane["project_lifecycle_c"] - set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
         == {
             "tests/tasks/evaluation_delivery/test_custody.py",
             "tests/tasks/evaluation_delivery/test_delivery.py",
@@ -193,7 +226,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert (
         modules_by_lane["task_lifecycle_a"]
         == modules_by_lane["task_lifecycle_b"]
-        == modules_by_lane["task_lifecycle_c"] - set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
+        == modules_by_lane["task_lifecycle_c"]
         == {
             "tests/authorization/submission_history/test_reads.py",
             "tests/authorization/submission_history/test_privacy.py",
@@ -232,7 +265,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/authorization/task_audit_evidence/test_authority.py",
             "tests/authorization/task_audit_evidence/test_history.py",
             "tests/authorization/task_audit_evidence/test_transactions_concurrency.py",
-
             "tests/tasks/test_management_queue.py",
             "tests/tasks/test_task_detail.py",
             "tests/tasks/test_work_context.py",
@@ -250,14 +282,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_payment_policy_migration.py",
             "tests/tasks/test_contribution_claim_races.py",
             "tests/tasks/test_submission_lineage.py",
-            "tests/checkers/execution/test_results.py",
-            "tests/checkers/execution/test_execution.py",
-            "tests/checkers/execution/test_coordination.py",
-            "tests/checkers/execution/test_concurrency.py",
-            "tests/checkers/execution/test_storage.py",
-            "tests/checkers/execution/test_migration.py",
-            "tests/checkers/execution/test_material_lineage.py",
-            "tests/checkers/execution/test_material_migration.py",
             "tests/checkers/post_submit/test_catalogue.py",
             "tests/checkers/post_submit/test_compiled_policy.py",
             "tests/checkers/post_submit/test_configuration.py",
@@ -272,11 +296,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/test_checkers.py",
             "tests/test_default_pre_submit_execution.py",
             "tests/test_approved_guide_intake.py",
-            "tests/test_submission_evaluation_capacity.py",
-            "tests/test_post_submit_materialization.py",
-            "tests/test_post_submit_selection.py",
-            "tests/test_checker_output_custody.py",
-            "tests/test_checker_output_storage.py",
             "tests/test_pre_submit_attempt_recovery.py",
             "tests/test_pre_submit_attempt_contracts.py",
             "tests/test_pre_submit_attempt_authority_integration.py",
@@ -346,9 +365,9 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/reviews/acceptance/test_storage.py",
         "tests/reviews/acceptance/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
-    } | static_contracts | post_submit_storage_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(catalogue.TASK_ROUTING_REQUEST_MODULES) == modules_by_lane[
-        "schema_contracts"
-    ]
+    } | static_contracts | post_submit_storage_contracts | set(
+        catalogue.OBSERVABILITY_MODULES
+    ) | set(catalogue.TASK_ROUTING_REQUEST_MODULES) == modules_by_lane["schema_contracts"]
     assert {
         "tests/authorization/admin_access/test_bootstrap_cli.py",
         "tests/authorization/admin_access/test_api_journey.py",
@@ -773,7 +792,9 @@ def test_routing_request_proofs_use_schema_lane_with_measured_headroom():
     }
     assert set(catalogue.TASK_ROUTING_REQUEST_MODULES) == expected
     for lane in LANES:
-        assert set(lane.modules) & expected == (expected if lane.name == "schema_contracts" else set())
+        assert set(lane.modules) & expected == (
+            expected if lane.name == "schema_contracts" else set()
+        )
     assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
 
 
@@ -785,18 +806,22 @@ def test_observability_proofs_use_schema_lane_with_measured_headroom():
     }
     assert set(catalogue.OBSERVABILITY_MODULES) == expected
     for lane in LANES:
-        assert set(lane.modules) & expected == (expected if lane.name == "schema_contracts" else set())
+        assert set(lane.modules) & expected == (
+            expected if lane.name == "schema_contracts" else set()
+        )
     assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
 
 
-def test_routing_authorization_proofs_run_once_on_task_c():
+def test_routing_authorization_proofs_run_once_on_project_c():
     expected = {
         "tests/authorization/post_submit_routing/test_contracts.py",
         "tests/authorization/post_submit_routing/test_prepared.py",
     }
     assert set(catalogue.ROUTING_AUTH_PREPARATION_MODULES) == expected
     for lane in LANES:
-        assert set(lane.modules) & expected == (expected if lane.name == "task_lifecycle_c" else set())
+        assert set(lane.modules) & expected == (
+            expected if lane.name == "project_lifecycle_c" else set()
+        )
     assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
 
 
@@ -809,7 +834,10 @@ def test_shared_acceptance_owner_proofs_are_in_partitioned_project_lanes():
         "tests/tasks/accepted_effects/test_postgresql.py",
     }
     assert expected <= set(catalogue.PROJECT_MODULES)
-    assert all(catalogue.PARTITION_LANES_BY_MODULE[path] == catalogue.PARTITIONED_PROJECT_LANES for path in expected)
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[path] == catalogue.PARTITIONED_PROJECT_LANES
+        for path in expected
+    )
 
 
 def test_evaluation_custody_proofs_use_project_lane_headroom():
@@ -817,7 +845,10 @@ def test_evaluation_custody_proofs_use_project_lane_headroom():
         "tests/tasks/post_submit_routing/test_evaluation_guard.py",
         "tests/tasks/post_submit_routing/test_evaluation_currentness.py",
         "tests/tasks/post_submit_routing/test_review_admission_currentness.py",
-            "tests/tasks/post_submit_routing/test_source_preparation.py",
+        "tests/tasks/post_submit_routing/test_source_preparation.py",
     }
     assert expected <= set(catalogue.PROJECT_MODULES)
-    assert all(catalogue.PARTITION_LANES_BY_MODULE[path] == catalogue.PARTITIONED_PROJECT_LANES for path in expected)
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[path] == catalogue.PARTITIONED_PROJECT_LANES
+        for path in expected
+    )

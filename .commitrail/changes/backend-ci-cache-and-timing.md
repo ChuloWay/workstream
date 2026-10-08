@@ -1,17 +1,16 @@
-# Backend CI Cache And Timing Diagnostics
+# Backend CI Caches And Measured Lane Balance
 
 - Initiative: `None`
 - Durable disposition: `Complete`
 - Intended merge outcome: Backend CI reuses an exact content-addressed MinIO
-  source image and pip download cache while retaining every semantic test,
-  fail-closed aggregate, and useful per-test duration evidence.
+  source image and pip download cache, moves measured workloads into existing
+  lane capacity, and retains every test and the fail-closed aggregate.
 
 ## Intent
 
-Reduce repeated setup work in the required Backend workflow and retain enough
-timing evidence to rebalance slow lanes from measurements. This change targets
-only exact cache-identity inputs and diagnostics; it does not trade
-test or evidence coverage for a faster green result.
+Reduce repeated setup work and repair measured task-lane overload in the required
+Backend workflow. Exact cache inputs, retained duration diagnostics and explicit
+workload placement preserve complete test and evidence coverage.
 
 ## Current behavior
 
@@ -42,6 +41,10 @@ run only; this record makes no hosted performance claim before a candidate run.
 - `backend/scripts/run_test_lanes.py`: retain all pytest duration diagnostics in
   the existing redacted per-lane diagnostic logs without changing selection or
   timeout or treating those logs as fan-in evidence.
+- `backend/scripts/test_lane_catalogue.py` and
+  `backend/tests/test_ci_lane_catalogue.py`: rebalance measured checker-delivery
+  and routing-preparation workloads into existing project-lane capacity;
+  preserve every test node, deterministic assignment and all nine lanes.
 - `scripts/test_lightweight_agent_gates.py` and
   `backend/tests/test_ci_test_lanes.py`: focused positive and adversarial
   regressions for cache identity, fresh installs, runtime verification, artifact
@@ -57,12 +60,30 @@ run only; this record makes no hosted performance claim before a candidate run.
 
 ### Not allowed
 
-- No product source, migrations, dependencies, test catalogue/partition, lane
+- No product source, migrations, dependencies, lane
   count, test selection, skips, coverage behavior, timeout, retry, runner
   permission, concurrency, service image or branch-protection change.
 - No installed virtual-environment cache, broad restore prefix, commit-SHA MinIO
   cache key, unverified image reuse, affected-only tests or hidden failures.
-- No lane/DAG redesign or performance/capacity claim before hosted measurement.
+- No lane-count/DAG redesign or performance claim before hosted measurement.
+
+### Timeout repair plan
+
+Backend run `37799550116` tested merge `9ea0fc9a2f9b0f9927ae98f06f9ea0a487daa050`.
+TASK B and C exhausted 1200 seconds with 22 and 30 nodes unfinished. Their
+databases and MinIO resources were cleaned up; the aggregate correctly failed.
+PROJECT A completed in 529 seconds, PROJECT B in 959 and PROJECT C in 758;
+TASK A completed in 969. This demonstrates available capacity in the existing
+jobs, not that a same-head retry would solve the imbalance.
+
+Move checker execution, post-submit materialization/selection, evaluation
+capacity and output-custody/storage proof together to PROJECT A, beside the
+existing initial-dispatch and evaluation-delivery owners. Move routing AUTH
+PREP proof from TASK C to PROJECT C. Keep the original per-node hash mechanism,
+UUID seed, node IDs, isolation, 1200-second limits and exact aggregate custody.
+Use catalogue/inventory regressions and a dropped/duplicated-owner mutant
+before independent CI-integrity and QA review. The recorded durations guide
+this allocation; only a fresh hosted run can establish runtime success.
 
 ## Design and decisions
 
@@ -108,7 +129,8 @@ promise an eight-minute Backend completion time.
   diagnostics while retaining the same exact node list, coverage, isolation,
   timeout, log and evidence contracts.
 - [x] The nine lanes, full inventory, fan-in failure propagation, CLI dependency,
-  aggregate validation, permissions and timeouts are unchanged.
+  aggregate validation, permissions and timeouts are unchanged; only the named
+  checker-delivery and routing-preparation workloads change lane ownership.
 - [x] Contributor guidance permits only failed-job reruns for a diagnosed
   same-head transient, explains aggregate revalidation of successful lane
   evidence, and requires diagnosis or fresh current-tree CI in the other cases.
@@ -131,6 +153,8 @@ promise an eight-minute Backend completion time.
 | Cache custody | `python -m unittest -v scripts.test_lightweight_agent_gates`; checksum-verified actionlint 1.7.7; cache-key, invalid-context and per-job-install relocation mutants | 19 workflow gates passed; candidate linted cleanly; all three cache/install mutants were rejected | A real cross-commit hit requires a trusted-main seed and later hosted run |
 | Lane diagnostics | Focused lane/evidence pytest batch plus duration-option mutant | 123 tests passed; reverting both commands to `--durations=25` failed the exact lane-command regression | A timed-out pytest process cannot print its final duration table |
 | Full gate preservation | Workflow inventory/fan-in tests, exact diff inspection, Commitrail and Markdown gates | Existing lane count, selection, timeouts, permissions, fan-in and fresh installs remain; repository gates passed | Root owns hosted aggregate validation |
+| Timeout diagnosis and allocation | Retained summaries and complete TASK A duration phases from Backend run `37799550116` | TASK B/C interrupted at 1200 seconds; delivery-group transfer forecasts about 152/161 seconds of relief and about 1036 seconds for PROJECT A | Forecast extrapolates TASK A module costs; fresh hosted execution is required |
+| Rebalance integrity | Catalogue/runner/evidence/merge focused pytest batch; dropped and duplicated delivery-owner mutations | 124 tests passed; recursive inventory rejected both mutations; all node IDs and existing hash/UUID-seed mechanisms remain | This proves assignment and evidence contracts, not hosted speed |
 
 ## Review findings
 
@@ -152,10 +176,10 @@ environment export and fresh install in order; the relocation mutant fails it.
 
 ## Reconciliation
 
-- Current-source reconciliation: Based on `main` at
-  `72b83ffc2f0fcb29efdc68f6babaee884ab7d4dd`; no product or migration owner is
+- Current-source reconciliation: Reconciled with `main` at
+  `b169e83f816bba417fc0618a6e2d419acb2f94ed`; no product or migration owner is
   affected.
-- Next usable boundary: Measure fresh and cross-commit hosted runs before any
-  lane rebalance or further DAG change.
+- Next usable boundary: Validate the measured allocation in fresh hosted CI and
+  measure cross-commit cache reuse before further allocation or DAG changes.
 - Remaining risks: GitHub-hosted cache availability and queue time vary outside
   repository control; no improvement is claimed until measured.
