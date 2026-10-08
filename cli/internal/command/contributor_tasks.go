@@ -13,7 +13,7 @@ func addContributorTasks(root *cobra.Command, client func() (*api.Client, error)
 	var limit int
 	var cursor string
 	ready := &cobra.Command{
-		Use: "ready PROJECT_ID", Short: "List one page of ready work under your Submitter grant", Args: cobra.ExactArgs(1),
+		Use: "ready PROJECT_ID", Short: "List ready work under your Submitter or Reviewer grant", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var continuation *string
 			if cmd.Flags().Changed("cursor") {

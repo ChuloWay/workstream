@@ -87,8 +87,9 @@ impact-routed review is coordinated by the lead.
 
 ## Reconciliation
 
-- Current-source reconciliation: Merged `main` at `b169e83f`, preserving PR #504
-  submission dispatch, PR #505 guide-document contracts and PR #509 hidden
-  evaluation-request delivery plus its owner inventories alongside compensation.
+- Current-source reconciliation: Merged `main` at `36e8a615`, preserving PR #504
+  submission dispatch, PR #505 guide-document contracts, PR #509 hidden
+  evaluation-request delivery and PR #507's qualified gVisor experiment limits
+  alongside compensation and their current owner inventories.
 - Next usable boundary: Human merge of this bounded PR; payment and fulfillment remain separate work.
 - Remaining risks: None beyond independent review and hosted CI.
