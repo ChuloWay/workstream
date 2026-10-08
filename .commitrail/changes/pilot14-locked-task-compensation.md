@@ -49,10 +49,10 @@ stored on each task and embeds the detached result in ready/detail responses.
 The existing ready/detail authority paths accept either active exact-project
 contributor role; claim/start and other Submitter operations remain unchanged.
 
-PR #505 overlaps TASK command/router schemas, CLI client/docs and roadmap files.
-This change is implemented independently from its immutable head, preserves its
-guide-read additions during the required post-merge reconciliation, and adds no
-migration.
+PR #505 overlapped TASK command/router schemas, CLI client/docs and roadmap files.
+This change was implemented independently, then rebased onto its merged head.
+The reconciliation preserves guide-document fields, delivery authority and CLI
+validation alongside compensation, and adds no migration.
 
 ## Acceptance criteria
 
@@ -87,7 +87,8 @@ impact-routed review is coordinated by the lead.
 
 ## Reconciliation
 
-- Current-source reconciliation: Rebased on `main` at `3fa0dfb9`, preserving
-  PR #504 submission dispatch; reconcile with merged PR #505 before final freeze.
+- Current-source reconciliation: Rebased on `main` at `72b83ffc`, preserving
+  PR #504 submission dispatch and merged PR #505 guide-document contracts,
+  authority and CLI validation alongside compensation.
 - Next usable boundary: Human merge of this bounded PR; payment and fulfillment remain separate work.
-- Remaining risks: None beyond final PR #505 reconciliation, independent review and hosted CI.
+- Remaining risks: None beyond independent review and hosted CI.
