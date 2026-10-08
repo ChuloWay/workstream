@@ -16,10 +16,8 @@ from app.modules.artifacts.api import (
     SubmissionAdmissionConsumptionResult,
     SubmissionAdmissionConsumptionStatus,
     SubmissionAdmissionMaterial,
-    SubmissionBundleFile,
 )
 from app.modules.artifacts.submission_manifest import SubmissionManifest
-from app.modules.artifacts.submission_archive import SubmissionArchiveEntryType
 from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
@@ -390,10 +388,7 @@ class SubmissionAdmissionConsumptionService:
                 archive_sha256=admission.archive_sha256,
                 archive_byte_count=admission.archive_byte_count,
                 semantic_manifest_sha256=manifest.sha256,
-                files=tuple(SubmissionBundleFile(
-                    normalized_path=item.normalized_path, sha256=item.sha256,
-                    byte_count=item.byte_count,
-                ) for item in manifest.entries if item.entry_type is SubmissionArchiveEntryType.FILE),
+                files=manifest.file_facts(),
             )
         return SubmissionAdmissionConsumptionResult(
             admission_id=UUID(admission.id),

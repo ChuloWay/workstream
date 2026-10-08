@@ -8,6 +8,8 @@ from pydantic import ValidationError
 
 from app.modules.checkers.api import ExpectedPostSubmitContext, PostSubmissionStructuralInput
 from app.modules.checkers.api.post_submit import (
+    POST_SUBMIT_CONTENT_BYTE_LIMIT,
+    PostSubmissionEvaluationContent,
     PostSubmitEvidenceEntry,
     PostSubmitManifestEntry,
     PostSubmitPolicyInputs,
@@ -150,24 +152,34 @@ def test_catalogue_resource_limits_match_exact_enforced_contract(field, maximum)
             PostSubmitResourceLimits(**{field: value})
 
 
-def test_request_aggregate_exact_limit_and_one_byte_over():
+@pytest.mark.parametrize("prefix", ("", "é\n\""))
+def test_request_aggregate_exact_limit_and_one_byte_over(prefix):
     source = request()
     data = source.structural_input.model_dump()
-    data["summary"] = ""
+    data["summary"] = prefix
     # Each item remains within its own limit; only the aggregate boundary varies.
     data["manifest"] = tuple(
         {"artifact": f"entry{i}", "hash": HASH, "notes": "x" * 3800, "size_bytes": 0}
         for i in range(260)
     )
     small = change_request(source, structural_input=data)
-    delta = 1_048_576 - len(canonical_post_submit_bytes(small))
+    fields = set(PostSubmissionEvaluationContent.model_fields)
+    delta = POST_SUBMIT_CONTENT_BYTE_LIMIT - len(canonical_post_submit_bytes(small, include=fields))
     assert 0 < delta < 65536
-    data["summary"] = "x" * delta
+    data["summary"] = prefix + "x" * delta
     exact = change_request(source, structural_input=data)
-    assert len(canonical_post_submit_bytes(exact)) == 1_048_576
+    content = PostSubmissionEvaluationContent(**exact.model_dump(include=fields))
+    assert len(canonical_post_submit_bytes(content)) == POST_SUBMIT_CONTENT_BYTE_LIMIT
+    maximum = change_request(exact, evaluation_generation=2_147_483_647,
+                             submission_version=2_147_483_647, byte_count=9_223_372_036_854_775_807)
+    # All remaining fields are fixed-width UUID/hash/schema values.
+    assert len(canonical_post_submit_bytes(maximum)) - len(canonical_post_submit_bytes(content)) <= 1024
+    assert len(canonical_post_submit_bytes(maximum)) <= 1_048_576
     data["summary"] += "x"
-    with pytest.raises(ValidationError, match="request capacity exceeded"):
+    with pytest.raises(ValidationError, match="content capacity exceeded"):
         change_request(source, structural_input=data)
+    with pytest.raises(ValidationError, match="content capacity exceeded"):
+        PostSubmissionEvaluationContent(**{**content.model_dump(), "structural_input": data})
 
 
 @pytest.mark.parametrize("mapping", (dict, UserDict, MappingProxyType))

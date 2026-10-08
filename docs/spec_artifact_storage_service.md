@@ -1712,3 +1712,22 @@ rollback are documented in the
 - [Amazon S3 Block Public Access](https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-block-public-access.html)
 - [Amazon S3 lifecycle management](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-lifecycle-mgmt.html)
 - [AWS standardized credential providers](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html)
+
+
+### Evaluation content capacity before durable admission
+
+ARCH-04E1B-B5 checks representability after private ZIP inspection and before
+pre-submit attempt reservation or durable upload intent. The CHECKERS-owned
+content value binds exact historical policy facts, task criteria, prepared packet
+text and every inspected file. Required evidence is projected only from matching
+verified `evidence/{key}` files; no EvidenceItem or evaluator result is fabricated.
+Missing task criteria remain empty input for the existing post-submit checker.
+
+The locked catalogue remains unchanged: at most 1,024 files, 1,000-character
+paths, the existing field limits and 1 MiB total request. Shared content reserves
+1,024 bytes for the finite record-identity envelope. ART's larger ZIP container
+limits do not imply every inspected archive can be admitted for evaluation.
+Rejection releases scratch and creates no attempt, put intent or ready admission.
+Both review-policy modes use these same content rules. Later initial dispatch
+must reuse this projection with real identities and the full request digest;
+dispatch, routing authority and public intake remain separate pending work.

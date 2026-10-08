@@ -4,6 +4,8 @@ These prerequisites exercise canonical storage guards, not deployment/provider
 conformance. Local/MinIO execution has its own focused integration proof.
 """
 
+from app.adapters.checkers import submission_evaluation_content
+
 from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
@@ -133,6 +135,7 @@ async def retained_admission(factory, task, assignment, link, packet, predecesso
                             session=session, admission=ArtifactAdmissionService(session, settings, namespace),
                             storage=storage, authorization=authority, task_contexts=tasks, project_contexts=projects,
                         ),
+                        submission_evaluation_content,
                     )
 
                 result = await PreparedSubmissionBundlePreparationCommand(

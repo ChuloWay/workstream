@@ -23,7 +23,9 @@ from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.artifacts.pre_submit_evidence import (
     PreSubmitEvidenceConflict, PreSubmitEvidencePersistenceResult,
 )
-from app.modules.artifacts.submission_admission import PreparedSubmissionBundlePreparationCommand
+from app.modules.artifacts.submission_admission import (
+    PreparedSubmissionBundlePreparationCommand, SubmissionBundlePreparationRuntime,
+)
 from tests.artifact_store_helpers import artifact_byte_stream
 from tests.test_submission_bundle_admission import _actor, _transaction
 
@@ -79,32 +81,31 @@ async def test_hidden_preparation_maps_context_custody_and_authority_distinctly(
 
 def _preparation_replay_runtime(prepare_bytes, evidence_id, *, eligible):
     """Supply bounded ART outcome doubles for command routing proof."""
-    runtime = SimpleNamespace(
+    evidence = SimpleNamespace(
+        reserve=AsyncMock(return_value=object()),
+        execute_reserved=AsyncMock(return_value=PreSubmitEvidencePersistenceResult(
+            evidence=SimpleNamespace(evidence_set_id=evidence_id),
+            pass_capability=None, failure_audit=None,
+            execution=SimpleNamespace(eligible=eligible),
+        )),
+    )
+    checker_service = CheckerPhaseService(
+        pre_submission=evidence, post_submission=forbidden_post_submission(),
+    )
+    checker_service.evaluate_pre_submission = AsyncMock(wraps=checker_service.evaluate_pre_submission)
+    from app.modules.checkers.api import PostSubmissionEvaluationContent
+    from tests.checkers.post_submit.support import request as evaluation_request
+    content = evaluation_request().model_dump(include=set(PostSubmissionEvaluationContent.model_fields))
+    return SubmissionBundlePreparationRuntime(
+        evaluation_content=Mock(return_value=PostSubmissionEvaluationContent(**content)),
+        checker_service=checker_service,
         preparation=SimpleNamespace(prepare=AsyncMock(side_effect=prepare_bytes)),
         inspector=object(),
         catalogue=object(),
         materialization=SimpleNamespace(prepare_authorization=AsyncMock(return_value=object())),
-        evidence=SimpleNamespace(
-            reserve=AsyncMock(return_value=object()),
-            execute_reserved=AsyncMock(
-                return_value=PreSubmitEvidencePersistenceResult(
-                    evidence=SimpleNamespace(evidence_set_id=evidence_id),
-                    pass_capability=None, failure_audit=None,
-                    execution=SimpleNamespace(eligible=eligible),
-                )
-            ),
-        ),
+        evidence=evidence,
         durable_put=object(),
     )
-
-    runtime.checker_service = CheckerPhaseService(
-        pre_submission=runtime.evidence,
-        post_submission=forbidden_post_submission(),
-    )
-    runtime.checker_service.evaluate_pre_submission = AsyncMock(
-        wraps=runtime.checker_service.evaluate_pre_submission,
-    )
-    return runtime
 
 
 @pytest.mark.asyncio
@@ -120,7 +121,7 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
     )
     locked = SimpleNamespace(effective_policy_id=new_record_id(), pre_submit_policy_id=new_record_id())
     prepared = SimpleNamespace(
-        commitment=object(),
+        commitment=SimpleNamespace(sha256="sha256:" + "a" * 64),
         inspect=AsyncMock(return_value=object()),
         close=AsyncMock(),
     )
@@ -142,7 +143,7 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
     monkeypatch.setattr(
         submission_admission_module,
         "build_submission_manifest",
-        Mock(return_value=object()),
+        Mock(return_value=SimpleNamespace(file_facts=Mock(return_value=()))),
     )
     monkeypatch.setattr(
         submission_admission_module,

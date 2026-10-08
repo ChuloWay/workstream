@@ -1,5 +1,7 @@
 
 from __future__ import annotations
+from submission_context_fixtures import submission_context_facts
+
 
 from app.adapters.tasks import task_service
 
@@ -95,7 +97,7 @@ def _locked_task_context_references() -> TaskLockedProjectContextReferences:
 def test_task_submission_context_public_facts_are_immutable_and_consistent() -> None:
     """Reject mutation, invalid failures, and inconsistent lifecycle facts."""
     predecessor = SubmissionPredecessorFacts(submission_id=new_record_id(), version=2)
-    facts = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+    facts = submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=new_record_id(),
         assignment_id=new_record_id(),
         contributor_id=new_record_id(),
@@ -126,7 +128,7 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
             pre_submit_policy_bundle_hash="sha256:" + "3" * 64,
         )
     with pytest.raises(ValueError, match="predecessor is inconsistent"):
-        TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+        submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
             task_id=new_record_id(),
             assignment_id=new_record_id(),
             contributor_id=new_record_id(),
@@ -136,7 +138,7 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
             locked_project_context=_locked_task_context_references(),
         )
     with pytest.raises(ValueError, match="predecessor is inconsistent"):
-        TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+        submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
             task_id=new_record_id(),
             assignment_id=new_record_id(),
             contributor_id=new_record_id(),
@@ -168,6 +170,24 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         locked_pre_submit_checker_policy_id=str(references.pre_submit_policy_id),
         locked_pre_submit_checker_bundle_hash=references.pre_submit_policy_bundle_hash,
     )
+    from tests.checkers.post_submit.support import request as evaluation_request
+    from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+
+    base_context = submission_context_facts(
+        task_id=task_id, assignment_id=assignment_id, contributor_id=contributor_id,
+        status="in_progress", kind="initial", predecessor=None,
+        submitter_contribution_policy_version_id=references.locked_contribution_policy_version_id,
+        locked_project_context=references,
+    )
+    post_policy = evaluation_request(project_id=references.project_id).policy
+    lineage = TaskPolicyLineage(**{
+        **base_context.locked_policy.model_dump(),
+        "locked_post_submit_checker_policy_hash": post_policy.policy_hash,
+    })
+    for field, value in lineage.model_dump().items():
+        setattr(task, field, str(value) if field.endswith("_id") and field != "locked_contribution_policy_version_id" else value)
+    task.locked_post_submit_checker_policy_body = post_policy.model_dump(mode="json")
+    task.acceptance_criteria = base_context.acceptance_criteria
     assignment = MagicMock(
         project_id=str(references.project_id),
         submitter_contribution_policy_version_id=references.locked_contribution_policy_version_id,
@@ -198,7 +218,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
             predecessor_submission_id=None,
         )
     )
-    assert initial == TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+    assert initial == submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=task_id,
         assignment_id=assignment_id,
         contributor_id=contributor_id,
@@ -206,6 +226,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         kind="initial",
         predecessor=None,
         locked_project_context=references,
+        locked_policy=lineage,
     )
     task.status = "needs_revision"
     revision = await repository.lock_submission_context(
@@ -216,7 +237,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
             predecessor_submission_id=predecessor_id,
         )
     )
-    assert revision == TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+    assert revision == submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=task_id,
         assignment_id=assignment_id,
         contributor_id=contributor_id,
@@ -227,6 +248,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
             version=1,
         ),
         locked_project_context=references,
+        locked_policy=lineage,
     )
     assert repository.get_task.await_args_list == [
         call(str(task_id), for_update=True),
@@ -243,6 +265,24 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         statement.get_execution_options().get("populate_existing") is True
         for statement in assignment_statements
     )
+
+    session.scalar = AsyncMock(return_value=assignment)
+    repository.get_latest_submission_for_task = AsyncMock(return_value=MagicMock(
+        id=str(predecessor_id), version=1, contributor_id=str(contributor_id),
+    ))
+    from app.modules.projects.post_submit_policy import build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec
+    substituted = compile_project_post_submit_checker_spec(
+        project_id=str(references.project_id), guide_version=references.guide_version,
+        spec=build_project_post_submit_checker_spec(project_id=str(references.project_id),
+                                                   guide_version=references.guide_version, required_checkers=[]),
+    )
+    assert substituted.policy_hash != lineage.locked_post_submit_checker_policy_hash
+    task.locked_post_submit_checker_policy_body = substituted.model_dump(mode="json")
+    with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_context_invalid"):
+        await repository.lock_submission_context(TaskSubmissionContextRequest(
+            task_id=task_id, assignment_id=assignment_id, contributor_id=contributor_id,
+            predecessor_submission_id=predecessor_id,
+        ))
 
 
 @pytest.mark.asyncio

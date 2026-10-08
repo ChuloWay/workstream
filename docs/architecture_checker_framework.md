@@ -815,3 +815,20 @@ without raw metadata, provider locations, token claims or obsolete payment field
 Hidden result rows and internal-only routing results are never returned to contributors.
 No manual execution endpoint accompanies these reads. See the
 [TASK history contract](spec_chunk_4_task_queue_assignment.md#retained-submission-and-checker-history).
+
+
+### Shared evaluation content capacity
+
+ARCH-04E1B-B5 provides `PostSubmissionEvaluationContent` for both preparation and
+later identified requests. It enforces the existing locked catalogue, policy
+consistency and structural field limits, plus 1 MiB minus a 1,024-byte reserve
+for the finite request identity envelope. The full request retains its 1 MiB
+limit and canonical digest. Catalogue and policy identities are unchanged.
+
+The typed adapter projects every verified file and only required evidence with
+matching verified `evidence/{key}` files. Missing criteria remain empty text for
+the existing post-submit checker. This check does not execute evaluators or
+supply authority. See [the ART admission boundary](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission)
+for timing and cleanup. Initial dispatch must verify stored Submission lineage
+against the locked context before reusing the projection. Preparation has no
+stored Submission to observe; it never replaces the TASK evaluation guard.

@@ -190,7 +190,9 @@ after acceptance. ARCH-04E1B-B3 retains the inspected ZIP file metadata with imm
 ART evidence and returns it on consumption without another storage read. Initial
 Submission/dispatch composition remains pending. ARCH-04E1B-B4 binds the
 Submission summary and attestation to the packet that passed intake, with
-service and database enforcement. ARCH-04E1B-B2 prepares exact source proposals from current
+service and database enforcement. ARCH-04E1B-B5 rejects evaluation content that
+exceeds the locked checker limits before any pre-check attempt or durable upload
+intent, using the same content contract required by later dispatch. ARCH-04E1B-B2 prepares exact source proposals from current
 CHECKERS custody and historical PROJECTS policy, without inserting a manifest
 or granting authority. Hidden handlers still need complete
 authorized currentness proof. These prerequisites do not require live
@@ -772,8 +774,9 @@ without creating a REV queue dependency. The false branch binds exact
 without fabricating a Review. CON-07 now supplies the hidden source-neutral
 submitter participant and complete frozen award-set staging/replay. REV-04C now
 composes FinalAcceptance, TASK terminal effects and that CON participant in one
-hidden caller-owned transaction for either source. Capacity alignment and atomic
-initial Submission/dispatch come next, before the hidden handlers.
+hidden caller-owned transaction for either source. B5 supplies bounded evaluation
+content before durable admission. Atomic initial Submission/dispatch comes next,
+before the hidden handlers.
 The mandatory exact AUTH receipt must become required on the same strict input,
 with no optional/default path, before production consumption; database
 FinalAcceptance/TASK/CON closure, TASK-before-CHECKERS race proof, shared

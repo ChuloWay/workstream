@@ -14,7 +14,7 @@ from app.modules.checkers.api import (
 )
 from app.modules.checkers.api.post_submit_catalogue import PostSubmitCatalogue, PostSubmitDefinition
 from app.modules.checkers.post_submit_catalogue import build_post_submit_catalogue
-from app.modules.checkers.post_submit_contracts import make_post_submit_request
+from app.modules.checkers.api.post_submit import make_post_submit_request
 from app.modules.checkers.runner import default_checker_registry
 from app.modules.projects.post_submit_policy import build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec
 

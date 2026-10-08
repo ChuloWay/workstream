@@ -5,6 +5,8 @@ from types import SimpleNamespace
 from uuid import UUID
 from app.core.identifiers import new_record_id
 
+from submission_context_fixtures import submission_context_facts
+
 import pytest
 
 from app.core.hashing import canonical_json_hash
@@ -23,7 +25,6 @@ from app.modules.artifacts.pre_submit_evidence import (
 from app.modules.tasks.api import (
     SubmissionPredecessorFacts,
     TaskLockedProjectContextReferences,
-    TaskSubmissionContextFacts,
 )
 from app.modules.checkers.api import (
     PreSubmissionExecutionEntryFacts,
@@ -98,7 +99,7 @@ def test_evidence_operation_identity_binds_every_custody_fact() -> None:
 
 def test_post_byte_relock_rejects_advanced_predecessor_version() -> None:
     predecessor_id = new_record_id()
-    task_context = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+    task_context = submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=new_record_id(),
         assignment_id=new_record_id(),
         contributor_id=new_record_id(),
