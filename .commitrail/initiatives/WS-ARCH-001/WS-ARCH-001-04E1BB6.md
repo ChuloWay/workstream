@@ -121,7 +121,6 @@ content. Reuse them rather than adding another intake or checker implementation.
   50 ms startup race; retain cancellation and single-provider-request assertions
   without changing the adapter or production timeout behavior.
 - This record, affected current ARCH/AUTH/POL/CON/REV navigation, README,
-  the adopted second-review record's next-boundary wording,
   submission/checker/artifact specifications, current system-flow/architecture brief (including its regenerated PDF) and operating manual, and roadmap; local exports if present.
 
 ## Prohibited changes
