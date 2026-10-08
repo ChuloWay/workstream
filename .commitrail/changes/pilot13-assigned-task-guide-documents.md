@@ -56,7 +56,9 @@ adapter change.
 
 - Add `task.guide.read` under existing project submitter permission. AUTH requires
   the current actor, identity, exact project grant and active assigned TASK facts.
-  It does not grant unassigned-ready access. Conceal denied/wrong document reads.
+  It does not grant unassigned-ready access. Conceal denied/wrong document reads
+  and denied contributor work-context reads; mutation denials retain their
+  existing permission error. Unassigned authorized browsing still lists no documents.
 - Contributor work context adds `guide_documents`, empty for legitimate ready-task
   browsing and populated only for the current assignment. CLI consumes that field;
   existing strict context decoding/rendering is updated rather than duplicated.
@@ -162,10 +164,11 @@ digest/foreign-snapshot guards need discriminating defective variants.
 
 ## Reconciliation
 
-Originally started from merged main `66a26d8d`; reconciled onto `235f9e1b`
-after PR #501 merged. Its local-stack composition remains independently owned
-and does not overlap this assigned-document read. PR #502 owns second-review
-policy validation, not this read boundary.
+Originally started from merged main `66a26d8d`; reconciled onto `9f774cbb`
+after PRs #501 and #502 merged. Their local-stack composition and false-only
+second-review guard remain independently owned. Append guide-read migration
+`0025_task_guide_read` after `0024_require_second_review_false`; retain both
+invariants, one migration head, repeated-upgrade safety and exact schema proof.
 Keep PILOT-12 upload transport separate; this read uses authenticated verified
 streaming without choosing its upload-intent implementation. Remaining review,
 rebase and upload work stays under its existing issues.

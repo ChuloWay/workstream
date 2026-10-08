@@ -58,7 +58,11 @@ Pre-submission and post-submission checking are different stages:
 The v0.1 project setting `human_review_required` defaults to `true` in the
 existing locked ReviewPolicy. After required post-submit checks pass, true
 requires human review; false uses an authorized automated FinalAcceptance and
-submitter ContributionRecord, with no reviewer contribution. This branch is
+submitter ContributionRecord, with no reviewer contribution.
+The separate `requires_second_review` policy field is [fixed to `false`](.commitrail/changes/enforce-requires-second-review-false.md)
+at input, immutable lineage, and database boundaries; second-review and
+adjudication behavior remain deferred.
+This branch is
 not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is implemented for configuration, and the hidden submitter participant can
 stage or exactly replay its complete frozen award set. Shared acceptance, TASK
@@ -329,6 +333,10 @@ explicit caller retry keys and uncertain-outcome reporting without automatic ret
 `workstream task context TASK_ID` and `task requirements TASK_ID` inspect the
 governing guide/policy selectors, server action hints and locked intake rules.
 Hints do not grant authority; requirements do not expose hidden submission upload.
+`workstream task guide TASK_ID [--download DIR]` lists or downloads the original
+documents of the task's locked guide for its currently authorized assignee.
+Downloaded bytes are verified against their retained hash and size; task examples
+remain private, and newer guide activation does not change existing task locks.
 `workstream project create --name TEXT --slug TEXT --idempotency-key UUID`
 creates a draft project shell through the public API, with explicit manual
 replay and uncertain-outcome handling; it does not approve or activate a guide.

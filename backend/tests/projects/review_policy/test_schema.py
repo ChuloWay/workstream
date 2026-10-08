@@ -92,3 +92,32 @@ async def test_review_policy_shape_rejects_invalid_mode_and_format_combinations(
                     )
         finally:
             await transaction.rollback()
+
+
+async def test_review_policy_shape_rejects_raw_second_review_insert(project_client) -> None:
+    project = await create_project(project_client)
+    guide = await create_guide(project_client, project["id"], complete_guide_payload())
+    source = await _selected(project["id"], guide["version"])
+    engine = db_session.get_engine()
+    async with engine.connect() as connection, connection.begin():
+        with pytest.raises(DBAPIError, match="review_policy_second_review_disabled"):
+            async with connection.begin_nested():
+                await connection.execute(
+                    text(
+                        "insert into review_policies select "
+                        "(jsonb_populate_record(null::review_policies, to_jsonb(p) || "
+                        "cast(:changes as jsonb))).* from review_policies p where p.id=:source"
+                    ),
+                    {
+                        "source": source.id,
+                        "changes": json.dumps(
+                            {
+                                "id": str(new_record_id()),
+                                "policy_generation": source.policy_generation + 1,
+                                "supersedes_policy_id": source.id,
+                                "predecessor_policy_hash": source.policy_hash,
+                                "requires_second_review": True,
+                            }
+                        ),
+                    },
+                )

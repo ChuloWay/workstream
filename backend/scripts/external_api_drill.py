@@ -686,6 +686,8 @@ async def policy_cases(drill, manager, groute, gpath, outsider):
             invalids.append((field + "_type", body | {field: {"bad": True}}))
         invalids += [(field + "_enum", body | {field: "invalid"}) for field in defaults[suffix]
                      if field not in {"reviewer_reassignment_rule"}]
+        if suffix == "review-policy":
+            invalids.append(("requires_second_review_true", body | {"requires_second_review": True}))
         for label, invalid in invalids:
             await drill.call(suffix + "_" + label, "PUT", groute + "/" + suffix,
                 path=gpath + "/" + suffix, token=manager, payload=invalid,
@@ -698,7 +700,7 @@ async def policy_cases(drill, manager, groute, gpath, outsider):
         # A fresh update with the prior selector proves rejections did not advance it.
         selector = f'"{result["id"]}.{result["policy_generation"]}.{result["policy_hash"].removeprefix("sha256:")}"'
         replacement = (body | {"human_review_required": False, "finding_evidence_requirement": "required_for_all",
-                              "requires_second_review": True, "allowed_decisions": ["accept", "reject"],
+                              "requires_second_review": False, "allowed_decisions": ["accept", "reject"],
                               "minimum_finding_fields": ["summary", "evidence"]}
                        if suffix == "review-policy" else
                        body | {"max_revision_rounds": 1, "revision_deadline_hours": 1,

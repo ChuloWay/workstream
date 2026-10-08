@@ -280,7 +280,7 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
     assert contributor.status_code == 200, contributor.text
     contributor_body, manager_body = contributor.json(), manager.json()
     assert set(contributor_body) == set(original)
-    assert set(manager_body) == set(original) - {"lifecycle"}
+    assert set(manager_body) == set(original) - {"lifecycle", "guide_documents"}
     assert set(contributor_body["task"]) == set(original["task"])
     assert set(manager_body["task"]) == set(original["task"]) | set(manager_facts)
     assert {key: manager_body["task"][key] for key in manager_facts} == manager_facts

@@ -138,6 +138,8 @@ async def test_v2_response_cannot_omit_mode_or_claim_legacy_false():
         )
     with pytest.raises(ValidationError, match="legacy review policy"):
         ReviewPolicyResponse.model_validate({**response, "semantics_format": "v1"})
+    with pytest.raises(ValidationError, match="requires_second_review"):
+        ReviewPolicyResponse.model_validate({**response, "requires_second_review": True})
 
 
 @pytest.mark.parametrize(

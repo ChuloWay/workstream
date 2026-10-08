@@ -64,6 +64,9 @@ enum, policy entity or adjudication setting is introduced. The
 queue, lease and human-decision sections apply only to the human branch. The
 [policy setting](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is persisted and versioned; false activation remains unavailable.
+The distinct `requires_second_review` field is fixed to `false` at policy input,
+immutable lineage and PostgreSQL boundaries. It does not activate another
+review decision or adjudication path.
 The hidden source-neutral CON submitter participant and complete frozen award-set
 port are delivered. REV-04C now composes one source-neutral FinalAcceptance,
 TASK accepted/completed effects and that CON outcome inside the caller's root
@@ -240,6 +243,10 @@ also be submitted but are not fabricated merely to satisfy a schema.
 no-self-review, finding/evidence, and decision rules. `RevisionPolicy` locks
 revision limit and deadline inputs. Task execution context remains separate
 from contribution terms.
+
+`requires_second_review` is a canonical false value in the ReviewPolicy body so
+existing false-policy hashes remain stable; true is unsupported and cannot be
+persisted.
 
 Each policy version has its own opaque ID, positive generation, canonical
 SHA-256 digest, and exact Project Guide lineage. The Project Guide selects one
