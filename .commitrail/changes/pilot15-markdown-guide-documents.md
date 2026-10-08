@@ -117,6 +117,13 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
 - FastAPI correctly appends the UTF-8 charset parameter to a Markdown response;
   the REST test compares its parsed base media type while the CLI independently
   parses and requires the advertised `text/markdown` type.
+- Hosted boundary validation found that the MinIO intake proof had grown past
+  the frozen 120-line test limit. A focused helper now performs only the stored
+  original lookup; every replica and byte assertion remains in the same primary
+  test node, which falls below the hard limit and adds no structural-debt entry.
+- The CLI public-contract formatter found the Markdown download journey was not
+  in canonical Ruff form. The focused integration source is now formatted and
+  remains covered by the built-CLI HTTP journey.
 
 ## Reconciliation
 

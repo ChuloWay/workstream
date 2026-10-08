@@ -193,6 +193,29 @@ async def _stored_put_state(project_id):
         ).where(ArtifactPutAttempt.project_id == project_id).order_by(ArtifactPutAttempt.id))).all()
 
 
+async def _stored_originals(project_id):
+    from app.core.config import get_settings
+    from app.modules.artifacts.models import ArtifactReplica, ArtifactPutAttempt
+
+    async with db_session.get_session_factory()() as session:
+        attempts = (
+            await session.scalars(
+                select(ArtifactPutAttempt).where(ArtifactPutAttempt.project_id == project_id)
+            )
+        ).all()
+        replicas = (await session.scalars(select(ArtifactReplica))).all()
+    bootstrap, store = _open_store(get_settings())
+    try:
+        stored = [
+            b"".join([chunk async for chunk in store.open(row.provider_object_ref)])
+            for row in replicas
+        ]
+    finally:
+        store.close()
+        bootstrap.close()
+    return attempts, replicas, stored
+
+
 async def _assert_inactive_resolver_replay_denied(
     client, project_id, resolver_id, path, headers, original, provider_calls, deliveries,
 ):
@@ -227,7 +250,6 @@ async def test_all_documents_stored_dispatches_once_through_minio(
 ):
     from app.core.config import get_settings
     from app.modules.actors.api import ServiceIdentity
-    from app.modules.artifacts.models import ArtifactReplica, ArtifactPutAttempt
     from app.workers.project_setup import run_project_guide_compilation
     from app.adapters.artifacts import internal_workers
 
@@ -325,25 +347,10 @@ async def test_all_documents_stored_dispatches_once_through_minio(
         async with db_session.get_session_factory()() as session:
             run = await session.get(ProjectSetupRun, guide["setup"]["id"])
             assert run.status == ("awaiting_documents" if index == 0 else "queued")
-    async with db_session.get_session_factory()() as session:
-        attempts = (
-            await session.scalars(
-                select(ArtifactPutAttempt).where(ArtifactPutAttempt.project_id == project["id"])
-            )
-        ).all()
-        replicas = (await session.scalars(select(ArtifactReplica))).all()
-        assert len(attempts) == len(replicas) == 2
-        assert {row.media_type for row in attempts} == {"text/markdown", "application/pdf"}
-    bootstrap, store = _open_store(get_settings())
-    try:
-        stored = [
-            b"".join([chunk async for chunk in store.open(row.provider_object_ref)])
-            for row in replicas
-        ]
-        assert set(stored) == set(originals)
-    finally:
-        store.close()
-        bootstrap.close()
+    attempts, replicas, stored = await _stored_originals(project["id"])
+    assert len(attempts) == len(replicas) == 2
+    assert {row.media_type for row in attempts} == {"text/markdown", "application/pdf"}
+    assert set(stored) == set(originals)
 
     # Even a completed put requires the fixed resolver's current authority.
     await _assert_inactive_resolver_replay_denied(

@@ -151,12 +151,22 @@ def test_markdown_guide_download_uses_canonical_md_name_and_exact_bytes(cli, tmp
         destination.mkdir()
 
         downloaded = cli(
-            origin, TOKEN, "task", "guide", TASK, "--download", str(destination), "-o", "json"
+            origin,
+            TOKEN,
+            "task",
+            "guide",
+            TASK,
+            "--download",
+            str(destination),
+            "-o",
+            "json",
         )
 
         assert downloaded.returncode == 0, downloaded.stderr
         target = destination / f"{ACTOR}.md"
-        assert target.read_bytes() == markdown and target.stat().st_mode & 0o777 == 0o600
+        assert (
+            target.read_bytes() == markdown and target.stat().st_mode & 0o777 == 0o600
+        )
         assert list(destination.iterdir()) == [target]
         assert requests[-1] == (document["read_reference"], "Bearer " + TOKEN)
 
