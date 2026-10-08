@@ -1,7 +1,7 @@
 # [PILOT-15] Admit Markdown Guide Originals
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: A Project Manager can declare and upload a
   `text/markdown` guide original that retains byte-exact ART custody and is
   available through the existing setup-agent and assigned-contributor reads.
@@ -20,8 +20,8 @@ not executable input or a separate storage path.
 The public guide declaration, ART upload format inspection, setup-agent manifest,
 review-packet metadata and Go declaration client consume that closed type. The
 database constraint on `review_packet_guide_items.media_type` independently
-repeats the same three values. PILOT-13 PR #505 adds task-locked contributor
-original reads and CLI downloads, but its open branch is not delivered behavior.
+repeats the same three values. Delivered PILOT-13 provides task-locked
+contributor original reads and CLI downloads with the same closed media type.
 
 ## Bounded change
 
@@ -35,12 +35,13 @@ original reads and CLI downloads, but its open branch is not delivered behavior.
 - The existing setup-agent manifest/workspace path and focused tests proving a
   `.md` original is opened under the same run-scoped grant, disabled-network
   container and exact resource cleanup.
-- Review-packet typed metadata/model constraint plus one forward-only migration
-  after the actual merged migration head, its graph/schema consumers and direct
-  PostgreSQL refusal/acceptance proof.
+- Review-packet typed metadata/model constraint plus forward-only revision
+  `0027_markdown_guide_media` after delivered `0026_task_guide_read`, its
+  graph/schema consumers and direct PostgreSQL refusal/acceptance proof.
 - The Go guide-declaration client and current CLI/API documentation for
-  `text/markdown`. After PR #505 merges, its task guide DTO/extension/download
-  consumers and tests may be reconciled without copying its implementation.
+  `text/markdown`. The merged PILOT-13 task guide DTO/extension/download consumers,
+  their real upload/read fixtures and direct tests are reconciled without copying
+  its implementation.
 - Existing guide API, real PostgreSQL/MinIO intake fixtures, format, setup
   workspace, review-packet, CLI declaration and later PILOT-13 contributor-read
   tests; current README, artifact/guide specifications, roadmap and this record.
@@ -55,8 +56,8 @@ original reads and CLI downloads, but its open branch is not delivered behavior.
 - No checker catalogue/registration changes, activation refusal or recovery
   behavior; F-020 belongs to PILOT-04 / issue #491.
 - No duplicate contributor read, task authority, streaming or CLI download
-  implementation while PR #505 remains open. No compatibility variant, data
-  rewrite, downgrade, deployment, merge or issue closure.
+  implementation. No compatibility variant, data rewrite, downgrade,
+  deployment, merge or issue closure.
 
 ## Design and decisions
 
@@ -71,20 +72,20 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
 
 ## Acceptance criteria
 
-- [ ] Public API and Go CLI declaration accept exactly `text/markdown`; HTML,
+- [x] Public API and Go CLI declaration accept exactly `text/markdown`; HTML,
   `text/plain`, binary/malformed UTF-8 and media-type substitution remain denied.
-- [ ] Real PostgreSQL/MinIO intake stores and reads back the exact Markdown
+- [x] Real PostgreSQL/MinIO intake stores and reads back the exact Markdown
   bytes with the server-computed SHA-256, byte count and declared media type.
-- [ ] The existing setup-agent workspace opens the exact `.md` version through
+- [x] The existing setup-agent workspace opens the exact `.md` version through
   its run-scoped grant and retains disabled network, bounded resources and cleanup.
-- [ ] Review-packet metadata and PostgreSQL accept the exact Markdown member
+- [x] Review-packet metadata and PostgreSQL accept the exact Markdown member
   while direct writes of unsupported media types still fail.
-- [ ] After PILOT-13 merges, an assigned contributor lists and downloads the
+- [x] An assigned contributor lists and downloads the
   task-locked Markdown original byte-identically through REST/CLI; foreign,
   unassigned, corrupt and unsafe-destination cases retain their existing denial.
-- [ ] PDF, DOCX and PPTX declaration/upload/setup/review/contributor behavior
+- [x] PDF, DOCX and PPTX declaration/upload/setup/review/contributor behavior
   remains covered and unchanged; no second migration head is introduced.
-- [ ] Current API/CLI, artifact/guide specifications and roadmap state the
+- [x] Current API/CLI, artifact/guide specifications and roadmap state the
   delivered boundary without claiming HTML, remote sites or deployed capability.
 
 ## Risk and review routing
@@ -100,24 +101,31 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Bounded Markdown classification | Focused `test_guide_formats.py` and upload mismatch controls | Required before completion | Markdown semantics are not parsed or rendered |
-| Durable original custody | Isolated real PostgreSQL/MinIO guide-intake journey with provider readback | Required before completion | Hosted S3 remains shared ART-provider evidence |
-| Setup-agent exact read | Existing workspace/runtime tests with Markdown version and byte-bearing grant | Required before completion | No live model inference is required for byte-access proof |
-| Persisted review metadata | Real PostgreSQL migration/direct-write and review-packet storage proof | Required after PR #505 establishes the predecessor | Existing rows are retained; no downgrade is supported |
-| Contributor REST/CLI | PILOT-13 focused public API and built-binary tests extended after merge | Blocked on merged PR #505 | Open-branch code is inspection input, not delivered proof |
+| Bounded Markdown classification | Focused format/API/review-packet/setup batch plus Ruff | 126 passed; strict streaming UTF-8, binary substitution and HTML/plain-text negatives passed | Markdown semantics are not parsed or rendered |
+| Durable original custody | Isolated PostgreSQL 16/MinIO intake journey with provider readback, replay and recovery | Both journey variants passed; runner verified database and MinIO cleanup | Hosted S3 remains shared ART-provider evidence |
+| Setup-agent exact read | Workspace/runtime batch with Markdown version, byte-bearing grant and disabled network | Exact `.md` bytes, media type, run handle and cleanup passed | No live model inference is required for byte-access proof |
+| Persisted review metadata | PostgreSQL 16 predecessor/head direct-write and schema-fingerprint proofs | Predecessor rejected Markdown; 0027 admitted it past the media check; HTML remained rejected; graph and regenerated fingerprint passed | Existing rows are retained; no downgrade is supported |
+| Contributor REST/CLI | Real PostgreSQL/MinIO locked-read batch and built-CLI HTTP/public-API journeys | Six backend cases, 34 HTTP cases and the real built-CLI API journey passed, including concealment, successor locking, corrupt originals and `.md` publication | Deployment remains outside this change |
 
 ## Review findings
 
-No review finding has produced a durable source change yet.
+- Real PostgreSQL/MinIO replay exposed a PDF-specific alternate-key fixture;
+  the control now reuses each declared media type while preserving conflict proof.
+- The merged PILOT-13 policy setup fixture assumed every already-committed source
+  was PDF. It now accepts an existing ingest only when its media matches the
+  snapshot item, while its synthetic fallback remains PDF-only.
+- FastAPI correctly appends the UTF-8 charset parameter to a Markdown response;
+  the REST test compares its parsed base media type while the CLI independently
+  parses and requires the advertised `text/markdown` type.
 
 ## Reconciliation
 
-- Current-source reconciliation: Based on main
-  `3fa0dfb9eeda18888cdced494dfe813bd8dacf63`, whose migration head is
-  `0025_submission_dispatch`. PR #505 currently proposes the next guide-read
-  migration and contributor read/CLI owners; this branch will not allocate its
-  revision or duplicate those owners before it merges.
-- Next usable boundary: Merge and verify PILOT-13, then reconcile its exact task
-  guide media type and CLI extension consumers and allocate the next migration.
+- Current-source reconciliation: Rebased on main
+  `72b83ffc2f0fcb29efdc68f6babaee884ab7d4dd`, where PILOT-13 is delivered as
+  revision `0026_task_guide_read`. Open PRs #509 and #510 add no migration, so
+  this branch owns the next linear revision, `0027_markdown_guide_media`.
+- Delivered dependency reconciliation: PILOT-13's exact task-locked authority,
+  concealment, verified streaming and safe CLI publication are unchanged; only
+  its closed media type and extension maps admit Markdown.
 - Remaining risks: Live provider/model inference is outside this byte-custody
   change. Hosted deployment and HTML/docs-site ingestion remain unsupported.

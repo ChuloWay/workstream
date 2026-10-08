@@ -109,9 +109,11 @@ async def test_installed_cli_reads_and_downloads_real_assigned_originals(
         assert result.returncode == 0, result.stderr
         documents = json.loads(result.stdout)
         assert len(documents) == len(guide_world.originals) == 2
-        for document, original in zip(documents, guide_world.originals, strict=True):
+        for document, original, extension in zip(
+            documents, guide_world.originals, ("md", "pdf"), strict=True
+        ):
             assert (
-                directory / f"{document['document_id']}.pdf"
+                directory / f"{document['document_id']}.{extension}"
             ).read_bytes() == original
         assert (
             "task_examples" not in result.stdout

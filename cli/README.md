@@ -313,8 +313,8 @@ responding. Missing, corrupt or wrong-namespace originals fail with
 are private/no-store; setup-agent run-scoped access remains unchanged.
 
 The CLI reconstructs fixed same-origin paths and verifies size/SHA-256 again.
-Files use canonical document UUID names with `.pdf`, `.docx` or `.pptx`, never
-labels as paths. The destination must already exist and must not be a symlink.
+Files use canonical document UUID names with `.pdf`, `.docx`, `.pptx` or `.md`,
+never labels as paths. The destination must already exist and must not be a symlink.
 Downloads use private bounded temporary files and atomic no-overwrite publication;
 existing targets/symlinks are refused and failed unpublished files are removed.
 Documents completed before a later document fails remain valid local files.
