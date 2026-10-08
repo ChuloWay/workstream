@@ -99,7 +99,9 @@ async def test_mixed_stored_sources_reject_without_effects(tmp_path, isolated_da
     async with routing_source(tmp_path, isolated_database_env) as h:
         sibling = await completed_sibling_source(h)
         async with h.factory() as session, session.begin():
-            await session.execute(text("UPDATE public.workstream_tasks SET status='evaluation_pending' WHERE id=:id"), {"id": sibling.request.task_id})
+            assert await session.scalar(text(
+                "SELECT status FROM public.workstream_tasks WHERE id=:id"
+            ), {"id": sibling.request.task_id}) == "evaluation_pending"
             await session.execute(text("UPDATE public.task_assignments SET accepted_at=clock_timestamp() WHERE id=:id"), {"id": sibling.request.assignment_id})
         async with h.factory() as session:
             await session.begin()
@@ -147,11 +149,9 @@ async def test_successor_preparation_matches_stored_predecessor(tmp_path, isolat
         successor = await completed_successor_source(original)
         expected = await joined_source_facts(successor, successor.source | {"created_at": datetime.now(UTC)})
         async with original.factory() as session, session.begin():
-            changed = await session.execute(text(
-                "UPDATE public.workstream_tasks SET status='evaluation_pending' "
-                "WHERE id=:id AND status='needs_revision'"
-            ), {"id": original.request.task_id})
-            assert changed.rowcount == 1
+            assert await session.scalar(text(
+                "SELECT status FROM public.workstream_tasks WHERE id=:id"
+            ), {"id": original.request.task_id}) == "evaluation_pending"
         async with original.factory() as session, session.begin():
             before = await effect_snapshot(session)
             prepared = await prepare(session, successor)
