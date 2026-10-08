@@ -86,13 +86,16 @@ async def test_project_grant_drives_claim_start_and_current_action_hints(task_cl
     admitted = await task_client.get("/api/v1/actors/me", headers=auth_headers())
     assert admitted.status_code == 200, admitted.text
     actor_id = admitted.json()["actor_profile_id"]
-    for method, suffix in (("post", "claim"), ("get", "work-context")):
+    for method, suffix, status, code in (
+        ("post", "claim", 403, "permission_not_granted"),
+        ("get", "work-context", 404, "project_authorization_resource_not_found"),
+    ):
         denied = await getattr(task_client, method)(
             f"/api/v1/tasks/{task_id}/{suffix}",
             headers=auth_headers(),
         )
-        assert denied.status_code == 403, denied.text
-        assert denied.json()["error"]["code"] == "permission_not_granted"
+        assert denied.status_code == status, denied.text
+        assert denied.json()["error"]["code"] == code
         assert denied.json()["error"]["retryable"] is False
         assert denied.json()["error"]["correlation_id"] == denied.headers["x-correlation-id"]
     async with db_session.get_session_factory()() as session:
@@ -113,6 +116,7 @@ async def test_project_grant_drives_claim_start_and_current_action_hints(task_cl
     context = await task_client.get(f"/api/v1/tasks/{task_id}/work-context", headers=auth_headers())
     assert context.status_code == 200, context.text
     assert context.json()["lifecycle"] == {"assigned_to_current_actor": False, "next_actions": ["claim"]}
+    assert context.json()["guide_documents"] == []
     claimed = await task_client.post(f"/api/v1/tasks/{task_id}/claim", headers=auth_headers())
     assert claimed.status_code == 200, claimed.text
     assert claimed.json()["assignment"]["contributor_id"] == actor_id
@@ -375,7 +379,8 @@ async def test_manager_context_and_system_operator_override_are_distinct(task_cl
     contributor_context = await task_client.get(
         f"/api/v1/tasks/{task_id}/work-context", headers=auth_headers()
     )
-    assert contributor_context.status_code == 403, contributor_context.text
+    assert contributor_context.status_code == 404, contributor_context.text
+    assert contributor_context.json()["error"]["code"] == "project_authorization_resource_not_found"
     owner = await admit_and_grant_project_submitter(
         task_client, monkeypatch, project["id"], "assigned-contributor"
     )
