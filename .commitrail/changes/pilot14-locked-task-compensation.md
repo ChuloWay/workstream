@@ -73,9 +73,9 @@ validation alongside compensation, and adds no migration.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Locked compensation is exact and concealed | Isolated real-PostgreSQL locked terms, ready/detail/work-context/public-queue and changed AUTH matrix tests | Passed: 2 locked-term cases, 60 owner projection cases and 7 matrix cases | Full hosted suite remains CI-owned. |
-| CLI validates and renders public output | Built CLI HTTP process tests plus `go test ./...`, `go vet ./...`, `go mod verify` and build | Passed: 12 process cases and all Go checks | None after the post-reconciliation exact-head run. |
-| Repository contracts remain consistent | Ruff, compile, and architecture/module boundary tests | Passed: 39 architecture tests and focused static checks | Agent Gates and full hosted CI remain external evidence. |
+| Locked compensation is exact and concealed | Isolated real-PostgreSQL locked terms, ready/detail/work-context/public-queue and changed AUTH matrix tests | Passed after the current-main merge: 2 locked-term cases; the byte-identical `677101a8` source previously passed 60 owner projection cases and 7 matrix cases | Full hosted suite remains CI-owned. |
+| CLI validates and renders public output | Built CLI HTTP process tests plus `go test ./...`, `go vet ./...`, `go mod verify` and build | Passed at `677101a8`: 12 process cases and all Go checks; CLI source and tests are byte-identical after the current-main merge | None. |
+| Repository contracts remain consistent | Lane-catalogue and architecture/module-boundary tests, Ruff and compile checks | Passed after the current-main merge: 81 catalogue/boundary cases; prior focused static checks remain source-identical | Agent Gates and full hosted CI remain external evidence. |
 
 ## Review findings
 
@@ -87,8 +87,8 @@ impact-routed review is coordinated by the lead.
 
 ## Reconciliation
 
-- Current-source reconciliation: Rebased on `main` at `72b83ffc`, preserving
-  PR #504 submission dispatch and merged PR #505 guide-document contracts,
-  authority and CLI validation alongside compensation.
+- Current-source reconciliation: Merged `main` at `b169e83f`, preserving PR #504
+  submission dispatch, PR #505 guide-document contracts and PR #509 hidden
+  evaluation-request delivery plus its owner inventories alongside compensation.
 - Next usable boundary: Human merge of this bounded PR; payment and fulfillment remain separate work.
 - Remaining risks: None beyond independent review and hosted CI.
