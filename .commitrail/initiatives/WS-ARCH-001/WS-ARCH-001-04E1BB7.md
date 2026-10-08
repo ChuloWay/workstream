@@ -1,7 +1,7 @@
 # ARCH-04E1B-B7 — Hidden initial evaluation request delivery
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Risk: L1 — untrusted delivery selectors, live feature authority and transactions.
 - Intended merge outcome: one unregistered typed handler recovers B6's exact
   committed request and runs the existing CHECKERS executor under independently
@@ -56,16 +56,17 @@ No additional job, request store, executor or retry engine is needed.
 
 - TASK `submission_dispatch.py` and one focused `evaluation_delivery.py` owner
   module; existing TASK composition adapters or a focused adapter file.
-- CHECKERS composition adapters and a focused delivery-custody composition
-  adapter using existing prepared execute/finalize, observer and fence ports.
-  Existing public execution-port annotations may be tightened without changing
+- CHECKERS composition root and a focused owner-local delivery-custody
+  participant using existing prepared execute/finalize, observer and fence ports.
+  The outbox composition root exposes its existing committed observer through
+  its public port. Existing public execution-port annotations may be tightened without changing
   direct executor behavior or introducing an optional custody bypass.
 - Focused `backend/tests/tasks/evaluation_delivery/` tests and support; existing
   real admission/execution/outbox helpers only for concrete fixture reuse.
 - Exact new-file ownership and test-lane inventories, their tests, and dependency
   metadata if required. No relaxed boundary, timeout, test-completeness or CI gate.
-- This record, affected ARCH/POL/AUTH/REV current navigation, README, checker/
-  artifact operating documentation and `docs/roadmap_status.md`; local roadmap
+- This record, affected ARCH/POL/AUTH/CON/REV current navigation, README, checker/
+  artifact/TASK specifications and operating documentation and `docs/roadmap_status.md`; local roadmap
   exports only if present. Preserve unrelated main changes.
 
 ## Acceptance criteria
@@ -120,6 +121,20 @@ unchanged. Approval of this chunk does not authorize merge or live activation.
 
 ## Evidence
 
-Plan feasibility traces the existing TASK dispatch, CHECKERS executor, real
-materialization fixture and shared outbox observation/fencing. Runtime verification
-will exercise the named acceptance boundaries on the implementation candidate.
+- `tests/tasks/evaluation_delivery/test_delivery.py`: real PostgreSQL/Local/MinIO
+  request delivery, one retained execution/result/completion event, no production
+  registration, lost-acknowledgement replay, fresh authority and separate new-effect
+  eligibility. The eligibility branch test varies the returned boolean after
+  actual TASK locking; it does not claim live final-acceptance activation.
+- `test_isolation.py`: claimed-but-uninvoked rejection; two valid persisted
+  lineages for direct resolver and independent observer substitution; crossed
+  CHECKERS request/reservation rejection without provider or scratch access.
+- `test_custody.py`: database-clock expiry, no expired-running renewal,
+  cancellation cleanup, and a real independent UNKNOWN finalization during
+  paused provider I/O that prevents checker terminal publication.
+- Existing canonical executor, materializer, AUTH, outbox and registry tests are
+  retained. No test is deleted or skipped; no production deadline is changed.
+- Exact candidate commands, guard-removal results, hosted completeness and
+  internal reviewer findings belong in the PR evidence bundle. These tests do
+  not prove broker transport, live registration, completion routing or automatic
+  UNKNOWN recovery; those remain the named later boundaries.

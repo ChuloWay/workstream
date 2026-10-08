@@ -2381,6 +2381,21 @@ def test_acceptance_contract_relocation_requires_public_replacement() -> None:
         ownership._validate_additive_partition_transition(_partition([retained]), trusted)
 
 
+def test_request_delivery_ownership_does_not_allow_registration():
+    targets = ownership.ARCH_04E1BB7_DELIVERY_TARGETS
+    assert targets == {
+        "backend/app/modules/checkers/delivery_authority.py",
+        "backend/app/modules/tasks/evaluation_delivery.py",
+    }
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(_partition(sorted({retained, *targets})), trusted)
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition(sorted({
+            retained, *targets, "backend/app/workers/evaluation_delivery.py",
+        })), trusted)
+
+
 @pytest.mark.parametrize(("filename", "targets"), [
     ("evaluation_guard.py", ownership.ARCH_04E1BB1_GUARD_TARGETS),
     ("source.py", ownership.ARCH_04E1BB2_SOURCE_TARGETS),

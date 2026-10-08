@@ -672,8 +672,9 @@ submission-finalize repair routes are removed. `evaluate_post_submission` now
 uses hidden durable execution with exact ARCH-04D2 service authority. ARCH-04E1A
 retains route-neutral source evidence. REV-04C uses its bounded exact-source
 verifier and hidden FinalAcceptance/TASK/CON participant, while no general
-routing publication writer/reader, handler or current pointer exists; automatic
-request delivery and routing remain ARCH-04E work.
+routing publication writer/reader or current pointer exists. B7 implements hidden
+request delivery with invocation fencing. Production registration and completion
+routing remain ARCH-04E work.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no
@@ -784,7 +785,7 @@ submitter participant and complete frozen award-set staging/replay. REV-04C now
 composes FinalAcceptance, TASK terminal effects and that CON participant in one
 hidden caller-owned transaction for either source. B5 supplies bounded evaluation
 content before durable admission; B6 uses it with real record identities in the
-atomic Submission/dispatch command. Hidden request/completion handlers come next;
+atomic Submission/dispatch command. B7 adds hidden request delivery; completion routing comes next;
 the committed request events are not registered for delivery.
 The mandatory exact AUTH receipt must become required on the same strict input,
 with no optional/default path, before production consumption; database

@@ -187,6 +187,10 @@ ARCH_04E1BB6_DISPATCH_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_participants.py",
     "backend/app/modules/authorization/prepared_submission_replay.py",
 })
+ARCH_04E1BB7_DELIVERY_TARGETS = frozenset({
+    "backend/app/modules/checkers/delivery_authority.py",
+    "backend/app/modules/tasks/evaluation_delivery.py",
+})
 ARCH_04E1BB2_SOURCE_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/source.py"})
 ARCH_04E1BB1_GUARD_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/evaluation_guard.py"})
 ARCH_04E1BA_REQUEST_TARGETS = frozenset({"backend/app/modules/tasks/post_submit_routing/requests.py"})
@@ -808,6 +812,7 @@ def _validate_additive_partition_transition(
             | ARCH_04E1BB1_GUARD_TARGETS
             | ARCH_04E1BB2_SOURCE_TARGETS
             | ARCH_04E1BB6_DISPATCH_TARGETS
+            | ARCH_04E1BB7_DELIVERY_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS
