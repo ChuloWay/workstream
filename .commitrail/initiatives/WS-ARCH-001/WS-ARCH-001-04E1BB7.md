@@ -43,7 +43,9 @@ No additional job, request store, executor or retry engine is needed.
    Reject malformed/uncommitted requests before effects. Unexpected exceptions,
    cancellation and uncertain effects propagate to shared UNKNOWN handling;
    never return RETRY merely because an invocation failed. An expired running
-   attempt is not automatically retried by this handler. Authorized infrastructure
+   attempt is not automatically retried by this handler: prepared execute consume
+   rejects lease generation greater than one, while exact terminal replay uses
+   the retained receipt. Authorized infrastructure
    recovery remains ARCH-04F; live registration remains ARCH-04E3.
 4. Keep the handler absent from the production registry. No completion routing,
    source publication, acceptance, human review, remediation, public intake or
@@ -78,8 +80,12 @@ No additional job, request store, executor or retry engine is needed.
   request, digest, receipt and attempt/result substitutions reject before provider
   or scratch access. Use recomputed valid digests where necessary so an earlier
   malformed-input guard cannot mask the ownership assertion.
-- A claimed-but-not-invoked event cannot execute. Expiry or completed delivery
-  cannot start effects. Independent-session invalidation while provider I/O is
+- A claimed-but-not-invoked event cannot execute. Pre-start expiry or completed
+  delivery cannot start effects. An expired running generation-one attempt under
+  a live invoked claim cannot acquire a second lease or reopen the provider;
+  removing that generation guard must fail the exact regression. A read already
+  authorized may finish after expiry, but cannot publish its terminal result.
+  Independent-session invalidation while provider I/O is
   paused prevents finalization and releases scratch; committed execute custody
   remains intact. Cancellation/unknown preserves the shared no-repeat behavior.
 - Lost terminal acknowledgement does not require another evaluation. Distinguish
