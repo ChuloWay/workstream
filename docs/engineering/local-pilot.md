@@ -30,6 +30,8 @@ Edit it before startup:
 - select unused loopback ports for API, PostgreSQL, Redis, MinIO API and MinIO
   console;
 - set `LOCAL_UID` and `LOCAL_GID` to the host values from `id -u` and `id -g`;
+  `LOCAL_UID` must be nonzero, so a root-run shell must instead supply the
+  intended non-root developer UID;
 - replace the PostgreSQL and MinIO values with checkout-local secrets;
 - keep the password embedded in `WORKSTREAM_DATABASE_URL` identical to
   `WORKSTREAM_POSTGRES_PASSWORD` (use a URL-safe value);
@@ -98,30 +100,30 @@ set +x
 set -o pipefail
 
 curl_with_token() {
-  local token="$1" header_file status
+  local token="$1" header_file curl_status
   shift
   header_file="$(mktemp "${TMPDIR:-/tmp}/workstream-auth.XXXXXXXX")" || return
   trap 'rm -f "$header_file"' HUP INT TERM
   chmod 600 "$header_file" || {
-    status=$?
+    curl_status=$?
     rm -f "$header_file"
     trap - HUP INT TERM
-    return "$status"
+    return "$curl_status"
   }
   printf 'Authorization: Bearer %s\n' "$token" >"$header_file" || {
-    status=$?
+    curl_status=$?
     rm -f "$header_file"
     trap - HUP INT TERM
-    return "$status"
+    return "$curl_status"
   }
   if curl --header "@$header_file" "$@"; then
-    status=0
+    curl_status=0
   else
-    status=$?
+    curl_status=$?
   fi
   rm -f "$header_file"
   trap - HUP INT TERM
-  return "$status"
+  return "$curl_status"
 }
 
 ADMIN_TOKEN="$(docker compose --profile backend exec -T backend python scripts/issue_local_flow_token.py --subject pilot-access-admin)"
