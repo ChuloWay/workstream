@@ -116,6 +116,10 @@ content. Reuse them rather than adding another intake or checker implementation.
   instead of independently reserving generation one. Historical migration tests
   use an explicit test-only predecessor-schema seeder preserving their original
   retained-data assertions; no production schema detection or fallback creator.
+- `tests/test_project_agent_resilience.py`: synchronize the existing retry
+  deadline proof with entry into backoff. Full-suite verification exposed its
+  50 ms startup race; retain cancellation and single-provider-request assertions
+  without changing the adapter or production timeout behavior.
 - This record, affected current ARCH/AUTH/POL/CON/REV navigation, README,
   submission/checker/artifact specifications, current system-flow/architecture brief (including its regenerated PDF) and operating manual, and roadmap; local exports if present.
 
