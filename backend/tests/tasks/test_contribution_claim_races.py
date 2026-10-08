@@ -1,6 +1,5 @@
 """Real AUTH role issuance and TASK claim share one consistent lock order."""
 
-from app.adapters.artifacts import task_guide_documents_port
 from app.core.config import get_settings
 
 import asyncio
@@ -12,14 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.adapters.audit import task_transition_audit
-from app.adapters.tasks import task_service
+from app.adapters.tasks import task_commands
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink
 from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
 from app.modules.authorization.project_role_schemas import ProjectRoleGrantIssueBody
 from app.modules.tasks.api.authorization import TaskAuthorityDenied
-from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask
 from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.authorization.task_authority.test_concurrency import actor_context
@@ -98,13 +96,12 @@ async def test_role_issuance_and_claim_linearize_at_real_authority(
 
     async def claim():
         async with AsyncSession(engines["claim"], expire_on_commit=False) as session:
-            return await AuthorizedTaskCommands(
+            return await task_commands(
                 session,
                 authorization=PreparedTaskAuthorization(session, context),
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
-                contexts=task_service(session, settings=get_settings()),
-                guide_documents=task_guide_documents_port(session, get_settings()),
+                settings=get_settings(),
             ).claim(UUID(ready["id"]), "Concurrent initial claim", idempotency_key=new_record_id())
 
     pending = []
@@ -213,13 +210,12 @@ async def test_claim_keeps_frozen_policy_while_successor_activation_waits(
     async def claim():
         async with db_session.get_session_factory()() as session:
             session.info["cp08_claim"] = True
-            return await AuthorizedTaskCommands(
+            return await task_commands(
                 session,
                 authorization=PreparedTaskAuthorization(session, context),
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
-                contexts=task_service(session, settings=get_settings()),
-                guide_documents=task_guide_documents_port(session, get_settings()),
+                settings=get_settings(),
             ).claim(UUID(ready["id"]), "Claim exact prior guide during successor activation", idempotency_key=new_record_id())
 
     pending = []

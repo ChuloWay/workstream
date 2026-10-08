@@ -153,8 +153,10 @@ digest/foreign-snapshot guards need discriminating defective variants.
 
 ## Reconciliation
 
-Starts from merged main `66a26d8d`. PR #501 owns local-stack composition, #502
-owns second-review policy validation; neither owns this assigned-document read.
+Originally started from merged main `66a26d8d`; reconciled onto `235f9e1b`
+after PR #501 merged. Its local-stack composition remains independently owned
+and does not overlap this assigned-document read. PR #502 owns second-review
+policy validation, not this read boundary.
 Keep PILOT-12 upload transport separate; this read uses authenticated verified
 streaming without choosing its upload-intent implementation. Remaining review,
 rebase and upload work stays under its existing issues.
