@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from datetime import datetime
 from uuid import UUID
 from app.api.deps.authorization import get_task_commands, enforce_human_authorization_read
@@ -12,6 +13,8 @@ from app.modules.tasks.api import TaskAuthorityOperation, ContributorTaskDetail,
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
+from app.modules.tasks.api.guide_documents import TaskGuideUnavailable, VerifiedTaskGuideRead
 
 from app.core.api_controls import StructuredHTTPException, error_response, parse_idempotency_key
 from app.modules.tasks.schemas import (
@@ -423,10 +426,53 @@ async def get_task_work_context(
 ) -> ContributorTaskWorkContext | JSONResponse:
     try:
         return await commands.contributor_work_context(task_id)
+    except TaskGuideUnavailable as exc:
+        raise guide_integrity_error() from exc
     except TaskServiceError as exc:
         if getattr(exc, "code", None) is not None:
             return task_domain_error_response(request, exc)
         raise task_http_error(exc) from exc
+
+
+def guide_integrity_error() -> StructuredHTTPException:
+    """Return a bounded error without original bytes or provider coordinates."""
+    return StructuredHTTPException(
+        status_code=503, detail="Guide document integrity unavailable",
+        error_code="guide_document_integrity_unavailable",
+        error_message="Guide document integrity unavailable", retryable=False,
+    )
+
+
+async def verified_task_guide(
+    task_id: UUID, document_id: UUID,
+    commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
+) -> AsyncIterator[VerifiedTaskGuideRead]:
+    try:
+        async with commands.contributor_guide_document(task_id, document_id) as read:
+            yield read
+    except TaskGuideUnavailable as exc:
+        raise guide_integrity_error() from exc
+    except TaskServiceError as exc:
+        raise task_http_error(exc) from exc
+
+
+@router.get(
+    "/tasks/{task_id}/guide/documents/{document_id}/content",
+    response_class=StreamingResponse,
+    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.GUIDE_READ.value},
+    responses={200: {"description": "Exact verified locked original", "content": {
+        "application/pdf": {"schema": {"type": "string", "format": "binary"}},
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {"schema": {"type": "string", "format": "binary"}},
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation": {"schema": {"type": "string", "format": "binary"}},
+    }}},
+)
+async def get_task_guide_document(read: Annotated[VerifiedTaskGuideRead, Depends(verified_task_guide)]) -> StreamingResponse:
+    """Serve only the authorized, completely verified locked original."""
+    return StreamingResponse(read.stream, media_type=read.document.media_type, headers={
+        "Content-Length": str(read.document.byte_count),
+        "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
+        "Content-Disposition": f'attachment; filename="{read.document.document_id}"',
+    })
 
 
 @router.get(

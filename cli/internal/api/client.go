@@ -58,9 +58,10 @@ func (f *Failure) Error() string {
 }
 
 type Client struct {
-	origin string
-	token  string
-	http   *http.Client
+	origin    string
+	token     string
+	http      *http.Client
+	guideHTTP *http.Client
 }
 
 type Profile struct {
@@ -110,17 +111,21 @@ func New(origin, token string) (*Client, error) {
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
-	return &Client{
-		origin: normalized,
-		token:  token,
-		http: &http.Client{
-			Transport: transport,
-			Timeout:   12 * time.Second,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   12 * time.Second,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
 		},
-	}, nil
+	}
+	// Binary reads include server-side whole-original verification and transfers
+	// up to 512 MiB. Keep them bounded without applying the JSON deadline.
+	guideTransport := transport.Clone()
+	guideTransport.ResponseHeaderTimeout = 2 * time.Minute
+	guideHTTP := *client
+	guideHTTP.Transport = guideTransport
+	guideHTTP.Timeout = 10 * time.Minute
+	return &Client{origin: normalized, token: token, http: client, guideHTTP: &guideHTTP}, nil
 }
 
 func validateOrigin(raw string) (string, error) {
@@ -314,6 +319,27 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 
 func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
 	mutation := method == http.MethodPatch || method == http.MethodPost
+	response, err := c.openRequest(ctx, c.http, method, path, query, body, key, "application/json")
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, int64(responseLimit)+1))
+	if err != nil || len(responseBody) > responseLimit {
+		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, OutcomeUnknown: mutation}
+	}
+	if response.StatusCode != successStatus {
+		return nil, c.responseFailure(method, response, responseBody)
+	}
+	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" || !jsontext.Value(responseBody).IsValid() {
+		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: c.responseCorrelation(response), OutcomeUnknown: mutation}
+	}
+	return json.RawMessage(responseBody), nil
+}
+
+func (c *Client) openRequest(ctx context.Context, requestClient *http.Client, method, path, query string, body []byte, key, accept string) (*http.Response, error) {
+	mutation := method == http.MethodPatch || method == http.MethodPost
 	target := c.origin + path
 	if query != "" {
 		target += "?" + query
@@ -333,7 +359,7 @@ func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, que
 		req.GetBody = nil
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", accept)
 	req.Header.Set("Accept-Encoding", "identity")
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
@@ -341,15 +367,14 @@ func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, que
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	response, err := c.http.Do(req)
+	response, err := requestClient.Do(req)
 	if err != nil {
 		return nil, &Failure{Code: "service_unavailable", OutcomeUnknown: mutation}
 	}
-	defer response.Body.Close()
-	responseBody, err := io.ReadAll(io.LimitReader(response.Body, int64(responseLimit)+1))
-	if err != nil || len(responseBody) > responseLimit {
-		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, OutcomeUnknown: mutation}
-	}
+	return response, nil
+}
+
+func (c *Client) responseCorrelation(response *http.Response) string {
 	correlation := response.Header.Get("X-Correlation-ID")
 	if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
 		correlation = response.Header.Get("X-Request-ID")
@@ -357,35 +382,34 @@ func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, que
 			correlation = ""
 		}
 	}
-	if response.StatusCode != successStatus {
-		code := "api_error"
-		knownEnvelope := false
-		if response.StatusCode >= 300 && response.StatusCode < 400 {
-			code = "redirect_refused"
-		} else {
-			var envelope struct {
-				Error struct {
-					Code string `json:"code"`
-				} `json:"error"`
-			}
-			knownEnvelope = jsonv2.Unmarshal(responseBody, &envelope) == nil && envelope.Error.Code != ""
-			if knownEnvelope && safeCode.MatchString(envelope.Error.Code) && c.safeMetadata(envelope.Error.Code) {
-				code = envelope.Error.Code
-			}
+	return correlation
+}
+
+func (c *Client) responseFailure(method string, response *http.Response, responseBody []byte) error {
+	mutation := method == http.MethodPatch || method == http.MethodPost
+	correlation := c.responseCorrelation(response)
+	code := "api_error"
+	knownEnvelope := false
+	if response.StatusCode >= 300 && response.StatusCode < 400 {
+		code = "redirect_refused"
+	} else {
+		var envelope struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
 		}
-		if method == http.MethodPost {
-			knownEnvelope = canonicalMutationError(responseBody, response.Header.Get("Content-Type"))
+		knownEnvelope = jsonv2.Unmarshal(responseBody, &envelope) == nil && envelope.Error.Code != ""
+		if knownEnvelope && safeCode.MatchString(envelope.Error.Code) && c.safeMetadata(envelope.Error.Code) {
+			code = envelope.Error.Code
 		}
-		// A complete API 4xx envelope is a known denial, independent of code
-		// spelling/redaction. A gateway reply without it cannot prove rollback.
-		return nil, &Failure{Code: code, Status: response.StatusCode, CorrelationID: correlation,
-			OutcomeUnknown: mutation && (response.StatusCode < 400 || response.StatusCode >= 500 || !knownEnvelope)}
 	}
-	mediaType, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || mediaType != "application/json" || !jsontext.Value(responseBody).IsValid() {
-		return nil, &Failure{Code: "invalid_api_response", Status: response.StatusCode, CorrelationID: correlation, OutcomeUnknown: mutation}
+	if method == http.MethodPost {
+		knownEnvelope = canonicalMutationError(responseBody, response.Header.Get("Content-Type"))
 	}
-	return json.RawMessage(responseBody), nil
+	// A complete API 4xx envelope is a known denial, independent of code
+	// spelling/redaction. A gateway reply without it cannot prove rollback.
+	return &Failure{Code: code, Status: response.StatusCode, CorrelationID: correlation,
+		OutcomeUnknown: mutation && (response.StatusCode < 400 || response.StatusCode >= 500 || !knownEnvelope)}
 }
 
 // POST writes need a complete public ApiError, not a gateway's code-shaped

@@ -21,6 +21,7 @@ type WorkContext struct {
 	RevisionPolicy              ContextPolicy         `json:"revision_policy"`
 	ContributionPolicyVersionID string                `json:"contribution_policy_version_id"`
 	Lifecycle                   ContextLifecycle      `json:"lifecycle"`
+	GuideDocuments              []TaskGuideDocument   `json:"guide_documents"`
 }
 
 type ContextProject struct {
@@ -112,11 +113,19 @@ type PackagingRequirements struct {
 
 var contextPolicyDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
+// Up to 100 Unicode labels plus full original identities exceed the small
+// default JSON envelope. This is a wire bound, not a project policy limit.
+const maxGuideContextResponseBytes = 2 * 1024 * 1024
+
 func (c *Client) readTaskContext(ctx context.Context, selector, suffix string) (json.RawMessage, error) {
 	if !validUUID(selector) || len(selector) > 100 {
 		return nil, errors.New("TASK_ID must be a UUID")
 	}
-	return c.request(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(selector)+suffix, "", nil)
+	limit := maxResponseBytes
+	if suffix == "/work-context" {
+		limit = maxGuideContextResponseBytes
+	}
+	return c.requestWithResponseLimit(ctx, http.MethodGet, "/api/v1/tasks/"+url.PathEscape(selector)+suffix, "", nil, "", http.StatusOK, limit)
 }
 
 func (c *Client) WorkContext(ctx context.Context, selector string) (Result[WorkContext], error) {
@@ -127,7 +136,7 @@ func (c *Client) WorkContext(ctx context.Context, selector string) (Result[WorkC
 	}
 	var value WorkContext
 	fields, err := contextObject(raw, &value, []string{
-		"task", "project", "guide", "review_policy", "revision_policy", "contribution_policy_version_id", "lifecycle",
+		"task", "project", "guide", "review_policy", "revision_policy", "contribution_policy_version_id", "lifecycle", "guide_documents",
 	}, nil)
 	if err != nil {
 		return result, &Failure{Code: "invalid_api_response"}
@@ -163,6 +172,9 @@ func (c *Client) WorkContext(ctx context.Context, selector string) (Result[WorkC
 		if action != "claim" && action != "start" {
 			return result, &Failure{Code: "invalid_api_response"}
 		}
+	}
+	if err := validateGuideDocuments(fields["guide_documents"], value.GuideDocuments, value.Task.TaskID, value.Lifecycle.AssignedToCurrentActor); err != nil {
+		return result, &Failure{Code: "invalid_api_response"}
 	}
 	return Result[WorkContext]{Raw: raw, Value: value}, nil
 }

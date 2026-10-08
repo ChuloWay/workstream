@@ -22,6 +22,7 @@ class TaskAuthorityOperation(StrEnum):
     START = "task.start"
     START_OVERRIDE = "operations.task.start_override"
     WORK_CONTEXT = "task.work_context.read"
+    GUIDE_READ = "task.guide.read"
     MANAGEMENT_WORK_CONTEXT = "project.task.work_context.read"
 
 

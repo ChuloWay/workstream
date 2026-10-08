@@ -133,6 +133,7 @@ def test_exact_active_action_inventory():
         ActionId.CHECKER_POST_SUBMIT_FINALIZE,
         ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,
         ActionId.TASK_SUBMISSION_LIST,
+        ActionId.TASK_GUIDE_READ,
         ActionId.SUBMISSION_READ,
         ActionId.SUBMISSION_CHECKER_RUN_LIST,
         ActionId.CHECKER_RUN_READ,
