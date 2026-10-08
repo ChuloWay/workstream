@@ -220,11 +220,14 @@ coverage tampering before coverage combination.
 - API contract or evidence-integrity failure: the required job remains failed;
   lane completion cannot compensate. A lower coverage percentage is not a failure.
 
-On the same exact head, rerun failed lanes (and their dependent final job), or
-rerun only the final job when the lane evidence already passed. Successful lanes
-not rerun retain their previous attempt's evidence; a rerun lane's newest bundle
-must independently pass all existing checks. A failed, cancelled or skipped
-required job still blocks fan-in. Never edit or upload evidence manually.
+After diagnosing a transient failure on the same exact head, rerun only failed
+jobs and their dependents with `gh run rerun RUN_ID --failed`; do not use
+`--all`. Successful lanes not rerun retain their previous attempt's evidence,
+while a rerun lane's newest bundle must independently pass all existing checks.
+The required aggregate job selects those bundles and revalidates the complete
+exact-head union. A failed, cancelled or skipped required job still blocks
+fan-in. Never edit or upload evidence manually. A repeated timeout requires
+diagnosis rather than retries until green.
 Review submission or dismissal does not rerun Backend because
 it does not change the tested tree. A new PR commit starts a new run and cancels
 the superseded same-PR run. Every new commit requires complete evidence because
@@ -239,6 +242,13 @@ a measured target miss at the human merge checkpoint, that performance result
 does not override otherwise passing correctness, custody, service-contract,
 API, and complete-execution gates. Coverage is diagnostic only. Never skip
 nodes or add a silent fallback to meet the target.
+
+A source push or base-branch change creates a different current tree and
+requires fresh CI; prior same-head retry evidence cannot be carried forward.
+The content-addressed MinIO cache can remove the measured 145-second image
+rebuild when its exact Docker context, Backend workflow and runner platform are
+unchanged. It does not solve observed 17-minute queue waits or 20-minute lanes
+and does not promise an eight-minute Backend completion time.
 
 ## Retired changed-scope behavior mutation
 
