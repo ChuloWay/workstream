@@ -1,5 +1,7 @@
 """Final intake revalidation uses exact activated owner facts, not current selectors."""
 
+from app.adapters.checkers import submission_evaluation_content
+
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -158,6 +160,9 @@ async def test_final_intake_rejects_invalid_owner_context(tmp_path, isolated_dat
                     foreign = new_record_id()
                     substituted = replace(facts,
                         submitter_contribution_policy_version_id=foreign,
+                        locked_policy=facts.locked_policy.model_copy(update={
+                            "locked_contribution_policy_version_id": foreign,
+                        }),
                         locked_project_context=replace(facts.locked_project_context,
                             locked_contribution_policy_version_id=foreign))
                     async def wrong_context(_):
@@ -246,6 +251,7 @@ async def test_command_holds_authorized_context_before_final_handoff(tmp_path, i
             @asynccontextmanager
             async def runtime():
                 yield SubmissionBundlePreparationRuntime(
+                    evaluation_content=submission_evaluation_content,
                     preparation=harness.preparation, inspector=harness.inspector,
                     catalogue=harness.catalogue, materialization=workflow._materialization,
                     evidence=workflow, checker_service=CheckerPhaseService(

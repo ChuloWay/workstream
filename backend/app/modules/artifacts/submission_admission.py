@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from dataclasses import dataclass, replace
 import json
 from uuid import UUID
@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.artifacts.api import (
+    SubmissionBundleFile,
     SubmissionBundlePreparationRejected,
     SubmissionBundlePreparationInfrastructureUnavailable,
     SubmissionBundlePreparationRequest,
@@ -66,6 +67,7 @@ from app.modules.artifacts.submission_materialization import (
     PreparedBundlePreSubmitEvidenceService,
     PreSubmissionEvaluationPort,
 )
+from app.modules.checkers.api.post_submit import PostSubmissionEvaluationContent
 from app.modules.checkers.api import (
     EffectivePreSubmissionExecutionPlan,
     EffectivePreSubmissionPlanLineage,
@@ -453,6 +455,10 @@ class SubmissionBundlePreparationRuntime:
     evidence: PreparedBundlePreSubmitEvidenceService
     checker_service: PreSubmissionEvaluationPort
     durable_put: SubmissionBundleDurablePutService
+    evaluation_content: Callable[
+        [TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts, SubmissionPacketView,
+         tuple[SubmissionBundleFile, ...], str], PostSubmissionEvaluationContent,
+    ]
 
 
 class PreparedSubmissionBundlePreparationCommand:
@@ -480,7 +486,6 @@ class PreparedSubmissionBundlePreparationCommand:
     ) -> SubmissionBundlePreparationResult:
         if type(request) is not SubmissionBundlePreparationRequest:
             raise TypeError("invalid submission bundle preparation request")
-        prepared = None
         try:
             await self._authority.preflight(request=request)
             validate_submission_packet_headers(
@@ -489,7 +494,7 @@ class PreparedSubmissionBundlePreparationCommand:
             )
             if request.media_type.partition(";")[0].strip().lower() != "application/zip":
                 raise SubmissionBundlePreparationRejected("submission_bundle_media_type_invalid")
-            async with self._runtime_factory() as runtime:
+            async with self._runtime_factory() as runtime, AsyncExitStack() as scratch_cleanup:
                 async with self._session.begin():
                     task_context, project_context = await self._lock_authorized_context(request)
                     plan = self._compile_plan(
@@ -502,8 +507,9 @@ class PreparedSubmissionBundlePreparationCommand:
                     request.byte_source,
                     media_type="application/zip",
                 )
+                scratch_cleanup.push_async_callback(prepared.close)
                 async with self._session.begin():
-                    await self._lock_authorized_context(request)
+                    task_context, project_context = await self._lock_authorized_context(request)
                     materialization_handle = await runtime.materialization.prepare_authorization(
                         task_id=request.task_id,
                         assignment_id=request.assignment_id,
@@ -515,6 +521,17 @@ class PreparedSubmissionBundlePreparationCommand:
                     )
                     inspection = await prepared.inspect(runtime.inspector)
                     manifest = build_submission_manifest(inspection)
+                    packet = SubmissionPacketView(
+                        summary=request.summary, contributor_attestation=request.contributor_attestation,
+                    )
+                    try:
+                        runtime.evaluation_content(
+                            task_context, project_context, packet, manifest.file_facts(), prepared.commitment.sha256,
+                        )
+                    except (ValueError, TypeError, KeyError) as exc:
+                        raise SubmissionBundlePreparationRejected(
+                            "submission_evaluation_content_invalid"
+                        ) from exc
                     change_gate = evaluate_submission_change(
                         commitment=prepared.commitment,
                         manifest=manifest,
@@ -538,10 +555,7 @@ class PreparedSubmissionBundlePreparationCommand:
                         inspection=inspection,
                         manifest=manifest,
                         change_gate=change_gate,
-                        packet=SubmissionPacketView(
-                            summary=request.summary,
-                            contributor_attestation=request.contributor_attestation,
-                        ),
+                        packet=packet,
                     )
                     reserved = await runtime.evidence.reserve(
                         materialization_request, preparation_request=request,
@@ -558,8 +572,6 @@ class PreparedSubmissionBundlePreparationCommand:
                         raise SubmissionBundlePreparationInfrastructureUnavailable(
                             "pre_submission_checked_custody_unavailable"
                         )
-                    await prepared.close()
-                    prepared = None
                     return replay
                 replay_intent_id = await self._matching_replay_intent(
                     evidence.evidence.evidence_set_id
@@ -574,7 +586,6 @@ class PreparedSubmissionBundlePreparationCommand:
                             replay_durable_intent_id=replay_intent_id,
                         )
                     )
-                prepared = None
                 result = await runtime.durable_put.publish_after_commit(
                     retained,
                     evidence.evidence.evidence_set_id,
@@ -588,8 +599,6 @@ class PreparedSubmissionBundlePreparationCommand:
                 "submission bundle preparation is unavailable"
             ) from exc
         finally:
-            if prepared is not None:
-                await prepared.close()
             self._authority.close()
 
     async def _matching_replay_intent(self, evidence_id: UUID) -> UUID | None:

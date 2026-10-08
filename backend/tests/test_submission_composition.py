@@ -9,6 +9,8 @@ from unittest.mock import AsyncMock
 from uuid import UUID
 from app.core.identifiers import new_record_id
 
+from submission_context_fixtures import submission_context_facts
+
 import pytest
 
 from app.modules.tasks.api import (
@@ -17,7 +19,6 @@ from app.modules.tasks.api import (
     SubmissionCreationRequest,
     SubmissionCreationUnavailable,
     TaskLockedProjectContextReferences,
-    TaskSubmissionContextFacts,
 )
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
 from app.api.deps.authorization import compose_hidden_submission_creation_command
@@ -55,7 +56,7 @@ def _request():
 
 
 def _context(request):
-    return TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+    return submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=request.task_id, assignment_id=request.assignment_id,
         contributor_id=request.contributor_id, status="in_progress", kind="initial",
         predecessor=None,
@@ -325,7 +326,7 @@ async def test_revision_increments_and_binds_the_exact_predecessor():
         summary=initial.summary, contributor_attestation=initial.contributor_attestation,
     )
     context = _context(request)
-    context = TaskSubmissionContextFacts(submitter_contribution_policy_version_id=UUID(int=100),
+    context = submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=context.task_id, assignment_id=context.assignment_id,
         contributor_id=context.contributor_id, status="needs_revision", kind="revision",
         predecessor=predecessor, locked_project_context=context.locked_project_context,

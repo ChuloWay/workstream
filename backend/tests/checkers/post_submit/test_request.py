@@ -10,8 +10,9 @@ from pydantic import ValidationError
 
 from app.modules.checkers.api import (
     PostSubmissionEvaluationRequest,
+    PostSubmissionEvaluationContent,
 )
-from app.modules.checkers.post_submit_contracts import make_post_submit_request
+from app.modules.checkers.api.post_submit import make_post_submit_request
 from tests.checkers.post_submit.support import OTHER_HASH, change_request, request
 
 
@@ -42,6 +43,11 @@ def test_request_digest_and_lineage(change, message):
             PostSubmissionEvaluationRequest(**fields, request_sha256=OTHER_HASH)
         else:
             make_post_submit_request(**fields)
+    if change != "digest":
+        with pytest.raises(ValueError, match=message):
+            PostSubmissionEvaluationContent(**{
+                key: fields[key] for key in PostSubmissionEvaluationContent.model_fields
+            })
 
 
 def test_coherent_foreign_facts_are_not_an_authorization_proof():

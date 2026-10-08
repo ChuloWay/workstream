@@ -8,6 +8,7 @@ from typing import Any
 from uuid import UUID
 
 from app.core.hashing import canonical_json_hash
+from app.modules.artifacts.api.submission_admission import SubmissionBundleFile
 from app.modules.artifacts.sources import ArtifactCommitment
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveEntry,
@@ -110,6 +111,12 @@ class SubmissionManifest:
         ArtifactCommitment.validate_sha256(self.sha256)
         if canonical_json_hash(self.as_dict()) != self.sha256:
             raise ValueError("submission manifest digest is inconsistent")
+
+    def file_facts(self) -> tuple[SubmissionBundleFile, ...]:
+        """Project every verified file for both capacity preflight and consumption."""
+        return tuple(SubmissionBundleFile(
+            normalized_path=item.normalized_path, sha256=item.sha256, byte_count=item.byte_count,
+        ) for item in self.entries if item.entry_type is SubmissionArchiveEntryType.FILE)
 
     @property
     def schema_version(self) -> str:

@@ -20,7 +20,7 @@ from app.modules.projects.models import (
     PostSubmitCheckerPolicy,
 )
 from app.modules.authorization.prepared import PreparedSubmissionCreationAuthorization
-from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.api import SubmissionCreationRequest, TaskSubmissionContextUnavailable
 from app.modules.tasks.models import AuditEvent, Submission, TaskAssignment, WorkstreamTask
 from app.modules.tasks.service import TaskLockedContextInvalid
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
@@ -84,7 +84,7 @@ async def test_invalid_locked_policy_never_reaches_art_or_submission(
 
     async with db_session.get_session_factory()() as session:
         expected_error = (
-            TaskLockedContextInvalid
+            TaskSubmissionContextUnavailable
             if field.endswith("body") else IntegrityError
         )
         with pytest.raises(expected_error) as rejected:
@@ -92,7 +92,7 @@ async def test_invalid_locked_policy_never_reaches_art_or_submission(
                 task = await session.get(WorkstreamTask, task_response["id"])
                 original = getattr(task, field)
                 # Policy hashes have composite FK custody. Body corruption is
-                # rejected by the complete TASK policy validator instead.
+                # rejected by the locked TASK context reader before admission.
                 setattr(task, field, {} if field.endswith("body") else "sha256:" + "f" * 64)
                 await session.flush()
                 await TaskSubmissionCreationService(
@@ -116,6 +116,8 @@ async def test_invalid_locked_policy_never_reaches_art_or_submission(
             assert integrity_constraint_name(rejected.value) == (
                 f"fk_workstream_tasks_locked_{policy}_policy"
             )
+        else:
+            assert rejected.value.code == "task_submission_context_invalid"
         admissions.consume.assert_not_awaited()
         assert await session.scalar(select(Submission).where(
             Submission.task_id == task_response["id"],
@@ -172,11 +174,9 @@ async def test_submission_rejects_malformed_locked_post_submit_policy_body_witho
         task.locked_post_submit_checker_policy_body = corrupted_body
         await session.commit()
 
-    with pytest.raises(TaskLockedContextInvalid) as rejected:
+    with pytest.raises(TaskSubmissionContextUnavailable) as rejected:
         await _create_hidden_submission(started_task["id"])
-    assert rejected.value.status_code == 422
-    assert rejected.value.code == "task_locked_context_invalid"
-    assert str(rejected.value) == "task locked policy custody is invalid"
+    assert rejected.value.code == "task_submission_context_invalid"
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, started_task["id"])
         submissions = (

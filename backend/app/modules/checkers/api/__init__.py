@@ -42,6 +42,8 @@ from app.modules.checkers.api.post_submit_catalogue import (
 from app.modules.checkers.api.post_submit import (
     ExpectedPostSubmitContext,
     ObservedPostSubmitContext,
+    PostSubmissionEvaluationContent,
+    make_post_submit_request,
     PostSubmissionEvaluationRequest,
     PostSubmissionEvaluationResult,
     PostSubmissionExecutionPort,
@@ -56,7 +58,7 @@ from app.modules.checkers.api.post_submit import (
 __all__ += (
     "CompiledPostSubmitPolicy", "EmptyPostSubmitConfiguration", "PostSubmitCatalogue",
     "PostSubmitDefinition", "PostSubmitPolicyEntry", "ExpectedPostSubmitContext",
-    "ObservedPostSubmitContext", "PostSubmissionEvaluationRequest", "PostSubmissionEvaluationResult",
+    "ObservedPostSubmitContext", "PostSubmissionEvaluationContent", "make_post_submit_request", "PostSubmissionEvaluationRequest", "PostSubmissionEvaluationResult",
     "PostSubmissionExecutionPort", "PostSubmissionStructuralInput",
     "PostSubmitCurrentResultReference", "PostSubmitEvidenceEntry", "PostSubmitManifestEntry",
     "PostSubmitMemberResult", "PostSubmitPolicyInputs",
