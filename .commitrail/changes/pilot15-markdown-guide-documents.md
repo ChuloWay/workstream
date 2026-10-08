@@ -127,10 +127,11 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
 
 ## Reconciliation
 
-- Current-source reconciliation: Rebased on main
-  `72b83ffc2f0fcb29efdc68f6babaee884ab7d4dd`, where PILOT-13 is delivered as
-  revision `0026_task_guide_read`. Open PRs #509 and #510 add no migration, so
-  this branch owns the next linear revision, `0027_markdown_guide_media`.
+- Current-source reconciliation: Merged main
+  `36e8a615f01801cecd6ccf83d7411235ab1cfa8f`, where PILOT-13 is delivered as
+  revision `0026_task_guide_read`. The later PILOT-00 experiment and delivery
+  changes add no migration, so this branch retains the next linear revision,
+  `0027_markdown_guide_media`.
 - Delivered dependency reconciliation: PILOT-13's exact task-locked authority,
   concealment, verified streaming and safe CLI publication are unchanged; only
   its closed media type and extension maps admit Markdown.
