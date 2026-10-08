@@ -1,7 +1,7 @@
 # [PILOT-13] Assigned contributors read exact locked guide originals
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Assigned contributors list and download their task's
   exact guide originals through public REST and Go CLI, without examples.
 
@@ -76,6 +76,15 @@ review/rebase implementation, frontend/MCP, dependencies, CI weakening or merge.
   digest/size before publishing, never overwrite existing files or trust labels
   as paths, and clean unpublished files on failure. Download reauthorizes each
   document; rebase/revocation between listing and fetching fails safely.
+- Extend the existing JSON transport's bounded response selector for document-
+  bearing work context (2 MiB); other read envelopes keep 64 KiB. Binary downloads
+  stream to disk and cannot exceed ART's existing 512 MiB hard ceiling. Reuse the
+  existing shared error redaction and one-shot mutation transport unchanged.
+- This single user-requested outcome crosses four existing owner boundaries and
+  includes its requested CLI consumer. The diff exceeds the preferred small L1
+  size because ports, catalogue/schema guards and retained constructor fixtures
+  must change together. Keep it one cohesive PR, with explicit owner-focused
+  review rather than splitting half-wired public authority across PRs.
 
 ## Acceptance criteria
 
@@ -108,10 +117,10 @@ review/rebase implementation, frontend/MCP, dependencies, CI weakening or merge.
 
 ## Evidence
 
-Future implementation proof paths: `backend/tests/tasks/test_guide_documents.py`,
-`backend/tests/artifacts/test_task_guide_documents.py`,
-`cli/tests/integration/test_task_guide_http.py` and the extended existing public
-API CLI journey. Fixtures must use real original ingest/confirmed receipts; a
+Implementation proof paths: `backend/tests/tasks/test_guide_documents.py`,
+`cli/tests/integration/test_task_guide_http.py` and
+`cli/tests/integration/test_task_guide_public_api.py`, alongside the retained CLI
+public API journey. Fixtures must use real original ingest/confirmed receipts; a
 mock guide or successful label alone cannot certify storage/assignment isolation.
 Build a composite fixture from existing public guide creation/content upload to
 MinIO and compilation/finalization/policy approval/activation helpers, followed
@@ -120,6 +129,15 @@ assert the stored confirmed receipt/object commitment before testing contributor
 list/download. Existing activation fixtures alone script provider access;
 existing MinIO intake fixtures alone stop before activation. Neither certifies
 this complete boundary without connecting their real operations.
+The independent CLI workflow uses its existing real PostgreSQL service and
+canonical local ArtifactStore for the new public download journey; backend owner
+tests separately prove MinIO behavior. This does not claim deployed Flow or
+real model compilation. Agent findings are scripted; custody, activation,
+authorization, task release/claim/start and document reads are real.
+Observe a named PostgreSQL revocation waiter while a verified read retains AUTH
+locks, then show revocation can commit before immutable prepared bytes finish
+serving. Verify that a later request is denied and cancellation/integrity errors
+release scratch reservations. No product rebase behavior is claimed.
 Run these through the existing isolated PostgreSQL/MinIO runner, Go build/vet/
 module verification, Ruff, module-boundary checks, documentation checks and full
 hosted suites. Prior missing-document context is the live-defect negative control;

@@ -3,7 +3,8 @@
 An independent Go client for Workstream's public REST API, for humans and
 agents using the terminal. It provides human self-profile reads and editing,
 plus draft project/guide declaration, exact-project inspection, authority reads, manager task browsing and
-contributor work discovery, claim/start and governing context/intake requirements:
+contributor work discovery, claim/start, locked guide documents and governing
+context/intake requirements:
 
 | Command | Public API |
 |---|---|
@@ -20,6 +21,7 @@ contributor work discovery, claim/start and governing context/intake requirement
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
 | `workstream task start TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/start` |
 | `workstream task context TASK_ID` | `GET /api/v1/tasks/TASK_ID/work-context` |
+| `workstream task guide TASK_ID [--download DIR]` | Work context, then assigned-task `GET /api/v1/tasks/TASK_ID/guide/documents/DOCUMENT_ID/content` for downloads |
 | `workstream task requirements TASK_ID` | `GET /api/v1/tasks/TASK_ID/submission-requirements` |
 
 Workstream verifies the caller's Flow bearer and owns identity resolution,
@@ -71,8 +73,10 @@ and preserving the successful API JSON.
 
 Exit status is `0` for success, `1` for API/network/response failure, and `2`
 for invalid arguments or configuration. A request times out after 12 seconds;
-responses default to a 64 KiB bound (guide declaration uses the documented
-2MiB exception below), and requests are not automatically retried.
+JSON responses default to a 64 KiB bound (guide declaration and document-bearing
+work context use 2 MiB wire bounds). Original downloads stream to private files,
+bounded by the advertised byte count and ART's 512 MiB hard ceiling. Requests
+are not automatically retried by the CLI.
 Use `--help`, `--version` and `completion bash|zsh|fish|powershell` without a
 credential or network connection.
 
@@ -269,7 +273,11 @@ not an empty successful result.
 
 Context returns contributor instructions, project/guide display facts, exact
 review/revision policy identities and contribution-policy version, plus the
-server's current assignment/action hints. Hints are observations, not authority
+server's current assignment/action hints and `guide_documents`. An active own
+assignment receives the exact locked originals' IDs, order, labels, media types,
+sizes, SHA-256 commitments and task-scoped read references; ready unassigned
+browsing receives an empty document list. Task examples are never included.
+Hints are observations, not authority
 or a claimability guarantee. The CLI never recomputes them or automatically
 executes a hinted action. Claim/start independently authorize their requests.
 
@@ -279,6 +287,33 @@ requirements, storage-reference restrictions, size/entry limits and packaging.
 They are not a current-guide lookup, a checker verdict or permission to upload.
 Submission intake is still hidden; these commands do not expose it. Described
 paths and storage references are displayed only, never read, downloaded or executed.
+
+### Read the assigned guide
+
+```sh
+workstream task guide TASK_ID --output json
+mkdir guide-documents
+workstream task guide TASK_ID --download guide-documents
+```
+
+This requires an active assignment and current exact-project Submitter authority.
+Each download reauthorizes independently; neither a cached list nor a read
+reference grants access. Workstream reads the task's locked snapshot, not the
+latest guide or drafts. A successor activation alone never changes its documents.
+The task rebase operation remains separate planned work.
+
+The API verifies the complete original against retained ART size/SHA-256 before
+responding. Missing, corrupt or wrong-namespace originals fail with
+`guide_document_integrity_unavailable`, not partial successful content. Responses
+are private/no-store; setup-agent run-scoped access remains unchanged.
+
+The CLI reconstructs fixed same-origin paths and verifies size/SHA-256 again.
+Files use canonical document UUID names with `.pdf`, `.docx` or `.pptx`, never
+labels as paths. The destination must already exist and must not be a symlink.
+Downloads use private bounded temporary files and atomic no-overwrite publication;
+existing targets/symlinks are refused and failed unpublished files are removed.
+Documents completed before a later document fails remain valid local files.
+The CLI does not expose examples, upload originals or execute document content.
 
 JSON preserves the exact public response. Human output labels every root field
 and uses compact, terminal-safe JSON for complete nested rules and facts;

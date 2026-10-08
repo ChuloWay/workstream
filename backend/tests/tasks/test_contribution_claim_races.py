@@ -1,5 +1,6 @@
 """Real AUTH role issuance and TASK claim share one consistent lock order."""
 
+from app.adapters.artifacts import task_guide_documents_port
 from app.core.config import get_settings
 
 import asyncio
@@ -103,6 +104,7 @@ async def test_role_issuance_and_claim_linearize_at_real_authority(
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
+                guide_documents=task_guide_documents_port(session, get_settings()),
             ).claim(UUID(ready["id"]), "Concurrent initial claim", idempotency_key=new_record_id())
 
     pending = []
@@ -217,6 +219,7 @@ async def test_claim_keeps_frozen_policy_while_successor_activation_waits(
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
+                guide_documents=task_guide_documents_port(session, get_settings()),
             ).claim(UUID(ready["id"]), "Claim exact prior guide during successor activation", idempotency_key=new_record_id())
 
     pending = []

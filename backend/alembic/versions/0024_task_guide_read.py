@@ -1,0 +1,38 @@
+"""Admit the exact assigned-task guide-read authorization evidence pair."""
+
+from alembic import op
+import sqlalchemy as sa
+
+revision = "0024_task_guide_read"
+down_revision = "0023_remove_task_payment_policy"
+branch_labels = None
+depends_on = None
+
+
+def upgrade():
+    name = "ck_audit_events_authorization_action_evidence"
+    op.execute("lock table audit_events in access exclusive mode")
+    definition = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "select pg_get_constraintdef(oid) from pg_constraint "
+                "where conrelid='audit_events'::regclass and conname=:name"
+            ),
+            {"name": name},
+        )
+        .scalar_one()
+    )
+    anchor = "(((action_id)::text = 'project.task.create'::text) AND ((permission_id)::text = 'project.task.manage'::text))"
+    addition = "(((action_id)::text = 'task.guide.read'::text) AND ((permission_id)::text = 'task.queue.read'::text))"
+    if definition.count(anchor) != 2:
+        raise RuntimeError("task guide-read authority constraint shape changed")
+    op.execute(f"alter table audit_events drop constraint {name}")
+    op.execute(
+        f"alter table audit_events add constraint {name} "
+        + definition.replace(anchor, anchor + " OR " + addition)
+    )
+
+
+def downgrade():
+    raise RuntimeError("Workstream v0.1 migrations cannot be downgraded; recreate the database")

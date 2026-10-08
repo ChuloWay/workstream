@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.projects.api.guide_documents import (
     GuideDocumentManifest, GuideDocumentManifestRequest, GuideDocumentUnavailable,
     ProjectGuideDocumentLineage, ProjectGuideDocumentSource,
+    LockedGuideOriginalsRequest, LabeledGuideOriginal,
 )
+from app.core.hashing import canonical_json_hash
 from app.modules.projects.models import (
     GuideSourceArtifactIngest, GuideSourceSnapshot, GuideSourceSnapshotItem,
     ProjectGuide, ProjectSetupRun,
@@ -21,6 +23,56 @@ class SqlAlchemyProjectGuideDocumentScope:
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def lock_task_originals(self, request: LockedGuideOriginalsRequest) -> tuple[LabeledGuideOriginal, ...]:
+        """Resolve only TASK's exact activated snapshot, including superseded versions."""
+        row = (await self._session.execute(
+            select(ProjectGuide, GuideSourceSnapshot)
+            .options(load_only(ProjectGuide.id, ProjectGuide.project_id, ProjectGuide.version, ProjectGuide.status))
+            .join(GuideSourceSnapshot, GuideSourceSnapshot.guide_id == ProjectGuide.id)
+            .where(
+                ProjectGuide.id == str(request.guide_id),
+                ProjectGuide.project_id == str(request.project_id),
+                ProjectGuide.version == request.guide_version,
+                ProjectGuide.status.in_(("active", "superseded")),
+                GuideSourceSnapshot.id == str(request.source_snapshot_id),
+                GuideSourceSnapshot.project_id == ProjectGuide.project_id,
+                GuideSourceSnapshot.guide_version == ProjectGuide.version,
+                GuideSourceSnapshot.bundle_hash == request.source_snapshot_hash,
+            ).with_for_update(of=(ProjectGuide, GuideSourceSnapshot))
+        )).one_or_none()
+        if row is None:
+            raise GuideDocumentUnavailable("guide_source_stale")
+        _, snapshot = row
+        if canonical_json_hash(snapshot.manifest_json) != snapshot.bundle_hash:
+            raise GuideDocumentUnavailable("guide_document_identity_mismatch")
+        items = (await self._session.scalars(
+            select(GuideSourceSnapshotItem)
+            .where(GuideSourceSnapshotItem.source_snapshot_id == snapshot.id)
+            .order_by(GuideSourceSnapshotItem.item_order, GuideSourceSnapshotItem.id)
+            .with_for_update()
+        )).all()
+        manifest_items = snapshot.manifest_json.get("items")
+        stored_items = [{
+            "item_id": item.id, "item_order": item.item_order,
+            "source_kind": item.source_kind, "source_label": item.source_label,
+            "ingestion_adapter": item.ingestion_adapter, "media_type": item.media_type,
+        } for item in items]
+        if not items or manifest_items != stored_items:
+            raise GuideDocumentUnavailable("guide_document_identity_mismatch")
+        originals = []
+        for item in items:
+            if item.source_kind != "document" or item.ingestion_adapter != "upload":
+                raise GuideDocumentUnavailable("guide_document_format_unsupported")
+            ingest = await self._session.scalar(select(GuideSourceArtifactIngest).where(
+                GuideSourceArtifactIngest.source_item_id == item.id).with_for_update())
+            if ingest is None or ingest.media_type != item.media_type:
+                raise GuideDocumentUnavailable("guide_documents_incomplete")
+            originals.append(LabeledGuideOriginal(item.source_label, ProjectGuideDocumentSource(
+                source_item_id=UUID(item.id), ingest_id=UUID(ingest.id), item_order=item.item_order,
+                sha256=ingest.sha256, byte_count=ingest.byte_count, media_type=ingest.media_type,
+            )))
+        return tuple(originals)
 
     async def lock_manifest_source(self, request: GuideDocumentManifestRequest) -> ProjectGuideDocumentLineage:
         """Lock exact current draft ownership and return no ORM or source bodies."""

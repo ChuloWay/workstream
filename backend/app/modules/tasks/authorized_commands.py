@@ -1,6 +1,8 @@
 """Canonical project-authorized task commands with one transaction owner."""
 
 import json
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID
@@ -23,6 +25,10 @@ from app.modules.tasks.api.authorization import (
 from app.modules.tasks.api.task_detail import (
     ContributorTaskDetail, ContributorTaskDetailRequest, ManagementTaskDetail, ManagementTaskDetailRequest,
 )
+from app.modules.tasks.api.guide_documents import (
+    TaskGuideDocumentsPort, TaskGuideDocumentNotFound, VerifiedTaskGuideRead,
+)
+from app.modules.projects.api.guide_documents import LockedGuideOriginalsRequest
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage, TaskTransitionAuditPort, TaskTransitionFacts
 from app.modules.tasks.api.audit_evidence import AuditTaskEvidenceRequest, AuditTaskEvidencePage, TaskEvidenceInvalid
 from app.modules.tasks.models import TaskAssignment, TaskCommandReceipt, WorkstreamTask
@@ -39,6 +45,7 @@ from app.modules.tasks.schemas import (
 )
 from app.modules.tasks.service import (
     LOCKED_CONTEXT_REQUIRED_FIELDS,
+    LockedTaskContext,
     TaskAssignmentConflict,
     TaskNotFound,
     TaskProjectNotReady,
@@ -59,6 +66,7 @@ class AuthorizedTaskCommands:
         audit: TaskTransitionAuditPort,
         actor_profile_id: UUID,
         contexts: TaskService,
+        guide_documents: TaskGuideDocumentsPort,
     ) -> None:
         self._session = session
         self._authorization = authorization
@@ -66,6 +74,7 @@ class AuthorizedTaskCommands:
         self._actor_id = actor_profile_id
         self._repo = TaskRepository(session)
         self._contexts = contexts
+        self._guide_documents = guide_documents
         self._replay = TaskCommandReplay(session)
 
     def _facts(
@@ -427,8 +436,34 @@ class AuthorizedTaskCommands:
                 lifecycle=ContributorTaskLifecycle(
                     assigned_to_current_actor=own_assignment, next_actions=actions,
                 ),
+                guide_documents=(await self._guide_documents.list(task_id, self._guide_request(task, context)))
+                if own_assignment else (),
             )
         return response
+
+    @staticmethod
+    def _guide_request(task: WorkstreamTask, context: LockedTaskContext) -> LockedGuideOriginalsRequest:
+        return LockedGuideOriginalsRequest(
+            project_id=UUID(task.project_id), guide_id=context.facts.guide.id,
+            guide_version=task.locked_guide_version,
+            source_snapshot_id=UUID(task.locked_guide_source_snapshot_id),
+            source_snapshot_hash=task.locked_guide_source_snapshot_hash,
+        )
+
+    @asynccontextmanager
+    async def contributor_guide_document(self, task_id: UUID, document_id: UUID) -> AsyncIterator[VerifiedTaskGuideRead]:
+        """Commit a fresh authorized read before serving owned verified scratch."""
+        async with AsyncExitStack() as stack:
+            try:
+                async with self._session.begin():
+                    task, _, _ = await self._locked_task(task_id, TaskAuthorityOperation.GUIDE_READ)
+                    context = await self._contexts._load_locked_task_context(task)
+                    prepared = await stack.enter_async_context(self._guide_documents.open(
+                        task_id, document_id, self._guide_request(task, context),
+                    ))
+            except TaskGuideDocumentNotFound as exc:
+                raise TaskNotFound("task guide document not found") from exc
+            yield prepared
 
     async def management_work_context(
         self, project_id: UUID, task_id: UUID,

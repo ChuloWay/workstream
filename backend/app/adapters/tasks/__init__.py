@@ -93,9 +93,11 @@ def task_commands(
     audit: TaskTransitionAuditPort, actor_profile_id: UUID, settings: Settings,
 ) -> AuthorizedTaskCommands:
     """Compose TASK commands without exposing private product imports to delivery."""
+    from app.adapters.artifacts import task_guide_documents_port
     return AuthorizedTaskCommands(
         session, authorization=authorization, audit=audit, actor_profile_id=actor_profile_id,
         contexts=task_service(session, settings=settings),
+        guide_documents=task_guide_documents_port(session, settings),
     )
 
 

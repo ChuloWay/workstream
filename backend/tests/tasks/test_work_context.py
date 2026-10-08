@@ -58,7 +58,7 @@ def test_work_context_contracts():
     task, manager, values = context_values()
     lifecycle = ContributorTaskLifecycle(assigned_to_current_actor=True, next_actions=("start",))
     for cls, detail, extra in (
-        (ContributorTaskWorkContext, task, {"lifecycle": lifecycle}),
+        (ContributorTaskWorkContext, task, {"lifecycle": lifecycle, "guide_documents": ()}),
         (ManagementTaskWorkContext, manager, {}),
     ):
         result = cls(task=detail, **values, **extra)
@@ -102,7 +102,7 @@ def test_work_context_openapi():
     schema = create_app().openapi()
     definitions = schema["components"]["schemas"]
     for route, name, fields, action in (
-        ("/api/v1/tasks/{task_id}/work-context", "ContributorTaskWorkContext", CONTEXT | {"lifecycle"}, ACTIONS[0]),
+        ("/api/v1/tasks/{task_id}/work-context", "ContributorTaskWorkContext", CONTEXT | {"lifecycle", "guide_documents"}, ACTIONS[0]),
         ("/api/v1/projects/{project_id}/tasks/{task_id}/work-context", "ManagementTaskWorkContext", CONTEXT, ACTIONS[1]),
     ):
         operation = schema["paths"][route]["get"]
@@ -121,7 +121,7 @@ def test_work_context_openapi():
 async def test_work_context_invalid_selectors():
     session, authority = MagicMock(), MagicMock()
     commands = AuthorizedTaskCommands(session, authorization=authority, audit=MagicMock(),
-                                      actor_profile_id=new_record_id(), contexts=MagicMock())
+                                      actor_profile_id=new_record_id(), contexts=MagicMock(), guide_documents=MagicMock())
     for invalid in (None, "not-a-uuid", str(new_record_id()), []):
         with pytest.raises(TaskValidationError):
             await commands.contributor_work_context(invalid)
@@ -180,7 +180,7 @@ async def test_work_context_public_projections(task_client, monkeypatch):
         assert response.status_code == 200, response.text
         body = response.json()
         fields = COMMON | (MANAGEMENT if management else set())
-        assert set(body) == CONTEXT | (set() if management else {"lifecycle"})
+        assert set(body) == CONTEXT | (set() if management else {"lifecycle", "guide_documents"})
         assert set(body["task"]) == fields
         for name in fields - {"created_at", "updated_at", "deadline_at"}:
             assert body["task"][name] == stored["id" if name == "task_id" else name], name
@@ -214,7 +214,7 @@ async def test_work_context_owned_state_matrix(task_client, monkeypatch):
     draft = await create_draft_task(task_client, project["id"])
     task = await create_started_task(task_client, project["id"], monkeypatch)
     denied = await task_client.get(f"/api/v1/tasks/{draft['id']}/work-context", headers=auth_headers())
-    assert denied.status_code == 403 and denied.json()["error"]["code"] == "permission_not_granted"
+    assert denied.status_code == 404 and denied.json()["error"]["code"] == "project_authorization_resource_not_found"
     states = {state for edge in ALLOWED_TASK_TRANSITIONS for state in edge}
     assert states == {"draft", "screening", "ready", "claimed", "in_progress", "submitted", "evaluation_pending", "review_pending", "needs_revision"}
     factory, seen = db_session.get_session_factory(), set()

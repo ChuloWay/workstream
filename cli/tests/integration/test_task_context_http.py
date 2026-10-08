@@ -29,6 +29,7 @@ CONTEXT = {
     "revision_policy": POLICY,
     "contribution_policy_version_id": ACTOR,
     "lifecycle": {"assigned_to_current_actor": False, "next_actions": ["claim"]},
+    "guide_documents": [],
 }
 REQUIREMENTS = {
     "task_id": TASK,
@@ -90,6 +91,7 @@ CONTEXT_LABELS = (
     "Revision policy",
     "Contribution policy version",
     "Lifecycle (server hints, not authorization)",
+    "Guide documents",
 )
 REQUIREMENT_LABELS = (
     "Task",
@@ -472,7 +474,7 @@ def test_requirements_reject_missing_null_or_substituted_facts(cli):
         )
 
 
-def test_context_reads_use_existing_failure_bounds_without_partial_output(cli):
+def test_context_reads_use_current_failure_bounds_without_partial_output(cli):
     with http_fixture() as (origin, response, requests):
         for command, value in (("context", CONTEXT), ("requirements", REQUIREMENTS)):
             for selector in ("bad", TASK + "/..", "x" * 101):
@@ -482,7 +484,10 @@ def test_context_reads_use_existing_failure_bounds_without_partial_output(cli):
                 assert requests[before:] == []
             oversized = deepcopy(value)
             if command == "context":
-                oversized["project"]["name"] = "x" * 65536
+                # Document-bearing context has its own 2 MiB wire bound.
+                # The separate 100-document test proves legitimate >64 KiB
+                # content succeeds; excess still fails without partial output.
+                oversized["project"]["name"] = "x" * (2 * 1024 * 1024)
             else:
                 oversized["attestation_terms"] = ["x" * 65536]
             response["body"] = json.dumps(oversized).encode()

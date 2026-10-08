@@ -52,6 +52,7 @@ from app.modules.artifacts.authorization import (
 )
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.api import ActorIdentityFacts
+from app.modules.tasks.api.guide_documents import TaskGuideDocumentsPort
 
 
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
@@ -203,6 +204,36 @@ def create_artifact_scratch_manager(settings: Settings) -> ArtifactScratchManage
     return ArtifactScratchManager(
         root=settings.artifact_scratch_root,
         limits=artifact_preparation_limits(settings),
+    )
+
+
+def task_guide_documents_port(session: AsyncSession, settings: Settings) -> TaskGuideDocumentsPort:
+    """Compose exact contributor originals without opening a provider for metadata."""
+    from app.adapters.projects import project_guide_document_scope_port
+    from app.modules.artifacts.guide_documents import SqlAlchemyGuideDocumentManifest
+    from app.modules.artifacts.task_guide_documents import ArtifactTaskGuideDocuments
+    from app.modules.artifacts.service import artifact_storage_namespace_spec
+
+    @asynccontextmanager
+    async def runtime():
+        bootstrap = create_artifact_store_bootstrap(settings)
+        manager = None
+        try:
+            manager = create_artifact_scratch_manager(settings)
+            namespace = artifact_storage_namespace_spec(settings, bootstrap)
+            store = bootstrap.initialize_after_namespace_claim(ArtifactStoreNamespaceClaim(
+                adapter_identity=bootstrap.identity, namespace_identity=bootstrap.namespace_identity,
+                namespace_fingerprint=namespace.namespace_fingerprint,
+            ))
+            yield store, namespace, ArtifactPreparationService(manager)
+        finally:
+            if manager is not None:
+                manager.close()
+            bootstrap.close()
+
+    scope = project_guide_document_scope_port(session)
+    return ArtifactTaskGuideDocuments(
+        session, scope=scope, manifest=SqlAlchemyGuideDocumentManifest(session, scope), runtime=runtime,
     )
 
 
