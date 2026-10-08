@@ -75,4 +75,3 @@ class DeliveryExecutionAuthority:
         async with self._authority.prepare_finalization(request) as prepared:
             yield _DeliveryFinalize(prepared, self._fence,
                                     self._envelope, self._request, eligible)
-
