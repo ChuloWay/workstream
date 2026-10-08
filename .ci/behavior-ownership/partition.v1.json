@@ -394,6 +394,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/task_guide_documents.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/zip_safety.py"
     },
     {
@@ -1438,6 +1442,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/guide_documents.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/management_queue.py"
     },
     {
@@ -1705,7 +1713,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "2188a5bf528b348a5e3b257aaf1d0910a05ba7a6ee29bb3f99dac0f5ee874b48",
+  "authority_digest": "ef9821de8c9f801b8883d9d485e320cae5283e7ae5abd9bac3ad2ab31042731a",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

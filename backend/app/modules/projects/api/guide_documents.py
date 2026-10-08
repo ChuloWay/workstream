@@ -227,6 +227,25 @@ class ProjectGuideDocumentSource:
 
 
 @dataclass(frozen=True, slots=True)
+class LockedGuideOriginalsRequest:
+    """Exact activated selectors supplied by the TASK owner, never latest-guide lookup."""
+
+    project_id: UUID
+    guide_id: UUID
+    guide_version: str
+    source_snapshot_id: UUID
+    source_snapshot_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class LabeledGuideOriginal:
+    """Display metadata paired with the existing immutable source commitment."""
+
+    label: str
+    source: ProjectGuideDocumentSource
+
+
+@dataclass(frozen=True, slots=True)
 class ProjectGuideDocumentLineage:
     """Current draft guide generation required by the document provider."""
 
@@ -246,6 +265,8 @@ class ProjectGuideDocumentScopePort(Protocol):
     async def lock_manifest_source(self, request: GuideDocumentManifestRequest) -> ProjectGuideDocumentLineage: ...
 
     async def lock_access_attempt(self, attempt_id: UUID, manifest: GuideDocumentManifest) -> None: ...
+
+    async def lock_task_originals(self, request: LockedGuideOriginalsRequest) -> tuple[LabeledGuideOriginal, ...]: ...
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,5 +1,6 @@
 """Real command/database races, with barriers only at observed owner boundaries."""
 
+from app.adapters.artifacts import task_guide_documents_port
 from app.core.config import get_settings
 
 from app.adapters.tasks import task_service
@@ -75,6 +76,7 @@ async def test_two_granted_claimants_have_one_atomic_winner(task_client, monkeyp
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
+                guide_documents=task_guide_documents_port(session, get_settings()),
             ).claim(UUID(task["id"]), "Competing claim", idempotency_key=uuid4())
 
     results = await asyncio.wait_for(
@@ -161,6 +163,7 @@ async def test_project_grant_revocation_serializes_with_claim(
                 audit=task_transition_audit(session),
                 actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
+                guide_documents=task_guide_documents_port(session, get_settings()),
             ).claim(UUID(task["id"]), "Claim racing with authority revocation", idempotency_key=uuid4())
 
     async def revoke():

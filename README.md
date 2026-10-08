@@ -334,6 +334,10 @@ explicit caller retry keys and uncertain-outcome reporting without automatic ret
 `workstream task context TASK_ID` and `task requirements TASK_ID` inspect the
 governing guide/policy selectors, server action hints and locked intake rules.
 Hints do not grant authority; requirements do not expose hidden submission upload.
+`workstream task guide TASK_ID [--download DIR]` lists or downloads the original
+documents of the task's locked guide for its currently authorized assignee.
+Downloaded bytes are verified against their retained hash and size; task examples
+remain private, and newer guide activation does not change existing task locks.
 `workstream project create --name TEXT --slug TEXT --idempotency-key UUID`
 creates a draft project shell through the public API, with explicit manual
 replay and uncertain-outcome handling; it does not approve or activate a guide.

@@ -2411,3 +2411,24 @@ def test_evaluation_guard_ownership_does_not_allow_routing_activation(filename, 
         ownership._validate_additive_partition_transition(_partition(sorted({
             retained, target, "backend/app/modules/tasks/post_submit_routing/activation.py",
         })), trusted)
+
+
+def test_assigned_guide_read_ownership_accepts_only_exact_new_modules():
+    expected = {
+        "backend/app/modules/artifacts/task_guide_documents.py",
+        "backend/app/modules/tasks/api/guide_documents.py",
+    }
+    assert ownership.PILOT_13_GUIDE_READ_TARGETS == expected
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *expected})), trusted
+    )
+    for neighbor in (
+        "backend/app/modules/tasks/api/guide_examples.py",
+        "backend/app/modules/artifacts/task_guide_urls.py",
+    ):
+        with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+            ownership._validate_additive_partition_transition(
+                _partition(sorted({retained, *expected, neighbor})), trusted
+            )

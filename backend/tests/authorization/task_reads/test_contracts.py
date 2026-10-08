@@ -60,7 +60,7 @@ def test_task_read_public_contract_and_removed_wrappers():
 @pytest.mark.parametrize("method", READS)
 async def test_task_read_invalid_internal_selectors(method):
     session=MagicMock()
-    commands=AuthorizedTaskCommands(session,authorization=MagicMock(),audit=MagicMock(),actor_profile_id=new_record_id(),contexts=MagicMock())
+    commands=AuthorizedTaskCommands(session,authorization=MagicMock(),audit=MagicMock(),actor_profile_id=new_record_id(),contexts=MagicMock(),guide_documents=MagicMock())
     for invalid in (None,"bad",str(new_record_id()),[]):
         args=(new_record_id(),invalid) if method.startswith("management") else (invalid,)
         with pytest.raises(TaskValidationError):

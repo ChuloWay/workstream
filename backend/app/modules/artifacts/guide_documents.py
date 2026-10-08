@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,6 +12,7 @@ from app.modules.projects.api.guide_documents import (
     GuideDocumentManifestRequest,
     GuideDocumentUnavailable,
     GuideDocumentVersion,
+    ProjectGuideDocumentSource,
 )
 from app.modules.artifacts.models import ArtifactContent, ArtifactPutAttempt, ArtifactReplica, ArtifactOperationReceipt, ArtifactPutObservationReceipt
 from app.modules.projects.api.guide_documents import ProjectGuideDocumentScopePort
@@ -25,8 +28,18 @@ class SqlAlchemyGuideDocumentManifest:
     async def load(self, request: GuideDocumentManifestRequest) -> GuideDocumentManifest:
         """Require current lineage and all committed originals, with no source-body query."""
         lineage = await self._scope.lock_manifest_source(request)
+        documents = await self.versions(lineage.project_id, lineage.documents)
+        return GuideDocumentManifest(
+            project_id=lineage.project_id, guide_id=lineage.guide_id, guide_version=lineage.guide_version,
+            source_snapshot_id=lineage.source_snapshot_id, source_snapshot_hash=lineage.source_snapshot_hash,
+            setup_run_id=lineage.setup_run_id, setup_generation=lineage.setup_generation,
+            documents=documents,
+        )
+
+    async def versions(self, project_id: UUID, sources: tuple[ProjectGuideDocumentSource, ...]) -> tuple[GuideDocumentVersion, ...]:
+        """Shared exact committed-original resolution for setup and assigned work."""
         documents = []
-        for item in lineage.documents:
+        for item in sources:
             row = (await self._session.execute(
                 select(ArtifactPutAttempt, ArtifactReplica, ArtifactContent)
                 .select_from(ArtifactPutAttempt)
@@ -36,7 +49,7 @@ class SqlAlchemyGuideDocumentManifest:
                     ArtifactPutAttempt.guide_source_item_id == str(item.source_item_id),
                     ArtifactPutAttempt.producer_request_type == "guide",
                     ArtifactPutAttempt.logical_role.is_(None),
-                    ArtifactPutAttempt.project_id == str(lineage.project_id),
+                    ArtifactPutAttempt.project_id == str(project_id),
                     ArtifactPutAttempt.status == "object_confirmed",
                     or_(
                         and_(ArtifactPutAttempt.terminal_result_code == "document_stored",
@@ -88,9 +101,4 @@ class SqlAlchemyGuideDocumentManifest:
                 ))
             except ValueError:
                 raise GuideDocumentUnavailable("guide_document_identity_mismatch") from None
-        return GuideDocumentManifest(
-            project_id=lineage.project_id, guide_id=lineage.guide_id, guide_version=lineage.guide_version,
-            source_snapshot_id=lineage.source_snapshot_id, source_snapshot_hash=lineage.source_snapshot_hash,
-            setup_run_id=lineage.setup_run_id, setup_generation=lineage.setup_generation,
-            documents=tuple(documents),
-        )
+        return tuple(documents)

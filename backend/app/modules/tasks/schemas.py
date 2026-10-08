@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from app.modules.projects.api.guide_activation_context import GuidePolicySelection
 from app.modules.projects.api.locked_policy import GuideDisplayFacts, ProjectDisplayFacts
 from app.modules.tasks.api.task_detail import ContributorTaskDetail, ManagementTaskDetail
+from app.modules.tasks.api.guide_documents import ContributorGuideDocument
 
 
 class ContributorTaskLifecycle(BaseModel):
@@ -50,6 +51,7 @@ class ContributorTaskWorkContext(_TaskWorkContext):
 
     task: ContributorTaskDetail
     lifecycle: ContributorTaskLifecycle
+    guide_documents: tuple[ContributorGuideDocument, ...]
 
     @model_validator(mode="after")
     def exact_task(self):

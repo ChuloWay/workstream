@@ -10,6 +10,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm.attributes import set_committed_value
 
+from app.adapters.artifacts import task_guide_documents_port
 from app.adapters.audit import task_transition_audit
 from app.adapters.tasks import task_service
 from app.core.config import get_settings
@@ -202,6 +203,7 @@ async def test_same_key_independent_sessions_have_one_result(task_client, task_d
                 session, authorization=PreparedTaskAuthorization(session, context),
                 audit=task_transition_audit(session), actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
+                guide_documents=task_guide_documents_port(session, get_settings()),
             )
             return await command.claim(UUID(task["id"]), "same request", idempotency_key=key)
     pending = [asyncio.create_task(claim())]
@@ -323,6 +325,7 @@ async def test_same_actor_distinct_receipts_do_not_invert_authority_locks(task_c
                 session, authorization=PreparedTaskAuthorization(session, context),
                 audit=task_transition_audit(session), actor_profile_id=context.actor_profile_id,
                 contexts=task_service(session, settings=get_settings()),
+                guide_documents=task_guide_documents_port(session, get_settings()),
             )
             return await command.claim(UUID(task["id"]), idempotency_key=uuid4())
     results = await asyncio.wait_for(asyncio.gather(*(claim(task) for task in tasks)), timeout=30)

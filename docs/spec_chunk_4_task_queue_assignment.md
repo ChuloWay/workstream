@@ -55,6 +55,7 @@ Contributor commands and work context use canonical project authority:
 | `POST /api/v1/tasks/{task_id}/claim` | Active same-project Submitter; ready, unassigned task |
 | `POST /api/v1/tasks/{task_id}/start` | Active same-project Submitter; exact own active assignment |
 | `GET /api/v1/tasks/{task_id}/work-context` | Active same-project Submitter; ready unassigned task or exact own assignment |
+| `GET /api/v1/tasks/{task_id}/guide/documents/{document_id}/content` | Active exact own assignment and same-project Submitter; document must belong to task's locked snapshot; denied selectors concealed |
 | `GET /api/v1/projects/{project_id}/tasks/{task_id}/work-context` | Covered Project Manager; exact route project and task |
 | `POST /api/v1/operations/tasks/{task_id}/start` | System Operator; another contributor's active assignment and nonblank reason |
 
@@ -270,6 +271,15 @@ Only contributor context has `lifecycle`, with `assigned_to_current_actor` and
 `start`; other own-active states have no action hint. Task status appears only in
 `task.status`. Hints never authorize execution. There is no `can_submit` flag or
 precheck capability; hidden submission creation is not advertised as usable.
+Contributor context also includes `guide_documents`: ordered document IDs,
+labels, media types, byte counts, SHA-256 and task-scoped authorized read references.
+It is empty for ready unassigned browsing and contains only exact locked originals
+for an active own assignment. It never includes task examples or provider keys.
+The document read uses distinct `task.guide.read` authority, not the broader
+ready-or-own work-context action. ART verifies complete original bytes before
+response exposure; provider/scratch cleanup is request-scoped. A newer guide
+activation leaves the task's current originals unchanged. Actual rebase behavior
+is owned by PILOT-08, not this read capability.
 Manager task facts include source/creator/assignee display fields, without
 contributor lifecycle or hints. The old shared work-context schemas and builders
 are removed, not aliased.

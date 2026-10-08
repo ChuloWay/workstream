@@ -265,8 +265,10 @@ active assignment before AUTH locks the current ActorProfile, exact identity
 link and applicable grant; mutation locks remain held through the transaction.
 Contributor commands require an active exact-project Submitter grant, not a
 token role or an eligibility row. The separate Operator start override
-requires its explicit permission and a reason. AUTH denials return HTTP 403
-`permission_not_granted`; database failures roll back with retryable HTTP 503
+requires its explicit permission and a reason. Claim/start AUTH denials return
+HTTP 403 `permission_not_granted`. Contributor work-context and assigned-guide
+document reads conceal denied scope with HTTP 404; database
+failures roll back with retryable HTTP 503
 `task_authority_unavailable`. Initial identity resolution may reject a request
 before command execution under its own identity-error contract.
 
