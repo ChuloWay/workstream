@@ -1,7 +1,7 @@
 wait_for_daemon() {
   local name="$1"
   local attempt
-  for attempt in $(seq 1 45); do
+  for ((attempt = 1; attempt <= 45; attempt++)); do
     if docker exec "${name}" docker info >/dev/null 2>&1; then
       return 0
     fi
