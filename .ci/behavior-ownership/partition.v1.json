@@ -714,6 +714,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_submission_replay.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/project_role_schemas.py"
     },
     {
@@ -1534,7 +1538,19 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_dispatch.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/submission_history.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_participants.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_replay.py"
     },
     {
       "group": "lifecycle",
@@ -1689,7 +1705,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "fb4b95c93d47f5230eb05d08ef2a3d92cb3f8c1399e527b7956bfa0d99fd2c20",
+  "authority_digest": "abbc45f6152f8d788445f4c94812f340e18169154720c2c4f1b6659c2d38ca67",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

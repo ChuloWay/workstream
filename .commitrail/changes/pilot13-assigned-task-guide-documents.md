@@ -173,11 +173,12 @@ digest/foreign-snapshot guards need discriminating defective variants.
 
 ## Reconciliation
 
-Originally started from merged main `66a26d8d`; reconciled onto `9f774cbb`
-after PRs #501 and #502 merged. Their local-stack composition and false-only
-second-review guard remain independently owned. Append guide-read migration
-`0025_task_guide_read` after `0024_require_second_review_false`; retain both
-invariants, one migration head, repeated-upgrade safety and exact schema proof.
+Originally started from merged main `66a26d8d`; reconciled onto `3fa0dfb9`
+after PRs #501, #502 and #504 merged. Their local-stack composition, false-only
+second-review guard and initial submission dispatcher remain independently owned.
+Append guide-read migration `0026_task_guide_read` after main's
+`0025_submission_dispatch`; retain all invariants, one migration head,
+repeated-upgrade safety and exact schema proof.
 Keep PILOT-12 upload transport separate; this read uses authenticated verified
 streaming without choosing its upload-intent implementation. Remaining review,
 rebase and upload work stays under its existing issues.

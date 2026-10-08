@@ -1,12 +1,12 @@
 # WS-ARCH-001 — Modular monolith boundaries
 
-[ARCH-04E1B-B5](WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. Atomic initial Submission/dispatch is next; its writer must reuse this projection with real record identities.
+[ARCH-04E1B-B5](WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. ARCH-04E1B-B6 reuses this projection in atomic Submission/dispatch creation with exact AUTH receipts and select-only replay. Hidden request/completion handlers are next.
 
 Delivery priority: [first complete contributor milestone](planning/PLAN.md#first-complete-contributor-milestone). Use its nine-step order and end-to-end exit proof when selecting the next bounded change; live human review/revision and external integration are later work.
 
-[ARCH-04E1B-B4](WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. Initial dispatch remains next and must bind exact receipts and fresh-authorized replay before connecting workers.
+[ARCH-04E1B-B4](WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. B6 now commits the initial reservation and request event with exact receipts and fresh-authorized replay. Delivery handlers remain next.
 
-[ARCH-04E1B-B3](WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. Initial Submission/dispatch composition is next; it must reuse the B5 bounded content contract and retain exact creation/binding receipts. No dispatch or routing authority is activated.
+[ARCH-04E1B-B3](WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. ARCH-04E1B-B6 commits that content, exact authority, generation-one reservation and shared request event with each new Submission. No delivery handler or routing authority is activated.
 
 [ARCH-04E1B-B2](WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
 TASK, CHECKERS and historical PROJECTS policy facts. It stages only the existing
@@ -55,7 +55,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   per checker ID serve active policy consumers; hidden post-submit execution has
   exact fixed-service authority. ARCH-04E1A adds immutable route-neutral TASK
   source storage, detached facts and source-neutral accepted-effects types.
-  Automatic dispatch/routing and acceptance remain unavailable.
+  Automatic request delivery/routing and acceptance remain unavailable.
 - Delivered storage boundary: hidden [ARCH-04B2 checker-output custody](WS-ARCH-001-04B2.md), following hidden input materialization (ARCH-04B). Typed store, byte-free recovery and flush-only verified binding exist; the CHECKERS zero-slot reservation reader is implemented; output write/bind authority remains unavailable.
 - Delivered source boundary: [ARCH-04E1A routing-source facts](WS-ARCH-001-04E1A.md)
   follow [ARCH-04D2](WS-ARCH-001-04D2.md) exact input, execute and finalize
@@ -72,8 +72,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or a production writer.
-- Next usable boundary: atomic initial Submission/dispatch,
-  then the remaining hidden 04E1B-B handlers. ARCH-04E2-B proves genuine authority
+- Next usable boundary: hidden request/completion handlers after delivered
+  ARCH-04E1B-B6 atomic Submission/dispatch. ARCH-04E2-B proves genuine authority
   with exact receipt/database/effect closure under a valid scoped controller
   generation for false. Prove ARCH-04F remediation before production false-policy
   enablement and ARCH-04E3 live composition. True handoff remains independent of
@@ -98,7 +98,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   completed [ARCH-03B8](WS-ARCH-001-03B8.md) hidden task audit evidence and [ARCH-03B7](WS-ARCH-001-03B7.md) requirements projections and [ARCH-03B6](WS-ARCH-001-03B6.md) locked-context projections and [ARCH-03B5](WS-ARCH-001-03B5.md) current contributor/manager work context and ARCH-03B4 hidden contributor/management task detail, ARCH-03B3 hidden management/operational queues and ARCH-03B2 contributor-ready queue facts, ARCH-03B1 detached metadata and CP08 lineage
   and minimal writers and ARCH-03A internal guide context, following delivered CP07 activation and AUTH-12H live manager authority. POL-04B unified setup, POL-05/06
   manager operations and POL-07B internal phase composition are delivered.
-  Exact hidden post-submit execution authority is delivered; automatic dispatch,
+  Exact hidden post-submit execution authority is delivered; automatic request delivery,
   routing and public intake remain subsequent boundaries.
 - Governing sources: `docs/architecture_lockdown.md`, accepted ADRs, code, and
   architecture tests.
@@ -119,7 +119,7 @@ acceptance later uses the same authorized shared acceptance/CON operation.
 ARCH-04E1B-B1 delivers TASK-before-CHECKERS reservation/current-read custody
 and ordered review admission INSERTs, including intermediate admission waits,
 terminal read-only replay and both mechanical race controls. The
-next steps are atomic initial Submission/dispatch, then
+next steps after ARCH-04E1B-B6 atomic Submission/dispatch are
 remaining 04E1B-B handlers and full authorized currentness proof;
 no handler or action is activated by this prerequisite.
 

@@ -11,14 +11,9 @@ from app.modules.artifacts.api import (
     SubmissionAdmissionConsumptionRequest,
 )
 from app.modules.tasks.api import (
-    SubmissionArtifactAdmissionRequest,
-    SubmissionArtifactAdmissionResult,
     SubmissionCreationAuthorizationPort,
-    SubmissionCreationAuthorityFacts,
-    SubmissionCreationPreparationFacts,
     SubmissionCreationRequest,
     SubmissionCreationResult,
-    SubmissionCreationUnavailable,
     TaskSubmissionContextPort,
 )
 from app.modules.tasks.repository import TaskRepository
@@ -27,6 +22,11 @@ from app.modules.projects.api import ProjectLockedPolicyContextFacts
 from app.modules.tasks.service import TaskService
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api import TaskAuthorizationPort, TaskTransitionAuditPort
+from app.modules.tasks.submission_participants import (
+    SubmissionArtifactAdmissionRequest, SubmissionArtifactAdmissionResult,
+    SubmissionArtifactReplayRequest, SubmissionArtifactBindingFacts,
+)
+from app.modules.artifacts.api.submission_admission import ConsumedSubmissionAdmissionRequest
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
 from app.modules.tasks.assignment_invalidation import AssignmentInvalidationOperation
 from app.modules.tasks.api.assignment_invalidation import AssignmentInvalidationUnavailable
@@ -68,7 +68,6 @@ __all__ = (
     "TransactionalAssignmentInvalidationHandler",
     "task_commands",
     "task_service",
-    "DenySubmissionCreationAuthorization",
     "TransactionalSubmissionCreationCommand",
     "task_submission_context_port",
 )
@@ -106,27 +105,6 @@ def task_submission_context_port(session: AsyncSession) -> TaskSubmissionContext
     return TaskRepository(session)
 
 
-class DenySubmissionCreationAuthorization:
-    """Keep the hidden human action unavailable until AUTH activation."""
-
-    async def authorize(self, facts: SubmissionCreationPreparationFacts) -> None:
-        del facts
-        raise SubmissionCreationUnavailable("submission creation is unavailable")
-
-    async def prepare(self, facts: SubmissionCreationAuthorityFacts) -> object:
-        del facts
-        raise SubmissionCreationUnavailable("submission creation is unavailable")
-
-    async def consume(
-        self, prepared_authorization: object, facts: SubmissionCreationAuthorityFacts
-    ) -> None:
-        del prepared_authorization, facts
-        raise SubmissionCreationUnavailable("submission creation is unavailable")
-
-    def close(self, prepared_authorization: object) -> None:
-        del prepared_authorization
-
-
 class _ArtifactAdmissionAdapter:
     def __init__(self, admissions: SubmissionAdmissionConsumptionPort) -> None:
         self._admissions = admissions
@@ -140,13 +118,38 @@ class _ArtifactAdmissionAdapter:
                 submission_id=request.submission_id,
                 submission_version=request.submission_version,
                 task_context=request.task_context,
-                packet_sha256=request.packet_sha256,
+                packet_sha256=request.packet.sha256,
             )
         )
-        if result.binding_id is None or result.status != "consumed":
+        if (result.binding_id is None or result.status != "consumed"
+                or result.material is None or result.binding_decision_id is None):
             raise RuntimeError("admission did not produce a binding")
+        from app.adapters.checkers import submission_evaluation_content
         return SubmissionArtifactAdmissionResult(
-            binding_id=result.binding_id, content_id=result.content_id
+            binding_id=result.binding_id, content_id=result.content_id,
+            binding_decision_id=result.binding_decision_id,
+            archive_sha256=result.material.archive_sha256,
+            byte_count=result.material.archive_byte_count,
+            evaluation_content=submission_evaluation_content(
+                request.task_context, request.project_context, request.packet,
+                result.material.files, result.material.archive_sha256,
+            ),
+        )
+
+    async def read_consumed(self, request: SubmissionArtifactReplayRequest) -> SubmissionArtifactBindingFacts:
+        result = await self._admissions.read_consumed(ConsumedSubmissionAdmissionRequest(
+            admission_id=request.admission_id, project_id=request.project_id,
+            task_id=request.task_id, assignment_id=request.assignment_id,
+            contributor_id=request.contributor_id, submission_id=request.submission_id,
+            submission_version=request.submission_version, packet_sha256=request.packet_sha256,
+        ))
+        if (result.binding_id is None or result.material is None
+                or result.binding_decision_id is None or result.status != "consumed"):
+            raise RuntimeError("retained admission custody unavailable")
+        return SubmissionArtifactBindingFacts(
+            binding_id=result.binding_id, content_id=result.content_id,
+            binding_decision_id=result.binding_decision_id,
+            archive_sha256=result.material.archive_sha256, byte_count=result.material.archive_byte_count,
         )
 
 
@@ -169,12 +172,17 @@ class TransactionalSubmissionCreationCommand:
     async def create(self, request: SubmissionCreationRequest) -> SubmissionCreationResult:
         if self._session.in_transaction():
             raise RuntimeError("submission composition requires a transaction-free session")
+        from app.adapters.checkers import evaluation_coordinator
+        from app.adapters.outbox import outbox_append
+
         async with self._session.begin():
             return await TaskSubmissionCreationService(
                 self._session,
                 contexts=task_service(self._session, settings=self._settings),
                 authorization=self._authorization,
                 admissions=_ArtifactAdmissionAdapter(self._admissions),
+                evaluations=evaluation_coordinator(self._session),
+                events=outbox_append(self._session),
             ).create(request)
 
 

@@ -50,7 +50,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   post-policy derivation, public complete policy read, separate approval and correction;
   ART-owned pre-submit reservation and completed evidence recovery without rerunning checks;
   one internal command per phase and removal of the standalone JSON precheck.
-  Exact hidden post-submit execution authority is delivered; automatic dispatch
+  Exact hidden post-submit execution authority is delivered; automatic request delivery
   and routing remain unavailable.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.
@@ -87,8 +87,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: atomic initial Submission/dispatch,
-  before ARCH-04E1B-B hidden handlers using the delivered
+- Next usable boundary: hidden ARCH-04E1B-B request/completion routing handlers
+  after delivered B6 atomic Submission/reservation/request custody, using the delivered
   REV-04C participant, then mandatory AUTH receipt/database closure and
   activation at 04E2-B before 04E3.
   ARCH-04F remediation still precedes enabling false.

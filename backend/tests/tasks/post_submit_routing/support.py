@@ -1,32 +1,23 @@
 """Real completed checker sources and direct-SQL routing-source helpers."""
 
 from contextlib import asynccontextmanager
-from dataclasses import asdict
 from types import SimpleNamespace
 from uuid import UUID
 
 from sqlalchemy import select, text
 
-from app.adapters.tasks import submitted_bundle_port
+from app.adapters.checkers import evaluation_coordinator
 from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorIdentityLink
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.checkers.api import (
-    ExpectedPostSubmitContext,
-    ObservedPostSubmitContext,
-    PostSubmitEvidenceEntry,
-    PostSubmitPolicyInputs,
-)
 from app.modules.checkers.models import CheckerRun
 from app.modules.projects.models import (
-    EffectiveProjectSubmissionArtifactPolicy,
     ReviewPolicy,
 )
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.api.post_submit_routing import TaskPostSubmitManifestFacts
-from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.models import Submission, TaskAssignment, WorkstreamTask
 from tests.checkers.execution.support import live_executor, reserve
@@ -110,63 +101,6 @@ async def source_rows(session) -> list[dict]:
             )
         ).scalars()
     )
-
-
-async def rebuild_real_request(h) -> None:
-    """Replace permissive helper inputs with archive-backed locked-policy facts."""
-    async with h.factory() as session:
-        submission = await session.get(Submission, str(h.request.submission_id))
-        effective = await session.get(
-            EffectiveProjectSubmissionArtifactPolicy,
-            submission.locked_effective_project_submission_artifact_policy_id,
-        )
-        assert effective is not None
-        assert effective.effective_policy_hash == h.request.expected_context.effective_policy_hash
-        policy = effective.effective_policy
-
-    manifest = {item.artifact: item for item in h.request.structural_input.manifest}
-    evidence = []
-    required_evidence = [
-        str(item["key"])
-        for item in policy.get("required_evidence", ())
-        if item.get("required", True)
-    ]
-    for key in required_evidence:
-        path = "evidence/" + key
-        entry = manifest[path]
-        evidence.append(
-            PostSubmitEvidenceEntry(
-                label=key,
-                type="file",
-                uri=path,
-                hash=entry.hash,
-                key=key,
-                required_evidence_key=key,
-            )
-        )
-    policy_inputs = PostSubmitPolicyInputs(
-        required_evidence_keys=tuple(required_evidence),
-        required_artifact_paths=tuple(
-            str(item["path"])
-            for item in policy.get("required_artifacts", ())
-            if item.get("required", True)
-        ),
-        forbidden_artifact_patterns=tuple(
-            str(item["pattern"])
-            for item in policy.get("forbidden_artifacts", ())
-            if item.get("pattern")
-        ),
-        required_attestation_terms=tuple(
-            str(item) for item in policy.get("attestation_terms", ())
-        ),
-    )
-    h.request = change_request(
-        h.request,
-        structural_input=h.request.structural_input.model_copy(
-            update={"evidence": tuple(evidence), "policy_inputs": policy_inputs}
-        ),
-    )
-    assert h.request.request_sha256 == change_request(h.request).request_sha256
 
 
 async def next_request(h, *, structural_input=None):
@@ -299,16 +233,16 @@ async def completed_source(
     provision_services=True,
     storage_settings=None,
     contribution_awards=(),
+    material_source=material_fixture,
 ):
     """Yield one real authorized allow-review run and its valid source scalars."""
-    async with material_fixture(
+    async with material_source(
         tmp_path,
         database_url,
         provision_services=provision_services,
         storage_settings=storage_settings,
         contribution_awards=contribution_awards,
     ) as h:
-        await rebuild_real_request(h)
         await reserve(h)
         result = await live_executor(h).evaluate_post_submission(h.request)
         async with h.factory() as session:
@@ -397,39 +331,18 @@ async def completed_sibling_source(h):
         )
 
     created = await _create_submission(h, context, task_id, assignment_id)
-    async with h.factory() as session:
-        facts = await submitted_bundle_port(session).read(
-            SubmittedBundleRequest(
-                h.request.project_id,
-                task_id,
-                created.submission_id,
-            )
+    async with h.factory() as session, session.begin():
+        stored = await evaluation_coordinator(session).read_reserved_evaluation(
+            project_id=h.request.project_id, task_id=task_id,
+            submission_id=created.submission_id, request_id=created.evaluation_request_id,
         )
-    expected = ExpectedPostSubmitContext(**asdict(facts.context))
-    structural_input = h.request.structural_input.model_copy(
-        update={"observed_context": ObservedPostSubmitContext(**asdict(facts.context))}
-    )
-    request = change_request(
-        h.request,
-        evaluation_request_id=new_record_id(),
-        evaluation_generation=1,
-        project_id=facts.project_id,
-        task_id=facts.task_id,
-        assignment_id=facts.assignment_id,
-        submission_id=facts.submission_id,
-        submission_version=facts.submission_version,
-        content_id=facts.content_id,
-        binding_id=facts.binding_id,
-        expected_context=expected,
-        structural_input=structural_input,
-    )
+        request = stored.request
     sibling = SimpleNamespace(
         factory=h.factory,
         service=h.service,
         request=request,
         source={},
     )
-    await reserve(sibling)
     result = await live_executor(sibling).evaluate_post_submission(request)
     async with h.factory() as session:
         run = await session.get(CheckerRun, str(result.attempt_id))
@@ -621,33 +534,15 @@ def revision_archive(data):
 
 async def completed_successor_source(h):
     """Evaluate a real successor created through verified ZIP admission."""
-    from app.modules.checkers.api import PostSubmitManifestEntry
-    from tests.post_submit_materialization_helpers import _archive_facts
-
     created = await successor_submission(h)
     data = revision_archive(h.data)
-    _, manifest, _, digest = _archive_facts(data)
-    async with h.factory() as session:
-        facts = await submitted_bundle_port(session).read(SubmittedBundleRequest(
-            h.request.project_id, h.request.task_id, created.submission_id,
-        ))
-    context = asdict(facts.context)
-    request = change_request(
-        h.request, evaluation_request_id=new_record_id(), evaluation_generation=1,
-        submission_id=created.submission_id, submission_version=created.submission_version,
-        content_id=created.artifact_content_id, binding_id=created.artifact_binding_id,
-        content_sha256=digest, byte_count=len(data),
-        expected_context=ExpectedPostSubmitContext(**context),
-        structural_input=h.request.structural_input.model_copy(update={
-            "package_hash": digest,
-            "observed_context": ObservedPostSubmitContext(**context),
-            "manifest": tuple(PostSubmitManifestEntry(
-                artifact=e.normalized_path, hash=e.sha256, size_bytes=e.byte_count,
-            ) for e in manifest.entries if e.sha256 is not None),
-        }),
-    )
+    async with h.factory() as session, session.begin():
+        stored = await evaluation_coordinator(session).read_reserved_evaluation(
+            project_id=h.request.project_id, task_id=h.request.task_id,
+            submission_id=created.submission_id, request_id=created.evaluation_request_id,
+        )
+        request = stored.request
     successor = SimpleNamespace(**(vars(h) | {"data": data, "request": request, "source": {}}))
-    await rebuild_real_request(successor)
     await reserve(successor)
     successor.result = await live_executor(successor).evaluate_post_submission(successor.request)
     async with h.factory() as session:

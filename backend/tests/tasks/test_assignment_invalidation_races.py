@@ -270,7 +270,7 @@ async def test_real_submission_and_invalidation_serialize(
             assert submission.artifact_content_id == str(result.artifact_content_id)
             assert admission.status == "consumed"
             assert admission.consumed_by_submission_id == submission.id
-            assert task["status"] == "in_progress"
+            assert task["status"] == "evaluation_pending"
             assert assignments[0]["status"] == "active" and assignments[0]["released_at"] is None
             assert not releases
         else:

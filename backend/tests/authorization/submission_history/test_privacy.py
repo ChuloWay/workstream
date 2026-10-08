@@ -1,5 +1,6 @@
 """Fixed SQL projections and live grant privacy over retained checker results."""
 
+import json
 from uuid import uuid4
 
 import pytest
@@ -24,6 +25,11 @@ async def test_fixed_projection_and_selected_columns(task_client, monkeypatch, s
     task = await create_started_task(task_client, project["id"], monkeypatch)
     submission = await seed_retained_submission(task["id"], complete_submission_payload())
     run = await seed_retained_checker_run(submission, state=state, failures=failures)
+    from app.modules.checkers.models import CheckerRun
+    async with db_session.get_session_factory()() as session:
+        stored = await session.get(CheckerRun, run)
+        private_attestation = json.loads(stored.request_json)["structural_input"]["worker_attestation"]
+        assert private_attestation
     captured = []
     def capture(conn, cursor, statement, parameters, context, executemany):
         compiled = getattr(context, "compiled", None)
@@ -38,7 +44,7 @@ async def test_fixed_projection_and_selected_columns(task_client, monkeypatch, s
                 captured.clear()
                 response = await task_client.get(path, headers=auth_headers())
                 assert response.status_code == 200, response.text
-                assert "PRIVATE_CHECKER_PACKET_SENTINEL" not in response.text
+                assert private_attestation not in response.text
                 value = response.json()
                 item = value["items"][0] if action.endswith("list") else value
                 checker = "checker" in action

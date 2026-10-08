@@ -264,12 +264,14 @@ async def test_outer_deadline_cancels_backoff_without_second_request(monkeypatch
 
     async def backoff(_):
         sleeping.set()
+        # Expire the outer run only after the retry boundary is reached.
+        deadline.reschedule(asyncio.get_running_loop().time())
         await asyncio.Event().wait()
 
     monkeypatch.setattr(model_retry, "_sleep_for_retry", backoff)
     model = ScriptedModel([status_error(429, "rate_limit_exceeded"), completed()])
     with pytest.raises(TimeoutError):
-        async with asyncio.timeout(0.05):
+        async with asyncio.timeout(10) as deadline:
             await run(model)
     assert sleeping.is_set()
     assert model.calls == 1

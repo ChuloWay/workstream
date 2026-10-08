@@ -1,6 +1,7 @@
 """Human prepared authorization adapter for hidden Submission creation."""
 
 from pydantic import ValidationError
+from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.tasks.api import (
@@ -90,7 +91,7 @@ class PreparedSubmissionCreationAuthorization:
 
     async def consume(
         self, prepared_authorization: object, facts: SubmissionCreationAuthorityFacts
-    ) -> None:
+    ) -> UUID:
         """Consume the exact capability prepared before admission inspection."""
         if not isinstance(prepared_authorization, _PreparedSubmissionCreation):
             raise SubmissionCreationUnavailable("submission creation is unavailable")
@@ -106,12 +107,13 @@ class PreparedSubmissionCreationAuthorization:
                 or resource != prepared_authorization.resource
             ):
                 raise SubmissionCreationUnavailable("submission creation is unavailable")
-            await prepared.consume(
+            decision = await prepared.consume(
                 prepared_authorization.handle,
                 ActionId.SUBMISSION_CREATE,
                 prepared_input,
                 resource,
             )
+            return decision.decision_id
         except (
             AuthorizationDenied,
             PreparedAuthorizationHandleInvalid,
@@ -121,6 +123,27 @@ class PreparedSubmissionCreationAuthorization:
             raise SubmissionCreationUnavailable("submission creation is unavailable") from exc
         finally:
             prepared.close()
+
+    async def validate_replay(
+        self, prepared_authorization: object, facts: SubmissionCreationAuthorityFacts,
+        decision_id: UUID,
+    ) -> None:
+        """Validate the original decision without another audit insertion."""
+        if not isinstance(prepared_authorization, _PreparedSubmissionCreation):
+            raise SubmissionCreationUnavailable("submission creation is unavailable")
+        resource = _creation_resource(self._context, facts)
+        if resource != prepared_authorization.resource:
+            raise SubmissionCreationUnavailable("submission creation is unavailable")
+        try:
+            await prepared_authorization.service.validate_replay(
+                prepared_authorization.handle, ActionId.SUBMISSION_CREATE,
+                prepared_authorization.prepared_input, resource, decision_id,
+            )
+        except (AuthorizationDenied, PreparedAuthorizationHandleInvalid,
+                PreparedAuthorizationUnsupported, ValidationError) as exc:
+            raise SubmissionCreationUnavailable("submission creation is unavailable") from exc
+        finally:
+            prepared_authorization.service.close()
 
     def close(self, prepared_authorization: object) -> None:
         """Discard an AUTH-owned process-local carrier on every exit path."""

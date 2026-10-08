@@ -600,5 +600,11 @@ post-policy body against its locked digest and uses the existing activation-stam
 projection to reconcile every identity/hash/generation with historical PROJECTS
 facts. Missing criteria become empty checker text; no requirement is fabricated.
 The [ART capacity check](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission)
-consumes these facts before durable admission. Initial Submission/dispatch must
-reuse that bounded content with real record identities and fresh authorization.
+consumes these facts before durable admission. ARCH-04E1B-B6 reuses that bounded
+content with real record identities and fresh authorization in the existing hidden
+Submission command. Its caller-owned root transaction commits ART consumption,
+Submission, both exact AUTH decisions, the generation-one evaluation reservation,
+TASK evaluation_pending and one shared request event. Admission-scoped replay
+validates the original immutable owners under live authority without reserve or
+append calls; it cannot reset a later generation. Every new predecessor-linked
+Submission uses the same writer. Public intake and delivery activation remain deferred.

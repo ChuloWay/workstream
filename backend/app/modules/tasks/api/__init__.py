@@ -46,9 +46,6 @@ from app.modules.tasks.api.submission_command import (
     SubmissionCreationRequest,
     SubmissionCreationResult,
     SubmissionCreationUnavailable,
-    SubmissionArtifactAdmissionPort,
-    SubmissionArtifactAdmissionRequest,
-    SubmissionArtifactAdmissionResult,
 )
 
 from app.modules.tasks.api.ready_queue import (
@@ -144,7 +141,4 @@ __all__ = (
     "SubmissionCreationRequest",
     "SubmissionCreationResult",
     "SubmissionCreationUnavailable",
-    "SubmissionArtifactAdmissionPort",
-    "SubmissionArtifactAdmissionRequest",
-    "SubmissionArtifactAdmissionResult",
 )

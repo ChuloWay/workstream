@@ -16,7 +16,7 @@ from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from tests.conftest import _drop_test_database_schema
 from tests.migration_fixtures import _config, current_schema_revision
-from tests.post_submit_materialization_helpers import material_fixture
+from tests.historical_submission_fixtures import historical_material_fixture
 
 pytestmark = pytest.mark.postgres_schema_contract
 TABLES = ("payment_policies", "workstream_tasks", "submissions", "task_command_receipts",
@@ -60,7 +60,7 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
     with migration_lock():
         await _drop_test_database_schema(isolated_database_env)
         await asyncio.to_thread(command.upgrade, _config(), "0022_submission_packet_custody")
-        async with material_fixture(tmp_path, isolated_database_env) as h:
+        async with historical_material_fixture(tmp_path, isolated_database_env) as h:
             async with h.engine.connect() as connection:
                 task = await connection.scalar(text("SELECT to_jsonb(t) FROM public.workstream_tasks t WHERE id=:id"),
                                                {"id": h.request.task_id})

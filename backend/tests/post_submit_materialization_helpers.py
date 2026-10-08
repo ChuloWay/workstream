@@ -1,14 +1,11 @@
 """Real verified admission/Submission fixtures and controlled post-submit authority."""
 
 from contextlib import asynccontextmanager
-from dataclasses import asdict
 from io import BytesIO
 from types import SimpleNamespace
 from uuid import UUID
 import zipfile
-import json
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.artifacts import create_artifact_store_bootstrap, post_submission_materialization
@@ -23,16 +20,9 @@ from app.modules.artifacts.service import artifact_storage_namespace_spec
 from app.modules.artifacts.submission_archive import SubmissionArchiveInspector, SubmissionArchiveLimits
 from app.modules.artifacts.submission_manifest import build_submission_manifest
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.checkers.api import (
-    CompiledPostSubmitPolicy, ExpectedPostSubmitContext, ObservedPostSubmitContext,
-    PostSubmissionStructuralInput, PostSubmitManifestEntry, PostSubmitPolicyInputs,
-)
-from app.modules.checkers.api.post_submit import make_post_submit_request
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
-from app.modules.tasks.models import Submission
 from tests.artifact_store_helpers import artifact_admission_limit_settings
-from tests.checkers.post_submit.support import catalogue
 from tests.pre_submit_test_helpers import approved_pre_submit_fixture
 from tests.submission_preparation_auth_helpers import install_submitter_grant
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
@@ -88,8 +78,34 @@ def _archive_facts(data):
     return inspector, manifest, files, digest
 
 
+async def _write_current_submission(factory, context, request):
+    async with factory() as session:
+        return await compose_hidden_submission_creation_command(
+            session, context, request_id=new_record_id(), correlation_id=new_record_id(),
+        ).create(request)
+
+
+async def _read_current_request(session, facts, created, data):
+    from app.adapters.checkers import evaluation_coordinator
+    stored = await evaluation_coordinator(session).read_reserved_evaluation(
+        project_id=facts.project_id, task_id=facts.task_id, submission_id=created.submission_id,
+        request_id=created.evaluation_request_id,
+    )
+    return stored.request
+
+
 @asynccontextmanager
-async def material_fixture(tmp_path, database_url, *, provider="local", scratch_limits=None,
+async def material_fixture(tmp_path, database_url, **options):
+    """Current canonical creation always commits its own exact initial request."""
+    async with _material_fixture(
+        tmp_path, database_url, write_submission=_write_current_submission,
+        read_request=_read_current_request, **options,
+    ) as material:
+        yield material
+
+
+@asynccontextmanager
+async def _material_fixture(tmp_path, database_url, *, write_submission, read_request, provider="local", scratch_limits=None,
                            storage_settings=None, provision_services=True, provision_checker=True,
                            contribution_awards=()):
     engine = create_async_engine(database_url)
@@ -135,40 +151,21 @@ async def material_fixture(tmp_path, database_url, *, provider="local", scratch_
             media_type="application/zip", byte_source=_bytes(data),
         )
         admission_id = await _verified_admission(factory, store, namespace, settings, context, preparation_request)
-        async with factory() as session:
-            created = await compose_hidden_submission_creation_command(
-                session, context, request_id=new_record_id(), correlation_id=new_record_id(),
-            ).create(SubmissionCreationRequest(
-                task_id=task_id, assignment_id=assignment_id, contributor_id=context.actor_profile_id,
-                predecessor_submission_id=None, admission_id=admission_id,
-                summary=preparation_request.summary,
-                contributor_attestation=preparation_request.contributor_attestation,
-            ))
+        creation_request = SubmissionCreationRequest(
+            task_id=task_id, assignment_id=assignment_id, contributor_id=context.actor_profile_id,
+            predecessor_submission_id=None, admission_id=admission_id,
+            summary=preparation_request.summary,
+            contributor_attestation=preparation_request.contributor_attestation,
+        )
+        created = await write_submission(factory, context, creation_request)
         async with factory() as session:
             facts = await submitted_bundle_port(session).read(SubmittedBundleRequest(
                 plan.lineage.project_id, task_id, created.submission_id,
             ))
-            submission = await session.scalar(select(Submission).where(Submission.id == str(created.submission_id)))
             admission = await session.get(SubmissionBundleAdmission, str(admission_id))
             replica_id = UUID(admission.verified_replica_id)
-            compiled = CompiledPostSubmitPolicy.model_validate_json(json.dumps(submission.locked_post_submit_checker_policy_body))
+            request = await read_request(session, facts, created, data)
         inspector, manifest, files, digest = _archive_facts(data)
-        request = make_post_submit_request(
-            evaluation_request_id=new_record_id(), evaluation_generation=1,
-            project_id=facts.project_id, task_id=task_id, assignment_id=assignment_id,
-            submission_id=created.submission_id, submission_version=created.submission_version,
-            content_id=created.artifact_content_id, binding_id=created.artifact_binding_id,
-            content_sha256=digest, byte_count=len(data), expected_context=ExpectedPostSubmitContext(**asdict(facts.context)),
-            catalogue=catalogue(), policy=compiled,
-            structural_input=PostSubmissionStructuralInput(
-                summary=preparation_request.summary, worker_attestation=preparation_request.contributor_attestation,
-                package_hash=digest, criteria="Deliver the required project work.",
-                manifest=tuple(PostSubmitManifestEntry(artifact=e.normalized_path, hash=e.sha256, size_bytes=e.byte_count)
-                               for e in manifest.entries if e.sha256 is not None),
-                evidence=(), policy_inputs=PostSubmitPolicyInputs(),
-                observed_context=ObservedPostSubmitContext(**asdict(facts.context)),
-            ),
-        )
         counted = CountedStore(store)
         preparation = ArtifactPreparationService(manager)
         service = post_submission_materialization(
@@ -177,6 +174,7 @@ async def material_fixture(tmp_path, database_url, *, provider="local", scratch_
         )
         yield SimpleNamespace(replica_id=replica_id, service=service, factory=factory, engine=engine, request=request,
                               created=created, facts=facts, files=files, data=data, manifest=manifest,
+                              actor_context=context, creation_request=creation_request,
                               settings=settings,
                               store=counted, namespace=namespace, preparation=preparation,
                               manager=manager, inspector=inspector,

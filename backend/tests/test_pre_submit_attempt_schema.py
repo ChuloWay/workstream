@@ -261,7 +261,7 @@ async def test_manifest_upgrade_preserves_old_evidence_without_inventing_metadat
 
 
 async def test_upgraded_consumed_admission_without_metadata_is_unavailable(
-    tmp_path, isolated_database_env, migration_lock, monkeypatch,
+    tmp_path, isolated_database_env, migration_lock,
 ):
     """Real retained admission recovery denies without rewriting its consumed facts."""
     import asyncio
@@ -269,21 +269,15 @@ async def test_upgraded_consumed_admission_without_metadata_is_unavailable(
     from alembic import command
     from app.db import session as db_session
     from app.modules.artifacts.api import SubmissionAdmissionConsumptionError
+    from app.modules.checkers.api import SubmissionPacketView
     from app.modules.artifacts.submission_bindings import SubmissionAdmissionConsumptionService
     from tests.migration_fixtures import (
         _config, add_current_art_seed_column, restore_predecessor_evidence_schema,
     )
-    from tests.post_submit_materialization_helpers import material_fixture
+    from tests.historical_submission_fixtures import historical_material_fixture
+    from app.modules.artifacts.api.submission_admission import ConsumedSubmissionAdmissionRequest
     from tests.test_artifact_bindings import _Allow
 
-    consume = SubmissionAdmissionConsumptionService.consume
-    requests = []
-
-    async def capture(service, request):
-        requests.append(request)
-        return await consume(service, request)
-
-    monkeypatch.setattr(SubmissionAdmissionConsumptionService, "consume", capture)
     with migration_lock():
         await db_session.dispose_engine()
         connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
@@ -293,13 +287,14 @@ async def test_upgraded_consumed_admission_without_metadata_is_unavailable(
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0020_review_admission_lock_order")
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with material_fixture(tmp_path, isolated_database_env) as h:
-            assert len(requests) == 1
-            request = requests[0]
-            # Committed, real metadata reaches the successful replay branch first.
-            async with h.factory() as session, session.begin():
-                result = await consume(SubmissionAdmissionConsumptionService(session, _Allow()), request)
-                assert result.replayed and result.material is not None
+        async with historical_material_fixture(tmp_path, isolated_database_env) as h:
+            request = ConsumedSubmissionAdmissionRequest(
+                admission_id=h.created.admission_id, project_id=h.request.project_id,
+                task_id=h.request.task_id, assignment_id=h.request.assignment_id,
+                contributor_id=h.facts.contributor_id, submission_id=h.created.submission_id,
+                submission_version=h.created.submission_version,
+                packet_sha256=SubmissionPacketView(h.creation_request.summary, h.creation_request.contributor_attestation).sha256,
+            )
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session:
                 before = await session.scalar(text(
@@ -310,7 +305,7 @@ async def test_upgraded_consumed_admission_without_metadata_is_unavailable(
             authority = _Allow()
             async with h.factory() as session, session.begin():
                 with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
-                    await consume(SubmissionAdmissionConsumptionService(session, authority), request)
+                    await SubmissionAdmissionConsumptionService(session, authority).read_consumed(request)
                 assert await session.scalar(text(
                     "select to_jsonb(a) from submission_bundle_admissions a where id=:id"
                 ), {"id": str(request.admission_id)}) == before

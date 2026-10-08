@@ -1347,7 +1347,8 @@ paths and exact-spelling directory ancestors. PostgreSQL 16 uses the frozen
 Unicode 15 mapping that matches the backend, rather than locale-dependent lowercase.
 The admission references its identity and hash. Consumption validates that body and
 returns detached file metadata with archive commitments only for a consumed
-result or exact replay; stale results contain no material. Consumption performs
+result; stale results contain no material. Exact consumed replay uses the scoped
+read_consumed operation and freshly validates the retained binding AUTH receipt. Consumption performs
 no provider read. Consumption also requires the canonical hash of the exact
 Submission summary and contributor attestation to match retained pre-submit
 evidence, before either new binding or consumed replay. A deferred database
@@ -1355,8 +1356,9 @@ guard compares the final bound Submission text with that evidence; the existing
 lineage guard prevents clearing or replacing a bound admission. Older retained evidence without metadata stays unchanged and
 cannot supply current consumption. Existing post-submit material selection keeps
 its exact immutable ART lineage and inspected-byte checks; it does not use this
-new consumption projection. This storage guarantee does not activate
-initial dispatch; its composition must reconcile ART and CHECKERS request limits.
+new consumption projection. B5 reconciles ART and CHECKERS request limits before durable admission; B6 reuses
+that projection when committing the Submission and its initial request. Delivery
+activation remains separate.
 
 It records preparation actor/profile and identity-link provenance, project,
 task, assignment, immediate predecessor, exact locked task/guide/policy context,
@@ -1728,6 +1730,11 @@ paths, the existing field limits and 1 MiB total request. Shared content reserve
 1,024 bytes for the finite record-identity envelope. ART's larger ZIP container
 limits do not imply every inspected archive can be admitted for evaluation.
 Rejection releases scratch and creates no attempt, put intent or ready admission.
-Both review-policy modes use these same content rules. Later initial dispatch
-must reuse this projection with real identities and the full request digest;
-dispatch, routing authority and public intake remain separate pending work.
+Both review-policy modes use these same content rules. ARCH-04E1B-B6 reuses this
+projection with real identities and the full request digest. ART consumption now
+retains an immutable admission/binding/decision receipt, required by a deferred
+database guard on each new consumed admission. Existing retained rows are not
+backfilled or deleted; absent receipt custody cannot use current consumed replay.
+The hidden caller transaction commits this receipt with the Submission and its
+initial evaluation request. Delivery, routing authority and public intake remain
+separate pending work.

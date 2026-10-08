@@ -12,7 +12,7 @@ from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
-from tests.post_submit_materialization_helpers import material_fixture
+from tests.historical_submission_fixtures import historical_material_fixture
 from types import SimpleNamespace
 
 from app.modules.checkers.post_submit_contracts import make_post_submit_result
@@ -55,7 +55,7 @@ async def test_retained_material_upgrade(tmp_path, isolated_database_env, migrat
     with migration_lock():
         await predecessor_database(isolated_database_env)
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
+        async with historical_material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             await reserve(h)
             lease = await predecessor_lease(h)
@@ -107,7 +107,7 @@ async def test_upgrade_excludes_writer_until_guard_is_installed(
     with migration_lock():
         await predecessor_database(isolated_database_env)
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
+        async with historical_material_fixture(tmp_path, isolated_database_env, provision_checker=False) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             await reserve(h)
             lease = await predecessor_lease(h)

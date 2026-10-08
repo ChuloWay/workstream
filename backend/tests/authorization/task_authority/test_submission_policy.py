@@ -98,7 +98,7 @@ async def test_invalid_locked_policy_never_reaches_art_or_submission(
                 await TaskSubmissionCreationService(
                     session,
                     authorization=PreparedSubmissionCreationAuthorization(session, context),
-                    admissions=admissions,
+                    admissions=admissions, evaluations=AsyncMock(), events=AsyncMock(),
                     contexts=task_service(session, settings=get_settings()),
                 ).create(
                     SubmissionCreationRequest(
