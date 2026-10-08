@@ -1,6 +1,7 @@
 """Closed history with canonical stored ART lineage and real fixed-service phase authority."""
 
 import json
+from app.modules.checkers.api.post_submit import make_post_submit_request
 from uuid import UUID
 
 from app.modules.artifacts.models import ArtifactContent, SubmissionBundleAdmission
@@ -9,7 +10,6 @@ from app.modules.checkers.api.post_submit import ExpectedPostSubmitContext, Post
 from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
 from app.adapters.checkers import evaluation_coordinator
 from app.modules.checkers.post_submit_contracts import (
-    make_post_submit_request,
     make_post_submit_result,
 )
 from app.modules.tasks.models import Submission, WorkstreamTask

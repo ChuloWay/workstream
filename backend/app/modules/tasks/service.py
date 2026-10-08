@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from app.modules.checkers.api.pre_submit import (
     EffectivePreSubmissionPlanningPort, EffectivePreSubmissionPlanLineage,
 )
+from app.modules.tasks.api import TaskSubmissionContextFacts
 from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy, PostSubmitCatalogue
 from app.modules.projects.api.locked_policy import (
     ProjectLockedPolicyContextFacts, ProjectLockedPolicyContextPort,
@@ -642,6 +643,21 @@ class TaskService:
             "locked_pre_submit_checker_policy_id": str(facts.pre_submit_policy_id),
             "locked_pre_submit_checker_bundle_hash": facts.pre_submit_policy_bundle_hash,
         }
+
+    @staticmethod
+    def validate_submission_policy_context(task_context: TaskSubmissionContextFacts, project_context: ProjectLockedPolicyContextFacts) -> None:
+        """Reconcile every locked TASK policy stamp with its exact PROJECTS receipt."""
+        from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+
+        if task_context.locked_project_context.project_id != project_context.project_id:
+            raise ValueError("task submission project differs")
+        expected = TaskService._policy_stamps(project_context)
+        for key in TaskPolicyLineage.model_fields:
+            value = expected[key]
+            if key.endswith("_id"):
+                value = UUID(str(value))
+            if getattr(task_context.locked_policy, key) != value:
+                raise ValueError("task submission policy differs")
 
     def _stamp_locked_context(self, task: WorkstreamTask, facts: ProjectLockedPolicyContextFacts) -> None:
         """Copy the exact activated guide and contribution-policy context."""

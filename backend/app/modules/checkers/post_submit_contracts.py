@@ -6,35 +6,14 @@ from pydantic import TypeAdapter
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
     PostSubmissionEvaluationResult,
 )
 
 
-_REQUEST_FIELDS = {
-    name: TypeAdapter(field.rebuild_annotation())
-    for name, field in PostSubmissionEvaluationRequest.model_fields.items()
-}
 _RESULT_FIELDS = {
     name: TypeAdapter(field.rebuild_annotation())
     for name, field in PostSubmissionEvaluationResult.model_fields.items()
 }
-
-
-def make_post_submit_request(**fields: object) -> PostSubmissionEvaluationRequest:
-    """Compute identity and then validate every field; this grants no authority."""
-    if "request_sha256" in fields:
-        raise ValueError("request identity is derived, not caller selected")
-    fields = {
-        name: _REQUEST_FIELDS[name].validate_python(value) if name in _REQUEST_FIELDS else value
-        for name, value in fields.items()
-    }
-    candidate = PostSubmissionEvaluationRequest.model_construct(
-        **fields, request_sha256="sha256:" + "0" * 64
-    )
-    body = candidate.model_dump(mode="json", exclude={"request_sha256"})
-    fields["request_sha256"] = canonical_json_hash(body)
-    return PostSubmissionEvaluationRequest.model_validate(fields)
 
 
 def make_post_submit_result(**fields: object) -> PostSubmissionEvaluationResult:
