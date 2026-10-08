@@ -386,6 +386,11 @@ def technical_worker_match(text: str, match: re.Match[str]) -> bool:
         and re.search(r"(?:^|\n)[^;\n]*\bcelery\s+-A\s+app\.$", prefix)
         and re.match(r"\s+worker\s+--", after_code_reference)
     )
+    exact_celery_app_reference = bool(
+        exact_code_path
+        and re.search(r"(?:^|\n)[^;\n]*\bcelery\s+-A\s+app\.$", prefix)
+        and suffix.startswith(".")
+    )
     code_path_has_prose = bool(
         exact_code_path
         and not exact_coverage_path
@@ -409,11 +414,28 @@ def technical_worker_match(text: str, match: re.Match[str]) -> bool:
         )
         and suffix.startswith(" --")
     )
+    current_line_prefix = prefix.rsplit("\n", 1)[-1]
+    compose_service_prefixes = (
+        r"(?:|[^`\n]*`)docker compose --profile backend exec -T ",
+        r"(?:|[^`\n]*`)docker compose --profile backend logs(?: -f| --since \S+)*(?: backend)? ",
+        r"(?:|[^`\n]*`)docker compose --profile backend run --rm --no-deps -e \S+ ",
+        r"(?:|[^`\n]*`)docker compose --profile backend kill -s KILL ",
+        r"(?:|[^`\n]*`)docker compose --profile backend up -d --wait ",
+    )
+    exact_compose_service = bool(
+        token.group(0).lower() == "worker"
+        and any(
+            re.fullmatch(pattern, current_line_prefix, re.IGNORECASE)
+            for pattern in compose_service_prefixes
+        )
+    )
     return bool(
         TECHNICAL_WORKER_PREFIX.search(prefix)
         or (exact_code_path and not code_path_has_prose)
         or exact_coverage_module
+        or exact_celery_app_reference
         or exact_celery_cli
+        or exact_compose_service
         or exact_technical_cli_flag
     )
 
