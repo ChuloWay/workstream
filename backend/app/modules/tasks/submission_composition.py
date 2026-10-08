@@ -67,7 +67,6 @@ def build_submission(
         locked_revision_policy_id=task.locked_revision_policy_id,
         locked_revision_policy_generation=task.locked_revision_policy_generation,
         locked_revision_policy_hash=task.locked_revision_policy_hash,
-        locked_payment_policy_version=task.locked_payment_policy_version,
         locked_guide_source_snapshot_id=task.locked_guide_source_snapshot_id,
         locked_guide_source_snapshot_hash=task.locked_guide_source_snapshot_hash,
         locked_effective_project_submission_artifact_policy_id=(

@@ -106,7 +106,9 @@ acceptance later uses the same authorized shared acceptance/CON operation.
 ## Remaining v0.1 sequence
 
 Use the [current cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
-for remaining integration and CP09 work; CON does not create a second policy/binding lane.
+for remaining integration; CON does not create a second policy/binding lane.
+The [physical cleanup](../../changes/remove-obsolete-task-payment-policy.md) is
+complete through migration 0023; acceptance and fulfillment activation remain separate.
 
 [CP05](../WS-ARCH-001/WS-ARCH-001-CP05.md) delivered exact authorization for
 the internal policy operations; CP05A exposes their public Finance routes.
@@ -119,9 +121,9 @@ the internal policy operations; CP05A exposes their public Finance routes.
    ARCH-03B8 hidden task audit evidence and ARCH-03B9 hidden assignment
    invalidation are complete; ARCH-03C1 supplies real feature authority and
    exact decision receipts. ARCH-03C2 supplies atomic producer wiring and registration.
-   CP09 removes the replaced legacy
-   economic path only after all consumers are replaced, including CHECKERS and
-   public Submission cutover; it does not block canonical `allow_review`.
+   Migration 0023 removes obsolete economic storage and its remaining consumers,
+   refusing retained data. Historical CP09 does not schedule another removal or
+   make public Submission cutover a prerequisite for the completed cleanup.
 2. [CON-03C](WS-CON-001-03C.md) delivers immutable ContributionRecord/CompensationAward storage after REV-04B. The disabled REV-12A1 fence, hidden AUTH preparation
    and CON-07 flush-only submitter participant are delivered. CON-07 creates or
    exactly replays a source-bound contribution and its complete frozen set of

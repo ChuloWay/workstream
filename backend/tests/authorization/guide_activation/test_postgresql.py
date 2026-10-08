@@ -35,7 +35,7 @@ async def test_complete_activation_and_live_replay(clean_postgres_database):
             assert guide.status == "active"
             assert guide.contribution_policy_version_id == command.contribution_policy_version_id
             assert await load_guide_activation(session, guide) == receipt
-            for table in ("payment_policies", "workstream_tasks", "submissions", "checker_runs"):
+            for table in ("workstream_tasks", "submissions", "checker_runs"):
                 assert await session.scalar(text(f"SELECT count(*) FROM {table}")) == 0
         assert await activate(factory, actor, command) == receipt
         assert await activation_state(factory) == before

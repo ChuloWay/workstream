@@ -2722,7 +2722,6 @@ async def _unrelated_checker_task(session, canonical_task):
                 canonical_task.locked_revision_policy_generation
             ),
             locked_revision_policy_hash=(canonical_task.locked_revision_policy_hash),
-            locked_payment_policy_version=(canonical_task.locked_payment_policy_version),
             locked_guide_source_snapshot_id=(
                 canonical_task.locked_guide_source_snapshot_id
             ),

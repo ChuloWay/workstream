@@ -218,7 +218,7 @@ async def task_side_effect_snapshot(task_id: str) -> dict:
 
 
 def _current_locked_test_facts() -> dict:
-    """Supply real current lock types to orchestration tests, without PaymentPolicy."""
+    """Supply real current lock types to orchestration tests."""
     from tests.checkers.post_submit.support import request
 
     facts = request().expected_context.model_dump(mode="json")
