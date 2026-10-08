@@ -23,7 +23,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
 - Next usable boundary: follow the [first contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone):
-  delivered capacity alignment and atomic Submission/dispatch; hidden handlers remain next
+  delivered capacity alignment, atomic Submission/dispatch and hidden B7 request delivery; completion routing remains next
   and exact authority/effect closure. CON-07/shared acceptance foundations are
   delivered; production consumption and scoped lifecycle activation remain gated.
   Submission/checker history uses canonical authority; the alternate gate lifecycle

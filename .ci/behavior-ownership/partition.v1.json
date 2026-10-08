@@ -834,6 +834,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/delivery_authority.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/effective_plan.py"
     },
     {
@@ -1490,6 +1494,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/evaluation_delivery.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/lifecycle.py"
     },
     {
@@ -1705,7 +1713,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "abbc45f6152f8d788445f4c94812f340e18169154720c2c4f1b6659c2d38ca67",
+  "authority_digest": "ef9821de8c9f801b8883d9d485e320cae5283e7ae5abd9bac3ad2ab31042731a",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
