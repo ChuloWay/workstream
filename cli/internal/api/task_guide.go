@@ -100,9 +100,6 @@ func (c *Client) DownloadGuideDocument(ctx context.Context, taskID string, docum
 	digest := sha256.New()
 	count, err := io.Copy(io.MultiWriter(target, digest), io.LimitReader(response.Body, document.ByteCount+1))
 	if err != nil {
-		if errors.Is(err, io.ErrUnexpectedEOF) {
-			return &Failure{Code: "guide_document_integrity_mismatch"}
-		}
 		return &Failure{Code: "guide_document_download_failed"}
 	}
 	if count != document.ByteCount || "sha256:"+hex.EncodeToString(digest.Sum(nil)) != document.SHA256 {

@@ -40,6 +40,7 @@ def guide_http():
         "delay_context": 0,
         "delay_headers": 0,
         "delay_body": 0,
+        "interrupt_body": False,
     }
     requests = []
 
@@ -65,6 +66,11 @@ def guide_http():
                 self.send_header(name, value)
             self.end_headers()
             try:
+                if not self.path.endswith("/work-context") and state["interrupt_body"]:
+                    self.wfile.write(body[: len(body) // 2])
+                    self.wfile.flush()
+                    self.close_connection = True
+                    return
                 if not self.path.endswith("/work-context") and state["delay_body"]:
                     midpoint = len(body) // 2
                     self.wfile.write(body[:midpoint])
@@ -131,13 +137,22 @@ def test_assigned_guide_list_and_verified_private_download(cli, tmp_path):
 
 @pytest.mark.parametrize("phase", ("headers", "body", "context"))
 def test_guide_download_has_its_own_deadline_but_json_keeps_twelve_seconds(
-    cli, tmp_path, phase,
+    cli,
+    tmp_path,
+    phase,
 ):
     with guide_http() as (origin, state, requests):
         state["delay_" + phase] = 13
         result = cli(
-            origin, TOKEN, "task", "guide", TASK, "--download", str(tmp_path),
-            "-o", "json",
+            origin,
+            TOKEN,
+            "task",
+            "guide",
+            TASK,
+            "--download",
+            str(tmp_path),
+            "-o",
+            "json",
         )
         if phase == "context":
             assert result.returncode == 1 and result.stdout == ""
@@ -147,6 +162,31 @@ def test_guide_download_has_its_own_deadline_but_json_keeps_twelve_seconds(
             assert result.returncode == 0, result.stderr
             assert (tmp_path / f"{ACTOR}.pdf").read_bytes() == ORIGINAL
             assert len(requests) == 2
+
+
+def test_interrupted_document_transfer_is_not_reported_as_digest_mismatch(
+    cli, tmp_path
+):
+    with guide_http() as (origin, state, requests):
+        state["headers"]["Content-Length"] = str(len(ORIGINAL))
+        state["interrupt_body"] = True
+        result = cli(
+            origin,
+            TOKEN,
+            "task",
+            "guide",
+            TASK,
+            "--download",
+            str(tmp_path),
+            "-o",
+            "json",
+        )
+        assert result.returncode == 1 and result.stdout == ""
+        assert (
+            json.loads(result.stderr)["error"]["code"]
+            == "guide_document_download_failed"
+        )
+        assert len(requests) == 2 and list(tmp_path.iterdir()) == []
 
 
 def test_full_document_list_uses_bounded_context_not_small_page_limit(cli):
