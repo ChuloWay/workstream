@@ -77,6 +77,7 @@ def http_fixture():
 
         def do_POST(self):  # noqa: N802 - standard HTTP handler interface
             body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            response.setdefault("raw_commands", []).append(body)
             response["commands"].append(
                 (
                     self.headers.get("Content-Type"),
