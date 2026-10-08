@@ -179,6 +179,10 @@ second-review guard and initial submission dispatcher remain independently owned
 Append guide-read migration `0026_task_guide_read` after main's
 `0025_submission_dispatch`; retain all invariants, one migration head,
 repeated-upgrade safety and exact schema proof.
+The guide-read migration sets a transaction-local trusted search path and
+qualifies every audit-table lookup, lock and DDL target as `public.audit_events`.
+A PostgreSQL shadow-table regression checks the public constraint and actual
+Alembic stamp while leaving the non-public namesake unchanged.
 Keep PILOT-12 upload transport separate; this read uses authenticated verified
 streaming without choosing its upload-intent implementation. Remaining review,
 rebase and upload work stays under its existing issues.
