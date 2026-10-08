@@ -418,7 +418,10 @@ def get_submission_bundle_preparation_command(
                 task_contexts=task_contexts,
                 project_contexts=project_contexts,
             )
+            from app.adapters.checkers import submission_evaluation_content
+
             yield SubmissionBundlePreparationRuntime(
+                evaluation_content=submission_evaluation_content,
                 preparation=preparation,
                 inspector=inspector,
                 catalogue=catalogue,

@@ -15,6 +15,7 @@ import pytest
 
 from task_journey import exercise_manager_task_reads
 from project_create_journey import exercise_project_creation
+from guide_create_journey import exercise_guide_creation
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / "backend"
@@ -264,6 +265,9 @@ async def test_installed_cli_uses_only_public_profile_and_project_context(
 
             await exercise_project_creation(
                 direct, cli, origin, tokens, profiles, project_id
+            )
+            await exercise_guide_creation(
+                direct, cli, origin, tokens, profiles, project_id, tmp_path
             )
 
             for selector in (project_id, project_id.replace("-", "")):

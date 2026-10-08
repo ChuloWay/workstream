@@ -79,7 +79,7 @@
     "scripts/admin_api_drill.py|AuthorityDrill.last_admin.revoke|Assign:5eb0e430a7bfa378|0": "uuid4:call:transport_token",
     "scripts/admin_api_drill.py|AuthorityDrill.last_admin.revoke|Assign:50c09de1b190b007|0": "uuid4:call:transport_token",
     "scripts/api_contract_e2e.py|flow_settings|Return:dc575af68f5f5f0c|0": "uuid4:call:ephemeral_secret",
-    "scripts/api_contract_e2e.py|issue_flow_token|Assign:dd98645354be1f57|0": "uuid4:call:external_identity_fixture",
+    "scripts/local_flow_tokens.py|issue_flow_token|Assign:dd98645354be1f57|0": "uuid4:call:external_identity_fixture",
     "scripts/api_contract_e2e.py|exercise_rate_control_contract|Assign:fed221fef92f603b|0": "uuid4:call:external_identity_fixture",
     "scripts/api_contract_e2e.py|request_json|Assign:9a076497f47031d6|0": "uuid4:call:transport_token",
     "scripts/api_contract_e2e.py|request_json|Assign:4250dc6f3375447a|0": "uuid4:call:transport_token",

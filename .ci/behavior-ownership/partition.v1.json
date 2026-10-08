@@ -1606,6 +1606,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/ensure_local_minio_bucket.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/external_api_drill.py"
     },
     {
@@ -1622,7 +1626,15 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/issue_local_flow_token.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/legacy_actor_classification.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/local_flow_tokens.py"
     },
     {
       "group": "shared",
@@ -1669,7 +1681,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "95fa9e2fa5e30557c54a51940b41141a4ebc67f083345ff66fc359d854525070",
+  "authority_digest": "b6f91808500d5b24ccc163305e2acd637289695ac47b45ff3a838af34b4a69ba",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

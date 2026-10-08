@@ -111,7 +111,7 @@ creating human admission, acceptance or contribution effects.
    custody, without source publication or authority.
    [04E1B-B3](../../WS-ARCH-001-04E1BB3.md) retains inspected ZIP metadata
    for admission consumption. Initial Submission/dispatch composition must
-   reconcile ART/CHECKERS input limits and retain exact creation/binding receipts.
+   reuse the B5 bounded content projection and retain exact creation/binding receipts.
    The full authorized
    handler races remain required. False composition must take the REV lifecycle
    fence before TASK and revalidate the policy after locking; source preparation
@@ -319,8 +319,8 @@ composition phases above; only false handlers add shared acceptance.
 
 [ARCH-04E1B-B4](../../WS-ARCH-001-04E1BB4.md) binds Submission text to the
 canonical packet retained by preparation, through ART consumption and a deferred
-storage guard. Initial dispatch must next reconcile capacity before ready
-admission, retain exact creation/binding receipts and define fresh-authorized
+storage guard. ARCH-04E1B-B5 supplies bounded evaluation content before ready
+admission; initial dispatch must reuse it, retain exact creation/binding receipts and define fresh-authorized
 same-admission replay after creation. Do not broaden the initial/revision context
 validator to treat evaluation_pending as a new submission window. No dispatch
 handler, routing authority or public intake is delivered by this correction.

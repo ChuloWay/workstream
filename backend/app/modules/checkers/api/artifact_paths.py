@@ -32,3 +32,24 @@ def is_canonical_relative_path(value: str) -> bool:
 def is_canonical_relative_pattern(value: str) -> bool:
     """Accept one relative fnmatch pattern; prohibited secret names remain expressible."""
     return _canonical_relative(value, pattern=True)
+
+
+def required_evidence_path(key: object) -> str:
+    """Project an evidence identity into Workstream's closed evidence namespace."""
+    if (
+        not isinstance(key, str)
+        or not key
+        or any(
+            not (character.isascii() and (character.isalnum() or character in "._-"))
+            for character in key
+        )
+    ):
+        raise ValueError(
+            "effective project submission evidence key is unmappable"
+        )
+    path = f"evidence/{key}"
+    if not is_canonical_relative_path(path):
+        raise ValueError(
+            "effective project submission evidence key is unmappable"
+        )
+    return path

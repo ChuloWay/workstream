@@ -286,11 +286,11 @@ class CompiledPostSubmitPolicy(PostSubmitValue):
 
 
 def canonical_post_submit_bytes(
-    value: PostSubmitValue, *, exclude: set[str] | None = None
+    value: PostSubmitValue, *, exclude: set[str] | None = None, include: set[str] | None = None
 ) -> bytes:
     """Use the canonical hash encoding for finite serialized-size checks."""
     return json.dumps(
-        value.model_dump(mode="json", exclude=exclude),
+        value.model_dump(mode="json", exclude=exclude, include=include),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
