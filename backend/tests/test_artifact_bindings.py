@@ -220,9 +220,10 @@ async def test_ready_admission_creates_exact_binding_and_consumes_once() -> None
     assert facts.logical_role == "submission_bundle_original"
     assert session.flush.await_count == 2
     receipt = session.add.call_args_list[1].args[0]
-    assert receipt.admission_id == request.admission_id
-    assert receipt.binding_id == result.binding_id
-    assert receipt.decision_id == result.binding_decision_id == authority.consume.return_value
+    assert receipt.admission_id == str(request.admission_id)
+    assert receipt.binding_id == str(result.binding_id)
+    assert receipt.decision_id == str(result.binding_decision_id)
+    assert result.binding_decision_id == authority.consume.return_value
 
 
 @pytest.mark.asyncio
@@ -296,7 +297,7 @@ async def test_matching_consumed_admission_replays_exact_binding() -> None:
     admission.consumed_by_submission_version = request.submission_version
     binding = SimpleNamespace(id=str(new_record_id()), content_id=admission.artifact_content_id)
     session = _session(admission, evidence, content, binding)
-    session.get.return_value = SimpleNamespace(binding_id=UUID(binding.id), decision_id=decision_id)
+    session.get.return_value = SimpleNamespace(binding_id=binding.id, decision_id=str(decision_id))
 
     authority = _Allow()
     result = await SubmissionAdmissionConsumptionService(session, authority).read_consumed(_replay_request(request))

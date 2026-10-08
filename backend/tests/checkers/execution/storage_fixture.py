@@ -19,11 +19,11 @@ from types import SimpleNamespace
 async def storage_request(session, submission_id, *, generation=1):
     from app.modules.tasks.models import SubmissionDispatch
     from app.core.identifiers import new_record_id
-    receipt = await session.get(SubmissionDispatch, UUID(str(submission_id)))
+    receipt = await session.get(SubmissionDispatch, str(submission_id))
     assert receipt is not None
     stored = await evaluation_coordinator(session).read_reserved_evaluation(
-        project_id=receipt.project_id, task_id=receipt.task_id,
-        submission_id=receipt.submission_id, request_id=receipt.evaluation_request_id,
+        project_id=UUID(receipt.project_id), task_id=UUID(receipt.task_id),
+        submission_id=UUID(receipt.submission_id), request_id=UUID(receipt.evaluation_request_id),
     )
     if generation == 1:
         return stored.request
