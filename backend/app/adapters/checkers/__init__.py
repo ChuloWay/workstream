@@ -224,3 +224,24 @@ def submission_evaluation_content(
             observed_context=ObservedPostSubmitContext(**expected.model_dump()),
         ),
     )
+
+
+def delivery_bound_post_submission_executor(*, sessions, materialization, envelope, request):
+    """Add invocation custody to the existing executor without registering delivery."""
+    from app.adapters.auth import post_submit_execution_authority
+    from app.adapters.outbox import outbox_append, outbox_invocation_fence
+    from app.adapters.tasks import evaluation_task_guard
+    from app.modules.checkers.delivery_authority import DeliveryExecutionAuthority
+    from app.modules.checkers.execution import PostSubmissionExecutor
+    from app.modules.checkers.runner import default_checker_registry
+
+    def authority(session):
+        return DeliveryExecutionAuthority(
+            authority=post_submit_execution_authority(session), tasks=evaluation_task_guard(session),
+            fence=outbox_invocation_fence(session), envelope=envelope, request=request,
+        )
+
+    return PostSubmissionExecutor(
+        sessions=sessions, execute_authority=authority, finalize_authority=authority,
+        materialization=materialization, registry=default_checker_registry(), outbox=outbox_append,
+    )

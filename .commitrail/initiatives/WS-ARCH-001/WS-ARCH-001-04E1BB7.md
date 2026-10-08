@@ -1,0 +1,140 @@
+# ARCH-04E1B-B7 — Hidden initial evaluation request delivery
+
+- Initiative: `WS-ARCH-001`
+- Durable disposition: `Complete`
+- Risk: L1 — untrusted delivery selectors, live feature authority and transactions.
+- Intended merge outcome: one unregistered typed handler recovers B6's exact
+  committed request and runs the existing CHECKERS executor under independently
+  verified outbox invocation custody. Completion routing remains the next boundary.
+
+## Intent
+
+Advance step 4 of the [first-layer sequence](planning/PLAN.md#first-complete-contributor-milestone).
+B6 already atomically stores Submission, exact receipts, generation-one reservation
+and request event. `EvaluationCoordinator.read_reserved_evaluation` returns that
+request without creating or repairing it. `PostSubmissionExecutor` owns execution,
+materialization and terminal publication; the shared outbox owns delivery.
+The missing link is a handler that binds these owners to the same committed event.
+No additional job, request store, executor or retry engine is needed.
+
+## Bounded change
+
+1. TASK recovers its immutable dispatch using event/project/submission identifiers
+   together. Compare the complete canonical event with the stored dispatch and
+   CHECKERS reservation, including request digest, generation, attempt/result,
+   creation/binding receipts and exact content/assignment identity. Payload values
+   are selectors, never authority. Use the existing event builder and select-only
+   owner read; no cross-owner private imports or SQL.
+2. An independently committed invocation observation precedes recovery/execution.
+   CHECKERS still performs fresh fixed-service AUTH for execute and finalize,
+   currentness checks, exact ART materialization and terminal receipt validation.
+   A delivery-specific composition participant binds that exact request and fences
+   the invocation in each execute/finalize transaction, including terminal replay.
+   Use the existing TASK evaluation guard before entering canonical AUTH PREP,
+   then acquire CHECKERS custody and finally the outbox fence in the prepared
+   consume/replay participant. A false new-generation eligibility value forbids
+   new execution but does not forbid exact terminal replay. Release
+   each transaction before provider/scratch work; never hold a delivery SQL lock
+   across materialization. The two existing prepared authority interfaces remain
+   distinct, and delivery custody never substitutes for AUTH.
+3. Acknowledge only a returned, committed terminal executor result. Duplicate
+   successful delivery reuses retained execution/finalization evidence and does
+   not reopen material, create a generation or append a second completion event.
+   Map only observer/resolver pre-effect rejection to REJECT. Exceptions from
+   the executor propagate to shared UNKNOWN. Unexpected exceptions,
+   cancellation and uncertain effects propagate to shared UNKNOWN handling;
+   never return RETRY merely because an invocation failed. An expired running
+   attempt is not automatically retried by this handler: prepared execute consume
+   rejects lease generation greater than one, while exact terminal replay uses
+   the retained receipt. Authorized infrastructure
+   recovery remains ARCH-04F; live registration remains ARCH-04E3.
+4. Keep the handler absent from the production registry. No completion routing,
+   source publication, acceptance, human review, remediation, public intake or
+   authority activation is added. This closes only the request half of step 4.
+
+## Allowed files
+
+- TASK `submission_dispatch.py` and one focused `evaluation_delivery.py` owner
+  module; existing TASK composition adapters or a focused adapter file.
+- CHECKERS composition root and a focused owner-local delivery-custody
+  participant using existing prepared execute/finalize, observer and fence ports.
+  The outbox composition root exposes its existing committed observer through
+  its public port. Existing public execution-port annotations may be tightened without changing
+  direct executor behavior or introducing an optional custody bypass.
+- Focused `backend/tests/tasks/evaluation_delivery/` tests and support; existing
+  real admission/execution/outbox helpers only for concrete fixture reuse.
+- Exact new-file ownership and test-lane inventories, their tests, and dependency
+  metadata if required. No relaxed boundary, timeout, test-completeness or CI gate.
+- This record, affected ARCH/POL/AUTH/CON/REV current navigation, README, checker/
+  artifact/TASK specifications and operating documentation and `docs/roadmap_status.md`; local roadmap
+  exports only if present. Preserve unrelated main changes.
+
+## Acceptance criteria
+
+- Real PostgreSQL delivery of B6's committed event reaches the existing executor
+  with actual fixed-service authority and Local/MinIO material. Verify exact run,
+  material custody, immutable AUTH receipt identities, completion event and no
+  routing/acceptance effects. Existing execution tests retain byte/hash proof.
+- Real shared outbox delivery acknowledges once; duplicates do not access the
+  provider or create additional checker/completion facts. Terminal handler replay
+  requires current invocation and fresh feature authority.
+- A second valid stored lineage supplies foreign substitutions. Event/header,
+  request, digest, receipt and attempt/result substitutions reject before provider
+  or scratch access. Use recomputed valid digests where necessary so an earlier
+  malformed-input guard cannot mask the ownership assertion.
+  Exercise the resolver directly as well: full-envelope observation would mask
+  its own missing comparison. Use two real B6 lineages, recompute canonical event
+  digests and retain a valid control that reaches the resolver. Remove one exact
+  comparison and require failure at the intended rejection assertion.
+- A claimed-but-not-invoked event cannot execute. Pre-start expiry or completed
+  delivery cannot start effects. An expired running generation-one attempt under
+  a live invoked claim cannot acquire a second lease or reopen the provider;
+  removing that generation guard must fail the exact regression. A read already
+  authorized may finish after expiry, but cannot publish its terminal result.
+  Independent-session invalidation while provider I/O is
+  paused prevents finalization and releases scratch; committed execute custody
+  remains intact. Cancellation/unknown preserves the shared no-repeat behavior.
+  For the late-fence race, execute fencing must succeed first; pause provider I/O,
+  finalize the invocation UNKNOWN through the real shared outbox in another
+  session, then release I/O. Assert no terminal run/member/completion-event commit,
+  no provider reopen/second lease, and released scratch.
+- Lost terminal acknowledgement does not require another evaluation. Distinguish
+  direct exact terminal replay proof from automatic recovery, which is deferred.
+- Guard-removal probes discriminate request matching and final transaction
+  invocation fencing. Reuse real AUTH and database constraints in race proofs;
+  coordinate barriers rather than relying on short sleeps.
+- Run focused new and affected execution/outbox tests, module boundaries, lint,
+  committed Commitrail validation, markdown links, stale-wording/diff checks and
+  exact-head hosted suite. Report actual infrastructure and uncertainty honestly.
+
+## Risk and review routing
+
+Plan review precedes implementation. Required implementation tracks: architecture/
+reuse, security, QA/test delta, CI integrity and documentation/product operations.
+Reviewers inspect a clean exact target and relevant unchanged owner paths; the
+lead supplies shared deterministic evidence and batches repairs.
+
+Human focus: invocation custody is additional to feature AUTH; it cannot become
+an event-based authority shortcut. UNKNOWN must not silently become retry. The
+production handler registry and both true/false governed-outcome gates remain
+unchanged. Approval of this chunk does not authorize merge or live activation.
+
+## Evidence
+
+- `tests/tasks/evaluation_delivery/test_delivery.py`: real PostgreSQL/Local/MinIO
+  request delivery, one retained execution/result/completion event, no production
+  registration, lost-acknowledgement replay, fresh authority and separate new-effect
+  eligibility. The eligibility branch test varies the returned boolean after
+  actual TASK locking; it does not claim live final-acceptance activation.
+- `test_isolation.py`: claimed-but-uninvoked rejection; two valid persisted
+  lineages for direct resolver and independent observer substitution; crossed
+  CHECKERS request/reservation rejection without provider or scratch access.
+- `test_custody.py`: database-clock expiry, no expired-running renewal,
+  cancellation cleanup, and a real independent UNKNOWN finalization during
+  paused provider I/O that prevents checker terminal publication.
+- Existing canonical executor, materializer, AUTH, outbox and registry tests are
+  retained. No test is deleted or skipped; no production deadline is changed.
+- Exact candidate commands, guard-removal results, hosted completeness and
+  internal reviewer findings belong in the PR evidence bundle. These tests do
+  not prove broker transport, live registration, completion routing or automatic
+  UNKNOWN recovery; those remain the named later boundaries.

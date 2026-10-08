@@ -218,3 +218,20 @@ def routing_source_preparer(session):
 def validate_submission_policy_context(task_context: TaskSubmissionContextFacts, project_context: ProjectLockedPolicyContextFacts) -> None:
     """Use TASK's canonical stamp projection without exposing its implementation."""
     TaskService.validate_submission_policy_context(task_context, project_context)
+
+
+def evaluation_request_handler(*, sessions, materialization):
+    """Compose one hidden TASK request handler; production registration is separate."""
+    from app.adapters.checkers import evaluation_coordinator, delivery_bound_post_submission_executor
+    from app.adapters.outbox import committed_invocation_reader
+    from app.modules.tasks.evaluation_delivery import EvaluationRequestHandler
+
+    def executor(envelope, request):
+        return delivery_bound_post_submission_executor(
+            sessions=sessions, materialization=materialization, envelope=envelope, request=request,
+        )
+
+    return EvaluationRequestHandler(
+        sessions, observer=committed_invocation_reader(sessions),
+        evaluations=evaluation_coordinator, executor=executor,
+    )
