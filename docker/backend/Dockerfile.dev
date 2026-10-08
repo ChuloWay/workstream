@@ -15,22 +15,34 @@ ENV PATH="/opt/venv/bin:$PATH" \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_PYTHON_DOWNLOADS=never
 
+ARG LOCAL_UID=1000
+ARG LOCAL_GID=1000
+
 # Docker Desktop ARM VMs can advertise OpenSSL acceleration capabilities that
 # still SIGILL when PyCA's bundled OpenSSL dispatches to them. The generic
 # implementation is slower but deterministic and sufficient for local dev.
 
-RUN groupadd --gid 1000 workstream \
-    && useradd --uid 1000 --gid workstream --create-home --shell /bin/bash workstream
+RUN if ! getent group "${LOCAL_GID}" >/dev/null; then \
+        groupadd --gid "${LOCAL_GID}" workstream; \
+    fi \
+    && if [ "${LOCAL_UID}" -eq 0 ]; then \
+        echo "LOCAL_UID=0 would run workstream as root" >&2; \
+        exit 1; \
+    fi \
+    && useradd --non-unique --uid "${LOCAL_UID}" --gid "${LOCAL_GID}" --create-home --shell /bin/bash workstream
 
 WORKDIR /workspace/backend
+
+RUN mkdir --parents /workspace/scratch \
+    && chown --recursive "${LOCAL_UID}:${LOCAL_GID}" /workspace/scratch
 
 COPY backend/ ./
 
 # Install the committed resolution into a virtual environment outside the
 # bind-mounted source tree using the committed dependency resolution.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --extra dev \
-    && chown -R workstream:workstream /workspace /opt/venv
+    uv sync --locked --extra agents --extra dev \
+    && chown -R "${LOCAL_UID}:${LOCAL_GID}" /workspace /opt/venv
 
 USER workstream
 

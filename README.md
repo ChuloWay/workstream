@@ -385,30 +385,45 @@ the backend does not run a separate guide extractor.
 ### Docker Workflow (Recommended)
 
 Prerequisites are Git, Docker Engine, and Docker Compose v2. From the repository
-root, build the native-architecture Linux image and start the API with healthy
-Postgres and Redis dependencies:
+root, create the ignored checkout-local configuration, give it a unique
+`COMPOSE_PROJECT_NAME`, replace every `change-me` value and select unused host
+ports. The [local pilot runbook](docs/engineering/local-pilot.md) documents
+secret generation, identities, grants, isolation and teardown.
 
 ```bash
-docker compose up --build --wait backend
+cp .env.example .env
+chmod 600 .env
+```
+
+The `chmod` command applies to Linux, macOS and Git Bash. PowerShell users must
+restrict the copied file to their Windows user with an equivalent private NTFS
+ACL before adding secrets.
+
+Then build the native-architecture Linux images and start the API, prefork
+Celery process, scheduler, PostgreSQL, Redis and MinIO:
+
+```bash
+docker compose --profile backend up --build --wait
 ```
 
 Then verify the API with the command for your shell:
 
 ```bash
 # macOS, Linux, or Git Bash
-curl --fail http://127.0.0.1:8000/api/v1/health
+curl --fail http://127.0.0.1:<WORKSTREAM_API_HOST_PORT>/api/v1/health
 ```
 
 ```powershell
 # PowerShell
-Invoke-RestMethod http://127.0.0.1:8000/api/v1/health
+Invoke-RestMethod http://127.0.0.1:<WORKSTREAM_API_HOST_PORT>/api/v1/health
 ```
 
-The expected response is `{"status":"ok"}`. The backend service applies
-Alembic migrations before serving, binds the API only to host loopback, and
-uses explicit local-only development auth and key material. Artifact storage is
-disabled in this first-run profile; integration tests configure MinIO when they
-exercise the S3-compatible path.
+Replace the placeholder with the port selected in root `.env`. The expected
+response is `{"status":"ok"}`. The backend applies Alembic migrations before
+serving and all published services bind only to host loopback. API, Celery process and
+beat use the same S3-compatible MinIO and local Flow-HMAC settings. Startup
+creates and verifies the checkout-local bucket; authority still comes only from
+the existing trust-root and grant operations.
 
 The pinned image supports Linux x86_64 and aarch64. On Docker Desktop, it runs
 inside the Docker VM.
@@ -433,11 +448,20 @@ an x86_64 or aarch64 machine. Docker is still used for backing services.
 Confirm that `python3 --version` reports Python 3.11 or 3.12 before creating
 the environment. Install uv 0.12.3 and use the
 committed lockfile; an unconstrained pip install is not a supported setup path.
+Create and secure the root Compose configuration before its first command, as
+described in the [local pilot runbook](docs/engineering/local-pilot.md). Give it
+a unique project name, replace every required secret and choose unused backing
+service host ports. The separate `backend/.env` configures the native process.
 
 ```bash
+cp .env.example .env
+chmod 600 .env
+# Edit root .env before continuing.
 docker compose up -d --wait postgres redis
 cd backend
 cp .env.example .env
+chmod 600 .env
+# Edit backend/.env before continuing.
 python3 --version
 uv --version
 uv sync --locked --extra dev --python python3
@@ -456,20 +480,28 @@ Verify the API from another terminal with:
 curl --fail http://127.0.0.1:8000/api/v1/health
 ```
 
-`backend/.env` is ignored. Its checked-in example contains only public,
-local-development values; replace those values when specifically testing key
-rotation, and never reuse them in a shared or hosted environment.
+Both files are ignored. In `backend/.env`, set `WORKSTREAM_DATABASE_URL` to the
+root file's PostgreSQL password and selected loopback host port, and set
+`WORKSTREAM_CELERY_BROKER_URL` to its Redis loopback host port. When native
+artifact storage is enabled, also select the MinIO profile and copy the root
+file's bucket and credentials while using the selected MinIO API host port in
+the loopback endpoint. These native process URLs use `localhost`; Compose
+containers continue to use internal service names and ports. The `chmod`
+commands are for POSIX shells; PowerShell users need equivalent private NTFS
+ACLs.
 
 ### Native Unified Guide Inference
 
 Set `WORKSTREAM_PROJECT_AGENT_MODEL=gpt-5.6-terra` (or your chosen supported model)
 and `OPENAI_API_KEY` in ignored `backend/.env`. Runtime, provider/API protocol,
 model and instructions are separate settings in `backend/.env.example`.
-Start backing services using the port settings in that same file, then install
-the agent runtime and load the environment into API and Celery worker:
+Prepare the ignored root `.env` as described in the Docker workflow and start
+backing services using its port and credential settings. Put native backend and
+provider settings in ignored `backend/.env`, then install the agent runtime and
+load that file into API and Celery worker:
 
 ```bash
-docker compose --env-file backend/.env up -d --wait postgres redis minio
+docker compose up -d --wait postgres redis minio
 cd backend
 uv sync --locked --extra dev --extra agents
 uv run --env-file .env uvicorn app.main:app --reload
@@ -494,8 +526,8 @@ and on-demand profiling procedure. Implemented instrumentation does not imply a
 collector or monitoring service is configured or deployed.
 
 ```bash
-docker compose logs -f backend
-docker compose down
+docker compose --profile backend logs -f backend worker beat
+docker compose --profile backend down
 ```
 
 For the native workflow, stop Uvicorn with `Ctrl+C` before running
@@ -538,18 +570,17 @@ later builds reuse Docker's cache. CI builds or restores this image once and
 shares it across the existing backend jobs. This does not change the hosted
 AWS S3 provider or delete existing artifact volumes.
 
-If either default host port is already in use, set
-`WORKSTREAM_POSTGRES_HOST_PORT` or `WORKSTREAM_REDIS_HOST_PORT` before running
-Compose. Native-backend users must put the same selected ports in
-`backend/.env`; the containerized backend uses the internal service ports.
+Set every published host port in the ignored root `.env`: API, PostgreSQL,
+Redis, MinIO API and MinIO console. Native-backend users must put the same
+selected backing-service ports in `backend/.env`; containerized services always
+use the internal DNS names and ports.
 
-MinIO uses the compose-only static credentials and the private
-`workstream-artifacts` bucket. The integration tests create that bucket
-automatically. For local runtime use, create the private bucket with an S3
-client against `http://localhost:9000` after MinIO is healthy, using access key
-`workstream-minio` and secret key `workstream-minio-secret-key`, before starting
-Workstream. Configure the runtime with the exact
-[artifact storage settings](docs/spec_artifact_storage_service.md#s3-compatible-adapter).
+MinIO uses checkout-local static credentials and the private bucket selected in
+root `.env`. API startup creates and verifies that bucket before migrations;
+the application and Celery process continue to access objects only through the
+canonical `ArtifactStore`. Configure a native runtime with the exact
+[artifact storage settings](docs/spec_artifact_storage_service.md#s3-compatible-adapter)
+and the same private bucket.
 The repository-managed MinIO port is bound to host loopback. A Workstream
 process running on a separate non-production container network may instead use
 an operator-controlled private MinIO endpoint; that remains development/test
@@ -559,16 +590,17 @@ runtime-ineligible until live deployment proof is approved; startup fails with
 `artifact_provider_live_proof_required` before credential probing or provider
 I/O.
 
-The default local development URL is:
+The local development URL uses the password and PostgreSQL host port selected
+in the ignored environment files:
 
 ```text
-postgresql+asyncpg://workstream:workstream@localhost:5433/workstream
+postgresql+asyncpg://workstream:<password>@localhost:<port>/workstream
 ```
 
 Destructive real API drills use the separate local test database:
 
 ```text
-postgresql+asyncpg://workstream:workstream@localhost:5433/workstream_test
+postgresql+asyncpg://workstream:<password>@localhost:<port>/workstream_test
 ```
 
 One project-guide compilation proposes sufficiency findings and separate
