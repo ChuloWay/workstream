@@ -40,7 +40,8 @@ No additional job, request store, executor or retry engine is needed.
 3. Acknowledge only a returned, committed terminal executor result. Duplicate
    successful delivery reuses retained execution/finalization evidence and does
    not reopen material, create a generation or append a second completion event.
-   Reject malformed/uncommitted requests before effects. Unexpected exceptions,
+   Map only observer/resolver pre-effect rejection to REJECT. Exceptions from
+   the executor propagate to shared UNKNOWN. Unexpected exceptions,
    cancellation and uncertain effects propagate to shared UNKNOWN handling;
    never return RETRY merely because an invocation failed. An expired running
    attempt is not automatically retried by this handler: prepared execute consume
@@ -80,6 +81,10 @@ No additional job, request store, executor or retry engine is needed.
   request, digest, receipt and attempt/result substitutions reject before provider
   or scratch access. Use recomputed valid digests where necessary so an earlier
   malformed-input guard cannot mask the ownership assertion.
+  Exercise the resolver directly as well: full-envelope observation would mask
+  its own missing comparison. Use two real B6 lineages, recompute canonical event
+  digests and retain a valid control that reaches the resolver. Remove one exact
+  comparison and require failure at the intended rejection assertion.
 - A claimed-but-not-invoked event cannot execute. Pre-start expiry or completed
   delivery cannot start effects. An expired running generation-one attempt under
   a live invoked claim cannot acquire a second lease or reopen the provider;
@@ -88,6 +93,10 @@ No additional job, request store, executor or retry engine is needed.
   Independent-session invalidation while provider I/O is
   paused prevents finalization and releases scratch; committed execute custody
   remains intact. Cancellation/unknown preserves the shared no-repeat behavior.
+  For the late-fence race, execute fencing must succeed first; pause provider I/O,
+  finalize the invocation UNKNOWN through the real shared outbox in another
+  session, then release I/O. Assert no terminal run/member/completion-event commit,
+  no provider reopen/second lease, and released scratch.
 - Lost terminal acknowledgement does not require another evaluation. Distinguish
   direct exact terminal replay proof from automatic recovery, which is deferred.
 - Guard-removal probes discriminate request matching and final transaction
