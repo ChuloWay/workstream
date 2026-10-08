@@ -62,8 +62,7 @@ submitter ContributionRecord, with no reviewer contribution.
 The separate `requires_second_review` policy field is [fixed to `false`](.commitrail/changes/enforce-requires-second-review-false.md)
 at input, immutable lineage, and database boundaries; second-review and
 adjudication behavior remain deferred.
-This branch is
-not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
+The automated-acceptance branch is not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is implemented for configuration, and the hidden submitter participant can
 stage or exactly replay its complete frozen award set. Shared acceptance, TASK
 terminal effects, authority/source custody, routing activation and public
@@ -674,7 +673,7 @@ uses hidden durable execution with exact ARCH-04D2 service authority. ARCH-04E1A
 retains route-neutral source evidence. REV-04C uses its bounded exact-source
 verifier and hidden FinalAcceptance/TASK/CON participant, while no general
 routing publication writer/reader, handler or current pointer exists; automatic
-dispatch and routing remain ARCH-04E work.
+request delivery and routing remain ARCH-04E work.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no

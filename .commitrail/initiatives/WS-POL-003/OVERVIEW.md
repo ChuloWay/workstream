@@ -50,7 +50,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   post-policy derivation, public complete policy read, separate approval and correction;
   ART-owned pre-submit reservation and completed evidence recovery without rerunning checks;
   one internal command per phase and removal of the standalone JSON precheck.
-  Exact hidden post-submit execution authority is delivered; automatic dispatch
+  Exact hidden post-submit execution authority is delivered; automatic request delivery
   and routing remain unavailable.
 - Intent: compile one locked guide and its policies into authoritative,
   versioned project behavior without circular subsystem authority.

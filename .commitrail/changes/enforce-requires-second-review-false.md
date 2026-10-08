@@ -93,5 +93,5 @@ No material finding is recorded in this durable change record.
   migration or cleanup behavior.
 - The existing payment-cleanup proof still upgrades through full Alembic head
   and now checks that result against the canonical current revision lookup.
-- Next usable boundary: second-review/adjudication behavior remains deferred; other pilot work proceeds only after this pull request is merged.
+- Next usable boundary: pilot integration uses the enforced false-only policy; second-review/adjudication behavior remains deferred.
 - Remaining risks: a database containing retained true policies cannot upgrade until an explicit preservation/disposition design is approved.
