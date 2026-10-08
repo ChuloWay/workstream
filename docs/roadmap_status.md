@@ -349,7 +349,8 @@ cannot be reused as post-submission review-gate evidence. See the
   [CLI guide declaration](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-09.md)
   creates draft guide metadata, required illustrative tasks and document targets
   through public POST. The API reauthorizes exact replay and setup waits for
-  document upload; the CLI does not upload, approve or activate the guide.
+  document upload; the declaration command does not upload, approve or activate
+  the guide.
   [CLI guide original upload](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-10.md)
   sends one declared document through the public binary POST, with bounded
   streaming, explicit replay custody and SHA-256/size-bound storage receipts.

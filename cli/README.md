@@ -347,7 +347,8 @@ labels as paths. The destination must already exist and must not be a symlink.
 Downloads use private bounded temporary files and atomic no-overwrite publication;
 existing targets/symlinks are refused and failed unpublished files are removed.
 Documents completed before a later document fails remain valid local files.
-The CLI does not expose examples, upload originals or execute document content.
+The `task guide` command does not expose examples, upload originals or execute
+document content. Manager uploads use the separate `project guide upload` command.
 
 JSON preserves the exact public response. Human output labels every root field
 and uses compact, terminal-safe JSON for complete nested rules and facts;
