@@ -317,7 +317,7 @@ async def test_all_documents_stored_dispatches_once_through_minio(
         changed = await project_client.post(path, headers=headers, content=original + b"changed")
         assert changed.status_code == 409, changed.text
         another_key = await project_client.post(
-            path, headers=auth_headers() | {"Content-Type": "application/pdf"}, content=original,
+            path, headers=auth_headers() | {"Content-Type": headers["Content-Type"]}, content=original,
         )
         assert another_key.status_code == 409, another_key.text
         assert await _stored_keys(get_settings()) == before_keys
