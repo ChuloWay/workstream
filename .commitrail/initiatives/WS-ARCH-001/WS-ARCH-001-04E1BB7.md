@@ -7,7 +7,7 @@
   committed request and runs the existing CHECKERS executor under independently
   verified outbox invocation custody. Completion routing remains the next boundary.
 
-## Intent and existing owners
+## Intent
 
 Advance step 4 of the [first-layer sequence](planning/PLAN.md#first-complete-contributor-milestone).
 B6 already atomically stores Submission, exact receipts, generation-one reservation
@@ -17,7 +17,7 @@ materialization and terminal publication; the shared outbox owns delivery.
 The missing link is a handler that binds these owners to the same committed event.
 No additional job, request store, executor or retry engine is needed.
 
-## Bounded design
+## Bounded change
 
 1. TASK recovers its immutable dispatch using event/project/submission identifiers
    together. Compare the complete canonical event with the stored dispatch and
@@ -65,7 +65,7 @@ No additional job, request store, executor or retry engine is needed.
   artifact operating documentation and `docs/roadmap_status.md`; local roadmap
   exports only if present. Preserve unrelated main changes.
 
-## Acceptance criteria and verification
+## Acceptance criteria
 
 - Real PostgreSQL delivery of B6's committed event reaches the existing executor
   with actual fixed-service authority and Local/MinIO material. Verify exact run,
@@ -91,7 +91,7 @@ No additional job, request store, executor or retry engine is needed.
   committed Commitrail validation, markdown links, stale-wording/diff checks and
   exact-head hosted suite. Report actual infrastructure and uncertainty honestly.
 
-## Reviews and human focus
+## Risk and review routing
 
 Plan review precedes implementation. Required implementation tracks: architecture/
 reuse, security, QA/test delta, CI integrity and documentation/product operations.
@@ -102,3 +102,9 @@ Human focus: invocation custody is additional to feature AUTH; it cannot become
 an event-based authority shortcut. UNKNOWN must not silently become retry. The
 production handler registry and both true/false governed-outcome gates remain
 unchanged. Approval of this chunk does not authorize merge or live activation.
+
+## Evidence
+
+Plan feasibility traces the existing TASK dispatch, CHECKERS executor, real
+materialization fixture and shared outbox observation/fencing. Runtime verification
+will exercise the named acceptance boundaries on the implementation candidate.
