@@ -432,9 +432,10 @@ cannot be reused as post-submission review-gate evidence. See the
   response supplies document IDs for the public binary upload route; no separate
   source-snapshot creation call remains. A starting idea is sufficient and optional
   example fields do not repeat requirements from the guide. Each snapshot/run
-  binds the exact version's examples. Upload admission checks bounded format, digest and size.
+  binds the exact version's examples. Upload admission accepts PDF, DOCX, PPTX
+  and byte-preserved UTF-8 Markdown (`.md`) and checks bounded format, digest and size.
   Committed originals do not bypass the separate verification required for
-  submission ZIPs. Inline markdown setup and extractors are removed.
+  submission ZIPs. Embedded document bodies and extractors are removed.
 - Committed original-document readiness automatically runs one unified compilation
   through Celery. It persists sufficiency findings and separate pre-submit and
   post-submit proposals, then projects the sufficiency and artifact-policy

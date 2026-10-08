@@ -119,7 +119,7 @@ guide document's contents or a storage URL. For example:
     {"content": "Evaluate the supplied experiment's evidence.", "title": "Evidence evaluation", "labels": ["research"]}
   ],
   "documents": [
-    {"label": "Guide.pdf", "media_type": "application/pdf"}
+    {"label": "Guide.md", "media_type": "text/markdown"}
   ]
 }
 ```
@@ -128,8 +128,9 @@ guide document's contents or a storage URL. For example:
 example `title` may be omitted or null; example `labels` defaults to an empty
 array. Unknown/duplicate members, malformed JSON and null required fields or
 array members are rejected. The file is sent unchanged; the API owns semantic
-limits and validation. PDF, DOCX and PPTX declarations use the media types in
-OpenAPI. The API normalizes document-label whitespace; example text is preserved.
+limits and validation. PDF, DOCX, PPTX and UTF-8 Markdown (`.md`) declarations
+use the media types in OpenAPI. The API normalizes document-label whitespace;
+example text is preserved.
 
 The CLI bounds this input to 1MiB and this response to 2MiB because declarations
 include example text and document selectors. These are client wire envelopes,

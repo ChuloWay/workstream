@@ -257,17 +257,24 @@ async def test_all_documents_stored_dispatches_once_through_minio(
             "version": "initial",
             "task_examples": [{"content": "Review a claim."}],
             "documents": [
-                {"label": name, "media_type": "application/pdf"}
-                for name in ("guide.pdf", "appendix.pdf")
+                {"label": "guide.md", "media_type": "text/markdown"},
+                {"label": "appendix.pdf", "media_type": "application/pdf"},
             ],
         },
     )
     assert created.status_code == 201, created.text
     guide = created.json()
-    originals = [b"%PDF-1.7\nGuide fixture\n%%EOF", b"%PDF-1.7\nAppendix fixture\n%%EOF"]
+    originals = [
+        "# Guide fixture\n\nFollow the locked instructions exactly. 雪\n".encode(),
+        b"%PDF-1.7\nAppendix fixture\n%%EOF",
+    ]
     for index, (document, original) in enumerate(zip(guide["documents"], originals, strict=True)):
         path = f"/api/v1/projects/{project['id']}/guides/{guide['id']}/documents/{document['document_id']}/content"
-        headers = auth_headers() | {"Content-Type": ("Application/PDF", "application/pdf; name=appendix.pdf")[index]}
+        headers = auth_headers() | {
+            "Content-Type": ("Text/Markdown; charset=utf-8", "application/pdf; name=appendix.pdf")[
+                index
+            ]
+        }
         real_callback = internal_workers.continue_guide_setup_after_stored_document
         if index == 1 and recover_callback:
 
@@ -326,6 +333,7 @@ async def test_all_documents_stored_dispatches_once_through_minio(
         ).all()
         replicas = (await session.scalars(select(ArtifactReplica))).all()
         assert len(attempts) == len(replicas) == 2
+        assert {row.media_type for row in attempts} == {"text/markdown", "application/pdf"}
     bootstrap, store = _open_store(get_settings())
     try:
         stored = [
