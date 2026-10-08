@@ -70,6 +70,9 @@ while exact authority/evidence, routing handlers, currentness proof and activati
 remain pending.
 This amendment does not enable raw checker results to create acceptance or
 change the existing human branch's implementation contract.
+The ReviewPolicy field `requires_second_review` is fixed to `false` in v0.1.
+Typed policy contracts and PostgreSQL enforce that invariant; no second-review
+or adjudication lifecycle is implied.
 
 ```text
 Project guide

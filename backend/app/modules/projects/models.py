@@ -704,6 +704,10 @@ class ReviewPolicy(Base):
             "semantics_format in ('v1','v2') and (semantics_format <> 'v1' or human_review_required)",
             name="review_policy_semantics_format",
         ),
+        CheckConstraint(
+            "not requires_second_review",
+            name="review_policy_second_review_disabled",
+        ),
         ForeignKeyConstraint(
             ["project_id", "guide_version"],
             ["project_guides.project_id", "project_guides.version"],

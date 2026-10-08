@@ -22,7 +22,7 @@ async def test_upgrade_preserves_retained_owners_without_backfill(tmp_path, isol
             await connection.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
         finally:
             await connection.close()
-        await asyncio.to_thread(command.upgrade, _config(), "0023_remove_task_payment_policy")
+        await asyncio.to_thread(command.upgrade, _config(), "0024_require_second_review_false")
         async with historical_material_fixture(tmp_path, isolated_database_env) as h:
             connection = await asyncpg.connect(url)
             tables = ("submissions", "submission_bundle_admissions", "artifact_bindings", "audit_events",

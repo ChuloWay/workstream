@@ -26,7 +26,7 @@ class ReviewPolicyInput(BaseModel):
     finding_evidence_requirement: Literal[
         "optional", "required_for_blocking", "required_for_all"
     ] = "optional"
-    requires_second_review: bool = False
+    requires_second_review: Literal[False] = False
     allowed_decisions: list[Literal["accept", "needs_revision", "reject"]] = Field(
         default_factory=lambda: ["accept", "needs_revision", "reject"]
     )
@@ -564,7 +564,7 @@ class ReviewPolicyResponse(BaseModel):
     self_review_allowed: bool | None
     reject_policy: str | None
     finding_evidence_requirement: str | None
-    requires_second_review: bool
+    requires_second_review: Literal[False]
     allowed_decisions: list[str]
     minimum_finding_fields: list[str]
     created_at: datetime

@@ -1,6 +1,6 @@
 """Explicit predecessor storage for migration proofs, never a current intake writer.
 
-Only migration tests call this seeder. It writes the pre-0024 row shape with all
+Only migration tests call this seeder. It writes the pre-0025 row shape with all
 then-installed constraints enabled; it does not invent current AUTH or dispatch
 receipts. Preparation and verification still use real ART owners and ZIP bytes.
 """
@@ -33,6 +33,7 @@ async def write_historical_submission(factory, context, request):
             "0017_acceptance_source_contracts", "0018_task_routing_request",
             "0020_review_admission_lock_order", "0021_submission_manifest",
             "0022_submission_packet_custody", "0023_remove_task_payment_policy",
+            "0024_require_second_review_false",
         }, "historical seeder cannot write the current schema"
         repository = TaskRepository(session)
         facts = await repository.lock_submission_context(TaskSubmissionContextRequest(

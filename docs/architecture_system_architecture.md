@@ -20,6 +20,9 @@ permits separately authorized automated FinalAcceptance and submitter
 contribution, with no human queue/lease/Review or reviewer contribution. This
 does not make checker output acceptance authority. Its detailed source/CON
 runtime remains pending after the [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+The separate ReviewPolicy field `requires_second_review` is fixed to `false` at
+typed input, locked lineage, and database boundaries. Second-review and
+adjudication behavior remain deferred.
 
 The product contract is source-agnostic. Flow Identity is the current v0.1
 external authentication adapter; manual, Markdown, and CSV intake are the

@@ -3,8 +3,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0024_submission_dispatch"
-down_revision = "0023_remove_task_payment_policy"
+revision = "0025_submission_dispatch"
+down_revision = "0024_require_second_review_false"
 branch_labels = None
 depends_on = None
 
