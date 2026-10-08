@@ -37,8 +37,9 @@ identity and completely hash/count bounded bytes in canonical scratch.
 - CLI work-context decoder/renderer and fixed `task guide TASK_ID [--download DIR]`
   command with authenticated original reads through the shared transport.
 - Focused TASK/PROJECTS/ART/AUTH integration tests, CLI process/real-API journey,
-  lane catalogue only if needed to classify new tests, current API/CLI docs,
-  affected roadmap claims and this standalone record.
+  lane catalogue and existing exact behavior-ownership partition registration
+  for the two new Python modules, current API/CLI docs, affected roadmap claims
+  and this standalone record.
 
 ### Not allowed
 
