@@ -29,6 +29,9 @@ currently accept only an active exact-project Submitter grant.
 - Focused real-PostgreSQL and CLI HTTP process proof, current API/CLI,
   authorization, compensation and roadmap documentation, required test-lane
   catalogue registration, and this record.
+- The existing nine-lane runner/catalogue, focused CI contract tests and backend
+  testing operations guide needed to keep the exact full inventory within the
+  unchanged hosted execution deadline.
 
 ### Not allowed
 
@@ -36,6 +39,8 @@ currently accept only an active exact-project Submitter grant.
   fulfillment, adapter-binding behavior, route keys or binding status.
 - Migrations, task-specific term editing, Finance read access, new permissions,
   lifecycle states, parallel owner implementations, or private cross-owner imports.
+- Test deletion or skipping, a timeout or lane-count increase, weaker evidence
+  custody, fake service substitution, or a product-source workaround for CI cost.
 - PILOT-13 guide-read implementation, PR #504 dispatch work, deployment, merge,
   issue closure, or another implementation chunk.
 
@@ -75,7 +80,7 @@ validation alongside compensation, and adds no migration.
 |---|---|---|---|
 | Locked compensation is exact and concealed | Isolated real-PostgreSQL locked terms, ready/detail/work-context/public-queue and changed AUTH matrix tests | Passed at `ec4c8505` after PR #509 reconciliation: 2 locked-term cases; the retained product source previously passed 60 owner projection cases and 7 matrix cases. Hosted Backend run `37906026854` at `8363c0e0` passed all nine lanes and the canonical aggregate across 8,805 nodes | None. |
 | CLI validates and renders public output | Built CLI HTTP process tests plus `go test ./...`, `go vet ./...`, `go mod verify` and build | Passed at `677101a8`: 12 process cases and all Go checks; PILOT-14 receipt/rendering behavior and process tests are retained, while current CLI compilation and `task ready --help` passed after reconciliation | None. |
-| Repository contracts remain consistent | Lane-catalogue and architecture/module-boundary tests, Ruff and compile checks | Passed at `ec4c8505`: 81 catalogue/boundary cases; current main supplies the merged CI lane allocation without changing compensation source | Agent Gates and fresh full hosted CI remain external evidence. |
+| Repository contracts remain consistent | Lane-catalogue and architecture/module-boundary tests, Ruff and compile checks | Passed at `ec4c8505`: 81 catalogue/boundary cases. After the measured lane repair, 62 focused catalogue/runner cases, Ruff, Markdown links, stale wording and Commitrail checks pass; compensation source and tests remain unchanged | Fresh exact-head hosted CI remains external evidence. |
 
 ## Review findings
 
@@ -96,6 +101,28 @@ with zero skips or deselections and complete PostgreSQL/MinIO cleanup. The later
 roadmap-only correction keeps PILOT-14 in open status until human merge; product
 source and test blobs remain unchanged, while the documentation head requires
 its own hosted checks.
+
+That documentation head exposed a separate measured project-lane imbalance.
+Hosted run `37909246303` passed Agent Gates, MCP, preflight, MinIO, CLI and eight
+of nine lanes, while project B completed 729 of 761 nodes before the unchanged
+1,200-second deadline. It reported no assertion failure, skip or deselection;
+PostgreSQL and MinIO cleanup completed, and the aggregate correctly rejected the
+interrupted lane. The immutable lane artifact is `11606463730`.
+
+The first proposed repair, assigning both broad PROJECT modules solely to
+project A, was rejected from retained measurements: project A took 951.944
+seconds, project C took 745.983 seconds, and the modules' retained B/C phases
+would have projected project A to at least 1,189.274 seconds before hidden phases
+or runner variance. The reviewed shared repair from `6256f239` instead excludes
+those modules from project B and partitions their exact nodes across project A
+and C with the existing hash. It preserves nine lanes, the 1,200-second deadline,
+all canonical nodes, real PostgreSQL/MinIO execution and authenticated evidence;
+the bounded logs retain only the 25 slowest phases. Replaying the failed run's
+8,805-node manifest through the repaired catalogue retained every unique node
+exactly once: 304 nodes from the two measured modules split 155 to project A and
+149 to project C, with none left in project B. This PR applies only the five shared
+runner, catalogue, focused-test and operations-guide files, preserving its
+PILOT-14 catalogue entries and all compensation product source and tests.
 
 ## Reconciliation
 
