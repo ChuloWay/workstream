@@ -98,6 +98,12 @@ def test_lane_command_uses_exact_nodes_and_isolation_contract(tmp_path: Path) ->
     assert command[-1] == nodes[0]
     assert "--cov=app" in command
     assert "--cov-report=" in command
+    assert "--durations=0" in command
+    assert "--durations=25" not in command
+
+    admin = runner.admin_runner_command([f"{runner.ADMIN_RUNNER_MODULE}::test_one"])
+    assert "--durations=0" in admin
+    assert "--durations=25" not in admin
 
 
 def test_lane_environment_uses_private_evidence_and_coverage(tmp_path: Path) -> None:
