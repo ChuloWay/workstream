@@ -161,7 +161,7 @@ workstream project guide upload PROJECT_ID GUIDE_ID DOCUMENT_ID --file Guide.pdf
 ```
 
 Use the guide and document IDs returned by `project guide create`. Supply the
-document's declared media type explicitly: PDF, DOCX or PPTX as listed in
+document's declared media type explicitly: PDF, DOCX, PPTX or UTF-8 Markdown as listed in
 OpenAPI. The CLI sends raw original bytes, not extracted text, JSON or multipart.
 It requires a nonempty regular file up to ART's 512MiB hard ceiling; Workstream
 can enforce smaller configured document or aggregate limits. Files are hashed

@@ -38,10 +38,11 @@ contributor original reads and CLI downloads with the same closed media type.
 - Review-packet typed metadata/model constraint plus forward-only revision
   `0027_markdown_guide_media` after delivered `0026_task_guide_read`, its
   graph/schema consumers and direct PostgreSQL refusal/acceptance proof.
-- The Go guide-declaration client and current CLI/API documentation for
-  `text/markdown`. The merged PILOT-13 task guide DTO/extension/download consumers,
-  task-read public route metadata, real upload/read fixtures and direct tests are
-  reconciled without copying its implementation.
+- The Go guide-declaration and delivered guide-upload clients/commands plus current
+  CLI/API documentation for `text/markdown`. The merged PILOT-13 task guide
+  DTO/extension/download consumers, task-read public route metadata, real
+  upload/read fixtures and direct tests are reconciled without copying its
+  implementation.
 - Existing guide API, real PostgreSQL/MinIO intake fixtures, format, setup
   workspace, review-packet, CLI declaration and later PILOT-13 contributor-read
   tests; current README, artifact/guide specifications, roadmap and this record.
@@ -130,6 +131,10 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
 - The binary-substitution regression originally allowed pytest to derive a ZIP
   case ID from timestamp-bearing archive bytes. Stable semantic case IDs retain
   both assertions while making separately collected exact-node execution reproducible.
+- Reconciliation with the delivered CLI upload journey found its real-API fixture
+  selected the new Markdown original while still declaring and sending PDF. The
+  journey, transport matrix, command help and CLI guide now use the same closed
+  Markdown media type; backend byte inspection remains authoritative.
 
 ## Reconciliation
 
