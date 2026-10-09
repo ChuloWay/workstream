@@ -10,6 +10,7 @@ PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_b",
     "project_lifecycle_c",
 )
+PARTITIONED_PROJECT_AC_LANES = ("project_lifecycle_a", "project_lifecycle_c")
 PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b", "task_lifecycle_c")
 
 
@@ -295,7 +296,6 @@ PROJECT_MODULES = (
     "tests/projects/guide_compilation/finalization/test_authorization_concurrency_postgresql.py",
     "tests/projects/guide_compilation/finalization/test_authorization_postgresql.py",
     "tests/projects/test_active_guide_repository.py",
-    "tests/test_guide_document_intake.py",
     "tests/projects/guide_compilation/finalization/test_concurrency_postgresql.py",
     "tests/projects/guide_compilation/finalization/test_contracts.py",
     "tests/projects/guide_compilation/finalization/test_guards_postgresql.py",
@@ -391,6 +391,13 @@ PROJECT_MODULES = (
     "tests/projects/sufficiency_mutations/test_replay_repository.py",
     "tests/projects/sufficiency_mutations/test_public_routes.py",
     "tests/projects/test_retired_submission_derivation_route.py",
+)
+
+# These broad PROJECT owners exhausted project B's execution budget. Retained
+# hosted timings keep their deterministic node partition on project A and C,
+# excluding B while preserving headroom across both measured current trees.
+PROJECT_AC_PARTITION_MODULES = (
+    "tests/test_guide_document_intake.py",
     "tests/test_projects.py",
 )
 
@@ -524,6 +531,7 @@ PARTITION_GROUPS = (
         PARTITIONED_PROJECT_LANES,
         PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
     ),
+    (PARTITIONED_PROJECT_AC_LANES, PROJECT_AC_PARTITION_MODULES),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
@@ -565,7 +573,10 @@ LANES = (
     *(
         TestLane(
             name,
-            PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
+            PROJECT_MODULES
+            + CHECKER_DELIVERY_MODULES
+            + ROUTING_AUTH_PREPARATION_MODULES
+            + (PROJECT_AC_PARTITION_MODULES if name in PARTITIONED_PROJECT_AC_LANES else ()),
         )
         for name in PARTITIONED_PROJECT_LANES
     ),

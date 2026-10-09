@@ -141,6 +141,12 @@ partition PROJECT nodes, checker execution, materialization, evaluation capacity
 output custody and routing AUTH preparation beside initial dispatch/delivery.
 All use the existing exact-node hash across the three lanes: placing the entire
 checker delivery group exclusively on project A exhausted its execution cap.
+Two measured broad owners, `tests/test_projects.py` and
+`tests/test_guide_document_intake.py`, instead partition their nodes only across
+project A and C. Retained runs measured capacity across that pair and a project B
+timeout when the modules used all three lanes. The lane logs retain the 25 slowest
+pytest phases for diagnosis without letting unbounded diagnostic output consume
+the execution deadline after all nodes finish.
 `task_lifecycle_a`, `task_lifecycle_b`, and `task_lifecycle_c` use the same
 deterministic partition mechanism for the remaining TASK and checker nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
 isolated-runner contracts. The

@@ -46,6 +46,10 @@ contributor original reads and CLI downloads with the same closed media type.
 - Existing guide API, real PostgreSQL/MinIO intake fixtures, format, setup
   workspace, review-packet, CLI declaration and later PILOT-13 contributor-read
   tests; current README, artifact/guide specifications, roadmap and this record.
+- `backend/scripts/run_test_lanes.py`, `backend/scripts/test_lane_catalogue.py`,
+  their focused CI regressions and the canonical backend-testing operations
+  guide: repair the measured hosted project-B timeout without changing product
+  tests, services, lane count or the 1200-second execution cap.
 
 ### Not allowed
 
@@ -59,6 +63,11 @@ contributor original reads and CLI downloads with the same closed media type.
 - No duplicate contributor read, task authority, streaming or CLI download
   implementation. No compatibility variant, data rewrite, downgrade,
   deployment, merge or issue closure.
+- Within the CI headroom repair, no product-test removal or change, skip,
+  deselection, lane name/count, service, timeout, runner permission, retry,
+  coverage, evidence format, UUID seed, generic hash algorithm or
+  aggregate-authority change. Only the named focused CI regression nodes may be
+  added.
 
 ## Design and decisions
 
@@ -70,6 +79,24 @@ typed consumers inherit the new member; the review-packet database check receive
 the matching additive value in the next linear migration. The setup agent stages
 the verified original through its current opaque handle and network-disabled
 workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
+
+### Hosted CI headroom repair
+
+Backend run `37908682835` completed all 766 project-B nodes but reached the
+unchanged runner deadline while emitting an unbounded duration table. Retained
+A/B/C phase timings were about 549/1169/948 seconds. The broad
+`tests/test_projects.py` and `tests/test_guide_document_intake.py` modules now
+use the same exact-node SHA-256 assignment across project A and C, excluding B.
+An exact 8,812-node replay changed only 222 assignments in those modules,
+preserved every node ID and execution kind, and produced project counts
+768/643/743 with a 155/149 A/C subgroup. The P15 observed-overhead forecast is
+about 694/1044/1029 seconds; the concurrent P14 forecast is about
+1011/974/837. These are qualified forecasts subject to hosted variance.
+
+Ordinary and admin commands retain the 25 slowest pytest phases. This bounds
+diagnostic output after completion; the measured A/C assignment supplies the
+material headroom. The nine lanes, 1200-second cap, services, UUID/hash
+mechanisms, evidence and fail-closed aggregate remain unchanged.
 
 ## Acceptance criteria
 
@@ -88,12 +115,19 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
   remains covered and unchanged; no second migration head is introduced.
 - [x] Current API/CLI, artifact/guide specifications and roadmap state the
   delivered boundary without claiming HTML, remote sites or deployed capability.
+- [x] Both measured project modules partition only across A/C; the retained
+  hosted manifest preserves exact IDs/kinds, moves only those modules and leaves
+  no selected node on project B.
+- [x] Current recursive collection covers 8,814 nodes exactly once across nine
+  lanes; the two added nodes are focused CI ownership/partition regressions.
+- [x] Ordinary/admin lane commands use `--durations=25`; predecessor three-way
+  assignment and unbounded-duration mutations fail their exact regressions.
 
 ## Risk and review routing
 
 - Risk class: L1
 - Required reviewers: architecture, reuse, security, qa, test_delta,
-  documentation, product_ops
+  documentation, product_ops, ci_integrity
 - Human review focus: Strict media classification without byte rewriting;
   unchanged ART/authority/isolation boundaries; one linear migration after
   PILOT-13; no duplicate contributor-read implementation; honest format limits.
@@ -107,6 +141,8 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
 | Setup-agent exact read | Workspace/runtime batch with Markdown version, byte-bearing grant and disabled network | Exact `.md` bytes, media type, run handle and cleanup passed | No live model inference is required for byte-access proof |
 | Persisted review metadata | PostgreSQL 16 predecessor/head direct-write and schema-fingerprint proofs | Predecessor rejected Markdown; 0027 admitted it past the media check; HTML remained rejected; graph and regenerated fingerprint passed | Existing rows are retained; no downgrade is supported |
 | Contributor REST/CLI | Real PostgreSQL/MinIO locked-read batch and built-CLI HTTP/public-API journeys | Six backend cases, 34 HTTP cases and the real built-CLI API journey passed, including concealment, successor locking, corrupt originals and `.md` publication | Deployment remains outside this change |
+| Hosted timeout diagnosis | Backend run `37908682835`, lane artifact `11606836106` and aggregate artifact `11606916469` | Project B recorded 766/766 full-lifecycle nodes, zero skip/deselect, 1200.943s interruption and complete PostgreSQL/MinIO cleanup | Fresh hosted timing remains required |
+| CI assignment and command repair | 8,812-node manifest replay; current recursive collection; focused catalogue/runner tests and predecessor mutations | IDs/kinds unchanged; 222 allowed assignment changes; current 8,814 nodes collected; 62 focused and 86 gate/record tests passed; both mutants failed | Forecasts do not replace fresh hosted aggregate proof |
 
 ## Review findings
 
@@ -135,6 +171,10 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
   selected the new Markdown original while still declaring and sending PDF. The
   journey, transport matrix, command help and CLI guide now use the same closed
   Markdown media type; backend byte inspection remains authoritative.
+- The first hosted repair completed every project-B node but lacked deadline
+  headroom. An initial exclusive-A plan was rejected before commit when concurrent
+  P14 timings forecast it too close to the cap; exact replays of both current
+  manifests selected the bounded A/C subgroup instead.
 
 ## Reconciliation
 
@@ -142,7 +182,8 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
   `77d6db613ad2734e80106076586052132fa466cb`, where PILOT-13 is delivered as
   revision `0026_task_guide_read`. The later PILOT-00 experiment, delivery and
   CI-allocation changes add no migration, so this branch retains the next linear
-  revision, `0027_markdown_guide_media`.
+  revision, `0027_markdown_guide_media`. The measured CI repair supersedes only
+  the candidate tuple for two project modules and unbounded duration diagnostics.
 - Delivered dependency reconciliation: PILOT-13's exact task-locked authority,
   concealment, verified streaming and safe CLI publication are unchanged; only
   its closed media type and extension maps admit Markdown.
