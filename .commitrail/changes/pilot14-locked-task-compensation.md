@@ -73,9 +73,9 @@ validation alongside compensation, and adds no migration.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Locked compensation is exact and concealed | Isolated real-PostgreSQL locked terms, ready/detail/work-context/public-queue and changed AUTH matrix tests | Passed after the current-main merge: 2 locked-term cases; the byte-identical `677101a8` source previously passed 60 owner projection cases and 7 matrix cases | Full hosted suite remains CI-owned. |
+| Locked compensation is exact and concealed | Isolated real-PostgreSQL locked terms, ready/detail/work-context/public-queue and changed AUTH matrix tests | Passed at `ec4c8505` after PR #509 reconciliation: 2 locked-term cases; the retained product source previously passed 60 owner projection cases and 7 matrix cases | Full hosted suite remains CI-owned. |
 | CLI validates and renders public output | Built CLI HTTP process tests plus `go test ./...`, `go vet ./...`, `go mod verify` and build | Passed at `677101a8`: 12 process cases and all Go checks; CLI source and tests are byte-identical after the current-main merge | None. |
-| Repository contracts remain consistent | Lane-catalogue and architecture/module-boundary tests, Ruff and compile checks | Passed after the current-main merge: 81 catalogue/boundary cases; prior focused static checks remain source-identical | Agent Gates and full hosted CI remain external evidence. |
+| Repository contracts remain consistent | Lane-catalogue and architecture/module-boundary tests, Ruff and compile checks | Passed at `ec4c8505`: 81 catalogue/boundary cases; current main supplies the merged CI lane allocation without changing compensation source | Agent Gates and fresh full hosted CI remain external evidence. |
 
 ## Review findings
 
@@ -85,11 +85,19 @@ DTO and maps from the existing CONTRIBUTIONS public port in repository
 composition; the full module-boundary suite passes. Remaining exact-head
 impact-routed review is coordinated by the lead.
 
+The first current-main hosted run at `ff62b273` used the predecessor CI lane
+allocation. TASK B completed 404 of 411 collected nodes before the unchanged
+1,200-second deadline, with no assertion failure and complete PostgreSQL/MinIO
+cleanup; all other lanes and the CLI contract passed. Merged PR #515 moves the
+measured checker workload out of TASK B while preserving the canonical inventory.
+Fresh hosted evidence on the reconciled head remains required.
+
 ## Reconciliation
 
-- Current-source reconciliation: Merged `main` at `36e8a615`, preserving PR #504
+- Current-source reconciliation: Merged `main` at `77d6db61`, preserving PR #504
   submission dispatch, PR #505 guide-document contracts, PR #509 hidden
-  evaluation-request delivery and PR #507's qualified gVisor experiment limits
-  alongside compensation and their current owner inventories.
+  evaluation-request delivery, PR #507's qualified gVisor experiment limits,
+  PR #513's guide upload and PR #515's measured CI allocation alongside
+  compensation and their current owner inventories.
 - Next usable boundary: Human merge of this bounded PR; payment and fulfillment remain separate work.
 - Remaining risks: None beyond independent review and hosted CI.
