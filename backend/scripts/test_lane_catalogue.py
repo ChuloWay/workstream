@@ -29,7 +29,6 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/post_submit/test_live_authority.py",
     "tests/authorization/post_submit/test_principals.py",
     "tests/authorization/post_submit/test_timeout.py",
-
     "tests/authorization/project_roles/test_cancellation_postgresql.py",
     "tests/authorization/project_roles/test_constraint_postgresql.py",
     "tests/authorization/project_roles/test_lifecycle_postgresql.py",
@@ -395,13 +394,31 @@ PROJECT_MODULES = (
     "tests/test_projects.py",
 )
 
+# Checker delivery shares project dispatch ownership and the existing
+# three-way partition; exclusive placement exceeded the hosted execution cap.
+CHECKER_DELIVERY_MODULES = (
+    "tests/checkers/execution/test_results.py",
+    "tests/checkers/execution/test_execution.py",
+    "tests/checkers/execution/test_coordination.py",
+    "tests/checkers/execution/test_concurrency.py",
+    "tests/checkers/execution/test_storage.py",
+    "tests/checkers/execution/test_migration.py",
+    "tests/checkers/execution/test_material_lineage.py",
+    "tests/checkers/execution/test_material_migration.py",
+    "tests/test_post_submit_materialization.py",
+    "tests/test_post_submit_selection.py",
+    "tests/test_submission_evaluation_capacity.py",
+    "tests/test_checker_output_custody.py",
+    "tests/test_checker_output_storage.py",
+)
+
+
 TASK_MODULES = (
     "tests/reviews/decision/test_contracts.py",
     "tests/reviews/decision/test_storage.py",
     "tests/reviews/decision/test_migration.py",
     "tests/reviews/packet/test_repository.py",
     "tests/reviews/packet/test_migration.py",
-
     "tests/tasks/post_submit_routing/test_contracts.py",
     "tests/tasks/post_submit_routing/test_storage.py",
     "tests/tasks/post_submit_routing/test_migration.py",
@@ -420,7 +437,6 @@ TASK_MODULES = (
     "tests/authorization/task_audit_evidence/test_authority.py",
     "tests/authorization/task_audit_evidence/test_history.py",
     "tests/authorization/task_audit_evidence/test_transactions_concurrency.py",
-
     "tests/authorization/task_queues/test_authority.py",
     "tests/authorization/task_queues/test_contracts.py",
     "tests/authorization/task_queues/test_transactions.py",
@@ -445,14 +461,6 @@ TASK_MODULES = (
     "tests/tasks/test_assignment_invalidation_races.py",
     "tests/tasks/test_contribution_claim_races.py",
     "tests/tasks/test_submission_lineage.py",
-    "tests/checkers/execution/test_results.py",
-    "tests/checkers/execution/test_execution.py",
-    "tests/checkers/execution/test_coordination.py",
-    "tests/checkers/execution/test_concurrency.py",
-    "tests/checkers/execution/test_storage.py",
-    "tests/checkers/execution/test_migration.py",
-    "tests/checkers/execution/test_material_lineage.py",
-    "tests/checkers/execution/test_material_migration.py",
     "tests/checkers/post_submit/test_catalogue.py",
     "tests/checkers/post_submit/test_compiled_policy.py",
     "tests/checkers/post_submit/test_configuration.py",
@@ -467,11 +475,6 @@ TASK_MODULES = (
     "tests/checkers/test_effective_intake_rules.py",
     "tests/test_default_pre_submit_execution.py",
     "tests/test_approved_guide_intake.py",
-    "tests/test_submission_evaluation_capacity.py",
-    "tests/test_post_submit_materialization.py",
-    "tests/test_post_submit_selection.py",
-    "tests/test_checker_output_custody.py",
-    "tests/test_checker_output_storage.py",
     "tests/test_pre_submit_attempt_recovery.py",
     "tests/test_pre_submit_attempt_contracts.py",
     "tests/test_pre_submit_attempt_authority_integration.py",
@@ -509,8 +512,7 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
-# Routing PREP proofs stay together on task C, which has measured headroom
-# after task A reached the unchanged execution cap.
+# Routing PREP proofs share the three-way project-policy partition.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
     "tests/authorization/post_submit_routing/test_prepared.py",
@@ -518,7 +520,10 @@ ROUTING_AUTH_PREPARATION_MODULES = (
 
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
-    (PARTITIONED_PROJECT_LANES, PROJECT_MODULES),
+    (
+        PARTITIONED_PROJECT_LANES,
+        PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
+    ),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
@@ -557,10 +562,12 @@ LANES = (
             ADMIN_RUNNER_MODULE,
         ),
     ),
-    *(TestLane(name, PROJECT_MODULES) for name in PARTITIONED_PROJECT_LANES),
-    *(TestLane(
-        name,
-        TASK_MODULES
-        + (ROUTING_AUTH_PREPARATION_MODULES if name == "task_lifecycle_c" else ()),
-    ) for name in PARTITIONED_TASK_LANES),
+    *(
+        TestLane(
+            name,
+            PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
+        )
+        for name in PARTITIONED_PROJECT_LANES
+    ),
+    *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
 )
