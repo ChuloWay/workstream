@@ -267,6 +267,7 @@ def test_markdown_rejects_non_utf8_and_nul_bytes(detector, payload):
 @pytest.mark.parametrize(
     ("payload", "detected"),
     [(b"%PDF-1.7\n", "pdf"), (_zip({"document.txt": b"guide"}).getvalue(), "zip")],
+    ids=("pdf", "zip"),
 )
 def test_markdown_declaration_does_not_relabel_known_binary_formats(detector, payload, detected):
     result = detector.detect(BytesIO(payload), declared_media_type="text/markdown")

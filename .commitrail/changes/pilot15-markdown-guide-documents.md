@@ -127,14 +127,17 @@ workspace. Contributor REST/CLI support is reconciled only from merged PILOT-13.
 - Final OpenAPI review found the existing task-original GET still advertised
   only the three predecessor binary formats. Its response metadata and an exact
   generated-schema regression now include the already-supported Markdown original.
+- The binary-substitution regression originally allowed pytest to derive a ZIP
+  case ID from timestamp-bearing archive bytes. Stable semantic case IDs retain
+  both assertions while making separately collected exact-node execution reproducible.
 
 ## Reconciliation
 
 - Current-source reconciliation: Merged main
-  `36e8a615f01801cecd6ccf83d7411235ab1cfa8f`, where PILOT-13 is delivered as
-  revision `0026_task_guide_read`. The later PILOT-00 experiment and delivery
-  changes add no migration, so this branch retains the next linear revision,
-  `0027_markdown_guide_media`.
+  `77d6db613ad2734e80106076586052132fa466cb`, where PILOT-13 is delivered as
+  revision `0026_task_guide_read`. The later PILOT-00 experiment, delivery and
+  CI-allocation changes add no migration, so this branch retains the next linear
+  revision, `0027_markdown_guide_media`.
 - Delivered dependency reconciliation: PILOT-13's exact task-locked authority,
   concealment, verified streaming and safe CLI publication are unchanged; only
   its closed media type and extension maps admit Markdown.
