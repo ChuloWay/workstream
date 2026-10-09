@@ -71,8 +71,10 @@ validation alongside compensation, and adds no migration.
 ## Risk and review routing
 
 - Risk class: L1
-- Required reviewers: architecture, security, QA, test delta, reuse/dedup, documentation
-- Human review focus: locked-version lineage, exact-role concealment, exact decimals, and the narrow cross-owner projection.
+- Required reviewers: architecture, security, QA, test delta, reuse/dedup, documentation, ci_integrity
+- Human review focus: locked-version lineage, exact-role concealment, exact decimals,
+  the narrow cross-owner projection, and exact CI assignment/evidence custody with
+  measured deadline headroom.
 
 ## Evidence
 
