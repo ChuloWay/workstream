@@ -73,7 +73,7 @@ validation alongside compensation, and adds no migration.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Locked compensation is exact and concealed | Isolated real-PostgreSQL locked terms, ready/detail/work-context/public-queue and changed AUTH matrix tests | Passed at `ec4c8505` after PR #509 reconciliation: 2 locked-term cases; the retained product source previously passed 60 owner projection cases and 7 matrix cases | Full hosted suite remains CI-owned. |
+| Locked compensation is exact and concealed | Isolated real-PostgreSQL locked terms, ready/detail/work-context/public-queue and changed AUTH matrix tests | Passed at `ec4c8505` after PR #509 reconciliation: 2 locked-term cases; the retained product source previously passed 60 owner projection cases and 7 matrix cases. Hosted Backend run `37906026854` at `8363c0e0` passed all nine lanes and the canonical aggregate across 8,805 nodes | None. |
 | CLI validates and renders public output | Built CLI HTTP process tests plus `go test ./...`, `go vet ./...`, `go mod verify` and build | Passed at `677101a8`: 12 process cases and all Go checks; PILOT-14 receipt/rendering behavior and process tests are retained, while current CLI compilation and `task ready --help` passed after reconciliation | None. |
 | Repository contracts remain consistent | Lane-catalogue and architecture/module-boundary tests, Ruff and compile checks | Passed at `ec4c8505`: 81 catalogue/boundary cases; current main supplies the merged CI lane allocation without changing compensation source | Agent Gates and fresh full hosted CI remain external evidence. |
 
@@ -90,7 +90,12 @@ allocation. TASK B completed 404 of 411 collected nodes before the unchanged
 1,200-second deadline, with no assertion failure and complete PostgreSQL/MinIO
 cleanup; all other lanes and the CLI contract passed. Merged PR #515 moves the
 measured checker workload out of TASK B while preserving the canonical inventory.
-Fresh hosted evidence on the reconciled head remains required.
+Fresh hosted evidence at `8363c0e0` passed all nine lanes and the canonical
+8,805-node aggregate. TASK B completed all 380 selected nodes in 731.367 seconds
+with zero skips or deselections and complete PostgreSQL/MinIO cleanup. The later
+roadmap-only correction keeps PILOT-14 in open status until human merge; product
+source and test blobs remain unchanged, while the documentation head requires
+its own hosted checks.
 
 ## Reconciliation
 
