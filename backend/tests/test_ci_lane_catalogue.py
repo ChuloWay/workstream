@@ -83,15 +83,36 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         )
 
 
+def test_measured_project_modules_partition_between_project_a_and_c() -> None:
+    expected = {
+        "tests/test_guide_document_intake.py",
+        "tests/test_projects.py",
+    }
+    assert set(catalogue.PROJECT_AC_PARTITION_MODULES) == expected
+    assert not expected & set(catalogue.PROJECT_MODULES)
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_AC_LANES
+        for module in expected
+    )
+
+    for module in expected:
+        assert tuple(lane.name for lane in LANES if module in lane.modules) == (
+            "project_lifecycle_a",
+            "project_lifecycle_c",
+        )
+
+    nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
+    manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
+    assert {row["nodeid"] for row in manifest["nodes"]} == set(nodes)
+    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_PROJECT_AC_LANES)
+
+
 def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     """Keep lane balance tied to subsystem ownership and measured schema cost."""
     modules_by_lane = {lane.name: set(lane.modules) for lane in LANES}
 
-    assert (
-        modules_by_lane["project_lifecycle_a"]
-        == modules_by_lane["project_lifecycle_b"]
-        == modules_by_lane["project_lifecycle_c"]
-        == set(catalogue.CHECKER_DELIVERY_MODULES)
+    partitioned_project_modules = (
+        set(catalogue.CHECKER_DELIVERY_MODULES)
         | set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
         | {
             "tests/tasks/evaluation_delivery/test_custody.py",
@@ -128,7 +149,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/guide_activation/test_rejections.py",
             "tests/projects/guide_activation/test_successor.py",
             "tests/projects/test_active_guide_repository.py",
-            "tests/test_guide_document_intake.py",
             "tests/projects/guide_compilation/test_capability_growth.py",
             "tests/projects/guide_compilation/test_capability_growth_postgresql.py",
             "tests/projects/guide_compilation/test_compilation_storage_limit.py",
@@ -230,9 +250,12 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/projects/submission_policy_mutations/test_public_routes_postgresql.py",
             "tests/projects/test_retired_submission_derivation_route.py",
             "tests/test_api_drill_repairs.py",
-            "tests/test_projects.py",
         }
     )
+    assert modules_by_lane["project_lifecycle_b"] == partitioned_project_modules
+    project_ac_modules = partitioned_project_modules | set(catalogue.PROJECT_AC_PARTITION_MODULES)
+    assert modules_by_lane["project_lifecycle_a"] == project_ac_modules
+    assert modules_by_lane["project_lifecycle_c"] == project_ac_modules
     assert (
         modules_by_lane["task_lifecycle_a"]
         == modules_by_lane["task_lifecycle_b"]
@@ -257,6 +280,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_project_display.py",
             "tests/tasks/test_ready_queue.py",
             "tests/tasks/test_public_queues.py",
+            "tests/tasks/test_locked_compensation.py",
             "tests/authorization/task_queues/test_authority.py",
             "tests/authorization/task_queues/test_contracts.py",
             "tests/authorization/task_queues/test_transactions.py",
@@ -495,7 +519,9 @@ def test_schema_nodes_share_one_lane() -> None:
 
 
 @pytest.mark.parametrize(
-    ("names", "modules"), catalogue.PARTITION_GROUPS, ids=("shared", "project", "task")
+    ("names", "modules"),
+    catalogue.PARTITION_GROUPS,
+    ids=("shared", "project", "project-ac", "task"),
 )
 def test_owner_nodes_partition_deterministically(names, modules) -> None:
     module = modules[0]
