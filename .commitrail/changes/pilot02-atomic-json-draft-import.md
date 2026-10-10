@@ -201,6 +201,19 @@ Review must freeze the chosen key/order and native intermediate-wait regression,
 including normal create versus overlapping import and revoked-authority races.
 No fence, source participant, model or migration is implemented by this record.
 
+Field mapping also has one concrete pending native-parity decision:
+`TaskImportRow.difficulty` publishes an 80-character limit, whereas the current
+`WorkstreamTask.difficulty` column is `varchar(50)` and `TaskCreate` has no length
+validator. A valid retained source must not fail as an unexplained late database
+error. Proposed handoff expands that TASK display column to 80 in the sole-author
+successor migration, preserving existing values and the published source shape;
+the alternative is an explicitly reviewed parser-contract narrowing to 50.
+Native 51/80-character controls and an indexed 81-character rejection must
+discriminate the chosen boundary. No schema choice or alteration is claimed here.
+The batch retains the actual `workstream.task_import.v1` document identity and
+an explicit row-mapping/parser commitment, alongside verified bytes, so replay
+never silently reinterprets retained rows under a later mapping.
+
 ## Acceptance criteria
 
 - [ ] One real 200-row verified JSON source creates exactly 200 DRAFT Tasks under
