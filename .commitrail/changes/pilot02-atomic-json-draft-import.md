@@ -101,7 +101,9 @@ it is not an authoritative native-UUID batch relationship.
    and the Go management contract accepts `batch`. It cannot be cast to an owned
    UUID reference. The proposed handoff preserves that metadata unchanged and
    gives the new ordered membership table the authoritative native batch/Task
-   relationship. Batch APIs select the new UUID owner, never arbitrary metadata.
+   relationship. Newly imported rows may expose the native batch UUID spelling
+   through that string metadata field. Batch APIs select the new UUID owner,
+   never arbitrary metadata; a manually supplied spelling creates no membership.
    Existing management/contributor projection and concealment stay unchanged.
    A duplicate project/external-ID preflight must stop with a diagnostic, without
    deleting or rewriting retained Tasks. Affected review freezes this mapping,
@@ -132,6 +134,72 @@ it is not an authoritative native-UUID batch relationship.
   Native FK representations follow each existing owner, including string-mapped
   actor/audit UUIDs. The sole migration author receives the reviewed field/lock
   contract against then-current main before allocating a linear successor.
+
+### Scope decisions and transaction preparation
+
+The lead confirmed the following issue489 boundaries during preparation:
+
+- Preserve all retained/manual `import_batch_id` strings. New imports may stamp
+  their native batch UUID spelling into metadata; native immutable membership
+  alone selects and authorizes the batch. Add a public control showing that a
+  manually supplied matching string never appears in the batch status response.
+- Exact project/SHA/byte-count file replay returns original IDs and creation
+  facts after fresh batch/source Project Manager authority, even if Tasks have
+  advanced. Reused actor/action/key with a changed source selector conflicts;
+  a new key for the same exact file recovers the original batch. Actual verified
+  source ancestry and parser/schema identity are bound, not a client digest alone.
+- Case-sensitive project/external-ID uniqueness covers every non-NULL Task
+  external ID, including normal create. Native preflight reports retained
+  duplicates without changing their data. NULL remains available for normal
+  Tasks without an external ID; arbitrary batch-label metadata gains no authority.
+
+The existing Task composite `(id, project_id)` uniqueness can bind native row
+membership without rewriting Task IDs or their string-mapped UUID model type.
+The new membership must bind the original external ID, row index, normalized
+row digest, original CREATE decision and immutable creation response separately
+from mutable current Task status. A batch closure invariant rejects committed
+success with a missing, foreign or duplicated row. No committed pending batch
+or partially created row set is an accepted intermediate product state.
+
+The creation refactor stays in the existing TASK owner: extract the current
+create operation into one explicitly caller-owned participant, with the current
+single-create public method remaining its transaction-owning wrapper. Batch
+imports compose that participant; they do not invoke the public command in a
+loop. Reserve all needed per-row replay identities before current AUTH locks,
+then retain each row's real CREATE decision and `TaskCreated` evidence. Successful
+batch closure and all row effects use one root; denial restaging follows the
+specific AUTH instance that captured the original decision. Late-row failure
+must remove every earlier successful creation effect in that root.
+
+The proposed lock graph requires affected review before code or DDL:
+
+1. Finish bounded ART provider verification and JSON parsing before the TASK
+   write root. Source read evidence belongs to that earlier read operation;
+   no provider stream, scratch cleanup or I/O occurs while TASK write locks wait.
+2. Within the root, reserve TASK batch/file and retry identities. Acquire a
+   TASK-owned external-ID creation fence shared by normal create and imports,
+   then existing Task/member custody where replay needs it, in deterministic
+   order. Actor and ART source foreign keys on reservations must not implicitly
+   take conflicting owner locks before their proper phase.
+3. Validate actual ART source/verification custody through its typed participant
+   after TASK custody and before fresh AUTH consumption. Read immutable tuples
+   with the weakest required lock; do not lock a mutable put attempt merely to
+   trust an application DTO. Preserve the existing TASK-before-CHECKERS/ART order.
+4. Consume fresh current batch/source authority, then the exact per-row CREATE
+   authority through the shared owner. Stage Tasks, immutable memberships and
+   evidence; close the batch and flush once before the caller commits.
+
+One concrete lock hazard still needs a reviewed choice: the current normal
+create inserts its Task after AUTH. Adding a unique external-ID reservation
+before AUTH only for imports can deadlock with a normal create that holds AUTH
+and waits on that reservation. Both entry points must share the same pre-AUTH
+creation fence; an import-only lock does not solve this. Candidate fences are a
+single project-scoped transaction advisory lock, or sorted project/external-ID
+transaction advisory locks. Native uniqueness remains the correctness boundary
+for direct SQL; the fence controls owner lock order and is not authority.
+Review must freeze the chosen key/order and native intermediate-wait regression,
+including normal create versus overlapping import and revoked-authority races.
+No fence, source participant, model or migration is implemented by this record.
 
 ## Acceptance criteria
 
