@@ -96,11 +96,42 @@ it is not an authoritative native-UUID batch relationship.
    It cannot mutate Tasks that subsequently advanced. Existing single-Task
    command replay/state-conflict behavior remains unchanged. Status reads are
    project-scoped and conceal foreign or revoked access without source coordinates.
-6. Before the schema handoff, explicitly settle the native relationship for the
-   existing string `import_batch_id` and preflight retained non-UUID/duplicate
-   provenance. Unsafe retained facts must stop the migration with a diagnostic;
-   they cannot be rewritten or discarded. Review also freezes exact batch replay
-   AUTH facts and lock order before application coding.
+6. The inspected string `import_batch_id` is genuinely caller-supplied metadata:
+   retained public fixtures use `private-import-batch` and `ready-private-import`,
+   and the Go management contract accepts `batch`. It cannot be cast to an owned
+   UUID reference. The proposed handoff preserves that metadata unchanged and
+   gives the new ordered membership table the authoritative native batch/Task
+   relationship. Batch APIs select the new UUID owner, never arbitrary metadata.
+   Existing management/contributor projection and concealment stay unchanged.
+   A duplicate project/external-ID preflight must stop with a diagnostic, without
+   deleting or rewriting retained Tasks. Affected review freezes this mapping,
+   exact replay AUTH facts and lock order before application coding.
+
+### Proposed schema and replay handoff for affected review
+
+- Batch: UUIDv7 ID, project UUID, original source UUID, exact SHA/count,
+  verified ART ancestry, row count, original actor/link and immutable creation
+  receipt/result. Unique received-file identity is project plus SHA/count.
+- Ordered membership: native batch and Task UUIDs, project, zero-based row index,
+  external ID, normalized row digest and exact CREATE decision. Composite custody
+  binds each member to its batch/project and Task/project. Each Task has one
+  import membership; batch row indexes and project/external IDs are unique.
+- Retry receipt: actor/action/UUID key namespace, exact project/source selector
+  request digest, original batch ID and immutable ordered result. A changed
+  selector under the same key conflicts even when the alternative source has
+  identical bytes. A new key for the same exact project/file recovers the
+  original batch after current authority and actual original custody checks.
+- Fresh replay authorization binds the current caller to the stored batch/source
+  and manifest digest. It does not borrow the original actor, issue new CREATE
+  effects or pretend an advanced Task is DRAFT. Status can show current row
+  states separately from immutable creation facts. Existing single-Task command
+  state-conflict semantics remain intact.
+- The ART binding participant validates actual immutable source/verification
+  rows in the caller's root; an application-created DTO supplies no authority.
+  Direct SQL must reject foreign ancestry, partial closure and changed tuples.
+  Native FK representations follow each existing owner, including string-mapped
+  actor/audit UUIDs. The sole migration author receives the reviewed field/lock
+  contract against then-current main before allocating a linear successor.
 
 ## Acceptance criteria
 
