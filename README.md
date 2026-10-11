@@ -395,6 +395,11 @@ COMPILATION_ID --input FILE` explicitly dispatches the successor identified by
 that saved correction receipt (or the `correction` member from `correct-post`).
 It reports the backend's diagnostic status, not completed processing or activation;
 uncertain writes are never automatically retried.
+`workstream project guide activate PROJECT_ID GUIDE_ID --input FILE
+--idempotency-key UUID` separately activates exactly selected, approved policies
+through the public manager API. It validates the immutable activation receipt;
+Workstream retains readiness, contribution-policy binding and supersession
+authority. It does not approve policies or enable false-review guide activation.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
