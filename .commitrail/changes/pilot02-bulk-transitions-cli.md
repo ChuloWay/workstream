@@ -23,7 +23,7 @@ Their current root transaction prevents composition across a complete batch.
   selection only. Extend exact existing SCREEN/RELEASE participants in
   `authorized_commands.py` through prepare/authorize/stage phases. Coordinate
   these regions with the atomic-import owner before edits.
-- Aggregate custody is owned in `task_batch_transition_models.py`: exactly one
+- Aggregate custody is owned in `task_batch_transition/models.py`: exactly one
   actor/action/key aggregate and its complete native member links. Lead review
   approved compact ordered receipt projections and a scoped batch-write client
   deadline, to be selected after native 200/500 measurements. No global transport
@@ -34,6 +34,13 @@ Their current root transaction prevents composition across a complete batch.
   updates in TASK router/import tests. A tiny `_locked_task` extraction shares
   its unchanged AUTH prepare/consume/finally-close block through `_authorize_facts`.
   CREATE methods/dataclass and source ancestry preparation remain untouched.
+- Sole schema-owner handoff authorizes only the two aggregate model imports in
+  `backend/app/db/models.py`. The new model owner is relocated once to
+  `task_batch_transition/models.py` so canonical registration uses the existing
+  protected metadata-discovery exception, without an alias or new private debt.
+  A fresh-process canonical-only metadata/FK compiler check belongs in the
+  existing compact-contract test module. Migration, Alembic/env, fingerprints,
+  reset lists and schema-owner inventory remain with the sole migration author.
 - New route/dependency modules and append-only composition of the typed batch
   transition owner. Shared TASK `router.py`, `schemas.py`, model/receipt and AUTH
   regions require an explicit owner handoff before edits. Existing per-Task
@@ -168,8 +175,9 @@ Peer review of aggregate checkpoint `42900b036` found that the new dependency
 projected immutable identity after the canonical Task dependency rolled back and
 expired the resolved ORM actor/link. The repair projects the existing public
 `ActorIdentityFacts` first, before that rollback; no row refresh, implicit read,
-new authority owner or private actor import is introduced. Peer native dependency
-expiration replay and installed aggregate public proof remain separate evidence.
+new authority owner or private actor import is introduced. The peer dependency-order/ORM-expiration discriminator uses actual FastAPI and
+attached SQLAlchemy models without SQL, schema or AUTH execution. It proves the
+composition defect and correction; native aggregate public proof remains pending.
 The same peer review found missing/blank RELEASE input reached the native pending
 receipt reason CHECK before normal validation. The repair uses the canonical
 `TaskValidationError` reason requirement before opening/reserving the root,
@@ -180,6 +188,19 @@ The repaired pure compact/admission plus retained parser checks passed 44 cases
 in 7.40 seconds; the protected module-boundary check also exited successfully.
 The owned idle PostgreSQL container was stopped after the earlier native proof's
 isolated DB/role cleanup, while aggregate DDL remains pending.
+
+Peer review also found the canonical model graph omitted the aggregate tables,
+so the new canonical receipt FK could not resolve in a fresh process. The repair
+registers both aggregate classes through the existing metadata-discovery owner
+and relocates their unchanged bodies once to the protected `.models` shape.
+The focused regression imports only `app.db.models` in a fresh interpreter,
+resolves every canonical FK and compiles the canonical receipt and aggregate
+tables with the PostgreSQL dialect. This is model-graph proof, not installed DDL
+or native aggregate proof.
+The focused compact/admission/model-graph module passed 15 cases in 7.98 seconds.
+Removing only canonical registration makes the fresh-process check fail at the
+missing aggregate table; registration was restored exactly. The protected
+module-boundary validator passed without ledger changes or gate exemptions.
 
 CLI import/status/screen/release are implemented as separate exact typed calls.
 Original/status responses are bounded to 16MiB, compact transitions to 2MiB,

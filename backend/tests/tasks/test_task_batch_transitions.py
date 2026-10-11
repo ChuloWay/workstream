@@ -18,7 +18,7 @@ from app.modules.authorization.runtime import ActorKind, ActorStatus, HumanAutho
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.models import AuditEvent, TaskCommandReceipt, WorkstreamTask
 from app.modules.tasks.service import TaskValidationError
-from app.modules.tasks.task_batch_transition_models import TaskBatchTransitionMember, TaskBatchTransitionReceipt
+from app.modules.tasks.task_batch_transition.models import TaskBatchTransitionMember, TaskBatchTransitionReceipt
 from app.modules.tasks.task_batch_transitions import TaskBatchTransitionCommands
 from app.modules.tasks.task_batch_transitions import _membership_digest
 from app.modules.tasks.task_import_membership import TaskImportMembership

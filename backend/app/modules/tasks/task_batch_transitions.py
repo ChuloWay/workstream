@@ -19,7 +19,7 @@ from app.modules.tasks.authorized_commands import AuthorizedTaskCommands, TaskTr
 from app.modules.tasks.command_replay import TaskReplayConflict
 from app.modules.tasks.schemas import TaskResponse
 from app.modules.tasks.service import TaskValidationError
-from app.modules.tasks.task_batch_transition_models import TaskBatchTransitionMember, TaskBatchTransitionReceipt
+from app.modules.tasks.task_batch_transition.models import TaskBatchTransitionMember, TaskBatchTransitionReceipt
 from app.modules.tasks.task_import_membership import TaskImportMembership, TaskImportMembershipSnapshot
 
 
