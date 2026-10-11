@@ -208,8 +208,10 @@ exceeds the locked checker limits before any pre-check attempt or durable upload
 intent, using the same content contract required by later dispatch. ARCH-04E1B-B2 prepares exact source proposals from current
 CHECKERS custody and historical PROJECTS policy, without inserting a manifest
 or granting authority by itself. ARCH-04E2-B consumes this source in the complete
-authorized outcome. B8 supplies hidden completion delivery; remediation and production composition
-remain before public intake and the first real end-to-end drill.
+authorized outcome. B8 supplies hidden completion delivery; 04F2 routes verified
+contributor-correctable failures to `needs_revision` under either policy mode.
+Exact-cause replacement intake, setup-fault/Operator recovery and production
+composition remain before public intake and the first real end-to-end drill.
 
 Active work stays on that first contribution path. Live human review/revision,
 reviewer participation and fulfillment delivery follow separately.
@@ -416,7 +418,8 @@ AUTH/PREP decisions for claim, invocation and finalization. AUTH-OUTBOX-02 binds
 those decisions to immutable delivery receipts and supplies Celery delivery and
 bounded recovery scans. ARCH-03C2 registers exact assignment invalidation,
 with atomic publication from supported authority mutations and separate fixed
-feature authority. Checker routing still needs its own authorized handler.
+feature authority. The authorized checker request and completion handlers are
+implemented but unregistered; production registration and live composition remain.
 Delivery consumes `workstream.outbox` only under a validated non-eager prefork
 Celery process; other queues can use their appropriate execution pool.
 
@@ -824,8 +827,10 @@ contribution. Database closure rejects partial effects; exact replay verifies
 the original tuple with fresh authority instead of repairing it.
 
 B6 supplies atomic Submission/dispatch, B7 hidden request delivery and B8 hidden
-completion handling with commit-before-ACK. Remediation, live
-registration, false-guide activation and public intake remain subsequent gates.
+completion handling with commit-before-ACK. 04F2 supplies the hidden remediation
+handoff without Review, acceptance, contribution or award effects. Exact-cause
+replacement intake, setup-fault/Operator recovery, live registration, false-guide
+activation and public intake remain subsequent gates.
 The hidden false-path proof uses explicitly seeded valid policy lineage;
 normal guide activation still rejects false until the runtime is ready.
 Conditional awards stay atomic; payment delivery and fulfillment-root machinery
