@@ -14,8 +14,8 @@ Issue #489 remains open after this chunk; batch transitions and CLI remain.
 
 ## Current behavior
 
-The inspected integration is `aa784c9c31490c018d35f4a3cc306fa7c16c630a`,
-based on main `251bc29bc5661934b2b70cde4ceecd52dbfa9687`. PR520 remains
+The inspected integration is `f831fda0fc8373910a71bcc0726e2a342898e890`,
+based on main `7e499849ab871f445012cf9e343ff97fbb95d62d`. PR520 remains
 the separate source prerequisite. Its parser in `tasks/api/task_import.py`
 accepts one strict UTF-8 JSON document with 1..500 rows, required case-sensitive
 external IDs, indexed duplicate errors and an 8 MiB ceiling. ART's
@@ -151,6 +151,51 @@ it is not an authoritative native-UUID batch relationship.
   Native FK representations follow each existing owner, including string-mapped
   actor/audit UUIDs. The sole migration author receives the reviewed field/lock
   contract against then-current main before allocating a linear successor.
+
+### Concrete owner and schema preparation for review
+
+The next reviewed application boundary separates canonical Task creation into
+three caller-root phases: prepare all retry/Task identities, consume the same
+exact CREATE authority facts, then stage the existing Task/create event/receipt.
+Normal public create remains the root-owning wrapper over those phases, with
+its current advanced-state replay rejection unchanged. Batch replay recovers
+its immutable creation responses and never routes through single-Task recovery.
+No public route or per-row command transaction is invoked from the batch owner.
+
+The proposed native tables are `task_import_batches`,
+`task_import_batch_members` and `task_import_batch_command_receipts`:
+
+- Batch reservation has UUIDv7 ID, project UUID, original source UUID and its
+  operation identity, exact source SHA/count, document schema and parser/mapping
+  identity, row count, original actor/link, current batch creation decision and
+  original immutable ordered result. Project/SHA/count identifies one original
+  batch. A reservation may be incomplete only inside its caller root; a deferred
+  closure check rejects any committed pending header, missing or extra member,
+  incorrect row count or incomplete ordered result.
+- Native ART ancestry stores source/attempt/content/replica IDs, verification
+  job/generation/receipt and exactly one operation/observation acknowledgement.
+  FKs plus owner validation bind each tuple to the same project/source bytes;
+  mutable replica health is not an original creation fact.
+- Member has batch/project/Task IDs, bounded original row index, exact external
+  ID, normalized row digest, server-generated CREATE key, original Task command
+  receipt/decision IDs and closed original Task creation response. Task/project
+  and batch/project composite FKs close custody; unique Task membership,
+  batch/index and project/external-ID identities reject substitutions. Existing
+  arbitrary `import_batch_id` metadata never supplies these relationships.
+- Batch command receipt has UUIDv7 ID, actor, closed import action, UUID key,
+  exact request digest over project/selected-source IDs, selected verified
+  ancestry, original batch ID and closed immutable ordered result. Actor/action/
+  key is unique. A changed selector conflicts after fresh authority; new-key
+  exact-file recovery creates only the current retry receipt/evidence.
+
+String-mapped owner UUID FKs use `Uuid(as_uuid=False)`; native UUID-typed receipt
+IDs keep their existing representation. Reservation actor/project/source/Task
+FK checks are deferred where they would otherwise acquire implicit locks before
+explicit TASK/ART/AUTH preparation. SOURCE KEY SHARE is acquired explicitly
+before AUTH and retained through commit. All member/receipt mutation and deletion
+are refused after committed closure. The sole migration author reviews native
+constraints, deferred closure and exact owner representations before DDL work;
+these proposed names/columns are planning, not installed schema.
 
 ### Scope decisions and transaction preparation
 
@@ -307,9 +352,9 @@ per-command transaction and unbound string provenance as explicit handoff issues
 ## Reconciliation
 
 - Current-source reconciliation: this preparation branch incorporates source
-  prerequisite `aa784c9c31490c018d35f4a3cc306fa7c16c630a` and main `251bc29b`,
+  prerequisite `f831fda0fc8373910a71bcc0726e2a342898e890` and main `7e499849`,
   retaining its ten-lane CI, hidden materialization/completion/failure/feedback
-  owners and CLI approval contracts. Only this planning record differs from the
+  owners and CLI approval/correction contracts. Only this planning record differs from the
   source candidate; no atomic-import product code, test or DDL is authored.
 - Next usable boundary: review the exact batch/membership/receipt schema and
   owner preparation/replay graph, then coordinate the sole-author migration and
