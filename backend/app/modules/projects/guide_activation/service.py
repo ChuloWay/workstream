@@ -7,6 +7,7 @@ from app.core.identifiers import new_record_id
 
 from app.modules.authorization.api import ActorKind
 from app.modules.checkers.api.pre_submit import EffectivePreSubmissionPlanLineage
+from app.modules.checkers.api.external_policy import LockedExternalCheckerPolicies
 from app.modules.projects.api.guide_activation import (
     GuideActivationCommand,
     GuideActivationFacts,
@@ -39,7 +40,8 @@ class GuideActivationService:
     """AUTH-12H supplies live manager authority; composition without it denies."""
 
     def __init__(
-        self, session, *, contribution, planner, pre_catalogue, post_catalogue, authorization=None
+        self, session, *, contribution, planner, pre_catalogue, post_catalogue,
+        authorization=None, registry=None,
     ):
         self.session = session
         self.authorization = authorization
@@ -52,6 +54,11 @@ class GuideActivationService:
         self.projects = ProjectRepository(session)
         self.replay = GuideMutationRepository(session)
         self.post = PostPolicyRepository(session)
+        if registry is None:
+            from app.modules.checkers.external_registry import ExternalCheckerRegistryReader
+
+            registry = ExternalCheckerRegistryReader(session)
+        self.registry = registry
 
     async def activate(
         self, command: GuideActivationCommand, *, actor, request_id: UUID
@@ -150,7 +157,9 @@ class GuideActivationService:
                         GuideActivationBlocked,
                         persisted_items=source_items,
                     )
-                    self._readiness(command, locked, policy, post_custody, review, revision)
+                    await self._readiness(
+                        command, locked, policy, post_custody, review, revision
+                    )
                 except ProjectServiceError:
                     raise GuideProposalError("approval_blocked") from None
                 try:
@@ -218,9 +227,29 @@ class GuideActivationService:
             await self.replay.complete(record, response_json=receipt.model_dump(mode="json"))
             return receipt
 
-    def _readiness(self, command, locked, policy, post, review, revision):
+    async def _readiness(self, command, locked, policy, post, review, revision):
         target, approval = command.target.proposal, locked.view.approval_custody
-        require_catalogues(target, self.pre_catalogue, self.post_catalogue)
+        external = (
+            approval.operation.effective_pre_submit_plan.get("schema_version")
+            == "external_checker_policies.v1"
+        )
+        if external:
+            policies = LockedExternalCheckerPolicies.model_validate(
+                approval.operation.effective_pre_submit_plan
+            )
+            if policies.pre_submit.model_dump(mode="json") != approval.pre.compiled_bundle:
+                raise GuideProposalError("approval_blocked")
+            for binding in (*policies.pre_submit.entries, *policies.post_submit.entries):
+                current = await self.registry.read_exact(
+                    binding.registry.registry_entry_id,
+                    binding.registry.entry_digest,
+                )
+                if current != binding.registry:
+                    raise GuideProposalError("approval_blocked")
+            if locked.result.capability_suggestions:
+                raise GuideProposalError("approval_blocked")
+        else:
+            require_catalogues(target, self.pre_catalogue, self.post_catalogue)
         post.compiled.validate_catalogue(self.post_catalogue)
         ProjectService(self.session).validate_activation_ready(
             locked.view.guide,
@@ -235,6 +264,8 @@ class GuideActivationService:
             approval_custody=approval,
             post_policy_custody=post,
         )
+        if external:
+            return
         upstream = command.target.upstream
         plan = self.planner.compile_effective_plan(
             lineage=EffectivePreSubmissionPlanLineage(

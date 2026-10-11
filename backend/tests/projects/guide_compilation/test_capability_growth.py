@@ -47,10 +47,10 @@ def growth_report(*, gaps=True):
                 evidence_refs=refs,
             ))
     return result().model_copy(update={
-        "status": "guide_blocked" if gaps else "draft_ready",
-        "submission_artifact_policy": None if gaps else result().submission_artifact_policy,
+        "status": "draft_ready_with_warnings" if gaps else "draft_ready",
+        "submission_artifact_policy": result().submission_artifact_policy,
         "findings": (CompilationFinding(
-            severity="blocking_gap" if gaps else "info", code="catalogue.coverage",
+            severity="warning" if gaps else "info", code="catalogue.coverage",
             message="Required automation is unavailable." if gaps else "All checks are supported.",
             evidence_refs=refs,
         ),),
@@ -180,7 +180,21 @@ def test_blocked_report_rejects_platform_defaults_as_project_bindings(stage):
 
 
 def test_blocked_handoff_cannot_include_artifact_policy():
-    report = growth_report()
+    report = result().model_copy(update={
+        "status": "guide_blocked",
+        "submission_artifact_policy": None,
+        "findings": (CompilationFinding(
+            severity="blocking_gap", code="guide.invalid",
+            message="The guide cannot define a valid task policy.",
+            evidence_refs=result().findings[0].evidence_refs,
+        ),),
+        "requirements": (AtomicGuideRequirement(
+            requirement_id="guide_invalid",
+            statement="The guide must define a valid task policy.",
+            disposition="guide_blocker",
+            evidence_refs=result().findings[0].evidence_refs,
+        ),),
+    })
     validate_project_guide_compilation_result(context(ids()), report)
     with pytest.raises(ValueError, match="blocked guide cannot publish policy proposals"):
         validate_project_guide_compilation_result(context(ids()), report.model_copy(update={

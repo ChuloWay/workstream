@@ -30,9 +30,15 @@ def context(snapshot=None):
 def proposal(disposition, *, binding=False):
     gap = disposition == "post_submit_capability_gap"
     return ProjectGuideCompilationResult(
-        status="guide_blocked" if gap else "draft_ready",
+        status="draft_ready_with_warnings" if gap else "draft_ready",
         agent_version="v1",
-        submission_artifact_policy=None if gap else _artifact_policy(),
+        submission_artifact_policy=_artifact_policy(),
+        findings=({
+            "severity": "warning",
+            "code": "capability.unavailable",
+            "message": "Required automation is awaiting a registered checker.",
+            "evidence_refs": (_evidence(),),
+        },) if gap else (),
         requirements=(
             AtomicGuideRequirement(
                 requirement_id="quality",
@@ -69,11 +75,11 @@ def test_requirement_disposition_is_preserved():
     validate_project_guide_compilation_result(source, gap)
     assert gap.requirements[0].disposition.value == "post_submit_capability_gap"
     assert gap.post_submit_bindings == ()
-    ready_gap = gap.model_copy(
-        update={"status": "draft_ready", "submission_artifact_policy": _artifact_policy()}
+    blocked_gap = gap.model_copy(
+        update={"status": "guide_blocked", "submission_artifact_policy": None}
     )
-    with pytest.raises(ValueError, match="ready compilation cannot contain blocking"):
-        validate_project_guide_compilation_result(source, ready_gap)
+    with pytest.raises(ValueError, match="blocked compilation requires blocking"):
+        validate_project_guide_compilation_result(source, blocked_gap)
 
 
 @pytest.mark.parametrize("disposition", ("human_review", "post_submit_capability_gap"))

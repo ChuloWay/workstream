@@ -310,6 +310,11 @@ class ExternalCheckerRegistryPort(Protocol):
     ) -> ExternalCheckerRegistryEntry:
         """Read one exact immutable entry without selecting a latest version."""
 
+    async def read_identity(
+        self, *, capability_id: str, capability_version: str, phase: ExternalCheckerPhase
+    ) -> ExternalCheckerRegistryEntry:
+        """Resolve the one immutable registered phase identity during approval."""
+
 
 class ExternalCheckerMaterial(ExternalCheckerValue):
     """One verified read-only material identity without provider coordinates."""

@@ -129,6 +129,63 @@ class ExternalCheckerRegistryRepository:
         await self._session.refresh(row)
 
 
+class ExternalCheckerRegistryReader:
+    """Authority-neutral exact metadata reads for trusted policy compilation."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+        self._repository = ExternalCheckerRegistryRepository(session)
+
+    def _require_root_transaction(self) -> None:
+        transaction = self._session.sync_session.get_transaction()
+        if (
+            transaction is None
+            or not transaction.is_active
+            or self._session.in_nested_transaction()
+        ):
+            raise ExternalCheckerRegistryUnavailable(
+                "external_checker_registry_unavailable"
+            )
+
+    async def read_exact(
+        self, registry_entry_id: UUID, entry_digest: str
+    ) -> ExternalCheckerRegistryEntry:
+        self._require_root_transaction()
+        if type(registry_entry_id) is not UUID or type(entry_digest) is not str:
+            raise ExternalCheckerRegistryUnavailable(
+                "external_checker_registry_unavailable"
+            )
+        row = await self._repository.by_exact_id(registry_entry_id)
+        if row is None or row.entry_digest != entry_digest:
+            raise ExternalCheckerRegistryUnavailable(
+                "external_checker_registry_unavailable"
+            )
+        return _row_entry(row)
+
+    async def read_identity(
+        self, *, capability_id: str, capability_version: str, phase: str
+    ) -> ExternalCheckerRegistryEntry:
+        self._require_root_transaction()
+        if (
+            type(capability_id) is not str
+            or type(capability_version) is not str
+            or phase not in {"pre_submit", "post_submit"}
+        ):
+            raise ExternalCheckerRegistryUnavailable(
+                "external_checker_registry_unavailable"
+            )
+        row = await self._repository.by_identity(
+            capability_id=capability_id,
+            capability_version=capability_version,
+            phase=phase,
+        )
+        if row is None:
+            raise ExternalCheckerRegistryUnavailable(
+                "external_checker_registry_unavailable"
+            )
+        return _row_entry(row)
+
+
 class ExternalCheckerRegistryService:
     """Publish immutable registry metadata without granting execution authority."""
 
@@ -225,17 +282,19 @@ class ExternalCheckerRegistryService:
         self, registry_entry_id: UUID, entry_digest: str
     ) -> ExternalCheckerRegistryEntry:
         """Read one exact row; never select a current/latest version."""
-        self._require_root_transaction()
-        if type(registry_entry_id) is not UUID or type(entry_digest) is not str:
-            raise ExternalCheckerRegistryUnavailable(
-                "external_checker_registry_unavailable"
-            )
-        row = await self._repository.by_exact_id(registry_entry_id)
-        if row is None or row.entry_digest != entry_digest:
-            raise ExternalCheckerRegistryUnavailable(
-                "external_checker_registry_unavailable"
-            )
-        return _row_entry(row)
+        return await ExternalCheckerRegistryReader(self._session).read_exact(
+            registry_entry_id, entry_digest
+        )
+
+    async def read_identity(
+        self, *, capability_id: str, capability_version: str, phase: str
+    ) -> ExternalCheckerRegistryEntry:
+        """Resolve the immutable identity during trusted approval compilation."""
+        return await ExternalCheckerRegistryReader(self._session).read_identity(
+            capability_id=capability_id,
+            capability_version=capability_version,
+            phase=phase,
+        )
 
     @staticmethod
     def _matches_request(

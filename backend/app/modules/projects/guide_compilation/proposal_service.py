@@ -50,6 +50,9 @@ class GuideProposalService:
         self.session = session
         self.authorization = authorization
         self.repository = GuideProposalRepository(session)
+        from app.modules.checkers.external_registry import ExternalCheckerRegistryReader
+
+        self.registry = ExternalCheckerRegistryReader(session)
 
     async def review_package(
         self,
@@ -120,6 +123,7 @@ class GuideProposalService:
                 pre_capabilities=pre_capabilities,
                 post_capabilities=post_capabilities,
                 planner=planner,
+                registry=self.registry,
             )
 
     def _require_transaction(self) -> None:

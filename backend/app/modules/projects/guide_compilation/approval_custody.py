@@ -17,6 +17,7 @@ from app.modules.projects.models import (
     SubmissionPolicyMutationIdempotencyRecord,
     SubmissionArtifactPolicy,
 )
+from app.modules.checkers.api.external_policy import LockedExternalCheckerPolicies
 
 from .custody_payloads import policy_digest
 from .models import ProjectGuideProposalApproval
@@ -201,7 +202,13 @@ def _require_plan_and_provenance(view, custody, target) -> None:
         "schema_version": target.pre_catalogue_schema_version,
         "manifest_sha256": target.pre_catalogue_manifest_hash,
     }
-    if (
+    if operation.effective_pre_submit_plan.get("schema_version") == "external_checker_policies.v1":
+        policies = LockedExternalCheckerPolicies.model_validate(
+            operation.effective_pre_submit_plan
+        )
+        if policies.pre_submit.model_dump(mode="json") != pre.compiled_bundle:
+            raise ValueError("approved external checker policy mismatch")
+    elif (
         operation.effective_pre_submit_plan.get("lineage") != expected_lineage
         or operation.effective_pre_submit_plan.get("catalogue") != expected_catalogue
     ):

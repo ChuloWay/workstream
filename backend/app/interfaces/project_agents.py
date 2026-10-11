@@ -266,9 +266,9 @@ class AtomicGuideRequirement(BaseModel):
     disposition: RequirementDisposition = Field(description=(
         "Use human_review for work assigned to an authorized human reviewer. "
         "Use a capability gap only for required unsupported automated evaluation. "
-        "Any guide_blocker, pre_submit_capability_gap or post_submit_capability_gap "
-        "requires guide_blocked and no artifact policy. Exact supported binding "
-        "proposals may remain as catalogue-match evidence without being projected."
+        "A guide_blocker requires guide_blocked and no artifact policy. Capability "
+        "gaps remain explicit activation blockers while the manager reviews the "
+        "available exact bindings in a warning-ready proposal."
     ))
     platform_coverage: PlatformCoverageRef | None = None
     evidence_refs: tuple[GuideEvidenceRef, ...] = Field(
@@ -593,15 +593,13 @@ def _validate_capability_suggestions(
 def _validate_status_consistency(result: ProjectGuideCompilationResult) -> None:
     """Require ready and blocked status to match findings and dispositions."""
     has_blocker = any(finding.severity == "blocking_gap" for finding in result.findings) or any(
-        requirement.disposition
-        in {
-            RequirementDisposition.GUIDE_BLOCKER,
-            RequirementDisposition.PRE_SUBMIT_CAPABILITY_GAP,
-            RequirementDisposition.POST_SUBMIT_CAPABILITY_GAP,
-        }
+        requirement.disposition is RequirementDisposition.GUIDE_BLOCKER
         for requirement in result.requirements
     )
-    has_warning = any(finding.severity == "warning" for finding in result.findings)
+    has_warning = (
+        any(finding.severity == "warning" for finding in result.findings)
+        or bool(result.capability_suggestions)
+    )
     if result.status == "guide_blocked" and not has_blocker:
         raise ValueError("blocked compilation requires blocking evidence")
     if result.status != "guide_blocked" and has_blocker:

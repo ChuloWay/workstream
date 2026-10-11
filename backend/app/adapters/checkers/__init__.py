@@ -74,6 +74,13 @@ def configured_external_checker_execution_factory(settings):
     )
 
 
+def external_checker_registry_reader(session):
+    """Resolve immutable metadata for trusted approval and execution owners."""
+    from app.modules.checkers.external_registry import ExternalCheckerRegistryReader
+
+    return ExternalCheckerRegistryReader(session)
+
+
 class _ExecutionRequest(Protocol):
     plan: Any
     commitment: Any
