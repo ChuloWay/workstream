@@ -58,7 +58,7 @@ human revision. The new TASK context and committed creation kind will name
 `revision` SQL inserts are denied; no historical revision alias or invented
 source is added to runtime/replay. The migration checks retained revision rows
 before changing the schema. If their exact cause and authority receipts cannot
-be proven, upgrade refuses transactionally with the rows and 0032 schema
+be proven, upgrade refuses transactionally with the rows and 0033 schema
 unchanged. Retained initial rows migrate unchanged. New human-review revision
 admission remains unavailable until its own exact Review cause exists.
 
@@ -95,7 +95,7 @@ replacement writer or route would fork the atomic creation operation.
    dispatch SQL closure as necessary. Retained initial evidence and its exact
    receipts remain valid. If retained `revision` dispatches cannot prove the
    new exact source and receipts, fail before applying DDL; keep their rows and
-   0032 revision unchanged. Do not backfill a guessed cause or preserve an
+   0033 revision unchanged. Do not backfill a guessed cause or preserve an
    uncaused runtime/replay branch. Deny SQL substitution of cause, predecessor,
    recommendation or receipt. No sibling Alembic head.
 
@@ -246,10 +246,10 @@ setup fault never becomes contributor remediation.
   binding, evaluation or outbox effect. Rollback and actual later participant
   insertion failure leave no partial replacement effects.
 - Direct PostgreSQL probes reject evidence/admission/dispatch cause
-  substitution and mismatched final AUTH contexts. Upgrade from 0032 preserves
+  substitution and mismatched final AUTH contexts. Upgrade from 0033 preserves
   committed initial Submission and remediation outcome rows and validates their
   original receipts. A separately seeded retained uncaused `revision` dispatch
-  makes the upgrade refuse with the 0032 schema and all rows unchanged. Function
+  makes the upgrade refuse with the 0033 schema and all rows unchanged. Function
   search paths and FKs do not trust caller text.
 
 The valid integration control uses
@@ -276,7 +276,7 @@ remain control requirements.
 | Competing replacements and response-loss replay | TASK lock, unique admission/dispatch and fresh AUTH replay | Two valid ready admissions for one cause; winning committed request replays exact receipt after later task state |
 | Late participant failure | Root transaction's real binding/evaluation/outbox insertion | Valid preparation/admission and authority reach the chosen failing insertion; no partial rows persist |
 | Direct SQL cause or receipt substitution | ART/TASK FK, immutable row and deferred dispatch/AUTH closure | A complete committed replacement first passes SQL predicates; alter one cause or receipt in an isolated transaction |
-| 0032 to 0033 upgrade | Migration retained-row precheck and revised SQL closure | Retained initial Submission and 04F2 remediation source survive; separately seeded uncaused revision refuses unchanged |
+| 0033 to 0034 upgrade | Migration retained-row precheck and revised SQL closure | Retained initial Submission and 04F2 remediation source survive; separately seeded uncaused revision refuses unchanged |
 
 Preserve existing initial, success, archive/semantic-change and foreign-predecessor
 controls; replace only synthetic-status fixtures that would bypass the new
