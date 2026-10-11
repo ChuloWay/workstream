@@ -265,10 +265,10 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
             assert admission.status == "ready"
             assert admission.predecessor_submission_id == str(predecessor_id)
             assert admission.predecessor_submission_version == 1
-            assert admission.checker_remediation_manifest_id == str(source_id)
+            assert admission.checker_remediation_manifest_id == source_id
             assert evidence.predecessor_submission_id == str(predecessor_id)
             assert evidence.predecessor_submission_version == 1
-            assert evidence.checker_remediation_manifest_id == str(source_id)
+            assert evidence.checker_remediation_manifest_id == source_id
             assert admission.archive_sha256 != predecessor_admission.archive_sha256
             assert (
                 admission.semantic_manifest_sha256 != predecessor_admission.semantic_manifest_sha256
@@ -366,7 +366,7 @@ async def test_replacement_without_routed_cause_denied_before_bytes(
         )
         async with h.factory() as session:
             admission = await session.get(SubmissionBundleAdmission, str(admission_id))
-            assert admission.checker_remediation_manifest_id == str(source_id)
+            assert admission.checker_remediation_manifest_id == source_id
 
 
 async def test_unchanged_replacement_archive_or_manifest_denied(
@@ -571,7 +571,7 @@ async def test_sql_evidence_insert_rejects_superseded_checker_cause(
         async with h.factory() as session:
             admission = await session.get(SubmissionBundleAdmission, str(admission_id))
             assert admission.status == "ready"
-            assert admission.checker_remediation_manifest_id == str(source_id)
+            assert admission.checker_remediation_manifest_id == source_id
             donor_id = admission.pre_submit_evidence_set_id
             donor = (await session.execute(text(
                 "SELECT attempt_id,attempt_request_digest FROM public.pre_submit_evidence_sets "
@@ -676,7 +676,7 @@ async def test_sql_attempt_reconstruction_rejects_foreign_routed_cause(
             async with local.factory() as session:
                 admission = await session.get(SubmissionBundleAdmission, str(admission_id))
                 assert admission.status == "ready"
-                assert admission.checker_remediation_manifest_id == str(local_source)
+                assert admission.checker_remediation_manifest_id == local_source
                 donor_id = admission.pre_submit_evidence_set_id
                 donor = (await session.execute(text("""
                     SELECT e.attempt_id, a.request_json::jsonb AS request_body
