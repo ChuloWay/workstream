@@ -203,9 +203,16 @@ class _ArtifactAdmissionAdapter:
             binding_decision_id=result.binding_decision_id,
             archive_sha256=result.material.archive_sha256,
             byte_count=result.material.archive_byte_count,
-            evaluation_content=submission_evaluation_content(
-                request.task_context, request.project_context, request.packet,
-                result.material.files, result.material.archive_sha256,
+            evaluation_content=(
+                submission_evaluation_content(
+                    request.task_context,
+                    request.project_context,
+                    request.packet,
+                    result.material.files,
+                    result.material.archive_sha256,
+                )
+                if selected_post_policy is None
+                else None
             ),
             selected_post_submit_policy=selected_post_policy,
             selected_evaluation_content=(

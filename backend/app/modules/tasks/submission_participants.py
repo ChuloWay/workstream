@@ -33,16 +33,20 @@ class SubmissionArtifactBindingFacts:
 
 @dataclass(frozen=True, slots=True)
 class SubmissionArtifactAdmissionResult(SubmissionArtifactBindingFacts):
-    evaluation_content: PostSubmissionEvaluationContent
+    evaluation_content: PostSubmissionEvaluationContent | None = None
     selected_post_submit_policy: LockedExternalPostSubmitPolicy | None = None
     selected_evaluation_content: SelectedPostSubmissionContent | None = None
 
     def __post_init__(self) -> None:
-        """Require selected policy and its locked request content together."""
+        """Keep retained legacy and selected content mutually exclusive."""
         if (self.selected_post_submit_policy is None) != (
             self.selected_evaluation_content is None
         ):
             raise ValueError("selected POST admission content is incomplete")
+        if (self.evaluation_content is None) == (
+            self.selected_evaluation_content is None
+        ):
+            raise ValueError("admission must select exactly one POST contract")
         if (
             self.selected_evaluation_content is not None
             and self.selected_evaluation_content.policy
