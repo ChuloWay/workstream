@@ -1649,6 +1649,10 @@
       "target": "backend/app/modules/tasks/submitted_bundle.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_import_batches.py"
+    },
+    {
       "group": "auth",
       "target": "backend/app/schemas/auth.py"
     },
@@ -1797,7 +1801,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "97a2953c103a4db84ef09f6cc1afe60e23a7f6b235f8cccf1abf1a31f7558f59",
+  "authority_digest": "fccb894db43d59f708dde7c3b9839b778f9715f685e34070be564c11ad6a5efe",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

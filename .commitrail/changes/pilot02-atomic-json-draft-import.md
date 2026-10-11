@@ -445,13 +445,18 @@ never silently reinterprets retained rows under a later mapping.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Canonical creation participant | Exact `59d47a6c` isolated native execution of five retained CREATE, denial, rollback and receipt controls | 5 passed in 69.02 seconds; schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Proves preservation of normal creation; no atomic batch success claim |
+| Source consumer and current CREATE participants | Exact `37d8705d` isolated execution of actual immutable-binding substitution/provider-health, public source, canonical denial, CREATE rollback and receipt controls | 10 passed in 120.95 seconds; runner exit 0, schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Raw `/tmp/pilot02-atomic-37d-source-create-corrected.log` and `.json`; validates existing owner integration, not installed batch schema |
 | Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical caller-root phases, closed batch DTOs, model representations, ART immutable-binding participant and batch/root/AUTH composition are implemented | New table constraints and guards require sole-author DDL and native proof |
-| Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Not run; tests not authored | All positive/negative/concurrency cases above must pass |
+| Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Eighteen native acceptance cases collect; not executed because batch schema is not installed | Actual 200-Task creation, immutable replay, late-stage rollback, direct SQL guards and intermediate-wait controls must pass after sole-author DDL |
 | Schema, guards and complete integration | Sole-author native graph/reset/UUID proof, affected guards, complete hosted lanes and aggregate | Not run for this chunk | Exact frozen candidate, actual merge tree and cleanup required |
 
 ## Review findings
 
-No implementation review is claimed. Scope preparation identifies the existing
+Independent schema/lock handoff review at exact `37d8705d` found no actionable
+architecture/reuse/security issue in the non-DDL models, replay and preparation
+graph. This qualified review does not prove native guards or public batch
+success; those require the integrated migration and real end-to-end execution.
+Scope preparation identifies the existing
 per-command transaction and unbound string provenance as explicit handoff issues.
 Affected independent planning review found two concrete missing integration
 requirements: the closed TaskCreated JSON source token and complete batch/header/
@@ -471,9 +476,11 @@ not prove installed custody or a public import result.
   provider-free ART binding validation and public route composition are coded
   on this isolated branch; no delivered import capability is claimed. No migration is
   authored in this worktree.
-- Next usable boundary: review the exact batch/membership/receipt schema and
-  owner preparation/replay graph, then coordinate the sole-author migration and
-  implement atomic JSON-to-DRAFT import. Explicit batch screen/release and CLI
+- Next usable boundary: coordinate the reviewed batch/membership/receipt schema
+  and owner preparation/replay graph with the sole-author migration, then prove
+  the coded atomic JSON-to-DRAFT operation through public native acceptance cases.
+  No migration ordinal is allocated before the actual merged predecessor and
+  delegated migration queue are reconciled. Explicit batch screen/release and CLI
   project/source/batch commands with client CSV conversion remain later chunks.
 - Remaining risks: source prerequisite and current required CI/actual external
   review remain separate; no deployed import capability or whole Issue 489 claim.
