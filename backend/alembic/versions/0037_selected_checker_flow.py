@@ -708,6 +708,26 @@ def _replace_submission_dispatch_custody() -> None:
     op.execute(definition.replace(old_packet, new_packet))
 
 
+def _replace_submission_packet_custody() -> None:
+    definition = op.get_bind().execute(sa.text(
+        "select pg_get_functiondef('public.validate_submission_packet_custody()'::regprocedure)"
+    )).scalar_one()
+    old_lookup = """    SELECT evidence.packet_sha256 INTO expected_packet
+      FROM public.submission_bundle_admissions AS admission
+      JOIN public.pre_submit_evidence_sets AS evidence
+        ON evidence.id = admission.pre_submit_evidence_set_id
+     WHERE admission.id = stored.submission_bundle_admission_id;"""
+    new_lookup = """    SELECT coalesce(evidence.packet_sha256,admission.packet_sha256)
+      INTO expected_packet
+      FROM public.submission_bundle_admissions AS admission
+      LEFT JOIN public.pre_submit_evidence_sets AS evidence
+        ON evidence.id = admission.pre_submit_evidence_set_id
+     WHERE admission.id = stored.submission_bundle_admission_id;"""
+    if definition.count(old_lookup) != 1:
+        raise RuntimeError("submission packet custody lookup shape changed")
+    op.execute(definition.replace(old_lookup, new_lookup))
+
+
 def upgrade() -> None:
     op.execute("set local search_path=pg_catalog,public,pg_temp")
     op.execute("lock table public.actor_profiles, public.actor_identity_links, public.audit_events, public.submissions, public.checker_runs, public.submission_bundle_durable_intents, public.submission_bundle_admissions in access exclusive mode")
@@ -720,6 +740,7 @@ def upgrade() -> None:
     _replace_post_policy_custody()
     _replace_checker_run_custody()
     _replace_submission_dispatch_custody()
+    _replace_submission_packet_custody()
 
 
 def downgrade() -> None:
