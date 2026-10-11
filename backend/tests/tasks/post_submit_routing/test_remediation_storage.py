@@ -89,3 +89,52 @@ async def test_database_rejects_crossed_remediation_recommendation(tmp_path, iso
             assert await outcome_snapshot(session) == before
         async with h.factory() as session, session.begin():
             assert (await apply_outcome(session, h, None)).routing_recommendation == "needs_revision"
+
+
+async def test_remediation_notice_requires_exact_manifest_and_receipt(tmp_path, isolated_database_env, monkeypatch):
+    import app.modules.tasks.post_submit_routing.outcome as owner
+    from app.core.identifiers import new_record_id
+
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        async with h.factory() as session:
+            before = await outcome_snapshot(session)
+        original = owner._notice
+        for field in ("routing_manifest_id", "authorization_decision_id"):
+            def altered(*args):
+                notice = original(*args)
+                return notice.model_copy(update={
+                    "payload": notice.payload | {field: str(new_record_id())},
+                })
+
+            with monkeypatch.context() as patch:
+                patch.setattr(owner, "_notice", altered)
+                async with h.factory() as session:
+                    with pytest.raises(DBAPIError, match="routing authority requires its complete governed outcome"):
+                        async with session.begin():
+                            await apply_outcome(session, h, None)
+            async with h.factory() as session:
+                assert await outcome_snapshot(session) == before
+        async with h.factory() as session, session.begin():
+            assert (await apply_outcome(session, h, None)).routing_recommendation == "needs_revision"
+
+
+async def test_failure_cannot_authorize_acceptance(tmp_path, isolated_database_env):
+    from app.core.identifiers import new_record_id
+
+    async with remediation_source(tmp_path, isolated_database_env, human_review_required=False) as h:
+        async with h.factory() as session, session.begin():
+            result = await apply_outcome(session, h, None)
+        async with h.factory() as session:
+            # Exercise the actual SQL context validator with otherwise genuine
+            # receipt/source facts. Each forbidden acceptance field is independent.
+            assert await session.scalar(text(
+                "SELECT public.task_routing_context_valid(m) FROM public.task_post_submit_routing_manifests m WHERE id=:id"
+            ), {"id": result.routing_manifest_id}) is True
+            for field, value in (("final_acceptance_id", str(new_record_id())), ("authorized_lifecycle_generation", 1)):
+                assert await session.scalar(text("""
+                    SELECT public.task_routing_context_valid(jsonb_populate_record(
+                      NULL::public.task_post_submit_routing_manifests,
+                      to_jsonb(m) || jsonb_build_object(CAST(:field AS text),CAST(:value AS text))))
+                    FROM public.task_post_submit_routing_manifests m WHERE id=:id
+                """), {"id": result.routing_manifest_id, "field": field, "value": str(value)}) is False
+            await no_economic_effects(session)
