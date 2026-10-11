@@ -117,6 +117,14 @@ class VerifiedTaskImportSourceBinding(BaseModel):
 class TaskImportSourceBindingPort(Protocol):
     """Prepare immutable source custody before caller-root AUTH and authorize it freshly."""
 
+    async def source_commitment(self, project_id: UUID, source_id: UUID) -> TaskImportSourceAuthorityFacts:
+        """Read native immutable declaration facts without claiming or granting authority."""
+        ...
+
+    async def authorize_commitment(self, facts: TaskImportSourceAuthorityFacts) -> UUID:
+        """Freshly authorize actual source facts before exposing preparation outcomes."""
+        ...
+
     async def prepare_binding(
         self, project_id: UUID, source_id: UUID,
         expected: VerifiedTaskImportSourceBinding | None = None,
@@ -126,6 +134,10 @@ class TaskImportSourceBindingPort(Protocol):
 
     async def authorize_binding(self, binding: VerifiedTaskImportSourceBinding) -> UUID:
         """Revalidate prepared custody and consume the current caller's exact source READ."""
+        ...
+
+    async def restage_denial(self, error: TaskImportSourceAuthorityDenied) -> None:
+        """Retain a caller-root denial through the actual issuing source authority."""
         ...
 
 

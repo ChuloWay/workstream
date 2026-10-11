@@ -32,7 +32,7 @@ from app.modules.tasks.api.guide_documents import (
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage, TaskTransitionAuditPort, TaskTransitionFacts
 from app.modules.tasks.api.audit_evidence import AuditTaskEvidenceRequest, AuditTaskEvidencePage, TaskEvidenceInvalid
 from app.modules.tasks.models import TaskAssignment, TaskCommandReceipt, WorkstreamTask
-from app.modules.tasks.command_replay import TaskCommandReplay
+from app.modules.tasks.command_replay import TaskCommandReplay, TaskReplayConflict
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.schemas import (
     ContributorTaskLifecycle, ContributorTaskWorkContext, ManagementTaskWorkContext,
@@ -213,7 +213,12 @@ class AuthorizedTaskCommands:
         )
         if replayed is not None:
             return replayed
-        task = await self._repo.add_task(task)
+        try:
+            task = await self._repo.add_task(task)
+        except IntegrityError as exc:
+            if integrity_constraint_name(exc) == "uq_workstream_tasks_project_external_id":
+                raise TaskReplayConflict("external_task_id_conflict") from exc
+            raise
         await self._record_management(task, TaskAuthorityOperation.CREATE, decision, None, None)
         response = self._contexts.task_response_for_authority(task, can_manage=True)
         self._replay.complete(prepared.receipt, None, self._facts(task, None, TaskAuthorityOperation.CREATE, None), response)

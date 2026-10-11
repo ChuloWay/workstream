@@ -199,6 +199,7 @@ class ArtifactTaskImportSourceCommands:
     async def _verified_ancestry(
         self, source: ArtifactTaskImportSource,
         expected: VerifiedTaskImportSourceBinding | None = None,
+        *, require_operational: bool = False,
     ) -> tuple[VerifiedTaskImportSourceBinding, ArtifactReplica]:
         """Validate append-only byte receipts independently of current provider health."""
         query = (select(
@@ -208,19 +209,21 @@ class ArtifactTaskImportSourceCommands:
          .join(ArtifactVerificationJob, ArtifactVerificationJob.originating_put_attempt_id == ArtifactPutAttempt.id)
          .join(ArtifactVerificationReceipt, ArtifactVerificationReceipt.verification_job_id == ArtifactVerificationJob.id)
          .where(ArtifactPutAttempt.task_import_source_id == source.id, ArtifactVerificationReceipt.outcome == "verified"))
-        if expected is None:
+        if require_operational:
             query = query.where(
                 ArtifactVerificationJob.status == "verified",
                 ArtifactVerificationReceipt.execution_generation == ArtifactVerificationJob.execution_generation,
             ).order_by(ArtifactVerificationJob.created_at.desc(), ArtifactVerificationJob.id.desc()).limit(1)
-        else:
+        elif expected is not None:
             query = query.where(ArtifactVerificationReceipt.id == str(expected.verification_receipt_id))
+        else:
+            query = query.order_by(ArtifactVerificationReceipt.created_at.desc(), ArtifactVerificationReceipt.id.desc()).limit(1)
         row = (await self._session.execute(query)).one_or_none()
         if row is None:
             raise TaskImportSourceError("task_import_source_unverified", 409)
         attempt, replica, content, job, receipt = row
         if (attempt.producer_request_type != "task_import_source" or attempt.project_id != source.project_id
-                or (expected is None and attempt.status != "object_confirmed")
+                or (require_operational and attempt.status != "object_confirmed")
                 or attempt.logical_role != "task_import_source"
                 or (attempt.sha256, attempt.byte_count, attempt.media_type) != (source.sha256, source.byte_count, source.media_type)
                 or (content.sha256, content.byte_count) != (source.sha256, source.byte_count)
@@ -270,6 +273,32 @@ class ArtifactTaskImportSourceCommands:
             raise TaskImportSourceError("task_import_source_custody_invalid", 409)
         return binding, replica
 
+    async def source_commitment(self, project_id: UUID, source_id: UUID) -> TaskImportSourceAuthorityFacts:
+        """Read the actual declaration for preparation; this supplies no authority."""
+        if not self._session.in_transaction():
+            raise RuntimeError("source commitment requires a caller transaction")
+        source = await self._session.scalar(select(ArtifactTaskImportSource).where(
+            ArtifactTaskImportSource.id == str(source_id), ArtifactTaskImportSource.project_id == str(project_id),
+        ).execution_options(populate_existing=True))
+        if source is None:
+            raise TaskImportSourceError("task_import_source_not_found", 404)
+        return self._facts(source)
+
+    async def authorize_commitment(self, facts: TaskImportSourceAuthorityFacts) -> UUID:
+        """Fence the actual declaration and authorize a provider-free preparation read."""
+        if not self._session.in_transaction():
+            raise RuntimeError("source authorization requires a caller transaction")
+        source = await self._session.scalar(select(ArtifactTaskImportSource).where(
+            ArtifactTaskImportSource.id == str(facts.source_id),
+            ArtifactTaskImportSource.project_id == str(facts.project_id),
+        ).with_for_update(read=True, key_share=True).execution_options(populate_existing=True))
+        if source is None:
+            raise TaskImportSourceError("task_import_source_not_found", 404)
+        current = self._facts(source)
+        if current != facts:
+            raise TaskImportSourceError("task_import_source_custody_invalid", 409)
+        return await self._authorization.authorize(TaskImportSourceAction.READ, current)
+
     async def prepare_binding(
         self, project_id: UUID, source_id: UUID,
         expected: VerifiedTaskImportSourceBinding | None = None,
@@ -291,9 +320,13 @@ class ArtifactTaskImportSourceCommands:
         source = await self._session.get(ArtifactTaskImportSource, str(binding.source_id))
         return await self._authorization.authorize(TaskImportSourceAction.READ, self._facts(source))
 
+    async def restage_denial(self, error: TaskImportSourceAuthorityDenied) -> None:
+        """Delegate caller-root denial custody to the source instance that captured it."""
+        await self._authorization.restage_denial(error)
+
     async def _verified_replica(self, source: ArtifactTaskImportSource) -> ArtifactReplica:
         """Apply current operational health checks only to an actual provider read."""
-        _, replica = await self._verified_ancestry(source)
+        _, replica = await self._verified_ancestry(source, require_operational=True)
         if (replica.verification_state, replica.availability_state, replica.integrity_state) != (
             "verified", "available", "valid",
         ):
