@@ -12,11 +12,15 @@ from app.modules.checkers.api import (
     PostSubmitManifestEntry,
     PostSubmitPolicyInputs,
 )
-from app.modules.checkers.api.historical_post_submit import PostSubmitCatalogue, PostSubmitDefinition
-from app.modules.checkers.post_submit_catalogue import build_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import (
+    CompiledPostSubmitPolicy,
+    EmptyPostSubmitConfiguration,
+    PostSubmitCatalogue,
+    PostSubmitDefinition,
+    PostSubmitPolicyEntry,
+    current_post_submit_catalogue,
+)
 from app.modules.checkers.api.post_submit import make_post_submit_request
-from app.modules.checkers.runner import default_checker_registry
-from app.modules.projects.post_submit_policy import build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec
 
 HASH = "sha256:" + "a" * 64
 OTHER_HASH = "sha256:" + "b" * 64
@@ -24,7 +28,37 @@ PROJECT = UUID("11111111-1111-4111-8111-111111111111")
 
 
 def catalogue():
-    return build_post_submit_catalogue(default_checker_registry())
+    """Return the frozen retained-history decoder, never an executable registry."""
+    return current_post_submit_catalogue()
+
+
+def _policy(*, project_id: UUID, snapshot: PostSubmitCatalogue) -> CompiledPostSubmitPolicy:
+    """Build a retained historical value without restoring its removed compiler."""
+    selected = {
+        "check_acceptance_criteria_present": "project_required",
+    }
+    entries = tuple(
+        PostSubmitPolicyEntry(
+            checker_id=item.capability_id,
+            definition_version=item.capability_version,
+            implementation_version=item.implementation_version,
+            classification=(
+                "platform_default"
+                if item.platform_default
+                else selected[item.capability_id]
+            ),
+            configuration=EmptyPostSubmitConfiguration(),
+        )
+        for item in snapshot.definitions
+        if item.platform_default or item.capability_id in selected
+    )
+    return CompiledPostSubmitPolicy(
+        project_id=project_id,
+        guide_version="v1",
+        catalogue_manifest_sha256=snapshot.manifest_sha256,
+        entries=entries,
+        blocking_severities=("critical", "high"),
+    )
 
 
 def altered_catalogue(original=None, *, index=8, **changes):
@@ -39,13 +73,7 @@ def altered_catalogue(original=None, *, index=8, **changes):
 
 def request(*, snapshot=None, project_id=PROJECT):
     snapshot = snapshot or catalogue()
-    policy = compile_project_post_submit_checker_spec(
-        project_id=str(project_id), guide_version="v1",
-        spec=build_project_post_submit_checker_spec(
-            project_id=str(project_id), guide_version="v1",
-            required_checkers=["check_acceptance_criteria_present"],
-        ),
-    )
+    policy = _policy(project_id=project_id, snapshot=snapshot)
     policy.validate_catalogue(snapshot)
     fields = {}
     for name in ExpectedPostSubmitContext.model_fields:
