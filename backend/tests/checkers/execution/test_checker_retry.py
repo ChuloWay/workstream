@@ -27,6 +27,8 @@ from app.modules.tasks.post_submit_routing.evaluation_guard import TaskEvaluatio
 from app.modules.tasks.repository import TaskRepository
 from tests.post_submit_materialization_helpers import material_fixture
 from tests.checkers.post_submit.support import change_request
+from tests.checkers.execution.completion_fixture import completed_evidence
+from tests.checkers.execution.support import live_executor
 from tests.project_create_fixtures import grant_fixture_admin_role
 from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome, state
 from tests.tasks.evaluation_delivery.test_worker_materialization import _worker_port
@@ -417,39 +419,52 @@ async def test_same_key_independent_sessions_wait_for_task_then_replay_one_retry
             internal_workers.shutdown_artifact_internal_runtime()
 
 
+async def _assert_nonterminal_source_reaches_guard(h, monkeypatch, expected_status):
+    operator = await _operator_for(h)
+    command = _command(h, operator)
+    before_opens = len(h.store.opens)
+    async with h.factory() as session:
+        before_events = await session.scalar(select(func.count()).select_from(OutboxEvent))
+        assert (await session.get(CheckerRun, str(command.source_run_id))).status == expected_status
+    reached = False
+    original = TaskEvaluationGuard.lock_terminal_retry_scope
+
+    async def observed(guard, request):
+        nonlocal reached
+        await original(guard, request)
+        reached = True
+
+    with monkeypatch.context() as patch:
+        patch.setattr(TaskEvaluationGuard, "lock_terminal_retry_scope", observed)
+        with pytest.raises(CheckerExecutionUnavailable, match="checker_retry_source_unavailable"):
+            async with h.factory.begin() as session:
+                await checker_retry_service(session, operator).retry(command)
+    assert reached and len(h.store.opens) == before_opens
+    async with h.factory() as session:
+        assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+        assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == before_events
+
+
 async def test_queued_source_reaches_valid_task_guard_then_refuses_terminal_retry(
     tmp_path, isolated_database_env, monkeypatch,
 ):
     async with material_fixture(tmp_path, isolated_database_env) as h:
-        operator = _context()
-        async with h.factory.begin() as session:
-            await _seed_human_actor(session, operator)
-            await grant_fixture_admin_role(
-                session, operator.actor_profile_id, role="operator", scope="system",
-            )
-        key = new_record_id()
-        operator = operator.model_copy(update={"request_id": key, "correlation_id": key})
-        command = CheckerRetryCommand(
-            source_run_id=h.created.evaluation_attempt_id,
-            request_key=key, reason="Queued run has not failed",
-        )
-        reached = False
-        original = TaskEvaluationGuard.lock_terminal_retry_scope
+        await _assert_nonterminal_source_reaches_guard(h, monkeypatch, "queued")
 
-        async def observed(guard, request):
-            nonlocal reached
-            result = await original(guard, request)
-            reached = True
-            return result
 
-        with monkeypatch.context() as patch:
-            patch.setattr(TaskEvaluationGuard, "lock_terminal_retry_scope", observed)
-            with pytest.raises(CheckerExecutionUnavailable, match="checker_retry_source_unavailable"):
-                async with h.factory.begin() as session:
-                    await checker_retry_service(session, operator).retry(command)
-        assert reached
-        async with h.factory() as session:
-            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
-            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
-            run = await session.get(CheckerRun, str(command.source_run_id))
-            assert run.status == "queued"
+async def test_running_source_reaches_valid_task_guard_then_refuses_terminal_retry(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        lease, replay = await live_executor(h)._claim(h.request)
+        assert replay is None and lease.reservation.attempt_id == h.created.evaluation_attempt_id
+        await _assert_nonterminal_source_reaches_guard(h, monkeypatch, "running")
+
+
+@pytest.mark.parametrize("recommendation", ["allow_review", "task_setup_blocked"])
+async def test_completed_source_reaches_valid_task_guard_then_refuses_terminal_retry(
+    tmp_path, isolated_database_env, monkeypatch, recommendation,
+):
+    async with completed_evidence(tmp_path, isolated_database_env, recommendation) as h:
+        assert h.result.outcome == "completed" and h.run.routing_recommendation == recommendation
+        await _assert_nonterminal_source_reaches_guard(h, monkeypatch, "completed")
