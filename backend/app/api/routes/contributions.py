@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from pydantic import AwareDatetime, ValidationError
 
 from app.api.deps.contribution_exports import (
@@ -14,7 +14,15 @@ from app.modules.contributions.api.records import ContributionExportResponse, Co
 
 router = APIRouter(tags=["contributions"])
 _ERRORS = {status: {"model": ApiErrorResponse} for status in (404, 422, 503)}
-_CSV = {"200": {"content": {"text/csv": {"schema": {"type": "string"}}}}}
+_CSV = {"200": {
+    "content": {"text/csv": {"schema": {"type": "string"}}},
+    "headers": {
+        "X-Workstream-Exported-At": {"description": "CSV original export instant, identical on every page",
+                                    "schema": {"type": "string", "format": "date-time"}},
+        "X-Workstream-Next-Cursor": {"description": "CSV continuation; absent on the final page",
+                                    "schema": {"type": "string", "maxLength": 4096}},
+    },
+}}
 
 
 def _selected(context, audience, project_id, output_format, contribution_type, recorded_from, recorded_before,
@@ -39,7 +47,9 @@ async def read_own_contributions(
     project_id: UUID | None = None, format: Literal["json", "csv"] = "json",
     contribution_type: Literal["accepted_submission", "completed_review"] | None = None,
     recorded_from: AwareDatetime | None = None, recorded_before: AwareDatetime | None = None,
-    page_size: int = 100, cursor: str | None = None,
+    page_size: Annotated[int, Query(ge=1, le=1000)] = 100,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=4096,
+                                       pattern=r"^[A-Za-z0-9_-]+$")] = None,
 ):
     """Return one authorized page of a fixed own-contribution selection."""
     return await contribution_export_response(context, _selected(
@@ -55,7 +65,9 @@ async def export_project_contributions(
     format: Literal["json", "csv"] = "json",
     contribution_type: Literal["accepted_submission", "completed_review"] | None = None,
     recorded_from: AwareDatetime | None = None, recorded_before: AwareDatetime | None = None,
-    page_size: int = 100, cursor: str | None = None,
+    page_size: Annotated[int, Query(ge=1, le=1000)] = 100,
+    cursor: Annotated[str | None, Query(min_length=1, max_length=4096,
+                                       pattern=r"^[A-Za-z0-9_-]+$")] = None,
 ):
     """Export one project for covering PM or exact-project Finance authority."""
     return await contribution_export_response(context, _selected(

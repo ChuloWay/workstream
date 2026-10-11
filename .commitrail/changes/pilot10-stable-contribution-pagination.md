@@ -22,6 +22,7 @@ protects other reads; it does not freeze export membership across transactions.
 
 - CON API/read facts, repository, projection, owner-local export cursor codec and
   record model; explicit CON composition and existing export REST dependencies/routes.
+- Read indexes for existing CON actor/project ordering and private membership ordering.
 - One sole-author native migration and corresponding schema/reset registration,
   after coordination with the existing migration owner; no guessed revision.
 - Focused contribution projection/cursor/native public-API regression tests,
@@ -80,9 +81,9 @@ CLI is a separate bounded PR.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current implementation | Inspect canonical CON read and AUTH keyset owner | Existing bounded reader and codec identified | Native membership design needs review |
+| Current implementation | Inspect canonical CON read and AUTH keyset owner | Existing read extended; peer selected expiring native membership | Installed native implementation pending |
 | Membership/authority | Real PostgreSQL installed-schema public reads, delayed commit and revocation controls | Planned | No native runtime claim yet |
-| Cursor validation | Focused tamper, scope, expiry and serialization controls | Planned | Implementation pending |
+| Cursor/projection validation | Focused cursor, exact projection, CSV and canonical-only model discovery | 68 pass; independent scope/expiry mutants fail intended assertions | No native membership claim |
 | Required repository checks | Focused checks plus required hosted CI and independent review | Planned | No readiness claim |
 
 ## Review findings

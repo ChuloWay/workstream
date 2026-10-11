@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, UniqueConstraint, Uuid, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, UniqueConstraint, Uuid, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -30,6 +30,8 @@ class ContributionRecord(Base):
         CheckConstraint("artifact_hash ~ '^sha256:[0-9a-f]{64}$'", name="artifact_hash"),
         UniqueConstraint("source_review_id"),
         UniqueConstraint("source_final_acceptance_id"),
+        Index("ix_contribution_records_self_export", "contributor_id", "created_at", "id"),
+        Index("ix_contribution_records_project_export", "project_id", "created_at", "id"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
@@ -110,6 +112,7 @@ class ContributionExportMember(Base):
     """Immutable originally visible identity and its source ordering timestamp."""
 
     __tablename__ = "contribution_export_members"
+    __table_args__ = (Index("ix_contribution_export_members_order", "export_id", "recorded_at", "contribution_id"),)
     export_id: Mapped[UUID] = mapped_column(
         Uuid(), ForeignKey("contribution_export_memberships.id", ondelete="CASCADE"), primary_key=True,
     )

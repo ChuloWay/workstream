@@ -1106,6 +1106,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/cursors.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/records/models.py"
     },
     {
@@ -1889,7 +1893,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "f735dc65412c3c09d4d06ff704d5a44d885385dd42d2cb06dddc9c4492e21675",
+  "authority_digest": "6284baec6963567f6e4fe22b9f8eafacbbe7c8174544cd4d36235ea3e7b4927d",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

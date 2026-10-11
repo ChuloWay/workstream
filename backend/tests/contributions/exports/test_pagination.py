@@ -1,6 +1,8 @@
 """Real public pages freeze visible membership and reauthorize continuation."""
 
 import asyncio
+import csv
+from io import StringIO
 
 from sqlalchemy import func, select, text
 
@@ -85,6 +87,11 @@ async def test_public_pages_exclude_pre_snapshot_uncommitted_record_after_it_com
             path, params={"page_size": 1, "cursor": cursor}, headers=other.headers,
         )
         assert crossed.status_code == 422, crossed.text
+        ungranted = await signed_access.actor("ungranted-membership-reader")
+        concealed = await signed_access.client.get(
+            path, params={"page_size": 1, "cursor": cursor}, headers=ungranted.headers,
+        )
+        assert concealed.status_code == 404, concealed.text
         next_page = await signed_access.client.get(
             path, params={"page_size": 1, "cursor": cursor}, headers=reader.headers,
         )
@@ -100,6 +107,23 @@ async def test_public_pages_exclude_pre_snapshot_uncommitted_record_after_it_com
         assert {row["contribution_id"] for row in fresh.json()["items"]} == set(ids) | {
             str(late_outcome.economic.contribution_record_id),
         }
+        csv_rows, csv_origin, csv_cursor = [], None, None
+        for page_number in range(3):
+            params = {"page_size": 1, "format": "csv"}
+            if csv_cursor is not None:
+                params["cursor"] = csv_cursor
+            csv_page = await signed_access.client.get(path, params=params, headers=reader.headers)
+            assert csv_page.status_code == 200, csv_page.text
+            if csv_origin is None:
+                csv_origin = csv_page.headers["X-Workstream-Exported-At"]
+            assert csv_page.headers["X-Workstream-Exported-At"] == csv_origin
+            csv_rows.extend(csv.DictReader(StringIO(csv_page.text, newline="")))
+            csv_cursor = csv_page.headers.get("X-Workstream-Next-Cursor")
+            assert (csv_cursor is None) is (page_number == 2)
+        assert {row["contribution_id"] for row in csv_rows} == {
+            row["contribution_id"] for row in fresh.json()["items"]
+        }
+        assert len(csv_rows) == 6
         async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(ContributionExportMembership)) >= 2
         revoked = await signed_access.client.post(
