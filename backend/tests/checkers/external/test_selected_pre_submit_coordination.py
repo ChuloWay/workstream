@@ -26,6 +26,8 @@ from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitLeaseFacts,
     SelectedPreSubmitReservationFacts,
 )
+from app.adapters.tasks import selected_pre_submit_task_guard
+from app.modules.tasks.repository import TaskRepository
 from app.modules.checkers.models import SelectedPreSubmitRun
 from app.modules.checkers.selected_pre_submit_coordination import (
     SelectedPreSubmitAdmissionCapability,
@@ -53,6 +55,67 @@ def _reservation() -> SelectedPreSubmitReservationFacts:
         semantic_manifest_sha256="sha256:" + "4" * 64,
         execution_budget_ms=120_000,
     )
+
+
+@pytest.mark.asyncio
+async def test_selected_pre_task_guard_rechecks_exact_locked_lineage(monkeypatch) -> None:
+    lineage = SelectedPreSubmitAdmissionLineage(
+        predecessor_submission_id=new_record_id(),
+        predecessor_submission_version=2,
+        guide_id=new_record_id(),
+        guide_version="guide-v2",
+        source_snapshot_id=new_record_id(),
+        source_snapshot_sha256="sha256:" + "5" * 64,
+        locked_guide_sha256="sha256:" + "6" * 64,
+        effective_policy_id=new_record_id(),
+        effective_policy_sha256="sha256:" + "7" * 64,
+        pre_submit_policy_id=new_record_id(),
+        pre_submit_policy_sha256="sha256:" + "8" * 64,
+        effective_plan_sha256="sha256:" + "9" * 64,
+        locked_policy_context_hash="sha256:" + "a" * 64,
+        semantic_manifest_id=new_record_id(),
+        semantic_manifest_body={"schema_version": "test"},
+        packet_sha256="sha256:" + "b" * 64,
+        storage_scheme="s3",
+    )
+    reservation = replace(
+        _reservation(),
+        policy_sha256=lineage.effective_plan_sha256,
+        semantic_manifest_sha256=canonical_json_hash(lineage.semantic_manifest_body),
+        admission_lineage=lineage,
+    )
+    locked = SimpleNamespace(
+        project_id=reservation.project_id,
+        guide_version=lineage.guide_version,
+        source_snapshot_id=lineage.source_snapshot_id,
+        source_snapshot_hash=lineage.source_snapshot_sha256,
+        effective_policy_id=lineage.effective_policy_id,
+        effective_policy_hash=lineage.effective_policy_sha256,
+        pre_submit_policy_id=lineage.pre_submit_policy_id,
+        pre_submit_policy_bundle_hash=lineage.pre_submit_policy_sha256,
+    )
+    context = SimpleNamespace(
+        task_id=reservation.task_id,
+        assignment_id=reservation.assignment_id,
+        contributor_id=reservation.actor_profile_id,
+        predecessor=SimpleNamespace(
+            submission_id=lineage.predecessor_submission_id,
+            version=lineage.predecessor_submission_version,
+        ),
+        locked_project_context=locked,
+    )
+
+    async def lock(_repository, request):
+        assert request.task_id == reservation.task_id
+        return context
+
+    monkeypatch.setattr(TaskRepository, "lock_submission_context", lock)
+    guard = selected_pre_submit_task_guard(SimpleNamespace())
+    await guard.lock_selected_pre_submit_scope(reservation)
+
+    locked.pre_submit_policy_bundle_hash = "sha256:" + "c" * 64
+    with pytest.raises(RuntimeError, match="selected PRE TASK custody changed"):
+        await guard.lock_selected_pre_submit_scope(reservation)
 
 
 def test_selected_pre_model_compiles_complete_owner_and_authority_custody() -> None:

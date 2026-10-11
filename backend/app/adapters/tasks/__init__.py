@@ -15,6 +15,7 @@ from app.modules.tasks.api import (
     SubmissionCreationRequest,
     SubmissionCreationResult,
     TaskSubmissionContextPort,
+    TaskSubmissionContextRequest,
 )
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.api import TaskSubmissionContextFacts
@@ -32,12 +33,61 @@ from app.modules.tasks.assignment_invalidation import AssignmentInvalidationOper
 from app.modules.tasks.api.assignment_invalidation import AssignmentInvalidationUnavailable
 from app.modules.outbox.api import HandlerOutcome
 from app.modules.checkers.api.execution import EvaluationTaskGuard
+from app.modules.checkers.api.selected_pre_submit import SelectedPreSubmitReservationFacts
 
 
 def evaluation_task_guard(session: AsyncSession) -> EvaluationTaskGuard:
     """Expose TASK-owned locking through the required CHECKERS consumer port."""
     from app.modules.tasks.post_submit_routing.evaluation_guard import TaskEvaluationGuard
     return TaskEvaluationGuard(session)
+
+
+class _SelectedPreSubmitTaskGuard:
+    """Project selected PRE custody through TASK's canonical submission lock."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._contexts = TaskRepository(session)
+
+    async def lock_selected_pre_submit_scope(
+        self, reservation: SelectedPreSubmitReservationFacts
+    ) -> None:
+        lineage = reservation.admission_lineage
+        if lineage is None:
+            raise RuntimeError("selected PRE admission lineage is unavailable")
+        context = await self._contexts.lock_submission_context(
+            TaskSubmissionContextRequest(
+                task_id=reservation.task_id,
+                assignment_id=reservation.assignment_id,
+                contributor_id=reservation.actor_profile_id,
+                predecessor_submission_id=lineage.predecessor_submission_id,
+            )
+        )
+        predecessor = context.predecessor
+        references = context.locked_project_context
+        if (
+            context.task_id != reservation.task_id
+            or context.assignment_id != reservation.assignment_id
+            or context.contributor_id != reservation.actor_profile_id
+            or (predecessor.submission_id if predecessor is not None else None)
+            != lineage.predecessor_submission_id
+            or (predecessor.version if predecessor is not None else None)
+            != lineage.predecessor_submission_version
+            or references.project_id != reservation.project_id
+            or references.guide_version != lineage.guide_version
+            or references.source_snapshot_id != lineage.source_snapshot_id
+            or references.source_snapshot_hash != lineage.source_snapshot_sha256
+            or references.effective_policy_id != lineage.effective_policy_id
+            or references.effective_policy_hash != lineage.effective_policy_sha256
+            or references.pre_submit_policy_id != lineage.pre_submit_policy_id
+            or references.pre_submit_policy_bundle_hash
+            != lineage.pre_submit_policy_sha256
+        ):
+            raise RuntimeError("selected PRE TASK custody changed")
+
+
+def selected_pre_submit_task_guard(session: AsyncSession) -> _SelectedPreSubmitTaskGuard:
+    """Expose TASK-first selected PRE locking to CHECKERS composition."""
+    return _SelectedPreSubmitTaskGuard(session)
 
 
 class TransactionalAssignmentInvalidationHandler:
@@ -66,6 +116,7 @@ class TransactionalAssignmentInvalidationHandler:
 
 
 __all__ = (
+    "selected_pre_submit_task_guard",
     "TransactionalAssignmentInvalidationHandler",
     "task_commands",
     "task_service",
