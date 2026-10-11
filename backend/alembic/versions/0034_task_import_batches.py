@@ -246,36 +246,38 @@ def _create_tables() -> None:
 def _create_custody_functions() -> None:
     op.execute(r"""
 create function public.task_import_binding_valid(
- source_id uuid, project_id uuid, sha256 text, byte_count bigint, operation_identity text,
- put_attempt_id uuid, content_id uuid, replica_id uuid, verification_job_id uuid,
- verification_generation bigint, verification_receipt_id uuid,
- operation_receipt_id uuid, observation_receipt_id uuid
+ expected_source_id uuid, expected_project_id uuid, expected_sha256 text,
+ expected_byte_count bigint, expected_operation_identity text,
+ expected_put_attempt_id uuid, expected_content_id uuid, expected_replica_id uuid,
+ expected_verification_job_id uuid, expected_verification_generation bigint,
+ expected_verification_receipt_id uuid, expected_operation_receipt_id uuid,
+ expected_observation_receipt_id uuid
 ) returns boolean language sql stable set search_path=pg_catalog,public,pg_temp as $$
  select exists(
   select 1 from public.artifact_task_import_sources s
-  join public.artifact_put_attempts a on a.id=put_attempt_id and a.task_import_source_id=s.id
-  join public.artifact_replicas r on r.id=replica_id and r.id=a.replica_id
-  join public.artifact_contents c on c.id=content_id and c.id=r.content_id
-  join public.artifact_verification_jobs j on j.id=verification_job_id
+  join public.artifact_put_attempts a on a.id=expected_put_attempt_id and a.task_import_source_id=s.id
+  join public.artifact_replicas r on r.id=expected_replica_id and r.id=a.replica_id
+  join public.artifact_contents c on c.id=expected_content_id and c.id=r.content_id
+  join public.artifact_verification_jobs j on j.id=expected_verification_job_id
     and j.originating_put_attempt_id=a.id and j.replica_id=r.id
-  join public.artifact_verification_receipts v on v.id=verification_receipt_id
+  join public.artifact_verification_receipts v on v.id=expected_verification_receipt_id
     and v.verification_job_id=j.id and v.outcome='verified'
-  where s.id=source_id and s.project_id=project_id and s.sha256=sha256
-    and s.byte_count=byte_count and s.operation_identity=operation_identity
+  where s.id=expected_source_id and s.project_id=expected_project_id and s.sha256=expected_sha256
+    and s.byte_count=expected_byte_count and s.operation_identity=expected_operation_identity
     and a.producer_request_type='task_import_source' and a.logical_role='task_import_source'
     and a.project_id=s.project_id and a.sha256=s.sha256 and a.byte_count=s.byte_count
     and a.media_type=s.media_type and c.sha256=s.sha256 and c.byte_count=s.byte_count
     and r.storage_namespace_id=a.storage_namespace_id
     and r.namespace_fingerprint=a.namespace_fingerprint
-    and v.execution_generation=verification_generation
+    and v.execution_generation=expected_verification_generation
     and v.observed_sha256=s.sha256 and v.observed_byte_count=s.byte_count
-    and ((operation_receipt_id is not null and observation_receipt_id is null and exists(
-      select 1 from public.artifact_operation_receipts o where o.id=operation_receipt_id
+    and ((expected_operation_receipt_id is not null and expected_observation_receipt_id is null and exists(
+      select 1 from public.artifact_operation_receipts o where o.id=expected_operation_receipt_id
       and o.put_attempt_id=a.id and o.replica_id=r.id and o.request_digest=a.request_digest
       and o.provider_object_ref=r.provider_object_ref and o.logical_role='task_import_source'
       and o.outcome='stored_pending_verification')) or
-     (operation_receipt_id is null and observation_receipt_id is not null and exists(
-      select 1 from public.artifact_put_observation_receipts o where o.id=observation_receipt_id
+     (expected_operation_receipt_id is null and expected_observation_receipt_id is not null and exists(
+      select 1 from public.artifact_put_observation_receipts o where o.id=expected_observation_receipt_id
       and o.put_attempt_id=a.id and o.outcome='observed_confirmed'
       and o.observed_sha256=s.sha256 and o.expected_sha256=s.sha256
       and o.observed_byte_count=s.byte_count and o.expected_byte_count=s.byte_count)))
@@ -284,39 +286,50 @@ $$
 """)
     op.execute(r"""
 create function public.task_import_binding_digest(
- source_id uuid, project_id uuid, sha256 text, byte_count bigint, operation_identity text,
- put_attempt_id uuid, content_id uuid, replica_id uuid, verification_job_id uuid,
- verification_generation bigint, verification_receipt_id uuid,
- operation_receipt_id uuid, observation_receipt_id uuid
+ expected_source_id uuid, expected_project_id uuid, expected_sha256 text,
+ expected_byte_count bigint, expected_operation_identity text,
+ expected_put_attempt_id uuid, expected_content_id uuid, expected_replica_id uuid,
+ expected_verification_job_id uuid, expected_verification_generation bigint,
+ expected_verification_receipt_id uuid, expected_operation_receipt_id uuid,
+ expected_observation_receipt_id uuid
 ) returns text language sql immutable set search_path=pg_catalog,public,pg_temp as $$
  select public.external_checker_registry_digest(pg_catalog.jsonb_build_object(
-  'source_id',source_id,'project_id',project_id,'sha256',sha256,'byte_count',byte_count,
-  'operation_identity',operation_identity,'put_attempt_id',put_attempt_id,'content_id',content_id,
-  'replica_id',replica_id,'verification_job_id',verification_job_id,
-  'verification_generation',verification_generation,'verification_receipt_id',verification_receipt_id,
-  'operation_receipt_id',operation_receipt_id,'observation_receipt_id',observation_receipt_id))
+  'source_id',expected_source_id,'project_id',expected_project_id,'sha256',expected_sha256,
+  'byte_count',expected_byte_count,'operation_identity',expected_operation_identity,
+  'put_attempt_id',expected_put_attempt_id,'content_id',expected_content_id,
+  'replica_id',expected_replica_id,'verification_job_id',expected_verification_job_id,
+  'verification_generation',expected_verification_generation,
+  'verification_receipt_id',expected_verification_receipt_id,
+  'operation_receipt_id',expected_operation_receipt_id,
+  'observation_receipt_id',expected_observation_receipt_id))
 $$
 """)
     op.execute(r"""
 create function public.task_import_authority_valid(
- decision_id uuid, action text, batch_id uuid, project_id uuid, source_id uuid,
- actor_id uuid, link_id uuid, sha256 text, byte_count bigint, row_count integer,
- manifest_digest text, source_binding_digest text, idempotency_key uuid, request_digest text
+ expected_decision_id uuid, expected_action text, expected_batch_id uuid,
+ expected_project_id uuid, expected_source_id uuid, expected_actor_id uuid,
+ expected_link_id uuid, expected_sha256 text, expected_byte_count bigint,
+ expected_row_count integer, expected_manifest_digest text,
+ expected_source_binding_digest text, expected_idempotency_key uuid,
+ expected_request_digest text
 ) returns boolean language sql stable set search_path=pg_catalog,public,pg_temp as $$
- select exists(select 1 from public.audit_events a where a.id=decision_id
+ select exists(select 1 from public.audit_events a where a.id=expected_decision_id
   and a.event_domain='authority' and a.event_type='SensitiveAuthorizationAllowed'
-  and a.actor_ref_kind='actor_profile' and a.actor_id=actor_id::text
-  and a.project_id=project_id and a.action_id=action and a.permission_id='project.task.manage'
-  and a.resource_type='task_import_batch' and a.resource_id=batch_id::text
-  and a.target_ref_kind='task_import_batch' and a.target_ref_id=batch_id::text
+  and a.actor_ref_kind='actor_profile' and a.actor_id=expected_actor_id::text
+  and a.project_id=expected_project_id and a.action_id=expected_action
+  and a.permission_id='project.task.manage'
+  and a.resource_type='task_import_batch' and a.resource_id=expected_batch_id::text
+  and a.target_ref_kind='task_import_batch' and a.target_ref_id=expected_batch_id::text
   and a.denial_code is null and a.after_facts::jsonb=pg_catalog.jsonb_build_object(
    'allowed',true,'resource_context_digest',public.external_checker_registry_digest(
     pg_catalog.jsonb_build_object('resource_context',pg_catalog.jsonb_build_object(
-     'resource_type','task_import_batch','resource_id',batch_id,'scope_project_id',project_id,
-     'source_id',source_id,'actor_profile_id',actor_id,'identity_link_id',link_id,
-     'sha256',sha256,'byte_count',byte_count,'row_count',row_count,
-     'manifest_digest',manifest_digest,'source_binding_digest',source_binding_digest,
-     'idempotency_key',idempotency_key,'request_digest',request_digest)))))
+     'resource_type','task_import_batch','resource_id',expected_batch_id,
+     'scope_project_id',expected_project_id,'source_id',expected_source_id,
+     'actor_profile_id',expected_actor_id,'identity_link_id',expected_link_id,
+     'sha256',expected_sha256,'byte_count',expected_byte_count,
+     'row_count',expected_row_count,'manifest_digest',expected_manifest_digest,
+     'source_binding_digest',expected_source_binding_digest,
+     'idempotency_key',expected_idempotency_key,'request_digest',expected_request_digest)))))
 $$
 """)
     op.execute(r"""
@@ -357,7 +370,7 @@ begin
     or (b.response::jsonb->>'row_count')::integer is distinct from b.row_count
     or b.response::jsonb->>'schema_version' is distinct from b.schema_version
     or b.response::jsonb->>'mapping_version' is distinct from b.mapping_version
-    or b.response::jsonb->'label' is distinct from to_jsonb(b.metadata_label)
+    or b.response::jsonb->'label' is distinct from coalesce(to_jsonb(b.metadata_label),'null'::jsonb)
     or pg_catalog.jsonb_array_length(b.response::jsonb->'tasks')<>b.row_count then
   raise exception 'task import batch response custody invalid' using errcode='23514';
  end if;
@@ -368,7 +381,7 @@ begin
    m.project_id is distinct from b.project_id or m.external_task_id is distinct from t.external_task_id
    or t.source_type<>'json_import' or t.source_ref is distinct from 'task-import-source:'||b.source_id::text
    or t.source_payload_hash is distinct from b.sha256 or t.import_batch_id is distinct from b.id::text
-   or t.status<>'draft' or t.created_by is distinct from b.actor_profile_id::text
+   or t.created_by is distinct from b.actor_profile_id::text
    or r.status<>'committed' or r.action_id<>'project.task.create' or r.task_id is distinct from m.task_id
    or r.actor_profile_id is distinct from b.actor_profile_id or r.idempotency_key is distinct from m.create_idempotency_key
    or r.response is distinct from m.response or m.response::jsonb is distinct from b.response::jsonb->'tasks'->m.row_index
