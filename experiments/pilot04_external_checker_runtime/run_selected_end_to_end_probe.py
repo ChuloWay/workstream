@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 from io import BytesIO
 from types import SimpleNamespace
+from uuid import UUID
 from zipfile import ZipFile, ZipInfo
 
 from aiobotocore.config import AioConfig
@@ -24,20 +25,29 @@ from app.adapters.artifacts import (
     get_submission_bundle_preparation_command,
 )
 from app.adapters.checkers import external_checker_execution_factory
+from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
 from app.modules.actors.api.service_identities import ServiceIdentity
 from app.modules.artifacts.api import (
     SubmissionBundlePreparationCheckFailed,
+    SubmissionBundlePreparationInfrastructureUnavailable,
     SubmissionBundlePreparationRequest,
+    SubmissionBundlePreparationStatus,
 )
+from app.modules.artifacts.models import (
+    ArtifactVerificationJob,
+    SubmissionBundleAdmission,
+)
+from app.modules.artifacts.service import ArtifactStorageOrchestrator
 from app.modules.artifacts.authorization import (
     PreparedArtifactInternalAuthority,
     PreparedSubmissionBundlePreparationAuthorization,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.checkers.api.external import ExternalCheckerRegistrySpec
-from app.modules.checkers.models import CheckerRun
-from app.modules.tasks.models import Submission, WorkstreamTask
+from app.modules.checkers.models import CheckerRun, SelectedPreSubmitRun
+from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.models import Submission, SubmissionDispatch, WorkstreamTask
 from experiments.pilot04_external_checker_runtime.run_probe import _image_identity
 from tests.artifact_store_helpers import artifact_admission_limit_settings
 from tests.checkers.execution.support import live_executor, reserve
@@ -69,7 +79,7 @@ def _locked_spec(phase: str, image: dict[str, str]) -> ExternalCheckerRegistrySp
         },
     )
     values["image_digest"] = image["platform_manifest_digest"]
-    values["resources"] |= {"deadline_ms": 8_000, "maximum_output_bytes": 8_192}
+    values["resources"] |= {"deadline_ms": 30_000, "maximum_output_bytes": 8_192}
     return ExternalCheckerRegistrySpec.model_validate(values)
 
 
@@ -186,6 +196,228 @@ async def _prove_work_failure(fixture, settings) -> dict[str, object]:
     }
 
 
+def _start_service(binary: Path, config_path: Path, socket_path: Path):
+    """Start only the private checker service and wait for its UDS endpoint."""
+    socket_path.unlink(missing_ok=True)
+    return subprocess.Popen(
+        [str(binary), str(config_path)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+
+async def _wait_service(service, socket_path: Path) -> None:
+    for _ in range(500):
+        if socket_path.exists():
+            return
+        if service.poll() is not None:
+            detail = service.stderr.read().strip() if service.stderr is not None else ""
+            raise RuntimeError(
+                f"checker service exited before readiness: {detail or 'no stderr'}"
+            )
+        await asyncio.sleep(0.02)
+    raise RuntimeError("checker service socket did not become ready")
+
+
+def _stop_service(service) -> None:
+    if service.poll() is not None:
+        return
+    service.terminate()
+    try:
+        service.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        service.kill()
+        service.wait(timeout=5)
+
+
+def _request(fixture, task_id, assignment_id, data: bytes):
+    return SubmissionBundlePreparationRequest(
+        actor=ActorIdentityFacts(
+            fixture.actor_context.actor_profile_id,
+            fixture.actor_context.identity_link_id,
+            ActorKind.HUMAN,
+        ),
+        request_id=new_record_id(),
+        correlation_id=new_record_id(),
+        task_id=task_id,
+        assignment_id=assignment_id,
+        predecessor_submission_id=None,
+        idempotency_key=new_record_id(),
+        summary=fixture.creation_request.summary,
+        contributor_attestation=fixture.creation_request.contributor_attestation,
+        media_type="application/zip",
+        byte_source=byte_source(data),
+    )
+
+
+async def _verify_prepared(fixture, settings, prepared):
+    """Run the independent ART verifier for one freshly uploaded preparation."""
+    async with fixture.factory() as session:
+        job_id = await session.scalar(
+            select(ArtifactVerificationJob.id).where(
+                ArtifactVerificationJob.originating_put_attempt_id
+                == str(prepared.put_attempt_id)
+            )
+        )
+        if job_id is None:
+            raise RuntimeError("fresh preparation did not enqueue verification")
+        await session.rollback()
+        verifier = PreparedArtifactInternalAuthority(
+            session,
+            service_identity=ServiceIdentity.ARTIFACT_VERIFIER,
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
+        )
+        outcome = await ArtifactStorageOrchestrator(
+            session, fixture.store, fixture.namespace, settings, verifier
+        ).verify_object(UUID(job_id))
+        if outcome != "verified":
+            raise RuntimeError("fresh preparation verification did not complete")
+    async with fixture.factory() as session:
+        admission = (
+            await session.scalars(
+                select(SubmissionBundleAdmission).where(
+                    SubmissionBundleAdmission.put_attempt_id
+                    == str(prepared.put_attempt_id)
+                )
+            )
+        ).one()
+        if admission.status != "ready":
+            raise RuntimeError("fresh preparation admission is not ready")
+        return UUID(admission.id)
+
+
+async def _prove_infrastructure_recovery(
+    fixture, settings, service_holder, service_binary, config_path, socket_path
+):
+    """Retain infrastructure failure, then require a fresh successful upload."""
+    task_id, assignment_id = new_record_id(), new_record_id()
+    params = {
+        "task": str(task_id),
+        "assignment": str(assignment_id),
+        "project": str(fixture.facts.project_id),
+        "actor": str(fixture.actor_context.actor_profile_id),
+    }
+    async with fixture.engine.begin() as connection:
+        await seed_started_task_for_artifact_test(connection, params)
+    _stop_service(service_holder[0])
+    try:
+        await _prepare(
+            fixture, settings, _request(fixture, task_id, assignment_id, fixture.data)
+        )
+    except SubmissionBundlePreparationInfrastructureUnavailable as error:
+        failure_code = str(error)
+    else:
+        raise RuntimeError("unavailable checker service did not fail preparation")
+    async with fixture.factory() as session:
+        task = await session.get(WorkstreamTask, str(task_id))
+        before_submissions = await session.scalar(
+            select(func.count()).select_from(Submission)
+        )
+        failed = (
+            (
+                await session.execute(
+                    select(SelectedPreSubmitRun)
+                    .where(SelectedPreSubmitRun.task_id == str(task_id))
+                    .order_by(SelectedPreSubmitRun.queued_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    if (
+        task.status != "in_progress"
+        or before_submissions != 1
+        or len(failed) != 1
+        or failed[0].status != "infrastructure_failed"
+    ):
+        raise RuntimeError("infrastructure failure changed TASK or was not retained")
+    service = _start_service(service_binary, config_path, socket_path)
+    service_holder[0] = service
+    await _wait_service(service, socket_path)
+    recovered = await _prepare(
+        fixture,
+        settings,
+        _request(fixture, task_id, assignment_id, fixture.data),
+    )
+    if recovered.replayed:
+        raise RuntimeError(
+            "fresh preparation did not recover infrastructure failure: "
+            f"status={recovered.submission_bundle_preparation_status}, "
+            f"admission={recovered.admission_id}, replayed={recovered.replayed}"
+        )
+    if (
+        recovered.submission_bundle_preparation_status
+        == SubmissionBundlePreparationStatus.STORED_PENDING_VERIFICATION
+        and recovered.admission_id is None
+    ):
+        admission_id = await _verify_prepared(fixture, settings, recovered)
+    elif (
+        recovered.submission_bundle_preparation_status
+        == SubmissionBundlePreparationStatus.READY
+        and recovered.admission_id is not None
+    ):
+        admission_id = recovered.admission_id
+    else:
+        raise RuntimeError(
+            "fresh preparation returned an invalid durable state: "
+            f"status={recovered.submission_bundle_preparation_status}, "
+            f"admission={recovered.admission_id}"
+        )
+    async with fixture.factory() as session:
+        created = await compose_hidden_submission_creation_command(
+            session,
+            fixture.actor_context,
+            request_id=new_record_id(),
+            correlation_id=new_record_id(),
+        ).create(
+            SubmissionCreationRequest(
+                task_id=task_id,
+                assignment_id=assignment_id,
+                contributor_id=fixture.actor_context.actor_profile_id,
+                predecessor_submission_id=None,
+                admission_id=admission_id,
+                summary=fixture.creation_request.summary,
+                contributor_attestation=fixture.creation_request.contributor_attestation,
+            )
+        )
+    async with fixture.factory() as session:
+        task = await session.get(WorkstreamTask, str(task_id))
+        submission_count = await session.scalar(
+            select(func.count()).select_from(Submission)
+        )
+        dispatch_count = await session.scalar(
+            select(func.count()).select_from(SubmissionDispatch)
+        )
+        runs = (
+            (
+                await session.execute(
+                    select(SelectedPreSubmitRun.status)
+                    .where(SelectedPreSubmitRun.task_id == str(task_id))
+                    .order_by(SelectedPreSubmitRun.queued_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    if (
+        task.status != "evaluation_pending"
+        or submission_count != 2
+        or dispatch_count != 2
+        or tuple(runs) != ("infrastructure_failed", "completed")
+    ):
+        raise RuntimeError("fresh recovery did not commit one atomic dispatch")
+    return {
+        "failure_code": failure_code,
+        "retained_run_statuses": runs,
+        "submission_id": str(created.submission_id),
+        "evaluation_request_id": str(created.evaluation_request_id),
+        "submission_count": submission_count,
+        "dispatch_count": dispatch_count,
+    }
+
+
 async def run(
     *, database_url: str, image_reference: str, service_binary: Path, root: Path
 ) -> dict[str, object]:
@@ -227,21 +459,10 @@ async def run(
     scratch_owner.close()
     async with await _bucket_client() as client:
         await client.create_bucket(Bucket=bucket)
-    service = subprocess.Popen(
-        [str(service_binary), str(config_path)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    service = _start_service(service_binary, config_path, socket_path)
+    service_holder = [service]
     try:
-        for _ in range(500):
-            if socket_path.exists():
-                break
-            if service.poll() is not None:
-                raise RuntimeError("checker service exited before readiness")
-            await asyncio.sleep(0.02)
-        else:
-            raise RuntimeError("checker service socket did not become ready")
+        await _wait_service(service, socket_path)
         adapter = external_checker_execution_factory(
             socket_path=socket_path, timeout_seconds=90.0
         ).create("unix_socket")
@@ -286,6 +507,14 @@ async def run(
             if not workspace_cleanup:
                 raise RuntimeError("selected checker workspace cleanup is incomplete")
             work_failure = await _prove_work_failure(fixture, settings)
+            infrastructure_recovery = await _prove_infrastructure_recovery(
+                fixture,
+                settings,
+                service_holder,
+                service_binary,
+                config_path,
+                socket_path,
+            )
             return {
                 "image": image,
                 "health": {
@@ -301,15 +530,11 @@ async def run(
                 "submission_count": submission_count,
                 "workspace_cleanup": workspace_cleanup,
                 "work_failure": work_failure,
+                "infrastructure_recovery": infrastructure_recovery,
                 "minio_bucket": bucket,
             }
     finally:
-        service.terminate()
-        try:
-            service.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            service.kill()
-            service.wait(timeout=5)
+        _stop_service(service_holder[0])
         await _delete_bucket(bucket)
 
 
