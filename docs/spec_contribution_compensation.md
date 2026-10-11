@@ -1183,9 +1183,11 @@ repository; all communication is through typed ports.
 
 Contribution and award reads use PostgreSQL canonical truth directly. They do
 not depend on ART, optional evidence, provider availability, balances, or
-settlement ledgers. Reads use stable pagination, exact self/project scope,
-pre-filtering, and concealment. Provider references, credentials, and secret
-routes are never returned.
+settlement ledgers. The public contribution reads use the bounded single-response
+contract above, with no continuation cursor, exact self/project scope,
+pre-filtering, and concealment. Stable fixed-membership pagination remains later
+issue #497 work. Provider references, credentials, and secret routes are never
+returned.
 
 CP05A exposes only ContributionPolicy administration, using the existing CP05
 Finance authority and caller-owned transaction. Under the project-scoped
