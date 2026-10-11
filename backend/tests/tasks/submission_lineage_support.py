@@ -28,6 +28,7 @@ async def _seed_services(factory):
             ServiceIdentity.ARTIFACT_PUT_RESOLVER,
             ServiceIdentity.ARTIFACT_VERIFIER,
             ServiceIdentity.ARTIFACT_BINDING,
+            ServiceIdentity.CHECKER_PRE_SUBMIT,
         ):
             actor_id, link_id = str(new_record_id()), str(new_record_id())
             session.add(
