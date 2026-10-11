@@ -117,7 +117,7 @@ jobs:
             --metadata-json "${RUNNER_TEMP}/workstream-cli-isolation.json" \
             --timeout-seconds 240 \
             -- python -m pytest -q ../cli/tests/integration \
-              '--ignore-glob=*_public_api.py' \
+              '--ignore-glob=../cli/tests/integration/*_public_api.py' \
               --ignore=../cli/tests/integration/test_public_self_service.py
 
       - name: Exercise existing native CLI public API callers

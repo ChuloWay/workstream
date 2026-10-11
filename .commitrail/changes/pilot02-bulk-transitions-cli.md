@@ -462,6 +462,16 @@ changes. Both resulting partitions and the updated exact completeness comparison
 must pass before claiming this workflow usable. Independent review and complete
 hosted CI remain pending.
 
+The first split run at `2b8e88ec` also exhausted 240 seconds, with complete
+cleanup and 53 completed cases. Its collection revealed a concrete selector
+defect: pytest resolves ignore globs from the `backend` working directory, so
+`*_public_api.py` did not exclude files under `cli/tests/integration`. Those
+native callers still ran in the supposed HTTP partition. The corrected glob
+names that directory explicitly; its collection contains 156 controlled cases.
+The complementary nine existing native files contain nine cases, and the owned
+bulk file contains two. All 167 original cases must remain selected once. The
+same caps, fixture deadlines, assertions and product contracts remain unchanged.
+
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
 is reconciled onto the unmerged atomic candidate `91183adafec37e7ad7eda624ad3556d89dc54ce6`;
