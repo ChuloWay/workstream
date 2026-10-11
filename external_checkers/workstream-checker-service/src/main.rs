@@ -24,6 +24,7 @@ const MAX_RESPONSE_BYTES: usize = 65_536 + 16_384;
 const SOCKET_IO_TIMEOUT: Duration = Duration::from_secs(2);
 const DOCKER_CONTROL_TIMEOUT: Duration = Duration::from_secs(10);
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(10);
+const RUNTIME_FILE_PREFIX: &str = ".workstream-checker-runtime-";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -160,6 +161,7 @@ fn run() -> Result<(), String> {
     if config.socket_path.exists() {
         return Err("socket path already exists".into());
     }
+    cleanup_stale_runtime_files(&config)?;
     let listener = UnixListener::bind(&config.socket_path).map_err(|_| "socket bind failed")?;
     fs::set_permissions(&config.socket_path, fs::Permissions::from_mode(0o600))
         .map_err(|_| "socket permission failed")?;
@@ -913,10 +915,7 @@ fn run_started_container(
     deadline: Instant,
 ) -> Result<Value, &'static str> {
     let payload = serde_json::to_vec(&request.value).map_err(|_| "invalid_output")?;
-    let files = RuntimeFiles {
-        output: config.material_root.join(format!(".{name}.stdout")),
-        error: config.material_root.join(format!(".{name}.stderr")),
-    };
+    let files = RuntimeFiles::new(config, name)?;
     let output = OpenOptions::new()
         .create_new(true)
         .write(true)
@@ -1027,11 +1026,46 @@ struct RuntimeFiles {
     error: PathBuf,
 }
 
+impl RuntimeFiles {
+    fn new(config: &ServiceConfig, name: &str) -> Result<Self, &'static str> {
+        let parent = config
+            .socket_path
+            .parent()
+            .ok_or("implementation_unavailable")?;
+        Ok(Self {
+            output: parent.join(format!("{RUNTIME_FILE_PREFIX}{name}.stdout")),
+            error: parent.join(format!("{RUNTIME_FILE_PREFIX}{name}.stderr")),
+        })
+    }
+}
+
 impl Drop for RuntimeFiles {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.output);
         let _ = fs::remove_file(&self.error);
     }
+}
+
+fn cleanup_stale_runtime_files(config: &ServiceConfig) -> Result<(), String> {
+    let parent = config.socket_path.parent().ok_or("socket parent missing")?;
+    for entry in fs::read_dir(parent).map_err(|_| "runtime directory unavailable")? {
+        let entry = entry.map_err(|_| "runtime directory unavailable")?;
+        let name = entry.file_name();
+        let name = name.to_str().ok_or("runtime file name invalid")?;
+        if !name.starts_with(RUNTIME_FILE_PREFIX)
+            || !(name.ends_with(".stdout") || name.ends_with(".stderr"))
+        {
+            continue;
+        }
+        let kind = entry
+            .file_type()
+            .map_err(|_| "runtime file identity unavailable")?;
+        if !kind.is_file() || kind.is_symlink() {
+            return Err("runtime file identity invalid".into());
+        }
+        fs::remove_file(entry.path()).map_err(|_| "runtime file cleanup failed")?;
+    }
+    Ok(())
 }
 
 fn terminate_container(config: &ServiceConfig, name: &str, child: &mut std::process::Child) {
@@ -1294,6 +1328,35 @@ mod tests {
             }],
         };
         (root, config)
+    }
+
+    #[test]
+    fn runtime_files_use_socket_custody_and_stale_cleanup_never_touches_art() {
+        let (root, config) = test_config();
+        let material_marker = config.material_root.join("preserved-art-custody");
+        fs::write(&material_marker, b"retained").unwrap();
+        let socket_root = config.socket_path.parent().unwrap();
+
+        let files = RuntimeFiles::new(&config, "owned").unwrap();
+        assert_eq!(files.output.parent(), Some(socket_root));
+        assert_eq!(files.error.parent(), Some(socket_root));
+        assert_ne!(files.output.parent(), Some(config.material_root.as_path()));
+        fs::write(&files.output, b"stdout").unwrap();
+        fs::write(&files.error, b"stderr").unwrap();
+        let output = files.output.clone();
+        let error = files.error.clone();
+        std::mem::forget(files);
+
+        cleanup_stale_runtime_files(&config).unwrap();
+        assert!(!output.exists());
+        assert!(!error.exists());
+        assert_eq!(fs::read(&material_marker).unwrap(), b"retained");
+
+        let unrelated = socket_root.join("operator-owned");
+        fs::write(&unrelated, b"preserved").unwrap();
+        cleanup_stale_runtime_files(&config).unwrap();
+        assert_eq!(fs::read(&unrelated).unwrap(), b"preserved");
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

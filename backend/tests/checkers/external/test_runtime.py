@@ -26,9 +26,10 @@ from app.interfaces.external_services import (
     UnknownExternalServiceProviderError,
 )
 from app.modules.artifacts.preparation import (
-    ArtifactScratchIntegrityError,
+    HARD_MAXIMUM_ARTIFACT_BYTES,
     ArtifactPreparationLimits,
     ArtifactPreparationService,
+    ArtifactScratchIntegrityError,
     ArtifactScratchManager,
     ExternalMaterialFile,
     ExternalMaterialGrantRequest,
@@ -110,6 +111,7 @@ def test_external_service_settings_share_the_art_scratch_root(tmp_path: Path):
         external_checker_material_root=scratch,
     )
     assert settings.external_checker_material_root == scratch
+    assert settings.external_checker_service_timeout_seconds == 3660.0
     with pytest.raises(ValidationError, match="must be complete"):
         Settings(external_checker_service_socket=tmp_path / "checker.sock")
     with pytest.raises(ValidationError, match="must equal"):
@@ -132,6 +134,40 @@ def test_external_service_settings_share_the_art_scratch_root(tmp_path: Path):
             sandbox_uid=1000,
             sandbox_gid=1000,
         )
+
+
+def test_service_runtime_files_stay_outside_art_scratch_custody(tmp_path: Path):
+    """A live or crashed service cannot poison ART's closed root layout."""
+    scratch = tmp_path / "scratch"
+    socket_root = tmp_path / "service"
+    socket_root.mkdir(mode=0o700)
+    stdout = socket_root / ".workstream-checker-runtime-owned.stdout"
+    stderr = socket_root / ".workstream-checker-runtime-owned.stderr"
+    with stdout.open("xb") as output, stderr.open("xb") as error:
+        output.write(b"preserved stdout")
+        error.write(b"preserved stderr")
+        limits = ArtifactPreparationLimits(
+            aggregate_reserved_bytes=2 * HARD_MAXIMUM_ARTIFACT_BYTES,
+            maximum_files=2,
+            maximum_concurrency=1,
+            minimum_free_bytes=0,
+            reservation_ttl_seconds=30.0,
+            total_deadline_seconds=10.0,
+            cleanup_margin_seconds=5.0,
+            stream_buffer_bytes=2,
+            maximum_source_bytes=64,
+        )
+        manager = ArtifactScratchManager(root=scratch, limits=limits)
+        manager.close()
+    assert stdout.read_bytes() == b"preserved stdout"
+    assert stderr.read_bytes() == b"preserved stderr"
+    reopened = ArtifactScratchManager(root=scratch, limits=limits)
+    reopened.close()
+
+    wrong_root = scratch / stdout.name
+    wrong_root.write_bytes(b"must not share ART root")
+    with pytest.raises(ValueError, match="dedicated directory"):
+        ArtifactScratchManager(root=scratch, limits=limits)
 
 
 @pytest.mark.asyncio

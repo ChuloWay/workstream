@@ -250,7 +250,7 @@ class Settings(BaseSettings):
     external_checker_service_socket: Path | None = None
     external_checker_material_root: Path | None = None
     external_checker_service_timeout_seconds: float = Field(
-        default=3600.0,
+        default=3660.0,
         gt=0.0,
         le=3700.0,
     )

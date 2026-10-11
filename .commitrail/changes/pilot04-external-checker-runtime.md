@@ -301,6 +301,17 @@ No database transaction crosses the client call.
   root and rejects a concrete checker adapter or factory constructed elsewhere.
   The checked-in local probe imports that owner root as well, with no
   compatibility export left in the concrete transport module.
+- External review found the default Python transport lifetime was shorter than
+  the registry's maximum one-hour execution deadline plus its required cleanup
+  margin. The default now covers that exact 3,660-second lifetime while the
+  existing configured upper bound and per-request validation remain closed.
+- External review also found that checker stdout and stderr used the ART
+  scratch root even though ART owns a strict private layout. Runtime files now
+  live beside the owner-only service socket, are removed after each execution,
+  and narrowly named stale files are removed on restart without traversing or
+  deleting ART grants. A real `ArtifactScratchManager` can initialize and
+  reopen while live or crash-retained service output exists; the former shared
+  root is rejected by the regression.
 
 ## Reconciliation
 
