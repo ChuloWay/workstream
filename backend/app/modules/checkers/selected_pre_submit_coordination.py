@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass
 from datetime import timedelta
 from typing import Protocol
 from uuid import UUID
@@ -14,7 +13,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.selected_pre_submit import (
+    PreparedSelectedPreSubmitExecution,
+    PreparedSelectedPreSubmitFinalization,
+    SelectedPreSubmitCompletion,
+    SelectedPreSubmitExecuteFacts,
     SelectedPreSubmitExecutionFacts,
+    SelectedPreSubmitFinalizeFacts,
     SelectedPreSubmitLeaseFacts,
     SelectedPreSubmitReservationFacts,
     SelectedPreSubmitTerminalFacts,
@@ -33,14 +37,6 @@ class SelectedPreSubmitTaskGuard(Protocol):
         self, reservation: SelectedPreSubmitReservationFacts
     ) -> None:
         """Lock and validate exact current TASK scope through caller commit."""
-
-
-@dataclass(frozen=True, slots=True)
-class SelectedPreSubmitCompletion:
-    """Terminal facts and one process-local capability for immediate admission."""
-
-    terminal: SelectedPreSubmitTerminalFacts
-    capability: SelectedPreSubmitAdmissionCapability | None
 
 
 _CAPABILITY_SEAL = object()
@@ -273,11 +269,11 @@ class SelectedPreSubmitCoordinator:
         *,
         run_id: UUID,
         facts: SelectedPreSubmitReservationFacts,
-        execute_evidence_id: UUID,
+        authority: PreparedSelectedPreSubmitExecution,
     ) -> SelectedPreSubmitLeaseFacts:
         """Issue one database-timed lease after fresh TASK and execute authority."""
         row = await self._lock(run_id=run_id, facts=facts)
-        if row.status != "queued" or not isinstance(execute_evidence_id, UUID):
+        if row.status != "queued":
             raise SelectedPreSubmitUnavailable("selected_pre_submit_lease_unavailable")
         now = await self._session.scalar(select(func.clock_timestamp()))
         assert now is not None
@@ -287,10 +283,14 @@ class SelectedPreSubmitCoordinator:
             lease_generation=row.lease_generation + 1,
             lease_expires_at=now + timedelta(milliseconds=facts.execution_budget_ms),
         )
+        execute_facts = SelectedPreSubmitExecuteFacts(lease)
+        evidence = await authority.consume(execute_facts)
+        if evidence.facts_digest != execute_facts.facts_digest:
+            raise SelectedPreSubmitUnavailable("selected_pre_submit_execute_evidence_invalid")
         row.lease_id = str(lease.lease_id)
         row.lease_generation = lease.lease_generation
         row.lease_expires_at = lease.lease_expires_at
-        row.execute_evidence_id = str(execute_evidence_id)
+        row.execute_evidence_id = str(evidence.evidence_id)
         row.started_at = now
         row.status = "running"
         await self._session.flush()
@@ -329,7 +329,7 @@ class SelectedPreSubmitCoordinator:
         *,
         run_id: UUID,
         lease: SelectedPreSubmitLeaseFacts,
-        finalize_evidence_id: UUID,
+        authority: PreparedSelectedPreSubmitFinalization,
         execution: SelectedPreSubmitExecutionFacts | None,
         infrastructure_failure_code: str | None,
     ) -> SelectedPreSubmitCompletion:
@@ -341,7 +341,6 @@ class SelectedPreSubmitCoordinator:
             or row.lease_id != str(lease.lease_id)
             or row.lease_generation != lease.lease_generation
             or row.lease_expires_at != lease.lease_expires_at
-            or not isinstance(finalize_evidence_id, UUID)
         ):
             raise SelectedPreSubmitUnavailable("selected_pre_submit_finalization_unavailable")
         completed_at = await self._session.scalar(select(func.clock_timestamp()))
@@ -349,6 +348,14 @@ class SelectedPreSubmitCoordinator:
         if execution is not None and completed_at > lease.lease_expires_at:
             raise SelectedPreSubmitUnavailable("selected_pre_submit_lease_expired")
         outcome = "completed" if execution is not None else "infrastructure_failed"
+        finalize_facts = SelectedPreSubmitFinalizeFacts(
+            lease=lease,
+            execution=execution,
+            infrastructure_failure_code=infrastructure_failure_code,
+        )
+        evidence = await authority.consume(finalize_facts)
+        if evidence.facts_digest != finalize_facts.facts_digest:
+            raise SelectedPreSubmitUnavailable("selected_pre_submit_finalize_evidence_invalid")
         terminal = SelectedPreSubmitTerminalFacts(
             lease=lease,
             outcome=outcome,
@@ -362,7 +369,7 @@ class SelectedPreSubmitCoordinator:
         row.terminal_json = terminal.canonical_body()
         row.terminal_digest = terminal.terminal_digest
         row.eligible = execution.eligible if execution is not None else None
-        row.finalize_evidence_id = str(finalize_evidence_id)
+        row.finalize_evidence_id = str(evidence.evidence_id)
         row.completed_at = completed_at
         await self._session.flush()
         capability = (

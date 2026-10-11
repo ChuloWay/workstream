@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from contextlib import AbstractAsyncContextManager
 from typing import Literal, Protocol
 from uuid import UUID
 
@@ -233,6 +234,173 @@ class SelectedPreSubmitExecutionAuthority(Protocol):
         """Return the exact lease once, or refuse stale/substituted execution."""
 
 
+class SelectedPreSubmitAdmissionAuthority(Protocol):
+    """Process-local authority for immediate selected admission."""
+
+    def consume(
+        self,
+        *,
+        run_id: UUID,
+        terminal_digest: str,
+        attempt_id: UUID,
+        prepared_generation_id: UUID,
+        archive_sha256: str,
+        semantic_manifest_sha256: str,
+    ) -> UUID:
+        """Consume only for the exact pass and still-live prepared bytes."""
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedPreSubmitExecuteFacts:
+    """Exact committed lease consumed by the fixed PRE executor."""
+
+    lease: SelectedPreSubmitLeaseFacts
+
+    def __post_init__(self) -> None:
+        if type(self.lease) is not SelectedPreSubmitLeaseFacts:
+            raise ValueError("selected PRE execute facts are invalid")
+
+    @property
+    def facts_digest(self) -> str:
+        """Bind reservation, lease generation and database expiry."""
+        return canonical_json_hash(
+            {
+                "schema_version": "workstream.selected_pre_submit_execute.v1",
+                "reservation": self.lease.reservation.canonical_body(),
+                "lease_id": str(self.lease.lease_id),
+                "lease_generation": self.lease.lease_generation,
+                "lease_expires_at": self.lease.lease_expires_at.isoformat(),
+            }
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedPreSubmitFinalizeFacts:
+    """Deterministic terminal input consumed before database-timed finalization."""
+
+    lease: SelectedPreSubmitLeaseFacts
+    execution: SelectedPreSubmitExecutionFacts | None
+    infrastructure_failure_code: str | None
+
+    def __post_init__(self) -> None:
+        if type(self.lease) is not SelectedPreSubmitLeaseFacts:
+            raise ValueError("selected PRE finalize lease is invalid")
+        if (self.execution is None) == (self.infrastructure_failure_code is None):
+            raise ValueError("selected PRE finalize outcome is invalid")
+        if self.execution is not None:
+            if type(self.execution) is not SelectedPreSubmitExecutionFacts:
+                raise ValueError("selected PRE finalize execution is invalid")
+            if self.execution.policy_sha256 != self.lease.reservation.policy_sha256:
+                raise ValueError("selected PRE finalize policy is invalid")
+        else:
+            SelectedPreSubmitInfrastructureUnavailable(
+                self.infrastructure_failure_code or ""
+            )
+
+    @property
+    def facts_digest(self) -> str:
+        """Bind the lease to either exact results or one closed infrastructure code."""
+        return canonical_json_hash(
+            {
+                "schema_version": "workstream.selected_pre_submit_finalize.v1",
+                "execute_facts_digest": SelectedPreSubmitExecuteFacts(
+                    self.lease
+                ).facts_digest,
+                "execution": (
+                    self.execution.canonical_body()
+                    if self.execution is not None
+                    else None
+                ),
+                "infrastructure_failure_code": self.infrastructure_failure_code,
+            }
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedPreSubmitAuthorityEvidence:
+    """One retained AUTH decision bound to exact phase facts."""
+
+    evidence_id: UUID
+    facts_digest: str
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.evidence_id) is not UUID
+            or len(self.facts_digest) != 71
+            or not self.facts_digest.startswith("sha256:")
+        ):
+            raise ValueError("selected PRE authority evidence is invalid")
+
+
+class PreparedSelectedPreSubmitExecution(Protocol):
+    """Transaction-bound fixed-service execution authority."""
+
+    async def consume(
+        self, facts: SelectedPreSubmitExecuteFacts
+    ) -> SelectedPreSubmitAuthorityEvidence:
+        """Consume the exact committed lease once."""
+
+
+class PreparedSelectedPreSubmitFinalization(Protocol):
+    """Transaction-bound fixed-service finalization authority."""
+
+    async def consume(
+        self, facts: SelectedPreSubmitFinalizeFacts
+    ) -> SelectedPreSubmitAuthorityEvidence:
+        """Consume the exact result or infrastructure outcome once."""
+
+
+class SelectedPreSubmitAuthorityPort(Protocol):
+    """Prepare separate execute and finalize authority before owner locks."""
+
+    def prepare_execution(
+        self, reservation: SelectedPreSubmitReservationFacts
+    ) -> AbstractAsyncContextManager[PreparedSelectedPreSubmitExecution]:
+        """Prepare execution authority before TASK/CHECKERS locks in the claim root."""
+
+    def prepare_finalization(
+        self, facts: SelectedPreSubmitFinalizeFacts
+    ) -> AbstractAsyncContextManager[PreparedSelectedPreSubmitFinalization]:
+        """Prepare exact finalization authority in the terminal root."""
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedPreSubmitCompletion:
+    """Terminal facts and immediate admission authority from finalization."""
+
+    terminal: SelectedPreSubmitTerminalFacts
+    capability: SelectedPreSubmitAdmissionAuthority | None
+
+
+class SelectedPreSubmitCoordinationPort(Protocol):
+    """CHECKERS-owned durable lease operations used by the ART workflow."""
+
+    async def claim(
+        self,
+        *,
+        run_id: UUID,
+        facts: SelectedPreSubmitReservationFacts,
+        authority: PreparedSelectedPreSubmitExecution,
+    ) -> SelectedPreSubmitLeaseFacts:
+        """Claim one queued run under TASK-first custody."""
+
+    async def committed_execution(
+        self, *, run_id: UUID, lease: SelectedPreSubmitLeaseFacts
+    ) -> SelectedPreSubmitExecutionAuthority:
+        """Mint process-local execution authority for a committed lease."""
+
+    async def finalize(
+        self,
+        *,
+        run_id: UUID,
+        lease: SelectedPreSubmitLeaseFacts,
+        authority: PreparedSelectedPreSubmitFinalization,
+        execution: SelectedPreSubmitExecutionFacts | None,
+        infrastructure_failure_code: str | None,
+    ) -> SelectedPreSubmitCompletion:
+        """Persist one terminal result and return pass authority when eligible."""
+
+
 @dataclass(frozen=True, slots=True)
 class SelectedPreSubmitTerminalFacts:
     """Exact terminal value finalized under a fresh TASK-first transaction."""
@@ -323,8 +491,17 @@ class SelectedPreSubmitInfrastructureUnavailable(RuntimeError):
 __all__ = (
     "ExternalPreSubmitIsolationFacts",
     "ExternalPreSubmitMemberFacts",
+    "PreparedSelectedPreSubmitExecution",
+    "PreparedSelectedPreSubmitFinalization",
+    "SelectedPreSubmitAdmissionAuthority",
+    "SelectedPreSubmitAuthorityEvidence",
+    "SelectedPreSubmitAuthorityPort",
+    "SelectedPreSubmitCompletion",
+    "SelectedPreSubmitCoordinationPort",
+    "SelectedPreSubmitExecuteFacts",
     "SelectedPreSubmitExecutionFacts",
     "SelectedPreSubmitInfrastructureUnavailable",
+    "SelectedPreSubmitFinalizeFacts",
     "SelectedPreSubmitLeaseFacts",
     "SelectedPreSubmitReservationFacts",
     "SelectedPreSubmitTerminalFacts",

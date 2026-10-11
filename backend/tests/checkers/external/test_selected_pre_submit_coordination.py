@@ -11,6 +11,8 @@ from sqlalchemy.schema import CreateTable
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
 from app.modules.checkers.api.selected_pre_submit import (
+    SelectedPreSubmitExecuteFacts,
+    SelectedPreSubmitFinalizeFacts,
     SelectedPreSubmitLeaseFacts,
     SelectedPreSubmitReservationFacts,
 )
@@ -120,3 +122,42 @@ def test_selected_pre_execution_capability_is_exact_and_single_use() -> None:
     ) == lease
     with pytest.raises(SelectedPreSubmitUnavailable):
         capability.consume(run_id=reservation.attempt_id, lease=lease)
+
+
+def test_selected_pre_authority_digests_bind_lease_and_infrastructure_outcome() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    reservation = _reservation()
+    lease = SelectedPreSubmitLeaseFacts(
+        reservation=reservation,
+        lease_id=new_record_id(),
+        lease_generation=1,
+        lease_expires_at=datetime.now(UTC),
+    )
+    execution = SelectedPreSubmitExecuteFacts(lease)
+    changed = SelectedPreSubmitExecuteFacts(
+        SelectedPreSubmitLeaseFacts(
+            reservation=reservation,
+            lease_id=lease.lease_id,
+            lease_generation=2,
+            lease_expires_at=lease.lease_expires_at + timedelta(seconds=1),
+        )
+    )
+    terminal = SelectedPreSubmitFinalizeFacts(
+        lease=lease,
+        execution=None,
+        infrastructure_failure_code="deadline_exceeded",
+    )
+
+    assert execution.facts_digest != changed.facts_digest
+    assert terminal.facts_digest != SelectedPreSubmitFinalizeFacts(
+        lease=lease,
+        execution=None,
+        infrastructure_failure_code="material_unavailable",
+    ).facts_digest
+    with pytest.raises(ValueError, match="outcome"):
+        SelectedPreSubmitFinalizeFacts(
+            lease=lease,
+            execution=None,
+            infrastructure_failure_code=None,
+        )

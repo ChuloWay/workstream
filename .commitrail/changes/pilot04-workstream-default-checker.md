@@ -39,6 +39,11 @@ database-timed generation lease, finalizes one terminal body, and mints a
 process-local one-use admission capability only for a complete pass. Its
 ordered work budget is derived from the default plus each locked image deadline
 and service cleanup margin and must fit ART's configured custody deadline.
+The selected execution workflow now prepares fixed-service authority before
+TASK/CHECKERS locks, commits the database-timed lease before exposing material,
+executes through one exact process-local ART capability with no transaction
+open, then uses a distinct short root to authorize and finalize the exact result
+or one closed recoverable infrastructure outcome.
 The selected POST processor consumes only actual Submission and ART material
 through the phase-typed callback grant, runs every locked POST image in order,
 and returns canonical evidence and observed isolation without any acceptance
@@ -196,6 +201,7 @@ intermediate-wait regression.
 | Selected durable result contract | `pytest -q backend/tests/checkers/external/test_selected_pre_submit.py`; Ruff and `git diff --check` on the affected files | 5 passed; canonical result/terminal digests bind the default, ordered external results, isolation, generation lease, outcome and measured queue/execution latency | PostgreSQL reservation, lease and finalize storage remain pending |
 | Selected durable request contract | The same five selected-PRE tests plus focused Ruff and `git diff --check` | Passed; the reservation digest covers contributor/link, TASK, assignment, ART attempt/generation, policy/default, exact default input and archive/manifest custody, and the terminal includes that request digest | PostgreSQL ownership and SQL custody remain pending |
 | Selected durable owner source | `pytest -q` over selected PRE, policy, coordination, PROJECT activation/proposal contracts and architecture module boundaries; focused Ruff | 51 focused/architecture tests passed; the selected run is its own durable attempt identity, TASK locks precede CHECKERS state, one-use admission facts are substitution-resistant, ordered deadlines fit ART custody, and four private module edges were removed through public ports/composition | Native migration, exact AUTH SQL closure, crash reclaim and admission composition remain pending |
+| Selected lease execution boundary | `pytest -q backend/tests/checkers/external/test_selected_pre_submit_coordination.py backend/tests/checkers/external/test_selected_pre_submit_service.py backend/tests/checkers/external/test_selected_pre_submit.py backend/tests/architecture/test_module_boundaries.py`; focused Ruff | 49 passed; fixed-service preparation precedes owner locks, the lease commits before material execution, execution occurs with no root open, and exact lease/result digests are consumed in a separate finalization root | Concrete AUTH registration, native SQL custody and live admission selection remain pending |
 | Selected POST callback | `pytest -q backend/tests/checkers/external/test_selected_post_submit.py`; Ruff and `git diff --check` on the affected files | 3 passed; actual Submission/ART identity reaches every locked POST image through its short-lived grant, work pass/fail remains evidence only, and infrastructure failure stays recoverable | Durable POST reservation/finalization, worker restart and routing composition remain pending |
 | Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | In progress | Persistence delta and migration ordinal await actual linear predecessor |
 | End-to-end replacement | Real PostgreSQL/MinIO/Rust public and worker journey | Not run | Implementation incomplete |
