@@ -135,6 +135,11 @@ replacement writer or route would fork the atomic creation operation.
   `docs/spec_authorization_service.md`, `README.md`, ARCH plan/chunk map/overview
   and `.commitrail/INDEX.md` only where the merged outcome changes a claim.
   Verify exact documentation filenames and links before editing.
+- Adjacent current navigation: ART, AUTH, POL, CON and REV initiative
+  `OVERVIEW.md` files, plus AUTH and POL `planning/PLAN.md` and
+  `planning/CHUNK_MAP.md`. These currently assign replacement intake as the next
+  boundary; reconcile that claim in the implementation PR without rewriting
+  completed historical records or claiming recovery is delivered.
 
 Shared migration environment/fingerprint files, AUTH catalogue/action lists,
 and any overlapping current docs are **coordination-owned by the lead** unless
