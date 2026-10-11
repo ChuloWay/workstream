@@ -93,8 +93,12 @@ Their current root transaction prevents composition across a complete batch.
   `.github/workflows/backend.yml`: require the existing source-pinned MinIO
   producer artifact through its job output, bind its SHA/attempt name, verify its
   checksum and start/clean up one actual provider. Add Go tests to existing
-  verify/build commands. Retain the old 240-second integration run while moving
-  only `test_task_batch_public_api.py` into a separate 240-second isolated run.
+  verify/build commands. Partition the old mixed integration run into controlled
+  HTTP/local checks and existing native public API callers, each with the unchanged
+  240-second isolated-run cap. Select existing native `*_public_api.py` files
+  automatically plus `test_public_self_service.py`, excluding only the owned bulk
+  file, which has its separate 240-second isolated run. HTTP/local selection is
+  the exact complementary file set. Refuse an empty native array.
   Every test stays selected once, the fifteen-minute job cap and aggregate
   required CLI result remain unchanged, and no skips or fallback providers are
   introduced. Preserve the separate PILOT-10 export-native partition at union.
@@ -195,7 +199,7 @@ single-Task and CREATE request digests remain byte-compatible. Deferred closure
 must require that exact binding and its canonical success/AUTH evidence, so a
 historical standalone success cannot be enrolled after the fact.
 
-### Implemented aggregate checkpoint, migration pending
+### Historical aggregate checkpoint before schema installation
 
 The aggregate models, compact public DTO, native membership selection, reservation,
 sorted all-Task preparation, fresh all-member AUTH, canonical staging and exact
@@ -436,8 +440,27 @@ dependency lacks `mcp.server.context`. Hosted complete checks remain required.
 Actual final CLI collection is 167 tests, split disjointly into 165 retained and
 two native caller cases. The source-artifact shell binding accepts only the
 exact SHA/attempt and rejects a prior attempt; removing that guard admits the
-same wrong artifact. The new 240-second native CLI partition budget remains to
-be executed. Required independent review and complete CI remain pending.
+same wrong artifact.
+
+The two-case native CLI partition passed at exact clean
+`2c9cff0a12ced5c817de885362f05df6abbb6561` in 176.02 seconds, within the unchanged
+240-second cap, with installed 0035 and complete database, role and MinIO cleanup.
+The 200-row socket case measured import 17.58, SCREEN 45.12 and RELEASE 48.41
+seconds; equivalent-source recovery/conflict took 14.01 seconds. Go source bytes
+and native bulk product/test bytes are unchanged from the recorded `932412232`
+proof; this checkpoint only fixes the closed API inventory and records evidence.
+
+The retained mixed 165-case CLI run exhausted the original 240-second cap with
+complete cleanup and no observed assertion failure. Its buffered partial output
+records 73 completed tests; actual collection places the next running case at
+the existing delayed guide-upload HTTP control. This is retained as a failed
+budget proof, not a passing suite or a batch product failure. The bounded repair
+separates controlled HTTP/local checks from the existing native public API files
+using complementary selections, retaining all tests, the same 240-second caps
+and fifteen-minute job cap. No fixture deadline, test assertion or lifecycle rule
+changes. Both resulting partitions and the updated exact completeness comparison
+must pass before claiming this workflow usable. Independent review and complete
+hosted CI remain pending.
 
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
@@ -572,6 +595,8 @@ that stronger observation and the larger journeys before any readiness claim.
   source custody; shared-file regions require handoff before edits.
 - Next usable boundary: Complete the separate explicit bulk/CLI journey under
   issue 489; whole-issue completion requires every agreed acceptance criterion.
-- Remaining risks: The implemented aggregate receipt/currentness contract still
-  needs sole-author native closure DDL, direct-SQL refusal, public rollback and
-  concurrency proof, and measured 200/500 journeys before readiness.
+- Remaining risks: The installed aggregate receipt/currentness contract has the
+  recorded native 200/500, rollback, concurrency and direct-SQL proof. The atomic
+  owner must consume the sole-authored 0034 correction before its human merge;
+  bulk must not edit an already deployed predecessor migration. Required final
+  independent reviews, bounded CLI partition proof and complete hosted CI remain.

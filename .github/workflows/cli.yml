@@ -105,7 +105,7 @@ jobs:
           docker logs workstream-cli-minio
           exit 1
 
-      - name: Exercise built CLI against HTTP boundaries and real public API
+      - name: Exercise built CLI against HTTP and local file boundaries
         working-directory: backend
         env:
           WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
@@ -117,7 +117,29 @@ jobs:
             --metadata-json "${RUNNER_TEMP}/workstream-cli-isolation.json" \
             --timeout-seconds 240 \
             -- python -m pytest -q ../cli/tests/integration \
-              --ignore=../cli/tests/integration/test_task_batch_public_api.py
+              '--ignore-glob=*_public_api.py' \
+              --ignore=../cli/tests/integration/test_public_self_service.py
+
+      - name: Exercise existing native CLI public API callers
+        working-directory: backend
+        env:
+          WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
+          WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          native_files=()
+          for test_path in ../cli/tests/integration/*_public_api.py ../cli/tests/integration/test_public_self_service.py; do
+            if [[ "${test_path}" != ../cli/tests/integration/test_task_batch_public_api.py ]]; then
+              native_files+=("${test_path}")
+            fi
+          done
+          test "${#native_files[@]}" -gt 0
+          python scripts/run_isolated_tests.py \
+            --metadata-json "${RUNNER_TEMP}/workstream-cli-native-isolation.json" \
+            --timeout-seconds 240 \
+            -- python -m pytest -q "${native_files[@]}"
 
       - name: Exercise complete native CLI batch journey
         working-directory: backend
