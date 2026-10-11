@@ -363,6 +363,11 @@ func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client
 		// replay after HTTP/2 GOAWAY/REFUSED_STREAM (or HTTP/1 connection
 		// failure); write retries belong to the caller, even with a retry key.
 		req.GetBody = nil
+		// An absent body is also replayable in Go's HTTP/2 transport. Keep
+		// zero-byte writes non-rewindable without inventing a request payload.
+		if req.Body == nil || req.Body == http.NoBody {
+			req.Body = io.NopCloser(bytes.NewReader(nil))
+		}
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", accept)

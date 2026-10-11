@@ -2,6 +2,9 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.contributions.api.published_selection import PublishedContributionPolicyPort
+from app.modules.contributions.api.records import (
+    ContributionExportPort, ContributionReadAuthorizationPort, ContributionExportResponse,
+)
 
 from app.adapters.compensation import policy_adapter_binding_port
 from app.adapters.projects import project_contribution_policy_eligibility_port
@@ -65,3 +68,28 @@ def submitter_contribution_participant(session, fence):
     return SubmitterContributionParticipant(
         session, fence=fence, awards=compensation_award_participant(session)
     )
+
+
+def contribution_export_service(
+    session: AsyncSession, *, authorization: ContributionReadAuthorizationPort,
+) -> ContributionExportPort:
+    """Compose one mandatory authorized evidence projection on the caller's snapshot."""
+    from app.adapters.actors import contribution_actor_label_port
+    from app.adapters.compensation import contribution_award_read_port
+    from app.adapters.reviews import final_acceptance_read_port
+    from app.adapters.tasks import contribution_task_evidence_port
+    from app.modules.contributions.records.read_repository import ContributionReadRepository
+    from app.modules.contributions.records.read_service import ContributionReadService
+
+    return ContributionReadService(
+        authorization=authorization, records=ContributionReadRepository(session),
+        awards=contribution_award_read_port(session), acceptances=final_acceptance_read_port(session),
+        tasks=contribution_task_evidence_port(session), actors=contribution_actor_label_port(session),
+    )
+
+
+def contribution_export_csv(projection: ContributionExportResponse) -> bytes:
+    """Serialize owner-validated evidence without exposing CON's private renderer."""
+    from app.modules.contributions.records.csv import contribution_csv
+
+    return contribution_csv(projection)

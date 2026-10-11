@@ -62,6 +62,14 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/adapters/reviews/contribution_reads.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/adapters/tasks/contribution_reads.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/adapters/tasks/routing_acceptance.py"
     },
     {
@@ -75,6 +83,10 @@
     {
       "group": "shared",
       "target": "backend/app/api/deps/authorization.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/deps/contribution_exports.py"
     },
     {
       "group": "lifecycle",
@@ -127,6 +139,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/api/routes/contribution_policies.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/api/routes/contributions.py"
     },
     {
       "group": "shared",
@@ -253,12 +269,20 @@
       "target": "backend/app/modules/actors/api/compensation_adapter.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/modules/actors/api/contribution_labels.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/modules/actors/api/service_identities.py"
     },
     {
       "group": "shared",
       "target": "backend/app/modules/actors/compensation_adapter.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/actors/contribution_labels.py"
     },
     {
       "group": "shared",
@@ -550,6 +574,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/contribution_read.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/action_groups.py"
     },
     {
@@ -579,6 +607,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/contribution_policies.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/contribution_reads.py"
     },
     {
       "group": "auth",
@@ -659,6 +691,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/project_setup_finalization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/read_dispatch.py"
     },
     {
       "group": "auth",
@@ -969,6 +1005,10 @@
       "target": "backend/app/modules/compensation/api/adapter_bindings.py"
     },
     {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/api/award_reads.py"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/modules/compensation/api/awards.py"
     },
@@ -987,6 +1027,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/compensation/awards/participant.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/modules/compensation/awards/read_repository.py"
     },
     {
       "group": "shared",
@@ -1026,6 +1070,14 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/records.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/api/source_reads.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/api/validation.py"
     },
     {
@@ -1054,11 +1106,27 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/csv.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/records/models.py"
     },
     {
       "group": "lifecycle",
       "target": "backend/app/modules/contributions/records/participant.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/read_facts.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/read_repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/read_service.py"
     },
     {
       "group": "lifecycle",
@@ -1442,11 +1510,19 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/reviews/acceptance/read_repository.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/reviews/acceptance/repository.py"
     },
     {
       "group": "lifecycle",
       "target": "backend/app/modules/reviews/api/acceptance.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/reviews/api/acceptance_reads.py"
     },
     {
       "group": "lifecycle",
@@ -1518,6 +1594,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/contribution_evidence.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/guide_documents.py"
     },
     {
@@ -1583,6 +1663,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/command_replay.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/contribution_evidence.py"
     },
     {
       "group": "lifecycle",
@@ -1837,7 +1921,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "05053353728987a58aaef286ffa68bdbb2ca94bba2f5dc3519423f95738f88b4",
+  "authority_digest": "53be5c0a4e5eafdc14dcddad4b7e21d5035764b85263a72623cad23d5d80683e",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

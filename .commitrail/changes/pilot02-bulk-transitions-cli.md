@@ -80,6 +80,11 @@ Their current root transaction prevents composition across a complete batch.
   explicit `PILOT_02C_BULK_TRANSITION_TARGETS` paths and additive partition
   regeneration. Preserve all atomic/source and ten-lane entries, retained
   assignments, protected-base custody and zero private-edge growth.
+- Current-main reconciliation preserves both the atomic import and merged P10
+  AUTH arms/action registries. Update the exact closed catalogue count and its
+  assertion to their 152-action union, preserving permissions and evaluators;
+  reconcile only the selected MCP authorization-context enum digest/provenance.
+  No bulk AUTH actions are introduced.
 - Current TASK/AUTH/ART and CLI contracts, README, affected roadmap sections,
   this record, and exact coordinated owner/lane/selected-contract metadata.
 - Required schema/receipt changes only through the sole migration author after
@@ -317,9 +322,28 @@ live setup inference or a complete 200-member public bulk journey.
 
 ## Reconciliation
 
-The additive bulk metadata preserves every trusted assignment and the existing
-protected base: 459 unique production targets validate, with exactly five new
-bulk paths. The complete ten-lane inventory covers 523 test modules. Its exact
+Main `d47ee1e9917689b94fd9439c09dffaf88c6d3ec1` now contains P10's linear audit
+migration 0033. This branch preserves its source and read contracts alongside the
+atomic import candidate, including both exact AUTH audit-target arms and all
+existing catalogue actions. Their approved union contains 152 ActionIds (116
+active and 36 planned, with permissions unchanged); its
+closed count and exact assertion are updated together. The protected partition
+now has 480 unique targets and the complete lane inventory has 532 modules,
+preserving all incoming/atomic/bulk targets and the original protected base.
+The selected MCP operation/components already equal the actual merged OpenAPI;
+only the union digest and exact capture provenance are reconciled. Native atomic
+and bulk migrations remain sequential sole-author work after 0033.
+The focused reconciliation run passed the 46 exact CI-catalogue and 15
+compact/admission/canonical-graph cases; its only failure was the retained
+114-active catalogue assertion. Updating that exact expectation to the union's
+116 active actions made all seven catalogue cases pass in 6.18 seconds.
+Protected module boundaries and scoped Ruff checks also passed. These are
+source/model/contract checks, with installed bulk proof still pending.
+
+Before the main-d47 union, additive bulk metadata preserved every trusted
+assignment and the existing protected base: 459 unique production targets
+validated, with exactly five new bulk paths; that ten-lane inventory covered
+523 test modules. Its exact
 TASK owner assertion is extended by the two actual new proof modules; the focused
 catalogue suite passes 46 cases in 7.79 seconds without weakening any gate.
 Canonical TASK/CLI documentation distinguishes current-state transition replay
