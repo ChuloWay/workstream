@@ -1,0 +1,310 @@
+"""A real missing-artifact infrastructure result can be superseded once by an Operator."""
+
+import asyncio
+import json
+import os
+
+import pytest
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+
+from app.adapters.checkers import checker_retry_service, evaluation_coordinator
+from app.core.identifiers import new_record_id
+from app.interfaces.artifacts import ArtifactObjectMissingError
+from app.modules.authorization.catalogue import ActionId
+from app.modules.checkers.api.execution import (
+    CheckerExecutionUnavailable, CheckerRequestConflict, CheckerRetryCommand,
+)
+from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun
+from app.modules.outbox.models import OutboxEvent
+from app.modules.tasks.models import AuditEvent
+from app.modules.tasks.post_submit_routing.evaluation_guard import TaskEvaluationGuard
+from app.modules.tasks.repository import TaskRepository
+from tests.post_submit_materialization_helpers import material_fixture
+from tests.checkers.post_submit.support import change_request
+from tests.project_create_fixtures import grant_fixture_admin_role
+from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome, state
+from tests.tasks.evaluation_delivery.test_worker_materialization import _worker_port
+from tests.test_artifact_admission import _context, _seed_human_actor
+
+
+@pytest.mark.parametrize("provider", ["local", "minio"])
+async def test_operator_retry_after_real_missing_object_is_atomic_and_replayable(
+    tmp_path, isolated_database_env, monkeypatch, provider,
+):
+    from app.adapters.artifacts.local import LocalStorageAdapter
+    from app.adapters.artifacts.s3_compatible import S3CompatibleArtifactStore
+    from app.adapters.artifacts import internal_workers
+
+    if provider == "minio":
+        from tests import test_s3_artifact_store
+
+        monkeypatch.setattr(
+            test_s3_artifact_store, "MINIO_BUCKET", os.environ["WORKSTREAM_TEST_MINIO_BUCKET"]
+        )
+    async with material_fixture(tmp_path, isolated_database_env, provider=provider) as h:
+        port = _worker_port(h, monkeypatch)
+
+        def missing(_store, _reference):
+            raise ArtifactObjectMissingError("controlled verified object loss")
+
+        try:
+            delivery = await delivery_fixture(h, materialization=port)
+            with monkeypatch.context() as patch:
+                patch.setattr(
+                    LocalStorageAdapter if provider == "local" else S3CompatibleArtifactStore,
+                    "open", missing,
+                )
+                initial = await delivery.delivery.deliver(
+                    h.created.evaluation_event_id, h.request.project_id, "retry-source",
+                )
+            assert outcome(initial)["delivery_state"] == "acknowledged"
+            saved = await state(h)
+            assert saved["run"]["status"] == "infrastructure_failed"
+            assert json.loads(saved["run"]["result_json"])["infrastructure_failure_code"] == "material_unavailable"
+            direct_successor = change_request(
+                h.request, evaluation_request_id=new_record_id(), evaluation_generation=2,
+            )
+            with pytest.raises(IntegrityError, match="terminal checker infrastructure retry requires Operator receipt"):
+                async with h.factory.begin() as session:
+                    await evaluation_coordinator(session).reserve_current_evaluation(direct_successor)
+            async with h.factory() as session:
+                assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+
+            operator = _context()
+            async with h.factory.begin() as session:
+                await _seed_human_actor(session, operator)
+            key = new_record_id()
+            operator = operator.model_copy(update={"request_id": key, "correlation_id": key})
+            command = CheckerRetryCommand(
+                source_run_id=h.created.evaluation_attempt_id,
+                request_key=key, reason="Verified artifact storage has been restored",
+            )
+            with pytest.raises(CheckerExecutionUnavailable, match="checker_retry_authority_unavailable"):
+                async with h.factory.begin() as session:
+                    await checker_retry_service(session, operator).retry(command)
+            async with h.factory() as session:
+                assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+                assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+            async with h.factory.begin() as session:
+                await grant_fixture_admin_role(
+                    session, operator.actor_profile_id, role="operator", scope="system",
+                )
+            with pytest.raises(RuntimeError, match="planned caller rollback"):
+                async with h.factory.begin() as session:
+                    staged = await checker_retry_service(session, operator).retry(command)
+                    assert staged.successor.generation == 2
+                    raise RuntimeError("planned caller rollback")
+            async with h.factory() as session:
+                assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+                assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+                assert await session.get(CheckerRun, str(staged.successor.run_id)) is None
+                assert await session.get(AuditEvent, str(staged.authorization_decision_id)) is None
+            from app.adapters.audit import _CheckerRetryAudit
+
+            async def audit_unavailable(_participant, _preparation, _successor, _authority):
+                raise RuntimeError("controlled initiation audit outage")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(_CheckerRetryAudit, "record", audit_unavailable)
+                with pytest.raises(RuntimeError, match="controlled initiation audit outage"):
+                    async with h.factory.begin() as session:
+                        await checker_retry_service(session, operator).retry(command)
+            async with h.factory() as session:
+                assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+                assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+                assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+            async with h.factory.begin() as session:
+                created = await checker_retry_service(session, operator).retry(command)
+            assert created.source.source_run_id == command.source_run_id
+            assert created.successor.generation == h.request.evaluation_generation + 1
+            assert created.successor.run_id != created.source.source_run_id
+
+            async with h.factory() as session:
+                source = await session.get(CheckerRun, str(command.source_run_id))
+                successor = await session.get(CheckerRun, str(created.successor.run_id))
+                receipt = await session.get(CheckerRetryReceipt, str(created.receipt_id))
+                assert source.status == "infrastructure_failed"
+                assert successor.status == "queued"
+                assert receipt.source_result_digest == source.result_digest
+                assert receipt.successor_request_digest == successor.request_digest
+                assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 1
+                assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+                authorization = await session.get(AuditEvent, str(created.authorization_decision_id))
+                assert authorization.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value
+                assert authorization.project_id == str(h.request.project_id)
+                assert authorization.resource_id == str(command.source_run_id)
+                assert authorization.after_facts["resource_context_digest"] == receipt.resource_digest
+                audit = await session.get(AuditEvent, str(created.successor.audit_event_id))
+                assert audit.project_id is None
+                assert audit.event_payload["references"]["project_id"] == str(h.request.project_id)
+                assert audit.event_payload["references"]["source_checker_run_id"] == str(command.source_run_id)
+                assert audit.event_payload["authorization_resource_digest"] == receipt.resource_digest
+
+            async with h.factory.begin() as session:
+                replay = await checker_retry_service(session, operator).retry(command)
+            assert replay == created
+            with pytest.raises(CheckerRequestConflict, match="checker_retry_request_conflict"):
+                async with h.factory.begin() as session:
+                    await checker_retry_service(session, operator).retry(command.model_copy(update={
+                        "reason": "Different reason under the same request key",
+                    }))
+            second_key = new_record_id()
+            second_context = operator.model_copy(update={
+                "request_id": second_key, "correlation_id": second_key,
+            })
+            with pytest.raises(CheckerExecutionUnavailable):
+                async with h.factory.begin() as session:
+                    await checker_retry_service(session, second_context).retry(
+                        command.model_copy(update={"request_key": second_key})
+                    )
+            delivered = await delivery.delivery.deliver(
+                created.successor.event_id, h.request.project_id, "retry-successor",
+            )
+            assert outcome(delivered)["delivery_state"] == "acknowledged"
+            later_request = change_request(
+                h.request, evaluation_request_id=new_record_id(), evaluation_generation=3,
+            )
+            async with h.factory.begin() as session:
+                later = await evaluation_coordinator(session).reserve_current_evaluation(later_request)
+            assert later.evaluation_generation == 3
+            assert later.attempt_id != created.successor.run_id
+            async with h.factory.begin() as session:
+                historical_replay = await checker_retry_service(session, operator).retry(command)
+            assert historical_replay == created
+            async with h.factory() as session:
+                source = await session.get(CheckerRun, str(command.source_run_id))
+                successor = await session.get(CheckerRun, str(created.successor.run_id))
+                assert source.status == "infrastructure_failed"
+                assert successor.status == "completed"
+                assert await session.get(CheckerRun, str(later.attempt_id)) is not None
+                assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 1
+                assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 3
+        finally:
+            internal_workers.shutdown_artifact_internal_runtime()
+
+
+async def test_same_key_independent_sessions_wait_for_task_then_replay_one_retry(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    from app.adapters.artifacts.local import LocalStorageAdapter
+    from app.adapters.artifacts import internal_workers
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        port = _worker_port(h, monkeypatch)
+
+        def missing(_store, _reference):
+            raise ArtifactObjectMissingError("controlled verified object loss")
+
+        try:
+            delivery = await delivery_fixture(h, materialization=port)
+            with monkeypatch.context() as patch:
+                patch.setattr(LocalStorageAdapter, "open", missing)
+                initial = await delivery.delivery.deliver(
+                    h.created.evaluation_event_id, h.request.project_id, "concurrent-source",
+                )
+            assert outcome(initial)["delivery_state"] == "acknowledged"
+            assert (await state(h))["run"]["status"] == "infrastructure_failed"
+
+            operator = _context()
+            async with h.factory.begin() as session:
+                await _seed_human_actor(session, operator)
+                await grant_fixture_admin_role(
+                    session, operator.actor_profile_id, role="operator", scope="system",
+                )
+            key = new_record_id()
+            operator = operator.model_copy(update={"request_id": key, "correlation_id": key})
+            command = CheckerRetryCommand(
+                source_run_id=h.created.evaluation_attempt_id,
+                request_key=key, reason="Restore verified checker infrastructure",
+            )
+
+            arrivals: set[int] = set()
+            both_arrived = asyncio.Event()
+            original_replay = TaskEvaluationGuard.lock_retry_replay_scope
+            original_new = TaskEvaluationGuard.lock_terminal_retry_scope
+
+            async def mark_then(method, guard, request):
+                arrivals.add(id(guard))
+                if len(arrivals) >= 2:
+                    both_arrived.set()
+                return await method(guard, request)
+
+            async def replay_gate(guard, request):
+                return await mark_then(original_replay, guard, request)
+
+            async def new_gate(guard, request):
+                return await mark_then(original_new, guard, request)
+
+            async def invoke():
+                async with h.factory.begin() as session:
+                    return await checker_retry_service(session, operator).retry(command)
+
+            with monkeypatch.context() as patch:
+                patch.setattr(TaskEvaluationGuard, "lock_retry_replay_scope", replay_gate)
+                patch.setattr(TaskEvaluationGuard, "lock_terminal_retry_scope", new_gate)
+                async with h.factory.begin() as holder:
+                    assert await TaskRepository(holder).lock_project_task(
+                        h.request.project_id, h.request.task_id,
+                    ) is not None
+                    calls = [asyncio.create_task(invoke()) for _ in range(2)]
+                    try:
+                        await asyncio.wait_for(both_arrived.wait(), 30)
+                        assert all(not call.done() for call in calls)
+                        async with h.factory() as observer:
+                            assert await observer.scalar(
+                                select(func.count()).select_from(CheckerRetryReceipt)
+                            ) == 0
+                            assert await observer.scalar(select(func.count()).select_from(
+                                AuditEvent
+                            ).where(AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value)) == 0
+                    except BaseException:
+                        for call in calls:
+                            call.cancel()
+                        await asyncio.gather(*calls, return_exceptions=True)
+                        raise
+                first, second = await asyncio.gather(*calls)
+            assert first == second
+            async with h.factory() as session:
+                assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 1
+                assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+        finally:
+            internal_workers.shutdown_artifact_internal_runtime()
+
+
+async def test_queued_source_reaches_valid_task_guard_then_refuses_terminal_retry(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        operator = _context()
+        async with h.factory.begin() as session:
+            await _seed_human_actor(session, operator)
+            await grant_fixture_admin_role(
+                session, operator.actor_profile_id, role="operator", scope="system",
+            )
+        key = new_record_id()
+        operator = operator.model_copy(update={"request_id": key, "correlation_id": key})
+        command = CheckerRetryCommand(
+            source_run_id=h.created.evaluation_attempt_id,
+            request_key=key, reason="Queued run has not failed",
+        )
+        reached = False
+        original = TaskEvaluationGuard.lock_terminal_retry_scope
+
+        async def observed(guard, request):
+            nonlocal reached
+            result = await original(guard, request)
+            reached = True
+            return result
+
+        with monkeypatch.context() as patch:
+            patch.setattr(TaskEvaluationGuard, "lock_terminal_retry_scope", observed)
+            with pytest.raises(CheckerExecutionUnavailable, match="checker_retry_source_unavailable"):
+                async with h.factory.begin() as session:
+                    await checker_retry_service(session, operator).retry(command)
+        assert reached
+        async with h.factory() as session:
+            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+            run = await session.get(CheckerRun, str(command.source_run_id))
+            assert run.status == "queued"

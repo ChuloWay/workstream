@@ -33,14 +33,19 @@ class EvaluationDeliveryRequestReader:
 
     async def read(self, envelope: OutboxEventEnvelope) -> PostSubmissionEvaluationRequest:
         """Select all owner identifiers together, without creating or repairing rows."""
+        retry = await self._evaluations.read_retry_delivery(
+            project_id=envelope.claim.project_id,
+            submission_id=envelope.aggregate_id,
+            event_id=envelope.claim.event_id,
+        )
         receipt = await self._session.scalar(select(SubmissionDispatch).where(
             SubmissionDispatch.project_id == str(envelope.claim.project_id),
             SubmissionDispatch.submission_id == str(envelope.aggregate_id),
             SubmissionDispatch.evaluation_event_id == envelope.claim.event_id,
         ).execution_options(populate_existing=True))
-        if receipt is None:
+        if (receipt is None) == (retry is None):
             raise EvaluationDeliveryUnavailable("evaluation_delivery_unavailable")
-        expected = evaluation_request_event(receipt)
+        expected = evaluation_request_event(receipt) if receipt is not None else retry.expected_event
         expected_payload = json.dumps(
             expected.payload, sort_keys=True, separators=(",", ":"),
             ensure_ascii=False, allow_nan=False,
@@ -54,6 +59,8 @@ class EvaluationDeliveryRequestReader:
             or envelope.claim.payload_digest != canonical_json_hash(expected.payload)
         ):
             raise EvaluationDeliveryUnavailable("evaluation_delivery_unavailable")
+        if retry is not None:
+            return retry.request
         stored = await self._evaluations.read_reserved_evaluation(
             project_id=UUID(receipt.project_id), task_id=UUID(receipt.task_id),
             submission_id=UUID(receipt.submission_id),

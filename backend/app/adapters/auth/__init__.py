@@ -72,6 +72,12 @@ def task_import_source_authorization(
     return PreparedTaskImportSourceAuthorization(session, context)
 
 
+def checker_retry_authorization(session: AsyncSession, context: AuthorizationContext):
+    """Compose one hidden retry through canonical prepared Operator authority."""
+    from app.modules.authorization.checker_retry_authorization import PreparedCheckerRetryAuthorization
+    return PreparedCheckerRetryAuthorization(session, context)
+
+
 def guide_sufficiency_projection_authorization(
     session: AsyncSession,
 ) -> GuideSufficiencyProjectionAuthorization:
