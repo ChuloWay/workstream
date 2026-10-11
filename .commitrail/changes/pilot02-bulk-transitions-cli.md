@@ -175,6 +175,12 @@ write, changed-input/partial-advance rollback, real grant-revocation denial and 
 observed native holder/waiter before concurrent same-key recovery. They have not
 run because aggregate custody DDL is pending the sole migration author. No native
 aggregate, native 200/500 timing, full CI, or readiness claim is made here.
+The native module also carries two commit-closure controls after genuine
+canonical stages: omitting the final initial member INSERT and leaving the root
+pending. Both require a complete successful-effect rollback. Direct SQL controls
+cover UPDATE/DELETE and TRUNCATE refusal for each committed aggregate table,
+unchanged retained facts and fresh-authorized exact replay afterward. They are
+written controls awaiting installed schema, not executed native evidence.
 
 Peer review of aggregate checkpoint `42900b036` found that the new dependency
 projected immutable identity after the canonical Task dependency rolled back and

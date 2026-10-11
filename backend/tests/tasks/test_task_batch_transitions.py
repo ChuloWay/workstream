@@ -6,8 +6,9 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import event, func, select, text
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import Session
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
@@ -285,3 +286,82 @@ async def test_sql_cannot_attach_old_standalone_successes_to_a_new_aggregate(imp
                 await session.flush()
         assert getattr(caught.value.orig, "sqlstate", None) == "23514"
     assert await _success_facts(project) == before
+
+
+@pytest.mark.parametrize("corruption", ["missing_member", "pending_root"])
+async def test_native_commit_refuses_incomplete_aggregate_after_real_canonical_stages(
+    import_source_client, corruption,
+):
+    """Initial custody corruption must roll back both actual canonical Task writes."""
+    client = import_source_client
+    project, batch = await _import(client)
+    before = await _success_facts(project)
+    changed = False
+
+    def corrupt_before_flush(session, flush_context, instances):
+        nonlocal changed
+        if changed:
+            return
+        if corruption == "missing_member":
+            for row in list(session.new):
+                if isinstance(row, TaskBatchTransitionMember) and row.row_index == 1:
+                    # Remove the initial INSERT; an UPDATE/DELETE guard cannot
+                    # mask missing complete-member commit closure.
+                    session.expunge(row)
+                    changed = True
+        else:
+            for row in list(session.dirty):
+                if isinstance(row, TaskBatchTransitionReceipt) and row.status == "committed":
+                    # Preserve the valid pending declaration without writing an
+                    # invalid state shape. Deferred closure must reject commit.
+                    session.expire(row)
+                    changed = True
+
+    event.listen(Session, "before_flush", corrupt_before_flush)
+    try:
+        refused = await client.post(
+            _path(project, batch, "screen"), headers=auth_headers(),
+            json={"reason": "Complete canonical stages before native refusal"},
+        )
+        assert changed, "the intended final aggregate INSERT/completion was not reached"
+        assert refused.status_code == 503 and refused.json()["error"]["retryable"] is True, refused.text
+        assert await _success_facts(project) == before
+    finally:
+        event.remove(Session, "before_flush", corrupt_before_flush)
+
+
+@pytest.mark.parametrize("table", ["task_batch_transition_receipts", "task_batch_transition_members"])
+@pytest.mark.parametrize("operation", ["update", "delete", "truncate"])
+async def test_committed_aggregate_custody_refuses_direct_sql_mutation(
+    import_source_client, table, operation,
+):
+    """Retained aggregate facts refuse mutation and each table owns a TRUNCATE guard."""
+    client = import_source_client
+    project, batch = await _import(client)
+    key, payload = auth_headers(), {"reason": "Immutable aggregate success"}
+    result = await client.post(_path(project, batch, "screen"), headers=key, json=payload)
+    assert result.status_code == 200, result.text
+    async with db_session.get_session_factory()() as session, session.begin():
+        snapshot = text(f"select to_jsonb(t) from {table} t order by id")
+        before = list(await session.scalars(snapshot))
+        assert before
+        if operation == "truncate":
+            assert await session.scalar(text(
+                "select count(*) from pg_trigger where tgrelid=cast(:table as regclass) "
+                "and not tgisinternal and (tgtype & 32)=32 and (tgtype & 1)=0 and tgenabled='O'"
+            ), {"table": table}) == 1, "each aggregate table needs its own enabled statement guard"
+        update = {
+            "task_batch_transition_receipts": "reason='changed retained decision'",
+            "task_batch_transition_members": "task_idempotency_key=:new_key",
+        }[table]
+        statement = {
+            "update": f"update {table} set {update}",
+            "delete": f"delete from {table}",
+            "truncate": f"truncate {table} cascade",
+        }[operation]
+        with pytest.raises(DBAPIError):
+            async with session.begin_nested():
+                await session.execute(text(statement), {"new_key": uuid4()})
+        assert list(await session.scalars(snapshot)) == before
+    replay = await client.post(_path(project, batch, "screen"), headers=key, json=payload)
+    assert replay.status_code == 200 and replay.json() == result.json(), replay.text
