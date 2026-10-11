@@ -99,13 +99,15 @@ def approved_projection_digest(view) -> str:
     )
     target = GuideProposalTarget.model_validate(operation.target_json)
     receipt = GuideProposalApprovalReceipt.model_validate(operation.receipt_json)
-    external_plan_hash = None
+    external_plan_hash = external_pre_hash = None
     if operation.effective_pre_submit_plan.get("schema_version") == (
         "external_checker_policies.v1"
     ):
-        external_plan_hash = LockedExternalCheckerPolicies.model_validate(
+        external_policies = LockedExternalCheckerPolicies.model_validate(
             operation.effective_pre_submit_plan
-        ).policies_sha256
+        )
+        external_plan_hash = external_policies.policies_sha256
+        external_pre_hash = external_policies.pre_submit.policy_sha256
     if (
         target.digest != operation.target_digest
         or target.compilation_id != view.compilation.id
@@ -146,7 +148,12 @@ def approved_projection_digest(view) -> str:
         or effective.effective_policy_hash != receipt.effective_policy_hash
         or canonical_json_hash(effective.effective_policy) != receipt.effective_policy_hash
         or pre.compiled_bundle_hash != receipt.pre_submit_bundle_hash
-        or canonical_json_hash(pre.compiled_bundle) != receipt.pre_submit_bundle_hash
+        or (
+            external_pre_hash
+            if external_pre_hash is not None
+            else canonical_json_hash(pre.compiled_bundle)
+        )
+        != receipt.pre_submit_bundle_hash
         or effective.submission_artifact_policy_id != policy.id
         or effective.submission_artifact_policy_hash != policy.policy_hash
         or pre.effective_policy_id != effective.id
