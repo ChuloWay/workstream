@@ -38,6 +38,15 @@ explained; do not restart delivered work or substitute a broader subsystem.
 Hidden completion delivery is complete; production registration remains disabled.
 No user-facing completion claim is valid until group 4 passes.
 
+Within group 1, exact-cause replacement intake and terminal infrastructure retry
+may be implemented in parallel against the delivered TASK/ART and CHECKERS
+interfaces. Keep each change in its own worktree and PR; coordinate shared AUTH,
+lineage and dispatch contracts before editing. Reconcile migrations into one
+linear chain and rerun affected checks after the preceding merge. Project/setup
+fault disposition remains an explicit recovery requirement. Groups 2 and 3 can
+be planned against these contracts, but runtime activation and public cutover
+follow their completed proofs; the full drill follows the connected public path.
+
 The first public intake scope is **initial submissions and checker remediation**.
 The historical pre-cutover ARCH-02I contract's requirement to implement human
 review revisions before any public intake is not adopted for this milestone.
