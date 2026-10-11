@@ -273,7 +273,7 @@ The earlier 8,935-case hosted proof remains bound to its actual merge into
 `20b0beb8`, not this integration. Fresh hosted CI is required for the new tree.
 
 
-Current-source reconciliation integrates main
+Earlier source reconciliation integrates main
 `251bc29bc5661934b2b70cde4ceecd52dbfa9687`, including exact CLI proposal
 approval, hidden ART worker materialization, completed-failure evidence and
 same-request pre-submit feedback. Their production owners, documentation,
@@ -288,3 +288,19 @@ capacity repair. Revision `0031_task_import_source` still follows
 `0030_routing_outcomes`; its authored DDL and measured fingerprint are unchanged.
 Atomic DRAFT import, batch screen/release and CLI conversion remain separate
 work, and Issue #489 remains open.
+
+
+Current-source reconciliation integrates main
+`7e499849ab871f445012cf9e343ff97fbb95d62d`, preserving CLI16's exact
+post-policy correction request/receipt, input and transport controls, documentation
+and delivered roadmap statements. All backend source, model, migration,
+fingerprint, native tests, MCP contracts and CI metadata remain byte-identical
+to source publication `aa784c9c31490c018d35f4a3cc306fa7c16c630a`.
+The complete hosted proof for that earlier publication remains bound to actual
+merge `8dd7d2989a7a94443535aff00fa87559b70fdf04`: all ten native lanes and
+aggregate passed with 9,007 completed unique tests, zero skips/deselections,
+all 18 public source cases and schema0031 owned-resource cleanup. This proof
+is not relabeled as the new integration; fresh required hosted CI remains
+necessary. The selected merge order retains `0031_task_import_source` after
+`0030_routing_outcomes`; no source DDL change is made for a competing draft.
+Atomic DRAFT import remains a separate reviewed scope and Issue #489 remains open.
