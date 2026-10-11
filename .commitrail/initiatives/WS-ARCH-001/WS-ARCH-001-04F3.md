@@ -119,7 +119,7 @@ replacement writer or route would fork the atomic creation operation.
   only if its typed guard needs the new closed kind. Existing action and grant
   identities stay unchanged.
 - One linear `backend/alembic/versions/0034_checker_remediation_replacement.py`
-  migration after 0032; matching model/schema registration and
+  migration after 0033 contribution reads; matching model/schema registration and
   `backend/tests/test_alembic.py` migration graph assertion.
 - Focused existing owner tests under
   `backend/tests/test_submission_predecessor_custody.py`,
@@ -147,8 +147,10 @@ replacement writer or route would fork the atomic creation operation.
   `backend/tests/test_blocked_pre_submit_feedback_postgresql.py`,
   `backend/tests/test_artifact_bindings.py`,
   `backend/tests/test_submission_bundle_preparation_recovery.py`,
-  `backend/tests/test_pre_submit_attempt_schema.py`, and
-  `backend/tests/reviews/decision/support.py`. The shared
+  `backend/tests/test_pre_submit_attempt_schema.py`,
+  `backend/tests/reviews/decision/support.py`,
+  `backend/tests/submission_fixtures.py`, and
+  `backend/tests/authorization/submission_history/test_isolation.py`. The shared
   retained-material and pre-submit fixtures must also compose the canonical
   context port. Existing routing successor fixtures must publish the real
   checker-remediation outcome before intake; historical migration fixtures must
@@ -160,7 +162,7 @@ replacement writer or route would fork the atomic creation operation.
   seeding helpers with temporary all-null cause columns. Remove those columns
   before upgrade and assert original row values and column shape are restored;
   this test support does not add a runtime compatibility path.
-- `backend/tests/conftest.py` only for the deterministic 0033 public-schema
+- `backend/tests/conftest.py` only for the deterministic 0034 public-schema
   fingerprint, with the existing strict schema guard and resettable-table list
   retained. The lead independently verifies the integrated fingerprint.
 - This record and affected current capability claims in `docs/roadmap_status.md`,
