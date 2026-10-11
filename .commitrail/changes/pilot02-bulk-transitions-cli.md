@@ -322,6 +322,15 @@ live setup inference or a complete 200-member public bulk journey.
 
 ## Reconciliation
 
+The native journey's AUTH assertions use canonical manager audit projection:
+`resource_type=project` and the exact project resource ID. The retained Task
+lifecycle event binds each member's original decision through its authorization
+reference, exact `manager_authority_facts` Task/project and identical context
+digest. Replay allow-count observations select the project resource too. This
+repairs the test's former Task-ID expectation without changing AUTH projection,
+product behavior or the immutable aggregate contract. Installed bulk/native
+proof remains pending the sole-author schema and source handoff.
+
 Main `d47ee1e9917689b94fd9439c09dffaf88c6d3ec1` now contains P10's linear audit
 migration 0033. This branch preserves its source and read contracts alongside the
 atomic import candidate, including both exact AUTH audit-target arms and all

@@ -63,7 +63,8 @@ async def _success_facts(project):
             AuditEvent.entity_id.in_(task_ids), AuditEvent.event_type.in_(["TaskScreened", "TaskReleased"]),
         )))
         allows = set(await session.scalars(select(AuditEvent.id).where(
-            AuditEvent.resource_id.in_(task_ids), AuditEvent.event_type == "SensitiveAuthorizationAllowed",
+            AuditEvent.resource_type == "project", AuditEvent.resource_id == project,
+            AuditEvent.event_type == "SensitiveAuthorizationAllowed",
             AuditEvent.action_id.in_(["project.task.screen", "project.task.release"]),
         )))
         return tasks, roots, members, receipts, lifecycle, allows
@@ -101,6 +102,13 @@ async def test_public_source_import_screen_release_complete_journey(import_sourc
             ).order_by(TaskBatchTransitionMember.row_index)))
             assert root.response == original and root.status == "committed" and len(links) == count
             assert len({link.task_idempotency_key for link in links}) == count
+            lifecycle_rows = list(await session.scalars(select(AuditEvent).where(
+                AuditEvent.entity_type == "task",
+                AuditEvent.entity_id.in_([link.task_id for link in links]),
+                AuditEvent.event_type == ("TaskScreened" if operation == "screen" else "TaskReleased"),
+            )))
+            lifecycle_by_task = {event.entity_id: event for event in lifecycle_rows}
+            assert len(lifecycle_rows) == len(lifecycle_by_task) == count
             for link, row in zip(links, original["tasks"], strict=True):
                 receipt = await session.get(TaskCommandReceipt, link.task_command_receipt_id)
                 decision = await session.get(AuditEvent, link.authorization_decision_id)
@@ -108,8 +116,15 @@ async def test_public_source_import_screen_release_complete_journey(import_sourc
                 assert receipt.task_id == link.task_id == row["task_id"]
                 assert receipt.response["status"] == row["status"]
                 assert receipt.locked_context_hash == row["locked_context_hash"]
-                assert decision.action_id == root.action_id and decision.resource_id == row["task_id"]
+                assert decision.action_id == root.action_id
+                assert decision.resource_type == "project" and decision.resource_id == project
                 assert decision.event_type == "SensitiveAuthorizationAllowed"
+                lifecycle = lifecycle_by_task[row["task_id"]]
+                assert lifecycle.event_payload["references"]["authorization_decision_id"] == decision.id
+                authority = lifecycle.event_payload["manager_authority_facts"]
+                assert authority["resource_type"] == "task_authority" and authority["resource_id"] == row["task_id"]
+                assert authority["scope_project_id"] == project
+                assert lifecycle.event_payload["authorization_resource_digest"] == decision.after_facts["resource_context_digest"]
     facts = await _success_facts(project)
     assert len(facts[1]) == 2 and all(len(values) == count * 2 for values in facts[2:5])
     assert all(row.status == "ready" for row in facts[0])
