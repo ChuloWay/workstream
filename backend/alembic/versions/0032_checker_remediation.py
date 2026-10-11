@@ -3,8 +3,8 @@
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0031_checker_remediation"
-down_revision = "0030_routing_outcomes"
+revision = "0032_checker_remediation"
+down_revision = "0031_task_import_source"
 branch_labels = None
 depends_on = None
 

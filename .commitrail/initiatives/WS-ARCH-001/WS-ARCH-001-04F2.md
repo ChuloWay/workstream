@@ -42,7 +42,7 @@ retain bounded findings. Preserve success behavior and default human review.
   `backend/app/modules/tasks/accepted_effects.py` and
   `backend/app/adapters/tasks/routing_acceptance.py`: admit the precise audit
   transition and reject failure sources at acceptance-only consumers.
-- `backend/alembic/versions/0031_checker_remediation.py`, corresponding model,
+- `backend/alembic/versions/0032_checker_remediation.py`, corresponding model,
   migration fingerprint and test registrations: extend source/receipt/consequence
   database closure, preserving prior rows and evidence.
 - Focused routing/AUTH contract, PostgreSQL, delivery and migration tests under
@@ -75,7 +75,7 @@ an exact reference notice: its manifest ID resolves the immutable recommendation
 and SQL binds that reference to the actual receipt. Audit binds the target state.
 Do not rewrite retained events or introduce event-format fallback.
 
-0031 replaces `guard_task_post_submit_routing_source` (0011), the request check
+0032 replaces `guard_task_post_submit_routing_source` (0011), the request check
 and `guard_task_routing_request` including completion payload (0018), and 0030's
 `task_routing_context_valid`, `guard_task_routing_authority`,
 `task_routing_acceptance_matches`, `task_routing_outcome_complete`, and
@@ -141,9 +141,10 @@ spies and held-row tests independently prove no observation/lock for false failu
 ## Evidence
 
 Planning is based on merged main `8f5fe6e0a`, including 04F1, 04E3A and 02I-A.
-The starting migration head was 0030; coordinate any newly merged migration before
-implementation is published. PRs 528 (external runtime), 532 (CLI correction)
-and 533 (CI lanes) are separate; preserve their owners on integration.
+The starting migration head was 0030. Task-import source custody subsequently
+merged as 0031; this migration now follows it linearly as 0032 without changing
+either SQL body. PRs 528 (external runtime), 532 (CLI correction) and 533 (CI
+lanes) are separate; preserve their owners on integration.
 
 Remaining: exact-cause replacement intake, setup-fault/Operator recovery,
 production composition/false readiness, public intake and the first-layer drill.

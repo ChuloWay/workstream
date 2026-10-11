@@ -1,4 +1,4 @@
-"""0031 preserves genuine retained success outcomes and their exact evidence."""
+"""0032 preserves genuine retained success outcomes and their exact evidence."""
 
 import asyncio
 
@@ -95,7 +95,7 @@ async def test_routing_upgrade_preserves_success_evidence(
     migration_lock,
     admin_access,
 ):
-    """Upgrade real 0030 true/false outcomes without rewriting their evidence."""
+    """Upgrade real 0031 true/false outcomes without rewriting their evidence."""
     url = isolated_database_env.replace("+asyncpg", "")
     with migration_lock():
         await db_session.dispose_engine()
@@ -104,10 +104,10 @@ async def test_routing_upgrade_preserves_success_evidence(
             await connection.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public")
         finally:
             await connection.close()
-        await asyncio.to_thread(command.upgrade, _config(), "0030_routing_outcomes")
+        await asyncio.to_thread(command.upgrade, _config(), "0031_task_import_source")
 
         # Current application construction requires the future owner column while
-        # it writes genuine 0030 outcomes. Remove it before running the real upgrade.
+        # it writes genuine predecessor outcomes. Remove it before the real upgrade.
         connection = await asyncpg.connect(url)
         try:
             await connection.execute(
@@ -146,7 +146,7 @@ async def test_routing_upgrade_preserves_success_evidence(
             )
             assert await connection.fetchval(
                 "SELECT version_num FROM public.alembic_version"
-            ) == "0030_routing_outcomes"
+            ) == "0031_task_import_source"
             before = await _snapshot(connection)
             before_validity = await _routing_validity(connection)
             assert len(before_validity) == 2
@@ -162,12 +162,12 @@ async def test_routing_upgrade_preserves_success_evidence(
         finally:
             await connection.close()
 
-        await asyncio.to_thread(command.upgrade, _config(), "0031_checker_remediation")
+        await asyncio.to_thread(command.upgrade, _config(), "0032_checker_remediation")
         connection = await asyncpg.connect(url)
         try:
             assert await connection.fetchval(
                 "SELECT version_num FROM public.alembic_version"
-            ) == "0031_checker_remediation"
+            ) == "0032_checker_remediation"
             assert await _snapshot(connection) == before
             after_validity = await _routing_validity(connection)
             assert after_validity == before_validity
