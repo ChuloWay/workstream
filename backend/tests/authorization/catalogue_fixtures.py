@@ -266,6 +266,8 @@ new_permissions = frozenset(
 )
 
 expected = {
+    "contribution.read_self": ("contribution.read_self", "PILOT-10"),
+    "contribution.read_project": ("contribution.read_project", "PILOT-10"),
     "task.post_submit.route": ("task.post_submit.route", "WS-ARCH-001-04E2"),
     "checker.post_submit.execute": ("checker.post_submit.execute", "WS-ARCH-001-04D2"),
     "checker.post_submit.finalize": ("checker.post_submit.finalize", "WS-ARCH-001-04D2"),
@@ -299,6 +301,9 @@ expected = {
     "project.task.queue.read": ("project.task.manage", "WS-ARCH-001-03C4"),
     "operations.task.queue.read": ("operations.status.read", "WS-ARCH-001-03C4"),
     "project.task.create": ("project.task.manage", "WS-ARCH-001-03C3"),
+    "artifact.task_import_source.declare": ("project.task.manage", "PILOT-02A"),
+    "artifact.task_import_source.upload": ("project.task.manage", "PILOT-02A"),
+    "artifact.task_import_source.read": ("project.task.manage", "PILOT-02A"),
     "project.task.screen": ("project.task.manage", "WS-ARCH-001-03C3"),
     "project.task.release": ("project.task.manage", "WS-ARCH-001-03C3"),
     "project.task.work_context.read": ("project.task.manage", "task-project-grant-authorization"),
@@ -440,6 +445,8 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "contribution.read_self",
+    "contribution.read_project",
     "task.post_submit.route",
     "checker.registry.register",
     "review.lifecycle.activation.manage",
@@ -479,6 +486,9 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "project.task.queue.read",
     "operations.task.queue.read",
     "project.task.create",
+    "artifact.task_import_source.declare",
+    "artifact.task_import_source.upload",
+    "artifact.task_import_source.read",
     "project.task.screen",
     "project.task.release",
     "project.task.work_context.read",

@@ -208,9 +208,10 @@ authority. Each phase obtains fresh AUTH/PREP before feature locks. Materializat
 checks the exact current execution lease and revalidates its original receipt after
 I/O. Execute/finalize receipts are bound to the persisted phase facts by PostgreSQL;
 terminal replay validates both original receipts without appending new evidence.
-No new Celery task, delivery handler or public execution endpoint exists. ARCH-04E
-must recheck currentness when consuming a completion event and apply the locked
-ReviewPolicy; CHECKERS never accepts a contribution or mutates TASK state.
+No new Celery task or public execution endpoint exists. ARCH-04E/B8 recheck
+currentness when consuming a completion event and apply the locked ReviewPolicy;
+their hidden handlers remain unregistered. CHECKERS never accepts a contribution
+or mutates TASK state.
 Migration 0008 refuses retained checker history before changing schema rather
 than inventing request lineage or deleting data.
 
@@ -263,6 +264,20 @@ unavailable required image and may proceed after the default checker passes.
 The target launcher and checker integration use the agreed Rust service and
 SDK. Registered OCI images are not thereby required to be written in Rust;
 their execution identity is the approved digest, schemas and resource limits.
+The hidden runtime mechanism now supplies the strict Rust SDK and long-lived
+service plus an unselected typed Python Unix-socket adapter. ART can issue one
+opaque request-bound grant only inside the existing pre-admission prepared-ZIP
+callback; the service independently verifies its sealed file/directory manifest
+and exact private-root location before a read-only mount. The service accepts
+only an administrator-cached OCI platform manifest whose repository, platform
+and config image ID all match, and owns no-network, non-root, capability-free,
+read-only sandbox launch, bounded output/deadline handling and cleanup. Hosted
+readiness requires `runsc`; local `runc` is reported as `docker-dev`.
+
+This hidden mechanism is not selected by either current catalogue and stores no
+run state. Policy binding, caller-owned phase authority/currentness, durable
+attempt and isolation receipts, the one default checker, project-image routing,
+F-020 and public intake remain required before cutover.
 The replacement must remove both current pre- and post-submit catalogues after
 end-to-end replacement proof. It must not retain a legacy/new parallel path,
 weaken caller-owned atomicity or bypass phase identity and currentness checks.
@@ -435,8 +450,10 @@ flush-only verified binding. The CHECKERS reservation reader now verifies the
 exact current request/run/lease and returns zero slots; ART authority remains
 deny-only. Controlled nonempty slots prove ART mechanics only. ARCH-04C supports
 that exact empty output set and owns durable execution. ARCH-04D2 supplies input,
-execute and finalize authority; ARCH-04E routing remains pending. A returned evaluation value is not a stored
-current result or acceptance.
+execute and finalize authority; ARCH-04E/B8 supply the hidden routing operation
+and completion handler, and 04F2 supplies its remediation branch. Production
+registration remains pending. A returned evaluation value is not a stored current
+result or acceptance.
 Retained run and submission history now use canonical AUTH and separate fixed
 contributor/manager projections. The alternate execution service and Celery worker are
 removed; the facade neither wraps them nor adds another policy compiler.
@@ -477,8 +494,9 @@ bundle hash and locked to the effective project submission artifact policy befor
 contributor pipeline. Tasks lock references to the shared project's compiled checker
 bundle hash. It runs inside continuous submission-bundle preparation before
 Workstream creates a submission. ART retains bounded status, eligibility and
-pass/fail/warning results. The existing hidden route returns only the code
-`pre_submission_checker_failed`; structured public intake feedback remains
+pass/fail/warning results. The mounted authorized hidden route returns
+`pre_submission_checker_failed` with those exact ordered bounded results in the
+same request. The route remains absent from OpenAPI, and public intake remains
 pending. The standalone JSON precheck and its exclusive implementation are removed
 by POL-07B. Broader
 Submission caller migration remains WS-ARCH-001-02I; this result is not a review decision value.
@@ -621,19 +639,24 @@ severities.
 ## Checker Run Flow — Target Contract
 
 The following is the intended end-to-end lifecycle. Pre-submit intake and
-retained-history reads are implemented. Hidden durable post-submit execution is
-implemented with ARCH-04D2 exact service authority. ARCH-04E1B-B7 adds a hidden
-request handler that verifies committed outbox invocation, recovers B6's exact
-request and fences both execution and terminal replay/publication. It remains
-unregistered; automatic delivery and result routing are unavailable. Known missing or corrupt input after ART authorization records a
+bounded retained-history reads are implemented. Hidden durable post-submit
+execution is implemented with ARCH-04D2 exact service authority.
+ARCH-04E1B-B7 adds a hidden request handler that verifies committed outbox
+invocation, recovers B6's exact request and fences both execution and terminal
+replay/publication. B8 delivers the hidden completion handler, and ARCH-04F2
+extends its existing TASK/AUTH outcome operation so an exact current
+contributor-correctable result routes to `needs_revision` under either locked
+ReviewPolicy mode. Both handlers remain unregistered; automatic production
+delivery is unavailable. Known missing or corrupt input after ART authorization records a
 terminal infrastructure failure only after cleanup and fresh finalization
 authorization; it does not route the task. Exact replay does not reread storage.
 Denied material access and unexpected failures remain nonterminal. ARCH-04F adds
-contributor-correctable remediation and gates public intake and enabling the
-false-policy acceptance path; the true `allow_review` route may ship before
-ARCH-04F. ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered
-with output-file authority unavailable; exact input authority is implemented. The flow below is not a claim
-that those jobs or transitions are live.
+replacement intake and authorized recovery after the delivered hidden
+remediation handoff; those remaining boundaries gate public intake and enabling
+the false-policy acceptance path. The true `allow_review` route may ship first.
+ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered
+with output-file authority unavailable; exact input authority is implemented.
+The flow below is not a claim that the complete journey is live in production.
 
 ```text
 Draft packet
@@ -650,7 +673,7 @@ Draft packet
 -> calculate blocking status
 -> commit final CheckerRun result/recommendation, required verified output bindings and completion event
 -> TASK consumes the current result: publish allow_review manifest/current pointer and review_pending atomically when eligible
--> TASK's later checker-remediation boundary projects contributor-fixable failures as needs_revision with outcome_source = auto_checker
+-> TASK projects an exact current contributor-fixable failure as needs_revision with the retained manifest recommendation and no Review
 -> project/setup faults remain internal task_setup_blocked, never contributor blame
 -> if checker infrastructure fails: keep in checker retry handling
 ```
@@ -662,9 +685,10 @@ or infrastructure retry is active. After checker results, immutable output/log
 artifact bindings, and completion facts commit atomically, the TASK-owned
 handler performs the routes above through its own transaction and authority:
 passing work moves to `review_pending`, while
-contributor-fixable blocking failures may move to `needs_revision` with
-`outcome_source = auto_checker`. Artifact-storage cutover changes how exact
-bytes and checker outputs are persisted; it does not redesign these routes.
+contributor-fixable blocking failures may move to `needs_revision`. The routing
+manifest retains the exact checker recommendation and no Review is created.
+Artifact-storage cutover changes how exact bytes and checker outputs are
+persisted; it does not redesign these routes.
 
 ARCH-04C owns CHECKERS result/currentness and its completion event, not TASK
 mutations. ARCH-04E owns the current `allow_review` manifest and TASK transition;
@@ -674,19 +698,31 @@ material/receipt facts. It recomputes routing from the stored request/result and
 rejects a mismatching caller recommendation. Infrastructure failures still have
 no completed-result reference. This internal observation grants no routing or
 artifact authority: TASK's success consumers still require `allow_review`.
-ARCH-04F's TASK handoff, contributor-readable remediation, replacement intake and
-authorized recovery remain required before public cutover.
+ARCH-04F2 supplies the hidden TASK/AUTH handoff for exact current
+`needs_revision` recommendations. It retains the active assignment and exact
+Submission/result/manifest/receipt lineage, and creates no Review,
+FinalAcceptance, ContributionRecord or award in either ReviewPolicy mode. Exact
+replay returns the retained outcome without repeating effects. Contributors
+continue to receive only the existing bounded checker-history projection; no new
+public API is added. Replacement intake, setup-fault and Operator recovery,
+production composition and public intake remain required before public cutover.
 The direct CHECKERS-to-TASK mutation, fabricated system actor and alternate
 Celery gate are removed. Hidden durable execution and exact service authority are implemented; automatic
 routing remains unregistered. ARCH-04E2-B supplies the hidden authorized
-outcome operation; B8 supplies hidden completion delivery; remediation and live composition remain pending.
+outcome operation; B8 supplies hidden completion delivery; ARCH-04F2 extends
+that operation with remediation. Live composition and the remaining 04F
+replacement/recovery boundaries remain pending.
 
 `review_pending` marks readiness for the separately owned WS-REV lifecycle.
 WS-REV alone creates `ReviewPacketManifest`, review queues, reviewer leases,
 assignments, and review decisions. Checker completion facts and general
 `ArtifactBinding` records are inputs to that later boundary, not review records.
 
-Checker failures are not human review decisions. They do not `accept` or `reject` work. Contributor-fixable blocking failures can route the task to user-facing `needs_revision`, with `outcome_source = auto_checker` and no review decision id. Human review can also produce `needs_revision` later, but that records `outcome_source = human_review` and a review decision id.
+Checker failures are not human review decisions. They do not `accept` or `reject`
+work. Contributor-fixable blocking failures can route the task to user-facing
+`needs_revision`; the exact routing manifest retains the checker recommendation
+and there is no Review or review decision ID. Human review can also produce
+`needs_revision` later, but that path is rooted in its exact Review decision.
 
 If a checker crashes or cannot run because of platform infrastructure, the
 checker run remains failed as an infrastructure failure and the task does not

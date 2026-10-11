@@ -9,6 +9,7 @@ PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_a",
     "project_lifecycle_b",
     "project_lifecycle_c",
+    "project_lifecycle_d",
 )
 PARTITIONED_PROJECT_AC_LANES = ("project_lifecycle_a", "project_lifecycle_c")
 PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b", "task_lifecycle_c")
@@ -72,9 +73,11 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_artifact_internal_authorization.py",
     "tests/test_artifact_cleanup_wiring.py",
     "tests/test_checker_materialization.py",
+    "tests/tasks/evaluation_delivery/test_worker_materialization.py",
     "tests/test_artifact_preparation.py",
     "tests/test_artifact_store_conformance.py",
     "tests/test_artifact_verification.py",
+    "tests/test_task_import_sources.py",
     "tests/test_artifacts.py",
     "tests/test_assertion_helpers.py",
     "tests/test_aws_credential_isolation.py",
@@ -223,6 +226,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_submission_bundle_preparation_recovery.py",
     "tests/checkers/test_phase_service.py",
     "tests/test_submission_preparation_adapter.py",
+    "tests/test_submission_predecessor_custody.py",
     "tests/test_submission_preparation_authorization.py",
     "tests/test_submission_composition.py",
     "tests/test_artifact_bindings.py",
@@ -255,6 +259,14 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    "tests/contributions/test_export_csv.py",
+    "tests/contributions/test_export_projection.py",
+    "tests/authorization/test_contribution_read_scope.py",
+    "tests/authorization/test_contribution_read_kernel.py",
+    "tests/contributions/exports/test_source_reads.py",
+    "tests/contributions/exports/test_public_reads.py",
+    "tests/contributions/exports/test_failures.py",
+    "tests/contributions/exports/test_concurrency.py",
     # Atomic submission composition shares the existing multi-owner project lanes;
     # task C and schema are close to their cap on the merged baseline.
     "tests/tasks/evaluation_delivery/test_custody.py",
@@ -413,6 +425,7 @@ PROJECT_AC_PARTITION_MODULES = (
 # three-way partition; exclusive placement exceeded the hosted execution cap.
 CHECKER_DELIVERY_MODULES = (
     "tests/checkers/external/test_contracts.py",
+    "tests/checkers/external/test_runtime.py",
     "tests/checkers/external/test_migration.py",
     "tests/checkers/external/test_postgresql.py",
     "tests/checkers/external/test_registry.py",
@@ -433,9 +446,14 @@ CHECKER_DELIVERY_MODULES = (
 
 
 TASK_MODULES = (
+    "tests/tasks/test_task_import_contract.py",
     "tests/checkers/execution/test_completion_evidence.py",
     "tests/checkers/execution/test_completion_contract.py",
     "tests/tasks/post_submit_routing/test_failure_completion.py",
+    "tests/tasks/post_submit_routing/test_remediation.py",
+    "tests/tasks/post_submit_routing/test_remediation_storage.py",
+    "tests/tasks/post_submit_routing/test_remediation_currentness.py",
+    "tests/tasks/post_submit_routing/test_remediation_migration.py",
 
     # New completion proofs use TASK custody and its measured lane headroom.
     "tests/tasks/evaluation_delivery/test_completion.py",
@@ -501,6 +519,7 @@ TASK_MODULES = (
     "tests/test_checker_catalogue.py",
     "tests/test_checkers.py",
     "tests/checkers/test_effective_intake_rules.py",
+    "tests/test_blocked_pre_submit_feedback_postgresql.py",
     "tests/test_default_pre_submit_execution.py",
     "tests/test_approved_guide_intake.py",
     "tests/test_pre_submit_attempt_recovery.py",
@@ -565,6 +584,7 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
+            "tests/migrations/test_contribution_read_audit.py",
             "tests/authorization/post_submit/test_receipt_custody.py",
             "tests/authorization/post_submit/test_migration.py",
             "tests/reviews/packet/test_storage.py",

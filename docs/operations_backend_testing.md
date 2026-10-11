@@ -42,7 +42,7 @@ unset WORKSTREAM_TEST_ADMIN_DATABASE_URL
 ```
 
 Run both phases for this sequential local diagnostic. Hosted CI instead
-uses nine independent matrix jobs, one per semantic lane, with a 20-minute lane
+uses ten independent matrix jobs, one per semantic lane, with a 20-minute lane
 limit and a separate fail-closed fan-in job.
 
 The runner removes the admin URL before child launch, overwrites both child database URLs,
@@ -62,7 +62,7 @@ attribution across SQLAlchemy async switches using the repository configuration.
 This setting changes measurement, not test selection or exclusions.
 
 Backend and MCP coverage percentages do not gate merges. Backend combines the
-nine lane artifacts once for diagnostics, without subsystem/per-file quotas or
+ten lane artifacts once for diagnostics, without subsystem/per-file quotas or
 focused reruns to raise a number. Artifact integrity and complete test execution
 remain blocking. The old floor-computation CLI and unused quota-policy helpers
 are removed; their module retains the shared lexical test-safety owner.
@@ -118,7 +118,7 @@ before collection. This is semantic fan-out, not arbitrary test-count sharding:
 lane ownership remains repository-defined and exact.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-Authorization preflight runs alongside the nine lanes. The final `test` job
+Authorization preflight runs alongside the ten lanes. The final `test` job
 requires both preflight and every lane to succeed before validating evidence and
 coverage; failed, cancelled or skipped prerequisites remain blocking. This saves
 serial waiting on valid changes at the cost of lane work when preflight fails.
@@ -136,11 +136,15 @@ This is not a production configuration or proof of host-power-loss durability:
 [Docker tmpfs data disappears when the container stops](https://docs.docker.com/engine/storage/tmpfs/).
 An exhausted mount fails the job; it does not silently change storage or skip tests.
 
-The `project_lifecycle_a`, `project_lifecycle_b`, and `project_lifecycle_c` lanes
+The `project_lifecycle_a`, `project_lifecycle_b`, `project_lifecycle_c`, and
+`project_lifecycle_d` lanes
 partition PROJECT nodes, checker execution, materialization, evaluation capacity,
 output custody and routing AUTH preparation beside initial dispatch/delivery.
-All use the existing exact-node hash across the three lanes: placing the entire
-checker delivery group exclusively on project A exhausted its execution cap.
+All use the existing exact-node hash across four lanes. A retained three-lane
+run exhausted project C's 1,200-second cap with 92 nodes unfinished; prior passing
+runs had little remaining headroom. The fourth project lane increases execution
+capacity without changing the cap or canonical test union. Placing the entire
+checker delivery group exclusively on project A previously exhausted its cap.
 Two measured broad owners, `tests/test_projects.py` and
 `tests/test_guide_document_intake.py`, instead partition their nodes only across
 project A and C. Retained runs measured capacity across that pair and a project B
@@ -182,7 +186,7 @@ SHA, lane and numeric run attempt, containing its manifest, lane evidence,
 isolation record, and coverage data. The final `test`
 job runs with `if: always()`, downloads available diagnostic bundles, then
 rejects any failed, cancelled, or skipped matrix result before fan-in. Fan-in
-selects the highest numeric attempt available for each of the nine declared
+selects the highest numeric attempt available for each of the ten declared
 lanes from separately downloaded artifact directories. It rejects malformed,
 foreign or future attempt names and never falls back from an incomplete or
 corrupt latest bundle to an older passing one. For the selected bundles it
@@ -192,7 +196,7 @@ rejects symlinks or surplus lanes.
 After fan-in, independent validation rejects missing, duplicated, foreign,
 deselected, unexpectedly skipped, interrupted, or partially completed nodes.
 It also binds the exact head, manifest, per-lane isolation metadata, evidence,
-and coverage-file SHA-256 digests. Only then are exactly nine regular,
+and coverage-file SHA-256 digests. Only then are exactly ten regular,
 non-symlink coverage files copied byte-for-byte for one literal
 `coverage combine`. Percentages are diagnostic, with no global or subsystem
 floor. The real API contract drill remains a separate
@@ -204,7 +208,7 @@ Each executed lane uploads one seven-day bundle per attempt, and the final job
 uploads the reconciled `.ci/test-lanes` tree and downloaded diagnostics under its
 own attempt-specific artifact name. Older diagnostic artifacts are preserved.
 Its summary
-records the exact head, canonical node count, nine lane results, elapsed time,
+records the exact head, canonical node count, ten lane results, elapsed time,
 and raw-file digests. Per-lane evidence records collected, completed, skipped,
 and deselected exact node IDs plus the bound resource-isolation metadata and
 coverage digest. Resource metadata is mode `0600`, omits credentials, and proves

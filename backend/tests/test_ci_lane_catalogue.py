@@ -24,7 +24,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     runner.validate_lane_inventory(discovered)
 
     assigned = [module for lane in LANES for module in lane.modules]
-    assert len(LANES) == 9
+    assert len(LANES) == 10
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(
@@ -48,6 +48,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/external/test_migration.py",
         "tests/checkers/external/test_postgresql.py",
         "tests/checkers/external/test_registry.py",
+        "tests/checkers/external/test_runtime.py",
         "tests/checkers/execution/test_results.py",
         "tests/checkers/execution/test_execution.py",
         "tests/checkers/execution/test_coordination.py",
@@ -119,6 +120,14 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         set(catalogue.CHECKER_DELIVERY_MODULES)
         | set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
         | {
+            "tests/contributions/test_export_csv.py",
+            "tests/contributions/test_export_projection.py",
+            "tests/authorization/test_contribution_read_scope.py",
+            "tests/authorization/test_contribution_read_kernel.py",
+            "tests/contributions/exports/test_source_reads.py",
+            "tests/contributions/exports/test_public_reads.py",
+            "tests/contributions/exports/test_failures.py",
+            "tests/contributions/exports/test_concurrency.py",
             "tests/tasks/evaluation_delivery/test_custody.py",
             "tests/tasks/evaluation_delivery/test_delivery.py",
             "tests/tasks/evaluation_delivery/test_isolation.py",
@@ -263,6 +272,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         }
     )
     assert modules_by_lane["project_lifecycle_b"] == partitioned_project_modules
+    assert modules_by_lane["project_lifecycle_d"] == partitioned_project_modules
     project_ac_modules = partitioned_project_modules | set(catalogue.PROJECT_AC_PARTITION_MODULES)
     assert modules_by_lane["project_lifecycle_a"] == project_ac_modules
     assert modules_by_lane["project_lifecycle_c"] == project_ac_modules
@@ -274,6 +284,10 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/checkers/execution/test_completion_evidence.py",
             "tests/checkers/execution/test_completion_contract.py",
             "tests/tasks/post_submit_routing/test_failure_completion.py",
+            "tests/tasks/post_submit_routing/test_remediation.py",
+            "tests/tasks/post_submit_routing/test_remediation_storage.py",
+            "tests/tasks/post_submit_routing/test_remediation_currentness.py",
+            "tests/tasks/post_submit_routing/test_remediation_migration.py",
             "tests/tasks/evaluation_delivery/test_completion.py",
             "tests/tasks/evaluation_delivery/test_completion_contracts.py",
             "tests/tasks/evaluation_delivery/test_completion_custody.py",
@@ -297,6 +311,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_ready_queue.py",
             "tests/tasks/test_public_queues.py",
             "tests/tasks/test_locked_compensation.py",
+            "tests/tasks/test_task_import_contract.py",
             "tests/authorization/task_queues/test_authority.py",
             "tests/authorization/task_queues/test_contracts.py",
             "tests/authorization/task_queues/test_transactions.py",
@@ -342,6 +357,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/checkers/post_submit/test_requirement_dispositions.py",
             "tests/checkers/post_submit/test_result_contract.py",
             "tests/checkers/test_effective_intake_rules.py",
+            "tests/test_blocked_pre_submit_feedback_postgresql.py",
             "tests/test_checker_catalogue.py",
             "tests/test_checkers.py",
             "tests/test_default_pre_submit_execution.py",
@@ -363,8 +379,10 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     shared_a = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[0]]
     shared_b = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[1]]
     assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
+    assert "tests/tasks/evaluation_delivery/test_worker_materialization.py" in shared_a
     assert "tests/artifacts/test_review_packet_contract.py" in shared_a
     assert {
+        "tests/test_task_import_sources.py",
         "tests/authorization/post_submit/test_atomicity.py",
         "tests/authorization/post_submit/test_concurrency.py",
         "tests/authorization/post_submit/test_live_authority.py",
@@ -405,6 +423,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert static_contracts.isdisjoint(shared_a | shared_b)
     assert {
         "tests/test_alembic.py",
+        "tests/migrations/test_contribution_read_audit.py",
         "tests/test_database_reset.py",
         "tests/reviews/packet/test_storage.py",
         "tests/reviews/lifecycle/test_contracts.py",
@@ -719,14 +738,24 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
     assert '--expected-head "${GITHUB_SHA}"' in source
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
-    assert 'test "${#coverage_files[@]}" -eq 9' in source
-    assert "len(lanes) != 9" in source
+    assert 'test "${#coverage_files[@]}" -eq 10' in source
+    assert "len(lanes) != 10" in source
     assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
     assert 'timing_path = bundle / "job-start-epoch.txt"' in source
     assert (
         "name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}-attempt-${{ github.run_attempt }}"
         in source
     )
+
+
+def test_workflow_requires_the_locked_external_checker_workspace() -> None:
+    source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
+    assert source.count("external-checker-runtime:") == 1
+    assert "rustup toolchain install 1.84.0 --profile minimal --component rustfmt" in source
+    assert "cargo fmt --all --check" in source
+    assert "cargo test --workspace --locked" in source
+    assert "EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}" in source
+    assert 'test "${EXTERNAL_CHECKER_RESULT}" = success' in source
 
 
 def test_former_coverage_reruns_remain_in_full_suite_lanes() -> None:

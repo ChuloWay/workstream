@@ -6,6 +6,7 @@ from app.api.routes.guide_proposals import router as guide_proposal_router
 from app.api.routes.guide_activation import router as guide_activation_router
 from app.api.routes.post_policy import router as post_policy_router
 from app.api.routes.contribution_policies import router as contribution_policy_router
+from app.api.routes.contributions import router as contributions_router
 
 from fastapi import APIRouter
 
@@ -14,6 +15,7 @@ from app.api.routes.health import router as health_router
 from app.modules.checkers.router import router as checkers_router
 from app.api.routes.artifact_submissions import router as artifact_submission_router
 from app.modules.artifacts.router import router as artifacts_router
+from app.api.routes.artifact_task_import_sources import router as task_import_source_router
 from app.modules.authorization.router import router as authorization_router
 from app.modules.projects.router import router as projects_router
 from app.modules.projects.create_router import router as project_create_router
@@ -33,10 +35,12 @@ api_router.include_router(projects_router, prefix="/api/v1")
 api_router.include_router(tasks_router, prefix="/api/v1")
 api_router.include_router(checkers_router, prefix="/api/v1")
 api_router.include_router(artifacts_router, prefix="/api/v1")
+api_router.include_router(task_import_source_router, prefix="/api/v1")
 api_router.include_router(artifact_submission_router, prefix="/api/v1")
 
 api_router.include_router(guide_proposal_router, prefix="/api/v1")
 api_router.include_router(post_policy_router, prefix="/api/v1")
 api_router.include_router(contribution_policy_router, prefix="/api/v1")
+api_router.include_router(contributions_router, prefix="/api/v1")
 
 api_router.include_router(guide_activation_router, prefix="/api/v1")

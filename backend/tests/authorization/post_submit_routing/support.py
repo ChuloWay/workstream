@@ -11,6 +11,7 @@ from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.outbox.api import OutboxClaim
 from app.modules.authorization.domain.post_submit_routing import (
     AutomatedAcceptanceConsequence,
+    CheckerRemediationConsequence,
     HumanAdmissionConsequence,
     PostSubmitRoutingResourceContext,
 )
@@ -32,10 +33,14 @@ from tests.tasks.post_submit_routing.support import (
 
 
 def detached_request_and_source(
-    *, human_review_required: bool = True
+    *, human_review_required: bool = True,
+    routing_recommendation: str = "allow_review",
 ) -> tuple[TaskRoutingRequestFacts, TaskPostSubmitSourceProposal]:
     """Build mutually exact values; neither value asserts storage or authority."""
-    source_values_ = _source_values(human_review_required=human_review_required)
+    source_values_ = _source_values(
+        human_review_required=human_review_required,
+        routing_recommendation=routing_recommendation,
+    )
     selection = TaskRoutingSelection(
         project_id=source_values_["project_id"],
         task_id=source_values_["task_id"],
@@ -48,7 +53,7 @@ def detached_request_and_source(
         result_id=source_values_["result_id"],
         result_digest=source_values_["result_digest"],
         completion_event_id=source_values_["completion_event_id"],
-        routing_recommendation="allow_review",
+        routing_recommendation=routing_recommendation,
     )
     request = TaskRoutingRequestFacts(
         **selection.model_dump(),
@@ -94,13 +99,19 @@ def accepted_effects_for(source: TaskPostSubmitSourceProposal) -> TaskAcceptedEf
     )
 
 
-def resource_for(*, human_review_required: bool = True) -> PostSubmitRoutingResourceContext:
+def resource_for(
+    *, human_review_required: bool = True,
+    routing_recommendation: str = "allow_review",
+) -> PostSubmitRoutingResourceContext:
     """Build one internally exact resource for the selected locked-policy branch."""
     request, source = detached_request_and_source(
-        human_review_required=human_review_required
+        human_review_required=human_review_required,
+        routing_recommendation=routing_recommendation,
     )
     consequence = (
-        HumanAdmissionConsequence()
+        CheckerRemediationConsequence()
+        if routing_recommendation == "needs_revision"
+        else HumanAdmissionConsequence()
         if human_review_required
         else AutomatedAcceptanceConsequence(
             task_effects=accepted_effects_for(source), authorized_lifecycle_generation=2

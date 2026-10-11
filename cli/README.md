@@ -19,6 +19,11 @@ context/intake requirements:
 | `workstream project guide proposal PROJECT_ID GUIDE_ID COMPILATION_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/compilations/COMPILATION_ID/proposal` |
 | `workstream project guide approve-pre PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/compilations/COMPILATION_ID/pre-submission-approval` |
 | `workstream project guide post-policy PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/compilations/COMPILATION_ID/post-submission-policies/POLICY_ID` |
+| `workstream project guide approve-post PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID --input FILE --idempotency-key UUID` | Exact policy `POST .../post-submission-policies/POLICY_ID/approval` |
+| `workstream project guide correct-post PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID --input FILE --idempotency-key UUID` | Exact policy `POST .../post-submission-policies/POLICY_ID/corrections` |
+| `workstream project guide correct PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE --idempotency-key UUID` | Exact compilation `POST .../corrections` |
+| `workstream project guide dispatch-correction PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE` | Exact saved correction `POST .../corrections/OPERATION_ID/dispatch` |
+| `workstream project guide activate PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/activate` |
 | `workstream project tasks PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
@@ -212,8 +217,8 @@ setup can be read successfully (exit 0); this is not a successful compilation,
 policy approval, guide activation or authority for another operation.
 Denials, malformed/substituted replies, oversized JSON and network failures
 leave stdout empty and exit 1. The normal 12-second/64KiB JSON bounds apply.
-Deliberate intake and evaluation approvals are separate commands below;
-activation remains future CLI work.
+Deliberate intake approval, evaluation approval and guide activation are separate
+commands below; none is implied by reading setup status.
 
 ## Inspect an exact finalized guide proposal
 
@@ -291,6 +296,101 @@ Retained compilation prerequisites are seeded canonical test custody. The API
 is configured for non-eager in-memory publication and no post-policy worker is
 started. This does not prove broker publication, job delivery, deployed Flow or
 live setup-provider execution.
+
+## Request an exact evaluation-policy correction
+
+Prepare the public `PostPolicyCorrectionInput` from the inspected `post-policy`
+response: `{"target": <complete displayed target>, "reason": "Manager feedback"}`.
+
+```sh
+workstream project guide correct-post PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID \
+  --input post-correction.json --idempotency-key CORRECTION_UUID -o json
+```
+
+One POST to the existing public `/corrections` route sends the original bounded
+UTF-8 JSON file (at most 1 MiB). The four selectors and caller-owned replay key
+are explicit UUIDs; unknown, duplicate or null required fields are rejected.
+The backend normalizes and validates feedback, checks both manager authorities,
+supersedes the inspected policy and saves one unified setup successor atomically.
+This command does not edit policy content, approve anything, activate a guide,
+fetch latest or dispatch setup. Use the existing `setup` and `post-policy` reads
+to discover retained state; explicit correction dispatch is described below.
+
+Success requires HTTP 201 and a closed `PostPolicyReceipt` with kind `correction`,
+the complete submitted target and a non-null correction bound to its proposal
+digest. The successor generation must be the inspected generation plus one,
+including values beyond signed 64-bit range. Record identities are UUIDv7;
+feedback hashes are structurally checked, not locally recomputed or certified.
+Text escapes terminal controls; JSON preserves the validated response.
+The usual 12-second deadline and 64 KiB write-response limit apply.
+
+New requests require current upstream custody and a usable policy. Exact replay
+recovers the saved historical receipt after fresh actor/grant checks and retained
+target validation; it does not allocate another successor or audit operation.
+Different feedback under the same key conflicts. Canonically equivalent backend
+feedback (NFC-normalized and trimmed) replays; retain the original file rather
+than rely on that normalization when recovering an uncertain write.
+
+A malformed receipt or unconfirmed write returns nonzero and empty stdout with
+`outcome_unknown` and a manual-replay hint. There is no automatic retry, including
+HTTP/2 transport replay. Replay only the unchanged selectors, file and key.
+Canonical backend 4xx responses remain known denials.
+
+Built-process hostile HTTP tests and a real Flow-verifier/uvicorn/PREP/PostgreSQL
+journey prove receipt binding, saved successor lineage, immutable policy bytes,
+exact replay, foreign-project concealment, suspension and revocation denial.
+Canonical retained source fixtures and an explicitly executed actual Celery
+derivation task arrange prerequisites; this is not live setup inference, queued
+broker delivery or deployed Flow proof.
+
+## Correct a guide proposal and dispatch its saved successor
+
+Inspect the exact finalized proposal and prepare its closed public correction
+input. This is a separate manager decision, not an automatic interpretation of
+the findings:
+
+```sh
+workstream project guide proposal PROJECT_ID GUIDE_ID COMPILATION_ID -o json > proposal.json
+jq '{target: .target, reason: "Clarify the evidence requirement"}' proposal.json > correction.json
+workstream project guide correct PROJECT_ID GUIDE_ID COMPILATION_ID \
+  --input correction.json --idempotency-key CORRECTION_UUID -o json > saved-correction.json
+# Dispatch is a separate, explicit request using the retained receipt.
+workstream project guide dispatch-correction PROJECT_ID GUIDE_ID COMPILATION_ID \
+  --input saved-correction.json -o json
+```
+
+Saving sends the original UTF-8 JSON once (regular file, at most 1 MiB), with
+the caller's token and UUID key. It validates the closed public receipt,
+UUIDv7 identities, hashes and exact successor generation using arbitrary-range
+integers. The backend owns target/feedback hashes, feedback normalization and
+fresh exact-project authorization. The CLI does not locally certify those
+digests, edit proposal content, select latest, approve or activate anything.
+
+Dispatch accepts exactly `GuideProposalCorrectionReceipt`, not a proposal,
+`PostPolicyReceipt` wrapper or setup-status object. For `correct-post`, extract
+the nested `correction` object into the file. The saved operation ID selects
+one public bodyless POST; no new idempotency key or JSON request payload is
+invented. The four-field HTTP 202 response must match that operation's successor
+ID and generation. JSON preserves it; text escapes terminal controls. The
+backend's open diagnostic status is not a CLI enum: exit 0 means a valid status
+was observed, even for `enqueue_failed`, not that work completed or publication
+succeeded. Inspect `status`; use `setup` for subsequent diagnostics if needed.
+The normal 12-second deadline and 64 KiB response bound apply.
+
+Both writes distinguish canonical backend 4xx denial from an unknown outcome.
+Unknown writes exit 1 with empty stdout and a manual recovery hint; the CLI
+never automatically retries, including zero-byte HTTP/2 POSTs. For save, retain
+unchanged selectors, input and key. For dispatch, inspect status and deliberately
+redispatch only the same selectors and saved receipt. Backend recovery remains
+freshly authorized and does not allocate another successor.
+
+Built-process hostile HTTP tests prove receipt identity, response shape,
+diagnostic/credential safety and GOAWAY no-replay. A real local
+Flow-verifier/uvicorn/PREP/PostgreSQL journey proves one saved successor, exact
+replay, explicit dispatch and current authority after suspension/revocation,
+including stored foreign-project concealment. Canonical retained prerequisites
+and Celery publication to an in-memory test broker do not prove distributed
+delivery, worker completion, live setup inference or deployed Flow behavior.
 
 ## Inspect an exact derived post-submission policy
 
@@ -413,6 +513,59 @@ noncanonical error replies leave an unknown outcome: nonzero exit, empty stdout
 and `error.outcome_unknown: true`. Only a complete canonical Workstream 4xx
 establishes a known denial. If manually retrying, use the unchanged fields and
 key; do not invent a project ID, assume rollback or switch to a fresh key.
+
+## Activate explicitly selected guide policies
+
+Use the existing `post-policy` read to inspect the exact separately approved
+evaluation policy and its `activation_context`. Review and revision selections,
+post-approval identity/digest and the published contribution-policy binding must
+be present. A null selection is not permission to invent one. Contribution-policy
+publication remains a separate Finance API operation; this command does not
+publish it or approve missing policies.
+
+From an inspected `post-policy.json`, prepare the closed public input:
+
+```sh
+jq '{target, post_approval_operation_id: .activation_context.post_approval_operation_id,
+  post_approval_output_digest: .activation_context.post_approval_output_digest,
+  guide_mutation_generation: .activation_context.guide_mutation_generation,
+  review: .activation_context.review, revision: .activation_context.revision,
+  contribution_policy_id: .activation_context.contribution.contribution_policy_id,
+  contribution_policy_version_id: .activation_context.contribution.contribution_policy_version_id,
+  expected_previous_active_guide_id: .activation_context.expected_previous_active_guide_id,
+  expected_previous_active_guide_generation: .activation_context.expected_previous_active_guide_generation}' \
+  post-policy.json > activation.json
+workstream project guide activate PROJECT_ID GUIDE_ID \
+  --input activation.json --idempotency-key CALLER_OWNED_UUID --output json
+```
+
+The command sends the original input bytes once, with the unchanged bearer and
+caller key in headers. It does not fetch latest, poll, infer readiness, approve
+policies or dispatch jobs. Workstream authorizes the manager afresh and owns the
+atomic activation, exact policy/source locks and predecessor supersession.
+
+Success validates the complete immutable receipt: UUIDv7 operation, exact echoed
+command/key, matching contribution project/policy/version, selected generation
+plus one, timezone-bearing effective time and prior project status. Integer
+fields retain the backend range and UUIDs compare by identity, not spelling.
+JSON returns the validated API object; text renders every field with terminal
+escaping. A replay receipt proves that operation, not that its guide is still
+current after later supersession. The current backend still rejects activation
+with `human_review_required=false`; this CLI does not change that readiness gate.
+
+Malformed or substituted receipts, lost responses and other uncertain writes
+exit 1 with empty stdout and `outcome_unknown: true`. Retain the original input
+and key; recovery is a deliberate invocation with unchanged selectors, input
+contents and key. Never generate a new key merely because the response was lost.
+Replay still requires current actor lifecycle and manager authority.
+
+Process tests cover closed inputs, exact receipt binding, credential reflection,
+large integers, terminal escaping and one POST under HTTP/2 GOAWAY. The real
+socket/Flow/PREP/PostgreSQL journey prepares canonical stored source evidence,
+executes the real derivation task explicitly, approves and publishes through
+public APIs, then proves activation/replay against SQL and denial after grant
+revocation or suspension. It is not live setup inference, broker-delivery or
+deployment certification.
 
 ## Browse tasks as a project manager
 

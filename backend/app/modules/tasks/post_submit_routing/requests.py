@@ -65,7 +65,11 @@ class TaskRoutingRequests:
         """Share the checked completion with owner-local source preparation."""
         await require_routing_transaction(self._session)
         completion = EvaluationCompletion.model_validate(completion)
-        if not isinstance(event_id, UUID) or completion.routing_recommendation != "allow_review":
+        if (
+            not isinstance(event_id, UUID)
+            or completion.routing_recommendation
+            not in {"allow_review", "needs_revision"}
+        ):
             raise TaskRoutingRequestUnavailable("routing_request_unavailable")
         task = await TaskRepository(self._session).lock_project_task(
             completion.project_id, completion.task_id

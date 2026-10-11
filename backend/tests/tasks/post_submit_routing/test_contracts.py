@@ -24,7 +24,7 @@ from tests.tasks.post_submit_routing.contract_fixtures import _lineage, _source_
         ("request_digest", "a" * 64),
         ("human_review_required", 1),
         ("byte_count", False),
-        ("routing_recommendation", "needs_revision"),
+        ("routing_recommendation", "task_setup_blocked"),
     ),
 )
 def test_source_contract_is_strict_and_detached(field: str, value: object) -> None:
@@ -162,6 +162,15 @@ def test_false_source_value_is_transport_only() -> None:
 
     assert source.human_review_required is False
     assert source.model_dump(mode="json")["human_review_required"] is False
+
+
+@pytest.mark.parametrize("recommendation", ("allow_review", "needs_revision"))
+def test_source_retains_closed_routing_recommendation(recommendation: str) -> None:
+    source = TaskPostSubmitManifestFacts(
+        **_source_values(routing_recommendation=recommendation)
+    )
+
+    assert source.routing_recommendation == recommendation
 
 
 def test_routing_authority_has_no_public_or_delivery_entry() -> None:

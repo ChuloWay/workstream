@@ -19,7 +19,13 @@ from app.db.session import get_db_session, get_session_factory
 from app.interfaces.artifact_operations import GuideArtifactIngestCommand
 from app.modules.projects.api.guide_documents import GuideDocumentUploadTargetPort
 from app.modules.artifacts.api import SubmissionBundlePreparationCommand
+from app.modules.artifacts.api.task_import_source import TaskImportSourceCommandPort
 from app.modules.checkers.api.materialization import PostSubmissionMaterializationPort
+from app.modules.checkers.api.materialization import (
+    PostSubmissionMaterialConsumer,
+    PostSubmissionMaterializationResult,
+)
+from app.modules.checkers.api.execution import ExecuteFacts
 from app.modules.checkers.api.output_custody import (
     CheckerArtifactOutputPort,
     CheckerOutputBindingPort,
@@ -555,6 +561,43 @@ def post_submission_materialization(*, sessions, store, namespace, preparation, 
     )
 
 
+class _WorkerPostSubmissionMaterialization:
+    """Lease the Celery ART provider only while one exact materialization runs."""
+
+    def __init__(self, sessions) -> None:
+        self._sessions = sessions
+
+    async def materialize(
+        self, facts: ExecuteFacts, consumer: PostSubmissionMaterialConsumer,
+    ) -> PostSubmissionMaterializationResult:
+        from app.core.config import get_settings
+        from app.adapters.artifacts.internal_workers import (
+            _artifact_internal_runtime,
+            initialize_artifact_internal_runtime,
+        )
+        from app.modules.artifacts.submission_archive import SubmissionArchiveInspector
+
+        settings = get_settings()
+        await initialize_artifact_internal_runtime()
+        with _artifact_internal_runtime() as (store, namespace):
+            manager = create_artifact_scratch_manager(settings)
+            try:
+                return await post_submission_materialization(
+                    sessions=self._sessions,
+                    store=store,
+                    namespace=namespace,
+                    preparation=ArtifactPreparationService(manager),
+                    inspector=SubmissionArchiveInspector(submission_archive_limits(settings)),
+                ).materialize(facts, consumer)
+            finally:
+                manager.close()
+
+
+def worker_post_submission_materialization(*, sessions) -> PostSubmissionMaterializationPort:
+    """Build the hidden request handler's lazy worker-owned ART input port."""
+    return _WorkerPostSubmissionMaterialization(sessions)
+
+
 def checker_output_storage(
     *, sessions, store, namespace, preparation, settings
 ) -> CheckerArtifactOutputPort:
@@ -574,3 +617,57 @@ def checker_output_binding(session, *, namespace) -> CheckerOutputBindingPort:
     from app.modules.artifacts.checker_output_bindings import CheckerOutputBindingService, DenyCheckerOutputBindingAuthority
     return CheckerOutputBindingService(session, namespace_fingerprint=namespace.namespace_fingerprint,
         reservations=checker_output_reservations(session), authority=DenyCheckerOutputBindingAuthority())
+
+
+async def get_task_import_source_commands(
+    request: Request,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    context: Annotated[object, Depends(get_artifact_authorization_context)],
+) -> TaskImportSourceCommandPort:
+    """Compose exact source commands in ART's registered owner root."""
+    from app.adapters.auth import task_import_source_authorization
+    from app.modules.artifacts.service import (
+        ArtifactAdmissionService, ArtifactStorageOrchestrator, artifact_storage_namespace_spec,
+    )
+    from app.modules.artifacts.task_import_sources import ArtifactTaskImportSourceCommands, TaskImportSourceRuntime
+
+    settings = request.app.state.settings
+    request_id, correlation_id = (UUID(value) for value in request_ids(request))
+    # Identity provisioning is committed by its owner. As in TASK commands,
+    # discard the resolver's read-only refresh before ART owns each root.
+    await session.rollback()
+
+    @asynccontextmanager
+    async def runtime():
+        bootstrap = create_artifact_store_bootstrap(settings)
+        manager = None
+        authorities = []
+        try:
+            manager = create_artifact_scratch_manager(settings)
+            namespace = artifact_storage_namespace_spec(settings, bootstrap)
+            store = bootstrap.initialize_after_namespace_claim(ArtifactStoreNamespaceClaim(
+                adapter_identity=bootstrap.identity, namespace_identity=bootstrap.namespace_identity,
+                namespace_fingerprint=namespace.namespace_fingerprint,
+            ))
+            for identity in (ServiceIdentity.ARTIFACT_PUT_RESOLVER, ServiceIdentity.ARTIFACT_VERIFIER):
+                authorities.append(PreparedArtifactInternalAuthority(
+                    session, service_identity=identity, request_id=request_id, correlation_id=correlation_id,
+                ))
+            yield TaskImportSourceRuntime(
+                store, namespace, ArtifactPreparationService(manager), ArtifactAdmissionService(session, settings, namespace),
+                ArtifactStorageOrchestrator(session, store, namespace, settings, authorities[0]),
+                ArtifactStorageOrchestrator(session, store, namespace, settings, authorities[1]),
+                authorities[0].denial_boundary, authorities[1].denial_boundary,
+            )
+        finally:
+            for authority in authorities:
+                authority.discard()
+            if manager is not None:
+                manager.close()
+            bootstrap.close()
+
+    return ArtifactTaskImportSourceCommands(
+        session, actor_profile_id=context.actor_profile_id,
+        identity_link_id=context.identity_link_id,
+        authorization=task_import_source_authorization(session, context), runtime=runtime,
+    )

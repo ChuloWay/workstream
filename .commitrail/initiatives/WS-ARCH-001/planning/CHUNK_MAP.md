@@ -1,12 +1,12 @@
 # WS-ARCH-001 — Current remaining change map
 
-[ARCH-04F1](../WS-ARCH-001-04F1.md) extends the existing CHECKERS completion read to verified contributor/setup failure evidence, including retained typed results. TASK remediation handoff, replacement intake and authorized recovery remain next; no failure routing or public surface is activated.
+[ARCH-04F1](../WS-ARCH-001-04F1.md) extends the existing CHECKERS completion read to verified contributor/setup failure evidence, including retained typed results. [ARCH-04F2](../WS-ARCH-001-04F2.md) reuses the hidden 04E TASK/AUTH outcome operation to route an exact current contributor-correctable result to `needs_revision` under either locked ReviewPolicy mode. Replacement intake and authorized setup-fault/Operator recovery remain; no public surface or production registration is activated.
 
-[ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. ARCH-04E1B-B6 reuses this projection in atomic Submission/dispatch creation with exact AUTH receipts and select-only replay. B7 delivers hidden request delivery with exact invocation fencing; 04E2-B supplies complete authorized outcomes; B8 supplies hidden completion delivery; remediation is next. Production registration remains unavailable.
+[ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. ARCH-04E1B-B6 reuses this projection in atomic Submission/dispatch creation with exact AUTH receipts and select-only replay. B7 delivers hidden request delivery with exact invocation fencing; 04E2-B supplies complete authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff. Replacement intake and recovery remain. Production registration remains unavailable.
 
 Delivery priority: [first complete contributor milestone](PLAN.md#first-complete-contributor-milestone). Use its four remaining outcome groups and end-to-end exit proof when selecting the next bounded change; live human review/revision and external integration are later work.
 
-[ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. B6 delivers atomic initial dispatch with exact receipts and fresh-authorized replay; B7 delivers hidden request handling. 04E2-B supplies authorized outcomes; B8 supplies hidden completion delivery; remediation remains.
+[ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. B6 delivers atomic initial dispatch with exact receipts and fresh-authorized replay; B7 delivers hidden request handling. 04E2-B supplies authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff.
 
 [ARCH-04E1B-B3](../WS-ARCH-001-04E1BB3.md) retains the inspected ZIP manifest in immutable ART evidence and returns verified file metadata on admission consumption. ARCH-04E1B-B6 commits that content, exact authority, generation-one reservation and shared request event with each new Submission. No delivery handler or routing authority is activated.
 [ARCH-04E1B-B2](../WS-ARCH-001-04E1BB2.md) supplies exact source preparation through
@@ -26,7 +26,9 @@ submitter contribution, applicable awards and audit/outbox evidence. Database
 closure rejects incomplete outcomes; fresh-authorized replay returns the stored
 complete tuple. No Review or reviewer contribution is fabricated.
 
-B8 supplies hidden completion delivery with commit-before-ACK. Next: 04F remediation, 04E3 production
+B8 supplies hidden completion delivery with commit-before-ACK; 04F2 extends that
+operation with policy-independent checker remediation. Next: exact-cause
+replacement intake and recovery, 04E3 production
 composition, public intake and the first-layer drill. False-guide activation,
 live human review/revision and payment delivery remain unavailable. Internally
 valid false-policy fixtures establish the hidden operation, not public readiness.
@@ -40,7 +42,9 @@ public intake remains deferred to ARCH-02I.
 
 ARCH-04E1B-B1 delivers TASK-before-CHECKERS reservation/current-read custody,
 ordered review admission INSERTs and terminal exact replay. 04E2-B delivers complete authorized outcomes and currentness proof;
-B8 supplies hidden completion delivery for that operation; remediation precedes live composition.
+B8 supplies hidden completion delivery for that operation; 04F2 supplies the
+hidden remediation handoff, while replacement intake and recovery still precede
+live composition.
 
 | Boundary | Owner outcome | Risk | Current dependency |
 |---|---|---|---|
@@ -79,7 +83,8 @@ B8 supplies hidden completion delivery for that operation; remediation precedes 
 | [WS-ARCH-001-04E](chunks/WS-ARCH-001-04E-canonical-allow-review.md) | TASK current routing: true to canonical `allow_review`, false/pass to shared acceptance | L1 | Both branches: delivered 04E1A/04D2/OUTBOX-02, request reservation 04E1B-A and AUTH preparation 04E2-A; exact source preparation [04E1B-B2](../WS-ARCH-001-04E1BB2.md) -> verified ZIP metadata [04E1B-B3](../WS-ARCH-001-04E1BB3.md) -> checked packet custody [04E1B-B4](../WS-ARCH-001-04E1BB4.md) -> bounded evaluation content [04E1B-B5](../WS-ARCH-001-04E1BB5.md) -> atomic Submission/dispatch [04E1B-B6](../WS-ARCH-001-04E1BB6.md) -> hidden request delivery [04E1B-B7](../WS-ARCH-001-04E1BB7.md) -> complete authorized outcomes/currentness proof 04E2-B -> completion delivery 04E1B-B -> live 04E3. False uses delivered REV-04C participation and 04E2-B mandatory exact receipt/database/audit closure under the reviewed scoped lifecycle manifest; true does not depend on CON. False guide activation also requires 04F remediation |
 | [WS-ARCH-001-03D](../WS-ARCH-001-03D.md) | Exact activated historical guide through hidden durable intake; obsolete lookup removed | L1 | Complete; hidden exact post-submit materialization, ARCH-04B2 output custody, ARCH-04C execution, ARCH-04D1/04D2 custody/authority and ARCH-04E1A source-only facts/types delivered; public cutover remains deferred |
 | [WS-ARCH-001-04F1](../WS-ARCH-001-04F1.md) | Verified completed failure evidence through the existing CHECKERS port | L1 | Complete; no TASK remediation mutation, replacement intake or recovery authority |
-| [WS-ARCH-001-04F](chunks/WS-ARCH-001-04F-checker-remediation.md) | Contributor-correctable checker failures and same-lineage admission-backed replacement Submission | L1 | Planned from required hidden 04E result/handler contracts; before false-policy activation and public 02I, without requiring live human review |
+| [WS-ARCH-001-04F2](../WS-ARCH-001-04F2.md) | Exact current checker-remediation handoff through existing TASK/AUTH outcome owners | L1 | Hidden policy-independent `needs_revision` transition with exact manifest/receipt custody and no REV/CON effect; no replacement intake, recovery, production registration or public API |
+| [WS-ARCH-001-04F](chunks/WS-ARCH-001-04F-checker-remediation.md) | Contributor-correctable checker failures and same-lineage admission-backed replacement Submission | L1 | Remaining after 04F1/04F2: exact-cause replacement intake and authorized setup-fault/Operator recovery before false-policy activation and public 02I, without requiring live human review |
 
 CP09 coordination is superseded by the completed physical cleanup. 04E and 04F
 remain coordination parents, not permission for multi-owner PRs.
