@@ -602,8 +602,10 @@ policies; release checks those locks and installed plans and requires an explici
 nonblank decision reason. These are three independent calls, never automatic
 steps. Only Workstream decides authority, readiness and lifecycle transitions.
 Text and JSON output retain the complete authorized management receipt, not
-the narrower contributor projection. Dates are backend-normalized; the client
-validates returned timestamps, not a second date-normalization policy.
+the narrower contributor projection. Supply deadlines as RFC3339 timestamps;
+creation binds the returned instant, allowing timezone normalization and the
+backend's microsecond precision. Import-batch identifiers are nullable text,
+not Workstream record UUIDs.
 
 Keep each key with its unchanged request. Immediate replay returns the original
 receipt only while current authority, lifecycle and locked context permit it;

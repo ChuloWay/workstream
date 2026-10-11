@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"reflect"
+	"time"
 )
 
 // ManagerTask retains the full management mutation projection. Embedding the
@@ -58,7 +59,8 @@ func (c *Client) CreateTask(ctx context.Context, project string, body json.RawMe
 		decodeTaskFields(body, &input, []string{"title", "description"}, nil) != nil ||
 		(fields["source_type"] != nil && bytes.Equal(bytes.TrimSpace(fields["source_type"]), []byte("null"))) ||
 		(input.SourceType != "manual" && input.SourceType != "markdown_import" && input.SourceType != "csv_import") ||
-		(input.EstimatedTimeMinutes != nil && input.EstimatedTimeMinutes.Sign() <= 0) {
+		(input.EstimatedTimeMinutes != nil && input.EstimatedTimeMinutes.Sign() <= 0) ||
+		(input.DeadlineAt != nil && !validTime(*input.DeadlineAt)) {
 		return result, errors.New("--input must contain a bounded closed TaskCreate JSON object")
 	}
 	path, err := taskProjectPath(project)
@@ -108,8 +110,7 @@ func decodeManagerTask(raw json.RawMessage, project, selector, status string) (M
 		!validUUID(task.ID) || !sameUUID(task.ProjectID, project) || (selector != "" && !sameUUID(task.ID, selector)) ||
 		task.Status != status || !validUUID(task.CreatedBy) || task.AssignedTo != nil ||
 		!validTime(task.CreatedAt) || !validTime(task.UpdatedAt) || (task.DeadlineAt != nil && !validTime(*task.DeadlineAt)) ||
-		(task.EstimatedTimeMinutes != nil && *task.EstimatedTimeMinutes <= 0) ||
-		(task.ImportBatchID != nil && !validUUID(*task.ImportBatchID)) {
+		(task.EstimatedTimeMinutes != nil && *task.EstimatedTimeMinutes <= 0) {
 		return task, errors.New("invalid manager task response")
 	}
 	var fields map[string]json.RawMessage
@@ -145,9 +146,19 @@ func sameTaskDeclaration(t ManagerTask, input taskCreateInput) bool {
 		reflect.DeepEqual(t.TaskType, input.TaskType) && reflect.DeepEqual(t.Difficulty, input.Difficulty) &&
 		reflect.DeepEqual(t.SkillTags, input.SkillTags) && reflect.DeepEqual(minutes, input.EstimatedTimeMinutes) &&
 		reflect.DeepEqual(t.SourceRef, input.SourceRef) && reflect.DeepEqual(t.SourcePayloadHash, input.SourcePayloadHash) &&
-		((t.ImportBatchID == nil && input.ImportBatchID == nil) || (t.ImportBatchID != nil && input.ImportBatchID != nil && sameUUID(*t.ImportBatchID, *input.ImportBatchID))) &&
+		reflect.DeepEqual(t.ImportBatchID, input.ImportBatchID) &&
 		reflect.DeepEqual(t.ExternalTaskID, input.ExternalTaskID) && reflect.DeepEqual(t.AcceptanceCriteria, input.AcceptanceCriteria) &&
-		reflect.DeepEqual(t.RejectionCriteria, input.RejectionCriteria) && ((t.DeadlineAt == nil) == (input.DeadlineAt == nil))
+		reflect.DeepEqual(t.RejectionCriteria, input.RejectionCriteria) && sameTaskDeadline(t.DeadlineAt, input.DeadlineAt)
+}
+
+func sameTaskDeadline(returned, submitted *string) bool {
+	if returned == nil || submitted == nil {
+		return returned == nil && submitted == nil
+	}
+	want, inputErr := time.Parse(time.RFC3339Nano, *submitted)
+	got, responseErr := time.Parse(time.RFC3339Nano, *returned)
+	// Pydantic/PostgreSQL retain microsecond precision and normalize timezones.
+	return inputErr == nil && responseErr == nil && got.Equal(want.Truncate(time.Microsecond))
 }
 
 func managerTaskFailure(err error) error {

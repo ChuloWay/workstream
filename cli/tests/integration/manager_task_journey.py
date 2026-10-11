@@ -45,6 +45,8 @@ async def exercise_manager_task_preparation(
         "acceptance_criteria": "Evidence is complete.",
         "rejection_criteria": "Evidence is missing.",
         "source_ref": "manager-private-source",
+        "source_type": "csv_import",
+        "import_batch_id": "cli-manager-batch-2026",
         "deadline_at": "2030-01-01T02:00:00+02:00",
     }
     input_file.write_text(json.dumps(payload, indent=2) + "\n")
@@ -101,7 +103,8 @@ async def exercise_manager_task_preparation(
     receipts = {}
     for action in ("create", "screen", "release"):
         if action == "release":
-            invoke(action, reason="", key=str(uuid4()), status=400)
+            error = invoke(action, reason="", key=str(uuid4()), status=422)
+            assert error["code"] == "invalid_request"
         receipts[action] = invoke(action)
         task_id = receipts[action]["id"]
         assert receipts[action]["project_id"] == project
