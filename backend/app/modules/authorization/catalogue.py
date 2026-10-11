@@ -256,7 +256,11 @@ class ActionId(StrEnum):
     CONTRIBUTION_POLICY_UPDATE_DRAFT = "contribution.policy.update_draft"
     CONTRIBUTION_POLICY_PUBLISH = "contribution.policy.publish"
     CONTRIBUTION_POLICY_RETIRE = "contribution.policy.retire"
+    CONTRIBUTION_READ_SELF = "contribution.read_self"
+    CONTRIBUTION_READ_PROJECT = "contribution.read_project"
 
+
+CONTRIBUTION_READ_ACTIONS = frozenset({ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT})
 
 HISTORY_READ_ACTIONS = frozenset({
     ActionId.TASK_SUBMISSION_LIST,
@@ -293,6 +297,7 @@ class ActionOwner(StrEnum):
     PILOT_02A = "PILOT-02A"
     PILOT_02B = "PILOT-02B"
     PILOT_04 = "PILOT-04"
+    PILOT_10 = "PILOT-10"
 
     AUTH_07B = "WS-AUTH-001-07B"
     AUTH_08 = "WS-AUTH-001-08"
@@ -393,6 +398,8 @@ _CONTRIBUTION_POLICY_ACTION_IDS = (
 
 
 ACTION_DEFINITIONS = (
+    _active(ActionId.CONTRIBUTION_READ_SELF, PermissionId.CONTRIBUTION_READ_SELF, ActionOwner.PILOT_10),
+    _active(ActionId.CONTRIBUTION_READ_PROJECT, PermissionId.CONTRIBUTION_READ_PROJECT, ActionOwner.PILOT_10),
     _active(ActionId.TASK_POST_SUBMIT_ROUTE, PermissionId.TASK_POST_SUBMIT_ROUTE, ActionOwner.ARCH_04E2),
     _active(ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, ActionOwner.ARCH_03C1),
     _active(ActionId.OUTBOX_DISPATCH, PermissionId.OUTBOX_DISPATCH, ActionOwner.AUTH_OUTBOX_01),
@@ -772,7 +779,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 78 or len(ACTION_IDS) != 150:
+    if len(PERMISSION_IDS) != 78 or len(ACTION_IDS) != 152:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 29:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -906,7 +913,7 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         definition.action_id
         for definition in definitions
         if definition.availability is ActionAvailability.ACTIVE
-    } != active_actions | {
+    } != active_actions | CONTRIBUTION_READ_ACTIONS | {
         ActionId.TASK_CLAIM, ActionId.TASK_START, ActionId.TASK_WORK_CONTEXT_READ,
         ActionId.TASK_GUIDE_READ,
         ActionId.PROJECT_TASK_WORK_CONTEXT_READ, ActionId.OPERATIONS_TASK_START_OVERRIDE,

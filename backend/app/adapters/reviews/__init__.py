@@ -13,3 +13,11 @@ def final_acceptance_participant(session) -> FinalAcceptancePort:
         tasks=lambda held: task_accepted_effects_participant(session, held),
         contributions=lambda held: submitter_contribution_participant(session, held),
     )
+
+
+def final_acceptance_read_port(session):
+    """Compose actual source-time evidence without constructing acceptance authority."""
+    from app.modules.reviews.acceptance.read_repository import FinalAcceptanceReadRepository
+    from app.adapters.reviews.contribution_reads import ContributionAcceptanceSourceReadAdapter
+
+    return ContributionAcceptanceSourceReadAdapter(FinalAcceptanceReadRepository(session))

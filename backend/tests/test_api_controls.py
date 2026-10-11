@@ -493,6 +493,14 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     new_manager_reads.add(activation_route)
     guide_read = {"GET /api/v1/tasks/{task_id}/guide/documents/{document_id}/content"}
     assert guide_read <= set(protected_inventory)
+    contribution_reads = {
+        "GET /api/v1/actors/me/contributions": "contribution.read_self",
+        "GET /api/v1/projects/{project_id}/contributions/export": "contribution.read_project",
+    }
+    for route, action in contribution_reads.items():
+        assert route in protected_inventory
+        method, path = route.split(" ", 1)
+        assert schema["paths"][path][method.lower()]["x-workstream-action-id"] == action
     source_prefix = "/api/v1/projects/{project_id}/task-import-sources"
     source_actions = {
         f"POST {source_prefix}": "artifact.task_import_source.declare",
@@ -505,13 +513,23 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         method, path = route.split(" ", 1)
         assert schema["paths"][path][method.lower()]["x-workstream-action-id"] == action
     new_manager_reads |= source_actions.keys()
-    assert len(route_inventory) == 98
-    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read)
-    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read)
+    batch_prefix = "/api/v1/projects/{project_id}/task-import-batches"
+    batch_actions = {
+        f"POST {batch_prefix}": "project.task.import",
+        f"GET {batch_prefix}/{{batch_id}}": "project.task.import_batch.read",
+    }
+    for route, action in batch_actions.items():
+        assert route in protected_inventory
+        method, path = route.split(" ", 1)
+        assert schema["paths"][path][method.lower()]["x-workstream-action-id"] == action
+    new_manager_reads |= batch_actions.keys()
+    assert len(route_inventory) == 102
+    retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys())
+    retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys())
     assert sha256("\n".join(retained_routes).encode()).hexdigest() == (
         "793237012e9256d308dd5d1e9c1a65e41381cf6306888fdd175dc9794b118444"
     )
-    assert len(protected_inventory) == 96
+    assert len(protected_inventory) == 100
     assert sha256("\n".join(retained_protected).encode()).hexdigest() == (
         "0953ae6392b81a4a7ba7c9f6b7fccc17768f34cd1f958572fdc553cd204ec82e"
     )
@@ -539,7 +557,9 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         if method in methods and "x-workstream-action-id" in operation
     }
     assert action_declarations == {
+        **contribution_reads,
         **source_actions,
+        **batch_actions,
         "GET /api/v1/tasks/{task_id}/submissions": "task.submission.list",
         "GET /api/v1/submissions/{submission_id}": "submission.read",
         "GET /api/v1/submissions/{submission_id}/checker-runs": "submission.checker_run.list",

@@ -19,6 +19,10 @@ context/intake requirements:
 | `workstream project guide proposal PROJECT_ID GUIDE_ID COMPILATION_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/compilations/COMPILATION_ID/proposal` |
 | `workstream project guide approve-pre PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/compilations/COMPILATION_ID/pre-submission-approval` |
 | `workstream project guide post-policy PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID` | `GET /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/compilations/COMPILATION_ID/post-submission-policies/POLICY_ID` |
+| `workstream project guide approve-post PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID --input FILE --idempotency-key UUID` | Exact policy `POST .../post-submission-policies/POLICY_ID/approval` |
+| `workstream project guide correct-post PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID --input FILE --idempotency-key UUID` | Exact policy `POST .../post-submission-policies/POLICY_ID/corrections` |
+| `workstream project guide correct PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE --idempotency-key UUID` | Exact compilation `POST .../corrections` |
+| `workstream project guide dispatch-correction PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE` | Exact saved correction `POST .../corrections/OPERATION_ID/dispatch` |
 | `workstream project tasks PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
@@ -309,7 +313,7 @@ The backend normalizes and validates feedback, checks both manager authorities,
 supersedes the inspected policy and saves one unified setup successor atomically.
 This command does not edit policy content, approve anything, activate a guide,
 fetch latest or dispatch setup. Use the existing `setup` and `post-policy` reads
-to discover retained state; correction dispatch is not a CLI command yet.
+to discover retained state; explicit correction dispatch is described below.
 
 Success requires HTTP 201 and a closed `PostPolicyReceipt` with kind `correction`,
 the complete submitted target and a non-null correction bound to its proposal
@@ -337,6 +341,55 @@ exact replay, foreign-project concealment, suspension and revocation denial.
 Canonical retained source fixtures and an explicitly executed actual Celery
 derivation task arrange prerequisites; this is not live setup inference, queued
 broker delivery or deployed Flow proof.
+
+## Correct a guide proposal and dispatch its saved successor
+
+Inspect the exact finalized proposal and prepare its closed public correction
+input. This is a separate manager decision, not an automatic interpretation of
+the findings:
+
+```sh
+workstream project guide proposal PROJECT_ID GUIDE_ID COMPILATION_ID -o json > proposal.json
+jq '{target: .target, reason: "Clarify the evidence requirement"}' proposal.json > correction.json
+workstream project guide correct PROJECT_ID GUIDE_ID COMPILATION_ID \
+  --input correction.json --idempotency-key CORRECTION_UUID -o json > saved-correction.json
+# Dispatch is a separate, explicit request using the retained receipt.
+workstream project guide dispatch-correction PROJECT_ID GUIDE_ID COMPILATION_ID \
+  --input saved-correction.json -o json
+```
+
+Saving sends the original UTF-8 JSON once (regular file, at most 1 MiB), with
+the caller's token and UUID key. It validates the closed public receipt,
+UUIDv7 identities, hashes and exact successor generation using arbitrary-range
+integers. The backend owns target/feedback hashes, feedback normalization and
+fresh exact-project authorization. The CLI does not locally certify those
+digests, edit proposal content, select latest, approve or activate anything.
+
+Dispatch accepts exactly `GuideProposalCorrectionReceipt`, not a proposal,
+`PostPolicyReceipt` wrapper or setup-status object. For `correct-post`, extract
+the nested `correction` object into the file. The saved operation ID selects
+one public bodyless POST; no new idempotency key or JSON request payload is
+invented. The four-field HTTP 202 response must match that operation's successor
+ID and generation. JSON preserves it; text escapes terminal controls. The
+backend's open diagnostic status is not a CLI enum: exit 0 means a valid status
+was observed, even for `enqueue_failed`, not that work completed or publication
+succeeded. Inspect `status`; use `setup` for subsequent diagnostics if needed.
+The normal 12-second deadline and 64 KiB response bound apply.
+
+Both writes distinguish canonical backend 4xx denial from an unknown outcome.
+Unknown writes exit 1 with empty stdout and a manual recovery hint; the CLI
+never automatically retries, including zero-byte HTTP/2 POSTs. For save, retain
+unchanged selectors, input and key. For dispatch, inspect status and deliberately
+redispatch only the same selectors and saved receipt. Backend recovery remains
+freshly authorized and does not allocate another successor.
+
+Built-process hostile HTTP tests prove receipt identity, response shape,
+diagnostic/credential safety and GOAWAY no-replay. A real local
+Flow-verifier/uvicorn/PREP/PostgreSQL journey proves one saved successor, exact
+replay, explicit dispatch and current authority after suspension/revocation,
+including stored foreign-project concealment. Canonical retained prerequisites
+and Celery publication to an in-memory test broker do not prove distributed
+delivery, worker completion, live setup inference or deployed Flow behavior.
 
 ## Inspect an exact derived post-submission policy
 

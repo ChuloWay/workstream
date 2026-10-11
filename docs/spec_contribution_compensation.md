@@ -19,9 +19,10 @@ versions and immutable awards remain the compensation boundary. Physical cleanup
 does not activate contribution recognition or external fulfillment.
 
 No route, model, action, service identity, or runtime behavior described here
-exists merely because it appears in this document. Each behavior remains
-hidden until its owning implementation chunk, AUTH activation, and joint
-release gates pass.
+exists merely because it appears in this document. Acceptance mutations remain
+subject to their shared lifecycle release gates. The bounded contribution reads
+below use fresh request authorization over existing immutable facts; they do not
+require external fulfillment or activate a recognition writer.
 
 Normative terms `MUST`, `MUST NOT`, `SHOULD`, and `MAY` are used in their usual
 requirements sense.
@@ -751,7 +752,7 @@ CON owns canonical resource loading, product guards, hidden behavior, and
 feature tests. Neither subsystem imports the other's repositories or mutates
 the other's state.
 
-Every protected surface follows:
+Recognition mutation surfaces follow:
 
 ```text
 AUTH registers planned action, mapping, typed context, principal path,
@@ -760,6 +761,13 @@ and activation custodian
 -> AUTH integrates the exact evaluator and alone activates the action
 -> joint release exposes the surface
 ```
+
+PILOT-10 activates only `contribution.read_self` and
+`contribution.read_project`, mapped to the same existing PermissionId strings.
+Their bounded public read composition uses the kernel's canonical decision and
+audit operation, current human/role locks and exact request-context digests.
+It consumes retained immutable facts independently of recognition-writer and
+fulfillment activation; it does not add a second lifecycle controller.
 
 Registration, provisioning, static membership, behavior, activation, and
 release are distinct. Planned actions deny in the real kernel. CON MUST NOT
@@ -927,10 +935,8 @@ remain unchanged, and downgrade refuses retained binding audit evidence.
 | `contribution.policy.publish` | `compensation.policy.manage` | Finance / complete draft | T | WS-ARCH-001-CP05 (active AUTH; CP04B owner; CP05A public composition; CP01B registration custody) |
 | `contribution.policy.retire` | `compensation.policy.manage` | Finance / published version | T | WS-ARCH-001-CP05 (active AUTH; CP04B owner; CP05A public composition; CP01B registration custody) |
 | `compensation.fulfillment.report` | proposed `compensation.fulfillment.report` | exact bound service / award and binding | T | CON-08B |
-| `contribution.read_self` | `contribution.read_self` | contributor / own record | Q | CON-10A |
-| `contribution.read_project` | `contribution.read_project` | eligible AdminRole / project records | Q | CON-10A |
-| `compensation.award.read_self` | `contribution.read_self` | beneficiary / own award | Q | CON-10A |
-| `compensation.award.read_project` | `compensation.award.read` | D11 role set / project awards | Q | CON-10A |
+| `contribution.read_self` | `contribution.read_self` | active human / own records and complete awards | Q | PILOT-10A |
+| `contribution.read_project` | `contribution.read_project` | covering PM or exact-project Finance / project records and complete awards | Q | PILOT-10A |
 | `compensation.delivery.reconcile` | `compensation.delivery.reconcile` | D11 role set / delivery request | T | CON-10B |
 | `compensation.status.read` | `operations.status.read` | Operator / bounded status | Q | CON-10B |
 | `compensation.reconcile.run` | `operations.reconcile.run` | reason-bound Operator / request | T | CON-10B |
@@ -940,6 +946,62 @@ remain unchanged, and downgrade refuses retained binding audit evidence.
 
 `T` means the prepared mutation protocol; `Q` means request-scoped read
 authorization.
+
+### Bounded contribution evidence reads
+
+`GET /api/v1/actors/me/contributions` reads only the currently authorized human's
+records. It accepts no contributor selector. `GET
+/api/v1/projects/{project_id}/contributions/export` selects exactly one project.
+A Project Manager's active system or exact-project grant covers that project;
+a Finance Authority must have an active grant on that exact project. A
+system-only Finance grant, Operator, Audit Authority or service principal does
+not authorize project disclosure. Token claims confer no Workstream grant.
+Missing or ungranted project
+selectors are concealed and absent from target audit evidence. Historical project
+status does not erase immutable contribution facts.
+
+Both routes accept `format=json|csv`, an optional exact `contribution_type`, and
+timezone-aware `recorded_from` (inclusive) and `recorded_before` (exclusive).
+Self reads also accept an optional `project_id` filter. `recorded_at` is the
+ContributionRecord's immutable creation time for both contribution types.
+`accepted_at` is the actual FinalAcceptance time for accepted-submission records
+and null for completed-review records. Separate `acceptance_review_id` and
+`acceptance_routing_manifest_id` retain the acceptance's exclusive trigger source;
+they never replace the contribution's own exclusive source references.
+
+The response includes contribution, contributor, project, task, Submission,
+artifact hash, policy-version and source identities, task source/display facts,
+and every immutable award ID, instrument, unit and exact decimal quantity. An
+unpaid record has `awards: []`. No field asserts payout, payment or fulfillment;
+adapter bindings and provider credentials are not exported. Quantity strings
+preserve exact decimal values without binary floats or rounding.
+
+Each response uses one fresh PostgreSQL REPEATABLE READ transaction selected
+before the first AUTH query. Current human profile/link, selected grant and
+authorized Project locks remain held through complete projection, response-byte
+serialization and canonical audit commit. An evidenced denial commits only its
+denial evidence. Selection, projection, serialization and SQL failures roll back
+the response transaction. A PostgreSQL serialization refusal (SQLSTATE 40001)
+permits one new response attempt after full rollback, with fresh canonical AUTH
+and a new repeatable-read snapshot for the identical query. Only the successful
+attempt's evidence and bytes survive. Denials, other SQL errors and serialization
+errors are not retried; a second 40001 remains unavailable. This bounded read
+recovery does not retry product mutations. Export reads mutate no recognition
+or economic facts.
+
+The maximum is 1,000 selected contributions. Filters apply before the repository
+probes the 1,001st row; excess selection returns 422
+`contribution_export_too_large` with no partial export. Empty selections succeed.
+Rows sort by `(recorded_at, contribution_id)` for display, not commit order.
+There is no continuation cursor or snapshot retained across requests. Fixed
+membership pagination and CLI consumption remain separate implementation work.
+
+CSV uses the same validated projection, quotes every UTF-8 cell and retains one
+row for an unpaid contribution or one row per award (at most 2,000 data rows).
+Untrusted display/source/unit text is neutralized with an apostrophe for formula
+triggers, including whitespace-prefixed and full-width variants. Embedded CSV
+delimiters remain inside one quoted cell. This mitigation applies to the generated
+CSV; external spreadsheet save/re-export behavior can change its interpretation.
 
 These mappings do not authorize protected handler execution. Before delivery,
 reconciliation, projection rebuild, or callback implementation, the human and
@@ -1121,9 +1183,11 @@ repository; all communication is through typed ports.
 
 Contribution and award reads use PostgreSQL canonical truth directly. They do
 not depend on ART, optional evidence, provider availability, balances, or
-settlement ledgers. Reads use stable pagination, exact self/project scope,
-pre-filtering, and concealment. Provider references, credentials, and secret
-routes are never returned.
+settlement ledgers. The public contribution reads use the bounded single-response
+contract above, with no continuation cursor, exact self/project scope,
+pre-filtering, and concealment. Stable fixed-membership pagination remains later
+issue #497 work. Provider references, credentials, and secret routes are never
+returned.
 
 CP05A exposes only ContributionPolicy administration, using the existing CP05
 Finance authority and caller-owned transaction. Under the project-scoped
@@ -1185,9 +1249,11 @@ later fulfillment activation. Removing unused storage does not activate them.
 The following decisions intentionally remain gates rather than inferred
 answers:
 
-1. D11 must select the exact AdminRole candidates for project award detail,
-   delivery recovery, and CON audit read/export before CON-10A/10B or related
-   AUTH registration starts.
+1. PILOT-10 selects covering Project Managers and exact-project Finance
+   Authorities for contribution evidence and its complete awards, with active
+   human self reads. D11 remains unresolved for delivery recovery, standalone
+   award administration, and CON audit read/export; these later surfaces cannot
+   infer their role sets from evidence export.
 2. If migration 0023 refuses retained economic facts or receipts, a human-owned
    preservation design is required before any later migration changes them.
    The delivered cleanup neither classifies nor deletes retained data.
@@ -1235,6 +1301,11 @@ interleaving. Its pre-review CON-05A/05B labels are replaced by CP06/CP07,
 CP08/ARCH-03B/03C and the completed physical cleanup described above. Current shared-dispatch
 delivery also precedes live task invalidation and ARCH-04E routing; it does
 not wait for contribution/award persistence or REV decisions.
+
+PILOT-10's bounded reads consume existing immutable CON/award facts after their
+own exact AUTH/audit activation and snapshot proof. They do not wait for CON-08B
+fulfillment or the historical CON-10A ordering below. The later fixed-membership
+list and CLI remain separately scoped under issue 497.
 
 ```text
 CON-01 -> CON-02A

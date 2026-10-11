@@ -301,8 +301,9 @@ source read preflight authorizes before preparation outcomes are observable;
 it commits no Task or batch effect. Each creation preparation is bound to its
 original active SQLAlchemy root, preventing reuse after rollback/commit. The
 sole author allocates a successor only after the lead names the actual merged
-predecessor; source `0031` is merged, PR534 is reconciling to `0032`, and this
-chunk reserves no ordinal.
+predecessor. Source `0031`, remediation `0032` and contribution reads `0033` are
+merged at main `d47ee1e9917689b94fd9439c09dffaf88c6d3ec1`. The lead delegated
+atomic successor `0034` to that sole author; this source worktree authors no DDL.
 
 ### Scope decisions and transaction preparation
 
@@ -475,9 +476,15 @@ not prove installed custody or a public import result.
 ## Reconciliation
 
 - Current-source reconciliation: this preparation branch incorporates source
-  prerequisite PR520 and merged main `e77c48b10`,
+  prerequisite PR520 and merged main `d47ee1e9917689b94fd9439c09dffaf88c6d3ec1`,
   retaining its ten-lane CI, hidden materialization/completion/failure/feedback
-  owners and CLI approval/correction contracts. Before implementation, only
+  owners, contribution export and CLI approval/correction contracts. The additive
+  AUTH union retains all 152 actions (116 active and 36 planned), all 78
+  permissions, both contribution-read audit arms and the reviewed atomic import
+  classifications. Shared metadata retains every incoming assignment and lane;
+  the selected MCP context contract will be recaptured from the clean coherent
+  owner union before the final source handoff.
+  Before implementation, only
   this planning record differed from the source candidate. Canonical Task creation now shares
   caller-root phases with its normal public wrapper; atomic batch creation
   still lacks installed schema/native proof. Model/API representations,

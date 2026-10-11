@@ -15,6 +15,11 @@ Implementation claims require merged code, migrations, tests, and review
 evidence. A plan or open pull request is not implemented behavior. Open pull
 requests are the transient view of work currently under review.
 
+Bounded contribution evidence reads expose existing immutable work and award
+facts to the current human or authorized project exporter. They do not activate
+recognition writers, complete the public contribution journey or assert payment.
+CLI consumption and fixed-membership pagination remain separate work.
+
 ## Product Goal
 
 Workstream turns governed work into trusted `ContributionRecord` facts:
@@ -185,6 +190,9 @@ uses caller-prepared input and a retry key, validates the full returned target
 and preserves backend-owned fresh replay authority; it does not activate a guide.
 Exact post-policy correction submits the inspected target and manager feedback,
 returning one saved unified successor without dispatch or activation.
+Exact proposal correction and explicit saved-successor dispatch are also
+available: dispatch preserves backend diagnostic status, including enqueue
+failure, rather than claiming processing completion or activation.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -266,6 +274,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts; ART-07A1 metadata-only packet contract and REV-03B immutable normalized packet persistence with live ingest custody; REV-04A Review/finding/resolution and completed request storage | Future resolver proof; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
 | Review decision and revision | **Hidden acceptance core; runtime planned** | Review/revision policy identities and mutation authority, with `requires_second_review` fixed false through typed and database boundaries; REV-04A immutable Review storage; REV-04B source storage; REV-04C hidden source-neutral FinalAcceptance/TASK/CON participant; approved same-task revision-rebase semantics | ARCH-04E2-B supplies mandatory source AUTH and complete database/audit/outbox closure for hidden automated outcomes. Human decision authority/composition, revision preparation, replay and recovery remain |
 | Contribution and compensation truth | **Hidden shared participant plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage; obsolete guide-keyed payment storage and task-local payment fields removed; CON-07 source-neutral submitter participant and complete award sets; REV-04C composes it with FinalAcceptance/TASK effects in the caller transaction; 04F2 checker remediation creates no contribution or award | ARCH-04E2-B supplies exact routing authority/evidence, complete-set database closure and audit/outbox under REV-12A4A. Hidden B8 completion delivery is implemented; replacement/recovery and live composition remain before production consumption. Only actual Reviews create reviewer records. Obligation/root/ordinal custody remains deferred until fulfillment activation; no public recognition or fulfillment route is live |
+| Contribution evidence reads | **Public bounded backend reads** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities; one fresh repeatable-read response with one narrowly bounded serialization-conflict retry and fresh authority, complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV; 1,000-contribution maximum refuses excess without truncation | CLI consumption and stable fixed-membership paginated list remain separate; no recognition mutation, fulfillment, payout or deployed-service claim |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove diagnostics during the release drill; no deployed monitoring claim |
 | Frontend and pilot | **Local runtime foundation; product pilot planned** | Checkout-isolated Docker Compose API, prefork Celery process, beat, PostgreSQL, Redis and MinIO stack with local Flow-HMAC identities, existing authority bootstrap/grants, configurable loopback ports and project-scoped state; a pinned offline sample image build and separate oracle were proved under gVisor; React + Vite + TypeScript stack decision | Implement the external launcher/checker images and benchmark a representative task before choosing production limits; complete provider-backed guide compilation and activated-guide scoped task-denial proof on the base stack, implement only stable backed frontend surfaces, run the real internal pilot, repair findings, and complete release drills; Docker Desktop/macOS runtime proof remains |
@@ -427,7 +436,11 @@ cannot be reused as post-submission review-gate evidence. See the
   sends the inspected target and manager feedback to the existing public write;
   the receipt identifies one saved unified setup successor, not dispatch or
   activation. Exact replay retains backend authority and adds no successor.
-  Correction dispatch and activation remain future CLI commands; backend owners retain all authority.
+  [CLI guide correction and dispatch](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-17.md)
+  saves feedback for an exact finalized proposal and explicitly dispatches the
+  saved unified successor. Complete response identity and manual-only recovery
+  protect the journey; dispatch diagnostics are not completion or activation.
+  Activation remains future CLI work; backend owners retain all authority.
   [PILOT-13 assigned-guide access](../.commitrail/changes/pilot13-assigned-task-guide-documents.md)
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads
@@ -848,6 +861,10 @@ Delivered foundations (not a claim of full public integration)
   ARCH-04F2 exact current checker remediation through TASK/AUTH under both policy modes
   ARCH-04E3A hidden ART Celery child lease + per-invocation scratch; no production registration
 
+  PILOT-10A public bounded evidence reads over existing immutable CON/awards
+    active human self or covering PM / exact-project Finance -> JSON or CSV
+    no recognition writer or fulfillment dependency; CLI/pagination remain
+
 Remaining integration
   PILOT-02 separately scoped atomic DRAFT import -> explicit batch screen/release
   04F exact-cause replacement intake + setup-fault/Operator recovery proof
@@ -936,6 +953,10 @@ v0.1 is not ready until all of the following are true:
   is not release proof.
 - Fulfillment and recovery are idempotent, observable, reconcilable, and safe
   under durable-job, provider, transaction, and unknown-commit failures.
+- Contribution evidence reads retain complete source/award identities with fresh
+  self or project authority, one response snapshot and explicit over-limit refusal.
+  CLI access and fixed-membership pagination remain later bounded work; exported
+  award quantities are earned facts, not proof of external payment.
 - Configure secured diagnostic collection with bounded retention and access,
   and prove API/Celery correlation, privacy and collector-outage behavior in
   the release drill. Implemented instrumentation alone is not deployed monitoring.
@@ -1063,6 +1084,10 @@ remaining trace sequence is:
 - Review/revision: REV packet/schema foundations may proceed independently,
   but live admission starts after `ARCH-04E`; the first live Review commit also
   requires the atomic CON decision participant on the delivered CON-03C storage.
+- [PILOT-10A's bounded read/export record](../.commitrail/changes/pilot10-contribution-award-export.md)
+  distinguishes public evidence reads from hidden recognition and deferred
+  fulfillment. The [canonical read contract](spec_contribution_compensation.md#bounded-contribution-evidence-reads)
+  defines scope, limits, exact quantities, time semantics and CSV safeguards.
 
 For implementation ownership and exact contracts, contributors can follow
 [Commitrail Engineering Index](../.commitrail/INDEX.md). For historical

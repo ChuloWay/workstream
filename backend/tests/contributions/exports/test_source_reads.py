@@ -1,0 +1,45 @@
+"""Real hidden source/owner projection proof; public AUTH evidence remains separate."""
+
+import pytest
+
+from app.adapters.compensation import contribution_award_read_port
+from app.adapters.reviews import final_acceptance_read_port
+from app.adapters.tasks import contribution_task_evidence_port
+from app.modules.contributions.api.records import ContributionReadRequest
+from app.modules.contributions.records.read_repository import ContributionReadRepository
+from tests.contributions.records.support import authorized_submitter_source, rows
+
+
+@pytest.mark.parametrize("instruments", [(), ("money",), ("money", "project_points")])
+async def test_projection_reads_actual_immutable_source_and_complete_awards(
+    tmp_path, isolated_database_env, live_acceptance_lifecycle, instruments,
+):
+    async with authorized_submitter_source(
+        tmp_path, isolated_database_env, contribution_awards=instruments,
+    ) as h:
+        async with h.factory() as session:
+            await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+            before = {table: await rows(session, table) for table in
+                      ("contribution_records", "compensation_awards", "final_acceptances")}
+            record, = await ContributionReadRepository(session).read(ContributionReadRequest(
+                audience="self", actor_profile_id=h.actor_context.actor_profile_id,
+            ))
+            assert record.id == h.submitter_record.id
+            assert record.source_final_acceptance_id == h.acceptance.id
+            assert {definition.instrument for definition in record.award_definitions} == set(instruments)
+            awards = await contribution_award_read_port(session).read_contribution_awards((record.id,))
+            assert {award.instrument_type.value for award in awards} == set(instruments)
+            assert {(award.award_definition_id, award.quantity) for award in awards} == {
+                (definition.id, definition.quantity) for definition in record.award_definitions
+            }
+            acceptance, = await final_acceptance_read_port(session).read_final_acceptances(
+                ((record.project_id, record.source_final_acceptance_id),),
+            )
+            assert acceptance.accepted_at == h.acceptance.accepted_at
+            assert acceptance.source_routing_manifest_id == h.acceptance.source_routing_manifest_id
+            task, = await contribution_task_evidence_port(session).read_contribution_tasks(
+                ((record.project_id, record.task_id),),
+            )
+            assert task.task_id == record.task_id
+            assert {table: await rows(session, table) for table in before} == before
+            await session.rollback()

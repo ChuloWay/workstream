@@ -129,9 +129,9 @@ def test_exact_active_action_inventory():
         for definition in ACTION_DEFINITIONS
         if definition.availability is ActionAvailability.ACTIVE
     } == {
-            ActionId.CHECKER_POST_SUBMIT_EXECUTE,
-            ActionId.CHECKER_POST_SUBMIT_FINALIZE,
-            ActionId.CHECKER_REGISTRY_REGISTER,
+        ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT,
+        ActionId.CHECKER_POST_SUBMIT_EXECUTE, ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+        ActionId.CHECKER_REGISTRY_REGISTER,
         ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,
         ActionId.TASK_SUBMISSION_LIST, ActionId.TASK_GUIDE_READ,
         ActionId.SUBMISSION_READ,
@@ -225,6 +225,7 @@ def test_exact_active_action_inventory():
         ActionId.PROJECT_TASK_QUEUE_READ,
         ActionId.OPERATIONS_TASK_QUEUE_READ,
         ActionId.PROJECT_TASK_CREATE,
+        ActionId.PROJECT_TASK_IMPORT, ActionId.PROJECT_TASK_IMPORT_BATCH_READ,
         ActionId.PROJECT_TASK_SCREEN,
         ActionId.PROJECT_TASK_RELEASE,
         ActionId.OPERATIONS_TASK_START_OVERRIDE,
