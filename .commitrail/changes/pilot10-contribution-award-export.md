@@ -316,3 +316,13 @@ rollback, exact DENY custody, retry exhaustion and non-serialization refusal.
   full_page_writes; this does not prove database crash persistence.
 - Whole issue #497 remains open for stable fixed-membership cursor pagination
   and CLI consumption. This bounded backend repair does not deliver those.
+
+### Hosted structural preflight repair
+
+Hosted head `a7c047d2b8ac18aaa4063b38b2c2330750ae3eeb` passed the 94
+module/authorization boundary tests but rejected the exact active-action inventory
+for reaching 121 lines (maximum 120). Compact only adjacent expected-action
+entries in that existing test; retain every expected enum and the same equality
+assertion. This catalogue test is in the existing allowed inventory repair scope.
+No debt ledger, limit, assertion or production behavior changes. Verify the
+focused inventory test and full structural validator before publication.
