@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.adapters.checkers import checker_retry_service, evaluation_coordinator
+from app.adapters.outbox import outbox_append
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import ArtifactObjectMissingError
@@ -17,8 +18,8 @@ from app.modules.authorization.catalogue import ActionId
 from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable, CheckerRequestConflict, CheckerRetryCommand,
 )
-from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun
-from app.modules.outbox.api import HandlerOutcome
+from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence
+from app.modules.outbox.api import HandlerOutcome, OutboxAppendInput, OutboxIdempotencyConflict
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import AuditEvent
 from app.modules.tasks.evaluation_delivery import EvaluationDeliveryRequestReader, EvaluationDeliveryUnavailable
@@ -161,6 +162,35 @@ async def test_retry_audit_failure_removes_whole_successor(
             assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
             assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+            assert await session.scalar(select(func.count()).select_from(
+                AuditEvent
+            ).where(AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value)) == 0
+
+
+async def test_retry_real_outbox_conflict_rolls_back_successor(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
+        operator = await _operator_for(h)
+        command = _command(h, operator)
+        async with h.factory.begin() as session:
+            await outbox_append(session).append(OutboxAppendInput(
+                event_type="RetryCollision", event_version=1,
+                aggregate_type="submission", aggregate_id=h.request.submission_id,
+                project_id=h.request.project_id,
+                correlation_id=str(command.source_run_id),
+                idempotency_key="checker-retry:" + str(command.source_run_id),
+                payload={"collision": "reserved by another producer"},
+            ))
+        with pytest.raises(OutboxIdempotencyConflict):
+            async with h.factory.begin() as session:
+                await checker_retry_service(session, operator).retry(command)
+        async with h.factory() as session:
+            fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+            assert fence.current_run_id == str(command.source_run_id)
+            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 2
             assert await session.scalar(select(func.count()).select_from(
                 AuditEvent
             ).where(AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value)) == 0
