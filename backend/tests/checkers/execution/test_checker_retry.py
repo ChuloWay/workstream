@@ -547,3 +547,26 @@ async def test_expired_unfinished_transport_reclaims_same_run_without_retry_rece
             assert fence.current_run_id == str(first.reservation.attempt_id)
             assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+
+
+async def test_retry_fences_failed_source_from_stale_worker_and_current_result(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
+        executor = live_executor(h)
+        lease, replay = await executor._claim(h.request)
+        assert lease is None and replay is not None
+        operator = await _operator_for(h)
+        async with h.factory.begin() as session:
+            created = await checker_retry_service(session, operator).retry(_command(h, operator))
+        with pytest.raises(CheckerExecutionUnavailable, match="checker_current_request_unavailable"):
+            await executor._claim(h.request)
+        async with h.factory.begin() as session:
+            with pytest.raises(CheckerExecutionUnavailable, match="checker_current_request_unavailable"):
+                await evaluation_coordinator(session).read_current_result(h.request)
+        async with h.factory() as session:
+            source = await session.get(CheckerRun, str(h.created.evaluation_attempt_id))
+            fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+            assert source.status == "infrastructure_failed" and source.completion_event_id is None
+            assert fence.current_run_id == str(created.successor.run_id)
+            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 1
