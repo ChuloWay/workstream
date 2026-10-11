@@ -25,6 +25,11 @@ from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerBinding,
     LockedExternalPostSubmitPolicy,
 )
+from app.modules.checkers.api.evaluation_contract import (
+    validate_execution_request,
+    validate_execution_result,
+)
+from app.modules.checkers.api.execution import EvaluationReservation, ExecutionLease
 from app.modules.checkers.api.materialization import SubmissionMaterialEntry
 from app.modules.checkers.selected_post_submit_execution import (
     SelectedPostSubmitProcessor,
@@ -81,6 +86,43 @@ def _policy() -> LockedExternalPostSubmitPolicy:
     return LockedExternalPostSubmitPolicy(
         entries=(binding,),
         policy_sha256=canonical_json_hash(body),
+    )
+
+
+def _request(identity, policy):
+    context = SelectedPostSubmitLockedContext(
+        guide_version="guide-v1",
+        source_id=new_record_id(),
+        source_hash=SHA,
+        effective_policy_id=new_record_id(),
+        effective_policy_hash=SHA,
+        pre_policy_id=new_record_id(),
+        pre_policy_hash=SHA,
+        retained_catalogue_policy_id=new_record_id(),
+        retained_catalogue_policy_version="guide-v1",
+        retained_catalogue_policy_hash=SHA,
+        selected_post_policy_hash=policy.policy_sha256,
+        review_policy_id=new_record_id(),
+        review_generation=1,
+        review_hash=SHA,
+        revision_policy_id=new_record_id(),
+        revision_generation=1,
+        revision_hash=SHA,
+    )
+    return make_selected_post_submit_request(
+        project_id=identity.project_id,
+        expected_context=context,
+        policy=policy,
+        evaluation_request_id=identity.evaluation_request_id,
+        evaluation_generation=identity.evaluation_generation,
+        task_id=identity.task_id,
+        assignment_id=identity.assignment_id,
+        submission_id=identity.submission_id,
+        submission_version=identity.submission_version,
+        content_id=new_record_id(),
+        binding_id=new_record_id(),
+        content_sha256=SHA,
+        byte_count=42,
     )
 
 
@@ -178,40 +220,7 @@ async def test_selected_post_separates_infrastructure_from_work_findings() -> No
 async def test_selected_post_request_and_result_bind_exact_locked_policy() -> None:
     identity = execution_identity("post_submit")
     policy = _policy()
-    context = SelectedPostSubmitLockedContext(
-        guide_version="guide-v1",
-        source_id=new_record_id(),
-        source_hash=SHA,
-        effective_policy_id=new_record_id(),
-        effective_policy_hash=SHA,
-        pre_policy_id=new_record_id(),
-        pre_policy_hash=SHA,
-        retained_catalogue_policy_id=new_record_id(),
-        retained_catalogue_policy_version="guide-v1",
-        retained_catalogue_policy_hash=SHA,
-        selected_post_policy_hash=policy.policy_sha256,
-        review_policy_id=new_record_id(),
-        review_generation=1,
-        review_hash=SHA,
-        revision_policy_id=new_record_id(),
-        revision_generation=1,
-        revision_hash=SHA,
-    )
-    request = make_selected_post_submit_request(
-        project_id=identity.project_id,
-        expected_context=context,
-        policy=policy,
-        evaluation_request_id=identity.evaluation_request_id,
-        evaluation_generation=identity.evaluation_generation,
-        task_id=identity.task_id,
-        assignment_id=identity.assignment_id,
-        submission_id=identity.submission_id,
-        submission_version=identity.submission_version,
-        content_id=new_record_id(),
-        binding_id=new_record_id(),
-        content_sha256=SHA,
-        byte_count=42,
-    )
+    request = _request(identity, policy)
     execution = await SelectedPostSubmitProcessor(
         policy=policy,
         identity=identity,
@@ -245,13 +254,46 @@ async def test_selected_post_request_and_result_bind_exact_locked_policy() -> No
                     exclude={"request_sha256", "policy", "expected_context"},
                 ),
                 policy=empty_policy,
-                expected_context=context.model_copy(
+                expected_context=request.expected_context.model_copy(
                     update={
                         "selected_post_policy_hash": empty_policy.policy_sha256
                     }
                 ),
             )
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "outcome,expected",
+    [("completed", "completed"), ("infrastructure_failed", "infrastructure_failed")],
+)
+async def test_selected_scheduler_consumer_derives_exact_envelope(outcome, expected) -> None:
+    from app.modules.checkers.execution import _SelectedExternalConsumer
+
+    identity = execution_identity("post_submit")
+    policy = _policy()
+    request = _request(identity, policy)
+    lease = ExecutionLease(
+        reservation=EvaluationReservation(
+            request_id=request.evaluation_request_id,
+            request_digest=request.request_sha256,
+            attempt_id=identity.attempt_id,
+            result_id=identity.result_id,
+            evaluation_generation=request.evaluation_generation,
+        ),
+        lease_id=identity.lease_id,
+        lease_generation=identity.lease_generation,
+        expires_at=identity.lease_expires_at,
+    )
+    result = await _SelectedExternalConsumer(
+        _Execution(outcome=outcome), lease
+    ).evaluate(request, _MaterialView(execution_material(identity)))
+
+    assert result.outcome == expected
+    result.validate_request(request)
+    assert type(validate_execution_request(request.model_dump())) is type(request)
+    assert type(validate_execution_result(result.model_dump())) is type(result)
 
 
 def test_selected_post_content_uses_selected_digest_not_catalogue_hash() -> None:
