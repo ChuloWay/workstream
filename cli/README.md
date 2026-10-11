@@ -23,6 +23,7 @@ context/intake requirements:
 | `workstream project guide correct-post PROJECT_ID GUIDE_ID COMPILATION_ID POLICY_ID --input FILE --idempotency-key UUID` | Exact policy `POST .../post-submission-policies/POLICY_ID/corrections` |
 | `workstream project guide correct PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE --idempotency-key UUID` | Exact compilation `POST .../corrections` |
 | `workstream project guide dispatch-correction PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE` | Exact saved correction `POST .../corrections/OPERATION_ID/dispatch` |
+| `workstream project guide activate PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/activate` |
 | `workstream project tasks PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
@@ -216,8 +217,8 @@ setup can be read successfully (exit 0); this is not a successful compilation,
 policy approval, guide activation or authority for another operation.
 Denials, malformed/substituted replies, oversized JSON and network failures
 leave stdout empty and exit 1. The normal 12-second/64KiB JSON bounds apply.
-Deliberate intake and evaluation approvals are separate commands below;
-activation remains future CLI work.
+Deliberate intake approval, evaluation approval and guide activation are separate
+commands below; none is implied by reading setup status.
 
 ## Inspect an exact finalized guide proposal
 
@@ -512,6 +513,59 @@ noncanonical error replies leave an unknown outcome: nonzero exit, empty stdout
 and `error.outcome_unknown: true`. Only a complete canonical Workstream 4xx
 establishes a known denial. If manually retrying, use the unchanged fields and
 key; do not invent a project ID, assume rollback or switch to a fresh key.
+
+## Activate explicitly selected guide policies
+
+Use the existing `post-policy` read to inspect the exact separately approved
+evaluation policy and its `activation_context`. Review and revision selections,
+post-approval identity/digest and the published contribution-policy binding must
+be present. A null selection is not permission to invent one. Contribution-policy
+publication remains a separate Finance API operation; this command does not
+publish it or approve missing policies.
+
+From an inspected `post-policy.json`, prepare the closed public input:
+
+```sh
+jq '{target, post_approval_operation_id: .activation_context.post_approval_operation_id,
+  post_approval_output_digest: .activation_context.post_approval_output_digest,
+  guide_mutation_generation: .activation_context.guide_mutation_generation,
+  review: .activation_context.review, revision: .activation_context.revision,
+  contribution_policy_id: .activation_context.contribution.contribution_policy_id,
+  contribution_policy_version_id: .activation_context.contribution.contribution_policy_version_id,
+  expected_previous_active_guide_id: .activation_context.expected_previous_active_guide_id,
+  expected_previous_active_guide_generation: .activation_context.expected_previous_active_guide_generation}' \
+  post-policy.json > activation.json
+workstream project guide activate PROJECT_ID GUIDE_ID \
+  --input activation.json --idempotency-key CALLER_OWNED_UUID --output json
+```
+
+The command sends the original input bytes once, with the unchanged bearer and
+caller key in headers. It does not fetch latest, poll, infer readiness, approve
+policies or dispatch jobs. Workstream authorizes the manager afresh and owns the
+atomic activation, exact policy/source locks and predecessor supersession.
+
+Success validates the complete immutable receipt: UUIDv7 operation, exact echoed
+command/key, matching contribution project/policy/version, selected generation
+plus one, timezone-bearing effective time and prior project status. Integer
+fields retain the backend range and UUIDs compare by identity, not spelling.
+JSON returns the validated API object; text renders every field with terminal
+escaping. A replay receipt proves that operation, not that its guide is still
+current after later supersession. The current backend still rejects activation
+with `human_review_required=false`; this CLI does not change that readiness gate.
+
+Malformed or substituted receipts, lost responses and other uncertain writes
+exit 1 with empty stdout and `outcome_unknown: true`. Retain the original input
+and key; recovery is a deliberate invocation with unchanged selectors, input
+contents and key. Never generate a new key merely because the response was lost.
+Replay still requires current actor lifecycle and manager authority.
+
+Process tests cover closed inputs, exact receipt binding, credential reflection,
+large integers, terminal escaping and one POST under HTTP/2 GOAWAY. The real
+socket/Flow/PREP/PostgreSQL journey prepares canonical stored source evidence,
+executes the real derivation task explicitly, approves and publishes through
+public APIs, then proves activation/replay against SQL and denial after grant
+revocation or suspension. It is not live setup inference, broker-delivery or
+deployment certification.
 
 ## Browse tasks as a project manager
 

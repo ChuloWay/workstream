@@ -194,6 +194,10 @@ returning one saved unified successor without dispatch or activation.
 Exact proposal correction and explicit saved-successor dispatch are also
 available: dispatch preserves backend diagnostic status, including enqueue
 failure, rather than claiming processing completion or activation.
+Separate exact guide activation is available through the public manager POST,
+with caller-selected approved policies, contribution-policy binding and immutable
+receipt validation. The backend retains readiness and supersession authority;
+this does not enable the still-unavailable false-review activation branch.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -441,7 +445,12 @@ cannot be reused as post-submission review-gate evidence. See the
   saves feedback for an exact finalized proposal and explicitly dispatches the
   saved unified successor. Complete response identity and manual-only recovery
   protect the journey; dispatch diagnostics are not completion or activation.
-  Activation remains future CLI work; backend owners retain all authority.
+  [CLI guide activation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-18.md)
+  sends caller-prepared, separately approved selections once to the public
+  manager activation operation and validates its complete immutable receipt.
+  Readiness, contribution-policy publication, fresh replay authority and
+  supersession remain backend-owned. This command does not enable false-review
+  guide activation or expose hidden submission work.
   [PILOT-13 assigned-guide access](../.commitrail/changes/pilot13-assigned-task-guide-documents.md)
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads
