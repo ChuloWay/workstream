@@ -531,7 +531,7 @@ begin
  return true;
 exception when sqlstate '23514' then raise;
  when others then
-  raise exception 'external checker policy value is invalid' using errcode='23514';
+  raise exception 'external checker policy value is invalid: %',sqlerrm using errcode='23514';
 end $$
 """)
     definition = op.get_bind().execute(sa.text(
