@@ -23,6 +23,7 @@
   [WS-CLI-001-16](WS-CLI-001-16.md), deliberate evaluation-policy correction with one saved unified successor;
   [WS-CLI-001-17](WS-CLI-001-17.md), exact guide-proposal correction and explicit saved-successor dispatch;
   [WS-CLI-001-18](WS-CLI-001-18.md), separate exact complete-guide activation and immutable receipt replay;
+  [WS-CLI-001-19](WS-CLI-001-19.md), separate manager draft creation, screening and release;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download.
 
 ## Current boundary
@@ -93,6 +94,12 @@ It observes backend diagnostic status, not completion, approval or activation.
 separately submits exact approved policy selections and validates the immutable
 activation receipt. It does not publish contribution policy, approve missing
 inputs or infer readiness; the backend owns authority and supersession.
+`project task create PROJECT_ID --input FILE --idempotency-key UUID`,
+`project task screen PROJECT_ID TASK_ID --idempotency-key UUID [--reason TEXT]`
+and `project task release PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT`
+prepare individual work through three deliberate public writes. Workstream owns
+active-guide locking, readiness, lifecycle and fresh-authority replay; management
+receipts do not enlarge contributor disclosure.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -176,11 +183,14 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 18. **WS-CLI-001-18:** Activate explicitly selected, separately approved guide
     policies through the public POST. Validate the immutable command/receipt
     binding; leave readiness, authorization and supersession to the backend.
-19. **Later governed-work commands:** Add further project setup, submission,
+19. **WS-CLI-001-19:** Prepare individual tasks through separate manager draft
+    create, screen and release calls. Validate full management receipts and
+    explicit replay; do not import, automatically release or choose policies.
+20. **Later governed-work commands:** Add further project setup, submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-20. **Optional TUI:** Add a focused public queue/evidence view after its API
+21. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof
