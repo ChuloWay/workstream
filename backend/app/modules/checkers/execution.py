@@ -54,14 +54,9 @@ from app.modules.checkers.execution_repository import (
     stored_result,
 )
 from app.modules.checkers.execution_results import classify_result
-from app.modules.checkers.post_submit_contracts import make_post_submit_result
-from app.modules.checkers.post_submit_implementations import (
-    bounded_structural_result,
-    detached_checker_context,
-)
-from app.modules.checkers.runner import UnknownChecker, CheckerRegistry
 from app.modules.checkers.api.materialization import (
-    PostSubmissionMaterializationPort, PostSubmissionMaterializationFailure,
+    PostSubmissionMaterializationPort,
+    PostSubmissionMaterializationFailure,
 )
 from app.modules.outbox.api import OutboxAppendPort
 from app.modules.outbox.api import OutboxAppendInput
@@ -85,64 +80,6 @@ def _evidence(value, expected_type, facts):
     if type(value) is not expected_type or value.facts_digest != execution_authority_digest(facts):
         raise CheckerExecutionUnavailable("checker_action_evidence_unavailable")
     return value.evidence_id
-
-
-class _StructuralConsumer:
-    """Run registered structural checks while ART owns the verified private view."""
-
-    def __init__(self, registry, lease):
-        """Bind the installed registry and reserved attempt identities."""
-        self._registry, self._lease = registry, lease
-
-    async def evaluate(self, request, material):
-        # ART retains the verified private view for this callback. These registered
-        # rules inspect structural facts whose exact archive manifest ART verified.
-        """Validate installed definitions and convert bounded outcomes to closed results."""
-        del material
-        identity = dict(
-            request_id=request.evaluation_request_id,
-            request_digest=request.request_sha256,
-            attempt_id=self._lease.reservation.attempt_id,
-            result_id=self._lease.reservation.result_id,
-            evaluation_generation=request.evaluation_generation,
-        )
-        try:
-            for entry in request.policy.entries:
-                if self._registry.resolve(
-                    entry.checker_id
-                ).definition != request.catalogue.definition(
-                    entry.checker_id, entry.definition_version
-                ):
-                    raise ValueError("post-submit installed catalogue mismatch")
-            limits = request.catalogue.definitions[0].resources
-            async with asyncio.timeout(limits.phase_deadline_ms / 1000):
-                outcomes = await self._registry.run(
-                    detached_checker_context(request), request.policy.entries
-                )
-            members = tuple(
-                bounded_structural_result(
-                    request.catalogue.definition(entry.checker_id, entry.definition_version),
-                    outcome,
-                )
-                for entry, outcome in zip(request.policy.entries, outcomes, strict=True)
-            )
-            result = make_post_submit_result(
-                **identity, outcome="completed", member_results=members
-            )
-            result.validate_request(request)
-            return result
-        except TimeoutError:
-            code = "deadline_exceeded"
-        except UnknownChecker:
-            code = "implementation_unavailable"
-        except ValueError:
-            code = "invalid_output"
-        return make_post_submit_result(
-            **identity,
-            outcome="infrastructure_failed",
-            member_results=(),
-            infrastructure_failure_code=code,
-        )
 
 
 class _SelectedExternalConsumer:
@@ -212,14 +149,13 @@ class PostSubmissionExecutor:
         execute_authority: Callable[[AsyncSession], ExecutionAuthorityPort],
         finalize_authority: Callable[[AsyncSession], FinalizationAuthorityPort],
         materialization: PostSubmissionMaterializationPort,
-        registry: CheckerRegistry,
         selected_execution: ExternalCheckerExecutionAdapter | None = None,
         outbox: Callable[[AsyncSession], OutboxAppendPort],
     ):
         """Receive explicit session, authority, materialization and publication ports."""
         self._sessions = sessions
         self._execute_authority, self._finalize_authority = execute_authority, finalize_authority
-        self._materialization, self._registry, self._outbox = materialization, registry, outbox
+        self._materialization, self._outbox = materialization, outbox
         self._selected_execution = selected_execution
 
     @staticmethod
@@ -231,11 +167,9 @@ class PostSubmissionExecutor:
     def _consumer(self, request, lease):
         if isinstance(request, SelectedPostSubmissionEvaluationRequest):
             if self._selected_execution is None:
-                raise CheckerExecutionUnavailable(
-                    "checker_external_execution_unavailable"
-                )
+                raise CheckerExecutionUnavailable("checker_external_execution_unavailable")
             return _SelectedExternalConsumer(self._selected_execution, lease)
-        return _StructuralConsumer(self._registry, lease)
+        raise CheckerExecutionUnavailable("checker_legacy_execution_retired")
 
     async def _claim(self, request):
         """Authorize replay or acquire the next database-timed lease atomically."""
@@ -266,13 +200,17 @@ class PostSubmissionExecutor:
                         ),
                         output_binding_ids=(),
                     )
+                if not isinstance(request, SelectedPostSubmissionEvaluationRequest):
+                    raise CheckerExecutionUnavailable("checker_legacy_execution_retired")
                 now = await repo.now()
                 if run.status == "running" and run.worker_lease_expires_at > now:
                     raise CheckerExecutionUnavailable("checker_execution_lease_unavailable")
                 execution_seconds = self._execution_budget_seconds(request)
-                lease_seconds = execution_seconds + math.ceil(
-                    SELECTED_POST_FINALIZATION_MARGIN_MS / 1000
-                ) if isinstance(request, SelectedPostSubmissionEvaluationRequest) else LEASE_SECONDS
+                lease_seconds = (
+                    execution_seconds + math.ceil(SELECTED_POST_FINALIZATION_MARGIN_MS / 1000)
+                    if isinstance(request, SelectedPostSubmissionEvaluationRequest)
+                    else LEASE_SECONDS
+                )
                 lease = ExecutionLease(
                     reservation=reservation(run),
                     lease_id=new_record_id(),
@@ -298,6 +236,8 @@ class PostSubmissionExecutor:
         lease, replay = await self._claim(request)
         if replay is not None:
             return await self.finalize(replay)
+        if not isinstance(request, SelectedPostSubmissionEvaluationRequest):
+            raise CheckerExecutionUnavailable("checker_legacy_execution_retired")
         material = None
         input_materialization_evidence_id = None
         try:
@@ -329,16 +269,9 @@ class PostSubmissionExecutor:
                     else "material_unavailable"
                 ),
             )
-            result = (
-                make_selected_post_submit_result(
-                    **values,
-                    execution=None,
-                )
-                if isinstance(request, SelectedPostSubmissionEvaluationRequest)
-                else make_post_submit_result(
-                    **values,
-                    member_results=(),
-                )
+            result = make_selected_post_submit_result(
+                **values,
+                execution=None,
             )
         return await self.finalize(
             FinalizeFacts(
@@ -390,7 +323,8 @@ class PostSubmissionExecutor:
                 if run.execute_evidence_id is None:
                     raise CheckerExecutionUnavailable("checker_execution_evidence_unavailable")
                 authority_facts = FinalizeAuthorityFacts(
-                    **facts.model_dump(), execute_evidence_id=UUID(run.execute_evidence_id),
+                    **facts.model_dump(),
+                    execute_evidence_id=UUID(run.execute_evidence_id),
                 )
                 if run.status in {"completed", "infrastructure_failed"}:
                     if (
@@ -409,7 +343,9 @@ class PostSubmissionExecutor:
                     await prepared.validate_replay(authority_facts, UUID(run.finalize_evidence_id))
                     return stored_result(run)
                 run = await repo.require_lease(request, facts.lease)
-                evidence_id = _evidence(await prepared.consume(authority_facts), FinalizeEvidence, authority_facts)
+                evidence_id = _evidence(
+                    await prepared.consume(authority_facts), FinalizeEvidence, authority_facts
+                )
                 completed_at = await repo.now()
                 await repo.write_members(run, result)
                 if result.outcome == "completed":

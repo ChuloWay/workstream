@@ -15,10 +15,9 @@ from app.modules.authorization.api.guide_proposal_review import (
     GuideProposalAuthorizationLocator,
     PreparedGuideProposalOperation,
 )
-from app.modules.checkers.api.policy_compilation import (
-    CompiledPreSubmitCheckerPolicy, PreSubmissionPolicyCompilationPort,
-)
+from app.modules.checkers.api.policy_compilation import CompiledPreSubmitCheckerPolicy
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
+from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
     compile_external_checker_policy_bundle,
@@ -63,16 +62,12 @@ async def approve_proposal(
     actor,
     request_id,
     material,
-    pre_capabilities,
-    post_capabilities,
-    planner: PreSubmissionPolicyCompilationPort,
+    capabilities: ExternalCheckerCapabilityProjection,
     registry: ExternalCheckerRegistryPort,
 ) -> GuideProposalApprovalReceipt:
     """Compile and persist in the caller transaction after exact authority closes."""
     target = command.target
-    selector_id = approval_authorization_selector(
-        actor.actor_profile_id, command.idempotency_key
-    )
+    selector_id = approval_authorization_selector(actor.actor_profile_id, command.idempotency_key)
     locator = GuideProposalAuthorizationLocator(
         project_id=target.project_id,
         guide_id=target.guide_id,
@@ -105,8 +100,7 @@ async def approve_proposal(
             locked,
             package,
             command,
-            pre_capabilities,
-            post_capabilities,
+            capabilities,
         )
         outputs = await _compile_approval(
             session,
@@ -114,9 +108,7 @@ async def approve_proposal(
             command,
             new_record_id(),
             material,
-            pre_capabilities,
-            post_capabilities,
-            planner,
+            capabilities,
             registry,
         )
         receipt = outputs.receipt
@@ -175,13 +167,12 @@ async def _validate_new_approval(
     locked,
     package,
     command,
-    pre_capabilities,
-    post_capabilities,
+    capabilities,
 ):
     """Validate current proposal and predecessor facts before compiling outputs."""
     if not locked.current:
         raise GuideProposalError("proposal_stale")
-    require_catalogues(command.target, pre_capabilities, post_capabilities)
+    require_capabilities(command.target, capabilities)
     if (
         locked.result.status == "guide_blocked"
         or locked.view.policy is None
@@ -190,15 +181,12 @@ async def _validate_new_approval(
         raise GuideProposalError("approval_blocked")
     if (
         locked.view.policy.lifecycle_status != "draft"
-        or package.current_approval_operation_id
-        != command.expected_previous_approval_operation_id
+        or package.current_approval_operation_id != command.expected_previous_approval_operation_id
         or package.current_approval_output_digest
         != command.expected_previous_approval_output_digest
     ):
         raise GuideProposalError("proposal_stale")
-    return await _previous_outputs(
-        session, command.expected_previous_approval_operation_id
-    )
+    return await _previous_outputs(session, command.expected_previous_approval_operation_id)
 
 
 @dataclass(frozen=True)
@@ -217,16 +205,13 @@ async def _compile_approval(
     command,
     operation_id,
     material,
-    pre_capabilities,
-    post_capabilities,
-    planner,
+    capabilities,
     registry,
 ) -> _CompiledApproval:
     target = command.target
     inputs = CompilationRequestInputs(
         material,
-        pre_capabilities,
-        post_capabilities,
+        capabilities,
         ProjectGuideRuntimeConfiguration.model_validate(locked.view.attempt.runtime_configuration),
     )
     context = await inputs.context_for_setup(session, locked.view.setup)
@@ -246,8 +231,7 @@ async def _compile_approval(
             *(entry.registry.capability_id for entry in external_pre.entries),
         ],
         checker_configs={
-            entry.requirement_id: entry.configuration
-            for entry in external_pre.entries
+            entry.requirement_id: entry.configuration for entry in external_pre.entries
         },
     )
     effective_id, pre_id = new_record_id(), new_record_id()
@@ -262,9 +246,7 @@ async def _compile_approval(
         effective_pre_submit_plan_hash=policies.policies_sha256,
         acknowledged_warning_hashes=command.acknowledged_warning_hashes,
     )
-    return _CompiledApproval(
-        effective_body, compiled, policies, receipt
-    )
+    return _CompiledApproval(effective_body, compiled, policies, receipt)
 
 
 async def _persist_approval(
@@ -343,23 +325,29 @@ def _facts(locator, target, request_digest, receipt, command):
     )
 
 
-def require_catalogues(target, pre, post):
+def require_capabilities(target, capabilities):
+    """Bind approval to the exact registry-backed compiler input snapshot."""
+    capabilities = ExternalCheckerCapabilityProjection.model_validate(capabilities)
     if (
-        not pre.available
-        or (pre.catalogue_id, pre.version, pre.schema_version, pre.manifest_sha256)
-        != (
-            target.pre_catalogue_id,
-            target.pre_catalogue_version,
-            target.pre_catalogue_schema_version,
-            target.pre_catalogue_manifest_hash,
-        )
-        or (post.catalogue_id, post.source_version, post.schema_version, post.manifest_sha256)
-        != (
-            target.post_catalogue_id,
-            target.post_catalogue_version,
-            target.post_catalogue_schema_version,
-            target.post_catalogue_manifest_hash,
-        )
+        "workstream.external_checker_capabilities",
+        "v1",
+        capabilities.schema_version,
+        capabilities.manifest_sha256,
+    ) != (
+        target.pre_catalogue_id,
+        target.pre_catalogue_version,
+        target.pre_catalogue_schema_version,
+        target.pre_catalogue_manifest_hash,
+    ) or (
+        "workstream.external_checker_capabilities",
+        "v1",
+        capabilities.schema_version,
+        capabilities.manifest_sha256,
+    ) != (
+        target.post_catalogue_id,
+        target.post_catalogue_version,
+        target.post_catalogue_schema_version,
+        target.post_catalogue_manifest_hash,
     ):
         raise GuideProposalError("proposal_stale")
 

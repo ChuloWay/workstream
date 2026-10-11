@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from dataclasses import dataclass, replace
-import json
 from uuid import UUID
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
@@ -15,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.artifacts.api import (
     SubmissionBundlePreparationCheckFailed,
-    SubmissionBundleFile,
     SubmissionBundlePreparationRejected,
     SubmissionBundlePreparationInfrastructureUnavailable,
     SubmissionBundlePreparationRequest,
@@ -65,8 +63,6 @@ from app.modules.artifacts.submission_manifest import (
 from app.modules.artifacts.submission_materialization import (
     PreparedBundleMaterializationRequest,
     PreparedBundleMaterializationService,
-    PreparedBundlePreSubmitEvidenceService,
-    PreSubmissionEvaluationPort,
 )
 from app.modules.artifacts.selected_pre_submit_admission import (
     bind_selected_pre_submit_admission,
@@ -76,7 +72,6 @@ from app.modules.artifacts.selected_pre_submit_admission import (
 from app.modules.artifacts.selected_pre_submit_execution import (
     SelectedPreSubmitExecutionService,
 )
-from app.modules.checkers.api.post_submit import PostSubmissionEvaluationContent
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitCompletion,
     SelectedPreSubmitCoordinationPort,
@@ -89,12 +84,7 @@ from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
     selected_pre_submit_execution_budget_ms,
 )
-from app.modules.checkers.api import (
-    EffectivePreSubmissionExecutionPlan,
-    EffectivePreSubmissionPlanLineage,
-    EffectivePreSubmissionPlanningPort,
-    SubmissionPacketView,
-)
+from app.modules.checkers.api import SubmissionPacketView
 from app.modules.projects.api import (
     ProjectLockedPolicyContextFacts,
     ProjectLockedPolicyContextPort,
@@ -221,9 +211,7 @@ class SubmissionBundleDurablePutService:
                     replay_durable_intent_id=request.replay_durable_intent_id,
                     selected_pre_submit_run_id=selected_run_id,
                     selected_terminal_digest=(
-                        custody.selected_terminal_digest
-                        if selected_run_id is not None
-                        else None
+                        custody.selected_terminal_digest if selected_run_id is not None else None
                     ),
                 ),
                 submission_prepared_authorization=self._authorization,
@@ -246,15 +234,10 @@ class SubmissionBundleDurablePutService:
         selected_pre_submit_run_id: UUID | None = None,
     ) -> SubmissionBundleDurablePutResult:
         """Hand the exact ZIP to storage only after the durable transaction ended."""
-        if (
-            selected_pre_submit_run_id is not None
-            and selected_pre_submit_run_id != lineage_id
-        ):
+        if selected_pre_submit_run_id is not None and selected_pre_submit_run_id != lineage_id:
             await prepared.close()
             raise RuntimeError("submission bundle selected lineage changed")
-        evidence_set_id = (
-            None if selected_pre_submit_run_id is not None else lineage_id
-        )
+        evidence_set_id = None if selected_pre_submit_run_id is not None else lineage_id
         if self._session.in_transaction():
             await prepared.close()
             raise RuntimeError("submission bundle durable transaction is still active")
@@ -430,18 +413,12 @@ class SubmissionBundleAdmissionPublisher:
                 project_id=str(
                     selected.project_id if selected is not None else evidence.project_id
                 ),
-                task_id=str(
-                    selected.task_id if selected is not None else evidence.task_id
-                ),
+                task_id=str(selected.task_id if selected is not None else evidence.task_id),
                 actor_profile_id=str(
-                    selected.actor_profile_id
-                    if selected is not None
-                    else evidence.actor_profile_id
+                    selected.actor_profile_id if selected is not None else evidence.actor_profile_id
                 ),
                 archive_sha256=(
-                    selected.archive_sha256
-                    if selected is not None
-                    else evidence.archive_sha256
+                    selected.archive_sha256 if selected is not None else evidence.archive_sha256
                 ),
                 archive_byte_count=(
                     selected.archive_byte_count
@@ -462,9 +439,7 @@ class SubmissionBundleAdmissionPublisher:
             id=str(new_record_id()),
             durable_intent_id=intent.id,
             pre_submit_evidence_set_id=(evidence.id if evidence is not None else None),
-            selected_pre_submit_run_id=(
-                str(selected.attempt_id) if selected is not None else None
-            ),
+            selected_pre_submit_run_id=(str(selected.attempt_id) if selected is not None else None),
             put_attempt_id=attempt.id,
             artifact_content_id=content.id,
             verified_replica_id=replica.id,
@@ -486,7 +461,9 @@ class SubmissionBundleAdmissionPublisher:
                 str(selected_lineage.predecessor_submission_id)
                 if selected_lineage is not None
                 and selected_lineage.predecessor_submission_id is not None
-                else evidence.predecessor_submission_id if evidence is not None else None
+                else evidence.predecessor_submission_id
+                if evidence is not None
+                else None
             ),
             predecessor_submission_version=(
                 selected_lineage.predecessor_submission_version
@@ -502,7 +479,9 @@ class SubmissionBundleAdmissionPublisher:
                 selected_lineage.guide_id if selected_lineage is not None else evidence.guide_id
             ),
             guide_version=(
-                selected_lineage.guide_version if selected_lineage is not None else evidence.guide_version
+                selected_lineage.guide_version
+                if selected_lineage is not None
+                else evidence.guide_version
             ),
             source_snapshot_id=str(
                 selected_lineage.source_snapshot_id
@@ -540,19 +519,13 @@ class SubmissionBundleAdmissionPublisher:
                 else evidence.effective_plan_sha256
             ),
             selected_rules_sha256=(
-                selected_lineage.rules_sha256
-                if selected_lineage is not None
-                else None
+                selected_lineage.rules_sha256 if selected_lineage is not None else None
             ),
             selected_post_submit_policy_sha256=(
-                selected_lineage.post_submit_policy_sha256
-                if selected_lineage is not None
-                else None
+                selected_lineage.post_submit_policy_sha256 if selected_lineage is not None else None
             ),
             selected_post_submit_policy_body=(
-                selected_lineage.post_submit_policy_body
-                if selected_lineage is not None
-                else None
+                selected_lineage.post_submit_policy_body if selected_lineage is not None else None
             ),
             packet_sha256=(
                 selected_lineage.packet_sha256
@@ -612,10 +585,7 @@ class SubmissionBundleAdmissionPublisher:
             and receipt.verification_job_id == job.id
             and receipt.execution_generation == job.execution_generation
             and receipt.outcome == "verified"
-            and receipt.observed_sha256
-            == attempt.sha256
-            == content.sha256
-            == archive_sha256
+            and receipt.observed_sha256 == attempt.sha256 == content.sha256 == archive_sha256
             and receipt.observed_byte_count
             == attempt.byte_count
             == content.byte_count
@@ -715,13 +685,6 @@ class SubmissionBundlePreparationRuntime:
     selected_execution: SelectedPreSubmitExecutionService | None = None
     storage_scheme: str | None = None
     artifact_deadline_ms: int = 0
-    catalogue: EffectivePreSubmissionPlanningPort | None = None
-    evidence: PreparedBundlePreSubmitEvidenceService | None = None
-    checker_service: PreSubmissionEvaluationPort | None = None
-    evaluation_content: Callable[
-        [TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts, SubmissionPacketView,
-         tuple[SubmissionBundleFile, ...], str], PostSubmissionEvaluationContent,
-    ] | None = None
 
 
 class PreparedSubmissionBundlePreparationCommand:
@@ -767,9 +730,7 @@ class PreparedSubmissionBundlePreparationCommand:
                 async with self._session.begin():
                     task_context, project_context = await self._lock_authorized_context(request)
                     predecessor = await self._load_predecessor(task_context)
-                    predecessor_rules_sha256 = await self._load_predecessor_rules(
-                        task_context
-                    )
+                    predecessor_rules_sha256 = await self._load_predecessor_rules(task_context)
                 prepared = await runtime.preparation.prepare(
                     request.byte_source,
                     media_type="application/zip",
@@ -802,9 +763,7 @@ class PreparedSubmissionBundlePreparationCommand:
                         manifest=manifest,
                         predecessor=predecessor,
                         predecessor_rules_sha256=predecessor_rules_sha256,
-                        predecessor_exists=(
-                            request.predecessor_submission_id is not None
-                        ),
+                        predecessor_exists=(request.predecessor_submission_id is not None),
                         packet=packet,
                     )
                     attempt_id = new_record_id()
@@ -822,9 +781,7 @@ class PreparedSubmissionBundlePreparationCommand:
                                 identity_link_id=request.actor.identity_link_id,
                                 task_id=request.task_id,
                                 assignment_id=request.assignment_id,
-                                predecessor_submission_id=(
-                                    request.predecessor_submission_id
-                                ),
+                                predecessor_submission_id=(request.predecessor_submission_id),
                                 idempotency_key=request.idempotency_key,
                                 archive_sha256=prepared.commitment.sha256,
                                 archive_byte_count=prepared.commitment.byte_count,
@@ -862,16 +819,10 @@ class PreparedSubmissionBundlePreparationCommand:
                         default_checker_input=selected.default_input,
                         selected_reservation=reservation,
                     )
-                    current = await runtime.selected_coordinator.read_current(
-                        reservation
-                    )
+                    current = await runtime.selected_coordinator.read_current(reservation)
                     if current is None:
-                        await runtime.materialization.authorize_inspected(
-                            materialization_request
-                        )
-                        reserved_id = await runtime.selected_coordinator.reserve(
-                            reservation
-                        )
+                        await runtime.materialization.authorize_inspected(materialization_request)
+                        reserved_id = await runtime.selected_coordinator.reserve(reservation)
                         if reserved_id != reservation.attempt_id:
                             raise RuntimeError("selected PRE reservation identity changed")
                 if current is not None:
@@ -909,9 +860,7 @@ class PreparedSubmissionBundlePreparationCommand:
                         "pre_submission_checked_custody_unavailable"
                     )
                 if not terminal.execution.eligible:
-                    raise SubmissionBundlePreparationCheckFailed(
-                        terminal.execution
-                    )
+                    raise SubmissionBundlePreparationCheckFailed(terminal.execution)
                 if completion.capability is None:
                     raise SubmissionBundlePreparationInfrastructureUnavailable(
                         "pre_submission_checked_custody_unavailable"
@@ -957,8 +906,7 @@ class PreparedSubmissionBundlePreparationCommand:
             )
         if terminal.outcome == "infrastructure_failed":
             raise SubmissionBundlePreparationInfrastructureUnavailable(
-                terminal.infrastructure_failure_code
-                or "pre_submission_checked_custody_unavailable"
+                terminal.infrastructure_failure_code or "pre_submission_checked_custody_unavailable"
             )
         execution = terminal.execution
         if execution is None:
@@ -976,17 +924,14 @@ class PreparedSubmissionBundlePreparationCommand:
                 )
                 .join(
                     ArtifactPutAttempt,
-                    ArtifactPutAttempt.id
-                    == SubmissionBundleDurableIntent.put_attempt_id,
+                    ArtifactPutAttempt.id == SubmissionBundleDurableIntent.put_attempt_id,
                 )
                 .outerjoin(
                     SubmissionBundleAdmission,
-                    SubmissionBundleAdmission.durable_intent_id
-                    == SubmissionBundleDurableIntent.id,
+                    SubmissionBundleAdmission.durable_intent_id == SubmissionBundleDurableIntent.id,
                 )
                 .where(
-                    SubmissionBundleDurableIntent.selected_pre_submit_run_id
-                    == str(current.run_id)
+                    SubmissionBundleDurableIntent.selected_pre_submit_run_id == str(current.run_id)
                 )
             )
         ).one_or_none()
@@ -1007,9 +952,7 @@ class PreparedSubmissionBundlePreparationCommand:
         return SubmissionBundlePreparationResult(
             put_attempt_id=UUID(attempt.id),
             admission_id=admission_id,
-            submission_bundle_preparation_status=SubmissionBundlePreparationStatus(
-                status
-            ),
+            submission_bundle_preparation_status=SubmissionBundlePreparationStatus(status),
             replayed=True,
         )
 
@@ -1087,21 +1030,29 @@ class PreparedSubmissionBundlePreparationCommand:
     def _evidence_failure(exc: PreSubmitEvidenceConflict) -> RuntimeError:
         """Separate changed client context from unavailable canonical execution evidence."""
         if str(exc) == "pre_submit_locked_context_changed":
-            return SubmissionBundlePreparationRejected("submission_bundle_preparation_context_changed")
+            return SubmissionBundlePreparationRejected(
+                "submission_bundle_preparation_context_changed"
+            )
         if str(exc) == "pre_submit_attempt_request_conflict":
-            return SubmissionBundlePreparationRejected("submission_bundle_preparation_request_conflict")
-        code = ("pre_submission_attempt_outcome_unresolved"
-                if str(exc) == "pre_submit_attempt_outcome_unresolved"
-                else "pre_submission_checked_custody_unavailable")
+            return SubmissionBundlePreparationRejected(
+                "submission_bundle_preparation_request_conflict"
+            )
+        code = (
+            "pre_submission_attempt_outcome_unresolved"
+            if str(exc) == "pre_submit_attempt_outcome_unresolved"
+            else "pre_submission_checked_custody_unavailable"
+        )
         return SubmissionBundlePreparationInfrastructureUnavailable(code)
 
     async def _lock_authorized_context(
-        self, request: SubmissionBundlePreparationRequest,
+        self,
+        request: SubmissionBundlePreparationRequest,
     ) -> tuple[TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts]:
         """Lock TASK, actor identity, PROJECT, then the current submitter grant."""
         task, project = await self._lock_context(request)
         await self._authority.revalidate(
-            request=request, project_id=task.locked_project_context.project_id,
+            request=request,
+            project_id=task.locked_project_context.project_id,
         )
         return task, project
 
@@ -1138,49 +1089,6 @@ class PreparedSubmissionBundlePreparationCommand:
                 "submission_bundle_preparation_context_changed"
             ) from exc
         return task_context, project_context
-
-    @staticmethod
-    def _compile_plan(
-        task_context: TaskSubmissionContextFacts,
-        project_context: ProjectLockedPolicyContextFacts,
-        planner: EffectivePreSubmissionPlanningPort,
-    ) -> EffectivePreSubmissionExecutionPlan:
-        """Compile the sole CHECKER plan from exact public PROJECT facts."""
-        try:
-            effective_policy = json.loads(project_context.effective_policy.value)
-            compiled_bundle = json.loads(
-                project_context.compiled_pre_submit_bundle.value
-            )
-        except (TypeError, ValueError) as exc:
-            raise SubmissionBundlePreparationRejected(
-                "submission_bundle_preparation_context_changed"
-            ) from exc
-        if (
-            project_context.project_id
-            != task_context.locked_project_context.project_id
-            or not isinstance(effective_policy, dict)
-            or not isinstance(compiled_bundle, dict)
-        ):
-            raise SubmissionBundlePreparationRejected(
-                "submission_bundle_preparation_context_changed"
-            )
-        return planner.compile_effective_plan(
-            lineage=EffectivePreSubmissionPlanLineage(
-                project_id=project_context.project_id,
-                guide_id=project_context.guide_id,
-                guide_version=project_context.guide_version,
-                source_snapshot_id=project_context.source_snapshot_id,
-                source_snapshot_hash=project_context.source_snapshot_hash,
-                effective_policy_id=project_context.effective_policy_id,
-                effective_policy_hash=project_context.effective_policy_hash,
-                pre_submit_policy_id=project_context.pre_submit_policy_id,
-                pre_submit_policy_bundle_hash=(
-                    project_context.pre_submit_policy_bundle_hash
-                ),
-            ),
-            effective_policy=effective_policy,
-            compiled_bundle=compiled_bundle,
-        )
 
     async def _existing_durable_result(
         self, evidence_id: UUID
@@ -1270,18 +1178,13 @@ class PreparedSubmissionBundlePreparationCommand:
             raise SubmissionBundlePreparationRejected(
                 "submission_canonical_predecessor_unavailable"
             )
-        return (
-            admission.selected_rules_sha256
-            or admission.locked_policy_context_hash
-        )
+        return admission.selected_rules_sha256 or admission.locked_policy_context_hash
 
     @staticmethod
     def _result(result: SubmissionBundleDurablePutResult) -> SubmissionBundlePreparationResult:
         return SubmissionBundlePreparationResult(
             put_attempt_id=result.put_attempt_id,
             admission_id=result.admission_id,
-            submission_bundle_preparation_status=SubmissionBundlePreparationStatus(
-                result.status
-            ),
+            submission_bundle_preparation_status=SubmissionBundlePreparationStatus(result.status),
             replayed=result.replayed,
         )

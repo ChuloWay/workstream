@@ -14,15 +14,15 @@ from app.adapters.contributions import published_contribution_policy_port
 from app.adapters.projects.contribution_validation import GuideContributionPolicyDiscovery
 from app.modules.projects.api.guide_activation_context import GuideContributionDiscoveryPort
 from app.api.deps.authorization import (
-    _authorization_context, get_authorization_actor, get_authorization_actor_identity,
+    _authorization_context,
+    get_authorization_actor,
+    get_authorization_actor_identity,
 )
 from app.core.api_controls import request_ids
 from app.db.session import get_db_session
 from app.modules.authorization.api import ActorIdentityFacts
 from app.modules.authorization.api.guide_proposal_review import GuideProposalAuthorizationPort
-from app.modules.checkers.api.post_submit_catalogue import (
-    CompiledPostSubmitPolicy, current_post_submit_catalogue,
-)
+from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
 from app.modules.projects.api.post_policy import PostPolicyOperationsPort
 
 
@@ -32,7 +32,9 @@ class PostPolicyRequest:
 
     session: AsyncSession
     service: PostPolicyOperationsPort[
-        ActorIdentityFacts, GuideProposalAuthorizationPort, CompiledPostSubmitPolicy,
+        ActorIdentityFacts,
+        GuideProposalAuthorizationPort,
+        LockedExternalPostSubmitPolicy,
     ]
     guide_authorization: GuideProposalAuthorizationPort
     actor: ActorIdentityFacts
@@ -55,10 +57,12 @@ async def get_post_policy_request(
             yield PostPolicyRequest(
                 session,
                 project_post_policy_service(
-                    session, post_policy_authorization(session, context),
-                    current_post_submit_catalogue(),
+                    session,
+                    post_policy_authorization(session, context),
                 ),
-                guide_proposal_authorization(session, context), actor, request_id,
+                guide_proposal_authorization(session, context),
+                actor,
+                request_id,
                 GuideContributionPolicyDiscovery(published_contribution_policy_port(session)),
             )
     finally:

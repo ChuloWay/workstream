@@ -10,6 +10,8 @@ from app.modules.checkers.api.external import (
     POST_SUBMIT_INPUT_SCHEMA_ID,
     PRE_SUBMIT_INPUT_SCHEMA_ID,
     RESULT_SCHEMA_ID,
+    ExternalCheckerCapabilityDefinition,
+    ExternalCheckerCapabilityProjection,
     ExternalCheckerRegistryEntry,
     ExternalCheckerRegistrySpec,
     ExternalCheckerResourceLimits,
@@ -20,6 +22,10 @@ from app.modules.checkers.api.external import (
     PreSubmitExternalCheckerIdentity,
     external_checker_json_hash,
     make_external_checker_registration_request,
+)
+from app.modules.checkers.api.default_checker import (
+    WORKSTREAM_DEFAULT_CHECKER_ID,
+    WORKSTREAM_DEFAULT_CHECKER_VERSION,
 )
 
 SHA = "sha256:" + "a" * 64
@@ -51,9 +57,7 @@ def registry_spec(
         image_digest=SHA,
         configuration_schema=schema("acme.safe_archive.configuration"),
         input_schema=schema(
-            PRE_SUBMIT_INPUT_SCHEMA_ID
-            if phase == "pre_submit"
-            else POST_SUBMIT_INPUT_SCHEMA_ID,
+            PRE_SUBMIT_INPUT_SCHEMA_ID if phase == "pre_submit" else POST_SUBMIT_INPUT_SCHEMA_ID,
             required=("task_version",),
         ),
         output_schema=schema(RESULT_SCHEMA_ID),
@@ -78,6 +82,43 @@ def registry_entry(
         registered_by_actor_profile_id=uuid4(),
         authorization_decision_event_id=uuid4(),
         created_at=datetime.now(timezone.utc),
+    )
+
+
+def capability_projection(
+    *entries: ExternalCheckerRegistryEntry,
+) -> ExternalCheckerCapabilityProjection:
+    """Build the one code-owned default plus exact immutable registry entries."""
+    definitions = tuple(
+        sorted(
+            (
+                ExternalCheckerCapabilityDefinition(
+                    capability_id=WORKSTREAM_DEFAULT_CHECKER_ID,
+                    capability_version=WORKSTREAM_DEFAULT_CHECKER_VERSION,
+                    phase="pre_submit",
+                    selectable=False,
+                ),
+                *(
+                    ExternalCheckerCapabilityDefinition(
+                        capability_id=entry.capability_id,
+                        capability_version=entry.capability_version,
+                        phase=entry.phase,
+                        selectable=True,
+                        registry_entry=entry,
+                    )
+                    for entry in entries
+                ),
+            ),
+            key=lambda item: (item.phase, item.capability_id, item.capability_version),
+        )
+    )
+    body = {
+        "schema_version": "external_checker_capabilities.v1",
+        "definitions": [item.model_dump(mode="json") for item in definitions],
+    }
+    return ExternalCheckerCapabilityProjection(
+        definitions=definitions,
+        manifest_sha256=external_checker_json_hash(body),
     )
 
 

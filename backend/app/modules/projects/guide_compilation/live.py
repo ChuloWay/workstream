@@ -17,8 +17,7 @@ from app.modules.authorization.api import (
     ActorIdentityFacts,
     ProjectGuideCompilationAuthorizationPort,
 )
-from app.modules.checkers.api.pre_submit_catalogue import PreSubmissionCapabilityProjection
-from app.modules.checkers.api.post_submit_catalogue import PostSubmitCatalogue
+from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.projects.api.guide_compilation import (
     ProjectGuideCompilationDelivery,
     ProjectGuideCompilationDeliveryError,
@@ -59,8 +58,7 @@ class LiveGuideCompilationCoordinator:
         session_factory: async_sessionmaker[AsyncSession],
         *,
         material_factory: Callable[[AsyncSession], GuideDocumentManifestPort],
-        pre_capabilities: PreSubmissionCapabilityProjection,
-        post_capabilities: PostSubmitCatalogue,
+        checker_capabilities: ExternalCheckerCapabilityProjection,
         request_authority: RequestAuthority,
         configuration_factory: Callable[[], ProjectGuideRuntimeConfiguration],
         execution: ProjectGuideCompilationExecutionPort,
@@ -69,8 +67,7 @@ class LiveGuideCompilationCoordinator:
     ) -> None:
         self._sessions = session_factory
         self._material = material_factory
-        self._pre = pre_capabilities
-        self._post = post_capabilities
+        self._checker_capabilities = checker_capabilities
         self._request_authority = request_authority
         self._configuration = configuration_factory
         self._execution = execution
@@ -107,8 +104,7 @@ class LiveGuideCompilationCoordinator:
                         authority,
                         request_inputs=CompilationRequestInputs(
                             self._material(session),
-                            self._pre,
-                            self._post,
+                            self._checker_capabilities,
                             configuration,
                         ),
                     ).request_automatic(actor=actor, setup_run_id=delivery.setup_run_id)
@@ -236,7 +232,12 @@ class LiveGuideCompilationCoordinator:
             from .delivery_request import manual_delivery_attempt
 
             manual_attempt = await manual_delivery_attempt(session, setup, attempt)
-            return None, attempt is not None, attempt.runtime_configuration if attempt else None, manual_attempt
+            return (
+                None,
+                attempt is not None,
+                attempt.runtime_configuration if attempt else None,
+                manual_attempt,
+            )
 
     async def _finalize(self, command: ProjectGuideSetupFinalizationCommand) -> dict:
         """Create or replay the existing finalizer's receipt under fresh authority."""

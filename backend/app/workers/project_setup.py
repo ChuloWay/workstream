@@ -18,9 +18,8 @@ from app.adapters.auth import (
     setup_finalization_authorization,
 )
 from app.adapters.projects import project_guide_compilation_delivery_port
-from app.adapters.checkers import project_guide_pre_submission_catalogue
+from app.adapters.checkers import external_checker_capability_projection
 from app.adapters.artifacts import guide_document_manifest_port, guide_document_access_runtime
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.api.guide_compilation import (
     ProjectGuideCompilationDelivery,
     ProjectGuideCompilationDeliveryError,
@@ -32,14 +31,15 @@ PROJECT_GUIDE_COMPILATION_TASK = "workstream.project_setup.compile_project_guide
 logger = get_task_logger(__name__)
 
 
-def _coordinator(session_factory):
+async def _coordinator(session_factory):
     """Compose owner ports and the sole registered runtime at the worker boundary."""
+    async with session_factory() as session, session.begin():
+        capabilities = await external_checker_capability_projection(session)
     return project_guide_compilation_delivery_port(
         session_factory,
         material_factory=guide_document_manifest_port,
         document_access_factory=partial(guide_document_access_runtime, session_factory),
-        pre_capabilities=project_guide_pre_submission_catalogue(),
-        post_capabilities=current_post_submit_catalogue(),
+        checker_capabilities=capabilities,
         request_authority=guide_compilation_request_authority,
         execution_authority=guide_compilation_execution_authority,
         configuration_factory=lambda: project_guide_runtime_configuration(get_settings()),
@@ -84,7 +84,8 @@ async def _run_project_guide_compilation(delivery: ProjectGuideCompilationDelive
     """Own the worker connection lifecycle and return only bounded failures."""
     engine = create_async_engine(get_database_url(), pool_pre_ping=True)
     try:
-        return await _coordinator(async_sessionmaker(engine, expire_on_commit=False)).run(delivery)
+        coordinator = await _coordinator(async_sessionmaker(engine, expire_on_commit=False))
+        return await coordinator.run(delivery)
     except ProjectGuideCompilationDeliveryError:
         return {"status": "delivery_rejected", "error_code": "stale_compilation_delivery"}
     except Exception:

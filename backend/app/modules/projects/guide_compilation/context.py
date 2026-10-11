@@ -17,12 +17,7 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationContext,
     canonical_project_guide_compilation_context_bytes,
 )
-from app.modules.checkers.api.pre_submit_catalogue import (
-    PreSubmissionCapabilityProjection,
-)
-from app.modules.checkers.api.post_submit_catalogue import (
-    PostSubmitCatalogue,
-)
+from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.projects.models import GuideSourceSnapshot, ProjectGuide
 from app.modules.projects.api.task_examples import require_task_example_commitment
 
@@ -36,8 +31,7 @@ async def build_project_guide_compilation_context(
     *,
     state: CompilationExecutionState,
     material: GuideDocumentManifestPort,
-    pre_submission_capabilities: PreSubmissionCapabilityProjection,
-    post_submission_capabilities: PostSubmitCatalogue,
+    checker_capabilities: ExternalCheckerCapabilityProjection,
 ) -> ProjectGuideCompilationContext:
     """Return an immutable context only when every current fact matches custody."""
     if session.in_transaction():
@@ -82,8 +76,7 @@ async def build_project_guide_compilation_context(
             loaded=loaded,
             setup_run_id=identity.setup_run_id,
             setup_generation=identity.setup_generation,
-            pre_submission_capabilities=pre_submission_capabilities,
-            post_submission_capabilities=post_submission_capabilities,
+            checker_capabilities=checker_capabilities,
             runtime_configuration=state.runtime_configuration,
             correction_feedback=await _correction_feedback(session, identity.setup_run_id),
         )
@@ -99,8 +92,7 @@ def compilation_context_from_material(
     loaded,
     setup_run_id,
     setup_generation,
-    pre_submission_capabilities: PreSubmissionCapabilityProjection,
-    post_submission_capabilities: PostSubmitCatalogue,
+    checker_capabilities: ExternalCheckerCapabilityProjection,
     runtime_configuration: ProjectGuideRuntimeConfiguration,
     correction_feedback=None,
 ) -> ProjectGuideCompilationContext:
@@ -133,8 +125,7 @@ def compilation_context_from_material(
         agent_identity=PROJECT_GUIDE_COMPILATION_AGENT_IDENTITY,
         agent_version=PROJECT_GUIDE_COMPILATION_AGENT_VERSION,
         runtime_configuration=runtime_configuration,
-        pre_submission_capabilities=pre_submission_capabilities,
-        post_submission_capabilities=post_submission_capabilities,
+        checker_capabilities=checker_capabilities,
     )
     if (
         len(canonical_project_guide_compilation_context_bytes(context))

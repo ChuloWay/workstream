@@ -7,11 +7,6 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from app.core.hashing import canonical_json_hash
-from app.interfaces.project_agents import (
-    PostSubmissionBindingProposal,
-    ProjectGuideCompilationResult,
-    RequirementDisposition,
-)
 from app.modules.checkers.api.default_checker import (
     WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
     WORKSTREAM_DEFAULT_CHECKER_ID,
@@ -83,12 +78,8 @@ class LockedWorkstreamDefault(_PolicyValue):
 class LockedExternalPreSubmitPolicy(_PolicyValue):
     """One default followed by every required project pre-submit image."""
 
-    schema_version: Literal["external_pre_submit_policy.v1"] = (
-        "external_pre_submit_policy.v1"
-    )
-    workstream_default: LockedWorkstreamDefault = Field(
-        default_factory=LockedWorkstreamDefault
-    )
+    schema_version: Literal["external_pre_submit_policy.v1"] = "external_pre_submit_policy.v1"
+    workstream_default: LockedWorkstreamDefault = Field(default_factory=LockedWorkstreamDefault)
     entries: tuple[LockedExternalCheckerBinding, ...]
     policy_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
@@ -105,9 +96,7 @@ class LockedExternalPreSubmitPolicy(_PolicyValue):
 class LockedExternalPostSubmitPolicy(_PolicyValue):
     """Every required post-submit image; checkers retain no acceptance authority."""
 
-    schema_version: Literal["external_post_submit_policy.v1"] = (
-        "external_post_submit_policy.v1"
-    )
+    schema_version: Literal["external_post_submit_policy.v1"] = "external_post_submit_policy.v1"
     entries: tuple[LockedExternalCheckerBinding, ...]
     policy_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
 
@@ -124,9 +113,7 @@ class LockedExternalPostSubmitPolicy(_PolicyValue):
 class LockedExternalCheckerPolicies(_PolicyValue):
     """Complete approval-time pre/post policy custody for one guide generation."""
 
-    schema_version: Literal["external_checker_policies.v1"] = (
-        "external_checker_policies.v1"
-    )
+    schema_version: Literal["external_checker_policies.v1"] = "external_checker_policies.v1"
     pre_submit: LockedExternalPreSubmitPolicy
     post_submit: LockedExternalPostSubmitPolicy
     policies_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
@@ -158,29 +145,27 @@ def _validate_entries(
 
 
 async def compile_external_checker_policies(
-    result: ProjectGuideCompilationResult,
+    result: object,
     registry: ExternalCheckerRegistryPort,
 ) -> tuple[LockedExternalPreSubmitPolicy, LockedExternalPostSubmitPolicy]:
     """Resolve every supported binding to exact immutable registry custody."""
+    from app.interfaces.project_agents import ProjectGuideCompilationResult
+
     result = ProjectGuideCompilationResult.model_validate(result)
     if result.status == "guide_blocked":
         raise ExternalCheckerPolicyError("checker capability coverage is incomplete")
     requirements = {item.requirement_id: item for item in result.requirements}
     if len(requirements) != len(result.requirements):
         raise ExternalCheckerPolicyError("checker requirements are duplicated")
-    pre = await _resolve(
-        result.pre_submit_bindings, requirements, registry, "pre_submit"
-    )
-    post = await _resolve(
-        result.post_submit_bindings, requirements, registry, "post_submit"
-    )
+    pre = await _resolve(result.pre_submit_bindings, requirements, registry, "pre_submit")
+    post = await _resolve(result.post_submit_bindings, requirements, registry, "post_submit")
     return _make_policy(LockedExternalPreSubmitPolicy, pre), _make_policy(
         LockedExternalPostSubmitPolicy, post
     )
 
 
 async def compile_external_checker_policy_bundle(
-    result: ProjectGuideCompilationResult,
+    result: object,
     registry: ExternalCheckerRegistryPort,
 ) -> LockedExternalCheckerPolicies:
     """Lock both execution phases into one immutable approval-time value."""
@@ -198,6 +183,11 @@ async def compile_external_checker_policy_bundle(
 
 
 async def _resolve(bindings, requirements, registry, phase):
+    from app.interfaces.project_agents import (
+        PostSubmissionBindingProposal,
+        RequirementDisposition,
+    )
+
     expected = (
         RequirementDisposition.SUPPORTED_PRE_SUBMIT
         if phase == "pre_submit"
@@ -205,9 +195,8 @@ async def _resolve(bindings, requirements, registry, phase):
     )
     resolved = []
     for binding in sorted(
-        bindings, key=lambda item: (
-            item.requirement_id, item.capability_id, item.capability_version
-        ),
+        bindings,
+        key=lambda item: (item.requirement_id, item.capability_id, item.capability_version),
     ):
         if (
             requirements.get(binding.requirement_id) is None
@@ -227,10 +216,7 @@ async def _resolve(bindings, requirements, registry, phase):
         ):
             raise ExternalCheckerPolicyError("checker registry identity mismatch")
         configuration = (
-            {
-                parameter.name: parameter.value
-                for parameter in binding.parameters
-            }
+            {parameter.name: parameter.value for parameter in binding.parameters}
             if isinstance(binding, PostSubmissionBindingProposal)
             else {}
         )
@@ -244,9 +230,7 @@ async def _resolve(bindings, requirements, registry, phase):
             )
         )
     expected_ids = {
-        item.requirement_id
-        for item in requirements.values()
-        if item.disposition is expected
+        item.requirement_id for item in requirements.values() if item.disposition is expected
     }
     if {item.requirement_id for item in resolved} != expected_ids:
         raise ExternalCheckerPolicyError("checker requirement coverage is incomplete")
@@ -283,14 +267,11 @@ def selected_pre_submit_execution_budget_ms(
     ):
         raise ExternalCheckerPolicyError("selected PRE execution budget is invalid")
     required = WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS + sum(
-        binding.registry.resources.deadline_ms
-        + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+        binding.registry.resources.deadline_ms + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
         for binding in policy.entries
     )
     if required > artifact_deadline_ms:
-        raise ExternalCheckerPolicyError(
-            "selected PRE execution exceeds ART custody deadline"
-        )
+        raise ExternalCheckerPolicyError("selected PRE execution exceeds ART custody deadline")
     return required
 
 
@@ -301,12 +282,9 @@ def selected_post_submit_execution_budget_ms(
     if type(policy) is not LockedExternalPostSubmitPolicy:
         raise ExternalCheckerPolicyError("selected POST execution budget is invalid")
     required = SELECTED_POST_MATERIALIZATION_BUDGET_MS + sum(
-        binding.registry.resources.deadline_ms
-        + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+        binding.registry.resources.deadline_ms + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
         for binding in policy.entries
     )
     if required > MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS:
-        raise ExternalCheckerPolicyError(
-            "selected POST execution exceeds durable worker deadline"
-        )
+        raise ExternalCheckerPolicyError("selected POST execution exceeds durable worker deadline")
     return required

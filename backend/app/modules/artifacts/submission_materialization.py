@@ -74,6 +74,7 @@ from app.modules.projects.api import ProjectLockedPolicyContextPort
 from app.modules.projects.api import ProjectLockedPolicyContextFacts
 from app.modules.tasks.api import TaskSubmissionContextFacts, TaskSubmissionContextPort
 
+
 @dataclass(frozen=True, slots=True)
 class PreparedBundleMaterializationRequest:
     """ART-private process-local prepared bytes and exact execution facts."""
@@ -161,9 +162,16 @@ class _PreSubmitExternalGrantIssuer:
         checked = ExternalCheckerExecutionRequest.model_validate(request)
         identity = checked.identity
         source = self._request
+        project_id = (
+            source.selected_reservation.project_id
+            if source.selected_reservation is not None
+            else source.effective_plan.lineage.project_id
+            if source.effective_plan is not None
+            else None
+        )
         if (
             not isinstance(identity, PreSubmitExternalCheckerIdentity)
-            or identity.project_id != source.effective_plan.lineage.project_id
+            or identity.project_id != project_id
             or identity.task_id != source.task_id
             or identity.assignment_id != source.assignment_id
             or identity.prepared_generation_id != source.prepared_artifact.generation_id
@@ -224,7 +232,10 @@ class PreSubmissionEvaluationPort(Protocol):
     """Finish ART's committed selection through the composed checker phase service."""
 
     async def evaluate_pre_submission(
-        self, request: PreparedBundleMaterializationRequest, reservation: object, *,
+        self,
+        request: PreparedBundleMaterializationRequest,
+        reservation: object,
+        *,
         preparation_request: SubmissionBundlePreparationRequest,
     ) -> PreSubmitEvidencePersistenceResult: ...
 
@@ -234,9 +245,7 @@ class PreSubmitCheckerProcessor(Protocol):
 
     def abort(self) -> None: ...
 
-    async def process(
-        self, reader: object, workspace: object
-    ) -> PreSubmissionExecutionFacts: ...
+    async def process(self, reader: object, workspace: object) -> PreSubmissionExecutionFacts: ...
 
 
 class PreSubmitCheckerExecutionFactory(Protocol):
@@ -467,14 +476,11 @@ class PreparedBundleMaterializationService:
             or request.task_id != reservation.task_id
             or request.assignment_id != reservation.assignment_id
             or request.selected_reservation != reservation
-            or request.prepared_artifact.generation_id
-            != reservation.prepared_generation_id
+            or request.prepared_artifact.generation_id != reservation.prepared_generation_id
             or request.external_policy is None
             or request.external_policy.policy_sha256 != reservation.policy_sha256
             or request.default_checker_input is None
-            or canonical_json_hash(
-                workstream_default_input_body(request.default_checker_input)
-            )
+            or canonical_json_hash(workstream_default_input_body(request.default_checker_input))
             != reservation.default_input_sha256
             or commitment.sha256 != reservation.archive_sha256
             or commitment.byte_count != reservation.archive_byte_count
@@ -527,7 +533,11 @@ class PreparedBundleMaterializationService:
         )
 
     async def authorize_original_replay(
-        self, request: PreparedBundleMaterializationRequest, *, generation_id: UUID, key: UUID,
+        self,
+        request: PreparedBundleMaterializationRequest,
+        *,
+        generation_id: UUID,
+        key: UUID,
     ) -> None:
         """Check original stored service facts; this grants no retry-byte capability."""
         facts = replace(self._authority_facts(request), prepared_generation_id=generation_id)
@@ -585,8 +595,7 @@ class PreparedBundleMaterializationService:
             or references.effective_policy_id != project.effective_policy_id
             or references.effective_policy_hash != project.effective_policy_hash
             or references.pre_submit_policy_id != project.pre_submit_policy_id
-            or references.pre_submit_policy_bundle_hash
-            != project.pre_submit_policy_bundle_hash
+            or references.pre_submit_policy_bundle_hash != project.pre_submit_policy_bundle_hash
             or external_policy.policy_sha256
             != canonical_json_hash(
                 external_policy.model_dump(mode="json", exclude={"policy_sha256"})
@@ -675,12 +684,10 @@ class PreparedBundleMaterializationService:
                 or external_policy is None
                 or task_id != selected_reservation.task_id
                 or assignment_id != selected_reservation.assignment_id
-                or prepared_artifact.generation_id
-                != selected_reservation.prepared_generation_id
+                or prepared_artifact.generation_id != selected_reservation.prepared_generation_id
                 or submission_artifact_policy_id != lineage.effective_policy_id
                 or checker_policy_id != lineage.pre_submit_policy_id
-                or external_policy.policy_sha256
-                != selected_reservation.policy_sha256
+                or external_policy.policy_sha256 != selected_reservation.policy_sha256
                 or commitment.sha256 != selected_reservation.archive_sha256
                 or commitment.byte_count != selected_reservation.archive_byte_count
             ):
@@ -701,9 +708,7 @@ class PreparedBundleMaterializationService:
                 checker_policy_hash=lineage.pre_submit_policy_sha256,
                 prepared_generation_id=prepared_artifact.generation_id,
                 plan_sha256=selected_reservation.policy_sha256,
-                catalogue_manifest_sha256=(
-                    selected_reservation.default_behavior_sha256
-                ),
+                catalogue_manifest_sha256=(selected_reservation.default_behavior_sha256),
                 archive_sha256=commitment.sha256,
                 archive_byte_count=commitment.byte_count,
                 storage_scheme=self._storage_scheme,
@@ -736,9 +741,7 @@ class PreparedBundleMaterializationService:
             or external_policy.workstream_default.behavior_sha256
             != WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
         ):
-            raise PreSubmissionInfrastructureUnavailableError(
-                "external_pre_submit_policy_invalid"
-            )
+            raise PreSubmissionInfrastructureUnavailableError("external_pre_submit_policy_invalid")
         commitment = prepared_artifact.commitment
         return PreSubmitMaterializationPreparationFacts(
             task_id=task_id,
@@ -784,7 +787,8 @@ class PreparedBundlePreSubmitEvidenceService:
     def _evidence_service(self) -> PreSubmitEvidenceService:
         """Use the sole evidence owner for both lineage reads and completion."""
         return PreSubmitEvidenceService(
-            self._session, task_contexts=self._task_contexts,
+            self._session,
+            task_contexts=self._task_contexts,
             project_contexts=self._project_contexts,
         )
 
@@ -804,16 +808,20 @@ class PreparedBundlePreSubmitEvidenceService:
         return PreSubmitEvidenceInput(
             actor_profile_id=preparation_request.actor.actor_profile_id,
             identity_link_id=preparation_request.actor.identity_link_id,
-            task_id=request.task_id, assignment_id=request.assignment_id,
+            task_id=request.task_id,
+            assignment_id=request.assignment_id,
             predecessor_submission_id=preparation_request.predecessor_submission_id,
             expected_predecessor_submission_version=request.predecessor_submission_version,
             prepared_generation_id=request.prepared_artifact.generation_id,
-            archive_sha256=commitment.sha256, archive_byte_count=commitment.byte_count,
-            semantic_manifest_sha256=request.manifest.sha256, plan=request.effective_plan,
+            archive_sha256=commitment.sha256,
+            archive_byte_count=commitment.byte_count,
+            semantic_manifest_sha256=request.manifest.sha256,
+            plan=request.effective_plan,
         )
 
     async def _lock_authorized_context(
-        self, request: PreparedBundleMaterializationRequest,
+        self,
+        request: PreparedBundleMaterializationRequest,
         preparation_request: SubmissionBundlePreparationRequest,
     ) -> PreSubmitEvidenceContext:
         """Match TASK, AUTH role issuance and revocation without reversing their locks."""
@@ -822,35 +830,47 @@ class PreparedBundlePreSubmitEvidenceService:
         task_context = await evidence.lock_task_context(values)
         await self._preparation_authorization.lock_actor(request=preparation_request)
         context = await evidence.lock_project_context(
-            values, task_context=task_context,
+            values,
+            task_context=task_context,
             storage_scheme=self._materialization._storage_scheme,
         )
         await self._preparation_authorization.revalidate(request=preparation_request)
         return context
 
     async def reserve(
-        self, request: PreparedBundleMaterializationRequest, *,
+        self,
+        request: PreparedBundleMaterializationRequest,
+        *,
         preparation_request: SubmissionBundlePreparationRequest,
     ) -> object:
         """Consume inspected authority and reserve; the caller must commit before execution."""
         context = await self._lock_authorized_context(request, preparation_request)
         await self._materialization.authorize_inspected(request)
         selected = await self._attempts.reserve(
-            context=context, plan=request.effective_plan, packet=request.packet,
-            idempotency_key=preparation_request.idempotency_key, request=request,
+            context=context,
+            plan=request.effective_plan,
+            packet=request.packet,
+            idempotency_key=preparation_request.idempotency_key,
+            request=request,
         )
         if isinstance(selected, PreSubmitExecutionAttempt):
             await self._materialization.authorize_original_replay(
-                request, generation_id=UUID(selected.prepared_generation_id),
+                request,
+                generation_id=UUID(selected.prepared_generation_id),
                 key=preparation_request.idempotency_key,
             )
             return await self._attempts.read_completed(
-                row=selected, context=context, plan=request.effective_plan,
+                row=selected,
+                context=context,
+                plan=request.effective_plan,
             )
         return selected
 
     async def execute_reserved(
-        self, request: PreparedBundleMaterializationRequest, reservation: object, *,
+        self,
+        request: PreparedBundleMaterializationRequest,
+        reservation: object,
+        *,
         preparation_request: SubmissionBundlePreparationRequest,
     ) -> PreSubmitEvidencePersistenceResult:
         """Run a committed winning claim, then atomically persist its canonical evidence."""
@@ -861,7 +881,8 @@ class PreparedBundlePreSubmitEvidenceService:
         async with self._session.begin():
             await self._lock_authorized_context(request, preparation_request)
             handle = await self._materialization.prepare_authorization(
-                task_id=request.task_id, assignment_id=request.assignment_id,
+                task_id=request.task_id,
+                assignment_id=request.assignment_id,
                 submission_artifact_policy_id=request.submission_artifact_policy_id,
                 checker_policy_id=request.checker_policy_id,
                 prepared_artifact=request.prepared_artifact,
@@ -871,17 +892,23 @@ class PreparedBundlePreSubmitEvidenceService:
             )
             authorized_request = replace(request, prepared_authorization=handle)
             await self._materialization.authorize_prepared_bundle(
-                authorized_request, claim=claim,
+                authorized_request,
+                claim=claim,
             )
         assert authorized_request is not None
         execution = await self._materialization.materialize_prepared_bundle(
-            replace(authorized_request, prepared_authorization=None), claim=claim,
+            replace(authorized_request, prepared_authorization=None),
+            claim=claim,
         )
         async with self._session.begin():
             await self._session.execute(text("set transaction isolation level read committed"))
             values = self._input(request, preparation_request)
             await self._lock_authorized_context(request, preparation_request)
-            return await self._evidence_service().persist(PreSubmitEvidencePersistenceRequest(
-                **{name: getattr(values, name) for name in values.__dataclass_fields__},
-                execution=execution, attempt=claim, manifest=request.manifest,
-            ))
+            return await self._evidence_service().persist(
+                PreSubmitEvidencePersistenceRequest(
+                    **{name: getattr(values, name) for name in values.__dataclass_fields__},
+                    execution=execution,
+                    attempt=claim,
+                    manifest=request.manifest,
+                )
+            )

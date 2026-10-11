@@ -6,7 +6,6 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from app.core.identifiers import new_record_id
 
 from app.modules.authorization.api import ActorKind
-from app.modules.checkers.api.pre_submit import EffectivePreSubmissionPlanLineage
 from app.modules.checkers.api.external_policy import LockedExternalCheckerPolicies
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
 from app.modules.projects.api.guide_activation import (
@@ -19,7 +18,6 @@ from app.modules.projects.api.guide_activation import (
 )
 from app.modules.projects.api.guide_proposals import GuideProposalError
 from app.modules.projects.api.post_policy import PostPolicySelection
-from app.modules.projects.guide_compilation.proposal_approval import require_catalogues
 from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 from app.modules.projects.guide_mutation_repository import GuideMutationRepository
 from app.modules.projects.post_policy.repository import PostPolicyRepository
@@ -41,17 +39,16 @@ class GuideActivationService:
     """AUTH-12H supplies live manager authority; composition without it denies."""
 
     def __init__(
-        self, session, *, contribution, planner, pre_catalogue, post_catalogue,
-        authorization=None, registry: ExternalCheckerRegistryPort | None = None,
+        self,
+        session,
+        *,
+        contribution,
+        authorization=None,
+        registry: ExternalCheckerRegistryPort | None = None,
     ):
         self.session = session
         self.authorization = authorization
         self.contribution = contribution
-        self.planner, self.pre_catalogue, self.post_catalogue = (
-            planner,
-            pre_catalogue,
-            post_catalogue,
-        )
         self.projects = ProjectRepository(session)
         self.replay = GuideMutationRepository(session)
         self.post = PostPolicyRepository(session)
@@ -154,9 +151,7 @@ class GuideActivationService:
                         GuideActivationBlocked,
                         persisted_items=source_items,
                     )
-                    await self._readiness(
-                        command, locked, policy, post_custody, review, revision
-                    )
+                    await self._readiness(command, locked, policy, post_custody, review, revision)
                 except ProjectServiceError:
                     raise GuideProposalError("approval_blocked") from None
                 try:
@@ -225,31 +220,27 @@ class GuideActivationService:
             return receipt
 
     async def _readiness(self, command, locked, policy, post, review, revision):
-        target, approval = command.target.proposal, locked.view.approval_custody
+        approval = locked.view.approval_custody
         external = (
             approval.operation.effective_pre_submit_plan.get("schema_version")
             == "external_checker_policies.v1"
         )
-        if external:
-            if self.registry is None:
-                raise GuideProposalError("approval_blocked")
-            policies = LockedExternalCheckerPolicies.model_validate(
-                approval.operation.effective_pre_submit_plan
+        if not external or self.registry is None:
+            raise GuideProposalError("approval_blocked")
+        policies = LockedExternalCheckerPolicies.model_validate(
+            approval.operation.effective_pre_submit_plan
+        )
+        if policies.pre_submit.model_dump(mode="json") != approval.pre.compiled_bundle:
+            raise GuideProposalError("approval_blocked")
+        for binding in (*policies.pre_submit.entries, *policies.post_submit.entries):
+            current = await self.registry.read_exact(
+                binding.registry.registry_entry_id,
+                binding.registry.entry_digest,
             )
-            if policies.pre_submit.model_dump(mode="json") != approval.pre.compiled_bundle:
+            if current != binding.registry:
                 raise GuideProposalError("approval_blocked")
-            for binding in (*policies.pre_submit.entries, *policies.post_submit.entries):
-                current = await self.registry.read_exact(
-                    binding.registry.registry_entry_id,
-                    binding.registry.entry_digest,
-                )
-                if current != binding.registry:
-                    raise GuideProposalError("approval_blocked")
-            if locked.result.capability_suggestions:
-                raise GuideProposalError("approval_blocked")
-        else:
-            require_catalogues(target, self.pre_catalogue, self.post_catalogue)
-            post.compiled.validate_catalogue(self.post_catalogue)
+        if locked.result.capability_suggestions:
+            raise GuideProposalError("approval_blocked")
         ProjectService(self.session).validate_activation_ready(
             locked.view.guide,
             locked.view.snapshot,
@@ -263,26 +254,3 @@ class GuideActivationService:
             approval_custody=approval,
             post_policy_custody=post,
         )
-        if external:
-            return
-        upstream = command.target.upstream
-        plan = self.planner.compile_effective_plan(
-            lineage=EffectivePreSubmissionPlanLineage(
-                project_id=target.project_id,
-                guide_id=target.guide_id,
-                guide_version=target.guide_version,
-                source_snapshot_id=target.source_snapshot_id,
-                source_snapshot_hash=target.source_snapshot_hash,
-                effective_policy_id=upstream.effective_policy_id,
-                effective_policy_hash=upstream.effective_policy_hash,
-                pre_submit_policy_id=upstream.pre_submit_policy_id,
-                pre_submit_policy_bundle_hash=upstream.pre_submit_bundle_hash,
-            ),
-            effective_policy=approval.effective.effective_policy,
-            compiled_bundle=approval.pre.compiled_bundle,
-        )
-        if (
-            plan.plan_sha256 != upstream.effective_pre_submit_plan_hash
-            or plan.catalogue_manifest_sha256 != target.pre_catalogue_manifest_hash
-        ):
-            raise GuideProposalError("approval_blocked")

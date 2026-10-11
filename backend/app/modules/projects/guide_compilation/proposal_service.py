@@ -30,9 +30,7 @@ from app.modules.projects.api.guide_proposals import (
     GuideProposalCorrectionReceipt,
 )
 from app.modules.projects.api.guide_documents import GuideDocumentManifestPort
-from app.modules.checkers.api.pre_submit_catalogue import PreSubmissionCapabilityProjection
-from app.modules.checkers.api.post_submit_catalogue import PostSubmitCatalogue
-from app.modules.checkers.api.policy_compilation import PreSubmissionPolicyCompilationPort
+from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
 from app.modules.projects.api.guide_proposal_package import GuideProposalReviewPackage
 
@@ -104,9 +102,7 @@ class GuideProposalService:
         actor: ActorIdentityFacts,
         request_id: UUID,
         material: GuideDocumentManifestPort,
-        pre_capabilities: PreSubmissionCapabilityProjection,
-        post_capabilities: PostSubmitCatalogue,
-        planner: PreSubmissionPolicyCompilationPort,
+        capabilities: ExternalCheckerCapabilityProjection,
     ) -> GuideProposalApprovalReceipt:
         """Approve through the sole approval owner, without committing or invoking a model."""
         from .proposal_approval import approve_proposal
@@ -122,9 +118,7 @@ class GuideProposalService:
                 actor=actor,
                 request_id=request_id,
                 material=material,
-                pre_capabilities=pre_capabilities,
-                post_capabilities=post_capabilities,
-                planner=planner,
+                capabilities=capabilities,
                 registry=self.registry,
             )
 

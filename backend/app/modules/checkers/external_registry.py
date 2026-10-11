@@ -90,9 +90,7 @@ class ExternalCheckerRegistryRepository:
                 {"scope": value},
             )
 
-    async def by_operation(
-        self, operation_id: UUID
-    ) -> ExternalCheckerRegistryEntryRecord | None:
+    async def by_operation(self, operation_id: UUID) -> ExternalCheckerRegistryEntryRecord | None:
         """Read the row reserved by one idempotent registration operation."""
         return await self._session.scalar(
             select(ExternalCheckerRegistryEntryRecord).where(
@@ -122,6 +120,18 @@ class ExternalCheckerRegistryRepository:
             populate_existing=True,
         )
 
+    async def all_entries(self) -> tuple[ExternalCheckerRegistryEntryRecord, ...]:
+        """Read the complete immutable inventory in one deterministic order."""
+        return tuple(
+            await self._session.scalars(
+                select(ExternalCheckerRegistryEntryRecord).order_by(
+                    ExternalCheckerRegistryEntryRecord.phase,
+                    ExternalCheckerRegistryEntryRecord.capability_id,
+                    ExternalCheckerRegistryEntryRecord.capability_version,
+                )
+            )
+        )
+
     async def add(self, row: ExternalCheckerRegistryEntryRecord) -> None:
         """Flush and refresh one row without committing the caller transaction."""
         self._session.add(row)
@@ -143,23 +153,17 @@ class ExternalCheckerRegistryReader:
             or not transaction.is_active
             or self._session.in_nested_transaction()
         ):
-            raise ExternalCheckerRegistryUnavailable(
-                "external_checker_registry_unavailable"
-            )
+            raise ExternalCheckerRegistryUnavailable("external_checker_registry_unavailable")
 
     async def read_exact(
         self, registry_entry_id: UUID, entry_digest: str
     ) -> ExternalCheckerRegistryEntry:
         self._require_root_transaction()
         if type(registry_entry_id) is not UUID or type(entry_digest) is not str:
-            raise ExternalCheckerRegistryUnavailable(
-                "external_checker_registry_unavailable"
-            )
+            raise ExternalCheckerRegistryUnavailable("external_checker_registry_unavailable")
         row = await self._repository.by_exact_id(registry_entry_id)
         if row is None or row.entry_digest != entry_digest:
-            raise ExternalCheckerRegistryUnavailable(
-                "external_checker_registry_unavailable"
-            )
+            raise ExternalCheckerRegistryUnavailable("external_checker_registry_unavailable")
         return _row_entry(row)
 
     async def read_identity(
@@ -171,19 +175,20 @@ class ExternalCheckerRegistryReader:
             or type(capability_version) is not str
             or phase not in {"pre_submit", "post_submit"}
         ):
-            raise ExternalCheckerRegistryUnavailable(
-                "external_checker_registry_unavailable"
-            )
+            raise ExternalCheckerRegistryUnavailable("external_checker_registry_unavailable")
         row = await self._repository.by_identity(
             capability_id=capability_id,
             capability_version=capability_version,
             phase=phase,
         )
         if row is None:
-            raise ExternalCheckerRegistryUnavailable(
-                "external_checker_registry_unavailable"
-            )
+            raise ExternalCheckerRegistryUnavailable("external_checker_registry_unavailable")
         return _row_entry(row)
+
+    async def list_entries(self) -> tuple[ExternalCheckerRegistryEntry, ...]:
+        """Expose every immutable capability to a new compilation attempt."""
+        self._require_root_transaction()
+        return tuple(_row_entry(row) for row in await self._repository.all_entries())
 
 
 class ExternalCheckerRegistryService:
@@ -207,9 +212,7 @@ class ExternalCheckerRegistryService:
             or not transaction.is_active
             or self._session.in_nested_transaction()
         ):
-            raise ExternalCheckerRegistryUnavailable(
-                "external_checker_registry_unavailable"
-            )
+            raise ExternalCheckerRegistryUnavailable("external_checker_registry_unavailable")
 
     async def register(
         self, request: ExternalCheckerRegistrationRequest
@@ -233,9 +236,7 @@ class ExternalCheckerRegistryService:
                 "external_checker_registry_unavailable"
             ) from exc
         if authority.actor_profile_id != request.actor_profile_id:
-            raise ExternalCheckerRegistryUnavailable(
-                "external_checker_registry_unavailable"
-            )
+            raise ExternalCheckerRegistryUnavailable("external_checker_registry_unavailable")
         await self._repository.lock_registration_scopes(
             request.operation_id,
             capability_id=request.spec.capability_id,
@@ -245,15 +246,16 @@ class ExternalCheckerRegistryService:
         replay = await self._repository.by_operation(request.operation_id)
         if replay is not None:
             if not self._matches_request(replay, request):
-                raise ExternalCheckerRegistryConflict(
-                    "external_checker_registry_conflict"
-                )
+                raise ExternalCheckerRegistryConflict("external_checker_registry_conflict")
             return _row_entry(replay)
-        if await self._repository.by_identity(
-            capability_id=request.spec.capability_id,
-            capability_version=request.spec.capability_version,
-            phase=request.spec.phase,
-        ) is not None:
+        if (
+            await self._repository.by_identity(
+                capability_id=request.spec.capability_id,
+                capability_version=request.spec.capability_version,
+                phase=request.spec.phase,
+            )
+            is not None
+        ):
             raise ExternalCheckerRegistryConflict("external_checker_registry_conflict")
         spec = request.spec
         values = {
@@ -270,9 +272,7 @@ class ExternalCheckerRegistryService:
             **spec.resources.model_dump(),
             "entry_digest": spec.spec_digest,
             "registered_by_actor_profile_id": str(request.actor_profile_id),
-            "authorization_decision_event_id": str(
-                authority.authorization_decision_event_id
-            ),
+            "authorization_decision_event_id": str(authority.authorization_decision_event_id),
         }
         row = ExternalCheckerRegistryEntryRecord(**values)
         await self._repository.add(row)
@@ -295,6 +295,10 @@ class ExternalCheckerRegistryService:
             capability_version=capability_version,
             phase=phase,
         )
+
+    async def list_entries(self) -> tuple[ExternalCheckerRegistryEntry, ...]:
+        """Expose the complete immutable capability inventory."""
+        return await ExternalCheckerRegistryReader(self._session).list_entries()
 
     @staticmethod
     def _matches_request(

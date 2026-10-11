@@ -24,8 +24,10 @@ from app.modules.tasks.service import TaskService
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api import TaskAuthorizationPort, TaskTransitionAuditPort
 from app.modules.tasks.submission_participants import (
-    SubmissionArtifactAdmissionRequest, SubmissionArtifactAdmissionResult,
-    SubmissionArtifactReplayRequest, SubmissionArtifactBindingFacts,
+    SubmissionArtifactAdmissionRequest,
+    SubmissionArtifactAdmissionResult,
+    SubmissionArtifactReplayRequest,
+    SubmissionArtifactBindingFacts,
 )
 from app.modules.artifacts.api.submission_admission import ConsumedSubmissionAdmissionRequest
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
@@ -39,6 +41,7 @@ from app.modules.checkers.api.selected_pre_submit import SelectedPreSubmitReserv
 def evaluation_task_guard(session: AsyncSession) -> EvaluationTaskGuard:
     """Expose TASK-owned locking through the required CHECKERS consumer port."""
     from app.modules.tasks.post_submit_routing.evaluation_guard import TaskEvaluationGuard
+
     return TaskEvaluationGuard(session)
 
 
@@ -79,8 +82,7 @@ class _SelectedPreSubmitTaskGuard:
             or references.effective_policy_id != lineage.effective_policy_id
             or references.effective_policy_hash != lineage.effective_policy_sha256
             or references.pre_submit_policy_id != lineage.pre_submit_policy_id
-            or references.pre_submit_policy_bundle_hash
-            != lineage.pre_submit_policy_sha256
+            or references.pre_submit_policy_bundle_hash != lineage.pre_submit_policy_sha256
         ):
             raise RuntimeError("selected PRE TASK custody changed")
 
@@ -98,13 +100,18 @@ class TransactionalAssignmentInvalidationHandler:
         self._observer, self._authorization = observer, authorization_factory
 
     async def __call__(self, envelope):
-        from app.adapters.audit import assignment_invalidation_audit, committed_authority_invalidation
+        from app.adapters.audit import (
+            assignment_invalidation_audit,
+            committed_authority_invalidation,
+        )
         from app.adapters.outbox import outbox_invocation_fence
 
         try:
             async with self._sessions() as session, session.begin():
                 outcome = await AssignmentInvalidationOperation(
-                    session, observer=self._observer, fence=outbox_invocation_fence(session),
+                    session,
+                    observer=self._observer,
+                    fence=outbox_invocation_fence(session),
                     causes=committed_authority_invalidation(self._sessions),
                     authorization=self._authorization(session),
                     audit=assignment_invalidation_audit(session),
@@ -126,28 +133,32 @@ __all__ = (
 
 
 def task_service(session: AsyncSession, *, settings: Settings) -> TaskService:
-    """Compose exact PROJECTS custody and installed CHECKERS at the existing TASK root."""
+    """Compose exact PROJECTS custody at the existing TASK transaction root."""
     from app.adapters.projects import project_locked_policy_context_port
-    from app.adapters.checkers import project_guide_approval_compiler, installed_post_submit_catalogue
 
-    planner, _, _ = project_guide_approval_compiler(
-        disabled_checker_ids=settings.artifact_pre_submission_checker_disabled_ids,
-    )
     return TaskService(
-        session, project_contexts=project_locked_policy_context_port(session),
-        pre_submit_planner=planner, post_submit_catalogue=installed_post_submit_catalogue,
+        session,
+        project_contexts=project_locked_policy_context_port(session),
     )
 
 
 def task_commands(
-    session: AsyncSession, *, authorization: TaskAuthorizationPort,
-    audit: TaskTransitionAuditPort, actor_profile_id: UUID, settings: Settings,
+    session: AsyncSession,
+    *,
+    authorization: TaskAuthorizationPort,
+    audit: TaskTransitionAuditPort,
+    actor_profile_id: UUID,
+    settings: Settings,
 ) -> AuthorizedTaskCommands:
     """Compose TASK commands without exposing private product imports to delivery."""
     from app.adapters.artifacts import task_guide_documents_port
     from app.adapters.contributions import locked_compensation_terms_port
+
     return AuthorizedTaskCommands(
-        session, authorization=authorization, audit=audit, actor_profile_id=actor_profile_id,
+        session,
+        authorization=authorization,
+        audit=audit,
+        actor_profile_id=actor_profile_id,
         contexts=task_service(session, settings=settings),
         guide_documents=task_guide_documents_port(session, settings),
         compensation_terms=locked_compensation_terms_port(session),
@@ -155,16 +166,30 @@ def task_commands(
 
 
 def task_import_batch_commands(
-    session: AsyncSession, *, authorization, audit: TaskTransitionAuditPort,
-    actor_profile_id: UUID, identity_link_id: UUID, settings: Settings, source,
+    session: AsyncSession,
+    *,
+    authorization,
+    audit: TaskTransitionAuditPort,
+    actor_profile_id: UUID,
+    identity_link_id: UUID,
+    settings: Settings,
+    source,
 ):
     """Compose the batch root from canonical TASK commands and one ART source owner."""
     from app.modules.tasks.task_import_batches import TaskImportBatchCommands
+
     return TaskImportBatchCommands(
-        session, actor_profile_id=actor_profile_id, identity_link_id=identity_link_id,
+        session,
+        actor_profile_id=actor_profile_id,
+        identity_link_id=identity_link_id,
         authorization=authorization,
-        tasks=task_commands(session, authorization=authorization, audit=audit,
-                            actor_profile_id=actor_profile_id, settings=settings),
+        tasks=task_commands(
+            session,
+            authorization=authorization,
+            audit=audit,
+            actor_profile_id=actor_profile_id,
+            settings=settings,
+        ),
         source=source,
     )
 
@@ -172,17 +197,25 @@ def task_import_batch_commands(
 def contributor_task_repository(session: AsyncSession) -> TaskRepository:
     """Compose contributor reads with CON's bounded locked-terms public port."""
     from app.adapters.contributions import locked_compensation_terms_port
+
     return TaskRepository(session, compensation_terms=locked_compensation_terms_port(session))
 
 
 def task_batch_transition_commands(
-    session: AsyncSession, *, tasks: AuthorizedTaskCommands,
-    actor_profile_id: UUID, identity_link_id: UUID,
+    session: AsyncSession,
+    *,
+    tasks: AuthorizedTaskCommands,
+    actor_profile_id: UUID,
+    identity_link_id: UUID,
 ):
     """Bind the batch root to the same canonical Task authority and participants."""
     from app.modules.tasks.task_batch_transitions import TaskBatchTransitionCommands
+
     return TaskBatchTransitionCommands(
-        session, tasks=tasks, actor_profile_id=actor_profile_id, identity_link_id=identity_link_id,
+        session,
+        tasks=tasks,
+        actor_profile_id=actor_profile_id,
+        identity_link_id=identity_link_id,
     )
 
 
@@ -207,63 +240,68 @@ class _ArtifactAdmissionAdapter:
                 packet_sha256=request.packet.sha256,
             )
         )
-        if (result.binding_id is None or result.status != "consumed"
-                or result.material is None or result.binding_decision_id is None):
+        if (
+            result.binding_id is None
+            or result.status != "consumed"
+            or result.material is None
+            or result.binding_decision_id is None
+        ):
             raise RuntimeError("admission did not produce a binding")
-        from app.adapters.checkers import (
-            selected_submission_evaluation_content,
-            submission_evaluation_content,
-        )
+        from app.adapters.checkers import selected_submission_evaluation_content
         from app.modules.checkers.api.external_policy import (
             LockedExternalPostSubmitPolicy,
         )
+
         selected_post_policy = (
-            LockedExternalPostSubmitPolicy.model_validate(
-                result.selected_post_submit_policy_body
-            )
+            LockedExternalPostSubmitPolicy.model_validate(result.selected_post_submit_policy_body)
             if result.selected_post_submit_policy_body is not None
             else None
         )
+        if selected_post_policy is None:
+            raise RuntimeError("legacy checker admission cannot create a submission")
         return SubmissionArtifactAdmissionResult(
-            binding_id=result.binding_id, content_id=result.content_id,
+            binding_id=result.binding_id,
+            content_id=result.content_id,
             binding_decision_id=result.binding_decision_id,
             archive_sha256=result.material.archive_sha256,
             byte_count=result.material.archive_byte_count,
-            evaluation_content=(
-                submission_evaluation_content(
-                    request.task_context,
-                    request.project_context,
-                    request.packet,
-                    result.material.files,
-                    result.material.archive_sha256,
-                )
-                if selected_post_policy is None
-                else None
-            ),
+            evaluation_content=None,
             selected_post_submit_policy=selected_post_policy,
             selected_evaluation_content=(
-                selected_submission_evaluation_content(
-                    request.task_context, selected_post_policy
-                )
+                selected_submission_evaluation_content(request.task_context, selected_post_policy)
                 if selected_post_policy is not None
                 else None
             ),
         )
 
-    async def read_consumed(self, request: SubmissionArtifactReplayRequest) -> SubmissionArtifactBindingFacts:
-        result = await self._admissions.read_consumed(ConsumedSubmissionAdmissionRequest(
-            admission_id=request.admission_id, project_id=request.project_id,
-            task_id=request.task_id, assignment_id=request.assignment_id,
-            contributor_id=request.contributor_id, submission_id=request.submission_id,
-            submission_version=request.submission_version, packet_sha256=request.packet_sha256,
-        ))
-        if (result.binding_id is None or result.material is None
-                or result.binding_decision_id is None or result.status != "consumed"):
+    async def read_consumed(
+        self, request: SubmissionArtifactReplayRequest
+    ) -> SubmissionArtifactBindingFacts:
+        result = await self._admissions.read_consumed(
+            ConsumedSubmissionAdmissionRequest(
+                admission_id=request.admission_id,
+                project_id=request.project_id,
+                task_id=request.task_id,
+                assignment_id=request.assignment_id,
+                contributor_id=request.contributor_id,
+                submission_id=request.submission_id,
+                submission_version=request.submission_version,
+                packet_sha256=request.packet_sha256,
+            )
+        )
+        if (
+            result.binding_id is None
+            or result.material is None
+            or result.binding_decision_id is None
+            or result.status != "consumed"
+        ):
             raise RuntimeError("retained admission custody unavailable")
         return SubmissionArtifactBindingFacts(
-            binding_id=result.binding_id, content_id=result.content_id,
+            binding_id=result.binding_id,
+            content_id=result.content_id,
             binding_decision_id=result.binding_decision_id,
-            archive_sha256=result.material.archive_sha256, byte_count=result.material.archive_byte_count,
+            archive_sha256=result.material.archive_sha256,
+            byte_count=result.material.archive_byte_count,
         )
 
 
@@ -308,12 +346,14 @@ def assignment_invalidation_targets(session: AsyncSession):
 def submission_history_repository(session) -> SubmissionHistoryReadPort:
     """Compose TASK-owned immutable history selectors and projections."""
     from app.modules.tasks.submission_history import SubmissionHistoryRepository
+
     return SubmissionHistoryRepository(session)
 
 
 def submitted_bundle_port(session: AsyncSession) -> SubmittedBundlePort:
     """Compose the exact immutable Submission read without private owner imports in ART."""
     from app.modules.tasks.submitted_bundle import SubmittedBundleReader
+
     return SubmittedBundleReader(session)
 
 
@@ -324,12 +364,15 @@ def routing_source_preparer(session):
     from app.modules.tasks.post_submit_routing.source import TaskRoutingSourcePreparer
 
     return TaskRoutingSourcePreparer(
-        session, evaluations=evaluation_coordinator(session),
+        session,
+        evaluations=evaluation_coordinator(session),
         projects=project_locked_policy_context_port(session),
     )
 
 
-def validate_submission_policy_context(task_context: TaskSubmissionContextFacts, project_context: ProjectLockedPolicyContextFacts) -> None:
+def validate_submission_policy_context(
+    task_context: TaskSubmissionContextFacts, project_context: ProjectLockedPolicyContextFacts
+) -> None:
     """Use TASK's canonical stamp projection without exposing its implementation."""
     TaskService.validate_submission_policy_context(task_context, project_context)
 
@@ -363,8 +406,10 @@ def evaluation_request_handler(*, sessions, materialization):
         )
 
     return EvaluationRequestHandler(
-        sessions, observer=committed_invocation_reader(sessions),
-        evaluations=evaluation_coordinator, executor=executor,
+        sessions,
+        observer=committed_invocation_reader(sessions),
+        evaluations=evaluation_coordinator,
+        executor=executor,
     )
 
 
@@ -408,7 +453,8 @@ def evaluation_completion_handler(*, sessions):
     from app.modules.tasks.evaluation_completion_delivery import EvaluationCompletionHandler
 
     return EvaluationCompletionHandler(
-        sessions, observer=committed_invocation_reader(sessions),
+        sessions,
+        observer=committed_invocation_reader(sessions),
         outcomes=lambda session: task_post_submit_outcome(session, sessions),
     )
 

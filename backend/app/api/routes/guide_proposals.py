@@ -7,18 +7,32 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.adapters.artifacts import guide_document_manifest_port
-from app.adapters.checkers import project_guide_approval_compiler
+from app.adapters.checkers import external_checker_capability_projection
 from app.api.deps.authorization import enforce_human_authorization_read
-from app.api.deps.guide_proposals import ProposalRequest, CorrectionDispatchRequest, get_proposal_request, get_correction_dispatch
+from app.api.deps.guide_proposals import (
+    ProposalRequest,
+    CorrectionDispatchRequest,
+    get_proposal_request,
+    get_correction_dispatch,
+)
 from app.core.api_controls import ApiErrorResponse
 from app.modules.projects.api.guide_proposal_package import GuideProposalReviewPackage
 from app.modules.projects.api.guide_proposals import (
-    GuideProposalApproval, GuideProposalApprovalInput, GuideProposalApprovalReceipt,
-    GuideProposalCorrection, GuideProposalCorrectionInput, GuideProposalCorrectionReceipt,
-    GuideProposalError, GuideProposalSelection, GuideProposalDispatchResponse,
+    GuideProposalApproval,
+    GuideProposalApprovalInput,
+    GuideProposalApprovalReceipt,
+    GuideProposalCorrection,
+    GuideProposalCorrectionInput,
+    GuideProposalCorrectionReceipt,
+    GuideProposalError,
+    GuideProposalSelection,
+    GuideProposalDispatchResponse,
 )
 from app.api.deps.guide_proposal_http import (
-    IDEMPOTENCY_PARAMETER, require_proposal_key, proposal_http_error, require_matching_target,
+    IDEMPOTENCY_PARAMETER,
+    require_proposal_key,
+    proposal_http_error,
+    require_matching_target,
 )
 from app.adapters.projects import dispatch_post_policy_derivation_after_commit
 
@@ -31,18 +45,24 @@ router = APIRouter(
 
 
 @router.get(
-    "/proposal", response_model=GuideProposalReviewPackage,
-    openapi_extra={"x-workstream-action-id": 'project.guide_compilation.review_package.read'},
+    "/proposal",
+    response_model=GuideProposalReviewPackage,
+    openapi_extra={"x-workstream-action-id": "project.guide_compilation.review_package.read"},
 )
 async def review_proposal(
-    project_id: UUID, guide_id: UUID, compilation_id: UUID,
+    project_id: UUID,
+    guide_id: UUID,
+    compilation_id: UUID,
     request: Annotated[ProposalRequest, Depends(get_proposal_request)],
 ) -> GuideProposalReviewPackage:
     """Read the exact finalized proposal and its approval/correction target."""
     try:
         response = await request.service.review_package(
-            GuideProposalSelection(project_id=project_id, guide_id=guide_id, compilation_id=compilation_id),
-            actor=request.actor, request_id=request.request_id,
+            GuideProposalSelection(
+                project_id=project_id, guide_id=guide_id, compilation_id=compilation_id
+            ),
+            actor=request.actor,
+            request_id=request.request_id,
         )
         await request.session.commit()
         return response
@@ -53,26 +73,32 @@ async def review_proposal(
 
 
 @router.post(
-    "/pre-submission-approval", response_model=GuideProposalApprovalReceipt,
-    openapi_extra={"x-workstream-action-id": 'project.submission_artifact_policy.approve',
-                   "parameters": [IDEMPOTENCY_PARAMETER]},
+    "/pre-submission-approval",
+    response_model=GuideProposalApprovalReceipt,
+    openapi_extra={
+        "x-workstream-action-id": "project.submission_artifact_policy.approve",
+        "parameters": [IDEMPOTENCY_PARAMETER],
+    },
     dependencies=[Depends(require_proposal_key)],
 )
 async def approve_proposal(
-    project_id: UUID, guide_id: UUID, compilation_id: UUID,
+    project_id: UUID,
+    guide_id: UUID,
+    compilation_id: UUID,
     payload: GuideProposalApprovalInput,
     key: Annotated[UUID, Depends(require_proposal_key)],
     request: Annotated[ProposalRequest, Depends(get_proposal_request)],
 ) -> GuideProposalApprovalReceipt:
     """Approve one displayed pre-submission policy without running inference."""
     require_matching_target(payload.target, project_id, guide_id, compilation_id)
-    planner, pre, post = project_guide_approval_compiler()
     try:
+        capabilities = await external_checker_capability_projection(request.session)
         response = await request.service.approve(
             GuideProposalApproval(**payload.model_dump(), idempotency_key=key),
-            actor=request.actor, request_id=request.request_id,
+            actor=request.actor,
+            request_id=request.request_id,
             material=guide_document_manifest_port(request.session),
-            pre_capabilities=pre, post_capabilities=post, planner=planner,
+            capabilities=capabilities,
         )
         await request.session.commit()
         await dispatch_post_policy_derivation_after_commit(response.operation_id)
@@ -84,13 +110,19 @@ async def approve_proposal(
 
 
 @router.post(
-    "/corrections", response_model=GuideProposalCorrectionReceipt, status_code=201,
-    openapi_extra={"x-workstream-action-id": 'project.guide_compilation.correction.request',
-                   "parameters": [IDEMPOTENCY_PARAMETER]},
+    "/corrections",
+    response_model=GuideProposalCorrectionReceipt,
+    status_code=201,
+    openapi_extra={
+        "x-workstream-action-id": "project.guide_compilation.correction.request",
+        "parameters": [IDEMPOTENCY_PARAMETER],
+    },
     dependencies=[Depends(require_proposal_key)],
 )
 async def correct_proposal(
-    project_id: UUID, guide_id: UUID, compilation_id: UUID,
+    project_id: UUID,
+    guide_id: UUID,
+    compilation_id: UUID,
     payload: GuideProposalCorrectionInput,
     key: Annotated[UUID, Depends(require_proposal_key)],
     request: Annotated[ProposalRequest, Depends(get_proposal_request)],
@@ -100,7 +132,8 @@ async def correct_proposal(
     try:
         response = await request.service.request_correction(
             GuideProposalCorrection(**payload.model_dump(), idempotency_key=key),
-            actor=request.actor, request_id=request.request_id,
+            actor=request.actor,
+            request_id=request.request_id,
         )
         await request.session.commit()
         return response
@@ -111,19 +144,26 @@ async def correct_proposal(
 
 
 @router.post(
-    "/corrections/{correction_operation_id}/dispatch", response_model=GuideProposalDispatchResponse,
+    "/corrections/{correction_operation_id}/dispatch",
+    response_model=GuideProposalDispatchResponse,
     status_code=202,
-    openapi_extra={"x-workstream-action-id": 'project.guide_compilation.request'},
+    openapi_extra={"x-workstream-action-id": "project.guide_compilation.request"},
 )
 async def dispatch_correction(
-    project_id: UUID, guide_id: UUID, compilation_id: UUID, correction_operation_id: UUID,
+    project_id: UUID,
+    guide_id: UUID,
+    compilation_id: UUID,
+    correction_operation_id: UUID,
     request: Annotated[CorrectionDispatchRequest, Depends(get_correction_dispatch)],
 ) -> GuideProposalDispatchResponse:
     """Manually dispatch the selected correction; its identity makes retries idempotent."""
     try:
         return await request.service.dispatch(
-            GuideProposalSelection(project_id=project_id, guide_id=guide_id, compilation_id=compilation_id),
-            correction_operation_id, actor=request.actor,
+            GuideProposalSelection(
+                project_id=project_id, guide_id=guide_id, compilation_id=compilation_id
+            ),
+            correction_operation_id,
+            actor=request.actor,
         )
     except GuideProposalError as exc:
         raise proposal_http_error(exc) from exc
