@@ -99,6 +99,14 @@ def _command(h, operator):
     )
 
 
+def _copied_audit_event(event, **changes):
+    values = {
+        column.name: getattr(event, column.name)
+        for column in AuditEvent.__table__.columns
+    }
+    return AuditEvent(**(values | changes))
+
+
 async def test_retry_sql_rejects_unreceipted_terminal_supersession(
     tmp_path, isolated_database_env, monkeypatch,
 ):
@@ -194,10 +202,32 @@ async def test_retry_sql_rejects_noncanonical_authority_resource_even_with_match
                         for column in CheckerRetryReceipt.__table__.columns
                         if column.name != "created_at"
                     }
-                    values["resource_json"] = " " + receipt.resource_json
+                    authority_id = str(new_record_id())
+                    initiation_id = str(new_record_id())
+                    resource = json.loads(receipt.resource_json)
+                    resource["resource_context"]["successor"]["audit_event_id"] = initiation_id
+                    values["resource_json"] = " " + json.dumps(
+                        resource, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+                    )
                     values["resource_digest"] = "sha256:" + hashlib.sha256(
                         values["resource_json"].encode("utf-8")
                     ).hexdigest()
+                    authority = await session.get(AuditEvent, receipt.authorization_decision_id)
+                    initiation = await session.get(AuditEvent, receipt.audit_event_id)
+                    assert authority is not None and initiation is not None
+                    references = dict(initiation.event_payload["references"])
+                    references["authorization_decision_id"] = authority_id
+                    session.add(_copied_audit_event(
+                        authority, id=authority_id, entity_id=authority_id,
+                        after_facts={"allowed": True, "resource_context_digest": values["resource_digest"]},
+                    ))
+                    session.add(_copied_audit_event(
+                        initiation, id=initiation_id,
+                        event_payload={**initiation.event_payload, "references": references},
+                    ))
+                    await session.flush()
+                    values["authorization_decision_id"] = authority_id
+                    values["audit_event_id"] = initiation_id
                     await session.execute(insert(CheckerRetryReceipt).values(**values))
         async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
