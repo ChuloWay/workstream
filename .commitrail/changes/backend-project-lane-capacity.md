@@ -13,8 +13,10 @@ frozen and no import functionality is implemented here.
 
 ## Current behavior
 
-The implementation base is `35314a926503fae889e548ac5dae1c3c9e1a2ee7`, preserving
-main's incoming checker-completion and CLI approval owners. The measured earlier
+The original implementation base was
+`35314a926503fae889e548ac5dae1c3c9e1a2ee7`. The current reconciliation base is
+`8f5fe6e0a615480aaef2680da656658de7e2d18b`, preserving incoming blocked-pre-submit
+feedback, checker-completion and CLI approval owners. The measured earlier
 main is `a51cf06ccb5ab85f2c41528855f537d4362ec26b`. Before this change, the catalogue
 in `backend/scripts/test_lane_catalogue.py` partitions project nodes across A/B/C.
 `tests/test_projects.py` and `tests/test_guide_document_intake.py` use A/C after a
@@ -60,6 +62,9 @@ capacity margin; they do not prove a specific current node's elapsed time.
   their existing implementations are retained. No timing extension is included.
 - Existing CI lane/catalogue/merge/evidence tests and affected ownership
   expectations: protect the exact canonical union and newest-attempt custody.
+- `backend/tests/test_isolated_database_runner.py`: derive all committed lane
+  namespace cases from the authoritative catalogue and retain exact bucket,
+  prefix, S3 grammar and cross-invocation separation assertions.
 - `scripts/test_lightweight_agent_gates.py`: preserve its strict independent
   workflow matrix assertion with the added project D entry.
 - `docs/operations_backend_testing.md` and this record: reconcile the declared
@@ -125,7 +130,8 @@ capacity margin; they do not prove a specific current node's elapsed time.
 | Affected repair controls | `pytest -q tests/test_ci_lane_catalogue.py tests/test_ci_test_lanes.py tests/test_test_lane_evidence.py tests/test_merge_test_lane_evidence.py` | Exact 51ed6e543: 148 passed in 37.29 seconds; old nine-lane partition mutant failed the retained inventory assertion | Full hosted execution pending |
 | Exact canonical union | Independent validator collection; old/new catalogue projection at the same 51ed6e543 head | 8,946 nodes unchanged; non-project assignment unchanged; project A646/B487/C622/D450; no app/DDL/CLI/MCP changes | Allocation is not a runtime prediction |
 | Repository checks | Configured docstrings, full backend Ruff, Commitrail, links and stale contract guards | Passed; the initial process batch exposed a strict nine-entry Agent Gates matrix fixture, now updated to require D | Final affected process result in PR; full hosted gates pending |
-| Full integration | Complete hosted ten-lane run and independent aggregate | Pending; no complete PASS claim | Actual frozen merge, all node/cleanup evidence and measured headroom required |
+| Namespace review repair | Existing grammar and cross-lane/two-suffix custody checks; out-of-tree D-to-C collision | 11 affected cases passed; original nine-lane check accepted the collision, expanded catalogue check rejected it | Current exact-head hosted execution still required |
+| Original full integration | Backend run 38118645511, actual merge 88ba1065c1973ba445384ecd5c6967d504f70198, tree identical to f9be88fca | All ten lanes and aggregate succeeded; 8,946 canonical nodes; project A/B/C/D runner seconds 1106.960/685.640/857.145/695.725; all lane cleanup metadata true | Historical original head; current main-integrated repair requires its own full evidence |
 
 ## Review findings
 
@@ -135,12 +141,19 @@ or specific deadlock is claimed from that interrupted artifact. The affected
 controls now require project D, reject its missing/foreign bundles, duplicated
 completion and interrupted execution, and refuse an invalid newest D attempt
 even when an older D bundle passed. Existing shared-lane controls remain.
+Affected review also found a nine-lane namespace test inventory that omitted D.
+Both existing grammar and uniqueness checks now derive the complete catalogue;
+a D-only collision with C must fail the cross-lane custody assertion. Current
+reconciliation wording is updated without relabeling the 51ed6e543/f9be88fca
+local proofs or their original hosted execution to the main-integrated head.
 
 ## Reconciliation
 
 - Current-source reconciliation: cleanly integrated main 35314a926 before
-  implementation; its production, test owners and delivered documentation are
-  preserved. Source PR520 stays frozen at 7a3551e7.
+  implementation. Candidate 641265b8a subsequently integrated main 8f5fe6e0a;
+  its production, test owners and delivered documentation are preserved. Source
+  PR520 is a separate frozen candidate; the 7a3551e7 measurements above remain
+  historical source evidence, not the current CI candidate's evidence.
 - Next usable boundary: reviewed CI allocation repair, then exact frozen source
   integration and full hosted evidence; atomic import remains a separate chunk.
 - Remaining risks: hosted runner variance and absent current per-node timing;

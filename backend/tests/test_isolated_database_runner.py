@@ -14,6 +14,8 @@ from types import SimpleNamespace
 import asyncpg
 import pytest
 
+from scripts.test_lane_catalogue import LANES
+
 RUNNER = Path(__file__).resolve().parents[1] / "scripts/run_isolated_tests.py"
 ADMIN_ENV = "WORKSTREAM_TEST_ADMIN_DATABASE_URL"
 SPEC = importlib.util.spec_from_file_location("isolated_runner_test", RUNNER)
@@ -184,15 +186,13 @@ def test_minio_probe_cleans_up_and_preserves_async_cancellation(
 @pytest.mark.parametrize(
     ("lane", "expected_bucket"),
     [
-        ("shared_foundations_a", "workstream-artifacts"),
-        ("shared_foundations_b", "workstream-artifacts"),
-        ("schema_contracts", "workstream-ci-schema-contracts-012345abcdef"),
-        ("project_lifecycle_a", "workstream-ci-project-lifecycle-a-012345abcdef"),
-        ("project_lifecycle_b", "workstream-ci-project-lifecycle-b-012345abcdef"),
-        ("project_lifecycle_c", "workstream-ci-project-lifecycle-c-012345abcdef"),
-        ("task_lifecycle_a", "workstream-ci-task-lifecycle-a-012345abcdef"),
-        ("task_lifecycle_b", "workstream-ci-task-lifecycle-b-012345abcdef"),
-        ("task_lifecycle_c", "workstream-ci-task-lifecycle-c-012345abcdef"),
+        (
+            lane.name,
+            "workstream-artifacts"
+            if lane.name in {"shared_foundations_a", "shared_foundations_b"}
+            else f"workstream-ci-{lane.name.replace('_', '-')}-012345abcdef",
+        )
+        for lane in LANES
     ],
 )
 def test_committed_lane_buckets_use_validator_compatible_s3_grammar(
@@ -211,20 +211,10 @@ def test_lane_namespaces_do_not_collide_across_lanes_or_runner_suffixes() -> Non
     """Separate lane identities and runner invocations cannot share custody."""
     namespaces = {
         runner._minio_namespace(lane, suffix)
-        for lane in (
-            "shared_foundations_a",
-            "shared_foundations_b",
-            "schema_contracts",
-            "project_lifecycle_a",
-            "project_lifecycle_b",
-            "project_lifecycle_c",
-            "task_lifecycle_a",
-            "task_lifecycle_b",
-            "task_lifecycle_c",
-        )
+        for lane in (entry.name for entry in LANES)
         for suffix in ("012345abcdef", "fedcba543210")
     }
-    assert len(namespaces) == 18
+    assert len(namespaces) == len(LANES) * 2
     with pytest.raises(runner.RunnerError, match="invalid_lane"):
         runner._minio_namespace("project_lifecycle", "not-hex")
     with pytest.raises(runner.RunnerError, match="invalid_minio_namespace"):
