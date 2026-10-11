@@ -180,6 +180,7 @@ async def test_revoked_manager_cannot_replay_a_successful_bulk_write(import_sour
     before = await _success_facts(project)
     async with db_session.get_session_factory()() as session, session.begin():
         grant = (await session.scalars(select(AdminRoleGrant).where(
+            AdminRoleGrant.target_actor_profile_id == batch["tasks"][0]["created_by"],
             AdminRoleGrant.role == "project_manager", AdminRoleGrant.status == "active",
         ))).one()
         link = (await session.scalars(select(ActorIdentityLink).where(
@@ -387,6 +388,10 @@ async def test_native_commit_refuses_incomplete_aggregate_after_real_canonical_s
                     session.expire(row)
                     changed = True
         else:
+            if staged_task_ids != {row["id"] for row in batch["tasks"]}:
+                # Corrupt the last initial lifecycle INSERT after both actual
+                # canonical Task writes, rather than the first row's flush.
+                return
             for row in list(session.new):
                 if isinstance(row, AuditEvent) and row.event_type == "TaskScreened":
                     # A digest-shaped altered pre-write fact must not borrow the

@@ -305,6 +305,20 @@ The composed native proof, complete suite and measured batch-write CLI deadline
 remain pending; source and focused two-case proof qualifications below remain
 unchanged.
 
+The exact clean `966b98a547ebcaff22e8ad3d9f20021d21f670f3` composed run completed
+in 786.13 seconds with 15 passes and two failures, and all database, role and
+MinIO cleanup complete. Both 200/500 public import-screen-release journeys with
+fresh replay passed. Recorded SCREEN durations were 58.60/121.36 seconds and
+RELEASE durations 48.96/115.93 seconds. Empty pending declaration, surplus
+command attachment, complete-membership, concurrency, partial advance, direct
+SQL immutability and original import replay controls passed. The revocation
+fixture selected all active PM grants instead of the actual imported creator's
+grant; its repair narrows that selection. The stronger digest control observed
+only the first lifecycle INSERT before refusal; its repair injects into the last
+initial lifecycle INSERT, after both real Task writes are observed. The original
+failure remains retained, and focused repaired proof is pending. No full native
+suite, hosted CI or readiness claim is made from this partial result.
+
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
 is reconciled onto the unmerged atomic candidate `91183adafec37e7ad7eda624ad3556d89dc54ce6`;
