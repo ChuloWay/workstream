@@ -37,6 +37,7 @@ from app.modules.tasks.api.task_import import TaskImportRow  # noqa: E402
 from tests.conftest import (  # noqa: E402
     clean_postgres_database as clean_postgres_database,
     postgres_database_url as postgres_database_url,
+    pagination_cursor_hmac_secret as pagination_cursor_hmac_secret,
 )
 from tests.authorization.guide_activation.pg_support import revoke_manager_grant  # noqa: E402
 from tests.authorization.task_authority.test_concurrency import actor_context  # noqa: E402

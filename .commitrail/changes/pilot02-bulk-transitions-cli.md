@@ -359,6 +359,15 @@ an explicit budget with headroom above these local timings, not a production
 latency promise. Other requests retain the default deadline. All-body/connection
 failure uncertainty, caller keys and no automatic write retry remain mandatory.
 
+Go tests, build and vet passed for the scoped transport checkpoint; all 18
+controlled CSV/source/batch HTTP cases passed in 65.49 seconds, including actual
+thirteen-second batch-write responses and ordinary status timeout. First native
+socket attempt at `202af962afcc7cb9e43500cb28f57a5d18bc8af7` failed before any
+business request because its fixture omitted the canonical pagination HMAC
+secret required by application lifespan. Database, role and MinIO cleanup were
+complete. The fixture imports the existing canonical secret provisioner; no
+startup guard or product configuration requirement is relaxed.
+
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
 is reconciled onto the unmerged atomic candidate `91183adafec37e7ad7eda624ad3556d89dc54ce6`;
