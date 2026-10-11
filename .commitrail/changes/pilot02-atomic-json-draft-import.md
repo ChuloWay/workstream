@@ -57,6 +57,8 @@ it is not an authoritative native-UUID batch relationship.
   action/permission/resource classifications in the existing TASK authority
   owner; reuse covered Project Manager grant evaluation and canonical denials.
 - Focused TASK/ART/AUTH public-contract and native PostgreSQL/MinIO tests;
+  `tests/committed_guide_fixtures.py` gives scripted guide storage its own exact
+  namespace so it cannot claim the live ART runtime's `primary` namespace;
   affected ownership/lane/inventory expectations and the selected MCP
   `authorization_context_get` snapshot for additive ActionId parity; current TASK/ART/AUTH specs,
   README and roadmap claims for this chunk only.
@@ -462,6 +464,16 @@ never silently reinterprets retained rows under a later mapping.
 | Schema, guards and complete integration | Sole-author native graph/reset/UUID proof, affected guards, complete hosted lanes and aggregate | Not run for this chunk | Exact frozen candidate, actual merge tree and cleanup required |
 
 ## Review findings
+
+The installed-schema replay at exact `e56fd60a` passed the real 200-row closure
+and both optional-label controls, then stopped before the advancement import:
+the committed guide fixture had claimed ART's live `primary` namespace with
+fake local-provider facts. A diagnostic observed the exact
+`ArtifactStorageNamespaceError`; database, role and MinIO namespace cleanup
+completed. The fixture now uses its dedicated `committed-guide-fixture`
+namespace for the same native attempts, receipts and replicas. No production
+namespace validation or migration is changed; the failed public case and full
+26-case replay remain required before readiness.
 
 Independent schema/lock handoff review at exact `37d8705d` found no actionable
 architecture/reuse/security issue in the non-DDL models, replay and preparation

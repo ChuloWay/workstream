@@ -36,9 +36,9 @@ async def create_committed_document_fixture(source_snapshot_id: str, *, sessions
         assert actor is not None
         items = list(await session.scalars(select(GuideSourceSnapshotItem).where(GuideSourceSnapshotItem.source_snapshot_id == source_snapshot_id).order_by(GuideSourceSnapshotItem.item_order)))
         assert items
-        namespace = await session.get(ArtifactStorageNamespace, "primary")
+        namespace = await session.get(ArtifactStorageNamespace, "committed-guide-fixture")
         if namespace is None:
-            namespace = ArtifactStorageNamespace(id="primary", backend="local", adapter="local", provider_profile="test", namespace_descriptor={"root": "committed-guide-fixture"}, namespace_fingerprint=sha256_hash("committed-guide-fixture"))
+            namespace = ArtifactStorageNamespace(id="committed-guide-fixture", backend="local", adapter="local", provider_profile="test", namespace_descriptor={"root": "committed-guide-fixture"}, namespace_fingerprint=sha256_hash("committed-guide-fixture"))
             session.add(namespace)
             await session.flush()
         content = await session.scalar(select(ArtifactContent).where(ArtifactContent.sha256 == SOURCE_SHA256))
