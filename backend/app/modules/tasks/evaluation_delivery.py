@@ -45,18 +45,24 @@ class EvaluationDeliveryRequestReader:
         ).execution_options(populate_existing=True))
         if (receipt is None) == (retry is None):
             raise EvaluationDeliveryUnavailable("evaluation_delivery_unavailable")
-        expected = evaluation_request_event(receipt) if receipt is not None else retry.expected_event
-        expected_payload = json.dumps(
-            expected.payload, sort_keys=True, separators=(",", ":"),
-            ensure_ascii=False, allow_nan=False,
-        )
+        if receipt is not None:
+            expected = evaluation_request_event(receipt)
+            expected_payload = json.dumps(
+                expected.payload, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            )
+            expected_digest = canonical_json_hash(expected.payload)
+        else:
+            expected = retry.expected_event
+            expected_payload = expected.payload_json
+            expected_digest = expected.payload_digest
         if (
             any(getattr(envelope, name) != getattr(expected, name) for name in (
                 "event_type", "event_version", "aggregate_type", "aggregate_id",
                 "correlation_id", "causation_event_id", "idempotency_key",
             ))
             or envelope.payload_json != expected_payload
-            or envelope.claim.payload_digest != canonical_json_hash(expected.payload)
+            or envelope.claim.payload_digest != expected_digest
         ):
             raise EvaluationDeliveryUnavailable("evaluation_delivery_unavailable")
         if retry is not None:

@@ -10,8 +10,6 @@ from typing import Literal, Protocol
 from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from app.core.hashing import canonical_json_hash
-from app.modules.outbox.api import OutboxAppendInput
-
 from app.modules.checkers.api.post_submit import (
     PostSubmissionEvaluationRequest,
     PostSubmissionEvaluationResult,
@@ -106,12 +104,25 @@ class CheckerRetryResult(PostSubmitValue):
     authorization_decision_id: ResourceId
 
 
+class CheckerRetryEventExpectation(PostSubmitValue):
+    """Immutable retry event facts for exact TASK delivery comparison."""
+
+    event_type: str
+    event_version: int
+    aggregate_type: str
+    aggregate_id: ResourceId
+    correlation_id: str
+    causation_event_id: ResourceId | None
+    idempotency_key: str
+    payload_json: str
+    payload_digest: Sha256
+
+
 class CheckerRetryDelivery(PostSubmitValue):
     """CHECKERS-owned committed source and exact event for the single TASK handler."""
 
     request: PostSubmissionEvaluationRequest
-    reservation: EvaluationReservation
-    expected_event: OutboxAppendInput
+    expected_event: CheckerRetryEventExpectation
 
 
 class CheckerRetryAuthorityReceipt(PostSubmitValue):

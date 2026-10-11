@@ -42,6 +42,15 @@ from tests.checkers.post_submit.support import change_request
 from tests.checkers.execution.completion_fixture import completed_evidence
 from tests.checkers.execution.support import live_executor, reserve
 from tests.project_create_fixtures import grant_fixture_admin_role
+from tests.authentication.fixtures import (
+    auth_database_env as auth_database_env,
+    clear_settings_cache as clear_settings_cache,
+    rsa_signing_material as rsa_signing_material,
+)
+from tests.authorization.admin_access.fixtures import (
+    admin_access as admin_access,
+    signed_access as signed_access,
+)
 from tests.reviews.lifecycle.fixtures import live_acceptance_lifecycle as live_acceptance_lifecycle
 from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome, state
 from tests.tasks.evaluation_delivery.test_worker_materialization import _worker_port
@@ -713,6 +722,21 @@ async def test_retry_handler_rejects_crossed_event_and_payload_before_execution(
             crossed.append(envelope.model_copy(update={
                 "claim": envelope.claim.model_copy(update={
                     "event_id": h.created.evaluation_event_id,
+                }),
+            }))
+            for field, value in (
+                ("event_type", "OtherEvaluationRequested"),
+                ("event_version", 2),
+                ("aggregate_type", "task"),
+                ("aggregate_id", new_record_id()),
+                ("correlation_id", str(new_record_id())),
+                ("causation_event_id", new_record_id()),
+                ("idempotency_key", "checker-retry:crossed"),
+            ):
+                crossed.append(envelope.model_copy(update={field: value}))
+            crossed.append(envelope.model_copy(update={
+                "claim": envelope.claim.model_copy(update={
+                    "payload_digest": canonical_json_hash({"crossed": True}),
                 }),
             }))
             for mixed in crossed:

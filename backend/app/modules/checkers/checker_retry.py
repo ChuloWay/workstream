@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable, CheckerRequestConflict, CheckerRetryAuditPort,
     CheckerRetryAuthorizationPort, CheckerRetryCommand, CheckerRetryDelivery,
+    CheckerRetryEventExpectation,
     CheckerRetryPreparation, CheckerRetryResult, CheckerRetrySource,
     CheckerRetrySuccessor, EvaluationTaskGuard,
 )
@@ -293,11 +296,23 @@ async def read_retry_delivery(
         or stored.request.submission_version != source.submission_version
     ):
         raise CheckerExecutionUnavailable("checker_retry_delivery_unavailable")
+    expected = retry_request_event(
+        source, receipt_id=UUID(receipt.id), request_id=successor.request_id,
+        request_digest=successor.request_digest,
+        run_id=successor.run_id, result_id=successor.result_id,
+    )
     return CheckerRetryDelivery(
-        request=stored.request, reservation=stored.reservation,
-        expected_event=retry_request_event(
-            source, receipt_id=UUID(receipt.id), request_id=successor.request_id,
-            request_digest=successor.request_digest,
-            run_id=successor.run_id, result_id=successor.result_id,
+        request=stored.request,
+        expected_event=CheckerRetryEventExpectation(
+            event_type=expected.event_type, event_version=expected.event_version,
+            aggregate_type=expected.aggregate_type, aggregate_id=expected.aggregate_id,
+            correlation_id=expected.correlation_id,
+            causation_event_id=expected.causation_event_id,
+            idempotency_key=expected.idempotency_key,
+            payload_json=json.dumps(
+                expected.payload, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            ),
+            payload_digest=canonical_json_hash(expected.payload),
         ),
     )
