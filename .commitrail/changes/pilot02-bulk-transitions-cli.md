@@ -400,7 +400,16 @@ genuine decision and event digest. It must refuse commit and roll back all stage
 effects. This is an additive test-only admission control; no production or gate
 owner changes. The 15-case suite retains the actual 200/500 journeys, currentness,
 fresh authority, observed PostgreSQL waits and immutable SQL controls. Native
-public bulk success, those timings and readiness remain pending.
+public bulk success, those timings and readiness remain pending. Sole-author
+`ae9263b8` records the completed function body's measured PG16 fingerprint
+`fea62e31eaedf4812046fda79c6dd732edb8f74184a4103d41ed8bb743f4d7bf`.
+The exact clean `79debf3eae277f6f5b848dbfcbf9d279206ba634` discriminator run
+passed two cases in 99.73 seconds with installed 0035 and database, role and MinIO
+cleanup all confirmed. It proves late-stage rollback followed by legitimate
+SCREEN, changed-payload and partially advanced replay refusal, and the new
+altered-manager-facts refusal. The negative control additionally observes both
+canonical Task lifecycle stages before refusal; the full 15-case run must verify
+that stronger observation and the larger journeys before any readiness claim.
 
 - Current-source reconciliation: Preserve the atomic owner's import/status and
   source custody; shared-file regions require handoff before edits.

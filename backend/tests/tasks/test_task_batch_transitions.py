@@ -312,9 +312,15 @@ async def test_native_commit_refuses_incomplete_aggregate_after_real_canonical_s
     project, batch = await _import(client)
     before = await _success_facts(project)
     changed = False
+    staged_task_ids = set()
 
     def corrupt_before_flush(session, flush_context, instances):
         nonlocal changed
+        if corruption == "authority_facts_digest":
+            staged_task_ids.update(
+                row.entity_id for row in session.new
+                if isinstance(row, AuditEvent) and row.event_type == "TaskScreened"
+            )
         if changed:
             return
         if corruption == "missing_member":
@@ -353,6 +359,8 @@ async def test_native_commit_refuses_incomplete_aggregate_after_real_canonical_s
             json={"reason": "Complete canonical stages before native refusal"},
         )
         assert changed, "the intended final aggregate INSERT/completion was not reached"
+        if corruption == "authority_facts_digest":
+            assert staged_task_ids == {row["id"] for row in batch["tasks"]}, "all canonical stages must precede native refusal"
         assert refused.status_code == 503 and refused.json()["error"]["retryable"] is True, refused.text
         assert await _success_facts(project) == before
     finally:
