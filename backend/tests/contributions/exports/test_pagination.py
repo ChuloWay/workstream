@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.identifiers import new_record_id
 from app.modules.contributions.records.models import ContributionExportMembership, ContributionExportMember
 from app.modules.authorization.repository import AdminAuthorizationRepository
-from tests.contributions.records.support import authorized_submitter_source
+from tests.contributions.records.support import authorized_submitter_source, rows
 from tests.tasks.post_submit_routing.support import completed_sibling_source
 from tests.tasks.post_submit_routing.outcome_support import apply_outcome, invoked_completion
 from .support import export_path
@@ -85,6 +85,9 @@ async def test_public_pages_exclude_pre_snapshot_uncommitted_record_after_it_com
             ).order_by(ContributionExportMembership.exported_at.desc()).limit(1))
             assert membership is not None and membership.sealed and membership.member_count == 2
             export_id = membership.id
+            retained_facts = {table: await rows(session, table) for table in (
+                "contribution_records", "compensation_awards", "final_acceptances",
+            )}
             assert await session.scalar(select(func.count()).select_from(ContributionExportMember).where(
                 ContributionExportMember.export_id == export_id,
             )) == 2
@@ -179,6 +182,7 @@ async def test_public_pages_exclude_pre_snapshot_uncommitted_record_after_it_com
         assert fresh.status_code == 200
         async with h.factory() as session:
             assert await session.get(ContributionExportMembership, expired_id) is None
+            assert {table: await rows(session, table) for table in retained_facts} == retained_facts
             assert await session.scalar(select(func.count()).select_from(ContributionExportMember).where(
                 ContributionExportMember.export_id == expired_id,
             )) == 0
