@@ -70,6 +70,19 @@ def registry_spec(
     )
 
 
+def post_registry_spec() -> ExternalCheckerRegistrySpec:
+    """Return the exact selected POST schema used by native execution fixtures."""
+    values = registry_spec("post_submit").model_dump(mode="json")
+    document = {"type": "object"}
+    values["input_schema"] = ExternalCheckerSchema(
+        schema_id=POST_SUBMIT_INPUT_SCHEMA_ID,
+        schema_version="v1",
+        document=document,
+        schema_sha256=external_checker_json_hash(document),
+    ).model_dump(mode="json")
+    return ExternalCheckerRegistrySpec.model_validate(values)
+
+
 def registry_entry(
     phase: str = "pre_submit", *, maximum_output_bytes: int = 32_768
 ) -> ExternalCheckerRegistryEntry:

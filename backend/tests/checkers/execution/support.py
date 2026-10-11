@@ -8,6 +8,61 @@ from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorProfile, ActorIdentityLink
 
 
+class ControlledSelectedExecution:
+    """Return one request-bound selected result without replacing owner logic."""
+
+    def __init__(self, *, verdict="passed"):
+        self.verdict = verdict
+        self.requests = []
+
+    async def execute(self, request, grant):
+        from app.interfaces.external_checker_execution import (
+            ExternalCheckerExecutionResponse,
+            ExternalCheckerIsolationReceipt,
+            ExternalCheckerMaterialGrant,
+        )
+        from app.modules.checkers.api.external import (
+            make_external_checker_execution_result,
+        )
+
+        assert type(grant) is ExternalCheckerMaterialGrant
+        self.requests.append(request)
+        findings = () if self.verdict == "passed" else ({
+            "code": "post_evidence_failed",
+            "level": "error",
+            "message": "Post evidence failed.",
+        },)
+        result = make_external_checker_execution_result(
+            request_digest=request.request_digest,
+            registry_entry_id=request.registry.registry_entry_id,
+            registry_entry_digest=request.registry.entry_digest,
+            phase="post_submit",
+            outcome="completed",
+            verdict=self.verdict,
+            findings=findings,
+            infrastructure_failure_code=None,
+        )
+        sha = "sha256:" + "a" * 64
+        return ExternalCheckerExecutionResponse(
+            result=result,
+            isolation=ExternalCheckerIsolationReceipt(
+                repository="registry.example/workstream/checker",
+                platform_manifest_digest=request.registry.image_digest,
+                platform_manifest_media_type=(
+                    "application/vnd.oci.image.manifest.v1+json"
+                ),
+                platform_manifest_byte_count=1024,
+                operating_system="linux",
+                architecture="amd64",
+                config_image_id=sha,
+                runtime="runsc",
+                isolation_mode="gvisor",
+                sandbox_uid=65532,
+                sandbox_gid=65532,
+            ),
+        )
+
+
 class ForbiddenPostSubmission:
     async def evaluate_post_submission(self, request):
         pytest.fail("pre-submit-only test entered post-submit execution")
@@ -62,7 +117,7 @@ def live_executor(h, *, outbox=None, selected_execution=None):
         materialization=h.service,
         execute_authority=post_submit_execution_authority,
         finalize_authority=post_submit_execution_authority,
-        selected_execution=selected_execution,
+        selected_execution=selected_execution or ControlledSelectedExecution(),
         outbox=outbox if outbox is not None else outbox_append,
     )
 

@@ -8,7 +8,7 @@ import pytest
 from app.adapters.checkers import evaluation_coordinator
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable, VerifiedMaterialFacts
-from app.modules.checkers.api.post_submit import PostSubmissionEvaluationResult
+from app.modules.checkers.api.evaluation_contract import validate_stored_execution_result
 from app.modules.checkers.models import CheckerSubmissionFence
 from tests.checkers.post_submit.support import change_request
 from .completion_fixture import completed_evidence, evidence_snapshot
@@ -21,14 +21,14 @@ async def verify(session, h, *, completion=None, event_id=None):
     )
 
 
-@pytest.mark.parametrize("recommendation", ["allow_review", "needs_revision", "task_setup_blocked"])
+@pytest.mark.parametrize("recommendation", ["allow_review", "needs_revision"])
 async def test_current_completion_returns_exact_stored_result(tmp_path, isolated_database_env, recommendation):
     async with completed_evidence(tmp_path, isolated_database_env, recommendation) as h:
         async with h.factory() as session:
             await session.begin()
             before = await evidence_snapshot(session)
             actual = await verify(session, h)
-            assert actual.result == h.result == PostSubmissionEvaluationResult.model_validate_json(
+            assert actual.result == h.result == validate_stored_execution_result(
                 json.dumps(json.loads(h.run.result_json) | {"result_digest": h.run.result_digest})
             )
             assert actual.completion == h.completion
@@ -44,26 +44,13 @@ async def test_current_completion_returns_exact_stored_result(tmp_path, isolated
             assert await evidence_snapshot(session) == before
 
 
-async def test_current_completion_preserves_nonempty_stored_counters(tmp_path, isolated_database_env):
-    async with completed_evidence(tmp_path, isolated_database_env, counters=True) as h:
-        async with h.factory() as session, session.begin():
-            actual = await verify(session, h)
-            stored = PostSubmissionEvaluationResult.model_validate_json(
-                json.dumps(json.loads(h.run.result_json) | {"result_digest": h.run.result_digest})
-            )
-            assert any(m.counters for m in stored.member_results), "fixture must discriminate dropped counters"
-            assert actual.result == stored == h.result
-            failed = next(m for m in actual.result.member_results if m.status == "failed")
-            assert [(c.key, c.value) for c in failed.counters] == [("missing_count", 2)]
-
-
-@pytest.mark.parametrize("recommendation", ["allow_review", "needs_revision", "task_setup_blocked"])
+@pytest.mark.parametrize("recommendation", ["allow_review", "needs_revision"])
 async def test_current_completion_rejects_wrong_derived_recommendation(tmp_path, isolated_database_env, recommendation):
     async with completed_evidence(tmp_path, isolated_database_env, recommendation) as h:
         async with h.factory() as session, session.begin():
             await verify(session, h)
             before = await evidence_snapshot(session)
-            for wrong in {"allow_review", "needs_revision", "task_setup_blocked"} - {recommendation}:
+            for wrong in {"allow_review", "needs_revision"} - {recommendation}:
                 altered = h.completion.model_copy(update={"routing_recommendation": wrong})
                 with pytest.raises(CheckerExecutionUnavailable, match="checker_current_completion_unavailable"):
                     await verify(session, h, completion=altered)

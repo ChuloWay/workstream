@@ -47,8 +47,8 @@ from tests.checkers.external.support import (
     SHA,
     execution_identity,
     execution_material,
+    post_registry_spec,
     registry_entry,
-    registry_spec,
 )
 from tests.checkers.execution.support import live_executor, reserve
 from tests.post_submit_materialization_helpers import material_fixture
@@ -97,15 +97,7 @@ def _policy() -> LockedExternalPostSubmitPolicy:
 
 def _post_spec() -> ExternalCheckerRegistrySpec:
     """Use the exact selected POST schema with the shared immutable registry facts."""
-    values = registry_spec("post_submit").model_dump(mode="json")
-    document = {"type": "object"}
-    values["input_schema"] = ExternalCheckerSchema(
-        schema_id=POST_SUBMIT_INPUT_SCHEMA_ID,
-        schema_version="v1",
-        document=document,
-        schema_sha256=external_checker_json_hash(document),
-    ).model_dump(mode="json")
-    return ExternalCheckerRegistrySpec.model_validate(values)
+    return post_registry_spec()
 
 
 def _request(identity, policy):
