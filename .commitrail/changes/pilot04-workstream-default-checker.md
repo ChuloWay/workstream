@@ -19,31 +19,15 @@ initial post-submit dispatch. Post-submit images produce evidence only.
 
 This branch contains the normalized external contract, immutable registry,
 long-lived Rust service and SDK, typed Unix-socket client, callback-scoped ART
-grant, and the exact four-behavior Workstream default checker. The selected PRE
-processor now runs the default before each locked external image over one
-genuine prepared-ART callback, but its durable result and admission caller are
-not selected yet. The admission binder now carries an unchanged byte/manifest
-comparison into the default checker with exact predecessor and current locked
-rules instead of treating that default behavior as an early ART rejection.
-The selected result contract now has one canonical digest over the default,
-ordered external results and observed isolation, plus a database-timed lease
-and terminal latency body suitable for the durable owner. Its reservation
-digest binds the contributor identity, TASK/assignment, genuine ART attempt
-and prepared generation, approved policy/default, complete default input and
-server-owned archive/manifest identity before the lease is issued.
-The selected durable owner is now modeled separately from the retained legacy
-evidence decoder: its UUIDv7 run identifier is the genuine PRE attempt identity,
-so selection does not reserve through or foreign-key to the obsolete invocation
-store. The coordinator takes TASK custody before CHECKERS state, issues a
-database-timed generation lease, finalizes one terminal body, and mints a
-process-local one-use admission capability only for a complete pass. Its
-ordered work budget is derived from the default plus each locked image deadline
-and service cleanup margin and must fit ART's configured custody deadline.
-The selected execution workflow now prepares fixed-service authority before
-TASK/CHECKERS locks, commits the database-timed lease before exposing material,
-executes through one exact process-local ART capability with no transaction
-open, then uses a distinct short root to authorize and finalize the exact result
-or one closed recoverable infrastructure outcome.
+grant, and the exact four-behavior Workstream default checker. ART verifies the
+received ZIP and canonical manifest before the default and every locked PRE
+image run over one genuine prepared-material capability. The selected durable
+owner takes TASK custody before CHECKERS state, commits its generation lease
+before execution, runs without a database transaction, and finalizes either the
+exact result or one recoverable infrastructure outcome in a fresh short root.
+Only a complete pass mints the one-use admission capability consumed by TASK's
+existing atomic Submission, `evaluation_pending`, evaluation reservation and
+outbox operation. Work findings retain bounded evidence without a Submission.
 Its closed AUTH contract now assigns those two phases to the dedicated selected
 PRE service principal and binds preparation, scope, the durable request and the
 exact execute/finalize fact digest without granting direct service access.
@@ -66,7 +50,10 @@ tests have been removed; retained immutable evidence has only its bounded
 historical decoder. F-020 recovery now proves that registration alone cannot
 activate the retained warning-bearing generation and that only an exact
 registered binding in a corrected, linked approval can activate. The combined
-public/native journey remains unfinished.
+native journey now exercises real PostgreSQL 16, MinIO, the Rust service and the
+digest-pinned image across pass, work-failure, infrastructure/restart/fresh
+verification and POST evidence paths with database, object-store and workspace
+cleanup.
 
 ## Bounded change
 
@@ -177,27 +164,27 @@ intermediate-wait regression.
 - [x] F-020 recovery is proven by register -> recompile -> approve -> activate
   in one current generation; registration alone and wrong generation, stage,
   requirement, registry digest or stale approval remain blocked.
-- [ ] ART verifies server receipt identity and a bounded safe manifest before
+- [x] ART verifies server receipt identity and a bounded safe manifest before
   any project image reads material.
-- [ ] The default checker runs exactly four blockers; absent summary and
+- [x] The default checker runs exactly four blockers; absent summary and
   attestation remain warning-only.
-- [ ] Every required pre image passes before admission consumption. Work
+- [x] Every required pre image passes before admission consumption. Work
   findings create no Submission/dispatch and keep the task `in_progress`;
   infrastructure failures remain recoverable and consume no attempt.
-- [ ] Passing preparation invokes the existing caller-owned atomic operation
+- [x] Passing preparation invokes the existing caller-owned atomic operation
   and commits Submission, `evaluation_pending` and initial dispatch together.
-- [ ] Required post images consume immutable Submission custody, persist
+- [x] Required post images consume immutable Submission custody, persist
   normalized evidence and never decide acceptance.
-- [ ] Timeout, cancellation, crash/restart, changed policy/material,
+- [x] Timeout, cancellation, crash/restart, changed policy/material,
   cross-project access and duplicate delivery cannot create partial effects;
   latency and queue/execution lineage are retained, and restart requires fresh
   server-verified uploaded material rather than a reconstructed scratch handle.
-- [ ] Retained old evidence remains readable without rewriting hashes; unresolved
+- [x] Retained old evidence remains readable without rewriting hashes; unresolved
   old execution cannot cross into the new runtime and requires authorized policy
   transition.
 - [x] Both obsolete catalogues, implementations, callers and obsolete tests are
   removed without a fallback or parallel runtime.
-- [ ] A real PostgreSQL 16, MinIO and Rust-service journey proves pass, work
+- [x] A real PostgreSQL 16, MinIO and Rust-service journey proves pass, work
   failure, infrastructure/retry and post-dispatch paths with cleanup.
 
 ## Risk and review routing
@@ -238,15 +225,16 @@ intermediate-wait regression.
 | Obsolete catalogue removal | Focused lane/architecture/ownership suite; recursive collection of every modified surviving test module; Ruff, module-boundary inventory and stale-import scan | 84 focused tests passed and 94 surviving tests collected. Ten obsolete executable catalogue/runner targets, their private-edge debt and tests are absent; exact ownership metadata admits only the selected owners and those retirements. | The stacked branch still has separately tracked structural-debt growth from earlier P02/P10/P04 source, so the repository-wide structural-debt gate is not claimed by this deletion checkpoint. |
 | F-020 recovery | `python3 /tmp/p04_selected_runner.py <repo> /tmp/pilot04-f020-native6 600 tests/projects/guide_activation/test_postgresql.py::test_checker_registration_requires_corrected_approval_before_activation`; focused external-policy tests and Ruff | PostgreSQL 16 PASS 1 with schema 0037 and database/role/MinIO cleanup complete, plus 6 pure compiler tests. A real Operator registration does not clear the existing warning generation; correction observes the current registry projection, a linked successor approval binds the exact row/digest, the successor activates, and the old generation remains refused. Wrong stage, requirement, identity and registry digest substitutions fail closed. | This proves the activation recovery gate, not the combined intake-to-POST journey. |
 | Retained admission migration shape | `pytest -q backend/tests/test_submission_bundle_admission.py backend/tests/checkers/external/test_selected_pre_submit_coordination.py backend/tests/checkers/external/test_selected_preparation_command.py backend/tests/test_artifact_architecture.py::test_checker_materialization_contract_has_one_canonical_consumer_owner`; focused Ruff | 62 passed; selected rows require complete new custody while every new column stays null on retained legacy rows, avoiding fabricated backfill or historical hash rewrites | Successor SQL and direct retained/selected row controls remain pending |
-| Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | Selected PRE uses durable reserve/lease/finalize roots around the genuine ART callback; a pass is consumed only by TASK's existing atomic Submission/evaluation reservation/outbox composition, while POST uses immutable Submission/ART custody | Final F-020 recovery, retained-history transition and combined native journey remain pending |
-| End-to-end replacement | Real PostgreSQL/MinIO/Rust public and worker journey | Not run | Implementation incomplete |
+| Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | Selected PRE uses durable reserve/lease/finalize roots around the genuine ART callback; a pass is consumed only by TASK's existing atomic Submission/evaluation reservation/outbox composition, while POST uses immutable Submission/ART custody | Independent final integration review remains |
+| Default behavior and warnings | `pytest -q backend/tests/checkers/default/test_contract.py backend/tests/checkers/default/test_execution.py backend/tests/checkers/external/test_selected_pre_submit.py -m 'not postgres_schema_contract'` | 30 passed. The manifest and executable behavior retain exactly four ordered blockers; empty summary and attestation produce warnings without changing eligibility. | Full required checks remain on the final reconciled head. |
+| End-to-end replacement | `run_selected_end_to_end_probe.py` through the isolated runner, `/tmp/pilot04-selected-e2e10.log` and `.json`, using platform manifest `sha256:c664d8d85d6dfcded31710223c8d91441548e5445f0aa9b59d246fc464a129ef` | PASS on PostgreSQL 16/schema 0037 with database/role/MinIO/workspace cleanup complete. Real MinIO PRE and the Rust/runc image commit one Submission, `evaluation_pending` and dispatch, then actual Submission/ART POST evidence. A secret finding leaves a separate Task `in_progress` with no Submission. Service loss retains `implementation_unavailable`; restart uses a fresh upload and independent ART verification, records a completed successor generation and commits exactly one later Submission/dispatch. | This local proof uses explicit `runc`/`docker-dev`; hosted CI must exercise its configured runtime and the final reconciled head. |
 
 ## Reconciliation
 
 - Current-source reconciliation: implementation starts at PR538 head
   `7453a0d8c5664cfd486872a381899f3755393004`; final publication will reconcile
   actual merged `main` and intervening owners.
-- Next usable boundary: full selected checker journey; no component-only merge.
-- Remaining risks: exact durable external pre-attempt/result projection may
-  require a successor migration. Numbering and fingerprints resolve only
-  against the actual linear graph; no competing ordinal is reserved here.
+- Next usable boundary: independent full-scope review and final required CI;
+  no component-only merge.
+- Remaining risk: reconcile the final stacked migration and owner metadata with
+  actual `main`, then validate the complete required test union on that tree.
