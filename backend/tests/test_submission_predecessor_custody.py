@@ -389,6 +389,7 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
                 "CAST(:body AS jsonb)))"
             )
             for field, substituted in (
+                ("checker_remediation_manifest_id", None),
                 ("checker_remediation_manifest_id", str(new_record_id())),
                 ("creation_decision_id", str(h.created.creation_decision_id)),
                 ("binding_decision_id", str(h.created.binding_decision_id)),
