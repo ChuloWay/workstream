@@ -4,13 +4,56 @@ import hashlib
 import json
 import unicodedata
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from enum import StrEnum
+from typing import Annotated, Literal, Protocol
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from pydantic_core import PydanticCustomError
 
 
 TASK_IMPORT_MAXIMUM_BYTES = 8 * 1024 * 1024
+TASK_IMPORT_MAPPING_VERSION = "workstream.task_import.draft_mapping.v1"
+
+
+class TaskImportBatchAction(StrEnum):
+    """Covered-manager import and membership status, separate from Task transitions."""
+
+    IMPORT = "project.task.import"
+    READ = "project.task.import_batch.read"
+
+
+class TaskImportBatchAuthorityDenied(RuntimeError):
+    """The exact native batch operation lacks current covered-manager authority."""
+
+
+@dataclass(frozen=True, slots=True)
+class TaskImportBatchAuthorityFacts:
+    """Caller and exact native file/result identities consumed by the AUTH owner."""
+
+    batch_id: UUID
+    project_id: UUID
+    source_id: UUID
+    actor_profile_id: UUID
+    sha256: str
+    byte_count: int
+    row_count: int
+    manifest_digest: str
+    source_binding_digest: str
+    idempotency_key: UUID
+    request_digest: str
+
+
+class TaskImportBatchAuthorizationPort(Protocol):
+    """Consume exact prepared authority and retain its original denial after rollback."""
+
+    async def authorize(self, action: TaskImportBatchAction, facts: TaskImportBatchAuthorityFacts) -> UUID:
+        """Return the fresh canonical decision for the current batch caller."""
+        ...
+
+    async def restage_denial(self, error: TaskImportBatchAuthorityDenied) -> None:
+        """Commit canonical denied evidence only through the instance that captured it."""
+        ...
 
 
 class TaskImportRow(BaseModel):

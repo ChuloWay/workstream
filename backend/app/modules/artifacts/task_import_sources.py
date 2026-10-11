@@ -16,7 +16,7 @@ from app.modules.artifacts.api.task_import_source import (
     TaskImportSourceError,
     TaskImportSourceAction, TaskImportSourceAuthorityDenied, TaskImportSourceAuthorityFacts,
     TaskImportSourceAuthorizationPort, TaskImportSourceDeclare, TaskImportSourceResponse,
-    VerifiedTaskImportSourceRead,
+    VerifiedTaskImportSourceRead, VerifiedTaskImportSourceBinding,
 )
 from app.modules.artifacts.models import (
     ArtifactContent, ArtifactOperationReceipt, ArtifactPutAttempt, ArtifactPutObservationReceipt,
@@ -196,47 +196,107 @@ class ArtifactTaskImportSourceCommands:
                     await prepared.close()
             return await self.status(project_id, source_id)
 
-    async def _verified_replica(self, source: ArtifactTaskImportSource) -> ArtifactReplica:
-        row = (await self._session.execute(select(
+    async def _verified_ancestry(
+        self, source: ArtifactTaskImportSource,
+        expected: VerifiedTaskImportSourceBinding | None = None,
+    ) -> tuple[VerifiedTaskImportSourceBinding, ArtifactReplica]:
+        """Validate append-only byte receipts independently of current provider health."""
+        query = (select(
             ArtifactPutAttempt, ArtifactReplica, ArtifactContent, ArtifactVerificationJob, ArtifactVerificationReceipt,
         ).join(ArtifactReplica, ArtifactReplica.id == ArtifactPutAttempt.replica_id)
          .join(ArtifactContent, ArtifactContent.id == ArtifactReplica.content_id)
          .join(ArtifactVerificationJob, ArtifactVerificationJob.originating_put_attempt_id == ArtifactPutAttempt.id)
-         .join(ArtifactVerificationReceipt, (ArtifactVerificationReceipt.verification_job_id == ArtifactVerificationJob.id)
-               & (ArtifactVerificationReceipt.execution_generation == ArtifactVerificationJob.execution_generation))
-         .where(ArtifactPutAttempt.task_import_source_id == source.id, ArtifactVerificationJob.status == "verified")
-         .order_by(ArtifactVerificationJob.created_at.desc(), ArtifactVerificationJob.id.desc()).limit(1))).one_or_none()
+         .join(ArtifactVerificationReceipt, ArtifactVerificationReceipt.verification_job_id == ArtifactVerificationJob.id)
+         .where(ArtifactPutAttempt.task_import_source_id == source.id, ArtifactVerificationReceipt.outcome == "verified"))
+        if expected is None:
+            query = query.where(
+                ArtifactVerificationJob.status == "verified",
+                ArtifactVerificationReceipt.execution_generation == ArtifactVerificationJob.execution_generation,
+            ).order_by(ArtifactVerificationJob.created_at.desc(), ArtifactVerificationJob.id.desc()).limit(1)
+        else:
+            query = query.where(ArtifactVerificationReceipt.id == str(expected.verification_receipt_id))
+        row = (await self._session.execute(query)).one_or_none()
         if row is None:
             raise TaskImportSourceError("task_import_source_unverified", 409)
         attempt, replica, content, job, receipt = row
         if (attempt.producer_request_type != "task_import_source" or attempt.project_id != source.project_id
-                or attempt.logical_role != "task_import_source" or attempt.status != "object_confirmed"
+                or (expected is None and attempt.status != "object_confirmed")
+                or attempt.logical_role != "task_import_source"
                 or (attempt.sha256, attempt.byte_count, attempt.media_type) != (source.sha256, source.byte_count, source.media_type)
                 or (content.sha256, content.byte_count) != (source.sha256, source.byte_count)
-                or job.replica_id != replica.id or job.execution_generation != receipt.execution_generation
+                or job.replica_id != replica.id
                 or receipt.verification_job_id != job.id or receipt.outcome != "verified"
                 or (receipt.observed_sha256, receipt.observed_byte_count) != (source.sha256, source.byte_count)
-                or (replica.verification_state, replica.availability_state, replica.integrity_state) != ("verified", "available", "valid")
                 or (replica.storage_namespace_id, replica.namespace_fingerprint) != (attempt.storage_namespace_id, attempt.namespace_fingerprint)):
             raise TaskImportSourceError("task_import_source_custody_invalid", 409)
-        if attempt.receipt_id is not None:
+        operation_id = attempt.receipt_id if expected is None else (
+            str(expected.operation_receipt_id) if expected.operation_receipt_id is not None else None
+        )
+        observation_id = None
+        if operation_id is not None:
             acknowledged = await self._session.scalar(select(ArtifactOperationReceipt.id).where(
-                ArtifactOperationReceipt.id == attempt.receipt_id, ArtifactOperationReceipt.put_attempt_id == attempt.id,
+                ArtifactOperationReceipt.id == operation_id, ArtifactOperationReceipt.put_attempt_id == attempt.id,
                 ArtifactOperationReceipt.replica_id == replica.id, ArtifactOperationReceipt.request_digest == attempt.request_digest,
                 ArtifactOperationReceipt.provider_object_ref == replica.provider_object_ref,
                 ArtifactOperationReceipt.logical_role == "task_import_source", ArtifactOperationReceipt.outcome == "stored_pending_verification",
             ))
         else:
-            acknowledged = await self._session.scalar(select(ArtifactPutObservationReceipt.id).where(
+            query = select(ArtifactPutObservationReceipt.id).where(
                 ArtifactPutObservationReceipt.put_attempt_id == attempt.id,
-                ArtifactPutObservationReceipt.execution_generation == attempt.execution_generation,
                 ArtifactPutObservationReceipt.outcome == "observed_confirmed",
                 ArtifactPutObservationReceipt.observed_sha256 == source.sha256,
                 ArtifactPutObservationReceipt.expected_sha256 == source.sha256,
                 ArtifactPutObservationReceipt.observed_byte_count == source.byte_count,
                 ArtifactPutObservationReceipt.expected_byte_count == source.byte_count,
-            ))
+            )
+            if expected is None:
+                query = query.where(ArtifactPutObservationReceipt.execution_generation == attempt.execution_generation)
+            else:
+                query = query.where(ArtifactPutObservationReceipt.id == str(expected.observation_receipt_id))
+            acknowledged = await self._session.scalar(query)
+            observation_id = acknowledged
         if acknowledged is None:
+            raise TaskImportSourceError("task_import_source_custody_invalid", 409)
+        binding = VerifiedTaskImportSourceBinding(
+            source_id=UUID(source.id), project_id=UUID(source.project_id), sha256=source.sha256,
+            byte_count=source.byte_count, operation_identity=source.operation_identity,
+            put_attempt_id=UUID(attempt.id), content_id=UUID(content.id), replica_id=UUID(replica.id),
+            verification_job_id=UUID(job.id), verification_generation=receipt.execution_generation,
+            verification_receipt_id=UUID(receipt.id),
+            operation_receipt_id=UUID(operation_id) if operation_id is not None else None,
+            observation_receipt_id=UUID(observation_id) if observation_id is not None else None,
+        )
+        if expected is not None and binding != expected:
+            raise TaskImportSourceError("task_import_source_custody_invalid", 409)
+        return binding, replica
+
+    async def prepare_binding(
+        self, project_id: UUID, source_id: UUID,
+        expected: VerifiedTaskImportSourceBinding | None = None,
+    ) -> VerifiedTaskImportSourceBinding:
+        """Retain SOURCE KEY SHARE before AUTH in the caller-owned transaction."""
+        if not self._session.in_transaction():
+            raise RuntimeError("source binding requires a caller transaction")
+        source = await self._session.scalar(select(ArtifactTaskImportSource).where(
+            ArtifactTaskImportSource.id == str(source_id), ArtifactTaskImportSource.project_id == str(project_id),
+        ).with_for_update(read=True, key_share=True).execution_options(populate_existing=True))
+        if source is None:
+            raise TaskImportSourceError("task_import_source_not_found", 404)
+        binding, _ = await self._verified_ancestry(source, expected)
+        return binding
+
+    async def authorize_binding(self, binding: VerifiedTaskImportSourceBinding) -> UUID:
+        """Revalidate prepared ancestry and consume fresh current-actor source READ."""
+        await self.prepare_binding(binding.project_id, binding.source_id, binding)
+        source = await self._session.get(ArtifactTaskImportSource, str(binding.source_id))
+        return await self._authorization.authorize(TaskImportSourceAction.READ, self._facts(source))
+
+    async def _verified_replica(self, source: ArtifactTaskImportSource) -> ArtifactReplica:
+        """Apply current operational health checks only to an actual provider read."""
+        _, replica = await self._verified_ancestry(source)
+        if (replica.verification_state, replica.availability_state, replica.integrity_state) != (
+            "verified", "available", "valid",
+        ):
             raise TaskImportSourceError("task_import_source_custody_invalid", 409)
         return replica
 

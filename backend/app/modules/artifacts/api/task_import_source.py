@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Literal, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class TaskImportSourceError(RuntimeError):
     """A closed source outcome mapped to a concealed or explicit HTTP response."""
@@ -85,6 +85,48 @@ class VerifiedTaskImportSourceRead:
 
     source: TaskImportSourceResponse
     stream: AsyncIterator[bytes]
+
+
+class VerifiedTaskImportSourceBinding(BaseModel):
+    """Immutable native byte ancestry; the ART participant revalidates every reference."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    source_id: UUID
+    project_id: UUID
+    sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    byte_count: int = Field(ge=1, le=8388608)
+    operation_identity: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    put_attempt_id: UUID
+    content_id: UUID
+    replica_id: UUID
+    verification_job_id: UUID
+    verification_generation: int = Field(ge=1)
+    verification_receipt_id: UUID
+    operation_receipt_id: UUID | None
+    observation_receipt_id: UUID | None
+
+    @model_validator(mode="after")
+    def exact_acknowledgement(self):
+        """Require precisely one retained operation or observation acknowledgement."""
+        if (self.operation_receipt_id is None) == (self.observation_receipt_id is None):
+            raise ValueError("verified source requires exactly one acknowledgement")
+        return self
+
+
+class TaskImportSourceBindingPort(Protocol):
+    """Prepare immutable source custody before caller-root AUTH and authorize it freshly."""
+
+    async def prepare_binding(
+        self, project_id: UUID, source_id: UUID,
+        expected: VerifiedTaskImportSourceBinding | None = None,
+    ) -> VerifiedTaskImportSourceBinding:
+        """Retain SOURCE KEY SHARE and validate actual receipts without provider access."""
+        ...
+
+    async def authorize_binding(self, binding: VerifiedTaskImportSourceBinding) -> UUID:
+        """Revalidate prepared custody and consume the current caller's exact source READ."""
+        ...
 
 
 class TaskImportSourceCommandPort(Protocol):

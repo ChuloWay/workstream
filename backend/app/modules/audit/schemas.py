@@ -367,7 +367,7 @@ class LifecycleAuditEventInput(BaseModel):
     event_type: LifecycleAuditEventType
     actor_id: UUID
     reason: LifecycleAuditReason
-    source_type: Literal["manual", "markdown_import", "csv_import"] | None = None
+    source_type: Literal["manual", "markdown_import", "csv_import", "json_import"] | None = None
     locked_lineage: dict[str, object] | None = None
     task_reason: Annotated[str, Field(min_length=1, max_length=1000)] | None = None
     from_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None

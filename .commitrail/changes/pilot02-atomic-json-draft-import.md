@@ -380,7 +380,8 @@ never silently reinterprets retained rows under a later mapping.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical create now has caller-root prepare/AUTH/stage phases; atomic import operation remains unimplemented | Exact schema and replay facts require affected review |
+| Canonical creation participant | Exact `59d47a6c` isolated native execution of five retained CREATE, denial, rollback and receipt controls | 5 passed in 69.02 seconds; schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Proves preservation of normal creation; no atomic batch success claim |
+| Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical caller-root phases, closed batch DTOs, model representations and ART immutable-binding participant are implemented; batch operation remains unassembled | New table constraints and guards require sole-author DDL and native proof |
 | Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Not run; tests not authored | All positive/negative/concurrency cases above must pass |
 | Schema, guards and complete integration | Sole-author native graph/reset/UUID proof, affected guards, complete hosted lanes and aggregate | Not run for this chunk | Exact frozen candidate, actual merge tree and cleanup required |
 
@@ -391,18 +392,20 @@ per-command transaction and unbound string provenance as explicit handoff issues
 Affected independent planning review found two concrete missing integration
 requirements: the closed TaskCreated JSON source token and complete batch/header/
 TRUNCATE immutability. This record now names all typed/audit/native token owners
-and all-three-table UPDATE/DELETE/TRUNCATE controls. Product/native proof is
-still unimplemented; these are recorded schema contracts, not runtime findings.
+and all-three-table UPDATE/DELETE/TRUNCATE controls. Complete batch/native proof remains unimplemented; schema contracts alone do
+not prove installed custody or a public import result.
 
 ## Reconciliation
 
 - Current-source reconciliation: this preparation branch incorporates source
   prerequisite `0524e56b6aa7576f748d645f672d42ce069141af` and main `7e499849`,
   retaining its ten-lane CI, hidden materialization/completion/failure/feedback
-  owners and CLI approval/correction contracts. Only this planning record differs from the
-  source candidate before implementation. Canonical Task creation now shares
+  owners and CLI approval/correction contracts. Before implementation, only
+  this planning record differed from the source candidate. Canonical Task creation now shares
   caller-root phases with its normal public wrapper; atomic batch creation and
-  all new native schema are not yet implemented or proven. No migration is
+  the installed native schema are not yet implemented or proven. Model/API
+  representations and provider-free ART binding validation are in progress;
+  no batch route is exposed. No migration is
   authored in this worktree.
 - Next usable boundary: review the exact batch/membership/receipt schema and
   owner preparation/replay graph, then coordinate the sole-author migration and
