@@ -437,6 +437,151 @@ end $$
     op.execute("create constraint trigger selected_pre_submit_receipt_custody after insert or update on public.selected_pre_submit_runs deferrable initially deferred for each row execute function public.guard_selected_pre_submit_receipts()")
 
 
+def _replace_guide_approval_custody() -> None:
+    op.execute(r"""
+create function public.external_checker_locked_policies_valid(value jsonb, expected_hash text)
+returns boolean language plpgsql stable strict
+set search_path=pg_catalog,public,pg_temp as $$
+declare phase_name text; policy jsonb; binding jsonb; registry jsonb;
+        registry_row public.external_checker_registry_entries%rowtype;
+        prior_requirement text; prior_capability text; prior_version text;
+begin
+ if jsonb_typeof(value)<>'object' or jsonb_object_length(value)<>4
+    or value->>'schema_version'<>'external_checker_policies.v1'
+    or value->>'policies_sha256'<>expected_hash
+    or public.guide_proposal_hash(value-'policies_sha256')<>expected_hash then
+  return false;
+ end if;
+ if jsonb_typeof(value->'pre_submit')<>'object'
+    or jsonb_typeof(value->'post_submit')<>'object' then return false; end if;
+ foreach phase_name in array array['pre_submit','post_submit'] loop
+  policy:=value->phase_name;
+  if jsonb_object_length(policy)<>(case when phase_name='pre_submit' then 4 else 3 end)
+     or policy->>'schema_version'<>'external_'||phase_name||'_policy.v1'
+     or public.guide_proposal_hash(policy-'policy_sha256')<>policy->>'policy_sha256'
+     or jsonb_typeof(policy->'entries')<>'array' then return false; end if;
+  if phase_name='pre_submit' and policy->'workstream_default' is distinct from
+     jsonb_build_object('checker_id','workstream.default','checker_version','v1',
+       'behavior_sha256','sha256:af2c604f792c4456d3b222036c772161b1503eace65ff90c3d3a23d9d348c28f')
+  then return false; end if;
+  prior_requirement:=null; prior_capability:=null; prior_version:=null;
+  for binding in select item from jsonb_array_elements(policy->'entries') item loop
+   if jsonb_typeof(binding)<>'object' or jsonb_object_length(binding)<>5
+      or binding->>'stage'<>phase_name
+      or jsonb_typeof(binding->'configuration')<>'object'
+      or public.external_checker_registry_digest(binding->'configuration')
+         <>binding->>'configuration_sha256' then return false; end if;
+   registry:=binding->'registry';
+   if jsonb_typeof(registry)<>'object' or jsonb_object_length(registry)<>14 then
+    return false;
+   end if;
+   select * into registry_row from public.external_checker_registry_entries
+    where id=(registry->>'registry_entry_id')::uuid
+      and entry_digest=registry->>'entry_digest';
+   if not found
+      or registry_row.capability_id<>registry->>'capability_id'
+      or registry_row.capability_version<>registry->>'capability_version'
+      or registry_row.phase<>registry->>'phase'
+      or registry_row.phase<>phase_name
+      or registry_row.image_digest<>registry->>'image_digest'
+      or registry_row.registration_operation_id<>(registry->>'registration_operation_id')::uuid
+      or registry_row.registered_by_actor_profile_id<>(registry->>'registered_by_actor_profile_id')::uuid
+      or registry_row.authorization_decision_event_id<>(registry->>'authorization_decision_event_id')::uuid
+      or registry_row.created_at<>(registry->>'created_at')::timestamptz
+      or registry->'configuration_schema' is distinct from jsonb_build_object(
+        'schema_id',registry_row.configuration_schema_id,
+        'schema_version',registry_row.configuration_schema_version,
+        'document',registry_row.configuration_schema_document,
+        'schema_sha256',registry_row.configuration_schema_sha256)
+      or registry->'input_schema' is distinct from jsonb_build_object(
+        'schema_id',registry_row.input_schema_id,
+        'schema_version',registry_row.input_schema_version,
+        'document',registry_row.input_schema_document,
+        'schema_sha256',registry_row.input_schema_sha256)
+      or registry->'output_schema' is distinct from jsonb_build_object(
+        'schema_id',registry_row.output_schema_id,
+        'schema_version',registry_row.output_schema_version,
+        'document',registry_row.output_schema_document,
+        'schema_sha256',registry_row.output_schema_sha256)
+      or registry->'resources' is distinct from jsonb_build_object(
+        'cpu_millis',registry_row.cpu_millis,
+        'memory_bytes',registry_row.memory_bytes,
+        'deadline_ms',registry_row.deadline_ms,
+        'maximum_output_bytes',registry_row.maximum_output_bytes)
+      or (prior_requirement,prior_capability,prior_version) is not null
+         and row(binding->>'requirement_id',registry_row.capability_id,
+                 registry_row.capability_version)
+             <= row(prior_requirement,prior_capability,prior_version)
+   then return false; end if;
+   prior_requirement:=binding->>'requirement_id';
+   prior_capability:=registry_row.capability_id;
+   prior_version:=registry_row.capability_version;
+  end loop;
+ end loop;
+ return true;
+exception when others then return false;
+end $$
+""")
+    definition = op.get_bind().execute(sa.text(
+        "select pg_get_functiondef('public.require_guide_proposal_approval()'::regprocedure)"
+    )).scalar_one()
+    declaration = "        prior project_guide_proposal_approvals%rowtype;"
+    if definition.count(declaration) != 1:
+        raise RuntimeError("guide approval declaration shape changed")
+    definition = definition.replace(
+        declaration, declaration + "\n        external_plan boolean;"
+    )
+    anchor = """        IF a.operation_id IS NULL THEN
+          RAISE EXCEPTION 'immutable proposal approval operation missing' USING ERRCODE='23514';
+        END IF;"""
+    if definition.count(anchor) != 1:
+        raise RuntimeError("guide approval operation guard shape changed")
+    definition = definition.replace(
+        anchor,
+        anchor + """
+        external_plan:=a.effective_pre_submit_plan::jsonb->>'schema_version'
+          ='external_checker_policies.v1';""",
+    )
+    old_hashes = """           OR guide_proposal_hash(pre.compiled_bundle::jsonb) IS DISTINCT FROM pre.compiled_bundle_hash
+           OR guide_proposal_hash(a.effective_pre_submit_plan::jsonb) IS DISTINCT FROM a.effective_pre_submit_plan_hash"""
+    new_hashes = """           OR (NOT external_plan AND (
+             guide_proposal_hash(pre.compiled_bundle::jsonb) IS DISTINCT FROM pre.compiled_bundle_hash
+             OR guide_proposal_hash(a.effective_pre_submit_plan::jsonb) IS DISTINCT FROM a.effective_pre_submit_plan_hash))
+           OR (external_plan AND (
+             pre.compiled_bundle::jsonb IS DISTINCT FROM a.effective_pre_submit_plan::jsonb->'pre_submit'
+             OR NOT public.external_checker_locked_policies_valid(
+               a.effective_pre_submit_plan::jsonb,a.effective_pre_submit_plan_hash)))"""
+    if definition.count(old_hashes) != 1:
+        raise RuntimeError("guide approval plan digest shape changed")
+    definition = definition.replace(old_hashes, new_hashes)
+    old_plan = """           OR a.effective_pre_submit_plan::jsonb->'lineage' IS DISTINCT FROM jsonb_build_object(
+             'project_id',a.project_id,'guide_id',a.guide_id,
+             'guide_version',a.target_json->>'guide_version',
+             'source_snapshot_id',a.target_json->>'source_snapshot_id',
+             'source_snapshot_hash',a.target_json->>'source_snapshot_hash',
+             'effective_policy_id',e.id,'effective_policy_hash',e.effective_policy_hash,
+             'pre_submit_policy_id',pre.id,'pre_submit_policy_bundle_hash',pre.compiled_bundle_hash)
+           OR a.effective_pre_submit_plan::jsonb->'catalogue' IS DISTINCT FROM jsonb_build_object(
+             'id',a.target_json->>'pre_catalogue_id','version',a.target_json->>'pre_catalogue_version',
+             'schema_version',a.target_json->>'pre_catalogue_schema_version',
+             'manifest_sha256',a.target_json->>'pre_catalogue_manifest_hash')"""
+    new_plan = """           OR (NOT external_plan AND (
+             a.effective_pre_submit_plan::jsonb->'lineage' IS DISTINCT FROM jsonb_build_object(
+               'project_id',a.project_id,'guide_id',a.guide_id,
+               'guide_version',a.target_json->>'guide_version',
+               'source_snapshot_id',a.target_json->>'source_snapshot_id',
+               'source_snapshot_hash',a.target_json->>'source_snapshot_hash',
+               'effective_policy_id',e.id,'effective_policy_hash',e.effective_policy_hash,
+               'pre_submit_policy_id',pre.id,'pre_submit_policy_bundle_hash',pre.compiled_bundle_hash)
+             OR a.effective_pre_submit_plan::jsonb->'catalogue' IS DISTINCT FROM jsonb_build_object(
+               'id',a.target_json->>'pre_catalogue_id','version',a.target_json->>'pre_catalogue_version',
+               'schema_version',a.target_json->>'pre_catalogue_schema_version',
+               'manifest_sha256',a.target_json->>'pre_catalogue_manifest_hash')))"""
+    if definition.count(old_plan) != 1:
+        raise RuntimeError("guide approval legacy plan binding shape changed")
+    op.execute(definition.replace(old_plan, new_plan))
+
+
 def upgrade() -> None:
     op.execute("set local search_path=pg_catalog,public,pg_temp")
     op.execute("lock table public.actor_profiles, public.actor_identity_links, public.audit_events, public.submissions, public.checker_runs, public.submission_bundle_durable_intents, public.submission_bundle_admissions in access exclusive mode")
@@ -445,6 +590,7 @@ def upgrade() -> None:
     _alter_selected_lineage()
     _replace_admission_guards()
     _selected_run_guards()
+    _replace_guide_approval_custody()
 
 
 def downgrade() -> None:

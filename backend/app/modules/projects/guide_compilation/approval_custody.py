@@ -99,6 +99,13 @@ def approved_projection_digest(view) -> str:
     )
     target = GuideProposalTarget.model_validate(operation.target_json)
     receipt = GuideProposalApprovalReceipt.model_validate(operation.receipt_json)
+    external_plan_hash = None
+    if operation.effective_pre_submit_plan.get("schema_version") == (
+        "external_checker_policies.v1"
+    ):
+        external_plan_hash = LockedExternalCheckerPolicies.model_validate(
+            operation.effective_pre_submit_plan
+        ).policies_sha256
     if (
         target.digest != operation.target_digest
         or target.compilation_id != view.compilation.id
@@ -145,7 +152,11 @@ def approved_projection_digest(view) -> str:
         or pre.effective_policy_id != effective.id
         or pre.effective_policy_hash != effective.effective_policy_hash
         or operation.effective_pre_submit_plan_hash != receipt.effective_pre_submit_plan_hash
-        or canonical_json_hash(operation.effective_pre_submit_plan)
+        or (
+            external_plan_hash
+            if external_plan_hash is not None
+            else canonical_json_hash(operation.effective_pre_submit_plan)
+        )
         != receipt.effective_pre_submit_plan_hash
     ):
         raise ValueError("approved proposal custody mismatch")
