@@ -25,12 +25,9 @@ from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitReservationFacts,
     SelectedPreSubmitRequestConflict,
     SelectedPreSubmitTerminalFacts,
+    SelectedPreSubmitUnavailable,
 )
 from app.modules.checkers.models import SelectedPreSubmitRun
-
-
-class SelectedPreSubmitUnavailable(RuntimeError):
-    """Conceal absent, foreign, stale, conflicting or already leased PRE custody."""
 
 
 class SelectedPreSubmitTaskGuard(Protocol):
@@ -514,5 +511,4 @@ __all__ = (
     "SelectedPreSubmitCoordinator",
     "SelectedPreSubmitExecutionCapability",
     "SelectedPreSubmitTaskGuard",
-    "SelectedPreSubmitUnavailable",
 )

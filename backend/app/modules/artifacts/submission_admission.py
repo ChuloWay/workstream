@@ -83,6 +83,7 @@ from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitCurrentFacts,
     SelectedPreSubmitReservationFacts,
     SelectedPreSubmitRequestConflict,
+    SelectedPreSubmitUnavailable,
 )
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
@@ -864,16 +865,32 @@ class PreparedSubmissionBundlePreparationCommand:
                     current = await runtime.selected_coordinator.read_current(
                         reservation
                     )
-                    if current is not None:
-                        return await self._selected_replay_result(current)
-                    await runtime.materialization.authorize_inspected(
-                        materialization_request
-                    )
-                    reserved_id = await runtime.selected_coordinator.reserve(
-                        reservation
-                    )
-                    if reserved_id != reservation.attempt_id:
-                        raise RuntimeError("selected PRE reservation identity changed")
+                    if current is None:
+                        await runtime.materialization.authorize_inspected(
+                            materialization_request
+                        )
+                        reserved_id = await runtime.selected_coordinator.reserve(
+                            reservation
+                        )
+                        if reserved_id != reservation.attempt_id:
+                            raise RuntimeError("selected PRE reservation identity changed")
+                if current is not None:
+                    if current.status == "running":
+                        try:
+                            recovered = await runtime.selected_execution.recover_expired(
+                                run_id=current.run_id,
+                                reservation=current.reservation,
+                            )
+                        except SelectedPreSubmitUnavailable:
+                            pass
+                        else:
+                            current = SelectedPreSubmitCurrentFacts(
+                                run_id=current.run_id,
+                                reservation=current.reservation,
+                                status="infrastructure_failed",
+                                terminal=recovered.terminal,
+                            )
+                    return await self._selected_replay_result(current)
                 completion = await runtime.selected_execution.execute(
                     reservation=reservation,
                     materialization=replace(

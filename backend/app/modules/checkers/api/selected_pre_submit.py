@@ -886,6 +886,10 @@ class SelectedPreSubmitRequestConflict(RuntimeError):
     """Refuse one actor/key namespace reused with changed stable facts."""
 
 
+class SelectedPreSubmitUnavailable(RuntimeError):
+    """Conceal absent, stale or conflicting durable selected PRE custody."""
+
+
 class SelectedPreSubmitAuthorityUnavailable(RuntimeError):
     """Conceal fixed-service PRE authorization loss without product facts."""
 
@@ -910,4 +914,5 @@ __all__ = (
     "SelectedPreSubmitReservationFacts",
     "SelectedPreSubmitRequestConflict",
     "SelectedPreSubmitTerminalFacts",
+    "SelectedPreSubmitUnavailable",
 )
