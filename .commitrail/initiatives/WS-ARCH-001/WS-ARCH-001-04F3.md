@@ -133,12 +133,17 @@ replacement writer or route would fork the atomic creation operation.
 - Direct callers of the superseded repository context method also require
   bounded test/support migration in `backend/tests/historical_submission_fixtures.py`,
   `backend/tests/authorization/task_authority/test_lifecycle_races.py`,
+  `backend/tests/authorization/task_authority/test_submission_policy.py`,
   `backend/tests/test_artifact_bindings_db.py`,
   `backend/tests/test_submission_evaluation_capacity.py`,
   `backend/tests/test_effective_pre_submit_execution.py`, and
   `backend/tests/test_approved_guide_intake.py`. Preserve each original
   owner, archive, authorization and race assertion while switching to the
   single composed context port or exact new context shape; add no old-port alias.
+- `backend/tests/migration_fixtures.py` only to extend existing historical-schema
+  seeding helpers with temporary all-null cause columns. Remove those columns
+  before upgrade and assert original row values and column shape are restored;
+  this test support does not add a runtime compatibility path.
 - `backend/tests/conftest.py` only for the deterministic 0033 public-schema
   fingerprint, with the existing strict schema guard and resettable-table list
   retained. The lead independently verifies the integrated fingerprint.
