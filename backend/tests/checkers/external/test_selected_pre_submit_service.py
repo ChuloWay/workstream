@@ -120,6 +120,7 @@ def _reservation() -> SelectedPreSubmitReservationFacts:
         task_id=new_record_id(),
         assignment_id=new_record_id(),
         attempt_id=new_record_id(),
+        idempotency_key=new_record_id(),
         attempt_request_digest="sha256:" + "0" * 64,
         prepared_generation_id=new_record_id(),
         policy_sha256="sha256:" + "1" * 64,

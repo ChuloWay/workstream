@@ -279,6 +279,7 @@ async def test_selected_pre_runs_default_then_locked_external_image(
             task_id=identity.task_id,
             assignment_id=identity.assignment_id,
             attempt_id=identity.attempt_id,
+            idempotency_key=new_record_id(),
             attempt_request_digest=identity.attempt_request_digest,
             prepared_generation_id=identity.prepared_generation_id,
             policy_sha256=policy.policy_sha256,
@@ -308,6 +309,12 @@ async def test_selected_pre_runs_default_then_locked_external_image(
         assert terminal.canonical_body()["execution_latency_ms"] == 50
         assert terminal.canonical_body()["request_digest"] == reservation.request_digest
         assert terminal.terminal_digest == canonical_json_hash(terminal.canonical_body())
+        assert SelectedPreSubmitTerminalFacts.from_canonical_body(
+            terminal.canonical_body()
+        ) == terminal
+        changed_terminal = terminal.canonical_body() | {"queue_latency_ms": 26}
+        with pytest.raises(ValueError, match="terminal facts"):
+            SelectedPreSubmitTerminalFacts.from_canonical_body(changed_terminal)
     finally:
         await request.prepared_artifact.close()
         manager.close()
@@ -471,6 +478,7 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
             project=project,
             prepared_generation_id=request.prepared_artifact.generation_id,
             attempt_id=new_record_id(),
+            idempotency_key=new_record_id(),
             attempt_request_digest=SHA,
             commitment=request.prepared_artifact.commitment,
             manifest=request.manifest,

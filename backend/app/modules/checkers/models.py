@@ -428,6 +428,11 @@ class SelectedPreSubmitRun(Base):
             name="json_objects",
         ),
         UniqueConstraint("request_digest", name="request_digest"),
+        UniqueConstraint(
+            "actor_profile_id",
+            "idempotency_key",
+            name="uq_selected_pre_run_actor_key",
+        ),
         Index("ix_selected_pre_runs_task", "task_id"),
         Index("ix_selected_pre_runs_status", "status"),
     )
@@ -438,6 +443,7 @@ class SelectedPreSubmitRun(Base):
     project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     assignment_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     prepared_generation_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     request_json: Mapped[dict] = mapped_column(JSONB(), nullable=False)
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)

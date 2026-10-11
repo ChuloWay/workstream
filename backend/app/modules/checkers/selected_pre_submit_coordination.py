@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from dataclasses import replace
 from datetime import timedelta
 from typing import Protocol
 from uuid import UUID
@@ -16,11 +17,13 @@ from app.modules.checkers.api.selected_pre_submit import (
     PreparedSelectedPreSubmitExecution,
     PreparedSelectedPreSubmitFinalization,
     SelectedPreSubmitCompletion,
+    SelectedPreSubmitCurrentFacts,
     SelectedPreSubmitExecuteFacts,
     SelectedPreSubmitExecutionFacts,
     SelectedPreSubmitFinalizeFacts,
     SelectedPreSubmitLeaseFacts,
     SelectedPreSubmitReservationFacts,
+    SelectedPreSubmitRequestConflict,
     SelectedPreSubmitTerminalFacts,
 )
 from app.modules.checkers.models import SelectedPreSubmitRun
@@ -192,6 +195,7 @@ def _matches(row: SelectedPreSubmitRun, facts: SelectedPreSubmitReservationFacts
         and row.project_id == str(facts.project_id)
         and row.task_id == str(facts.task_id)
         and row.assignment_id == str(facts.assignment_id)
+        and row.idempotency_key == str(facts.idempotency_key)
         and row.prepared_generation_id == str(facts.prepared_generation_id)
         and row.policy_sha256 == facts.policy_sha256
         and row.default_behavior_sha256 == facts.default_behavior_sha256
@@ -217,6 +221,69 @@ class SelectedPreSubmitCoordinator:
         self._capability: SelectedPreSubmitAdmissionCapability | None = None
         self._execution_capability: SelectedPreSubmitExecutionCapability | None = None
 
+    async def read_current(
+        self, facts: SelectedPreSubmitReservationFacts
+    ) -> SelectedPreSubmitCurrentFacts | None:
+        """Lock TASK before reading and validating one actor/key CHECKERS row."""
+        _require_root(self._session)
+        if type(facts) is not SelectedPreSubmitReservationFacts:
+            raise TypeError("selected PRE reservation facts are invalid")
+        await self._tasks.lock_selected_pre_submit_scope(facts)
+        row = await self._session.scalar(
+            select(SelectedPreSubmitRun)
+            .where(
+                SelectedPreSubmitRun.actor_profile_id
+                == str(facts.actor_profile_id),
+                SelectedPreSubmitRun.idempotency_key
+                == str(facts.idempotency_key),
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if row is None:
+            return None
+        try:
+            stored = SelectedPreSubmitReservationFacts.from_canonical_body(
+                row.request_json
+            )
+            normalized = replace(
+                facts,
+                attempt_id=stored.attempt_id,
+                prepared_generation_id=stored.prepared_generation_id,
+            )
+            terminal = (
+                SelectedPreSubmitTerminalFacts.from_canonical_body(row.terminal_json)
+                if row.terminal_json is not None
+                else None
+            )
+        except (TypeError, ValueError):
+            raise SelectedPreSubmitUnavailable(
+                "selected_pre_submit_stored_facts_invalid"
+            ) from None
+        if (
+            normalized != stored
+            or not _matches(row, stored)
+            or row.request_digest != stored.request_digest
+            or (
+                terminal is not None
+                and (
+                    terminal.terminal_digest != row.terminal_digest
+                    or terminal.lease.reservation != stored
+                    or terminal.execution is not None
+                    and terminal.execution.eligible != row.eligible
+                )
+            )
+        ):
+            raise SelectedPreSubmitRequestConflict(
+                "selected_pre_submit_request_conflict"
+            )
+        return SelectedPreSubmitCurrentFacts(
+            run_id=UUID(row.id),
+            reservation=stored,
+            status=row.status,
+            terminal=terminal,
+        )
+
     async def reserve(self, facts: SelectedPreSubmitReservationFacts) -> UUID:
         """Acquire TASK custody before the CHECKERS key and exact request row."""
         _require_root(self._session)
@@ -225,11 +292,23 @@ class SelectedPreSubmitCoordinator:
         await self._tasks.lock_selected_pre_submit_scope(facts)
         await self._session.execute(
             text("select pg_advisory_xact_lock(hashtextextended(:key,0))"),
-            {"key": "checkers:selected-pre:" + str(facts.attempt_id)},
+            {
+                "key": (
+                    "checkers:selected-pre:"
+                    + str(facts.actor_profile_id)
+                    + ":"
+                    + str(facts.idempotency_key)
+                )
+            },
         )
         row = await self._session.scalar(
             select(SelectedPreSubmitRun)
-            .where(SelectedPreSubmitRun.id == str(facts.attempt_id))
+            .where(
+                SelectedPreSubmitRun.actor_profile_id
+                == str(facts.actor_profile_id),
+                SelectedPreSubmitRun.idempotency_key
+                == str(facts.idempotency_key),
+            )
             .with_for_update()
             .execution_options(populate_existing=True)
         )
@@ -244,6 +323,7 @@ class SelectedPreSubmitCoordinator:
             project_id=str(facts.project_id),
             task_id=str(facts.task_id),
             assignment_id=str(facts.assignment_id),
+            idempotency_key=str(facts.idempotency_key),
             prepared_generation_id=str(facts.prepared_generation_id),
             request_json=facts.canonical_body(),
             request_digest=facts.request_digest,

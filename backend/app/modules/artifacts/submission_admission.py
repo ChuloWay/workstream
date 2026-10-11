@@ -80,7 +80,9 @@ from app.modules.checkers.api.post_submit import PostSubmissionEvaluationContent
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitCompletion,
     SelectedPreSubmitCoordinationPort,
+    SelectedPreSubmitCurrentFacts,
     SelectedPreSubmitReservationFacts,
+    SelectedPreSubmitRequestConflict,
 )
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
@@ -802,6 +804,7 @@ class PreparedSubmissionBundlePreparationCommand:
                         project=project_context,
                         prepared_generation_id=prepared.generation_id,
                         attempt_id=attempt_id,
+                        idempotency_key=request.idempotency_key,
                         attempt_request_digest=(
                             selected_pre_submit_attempt_request_digest(
                                 actor_profile_id=request.actor.actor_profile_id,
@@ -848,6 +851,11 @@ class PreparedSubmissionBundlePreparationCommand:
                         default_checker_input=selected.default_input,
                         selected_reservation=reservation,
                     )
+                    current = await runtime.selected_coordinator.read_current(
+                        reservation
+                    )
+                    if current is not None:
+                        return await self._selected_replay_result(current)
                     await runtime.materialization.authorize_inspected(
                         materialization_request
                     )
@@ -898,6 +906,10 @@ class PreparedSubmissionBundlePreparationCommand:
                     selected_pre_submit_run_id=reservation.attempt_id,
                 )
                 return self._result(result)
+        except SelectedPreSubmitRequestConflict as exc:
+            raise SubmissionBundlePreparationRejected(
+                "submission_bundle_preparation_request_conflict"
+            ) from exc
         except PreSubmitEvidenceConflict as exc:
             raise self._evidence_failure(exc) from exc
         except ArtifactAuthorityDeniedError as exc:
@@ -906,6 +918,73 @@ class PreparedSubmissionBundlePreparationCommand:
             ) from exc
         finally:
             self._authority.close()
+
+    async def _selected_replay_result(
+        self, current: SelectedPreSubmitCurrentFacts
+    ) -> SubmissionBundlePreparationResult:
+        """Replay exact work facts or an already durable pass without execution."""
+        terminal = current.terminal
+        if current.status in {"queued", "running"} or terminal is None:
+            raise SubmissionBundlePreparationInfrastructureUnavailable(
+                "pre_submission_attempt_outcome_unresolved"
+            )
+        if terminal.outcome == "infrastructure_failed":
+            raise SubmissionBundlePreparationInfrastructureUnavailable(
+                terminal.infrastructure_failure_code
+                or "pre_submission_checked_custody_unavailable"
+            )
+        execution = terminal.execution
+        if execution is None:
+            raise SubmissionBundlePreparationInfrastructureUnavailable(
+                "pre_submission_checked_custody_unavailable"
+            )
+        if not execution.eligible:
+            raise SubmissionBundlePreparationCheckFailed(execution)
+        row = (
+            await self._session.execute(
+                select(
+                    SubmissionBundleDurableIntent,
+                    ArtifactPutAttempt,
+                    SubmissionBundleAdmission,
+                )
+                .join(
+                    ArtifactPutAttempt,
+                    ArtifactPutAttempt.id
+                    == SubmissionBundleDurableIntent.put_attempt_id,
+                )
+                .outerjoin(
+                    SubmissionBundleAdmission,
+                    SubmissionBundleAdmission.durable_intent_id
+                    == SubmissionBundleDurableIntent.id,
+                )
+                .where(
+                    SubmissionBundleDurableIntent.selected_pre_submit_run_id
+                    == str(current.run_id)
+                )
+            )
+        ).one_or_none()
+        if row is None:
+            raise SubmissionBundlePreparationInfrastructureUnavailable(
+                "pre_submission_checked_custody_unavailable"
+            )
+        _, attempt, admission = row
+        status = attempt.status
+        admission_id = None
+        if admission is not None:
+            if admission.status == "ready":
+                status, admission_id = "ready", UUID(admission.id)
+            elif admission.status == "stale":
+                status = "stale"
+            else:
+                status = "conflict"
+        return SubmissionBundlePreparationResult(
+            put_attempt_id=UUID(attempt.id),
+            admission_id=admission_id,
+            submission_bundle_preparation_status=SubmissionBundlePreparationStatus(
+                status
+            ),
+            replayed=True,
+        )
 
     async def _matching_replay_intent(self, evidence_id: UUID) -> UUID | None:
         """Find an older exact lineage without trusting client replay selectors."""

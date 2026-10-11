@@ -79,7 +79,10 @@ async def test_hidden_preparation_uses_selected_pre_before_durable_admission(
         prepare_selected_authorization=AsyncMock(return_value=object()),
         authorize_inspected=AsyncMock(),
     )
-    coordinator = SimpleNamespace(reserve=AsyncMock(return_value=attempt_id))
+    coordinator = SimpleNamespace(
+        read_current=AsyncMock(return_value=None),
+        reserve=AsyncMock(return_value=attempt_id),
+    )
     selected_execution = SimpleNamespace(execute=AsyncMock(return_value=completion))
     durable = SimpleNamespace(
         admit_in_transaction=AsyncMock(
@@ -165,6 +168,7 @@ async def test_hidden_preparation_uses_selected_pre_before_durable_admission(
     )
     materialization.prepare_selected_authorization.assert_awaited_once()
     materialization.authorize_inspected.assert_awaited_once()
+    coordinator.read_current.assert_awaited_once_with(reservation)
     coordinator.reserve.assert_awaited_once_with(reservation)
     selected_execution.execute.assert_awaited_once()
     admitted = durable.admit_in_transaction.await_args.args[0]
@@ -176,4 +180,3 @@ async def test_hidden_preparation_uses_selected_pre_before_durable_admission(
         durable.admit_in_transaction.return_value[2],
         selected_pre_submit_run_id=attempt_id,
     )
-

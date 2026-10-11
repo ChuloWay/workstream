@@ -259,6 +259,51 @@ class SelectedPreSubmitExecutionFacts:
             "eligible": self.eligible,
         }
 
+    @classmethod
+    def from_canonical_body(
+        cls, body: object
+    ) -> SelectedPreSubmitExecutionFacts:
+        """Parse the exact bounded result retained for idempotent work replay."""
+        if type(body) is not dict or set(body) != {
+            "schema_version",
+            "policy_sha256",
+            "workstream_default",
+            "required_external_count",
+            "external_members",
+            "eligible",
+        } or body["schema_version"] != "workstream.selected_pre_submit_execution.v1":
+            raise ValueError("selected PRE execution facts are invalid")
+        members = body["external_members"]
+        if type(members) is not list:
+            raise ValueError("selected PRE execution facts are invalid")
+        return cls(
+            policy_sha256=body["policy_sha256"],
+            workstream_default=WorkstreamDefaultCheckerResult.model_validate(
+                body["workstream_default"]
+            ),
+            required_external_count=body["required_external_count"],
+            external_members=tuple(
+                ExternalPreSubmitMemberFacts(
+                    order=item["order"],
+                    requirement_id=item["requirement_id"],
+                    registry_entry_id=UUID(str(item["registry_entry_id"])),
+                    registry_entry_digest=item["registry_entry_digest"],
+                    request_digest=item["request_digest"],
+                    result=ExternalCheckerExecutionResult.model_validate(
+                        item["result"]
+                        | {
+                            "registry_entry_id": UUID(
+                                str(item["result"]["registry_entry_id"])
+                            )
+                        }
+                    ),
+                    isolation=ExternalPreSubmitIsolationFacts(**item["isolation"]),
+                )
+                for item in members
+            ),
+            eligible=body["eligible"],
+        )
+
     @property
     def result_digest(self) -> str:
         """Bind every default, project-image and observed-isolation result fact."""
@@ -275,6 +320,7 @@ class SelectedPreSubmitReservationFacts:
     task_id: UUID
     assignment_id: UUID
     attempt_id: UUID
+    idempotency_key: UUID
     attempt_request_digest: str
     prepared_generation_id: UUID
     policy_sha256: str
@@ -295,6 +341,7 @@ class SelectedPreSubmitReservationFacts:
             self.task_id,
             self.assignment_id,
             self.attempt_id,
+            self.idempotency_key,
             self.prepared_generation_id,
         )
         digests = (
@@ -347,6 +394,7 @@ class SelectedPreSubmitReservationFacts:
             "task_id": str(self.task_id),
             "assignment_id": str(self.assignment_id),
             "attempt_id": str(self.attempt_id),
+            "idempotency_key": str(self.idempotency_key),
             "attempt_request_digest": self.attempt_request_digest,
             "prepared_generation_id": str(self.prepared_generation_id),
             "policy_sha256": self.policy_sha256,
@@ -376,6 +424,7 @@ class SelectedPreSubmitReservationFacts:
             "task_id",
             "assignment_id",
             "attempt_id",
+            "idempotency_key",
             "attempt_request_digest",
             "prepared_generation_id",
             "policy_sha256",
@@ -396,6 +445,7 @@ class SelectedPreSubmitReservationFacts:
             task_id=UUID(str(body["task_id"])),
             assignment_id=UUID(str(body["assignment_id"])),
             attempt_id=UUID(str(body["attempt_id"])),
+            idempotency_key=UUID(str(body["idempotency_key"])),
             attempt_request_digest=body["attempt_request_digest"],
             prepared_generation_id=UUID(str(body["prepared_generation_id"])),
             policy_sha256=body["policy_sha256"],
@@ -592,6 +642,14 @@ class SelectedPreSubmitCompletion:
 class SelectedPreSubmitCoordinationPort(Protocol):
     """CHECKERS-owned durable lease operations used by the ART workflow."""
 
+    async def read_current(
+        self, facts: SelectedPreSubmitReservationFacts
+    ) -> SelectedPreSubmitCurrentFacts | None:
+        """Read one exact actor/key result after TASK custody is locked."""
+
+    async def reserve(self, facts: SelectedPreSubmitReservationFacts) -> UUID:
+        """Reserve one exact actor/key request after TASK custody is locked."""
+
     async def claim(
         self,
         *,
@@ -683,10 +741,95 @@ class SelectedPreSubmitTerminalFacts:
             ),
         }
 
+    @classmethod
+    def from_canonical_body(
+        cls, body: object
+    ) -> SelectedPreSubmitTerminalFacts:
+        """Parse and revalidate every persisted lease, result and timing fact."""
+        if type(body) is not dict or set(body) != {
+            "schema_version",
+            "reservation",
+            "request_digest",
+            "lease_id",
+            "lease_generation",
+            "lease_expires_at",
+            "outcome",
+            "execution",
+            "infrastructure_failure_code",
+            "queued_at",
+            "started_at",
+            "completed_at",
+            "queue_latency_ms",
+            "execution_latency_ms",
+        } or body["schema_version"] != "workstream.selected_pre_submit_terminal.v1":
+            raise ValueError("selected PRE terminal facts are invalid")
+        reservation = SelectedPreSubmitReservationFacts.from_canonical_body(
+            body["reservation"]
+        )
+        if body["request_digest"] != reservation.request_digest:
+            raise ValueError("selected PRE terminal request is invalid")
+        execution_body = body["execution"]
+        value = cls(
+            lease=SelectedPreSubmitLeaseFacts(
+                reservation=reservation,
+                lease_id=UUID(str(body["lease_id"])),
+                lease_generation=body["lease_generation"],
+                lease_expires_at=datetime.fromisoformat(body["lease_expires_at"]),
+            ),
+            outcome=body["outcome"],
+            execution=(
+                SelectedPreSubmitExecutionFacts.from_canonical_body(execution_body)
+                if execution_body is not None
+                else None
+            ),
+            infrastructure_failure_code=body["infrastructure_failure_code"],
+            queued_at=datetime.fromisoformat(body["queued_at"]),
+            started_at=datetime.fromisoformat(body["started_at"]),
+            completed_at=datetime.fromisoformat(body["completed_at"]),
+        )
+        if value.canonical_body() != body:
+            raise ValueError("selected PRE terminal facts are invalid")
+        return value
+
     @property
     def terminal_digest(self) -> str:
         """Bind the exact terminal body used by replay and admission."""
         return canonical_json_hash(self.canonical_body())
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedPreSubmitCurrentFacts:
+    """One exact actor/key namespace result safe for bounded ART replay."""
+
+    run_id: UUID
+    reservation: SelectedPreSubmitReservationFacts
+    status: Literal["queued", "running", "completed", "infrastructure_failed"]
+    terminal: SelectedPreSubmitTerminalFacts | None
+
+    def __post_init__(self) -> None:
+        terminal_status = (
+            self.terminal.outcome if self.terminal is not None else None
+        )
+        if (
+            type(self.run_id) is not UUID
+            or type(self.reservation) is not SelectedPreSubmitReservationFacts
+            or self.run_id != self.reservation.attempt_id
+            or self.status not in {
+                "queued",
+                "running",
+                "completed",
+                "infrastructure_failed",
+            }
+            or (self.status in {"queued", "running"}) != (self.terminal is None)
+            or (
+                self.terminal is not None
+                and (
+                    self.terminal.lease.reservation != self.reservation
+                    or terminal_status != self.status
+                )
+            )
+        ):
+            raise ValueError("selected PRE current facts are invalid")
 
 
 class SelectedPreSubmitInfrastructureUnavailable(RuntimeError):
@@ -705,6 +848,10 @@ class SelectedPreSubmitInfrastructureUnavailable(RuntimeError):
         super().__init__(code)
 
 
+class SelectedPreSubmitRequestConflict(RuntimeError):
+    """Refuse one actor/key namespace reused with changed stable facts."""
+
+
 class SelectedPreSubmitAuthorityUnavailable(RuntimeError):
     """Conceal fixed-service PRE authorization loss without product facts."""
 
@@ -720,11 +867,13 @@ __all__ = (
     "SelectedPreSubmitAuthorityPort",
     "SelectedPreSubmitCompletion",
     "SelectedPreSubmitCoordinationPort",
+    "SelectedPreSubmitCurrentFacts",
     "SelectedPreSubmitExecuteFacts",
     "SelectedPreSubmitExecutionFacts",
     "SelectedPreSubmitInfrastructureUnavailable",
     "SelectedPreSubmitFinalizeFacts",
     "SelectedPreSubmitLeaseFacts",
     "SelectedPreSubmitReservationFacts",
+    "SelectedPreSubmitRequestConflict",
     "SelectedPreSubmitTerminalFacts",
 )

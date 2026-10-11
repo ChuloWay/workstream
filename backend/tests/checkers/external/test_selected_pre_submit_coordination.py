@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
@@ -25,6 +26,7 @@ from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitFinalizeFacts,
     SelectedPreSubmitLeaseFacts,
     SelectedPreSubmitReservationFacts,
+    SelectedPreSubmitRequestConflict,
 )
 from app.adapters.tasks import selected_pre_submit_task_guard
 from app.modules.tasks.repository import TaskRepository
@@ -32,6 +34,7 @@ from app.modules.checkers.models import SelectedPreSubmitRun
 from app.modules.checkers.selected_pre_submit_coordination import (
     SelectedPreSubmitAdmissionCapability,
     SelectedPreSubmitExecutionCapability,
+    SelectedPreSubmitCoordinator,
     SelectedPreSubmitUnavailable,
 )
 from tests.checkers.external.support import SHA
@@ -45,6 +48,7 @@ def _reservation() -> SelectedPreSubmitReservationFacts:
         task_id=new_record_id(),
         assignment_id=new_record_id(),
         attempt_id=new_record_id(),
+        idempotency_key=new_record_id(),
         attempt_request_digest=SHA,
         prepared_generation_id=new_record_id(),
         policy_sha256="sha256:" + "1" * 64,
@@ -55,6 +59,67 @@ def _reservation() -> SelectedPreSubmitReservationFacts:
         semantic_manifest_sha256="sha256:" + "4" * 64,
         execution_budget_ms=120_000,
     )
+
+
+def _queued_row(reservation: SelectedPreSubmitReservationFacts) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=str(reservation.attempt_id),
+        actor_profile_id=str(reservation.actor_profile_id),
+        identity_link_id=str(reservation.identity_link_id),
+        project_id=str(reservation.project_id),
+        task_id=str(reservation.task_id),
+        assignment_id=str(reservation.assignment_id),
+        idempotency_key=str(reservation.idempotency_key),
+        prepared_generation_id=str(reservation.prepared_generation_id),
+        request_json=reservation.canonical_body(),
+        request_digest=reservation.request_digest,
+        policy_sha256=reservation.policy_sha256,
+        default_behavior_sha256=reservation.default_behavior_sha256,
+        default_input_sha256=reservation.default_input_sha256,
+        archive_sha256=reservation.archive_sha256,
+        archive_byte_count=reservation.archive_byte_count,
+        semantic_manifest_sha256=reservation.semantic_manifest_sha256,
+        execution_budget_ms=reservation.execution_budget_ms,
+        status="queued",
+        terminal_json=None,
+        terminal_digest=None,
+        eligible=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_selected_pre_current_replays_only_stable_actor_key_facts() -> None:
+    stored = _reservation()
+    row = _queued_row(stored)
+    transaction = SimpleNamespace(is_active=True)
+    session = SimpleNamespace(
+        sync_session=SimpleNamespace(get_transaction=lambda: transaction),
+        in_nested_transaction=lambda: False,
+        scalar=AsyncMock(return_value=row),
+    )
+    tasks = SimpleNamespace(lock_selected_pre_submit_scope=AsyncMock())
+    coordinator = SelectedPreSubmitCoordinator(session, tasks=tasks)
+    fresh = replace(
+        stored,
+        attempt_id=new_record_id(),
+        prepared_generation_id=new_record_id(),
+    )
+
+    current = await coordinator.read_current(fresh)
+
+    assert current is not None
+    assert current.run_id == stored.attempt_id
+    assert current.reservation == stored
+    assert current.status == "queued"
+    tasks.lock_selected_pre_submit_scope.assert_awaited_once_with(fresh)
+
+    with pytest.raises(
+        SelectedPreSubmitRequestConflict,
+        match="selected_pre_submit_request_conflict",
+    ):
+        await coordinator.read_current(
+            replace(fresh, archive_sha256="sha256:" + "f" * 64)
+        )
 
 
 @pytest.mark.asyncio
