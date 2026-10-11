@@ -223,7 +223,11 @@ async def test_retry_sql_rejects_noncanonical_authority_resource_even_with_match
                     ))
                     session.add(_copied_audit_event(
                         initiation, id=initiation_id,
-                        event_payload={**initiation.event_payload, "references": references},
+                        event_payload={
+                            **initiation.event_payload,
+                            "references": references,
+                            "authorization_resource_digest": values["resource_digest"],
+                        },
                     ))
                     await session.flush()
                     values["authorization_decision_id"] = authority_id
@@ -338,26 +342,54 @@ async def test_retry_caller_rollback_removes_whole_successor(
 async def test_retry_audit_failure_removes_whole_successor(
     tmp_path, isolated_database_env, monkeypatch,
 ):
-    from app.adapters.audit import _CheckerRetryAudit
-
     async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
         operator = await _operator_for(h)
-
-        async def audit_unavailable(_participant, _preparation, _successor, _authority):
-            raise RuntimeError("controlled initiation audit outage")
-
-        with monkeypatch.context() as patch:
-            patch.setattr(_CheckerRetryAudit, "record", audit_unavailable)
-            with pytest.raises(RuntimeError, match="controlled initiation audit outage"):
+        async with h.factory.begin() as session:
+            await session.execute(text("CREATE SEQUENCE test_checker_retry_audit_attempt"))
+            await session.execute(text("""
+                CREATE FUNCTION test_checker_retry_audit_failure() RETURNS trigger
+                LANGUAGE plpgsql AS $$ BEGIN
+                  IF NOT EXISTS (SELECT 1 FROM audit_events
+                    WHERE action_id='operations.checker.retry'
+                      AND event_type='SensitiveAuthorizationAllowed') THEN
+                    RAISE EXCEPTION 'checker retry AUTH was not staged before audit'
+                      USING ERRCODE='23514';
+                  END IF;
+                  PERFORM nextval('test_checker_retry_audit_attempt');
+                  RAISE EXCEPTION 'checker retry audit insert rejected' USING ERRCODE='23514';
+                END $$
+            """))
+            await session.execute(text("""
+                CREATE TRIGGER test_checker_retry_audit_failure
+                BEFORE INSERT ON audit_events FOR EACH ROW
+                WHEN (NEW.event_type='CheckerRetryRequested')
+                EXECUTE FUNCTION test_checker_retry_audit_failure()
+            """))
+        try:
+            with pytest.raises(IntegrityError, match="checker retry audit insert rejected"):
                 async with h.factory.begin() as session:
                     await checker_retry_service(session, operator).retry(_command(h, operator))
-        async with h.factory() as session:
-            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
-            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
-            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
-            assert await session.scalar(select(func.count()).select_from(
-                AuditEvent
-            ).where(AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value)) == 0
+            async with h.factory() as session:
+                assert (await session.execute(text(
+                    "SELECT last_value,is_called FROM test_checker_retry_audit_attempt"
+                ))).one() == (1, True)
+                assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+                assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+                assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+                assert await session.scalar(select(func.count()).select_from(
+                    AuditEvent
+                ).where(AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value)) == 0
+                assert await session.scalar(select(func.count()).select_from(
+                    AuditEvent
+                ).where(AuditEvent.event_type == "CheckerRetryRequested")) == 0
+        finally:
+            async with h.factory.begin() as session:
+                await session.execute(text("DROP TRIGGER test_checker_retry_audit_failure ON audit_events"))
+                await session.execute(text("DROP FUNCTION test_checker_retry_audit_failure()"))
+                await session.execute(text("DROP SEQUENCE test_checker_retry_audit_attempt"))
+        async with h.factory.begin() as session:
+            valid = await checker_retry_service(session, operator).retry(_command(h, operator))
+        assert valid.successor.generation == 2
 
 
 async def test_retry_real_outbox_conflict_rolls_back_successor(
