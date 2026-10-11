@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import event, func, select, text
+from sqlalchemy import event, func, or_, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
@@ -179,19 +179,22 @@ async def test_revoked_manager_cannot_replay_a_successful_bulk_write(import_sour
     assert result.status_code == 200, result.text
     before = await _success_facts(project)
     async with db_session.get_session_factory()() as session, session.begin():
-        grant = (await session.scalars(select(AdminRoleGrant).where(
+        grants = list(await session.scalars(select(AdminRoleGrant).where(
             AdminRoleGrant.target_actor_profile_id == batch["tasks"][0]["created_by"],
             AdminRoleGrant.role == "project_manager", AdminRoleGrant.status == "active",
-        ))).one()
-        link = (await session.scalars(select(ActorIdentityLink).where(
-            ActorIdentityLink.actor_profile_id == grant.granted_by_actor_profile_id,
-        ))).one()
-        context = HumanAuthorizationContext(
-            actor_profile_id=UUID(link.actor_profile_id), identity_link_id=UUID(link.id),
-            actor_kind=ActorKind.HUMAN, actor_status=ActorStatus.ACTIVE,
-            identity_link_status=IdentityLinkStatus.ACTIVE, request_id=uuid4(), correlation_id=uuid4(),
-        )
-        await revoke_manager_grant(session, context, UUID(str(grant.id)))
+            or_(AdminRoleGrant.scope_type == "system", AdminRoleGrant.scope_project_id == project),
+        ).order_by(AdminRoleGrant.id)))
+        assert grants, "the actual manager must have covering authority before revocation"
+        for grant in grants:
+            link = (await session.scalars(select(ActorIdentityLink).where(
+                ActorIdentityLink.actor_profile_id == grant.granted_by_actor_profile_id,
+            ))).one()
+            context = HumanAuthorizationContext(
+                actor_profile_id=UUID(link.actor_profile_id), identity_link_id=UUID(link.id),
+                actor_kind=ActorKind.HUMAN, actor_status=ActorStatus.ACTIVE,
+                identity_link_status=IdentityLinkStatus.ACTIVE, request_id=uuid4(), correlation_id=uuid4(),
+            )
+            await revoke_manager_grant(session, context, UUID(str(grant.id)))
     denied = await client.post(_path(project, batch, "screen"), headers=key, json=payload)
     assert denied.status_code == 403 and denied.json()["error"]["code"] == "permission_not_granted", denied.text
     assert await _success_facts(project) == before

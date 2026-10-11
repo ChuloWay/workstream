@@ -319,6 +319,14 @@ initial lifecycle INSERT, after both real Task writes are observed. The original
 failure remains retained, and focused repaired proof is pending. No full native
 suite, hosted CI or readiness claim is made from this partial result.
 
+Focused replay at `f7f399580d5331b9f2bcd90ab504cc245c099f12` passed the stronger
+digest corruption control after both actual Task writes and failed the grant
+fixture selection, in 40.99 seconds, with cleanup complete. The creator has both
+system and project-covering PM grants; selecting only its actor still returns
+multiple grants. The bounded repair revokes every actual covering PM grant in
+deterministic order through the unchanged canonical revocation operation. It
+retains permission denial, denial-only evidence and unchanged successful facts.
+
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
 is reconciled onto the unmerged atomic candidate `91183adafec37e7ad7eda624ad3556d89dc54ce6`;
