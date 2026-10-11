@@ -12,7 +12,7 @@ PILOT-02A provides exact source custody but creates no Tasks. This chunk supplie
 that missing JSON-to-DRAFT operation and a covered-manager batch-status read.
 Issue #489 remains open after this chunk; batch transitions and CLI remain.
 
-## Current behavior
+## Baseline before this chunk
 
 The implementation incorporates merged source prerequisite PR520 on main
 `d3c50e1500beffea684fe881cd0a2b3431e6ccb9`. Its parser in `tasks/api/task_import.py`
@@ -67,7 +67,8 @@ it is not an authoritative native-UUID batch relationship.
   `audit/schemas.py`; preserve every existing type and canonical event owner.
 - One coordinated successor migration and its graph/reset/fingerprint consumers,
   authored solely by the delegated migration owner after final schema handoff.
-  This planning work authors no migration and reserves no ordinal in advance.
+  The delegated owner authored `0034_task_import_batches` after merged `0033`;
+  this worktree consumes that handoff without authoring DDL.
 
 ### Not allowed
 
@@ -129,7 +130,7 @@ it is not an authoritative native-UUID batch relationship.
    deleting or rewriting retained Tasks. Affected review freezes this mapping,
    exact replay AUTH facts and lock order before application coding.
 
-### Proposed schema and replay handoff for affected review
+### Reviewed schema and replay handoff
 
 - Batch: UUIDv7 ID, project UUID, original source UUID, exact SHA/count,
   verified ART ancestry, row count, original actor/link and immutable creation
@@ -167,7 +168,7 @@ it is not an authoritative native-UUID batch relationship.
   actor/audit UUIDs. The sole migration author receives the reviewed field/lock
   contract against then-current main before allocating a linear successor.
 
-### Proposed public and row-mapping contract
+### Public and row-mapping contract
 
 - POST `/projects/{project_id}/task-import-batches` accepts a closed
   `{source_id: UUID}` body and the shared UUID idempotency header. Its import
@@ -199,7 +200,7 @@ it is not an authoritative native-UUID batch relationship.
 
 ### Concrete owner and schema preparation for review
 
-The next reviewed application boundary separates canonical Task creation into
+The implemented application boundary separates canonical Task creation into
 three caller-root phases: prepare all retry/Task identities, consume the same
 exact CREATE authority facts, then stage the existing Task/create event/receipt.
 Normal public create remains the root-owning wrapper over those phases, with
@@ -245,12 +246,13 @@ ancestry never change. Members are append-only and committed headers cannot be
 reopened or deleted. Native reset restores these guards through the canonical
 owned reset helper, without leaving them disabled for product writes. The sole migration author reviews native
 constraints, deferred closure and exact owner representations before DDL work;
-these proposed names/columns are planning, not installed schema.
+the consumed sole-author `0034` installs the reviewed constraints and guards.
 
 ### Concrete non-DDL schema handoff
 
 The ORM representations now declare these exact owner relationships for the
-sole migration author’s affected review. They do not install any table or guard:
+sole migration author’s affected review. The ORM does not install guards; the
+consumed `0034` migration installs the matching native schema:
 
 - `task_import_batches`: native string-mapped UUIDv7 `id`, project and original
   source UUIDs, unique original `creation_command_receipt_id`, exact SHA/count/
@@ -396,8 +398,8 @@ revocation and late-failure rollback. Native uniqueness also protects direct SQL
 AUTH custody and file replay do not depend on an invented global creation fence.
 
 Field mapping has one confirmed native-parity decision:
-`TaskImportRow.difficulty` publishes an 80-character limit, whereas the current
-`WorkstreamTask.difficulty` column is `varchar(50)` and `TaskCreate` has no length
+`TaskImportRow.difficulty` publishes an 80-character limit, whereas the baseline
+`WorkstreamTask.difficulty` column was `varchar(50)` and `TaskCreate` has no length
 validator. A valid retained source must not fail as an unexplained late database
 error. The lead confirmed expanding that TASK display column to 80 in the
 sole-author successor migration, preserving existing values and the published
@@ -458,11 +460,11 @@ never silently reinterprets retained rows under a later mapping.
 | Canonical creation participant | Exact `59d47a6c` isolated native execution of five retained CREATE, denial, rollback and receipt controls | 5 passed in 69.02 seconds; schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Proves preservation of normal creation; no atomic batch success claim |
 | Source consumer and current CREATE participants | Exact `37d8705d` isolated execution of actual immutable-binding substitution/provider-health, public source, canonical denial, CREATE rollback and receipt controls | 10 passed in 120.95 seconds; runner exit 0, schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Raw `/tmp/pilot02-atomic-37d-source-create-corrected.log` and `.json`; validates existing owner integration, not installed batch schema |
 | Shared SCREEN/RELEASE participant and membership extraction | Inspected sibling exact `4400568a` native replay; seven source/test files integrated as `96b1fb820` without its separate CLI record | 5 passed in 225.05 seconds; runner exit 0, schema `0031_task_import_source`; database/role cleanup complete | Raw `/tmp/pilot02-bulk-4400568-native.log` and `.json`; historical exact extraction proof, not a new batch-schema or public bulk success claim |
-| Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical caller-root phases, closed batch DTOs, model representations, ART immutable-binding participant and batch/root/AUTH composition are implemented | New table constraints and guards require sole-author DDL and native proof |
+| Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical caller-root phases, closed batch DTOs, ART binding and batch/root/AUTH composition are implemented; sole-author `0034` is consumed | Bulk SCREEN/RELEASE and CLI remain separate; hosted complete-execution evidence remains required |
 | Current-main owner reconciliation | Source-equivalent `13c031333` focused catalogue/import contracts and protected API inventory | 50 passed in 2.09 seconds; one API inventory case passed in 16.01 seconds after its exact two import routes were registered; retained route hashes unchanged | Module boundary, Ruff, Commitrail and Markdown link checks pass; partition has 475 unique exact-union targets. Live OpenAPI comparison and tamper hash pass for all nine selected MCP fragments, plus the transitive-reference control. These pure/contract checks do not prove installed batch schema or public native import success |
 | First installed-schema acceptance diagnostic | Exact combined `28e72311f` source plus sole-author `0034_task_import_batches`; isolated PostgreSQL 16/MinIO runner | First actual 200-row import failed in 61.03 seconds with safe 503; runner exit 1 and complete database/role/MinIO cleanup | PostgreSQL records an ambiguous `project_id` parameter in the binding validator at COMMIT. The migration owner repairs DDL; no native success is claimed. Retained public absent/null-label controls bind the optional label to JSON null rather than SQL NULL. The retained advancement fixture supplies the required canonical nonblank RELEASE reason before the next execution |
-| Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Twenty-four original native acceptance cases collected before the DDL handoff; two optional-label controls are added for the installed-schema replay. The first integrated execution failed and final native proof remains pending | Actual 200-Task creation, immutable replay, late-stage rollback, direct SQL guards, exact original-authority revocation and intermediate-wait controls must pass after sole-author DDL |
-| Schema, guards and complete integration | Sole-author native graph/reset/UUID proof, affected guards, complete hosted lanes and aggregate | Not run for this chunk | Exact frozen candidate, actual merge tree and cleanup required |
+| Public import and atomic effects | Exact clean `09570d3a956a0c604b76c04037027c1dd8fd5c0f` / tree `32a2d1708e17c4108ecf6f776766ac606379d858`; isolated runner `pytest -x -vv tests/tasks/test_task_import_batches.py`, actual PostgreSQL 16 and MinIO | 26 passed in 686.84 seconds; runner exit 0; installed `0034_task_import_batches`; database/role and MinIO bucket/prefix cleanup complete | Raw `/tmp/pilot02-atomic-screenable-native26.log` and `.json`. Real 200-Task closure, both label forms, advanced/provider-independent same/new-key recovery, verified alternative-source recovery, revoked authority, late rollback, intermediate lock waits, foreign/partial closure rejection and all three tables’ UPDATE/DELETE/TRUNCATE guards. No bulk or CLI journey claim |
+| Complete integration | Required local guards, independent SQL review, complete hosted lanes and canonical aggregate | Native public batch/SQL guards pass at `09570d3a`; complete hosted evidence is not yet produced for this chunk | Exact final frozen candidate, actual tested merge tree and complete execution/cleanup remain required |
 
 ## Review findings
 
@@ -479,7 +481,7 @@ startup namespace validation before scripted guide prerequisites reuse its exact
 configured singleton, and closes its bootstrap. Guide object bytes remain
 scripted; actual source bytes still use real MinIO PUT and verification. No
 production validation or migration is changed; the failed public case and full
-26-case replay remain required before readiness.
+26-case replay subsequently passed at `09570d3a`; full hosted evidence remains required.
 
 At exact `99b4d170`, the integrated replay again passed the 200-row and two label
 controls. The startup repair also allowed source upload and the advancement
@@ -487,7 +489,7 @@ import to succeed; canonical SCREEN then correctly rejected its minimal input
 for missing acceptance criteria. The advancement fixture now includes legitimate
 criteria in the original verified JSON, rather than changing a Task or weakening
 SCREEN. That run ended 3 passed / 1 failed in 180.57 seconds with complete owned
-cleanup; the complete 26-case acceptance remains pending.
+cleanup; the corrected exact `09570d3a` complete 26-case execution then passed.
 
 Independent schema/lock handoff review at exact `37d8705d` found no actionable
 architecture/reuse/security issue in the non-DDL models, replay and preparation
@@ -498,13 +500,18 @@ per-command transaction and unbound string provenance as explicit handoff issues
 Affected independent planning review found two concrete missing integration
 requirements: the closed TaskCreated JSON source token and complete batch/header/
 TRUNCATE immutability. This record now names all typed/audit/native token owners
-and all-three-table UPDATE/DELETE/TRUNCATE controls. Complete batch/native proof remains unimplemented; schema contracts alone do
-not prove installed custody or a public import result.
+and all-three-table UPDATE/DELETE/TRUNCATE controls. Those planning gaps are
+closed by the consumed sole-author `0034` and the exact
+`09570d3a` public/native proof. Independent source/fixture review at `09570d3a`
+found no weakening: the actual configured namespace uses canonical startup,
+scripted guide bytes remain qualified, and the advanced replay input satisfies
+existing SCREEN/RELEASE requirements. That reviewer excludes its authored DDL;
+the lead retains independent SQL and final full-evidence review.
 
 ## Reconciliation
 
 - Current-source reconciliation: this preparation branch incorporates source
-  prerequisite PR520 and merged main `d47ee1e9917689b94fd9439c09dffaf88c6d3ec1`,
+  prerequisite PR520 and merged main `e31e1777c47b794b1d4d8240192608e4fff4f536`,
   retaining its ten-lane CI, hidden materialization/completion/failure/feedback
   owners, contribution export and CLI approval/correction contracts. The additive
   AUTH union retains all 152 actions (116 active and 36 planned), all 78
@@ -512,18 +519,21 @@ not prove installed custody or a public import result.
   classifications. Shared metadata retains every incoming assignment and lane;
   the selected MCP context contract is recaptured from clean backend commit
   `13c0313334d20acbaecd6ea76c54b3573336a40d` after the owner union.
-  Before implementation, only
-  this planning record differed from the source candidate. Canonical Task creation now shares
-  caller-root phases with its normal public wrapper; atomic batch creation
-  still lacks installed schema/native proof. Model/API representations,
-  provider-free ART binding validation and public route composition are coded
-  on this isolated branch; no delivered import capability is claimed. No migration is
-  authored in this worktree.
-- Next usable boundary: coordinate the reviewed batch/membership/receipt schema
-  and owner preparation/replay graph with the sole-author migration, then prove
-  the coded atomic JSON-to-DRAFT operation through public native acceptance cases.
-  No migration ordinal is allocated before the actual merged predecessor and
-  delegated migration queue are reconciled. Explicit batch screen/release and CLI
+  Main guide-activation integration at `89c18c78` changes only incoming CLI/docs
+  files; all backend source, tests and migration blobs are byte-identical to
+  exact native-proven `09570d3a` (`git diff --exit-code 09570d3a -- backend`).
+  The native proof remains attributed to `09570d3a`, not relabeled to the merge.
+  The required structural guard then identified `_index_actions` at 101 lines
+  after adding the two closed import actions. One adjacent Task action declaration
+  line is consolidated, preserving its entire AST and returning the function
+  to 100 lines; no debt entry, policy limit or authority assertion is relaxed.
+  Canonical Task creation shares caller-root phases with its normal public
+  wrapper, and public atomic import/status use the consumed sole-author `0034`.
+  No deployed or main-delivered atomic import capability is claimed before merge.
+- Next usable boundary: complete required local guards, independent SQL/final
+  review and exact-head hosted CI for this atomic JSON-to-DRAFT slice. Native
+  public acceptance is proven at `09570d3a`; integration includes sole-author
+  `0034` after actual merged `0033`. Explicit batch screen/release and CLI
   project/source/batch commands with client CSV conversion are implemented on a
   separate coordinated lane; its public/native aggregate journey remains pending.
 - Remaining risks: source prerequisite and current required CI/actual external
