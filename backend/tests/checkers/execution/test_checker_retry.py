@@ -6,7 +6,7 @@ import json
 import os
 
 import pytest
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +29,7 @@ from app.modules.tasks.repository import TaskRepository
 from tests.post_submit_materialization_helpers import material_fixture
 from tests.checkers.post_submit.support import change_request
 from tests.checkers.execution.completion_fixture import completed_evidence
-from tests.checkers.execution.support import live_executor
+from tests.checkers.execution.support import live_executor, reserve
 from tests.project_create_fixtures import grant_fixture_admin_role
 from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome, state
 from tests.tasks.evaluation_delivery.test_worker_materialization import _worker_port
@@ -522,3 +522,28 @@ async def test_completed_source_reaches_valid_task_guard_then_refuses_terminal_r
     async with completed_evidence(tmp_path, isolated_database_env, recommendation) as h:
         assert h.result.outcome == "completed" and h.run.routing_recommendation == recommendation
         await _assert_nonterminal_source_reaches_guard(h, monkeypatch, "completed")
+
+
+async def test_expired_unfinished_transport_reclaims_same_run_without_retry_receipt(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    import app.modules.checkers.execution as execution
+
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        await reserve(h)
+        executor = live_executor(h)
+        monkeypatch.setattr(execution, "LEASE_SECONDS", 1)
+        first, replay = await executor._claim(h.request)
+        assert replay is None
+        async with h.factory() as session:
+            await session.execute(text("select pg_sleep(1.05)"))
+        monkeypatch.setattr(execution, "LEASE_SECONDS", 300)
+        second, replay = await executor._claim(h.request)
+        assert replay is None
+        assert second.reservation == first.reservation
+        assert second.lease_generation == first.lease_generation + 1
+        async with h.factory() as session:
+            fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+            assert fence.current_run_id == str(first.reservation.attempt_id)
+            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
