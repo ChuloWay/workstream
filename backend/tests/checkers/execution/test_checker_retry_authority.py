@@ -38,11 +38,15 @@ from tests.checkers.execution.test_checker_retry import _command, _failed_source
 from tests.test_artifact_admission import _context
 
 
-async def _named_retry(h, operator, name):
+async def _named_retry(h, operator, name, *, named=None, backend_pids=None):
     async with h.factory.begin() as session:
         await session.execute(
             text("select set_config('application_name', :name, true)"), {"name": name}
         )
+        if backend_pids is not None:
+            backend_pids.append(await session.scalar(text("select pg_backend_pid()")))
+        if named is not None:
+            named.set()
         return await checker_retry_service(session, operator).retry(_command(h, operator))
 
 
@@ -118,7 +122,7 @@ async def _revocation_setup(h, operator):
     return grant_id, revoker
 
 
-async def _named_revoke(h, grant_id, revoker, name):
+async def _named_revoke(h, grant_id, revoker, name, *, named=None, backend_pids=None):
     reason = "Revoke Operator authority during checker recovery"
     request = AdminRoleGrantRevokeRequest(
         operation=AuthorityOperation.ADMIN_ROLE_GRANT_REVOKE,
@@ -129,6 +133,10 @@ async def _named_revoke(h, grant_id, revoker, name):
         await session.execute(
             text("select set_config('application_name', :name, true)"), {"name": name}
         )
+        if backend_pids is not None:
+            backend_pids.append(await session.scalar(text("select pg_backend_pid()")))
+        if named is not None:
+            named.set()
         service = AdminRoleGrantService(session)
         reservation = await service.reserve(
             idempotency_key=revoker.request_id,
@@ -281,8 +289,11 @@ async def test_retry_and_operator_revocation_commit_one_authorized_order(
         operator = await _operator_for(h)
         grant_id, revoker = await _revocation_setup(h, operator)
         held, release = asyncio.Event(), asyncio.Event()
-        retry_name = f"checker-retry-revocation-{first}-{new_record_id().hex}"
-        revoke_name = f"checker-grant-revocation-{first}-{new_record_id().hex}"
+        retry_name = f"checker-retry-revoc-{first}-{new_record_id().hex}"
+        revoke_name = f"checker-grant-revoc-{first}-{new_record_id().hex}"
+        assert max(len(retry_name), len(revoke_name)) <= 63
+        named = {"retry": asyncio.Event(), "revoke": asyncio.Event()}
+        backend_pids: dict[str, list[int]] = {"retry": [], "revoke": []}
         original_consume = PreparedCheckerRetryAuthorization.consume
         original_revoke = AdminRoleGrantService.complete_revoke
 
@@ -306,26 +317,46 @@ async def test_retry_and_operator_revocation_commit_one_authorized_order(
             patch.setattr(AdminRoleGrantService, "complete_revoke", pause_revoke)
             try:
                 if first == "retry":
-                    calls.append(asyncio.create_task(_named_retry(h, operator, retry_name)))
+                    calls.append(asyncio.create_task(_named_retry(
+                        h, operator, retry_name,
+                        named=named["retry"], backend_pids=backend_pids["retry"],
+                    )))
                 else:
                     calls.append(
                         asyncio.create_task(
-                            _named_revoke(h, grant_id, revoker, revoke_name)
+                            _named_revoke(
+                                h, grant_id, revoker, revoke_name,
+                                named=named["revoke"], backend_pids=backend_pids["revoke"],
+                            )
                         )
                     )
                 await asyncio.wait_for(held.wait(), 30)
                 if first == "retry":
                     calls.append(
                         asyncio.create_task(
-                            _named_revoke(h, grant_id, revoker, revoke_name)
+                            _named_revoke(
+                                h, grant_id, revoker, revoke_name,
+                                named=named["revoke"], backend_pids=backend_pids["revoke"],
+                            )
                         )
                     )
                     waiter_name = revoke_name
+                    waiter_role = "revoke"
                 else:
-                    calls.append(asyncio.create_task(_named_retry(h, operator, retry_name)))
+                    calls.append(asyncio.create_task(_named_retry(
+                        h, operator, retry_name,
+                        named=named["retry"], backend_pids=backend_pids["retry"],
+                    )))
                     waiter_name = retry_name
+                    waiter_role = "retry"
+                await asyncio.wait_for(named[waiter_role].wait(), 30)
+                assert len(backend_pids[first]) == len(backend_pids[waiter_role]) == 1
                 observer = asyncio.create_task(
-                    wait_for_named_database_lock(isolated_database_env, waiter_name)
+                    wait_for_named_database_lock(
+                        isolated_database_env, waiter_name,
+                        expected_waiter_pid=backend_pids[waiter_role][0],
+                        expected_blocker_pid=backend_pids[first][0],
+                    )
                 )
                 try:
                     done, _ = await asyncio.wait(
