@@ -174,15 +174,17 @@ async def test_cross_project_cannot_lock_foreign_task(tmp_path, isolated_databas
 
 
 async def test_replay_rejects_older_still_submitted_version(tmp_path, isolated_database_env):
-    async with completed_source(tmp_path, isolated_database_env) as h:
+    from .remediation_support import remediation_source
+
+    async with remediation_source(tmp_path, isolated_database_env) as h:
         async with h.factory() as session, session.begin():
-            original = await stage(session, h)
+            original = await stage(session, h, h.completion)
         successor = await successor_submission(h)
         assert successor.submission_version == 2
         async with h.factory() as session, session.begin():
             assert await session.scalar(text("SELECT status FROM public.submissions WHERE id=:id"), {"id": h.request.submission_id}) == "submitted"
             with pytest.raises(TaskRoutingRequestUnavailable, match="routing_request_unavailable"):
-                await stage(session, h)
+                await stage(session, h, h.completion)
             assert await session.scalar(select(func.count()).select_from(TaskRoutingRequest)) == 1
             assert (await session.get(TaskRoutingRequest, original.route_operation_id)).routing_manifest_id == original.routing_manifest_id
 
