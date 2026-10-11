@@ -37,10 +37,7 @@ from app.modules.authorization.domain.prepared_service import (
     fixed_service_scope_project, fixed_service_resource_matches,
 )
 from app.modules.authorization.policy import ACTIVE_GUIDE_ADMIN_ROLES
-from app.modules.authorization.domain.submission_history import history_read_denial
-from app.modules.authorization.catalogue import HISTORY_READ_ACTIONS
-from app.modules.authorization.domain.task_queues import TASK_QUEUE_ACTIONS, queue_read_denial
-from app.modules.authorization.domain.project_reads import project_read_denial
+from app.modules.authorization.domain.read_dispatch import READ_ACTIONS, read_denial
 from app.modules.authorization.prepared_admin_authority import lock_admin_mutation_authority
 from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.authorization.schemas import AdminRole
@@ -630,17 +627,11 @@ class AuthorizationService:
             ) = await self._admin_denial(action, resource_context, context)
             if denial is None:
                 matched_kind = MatchedAuthorityKind.ADMIN_ROLE_GRANT
-        elif action is not None and action.action_id in TASK_QUEUE_ACTIONS | HISTORY_READ_ACTIONS:
+        elif action is not None and action.action_id in READ_ACTIONS:
             (denial, context, matched_kind, matched_grant_id, matched_project_id,
-             revalidated) = await (history_read_denial if action.action_id in HISTORY_READ_ACTIONS else queue_read_denial)(
+             revalidated) = await read_denial(
                 action, resource_context, context, self._admin,
-                self._locked_human_context, self._lifecycle_denial,
-            )
-        elif action is not None and action.action_id is ActionId.PROJECT_READ:
-            (denial, context, matched_kind, matched_grant_id, matched_project_id,
-             revalidated) = await project_read_denial(
-                action, resource_context, context, self._admin,
-                self._revalidate_actor_self, self._lifecycle_denial,
+                self._locked_human_context, self._lifecycle_denial, self._revalidate_actor_self,
             )
         elif action is not None and action.action_id is ActionId.ACTOR_AUTHORIZATION_CONTEXT_READ:
             if (
@@ -1266,7 +1257,7 @@ class AuthorizationService:
             audit_resource_type = "actor_profile"
         elif decision.resource_type in {"actor_identity_link", "admin_role_grant"}:
             audit_resource_type = decision.resource_type
-        if exact_project_target := project_authority_audit_target(resource_context, decision.action_id):
+        if exact_project_target := project_authority_audit_target(resource_context, decision.action_id, matched_scope_project_id=decision.matched_scope_project_id):
             (target_project_id, audit_resource_type, audit_resource_id,
              target_ref_kind, target_ref_id) = exact_project_target
             if target_project_id is not None:

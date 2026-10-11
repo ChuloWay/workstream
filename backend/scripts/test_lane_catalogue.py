@@ -259,6 +259,14 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    "tests/contributions/test_export_csv.py",
+    "tests/contributions/test_export_projection.py",
+    "tests/authorization/test_contribution_read_scope.py",
+    "tests/authorization/test_contribution_read_kernel.py",
+    "tests/contributions/exports/test_source_reads.py",
+    "tests/contributions/exports/test_public_reads.py",
+    "tests/contributions/exports/test_failures.py",
+    "tests/contributions/exports/test_concurrency.py",
     # Atomic submission composition shares the existing multi-owner project lanes;
     # task C and schema are close to their cap on the merged baseline.
     "tests/tasks/evaluation_delivery/test_custody.py",
@@ -578,6 +586,7 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
+            "tests/migrations/test_contribution_read_audit.py",
             "tests/authorization/post_submit/test_receipt_custody.py",
             "tests/authorization/post_submit/test_migration.py",
             "tests/reviews/packet/test_storage.py",

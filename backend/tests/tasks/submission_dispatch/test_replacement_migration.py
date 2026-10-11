@@ -1,4 +1,4 @@
-"""0033 preserves initial custody and refuses uncaused retained replacements."""
+"""0034 preserves initial custody and refuses uncaused retained replacements."""
 
 import asyncio
 import io
@@ -18,8 +18,8 @@ from tests.migration_fixtures import _config
 
 
 pytestmark = pytest.mark.postgres_schema_contract
-PREDECESSOR = "0032_checker_remediation"
-SUCCESSOR = "0033_checker_replacement"
+PREDECESSOR = "0033_contribution_reads"
+SUCCESSOR = "0034_checker_replacement"
 # The last merged 0032 writer could produce an authorized revision without a
 # persisted checker-remediation cause; current runtime deliberately cannot.
 HISTORICAL_WRITER = "735cf26591e4ed616bcaa57f12eeb37cee741973"
@@ -151,7 +151,7 @@ def _seed_with_historical_writer(tmp_path, database_url, mode):
 
 
 async def _retained_rows(connection):
-    """Exclude only the nullable cause columns introduced by 0033."""
+    """Exclude only the nullable cause columns introduced by 0034."""
     return {
         table: tuple(
             row["value"]

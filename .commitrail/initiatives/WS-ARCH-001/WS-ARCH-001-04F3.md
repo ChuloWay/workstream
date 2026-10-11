@@ -6,8 +6,9 @@
   canonical pre-submit intake again and creates a new immutable Submission and
   generation-one evaluation request only when its immediate predecessor has the
   exact current authorized checker-remediation outcome.
-- Base: merged main `735cf2659` (PR 534); current migration head
-  `0032_checker_remediation`. This record is group 1 of the first complete
+- Original base: merged main `735cf2659` (PR 534), with
+  `0032_checker_remediation`; reconciled with main `d47ee1e99` (PR 535) and
+  its `0033_contribution_reads` predecessor. This record is group 1 of the first complete
   contributor milestone in the [current plan](planning/PLAN.md).
 
 ## Intent
@@ -89,7 +90,7 @@ replacement writer or route would fork the atomic creation operation.
    reserve the successor evaluation and outbox event inside the same root
    transaction. Fresh-authorized replay checks the committed source/receipts
    by the same admission key and does not require the old run still be current.
-4. A linear migration after `0032_checker_remediation` adds the minimal cause
+4. A linear migration after main’s `0033_contribution_reads` adds the minimal cause
    columns/checks/FKs and replaces the existing admission, AUTH-resource and
    dispatch SQL closure as necessary. Retained initial evidence and its exact
    receipts remain valid. If retained `revision` dispatches cannot prove the
@@ -117,7 +118,7 @@ replacement writer or route would fork the atomic creation operation.
   the cause, and `backend/app/modules/authorization/artifact_project_authority.py`
   only if its typed guard needs the new closed kind. Existing action and grant
   identities stay unchanged.
-- One linear `backend/alembic/versions/0033_checker_remediation_replacement.py`
+- One linear `backend/alembic/versions/0034_checker_remediation_replacement.py`
   migration after 0032; matching model/schema registration and
   `backend/tests/test_alembic.py` migration graph assertion.
 - Focused existing owner tests under
