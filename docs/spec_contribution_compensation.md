@@ -1325,7 +1325,7 @@ not wait for contribution/award persistence or REV decisions.
 
 PILOT-10's bounded reads consume existing immutable CON/award facts after their
 own exact AUTH/audit activation and snapshot proof. They do not wait for CON-08B
-fulfillment or the historical CON-10A ordering below. The later fixed-membership
+fulfillment or the historical CON-10A ordering below. The fixed-membership
 list extends those reads without changing economic facts; CLI remains separately
 scoped under issue 497.
 

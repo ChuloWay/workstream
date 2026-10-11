@@ -864,7 +864,8 @@ Delivered foundations (not a claim of full public integration)
 
   PILOT-10A public bounded evidence reads over existing immutable CON/awards
     active human self or covering PM / exact-project Finance -> JSON or CSV
-    no recognition writer or fulfillment dependency; CLI/pagination remain
+    PILOT-10B fixed membership + signed expiring pages, fresh authority each page
+    no recognition writer or fulfillment dependency; CLI remains
 
 Remaining integration
   PILOT-02 separately scoped atomic DRAFT import -> explicit batch screen/release
