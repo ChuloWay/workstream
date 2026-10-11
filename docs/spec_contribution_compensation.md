@@ -981,7 +981,13 @@ before the first AUTH query. Current human profile/link, selected grant and
 authorized Project locks remain held through complete projection, response-byte
 serialization and canonical audit commit. An evidenced denial commits only its
 denial evidence. Selection, projection, serialization and SQL failures roll back
-the response transaction. Export reads mutate no recognition or economic facts.
+the response transaction. A PostgreSQL serialization refusal (SQLSTATE 40001)
+permits one new response attempt after full rollback, with fresh canonical AUTH
+and a new repeatable-read snapshot for the identical query. Only the successful
+attempt's evidence and bytes survive. Denials, other SQL errors and serialization
+errors are not retried; a second 40001 remains unavailable. This bounded read
+recovery does not retry product mutations. Export reads mutate no recognition
+or economic facts.
 
 The maximum is 1,000 selected contributions. Filters apply before the repository
 probes the 1,001st row; excess selection returns 422

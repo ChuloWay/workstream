@@ -295,3 +295,24 @@ read-contract documentation. No new service/factory, alternate authorization,
 isolation downgrade, global retry middleware or weakened revocation assertion.
 Verify both real lock interleavings, first-snapshot visibility, serialization
 rollback, exact DENY custody, retry exhaustion and non-serialization refusal.
+
+### Repair verification custody
+
+- Exact `487488ebf6493906ad88ca99af102f5e197f422c`: migration control 1 passed
+  in 109.53 seconds on real PostgreSQL, schema `0033_contribution_reads`, isolated
+  database/role cleanup true. Original revocation-first case failed 503 versus
+  expected 404 in 83.33 seconds; PostgreSQL/MinIO cleanup true.
+- Exact `af81bb903a60796c09919ed973cbb382971a14c5`: 59 catalogue/audit/graph
+  checks passed in 8.57 seconds. All three actual PostgreSQL concurrency cases
+  passed in 175.01 seconds, including the observed 40001 and fresh DENY; schema
+  `0033_contribution_reads`, database/role/MinIO cleanup true.
+- Focused independent architecture/AUTH/reuse source review passed; the narrow
+  driver classifier was independently checked against wrapped errors, cycles
+  and non-serialization codes. No actual distributed delivery or payout claim.
+- Additional local failure/public batches were incomplete under host resource
+  pressure (exit 124/130), with cleanup complete. Their positive prefixes are
+  not described as whole-batch passes. Remaining cases require full hosted CI.
+  Temporary memory-backed PostgreSQL retained fsync, synchronous_commit and
+  full_page_writes; this does not prove database crash persistence.
+- Whole issue #497 remains open for stable fixed-membership cursor pagination
+  and CLI consumption. This bounded backend repair does not deliver those.
