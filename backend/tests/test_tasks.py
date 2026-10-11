@@ -33,7 +33,7 @@ from sqlalchemy.schema import CreateIndex
 from projects.guide_fixtures import complete_guide_payload
 from tests.projects.policy_read_faults import corrupt_locked_policy_reads
 from auth_concurrency_support import wait_for_named_database_lock
-from tests.submission_fixtures import seed_retained_submission
+from tests.submission_fixtures import seed_retained_submission, route_retained_checker_remediation
 
 from app.core.config import get_settings
 from app.db import models as db_models
@@ -2457,11 +2457,7 @@ async def test_retained_submission_versions_are_readable_without_exposing_packet
         f"/api/v1/submissions/{v1_id}", headers=auth_headers(),
     )
     assert v1.status_code == 200, v1.text
-    async with db_session.get_session_factory()() as session:
-        task = await session.get(WorkstreamTask, started_task["id"])
-        assert task is not None
-        task.status = "needs_revision"
-        await session.commit()
+    remediation_id = await route_retained_checker_remediation(v1_id)
     set_dev_actor(monkeypatch, roles="worker", subject="worker-one")
     v2_payload = complete_submission_payload("sha256:package-v2")
     v2_payload["artifact_hash_manifest"][0]["hash"] = "sha256:answer-v2"
@@ -2485,6 +2481,10 @@ async def test_retained_submission_versions_are_readable_without_exposing_packet
     assert persisted_v1 is not None
     assert persisted_v1.package_hash == "sha256:package-v1"
     assert persisted_v1.artifact_hash_manifest[0]["hash"] == "sha256:answer-v1"
+    async with db_session.get_session_factory()() as session:
+        dispatch = await session.get(db_models.SubmissionDispatch, v2_id)
+    assert dispatch is not None
+    assert str(dispatch.checker_remediation_manifest_id) == remediation_id
 
     listed = await task_client.get(
         f"/api/v1/tasks/{started_task['id']}/submissions",
@@ -2567,13 +2567,8 @@ async def test_retained_version_read_does_not_rewrite_prior_finalized_packet(
     )
     assert v1.status_code == 200, v1.text
 
-    set_dev_actor(monkeypatch, roles="project_manager", subject="project-manager-subject")
     locked_v1 = v1
-    async with db_session.get_session_factory()() as session:
-        task = await session.get(WorkstreamTask, started_task["id"])
-        assert task is not None
-        task.status = "needs_revision"
-        await session.commit()
+    await route_retained_checker_remediation(v1_id)
 
     set_dev_actor(monkeypatch, roles="worker", subject="worker-one")
     v2_payload = complete_submission_payload("sha256:package-replacement")
