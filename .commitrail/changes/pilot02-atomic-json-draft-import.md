@@ -34,7 +34,7 @@ it is not an authoritative native-UUID batch relationship.
 
 ### Allowed
 
-- TASK: `api/task_import.py`, a cohesive `task_import_batches.py`,
+- TASK: `api/task_import.py`, `api/transition_audit.py`, a cohesive `task_import_batches.py`,
   `authorized_commands.py`, `command_replay.py`, `models.py`, `schemas.py`,
   `repository.py` and `router.py`: typed import/status contracts, immutable batch
   receipt and row membership, server provenance and reuse of canonical creation.
@@ -50,6 +50,8 @@ it is not an authoritative native-UUID batch relationship.
 - Focused TASK/ART/AUTH public-contract and native PostgreSQL/MinIO tests;
   affected ownership/lane/inventory expectations; current TASK/ART/AUTH specs,
   README and roadmap claims for this chunk only.
+- AUDIT: the existing closed TaskCreated payload source-type classification in
+  `audit/schemas.py`; preserve every existing type and canonical event owner.
 - One coordinated successor migration and its graph/reset/fingerprint consumers,
   authored solely by the delegated migration owner after final schema handoff.
   This planning work authors no migration and reserves no ordinal in advance.
@@ -166,6 +168,11 @@ it is not an authoritative native-UUID batch relationship.
   fields. Server metadata stamps additive source type `json_import`,
   `source_ref=task-import-source:<native source UUID>`, the actual verified
   `source_payload_hash`, and native batch UUID spelling in `import_batch_id`.
+  Select exactly `json_import` across TaskCreate, TaskTransitionFacts and the
+  closed TaskCreated payload. The sole-author successor updates the current
+  lifecycle SQL custody validator to admit that same exact token; historical
+  baseline files stay unchanged. Normal manual/markdown/CSV entries remain.
+  Caller input cannot choose or relabel these atomic-import server stamps.
   These labels add no authority; a manually stamped matching label remains
   outside native membership. The server does not infer deadline, assignment,
   guide locks, contribution terms or release state.
@@ -215,8 +222,12 @@ String-mapped owner UUID FKs use `Uuid(as_uuid=False)`; native UUID-typed receip
 IDs keep their existing representation. Reservation actor/project/source/Task
 FK checks are deferred where they would otherwise acquire implicit locks before
 explicit TASK/ART/AUTH preparation. SOURCE KEY SHARE is acquired explicitly
-before AUTH and retained through commit. All member/receipt mutation and deletion
-are refused after committed closure. The sole migration author reviews native
+before AUTH and retained through commit. All three tables reject UPDATE/DELETE after committed
+closure and reject statement-level TRUNCATE. Only the exact pending-to-committed
+header/receipt completion may change staged fields; immutable identity and
+ancestry never change. Members are append-only and committed headers cannot be
+reopened or deleted. Native reset restores these guards through the canonical
+owned reset helper, without leaving them disabled for product writes. The sole migration author reviews native
 constraints, deferred closure and exact owner representations before DDL work;
 these proposed names/columns are planning, not installed schema.
 
@@ -345,7 +356,11 @@ never silently reinterprets retained rows under a later mapping.
   external-ID conflicts, deterministic intermediate lock waits and complete
   rollback after an injected late-row/audit/binding failure.
 - [ ] Direct SQL rejects partial batch closure, foreign source/verification/Task
-  membership, changed original receipts and NULL/changed custody. Upgrade/reset
+  membership, changed original receipts and NULL/changed custody. For each of
+  batch/member/receipt tables, native direct-SQL UPDATE, DELETE and TRUNCATE
+  negatives retain all original facts. TaskCreated evidence uses the exact
+  `json_import` token and server provenance; malformed/caller-relabelled stamps
+  cannot produce a committed batch. Upgrade/reset
   preserves every retained main and source fact on the sole linear schema.
 
 ## Risk and review routing
@@ -371,6 +386,11 @@ never silently reinterprets retained rows under a later mapping.
 
 No implementation review is claimed. Scope preparation identifies the existing
 per-command transaction and unbound string provenance as explicit handoff issues.
+Affected independent planning review found two concrete missing integration
+requirements: the closed TaskCreated JSON source token and complete batch/header/
+TRUNCATE immutability. This record now names all typed/audit/native token owners
+and all-three-table UPDATE/DELETE/TRUNCATE controls. Product/native proof is
+still unimplemented; these are recorded schema contracts, not runtime findings.
 
 ## Reconciliation
 
