@@ -696,8 +696,11 @@ shared OUTBOX UNKNOWN, never an automatic uncertain-effect retry. A still-curren
 unfinalized invocation can replay the exact outcome with fresh authority.
 The true branch never observes REV generation or enters CON. Both request and
 completion handlers remain absent from production registration. Connected
-production readiness and authorized manager-visible setup-fault hold and Operator retry
-precede public intake; 04F3 supplies hidden exact-cause replacement intake.
+production readiness and authorized manager-visible setup-fault hold precede
+public intake; 04F3 supplies hidden exact-cause replacement intake. ARCH-04F4
+supplies separate hidden Operator retry of a known terminal
+`infrastructure_failed` checker run through the existing request handler.
+Fresh-authorized historical replay does not require the old run to remain current.
 
 ARCH-04F2 extends this handler and the existing root outcome transaction for an
 exact current `needs_revision` checker recommendation. The manifest retains the
@@ -712,5 +715,7 @@ repeating effects. Existing acceptance consumers admit only `allow_review`.
 The operation adds no route or contributor response schema. Contributors use the
 existing bounded Submission/checker-history reads above. ARCH-04F3 supplies
 hidden exact-cause replacement Submission intake through the same writer.
-Setup-fault and Operator recovery, production handler
-registration, public intake and the first end-to-end drill remain separate work.
+Manager-visible setup-fault hold, production handler registration, public intake
+and the first end-to-end drill remain separate work. The hold retains the
+Submission and locked rules without contributor penalty; changing or
+re-screening submitted-task rules is deferred.

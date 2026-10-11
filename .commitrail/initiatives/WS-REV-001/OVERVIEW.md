@@ -17,7 +17,7 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 [ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either policy mode, without a Review, FinalAcceptance or
-CON effect. 04F3 hidden exact-cause replacement intake is delivered; manager-visible setup-fault hold and Operator retry, 04E3
+CON effect. 04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; neither creates a Review or acceptance. Manager-visible setup-fault hold, 04E3
 production composition, public intake and the first-layer drill remain.
 False-guide activation, live human review/revision and payment delivery remain
 unavailable.
