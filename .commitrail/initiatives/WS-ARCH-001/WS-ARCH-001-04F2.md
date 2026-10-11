@@ -11,7 +11,7 @@
 Group 1 of the first contributor milestone requires failed post-submit work to
 reach its contributor without being mistaken for a human review or acceptance.
 04F1 already supplies current verified failure results; 02I-A supplies pre-submit
-feedback. Neither performs this post-submit handoff. Current TASK request, source,
+feedback. Neither performs this post-submit handoff. Before this change TASK request, source,
 outcome, completion handler and SQL closure accept only `allow_review`.
 
 This child makes the hidden lifecycle handoff representable and authorized. It
@@ -141,7 +141,7 @@ spies and held-row tests independently prove no observation/lock for false failu
 ## Evidence
 
 Planning is based on merged main `8f5fe6e0a`, including 04F1, 04E3A and 02I-A.
-Current migration head is 0030; coordinate any newly merged migration before
+The starting migration head was 0030; coordinate any newly merged migration before
 implementation is published. PRs 528 (external runtime), 532 (CLI correction)
 and 533 (CI lanes) are separate; preserve their owners on integration.
 
@@ -165,3 +165,12 @@ added exact audit/acceptance files and discriminating tests. Outcome recommendat
 is explicit; the existing reference-notice format is retained to preserve immutable
 success evidence without compatibility branches. Parallel ART proof is test-only
 and does not establish checker-remediation causality.
+
+Implementation review corrected the Alembic admission list alongside the new
+graph head, retained the existing request column's SQL length, and kept persisted
+acceptance matching in its canonical SQL function. AUTH now rejects acceptance
+inputs for either non-acceptance branch instead of discarding them. Current owner
+overviews distinguish this delivered handoff from remaining replacement/recovery.
+The existing repeat-upgrade regression detects the missing migration registration;
+focused guard-removal probes detect recommendation substitution, forbidden AUTH
+inputs, successor freezing and unchanged predecessor admission.
