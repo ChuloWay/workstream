@@ -456,6 +456,7 @@ never silently reinterprets retained rows under a later mapping.
 | Source consumer and current CREATE participants | Exact `37d8705d` isolated execution of actual immutable-binding substitution/provider-health, public source, canonical denial, CREATE rollback and receipt controls | 10 passed in 120.95 seconds; runner exit 0, schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Raw `/tmp/pilot02-atomic-37d-source-create-corrected.log` and `.json`; validates existing owner integration, not installed batch schema |
 | Shared SCREEN/RELEASE participant and membership extraction | Inspected sibling exact `4400568a` native replay; seven source/test files integrated as `96b1fb820` without its separate CLI record | 5 passed in 225.05 seconds; runner exit 0, schema `0031_task_import_source`; database/role cleanup complete | Raw `/tmp/pilot02-bulk-4400568-native.log` and `.json`; historical exact extraction proof, not a new batch-schema or public bulk success claim |
 | Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical caller-root phases, closed batch DTOs, model representations, ART immutable-binding participant and batch/root/AUTH composition are implemented | New table constraints and guards require sole-author DDL and native proof |
+| Current-main owner reconciliation | Source-equivalent `13c031333` focused catalogue/import contracts and protected API inventory | 50 passed in 2.09 seconds; one API inventory case passed in 16.01 seconds after its exact two import routes were registered; retained route hashes unchanged | Module boundary, Ruff, Commitrail and Markdown link checks pass; partition has 475 unique exact-union targets. Live OpenAPI comparison and tamper hash pass for all nine selected MCP fragments, plus the transitive-reference control. These pure/contract checks do not prove installed batch schema or public native import success |
 | Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Twenty-four native acceptance cases collect; not executed because batch schema is not installed | Actual 200-Task creation, immutable replay, late-stage rollback, direct SQL guards, exact original-authority revocation and intermediate-wait controls must pass after sole-author DDL |
 | Schema, guards and complete integration | Sole-author native graph/reset/UUID proof, affected guards, complete hosted lanes and aggregate | Not run for this chunk | Exact frozen candidate, actual merge tree and cleanup required |
 
@@ -482,8 +483,8 @@ not prove installed custody or a public import result.
   AUTH union retains all 152 actions (116 active and 36 planned), all 78
   permissions, both contribution-read audit arms and the reviewed atomic import
   classifications. Shared metadata retains every incoming assignment and lane;
-  the selected MCP context contract will be recaptured from the clean coherent
-  owner union before the final source handoff.
+  the selected MCP context contract is recaptured from clean backend commit
+  `13c0313334d20acbaecd6ea76c54b3573336a40d` after the owner union.
   Before implementation, only
   this planning record differed from the source candidate. Canonical Task creation now shares
   caller-root phases with its normal public wrapper; atomic batch creation
