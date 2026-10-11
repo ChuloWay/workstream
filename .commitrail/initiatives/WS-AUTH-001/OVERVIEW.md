@@ -13,10 +13,13 @@ submitter contribution, applicable awards and audit/outbox evidence. Database
 closure rejects incomplete outcomes; fresh-authorized replay returns the stored
 complete tuple. No Review or reviewer contribution is fabricated.
 
-B8 supplies hidden completion delivery with commit-before-ACK. Next: 04F remediation, 04E3 production
-composition, public intake and the first-layer drill. False-guide activation,
-live human review/revision and payment delivery remain unavailable. Internally
-valid false-policy fixtures establish the hidden operation, not public readiness.
+B8 supplies hidden completion delivery with commit-before-ACK.
+[ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
+operation so an exact current contributor-correctable result reaches
+`needs_revision` under either policy mode, with no REV/CON effect. Exact-cause
+replacement intake, setup-fault/Operator recovery, 04E3 production composition,
+public intake and the first-layer drill remain. False-guide activation, live
+human review/revision and payment delivery remain unavailable.
 
 Latest completed activation: [AUTH-18 public manager activation](WS-AUTH-001-18.md),
 using [AUTH-12H complete-guide authority](WS-AUTH-001-12H.md),
@@ -78,9 +81,9 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: prove 04F
-  remediation, 04E3 live composition and false-guide readiness, public intake
-  and the first-layer drill. True handoff remains independent of REV/CON;
+- Next usable boundary: complete 04F exact-cause replacement intake and recovery,
+  04E3 live composition and false-guide readiness, public intake and the
+  first-layer drill. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
   migrations, and tests.
@@ -128,5 +131,5 @@ manager proposal review, pre-submit approval and manual correction dispatch.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
    TASK queue/read exposure is complete through ARCH-03C7. AUTH-18 public
-   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority, ARCH-04E1A source-only facts/types and ARCH-04E2-A hidden strict preparation are delivered. 04E2-B authorized outcomes are delivered; B8 completion delivery is implemented; remediation and live 04E3 remain. Shared acceptance foundations additionally gate false routing, not true admission.
+   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority, ARCH-04E1A source-only facts/types and ARCH-04E2-A hidden strict preparation are delivered. 04E2-B authorized outcomes, B8 completion delivery and the 04F2 hidden remediation handoff are delivered; replacement intake/recovery and live 04E3 remain. Shared acceptance foundations additionally gate false routing, not true admission.
    Remaining work must use its exact owner, not the superseded broad designs.

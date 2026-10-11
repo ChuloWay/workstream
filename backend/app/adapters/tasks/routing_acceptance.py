@@ -36,7 +36,11 @@ class _PreparedAdapter:
 
     async def participate(self, source, effects, authority, authorized_generation):
         """Bind real routing authority and return only committed-shape economic facts."""
-        if source.source.human_review_required or authorized_generation <= 0:
+        if (
+            source.source.routing_recommendation != "allow_review"
+            or source.source.human_review_required
+            or authorized_generation <= 0
+        ):
             raise ValueError("false acceptance source unavailable")
         result = await self._prepared.participate(
             FinalAcceptanceRequest(

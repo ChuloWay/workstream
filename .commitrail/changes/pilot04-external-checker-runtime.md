@@ -306,11 +306,11 @@ No database transaction crosses the client call.
 
 - Current-source reconciliation: branch `codex/pilot04-external-runtime`
   started at merged PR #521 and merged current main
-  `d3c50e1500beffea684fe881cd0a2b3431e6ccb9`; the incoming CLI approval,
+  `735cf26591e4ed616bcaa57f12eeb37cee741973`; the incoming CLI approval,
   inspection and correction, hidden routing-outcome, completion delivery,
   verified failure evidence, same-request pre-submit feedback, ten-lane CI
-  capacity, task-import source custody, ownership metadata and roadmap
-  statements are preserved.
+  capacity, task-import source custody, contributor-remediation outcome,
+  ownership metadata and roadmap statements are preserved.
 - Parallel-lane reconciliation: merged PILOT-02 task-import product, ART source
   code and migration `0031_task_import_source` remain current-main content and
   are not part of this runtime PR. No PILOT-02 worktree is edited here.

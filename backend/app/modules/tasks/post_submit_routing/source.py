@@ -47,7 +47,12 @@ class TaskRoutingSourcePreparer:
 
     async def _prepare(self, event_id, completion):
         task = await self._tasks.lock_project_task(completion.project_id, completion.task_id)
-        if task is None or task.status not in {"evaluation_pending", "review_pending", "accepted"}:
+        if task is None or task.status not in {
+            "evaluation_pending",
+            "review_pending",
+            "needs_revision",
+            "accepted",
+        }:
             raise TaskRoutingRequestUnavailable("routing_source_unavailable")
         retained = await self._session.scalar(
             select(TaskPostSubmitRoutingManifest).where(
@@ -171,11 +176,17 @@ class TaskRoutingSourcePreparer:
             predecessor_submission_id=UUID(predecessor.id) if predecessor else None,
             predecessor_submission_version=predecessor.version if predecessor else None,
             locked_policy=lineage,
-            routing_recommendation="allow_review",
+            routing_recommendation=completion.routing_recommendation,
             **material.model_dump(exclude={"submission_id", "submission_version"}),
         )
         if retained is not None:
-            expected_status = "review_pending" if source.human_review_required else "accepted"
+            expected_status = (
+                "needs_revision"
+                if source.routing_recommendation == "needs_revision"
+                else "review_pending"
+                if source.human_review_required
+                else "accepted"
+            )
             if task.status != expected_status or retained.authority_context.get(
                 "source"
             ) != source.model_dump(mode="json"):
