@@ -280,7 +280,7 @@ controls; replace only synthetic-status fixtures that would bypass the new
 causality rule. Each negative must first demonstrate its adjacent valid path,
 then fail at the named boundary rather than fixture setup.
 
-## Required verification
+## Evidence
 
 The implementation PR carries actual command, CI and reviewer evidence; this
 record defines the required proof, not an executed-test attestation. Verify
