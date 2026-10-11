@@ -104,11 +104,12 @@ def test_post_byte_relock_rejects_advanced_predecessor_version() -> None:
         assignment_id=new_record_id(),
         contributor_id=new_record_id(),
         status="needs_revision",
-        kind="revision",
+        kind="checker_remediation",
         predecessor=SubmissionPredecessorFacts(
             submission_id=predecessor_id,
             version=2,
         ),
+        checker_remediation_manifest_id=new_record_id(),
         locked_project_context=TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
             project_id=new_record_id(),
             guide_version="1",
@@ -126,6 +127,7 @@ def test_post_byte_relock_rejects_advanced_predecessor_version() -> None:
             task_context,
             predecessor_submission_id=predecessor_id,
             predecessor_submission_version=1,
+            checker_remediation_manifest_id=task_context.checker_remediation_manifest_id,
         )
 
 
@@ -145,6 +147,7 @@ def test_pass_capability_is_generation_bound_and_single_use() -> None:
         evidence_set_id=evidence_set_id,
         prepared_generation_id=generation_id,
         predecessor_submission_id=None,
+        checker_remediation_manifest_id=None,
         effective_plan_sha256=_sha("7"),
         archive_sha256=_sha("1"),
         semantic_manifest_sha256=_sha("2"),
@@ -155,6 +158,7 @@ def test_pass_capability_is_generation_bound_and_single_use() -> None:
         capability.consume(
             prepared_generation_id=new_record_id(),
             predecessor_submission_id=None,
+            checker_remediation_manifest_id=None,
             effective_plan_sha256=_sha("7"),
             archive_sha256=_sha("1"),
             semantic_manifest_sha256=_sha("2"),
@@ -165,6 +169,7 @@ def test_pass_capability_is_generation_bound_and_single_use() -> None:
         capability.consume(
             prepared_generation_id=generation_id,
             predecessor_submission_id=None,
+            checker_remediation_manifest_id=None,
             effective_plan_sha256=_sha("7"),
             archive_sha256=_sha("1"),
             semantic_manifest_sha256=_sha("2"),
@@ -176,6 +181,7 @@ def test_pass_capability_is_generation_bound_and_single_use() -> None:
         capability.consume(
             prepared_generation_id=generation_id,
             predecessor_submission_id=None,
+            checker_remediation_manifest_id=None,
             effective_plan_sha256=_sha("7"),
             archive_sha256=_sha("1"),
             semantic_manifest_sha256=_sha("2"),

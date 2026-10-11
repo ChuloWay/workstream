@@ -13,6 +13,7 @@ from contextlib import suppress
 from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock, call
 from uuid import UUID
@@ -102,8 +103,9 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
         assignment_id=new_record_id(),
         contributor_id=new_record_id(),
         status="needs_revision",
-        kind="revision",
+        kind="checker_remediation",
         predecessor=predecessor,
+        checker_remediation_manifest_id=new_record_id(),
         locked_project_context=_locked_task_context_references(),
     )
 
@@ -210,7 +212,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         ]
     )
 
-    initial = await repository.lock_submission_context(
+    initial, source = await repository.select_submission_context(
         TaskSubmissionContextRequest(
             task_id=task_id,
             assignment_id=assignment_id,
@@ -218,6 +220,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
             predecessor_submission_id=None,
         )
     )
+    assert source is None
     assert initial == submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=task_id,
         assignment_id=assignment_id,
@@ -229,27 +232,12 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         locked_policy=lineage,
     )
     task.status = "needs_revision"
-    revision = await repository.lock_submission_context(
-        TaskSubmissionContextRequest(
-            task_id=task_id,
-            assignment_id=assignment_id,
-            contributor_id=contributor_id,
-            predecessor_submission_id=predecessor_id,
-        )
-    )
-    assert revision == submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
-        task_id=task_id,
-        assignment_id=assignment_id,
-        contributor_id=contributor_id,
-        status="needs_revision",
-        kind="revision",
-        predecessor=SubmissionPredecessorFacts(
-            submission_id=predecessor_id,
-            version=1,
-        ),
-        locked_project_context=references,
-        locked_policy=lineage,
-    )
+    session.scalars = AsyncMock(return_value=SimpleNamespace(all=lambda: []))
+    with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_context_invalid"):
+        await repository.select_submission_context(TaskSubmissionContextRequest(
+            task_id=task_id, assignment_id=assignment_id,
+            contributor_id=contributor_id, predecessor_submission_id=predecessor_id,
+        ))
     assert repository.get_task.await_args_list == [
         call(str(task_id), for_update=True),
         call(str(task_id), for_update=True),
@@ -267,9 +255,8 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
     )
 
     session.scalar = AsyncMock(return_value=assignment)
-    repository.get_latest_submission_for_task = AsyncMock(return_value=MagicMock(
-        id=str(predecessor_id), version=1, contributor_id=str(contributor_id),
-    ))
+    repository.get_latest_submission_for_task = AsyncMock(return_value=None)
+    task.status = "in_progress"
     from app.modules.projects.post_submit_policy import build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec
     substituted = compile_project_post_submit_checker_spec(
         project_id=str(references.project_id), guide_version=references.guide_version,
@@ -279,9 +266,9 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
     assert substituted.policy_hash != lineage.locked_post_submit_checker_policy_hash
     task.locked_post_submit_checker_policy_body = substituted.model_dump(mode="json")
     with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_context_invalid"):
-        await repository.lock_submission_context(TaskSubmissionContextRequest(
+        await repository.select_submission_context(TaskSubmissionContextRequest(
             task_id=task_id, assignment_id=assignment_id, contributor_id=contributor_id,
-            predecessor_submission_id=predecessor_id,
+            predecessor_submission_id=None,
         ))
 
 
@@ -309,7 +296,7 @@ async def test_task_repository_rejects_stale_submission_predecessor() -> None:
         TaskSubmissionContextUnavailable,
         match="task_submission_predecessor_changed",
     ):
-        await repository.lock_submission_context(
+        await repository.select_submission_context(
             TaskSubmissionContextRequest(
                 task_id=task_id,
                 assignment_id=assignment_id,
@@ -350,7 +337,7 @@ async def test_task_repository_rejects_invalid_revision_lineage(
         TaskSubmissionContextUnavailable,
         match="task_submission_context_invalid",
     ):
-        await repository.lock_submission_context(
+        await repository.select_submission_context(
             TaskSubmissionContextRequest(
                 task_id=task_id,
                 assignment_id=assignment_id,
@@ -946,7 +933,8 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
     initial_request = await _submission_context_request_for_started_task(task["id"], contributor_id)
 
     async with db_session.get_session_factory()() as session:
-        initial = await TaskRepository(session).lock_submission_context(initial_request)
+        initial, source = await TaskRepository(session).select_submission_context(initial_request)
+        assert source is None
         assert initial.kind == "initial"
         assert initial.status == "in_progress"
         assert initial.predecessor is None
@@ -963,7 +951,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
             TaskSubmissionContextUnavailable,
             match="task_submission_context_invalid",
         ):
-            await TaskRepository(session).lock_submission_context(initial_request)
+            await TaskRepository(session).select_submission_context(initial_request)
 
     async with db_session.get_session_factory()() as session:
         await session.execute(
@@ -993,13 +981,8 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
         task["id"], contributor_id, predecessor_submission_id=predecessor["id"]
     )
     async with db_session.get_session_factory()() as session:
-        revision = await TaskRepository(session).lock_submission_context(revision_request)
-        assert revision.kind == "revision"
-        assert revision.status == "needs_revision"
-        assert revision.predecessor == SubmissionPredecessorFacts(
-            submission_id=UUID(predecessor["id"]),
-            version=predecessor["version"],
-        )
+        with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_context_invalid"):
+            await TaskRepository(session).select_submission_context(revision_request)
 
     stale_request = TaskSubmissionContextRequest(
         task_id=revision_request.task_id,
@@ -1012,7 +995,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
             TaskSubmissionContextUnavailable,
             match="task_submission_predecessor_changed",
         ):
-            await TaskRepository(session).lock_submission_context(stale_request)
+            await TaskRepository(session).select_submission_context(stale_request)
 
     async with db_session.get_session_factory()() as session:
         await session.execute(
@@ -1026,7 +1009,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
             TaskSubmissionContextUnavailable,
             match="task_submission_context_invalid",
         ):
-            await TaskRepository(session).lock_submission_context(revision_request)
+            await TaskRepository(session).select_submission_context(revision_request)
 
     replacement_subject = "worker-submission-context-replacement"
     replacement_contributor_id = await seed_task_test_actor(replacement_subject)
@@ -1064,7 +1047,7 @@ async def test_task_repository_postgresql_submission_context_state_matrix(
             TaskSubmissionContextUnavailable,
             match="task_submission_context_invalid",
         ):
-            await TaskRepository(session).lock_submission_context(cross_contributor_request)
+            await TaskRepository(session).select_submission_context(cross_contributor_request)
 
 
 @pytest.mark.asyncio
@@ -1084,22 +1067,23 @@ async def test_task_repository_postgresql_submission_context_lock_serializes_rac
 
     holder = db_session.get_session_factory()()
     contender = db_session.get_session_factory()()
-    contender_call: asyncio.Task[TaskSubmissionContextFacts] | None = None
+    contender_call: asyncio.Task[tuple[TaskSubmissionContextFacts, object | None]] | None = None
     try:
-        held_facts = await TaskRepository(holder).lock_submission_context(request)
+        held_facts, held_source = await TaskRepository(holder).select_submission_context(request)
+        assert held_source is None
         assert held_facts.kind == "initial"
         await contender.execute(
             text("select set_config('application_name', :application_name, true)"),
             {"application_name": contender_name},
         )
         contender_call = asyncio.create_task(
-            TaskRepository(contender).lock_submission_context(request)
+            TaskRepository(contender).select_submission_context(request)
         )
         await wait_for_named_database_lock(task_database_env, contender_name)
         assert not contender_call.done()
         await holder.rollback()
-        contender_facts = await contender_call
-        assert contender_facts == held_facts
+        contender_facts, contender_source = await contender_call
+        assert contender_source is None and contender_facts == held_facts
     finally:
         if contender_call is not None:
             contender_call.cancel()

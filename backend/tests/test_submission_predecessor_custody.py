@@ -11,7 +11,9 @@ import pytest
 from sqlalchemy import text
 from starlette.requests import Request
 
+from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.adapters.artifacts import get_submission_bundle_preparation_command
+from app.adapters.tasks import task_post_submit_outcome
 from app.adapters.artifacts.local import LocalStorageAdapter
 from app.core.identifiers import new_record_id
 from app.modules.actors.api.service_identities import ServiceIdentity
@@ -36,8 +38,13 @@ from app.modules.artifacts.submission_manifest import (
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
+from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.models import SubmissionDispatch
 from tests.artifact_store_helpers import artifact_byte_stream
-from tests.post_submit_materialization_helpers import material_fixture
+from tests.tasks.post_submit_routing.remediation_support import (
+    no_economic_effects,
+    remediation_source,
+)
 from tests.tasks.post_submit_routing.support import revision_archive
 from tests.tasks.submission_lineage_support import _verified_admission
 
@@ -134,17 +141,29 @@ async def _snapshot(h) -> tuple[tuple[str, int], ...]:
         return tuple(rows)
 
 
-async def _fixture_revision_context(h) -> None:
-    """Supply only the exact existing TASK context needed to exercise ART."""
+async def _fixture_revision_context(h):
+    """Commit the real routed checker failure before replacement intake."""
     async with h.factory() as session, session.begin():
-        changed = await session.execute(
-            text(
-                "UPDATE public.workstream_tasks SET status='needs_revision' "
-                "WHERE id=:id AND status='evaluation_pending'"
-            ),
-            {"id": h.request.task_id},
-        )
-        assert changed.rowcount == 1
+        outcome = task_post_submit_outcome(session, h.factory)
+        assert await outcome.observe_delivery_generation(h.envelope) is None
+        result = await outcome.apply(h.envelope, current_generation=None)
+        assert result.routing_recommendation == "needs_revision"
+    async with h.factory() as session:
+        source = (await session.execute(text("""
+            SELECT m.id,m.submission_id,m.assignment_id,m.routing_recommendation,
+              t.status AS task_status,a.status AS assignment_status,
+              public.task_routing_outcome_complete(m) AS complete
+            FROM public.task_post_submit_routing_manifests m
+            JOIN public.workstream_tasks t ON t.id=m.task_id
+            JOIN public.task_assignments a ON a.id=m.assignment_id
+            WHERE m.id=:id
+        """), {"id": result.routing_manifest_id})).mappings().one()
+        assert source["submission_id"] == h.created.submission_id
+        assert source["assignment_id"] == h.request.assignment_id
+        assert source["routing_recommendation"] == source["task_status"] == "needs_revision"
+        assert source["assignment_status"] == "active" and source["complete"] is True
+        await no_economic_effects(session)
+    return result.routing_manifest_id
 
 
 def _same_semantics_different_archive(data: bytes) -> bytes:
@@ -171,10 +190,12 @@ async def _assert_dispatch_valid(h) -> None:
         )
 
 
+@pytest.mark.parametrize("human_review_required", [True, False])
 async def test_real_replacement_compares_consumed_predecessor_and_replays_exactly(
     tmp_path,
     isolated_database_env,
     monkeypatch,
+    human_review_required,
 ):
     provider_writes = _trace_provider_writes(monkeypatch)
     loaded = []
@@ -191,9 +212,11 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
         traced_load,
     )
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with remediation_source(
+        tmp_path, isolated_database_env, human_review_required=human_review_required,
+    ) as h:
         await _assert_dispatch_valid(h)
-        await _fixture_revision_context(h)
+        source_id = await _fixture_revision_context(h)
         provider_writes.clear()
         loaded.clear()
 
@@ -246,8 +269,10 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
             assert admission.status == "ready"
             assert admission.predecessor_submission_id == str(predecessor_id)
             assert admission.predecessor_submission_version == 1
+            assert admission.checker_remediation_manifest_id == str(source_id)
             assert evidence.predecessor_submission_id == str(predecessor_id)
             assert evidence.predecessor_submission_version == 1
+            assert evidence.checker_remediation_manifest_id == str(source_id)
             assert admission.archive_sha256 != predecessor_admission.archive_sha256
             assert (
                 admission.semantic_manifest_sha256 != predecessor_admission.semantic_manifest_sha256
@@ -268,6 +293,51 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
         assert await _snapshot(h) == ready
         assert provider_writes == ["put"]
 
+        async with h.factory() as session:
+            immutable_before = (await session.execute(text("""
+                SELECT (SELECT to_jsonb(s) FROM public.submissions s WHERE s.id=:prior),
+                  (SELECT to_jsonb(m) FROM public.task_post_submit_routing_manifests m WHERE m.id=:cause),
+                  (SELECT to_jsonb(r) FROM public.checker_results r WHERE r.id=:result)
+            """), {"prior": predecessor_id, "cause": source_id,
+                   "result": h.completion.reference.result_id})).one()
+        creation = SubmissionCreationRequest(
+            task_id=h.request.task_id,
+            assignment_id=h.request.assignment_id,
+            contributor_id=h.actor_context.actor_profile_id,
+            predecessor_submission_id=predecessor_id,
+            admission_id=admission_id,
+            summary=changed_request.summary,
+            contributor_attestation=changed_request.contributor_attestation,
+        )
+        async with h.factory() as session:
+            created = await compose_hidden_submission_creation_command(
+                session, h.actor_context, request_id=new_record_id(),
+                correlation_id=new_record_id(),
+            ).create(creation)
+        assert created.submission_version == 2
+        async with h.factory() as session:
+            receipt = await session.get(SubmissionDispatch, str(created.submission_id))
+            assert receipt is not None
+            assert receipt.creation_kind == "checker_remediation"
+            assert receipt.checker_remediation_manifest_id == source_id
+            assert await session.scalar(text("""
+                SELECT public.submission_dispatch_valid(d) FROM public.submission_dispatches d
+                WHERE d.submission_id=:id
+            """), {"id": created.submission_id}) is True
+            immutable_after = (await session.execute(text("""
+                SELECT (SELECT to_jsonb(s) FROM public.submissions s WHERE s.id=:prior),
+                  (SELECT to_jsonb(m) FROM public.task_post_submit_routing_manifests m WHERE m.id=:cause),
+                  (SELECT to_jsonb(r) FROM public.checker_results r WHERE r.id=:result)
+            """), {"prior": predecessor_id, "cause": source_id,
+                   "result": h.completion.reference.result_id})).one()
+            assert immutable_after == immutable_before
+            await no_economic_effects(session)
+        async with h.factory() as session:
+            assert await compose_hidden_submission_creation_command(
+                session, h.actor_context, request_id=new_record_id(),
+                correlation_id=new_record_id(),
+            ).create(creation) == created
+
         assert len(loaded) == 4
         for task_predecessor, artifact_predecessor in loaded:
             assert task_predecessor.submission_id == predecessor_id
@@ -287,8 +357,8 @@ async def test_foreign_predecessor_stops_at_task_context_before_art_effects(
     monkeypatch,
 ):
     provider_writes = _trace_provider_writes(monkeypatch)
-    async with material_fixture(tmp_path / "local", isolated_database_env) as local:
-        async with material_fixture(
+    async with remediation_source(tmp_path / "local", isolated_database_env) as local:
+        async with remediation_source(
             tmp_path / "foreign",
             isolated_database_env,
             provision_services=False,
@@ -297,6 +367,7 @@ async def test_foreign_predecessor_stops_at_task_context_before_art_effects(
             await _assert_dispatch_valid(local)
             await _assert_dispatch_valid(foreign)
             await _fixture_revision_context(local)
+            await _fixture_revision_context(foreign)
             provider_writes.clear()
             baseline = await _snapshot(local)
 

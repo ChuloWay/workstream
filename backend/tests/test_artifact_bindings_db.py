@@ -26,6 +26,7 @@ from app.modules.tasks.api import SubmissionCreationRequest, SubmissionCreationU
 from app.modules.tasks.models import Submission, SubmissionDispatch
 from app.modules.tasks.models import AuditEvent
 from app.modules.tasks.repository import TaskRepository
+from app.modules.tasks.submission_context import TaskSubmissionContextService
 from app.modules.tasks.service import TaskService
 from test_artifact_bindings import _Allow, _lineage, _request, _replay_request
 
@@ -188,7 +189,7 @@ async def test_composed_final_denial_rolls_back_task_and_art_rows(
         # policy rejection is proved in task_authority/test_submission_policy.py.
         assert candidate is task
 
-    monkeypatch.setattr(TaskRepository, "lock_submission_context", lock_context)
+    monkeypatch.setattr(TaskSubmissionContextService, "lock_submission_context", lock_context)
     monkeypatch.setattr(TaskRepository, "get_task", get_task)
     monkeypatch.setattr(TaskService, "_load_locked_task_context", validate_context)
     async with _isolated_binding_schema(isolated_database_env) as (schema, factory):

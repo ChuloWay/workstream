@@ -183,6 +183,7 @@ def _creation_resource(
         admission_id=facts.admission_id,
         predecessor_submission_id=facts.predecessor_submission_id,
         predecessor_submission_version=(predecessor.version if predecessor else None),
+        checker_remediation_manifest_id=task.checker_remediation_manifest_id,
         submission_id=facts.submission_id,
         submission_version=facts.submission_version,
         task_status=task.status,

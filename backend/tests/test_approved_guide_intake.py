@@ -1,6 +1,7 @@
 """Final intake revalidation uses exact activated owner facts, not current selectors."""
 
 from app.adapters.checkers import submission_evaluation_content
+from app.adapters.tasks import task_submission_context_port
 
 from dataclasses import replace
 from types import SimpleNamespace
@@ -18,7 +19,6 @@ from app.modules.artifacts.service import ArtifactStorageNamespaceSpec
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
 from app.modules.projects.models import ProjectGuide
 from app.modules.projects.guide_activation.custody import load_guide_activation
-from app.modules.tasks.repository import TaskRepository
 from tests.pre_submit_test_helpers import execute_evidence_workflow
 from tests.artifact_store_helpers import artifact_admission_limit_settings
 from tests.test_pre_submit_attempt_recovery import _harness
@@ -56,7 +56,7 @@ async def _admit(session, request, authority, tmp_path, *, task_contexts=None):
     # This is the real durable-admission writer, including final AUTH and custody.
     return await _admission(session, tmp_path).admit(
         request, submission_prepared_authorization=authority,
-        submission_task_contexts=task_contexts or TaskRepository(session),
+        submission_task_contexts=task_contexts or task_submission_context_port(session),
         submission_project_contexts=ProjectLockedPolicyRepository(session),
         existing_transaction=True,
     )
@@ -151,7 +151,7 @@ async def test_final_intake_rejects_invalid_owner_context(tmp_path, isolated_dat
                 else:
                     # Substitute a same-shaped owner result; database guards are not disabled.
                     from app.core.identifiers import new_record_id
-                    real = TaskRepository(session)
+                    real = task_submission_context_port(session)
                     from app.modules.tasks.api import TaskSubmissionContextRequest
                     facts = await real.lock_submission_context(TaskSubmissionContextRequest(
                         task_id=harness.request.task_id, assignment_id=harness.request.assignment_id,
@@ -211,7 +211,7 @@ async def test_command_holds_authorized_context_before_final_handoff(tmp_path, i
             admission = _admission(session, tmp_path)
             durable = SubmissionBundleDurablePutService(
                 session=session, admission=admission, storage=object(), authorization=contributor,
-                task_contexts=TaskRepository(session), project_contexts=ProjectLockedPolicyRepository(session),
+                task_contexts=task_submission_context_port(session), project_contexts=ProjectLockedPolicyRepository(session),
             )
             observed = []
             async def final_handoff(request):
@@ -261,7 +261,7 @@ async def test_command_holds_authorized_context_before_final_handoff(tmp_path, i
                 )
 
             command = PreparedSubmissionBundlePreparationCommand(
-                session=session, authority=contributor, task_contexts=TaskRepository(session),
+                session=session, authority=contributor, task_contexts=task_submission_context_port(session),
                 project_contexts=ProjectLockedPolicyRepository(session), runtime_factory=runtime,
             )
             try:

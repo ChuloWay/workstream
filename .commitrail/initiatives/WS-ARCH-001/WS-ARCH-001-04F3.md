@@ -125,10 +125,23 @@ replacement writer or route would fork the atomic creation operation.
   `backend/tests/tasks/submission_dispatch/`,
   `backend/tests/tasks/post_submit_routing/`,
   `backend/tests/test_submission_bundle_admission.py`,
+  `backend/tests/test_submission_composition.py`,
   `backend/tests/test_submission_preparation_authorization.py`,
   `backend/tests/authorization/task_authority/test_submission_authority.py`,
   `backend/tests/test_tasks.py`, and one new focused integration test file under
   `backend/tests/tasks/submission_dispatch/` if needed for the joined journey.
+- Direct callers of the superseded repository context method also require
+  bounded test/support migration in `backend/tests/historical_submission_fixtures.py`,
+  `backend/tests/authorization/task_authority/test_lifecycle_races.py`,
+  `backend/tests/test_artifact_bindings_db.py`,
+  `backend/tests/test_submission_evaluation_capacity.py`,
+  `backend/tests/test_effective_pre_submit_execution.py`, and
+  `backend/tests/test_approved_guide_intake.py`. Preserve each original
+  owner, archive, authorization and race assertion while switching to the
+  single composed context port or exact new context shape; add no old-port alias.
+- `backend/tests/conftest.py` only for the deterministic 0033 public-schema
+  fingerprint, with the existing strict schema guard and resettable-table list
+  retained. The lead independently verifies the integrated fingerprint.
 - This record and affected current capability claims in `docs/roadmap_status.md`,
   `docs/spec_chunk_4_task_queue_assignment.md`,
   `docs/spec_artifact_storage_service.md`,

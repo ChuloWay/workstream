@@ -37,9 +37,10 @@ async def write_historical_submission(factory, context, request):
             "0024_require_second_review_false",
         }, "historical seeder cannot write the current schema"
         repository = TaskRepository(session)
-        facts = await repository.lock_submission_context(TaskSubmissionContextRequest(
+        facts, source = await repository.select_submission_context(TaskSubmissionContextRequest(
             request.task_id, request.assignment_id, request.contributor_id, request.predecessor_submission_id,
         ))
+        assert source is None
         task = await repository.get_task(str(request.task_id))
         admission = await session.get(SubmissionBundleAdmission, str(request.admission_id))
         assert admission.status == "ready" and admission.actor_profile_id == str(context.actor_profile_id)

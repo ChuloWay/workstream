@@ -725,8 +725,10 @@ class SubmissionDispatch(Base):
             ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"], ondelete="RESTRICT"),
         CheckConstraint("request_digest ~ '^sha256:[0-9a-f]{64}$' and "
                         "evaluation_request_digest ~ '^sha256:[0-9a-f]{64}$'", name="sha256_shapes"),
-        CheckConstraint("(submission_version = 1 and creation_kind = 'initial' and creation_status = 'in_progress') "
-                        "or (submission_version > 1 and creation_kind = 'revision' and creation_status = 'needs_revision')",
+        CheckConstraint("(submission_version = 1 and creation_kind = 'initial' and creation_status = 'in_progress' "
+                        "and checker_remediation_manifest_id is null) "
+                        "or (submission_version > 1 and creation_kind = 'checker_remediation' "
+                        "and creation_status = 'needs_revision' and checker_remediation_manifest_id is not null)",
                         name="creation_shape"),
         CheckConstraint("creation_decision_id <> binding_decision_id", name="distinct_authority"),
     )
@@ -743,8 +745,12 @@ class SubmissionDispatch(Base):
     creation_decision_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False, unique=True)
     binding_decision_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id", ondelete="RESTRICT"), nullable=False, unique=True)
     request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
-    creation_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    creation_kind: Mapped[str] = mapped_column(String(32), nullable=False)
     creation_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    checker_remediation_manifest_id: Mapped[UUID | None] = mapped_column(
+        Uuid(), ForeignKey("task_post_submit_routing_manifests.id", ondelete="RESTRICT",
+                           name="fk_submission_dispatches_checker_remediation_manifest")
+    )
     evaluation_request_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, unique=True)
     evaluation_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     evaluation_attempt_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("checker_runs.id", ondelete="RESTRICT"), nullable=False, unique=True)

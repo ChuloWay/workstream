@@ -3,7 +3,7 @@
 from app.adapters.artifacts import task_guide_documents_port
 from app.core.config import get_settings
 
-from app.adapters.tasks import task_service
+from app.adapters.tasks import task_service, task_submission_context_port
 
 import asyncio
 from collections.abc import AsyncIterator
@@ -36,7 +36,6 @@ from app.modules.tasks.api import (
 )
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.models import AuditEvent, TaskAssignment
-from app.modules.tasks.repository import TaskRepository
 from tests.test_tasks import (
     task_client as task_client,
     task_database_env as task_database_env,
@@ -208,7 +207,7 @@ async def _consume_submission_authority(session, context, task_id):
             TaskAssignment.task_id == task_id, TaskAssignment.status == "active",
         ))
         assert assignment is not None
-        task_context = await TaskRepository(session).lock_submission_context(
+        task_context = await task_submission_context_port(session).lock_submission_context(
             TaskSubmissionContextRequest(
                 task_id=UUID(task_id), assignment_id=UUID(assignment.id),
                 contributor_id=context.actor_profile_id, predecessor_submission_id=None,

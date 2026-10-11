@@ -36,6 +36,7 @@ class SubmissionBundlePreparationResourceContext(SubmissionBundlePreparationRequ
     resource_type: Literal["submission_bundle_preparation"]
     resource_id: UUID
     predecessor_submission_version: int | None = Field(default=None, ge=1)
+    checker_remediation_manifest_id: UUID | None = None
     pre_submit_evidence_set_id: UUID
     prepared_generation_id: UUID
     guide_id: UUID
@@ -65,6 +66,10 @@ class SubmissionBundlePreparationResourceContext(SubmissionBundlePreparationRequ
             self.predecessor_submission_version is None
         ):
             raise ValueError("submission predecessor identity is incomplete")
+        if (self.predecessor_submission_id is None) != (
+            self.checker_remediation_manifest_id is None
+        ):
+            raise ValueError("submission remediation source is incomplete")
         return self
 
 
@@ -102,6 +107,8 @@ def parse_submission_preparation(
         value[field] = UUID(str(value[field]))
     if value.get("replay_durable_intent_id") is not None:
         value["replay_durable_intent_id"] = UUID(str(value["replay_durable_intent_id"]))
+    if value.get("checker_remediation_manifest_id") is not None:
+        value["checker_remediation_manifest_id"] = UUID(str(value["checker_remediation_manifest_id"]))
     final = SubmissionBundlePreparationResourceContext(
         resource_type="submission_bundle_preparation",
         resource_id=value["prepared_generation_id"],

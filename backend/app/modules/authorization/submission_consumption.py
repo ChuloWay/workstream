@@ -29,7 +29,8 @@ class SubmissionCreationResourceContext(BaseModel):
     submission_id: UUID
     submission_version: int = Field(ge=1)
     task_status: str = Field(min_length=1)
-    submission_kind: Literal["initial", "revision"]
+    submission_kind: Literal["initial", "checker_remediation"]
+    checker_remediation_manifest_id: UUID | None = None
     guide_version: str = Field(min_length=1)
     source_snapshot_id: UUID
     source_snapshot_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
@@ -47,6 +48,10 @@ class SubmissionCreationResourceContext(BaseModel):
             self.predecessor_submission_version is None
         ):
             raise ValueError("submission predecessor identity is incomplete")
+        if (self.submission_kind == "initial") != (
+            self.checker_remediation_manifest_id is None
+        ):
+            raise ValueError("submission remediation source is inconsistent")
         return self
 
 
@@ -65,6 +70,7 @@ class SubmissionBindingResourceContext(BaseModel):
     assignment_id: UUID
     predecessor_submission_id: UUID | None
     predecessor_submission_version: int | None = Field(default=None, ge=1)
+    checker_remediation_manifest_id: UUID | None = None
     submission_id: UUID
     submission_version: int = Field(ge=1)
     guide_id: UUID
@@ -92,6 +98,10 @@ class SubmissionBindingResourceContext(BaseModel):
             self.predecessor_submission_version is None
         ):
             raise ValueError("submission binding predecessor is incomplete")
+        if (self.predecessor_submission_id is None) != (
+            self.checker_remediation_manifest_id is None
+        ):
+            raise ValueError("submission binding remediation source is incomplete")
         return self
 
 

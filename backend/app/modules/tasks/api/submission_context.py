@@ -8,7 +8,7 @@ from uuid import UUID
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 
-TaskSubmissionContextKind = Literal["initial", "revision"]
+TaskSubmissionContextKind = Literal["initial", "checker_remediation"]
 TaskSubmissionContextStatus = Literal["in_progress", "needs_revision"]
 TaskSubmissionContextFailure = Literal[
     "task_submission_context_invalid",
@@ -92,9 +92,10 @@ class TaskSubmissionContextFacts:
     locked_project_context: TaskLockedProjectContextReferences
     locked_policy: TaskPolicyLineage
     acceptance_criteria: str | None
+    checker_remediation_manifest_id: UUID | None = None
 
     def __post_init__(self) -> None:
-        """Enforce the exact initial-or-revision lifecycle shape."""
+        """Enforce the exact initial or checker-remediation lifecycle shape."""
         if (
             not isinstance(self.submitter_contribution_policy_version_id, UUID)
             or self.submitter_contribution_policy_version_id
@@ -120,13 +121,15 @@ class TaskSubmissionContextFacts:
             self.status == "in_progress"
             and self.kind == "initial"
             and self.predecessor is None
+            and self.checker_remediation_manifest_id is None
         )
-        is_revision = (
+        is_remediation = (
             self.status == "needs_revision"
-            and self.kind == "revision"
+            and self.kind == "checker_remediation"
             and self.predecessor is not None
+            and isinstance(self.checker_remediation_manifest_id, UUID)
         )
-        if not (is_initial or is_revision):
+        if not (is_initial or is_remediation):
             raise ValueError("task submission context predecessor is inconsistent")
 
 

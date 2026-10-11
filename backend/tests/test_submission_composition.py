@@ -126,9 +126,7 @@ async def test_human_lifecycle_denial_precedes_task_state(
         evaluations=None, events=None,
         admissions=None,
         contexts=task_service(_Session(), settings=get_settings()),
-    )
-    service._repository = SimpleNamespace(
-        lock_submission_context=lambda value: pytest.fail("TASK state was revealed")
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(side_effect=AssertionError("TASK state was revealed"))),
     )
     with pytest.raises(SubmissionCreationUnavailable):
         await service.create(request)
@@ -149,9 +147,7 @@ async def test_foreign_contributor_denial_precedes_task_lookup():
         evaluations=None, events=None,
         admissions=None,
         contexts=task_service(_Session(), settings=get_settings()),
-    )
-    service._repository = SimpleNamespace(
-        lock_submission_context=lambda value: pytest.fail("foreign task was inspected"),
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(side_effect=AssertionError("foreign task was inspected"))),
     )
     with pytest.raises(SubmissionCreationUnavailable):
         await service.create(request)
@@ -171,9 +167,7 @@ async def test_denial_precedes_task_lock_and_all_mutation():
         evaluations=None, events=None,
         admissions=None,
         contexts=task_service(_Session(), settings=get_settings()),
-    )
-    service._repository = SimpleNamespace(
-        lock_submission_context=lambda value: pytest.fail("TASK state was revealed")
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(side_effect=AssertionError("TASK state was revealed"))),
     )
     with pytest.raises(SubmissionCreationUnavailable):
         await service.create(_request())
@@ -203,11 +197,11 @@ async def test_fresh_authority_denial_precedes_art_and_mutation(revocation):
         evaluations=None, events=None,
         admissions=Admissions(),
         contexts=task_service(_Session(), settings=get_settings()),
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(return_value=_context(request))),
     )
     persisted = []
 
     class Repository:
-        async def lock_submission_context(self, value): return _context(request)
         async def get_task(self, task_id, **kwargs): return _task()
         async def add_submission(self, submission): persisted.append(submission)
 
@@ -244,11 +238,11 @@ async def test_invalid_admission_result_denies_before_lineage_and_final_authorit
         evaluations=None, events=None,
         admissions=Admissions(),
         contexts=task_service(_Session(), settings=get_settings()),
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(return_value=_context(request))),
     )
     persisted = []
 
     class Repository:
-        async def lock_submission_context(self, value): return _context(request)
         async def get_task(self, task_id, **kwargs): return _task()
         async def add_submission(self, submission): persisted.append(submission)
 
@@ -291,9 +285,9 @@ async def test_policy_failure_closes_prepared_authority_before_any_submission_or
         contexts=SimpleNamespace(
             _load_locked_task_context=AsyncMock(side_effect=ValueError("custody changed"))
         ),
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(return_value=_context(request))),
     )
     service._repository = SimpleNamespace(
-        lock_submission_context=AsyncMock(return_value=_context(request)),
         get_task=AsyncMock(return_value=_task()), add_submission=AsyncMock(),
     )
     with pytest.raises(ValueError, match="custody changed"):
