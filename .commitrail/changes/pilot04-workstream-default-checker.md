@@ -109,10 +109,14 @@ then the ART callback and external service execute without a database
 transaction. A fresh root locks TASK currentness before CHECKERS attempt state,
 verifies lease/generation and material/result/isolation identities, and appends
 the immutable outcome or marks a recoverable infrastructure result. Expired
-leases may be reclaimed under the same locks; a crashed process-local grant is
-never serialized or resumed. Queue/read-current/reserve, completion, replay and
-acknowledgment all acquire TASK custody before CHECKERS state, including the
-retained intermediate-wait regression.
+leases are finalized as infrastructure failures under the same locks. Because
+pre-Submission prepared bytes and the grant are deliberately process-local, a
+restart never reconstructs them from a DTO or path: retry requires a fresh
+upload, a fresh server-computed byte/manifest identity and a new attempt
+generation while retaining the failed attempt. A grant is never serialized or
+resumed. Queue/read-current/reserve, completion, replay and acknowledgment all
+acquire TASK custody before CHECKERS state, including the retained
+intermediate-wait regression.
 
 ## Acceptance criteria
 
@@ -121,6 +125,9 @@ retained intermediate-wait regression.
   limits; substitutions and stale approvals fail closed.
 - [ ] Activation enforces exact F-020 requirement/stage/generation coverage and
   retains false-policy and warning-acknowledgment guards.
+- [ ] F-020 recovery is proven by register -> recompile -> approve -> activate
+  in one current generation; registration alone and wrong generation, stage,
+  requirement, registry digest or stale approval remain blocked.
 - [ ] ART verifies server receipt identity and a bounded safe manifest before
   any project image reads material.
 - [ ] The default checker runs exactly four blockers; absent summary and
@@ -134,7 +141,8 @@ retained intermediate-wait regression.
   normalized evidence and never decide acceptance.
 - [ ] Timeout, cancellation, crash/restart, changed policy/material,
   cross-project access and duplicate delivery cannot create partial effects;
-  latency and queue/execution lineage are retained.
+  latency and queue/execution lineage are retained, and restart requires fresh
+  server-verified uploaded material rather than a reconstructed scratch handle.
 - [ ] Retained old evidence remains readable without rewriting hashes; unresolved
   old execution cannot cross into the new runtime and requires authorized policy
   transition.
