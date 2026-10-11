@@ -19,7 +19,6 @@ from app.modules.artifacts.models import (
     SubmissionBundleAdmission,
 )
 from app.modules.artifacts.service import ArtifactStorageOrchestrator
-from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
 
 
 async def _seed_services(factory):
@@ -60,12 +59,7 @@ async def _verified_admission(factory, store, namespace, settings, context, requ
         {
             "type": "http",
             "headers": [],
-            "app": SimpleNamespace(
-                state=SimpleNamespace(
-                    settings=settings,
-                    pre_submission_checker_catalogue=build_pre_submission_checker_catalogue(),
-                )
-            ),
+            "app": SimpleNamespace(state=SimpleNamespace(settings=settings)),
         }
     )
     async with factory() as session:
