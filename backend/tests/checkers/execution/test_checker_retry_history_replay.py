@@ -121,7 +121,9 @@ async def test_retry_replays_after_real_later_submission_without_reopening_old_s
         })
         with monkeypatch.context() as patch:
             patch.setattr(LocalStorageAdapter, "open", forbidden_open)
-            with pytest.raises(CheckerExecutionUnavailable, match="checker_retry_scope_unavailable"):
+            # A new key must pass current TASK ownership; the later Submission
+            # makes the old source fail the shared latest-Submission guard.
+            with pytest.raises(CheckerExecutionUnavailable, match="checker_reservation_scope_unavailable"):
                 async with h.factory.begin() as session:
                     await checker_retry_service(session, other_operator).retry(
                         command.model_copy(update={"request_key": other_key})
