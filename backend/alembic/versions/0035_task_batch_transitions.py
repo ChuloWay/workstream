@@ -325,7 +325,12 @@ begin
        and e.event_payload::jsonb#>>'{manager_authority_facts,idempotency_key}'=c.idempotency_key::text
        and e.event_payload::jsonb#>>'{manager_authority_facts,request_digest}'=c.request_digest
        and e.event_payload::jsonb#>>'{manager_authority_facts,identity_link_id}'=b.identity_link_id::text
-       and e.event_payload::jsonb#>>'{manager_authority_facts,locked_context_hash}'=c.locked_context_hash
+       and e.event_payload::jsonb#>>'{manager_authority_facts,task_status}'=
+         case b.action_id when 'project.task.screen' then 'draft' else 'screening' end
+       and coalesce((e.event_payload::jsonb#>>'{manager_authority_facts,locked_context_hash}')
+         ~ '^sha256:[0-9a-f]{64}$',false)
+       and (b.action_id='project.task.screen' or
+         e.event_payload::jsonb#>>'{manager_authority_facts,locked_context_hash}'=c.locked_context_hash)
        and e.event_payload::jsonb->>'authorization_resource_digest'
          =d.after_facts::jsonb->>'resource_context_digest'
        and e.event_payload::jsonb->>'locked_guide_version'=c.response::jsonb->>'locked_guide_version'
