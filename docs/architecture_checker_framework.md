@@ -244,6 +244,19 @@ The default checker, ART custody and project images must replace every required
 outcome before either current catalogue is removed. Human reviewers continue
 to own final quality judgment.
 
+The unselected `workstream.default` v1 component implements this closed result
+boundary. It consumes detached ART/TASK custody facts and reads verified bytes
+only through the existing CHECKERS-owned callback-scoped material capability;
+it receives no path or storage authority and introduces no CHECKERS-to-ART
+dependency. It reports four ordered blocking slots and separate warning-only
+summary/attestation absence; matched secret bytes and contributor text never
+enter its result. Malformed or
+unsafe contributor ZIPs are bounded work findings, while storage integrity,
+inspection timeout, stale predecessor and mixed-custody failures remain
+recoverable infrastructure outcomes. The unchanged-work check compares the
+canonical predecessor only when its locked task-rules digest is still current.
+This component has no active caller yet and does not alter either catalogue.
+
 The clean-cutover intake order is fixed. ART receives the ZIP, computes its
 SHA-256, verifies the stored bytes, safely opens it within platform limits and
 builds the manifest before any external image can read material. The one
@@ -276,8 +289,8 @@ readiness requires `runsc`; local `runc` is reported as `docker-dev`.
 
 This hidden mechanism is not selected by either current catalogue and stores no
 run state. Policy binding, caller-owned phase authority/currentness, durable
-attempt and isolation receipts, the one default checker, project-image routing,
-F-020 and public intake remain required before cutover.
+attempt and isolation receipts, composition of the unselected default checker,
+project-image routing, F-020 and public intake remain required before cutover.
 The replacement must remove both current pre- and post-submit catalogues after
 end-to-end replacement proof. It must not retain a legacy/new parallel path,
 weaken caller-owned atomicity or bypass phase identity and currentness checks.

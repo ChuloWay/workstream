@@ -850,6 +850,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/default_checker.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/execution.py"
     },
     {
@@ -895,6 +899,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/compiler.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/default_checker.py"
     },
     {
       "group": "artifacts",
@@ -1805,7 +1813,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "93906ccf711fb56664d96d5ad646991ab2877131a2c83e09643a84180e547c27",
+  "authority_digest": "8eb8e05679f811271c2a07399e4da7b6048d074fb72168d30fba876ca7f11d16",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

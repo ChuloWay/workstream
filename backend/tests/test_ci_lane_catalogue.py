@@ -44,6 +44,8 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
 
 def test_checker_delivery_and_routing_preparation_partition_every_node_once() -> None:
     delivery = {
+        "tests/checkers/default/test_contract.py",
+        "tests/checkers/default/test_execution.py",
         "tests/checkers/external/test_contracts.py",
         "tests/checkers/external/test_migration.py",
         "tests/checkers/external/test_postgresql.py",

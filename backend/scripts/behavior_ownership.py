@@ -144,6 +144,12 @@ PILOT_04_RUNTIME_TARGETS = frozenset(
         "backend/app/modules/artifacts/preparation.py",
     }
 )
+PILOT_04_DEFAULT_CHECKER_TARGETS = frozenset(
+    {
+        "backend/app/modules/checkers/api/default_checker.py",
+        "backend/app/modules/checkers/default_checker.py",
+    }
+)
 LOCAL_PILOT_HELPER_TARGETS = frozenset(
     {
         "backend/scripts/ensure_local_minio_bucket.py",
@@ -817,6 +823,7 @@ def _validate_additive_partition_transition(
         | CI_LANE_CATALOGUE_TARGETS
         | PILOT_04_REGISTRY_TARGETS
         | PILOT_04_RUNTIME_TARGETS
+        | PILOT_04_DEFAULT_CHECKER_TARGETS
         | LOCAL_PILOT_HELPER_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS
