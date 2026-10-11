@@ -94,11 +94,13 @@ Their current root transaction prevents composition across a complete batch.
   producer artifact through its job output, bind its SHA/attempt name, verify its
   checksum and start/clean up one actual provider. Add Go tests to existing
   verify/build commands. Partition the old mixed integration run into controlled
-  HTTP/local checks and existing native public API callers, each with the unchanged
+  task/local HTTP checks, guide HTTP checks and existing native public API callers,
+  each with the unchanged
   240-second isolated-run cap. Select existing native `*_public_api.py` files
   automatically plus `test_public_self_service.py`, excluding only the owned bulk
   file, which has its separate 240-second isolated run. HTTP/local selection is
-  the exact complementary file set. Refuse an empty native array.
+  the exact complementary file set: guide `test_guide*.py` files excluding native
+  files, and remaining HTTP/local files. Refuse empty native or guide arrays.
   Every test stays selected once, the fifteen-minute job cap and aggregate
   required CLI result remain unchanged, and no skips or fallback providers are
   introduced. Preserve the separate PILOT-10 export-native partition at union.
@@ -471,6 +473,16 @@ names that directory explicitly; its collection contains 156 controlled cases.
 The complementary nine existing native files contain nine cases, and the owned
 bulk file contains two. All 167 original cases must remain selected once. The
 same caps, fixture deadlines, assertions and product contracts remain unchanged.
+
+The corrected 156-case HTTP run at `051a0adb` reached 145 passing cases before
+the unchanged 240-second cap, again with complete cleanup and no reported
+assertion failure. Collection identifies the next case as the existing
+malformed Task-guide media-type control, after cumulative delayed transport
+controls. The bounded repair separates existing guide-family HTTP files from
+the remaining task/local HTTP files, keeping 240 seconds for each group and the
+fifteen-minute job limit. Exact collection must prove their union plus the nine
+retained native and two bulk native cases equals the original 167, with no
+overlap. Actual measured partition results remain required.
 
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
