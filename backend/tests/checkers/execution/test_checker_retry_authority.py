@@ -106,12 +106,15 @@ async def _revocation_setup(h, operator):
             )
         )
         assert revoker_link is not None
+        grant_id = grant.id
+        revoker_actor_id = grant.granted_by_actor_profile_id
+        revoker_link_id = revoker_link.id
     key = new_record_id()
     revoker = _context(
-        actor_profile_id=grant.granted_by_actor_profile_id,
-        identity_link_id=revoker_link.id,
+        actor_profile_id=revoker_actor_id,
+        identity_link_id=revoker_link_id,
     ).model_copy(update={"request_id": key, "correlation_id": key})
-    return grant.id, revoker
+    return grant_id, revoker
 
 
 async def _named_revoke(h, grant_id, revoker, name):
@@ -332,7 +335,7 @@ async def test_retry_and_operator_revocation_commit_one_authorized_order(
                         call.cancel()
                 await asyncio.gather(*calls, return_exceptions=True)
         async with h.factory() as session:
-            grant = await session.get(AdminRoleGrant, str(grant_id))
+            grant = await session.get(AdminRoleGrant, grant_id)
             assert grant.status == "revoked" and grant.version == 2
         if first == "retry":
             assert all(not isinstance(result, BaseException) for result in results)
