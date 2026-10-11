@@ -14,11 +14,6 @@ from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.authorization.models import AdminRoleGrant
-from app.modules.checkers.catalogue import (
-    build_pre_submission_checker_catalogue,
-    project_guide_pre_submission_capabilities,
-)
-from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 from app.modules.projects.api import (
     ProjectGuideProjectionCommand,
     ProjectGuideSetupFinalizationCommand,
@@ -125,8 +120,13 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, 
             request_id=uuid4(),
         )
     assert str(package.target.artifact_policy_id) == policy_id
-    planner = build_pre_submission_checker_catalogue()
     async with sessions() as session, session.begin():
+        from app.adapters.checkers import (
+            external_checker_capability_projection,
+            external_checker_registry_reader,
+        )
+
+        capabilities = await external_checker_capability_projection(session)
         receipt = await GuideProposalService(
             session,
             ProposalAuthority(
@@ -135,6 +135,7 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, 
                 UUID(project_id),
                 grant_id,
             ),
+            external_checker_registry_reader(session),
         ).approve(
             GuideProposalApproval(
                 target=package.target,
@@ -146,9 +147,7 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, 
             actor=actor,
             request_id=uuid4(),
             material=guide_document_manifest_port(session),
-            pre_capabilities=project_guide_pre_submission_capabilities(planner),
-            post_capabilities=current_post_submit_catalogue(),
-            planner=planner,
+            capabilities=capabilities,
         )
     async with sessions() as session:
         effective = await session.get(

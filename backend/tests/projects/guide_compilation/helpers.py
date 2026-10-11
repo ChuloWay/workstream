@@ -103,7 +103,11 @@ def runtime_configuration():
 
 
 def context(
-    values: dict[str, UUID], *, generation: int = 1, guide_version="v1"
+    values: dict[str, UUID],
+    *,
+    generation: int = 1,
+    guide_version="v1",
+    checker_capabilities=None,
 ) -> ProjectGuideCompilationContext:
     """Build one exact committed-original metadata context."""
     material = GuideDocumentManifest(
@@ -139,7 +143,7 @@ def context(
         instruction_version="v1",
         agent_identity="project-guide-compilation-agent-v1",
         agent_version="v1",
-        checker_capabilities=capability_projection(),
+        checker_capabilities=checker_capabilities or capability_projection(),
     )
 
 

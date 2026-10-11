@@ -94,8 +94,7 @@ async def create_compiled_report_fixture(
 ) -> str:
     """Project a scripted unified result under real service authority and custody."""
     from app.adapters.auth import guide_compilation_request_authority, guide_compilation_execution_authority, guide_sufficiency_projection_authorization, artifact_policy_projection_authorization
-    from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue, project_guide_pre_submission_capabilities
-    from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
+    from app.adapters.checkers import external_checker_capability_projection
     from app.modules.projects.api import ProjectGuideCompilationExecutionCommand, ProjectGuideProjectionCommand, ProjectGuideCompilationExecutionClassification
     from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
     from app.modules.projects.guide_compilation.request_inputs import (
@@ -118,8 +117,8 @@ async def create_compiled_report_fixture(
         status, findings = diagnostic.status, diagnostic.findings
     manifest = await create_committed_document_fixture(source_snapshot_id)
     configuration = runtime_configuration()
-    pre = project_guide_pre_submission_capabilities(build_pre_submission_checker_catalogue())
-    post = current_post_submit_catalogue()
+    async with sessions() as session:
+        capabilities = await external_checker_capability_projection(session)
     async with sessions() as session:
         setup = await session.get(ProjectSetupRun, str(manifest.setup_run_id))
         setup.status = setup.current_step = "queued"
@@ -130,7 +129,13 @@ async def create_compiled_report_fixture(
             session,
             automatic_request_selector(manifest.setup_run_id, manifest.setup_generation),
         ) as (authority, actor):
-            request = await GuideCompilationService(session, authority, request_inputs=CompilationRequestInputs(guide_document_manifest_port(session), pre, post, configuration)).request_automatic(actor=actor, setup_run_id=manifest.setup_run_id)
+            request = await GuideCompilationService(
+                session,
+                authority,
+                request_inputs=CompilationRequestInputs(
+                    guide_document_manifest_port(session), capabilities, configuration
+                ),
+            ).request_automatic(actor=actor, setup_run_id=manifest.setup_run_id)
 
     class Runtime:
         identity = configuration.adapter_identity
@@ -163,7 +168,14 @@ async def create_compiled_report_fixture(
                 patch["submission_artifact_policy"] = None
             return result().model_copy(update=patch)
 
-    execution = project_guide_compilation_execution_port(sessions, material_factory=guide_document_manifest_port, document_access_factory=document_access, pre_submission_capabilities=pre, post_submission_capabilities=post, authorization_context=guide_compilation_execution_authority, runtime_factory=lambda config: Runtime())
+    execution = project_guide_compilation_execution_port(
+        sessions,
+        material_factory=guide_document_manifest_port,
+        document_access_factory=document_access,
+        checker_capabilities=capabilities,
+        authorization_context=guide_compilation_execution_authority,
+        runtime_factory=lambda config: Runtime(),
+    )
     receipt = await execution.execute(ProjectGuideCompilationExecutionCommand(attempt_id=request.attempt_id))
     assert receipt.classification is ProjectGuideCompilationExecutionClassification.PERSISTED
     projections = GuideCompilationProjectionService(sessions, material_factory=guide_document_manifest_port, sufficiency_authorization_factory=guide_sufficiency_projection_authorization, policy_authorization_factory=artifact_policy_projection_authorization)
