@@ -874,12 +874,14 @@ only bounded contributor-safe CheckerResult messages/suggested fixes, requires
 no fabricated ReviewFinding/response/resolution, and returns to open routing
 after corrected checker admission.
 
-A human-Review Submission N+1 links its immediate predecessor, exact preparation
-head, required bounded response text, and target TaskAssignment. A
-checker-remediation Submission N+1 instead binds the exact final needs-revision
-CheckerRun through its server-derived immutable
-`remediation_source_checker_run_id` and retains the Task's existing locked
-context; it has no preparation or ReviewFinding response. Both paths rerun the
+A planned human-Review Submission N+1 links its immediate predecessor, exact
+preparation head, required bounded response text, and target TaskAssignment.
+The hidden checker-remediation Submission N+1 instead uses the exact authorized
+needs-revision routing manifest for the predecessor's current completed
+CheckerRun. Its `checker_remediation_manifest_id` is retained by ART evidence and
+admission, TASK dispatch and exact AUTH receipts; Submission links the admission
+and predecessor without a duplicate cause column. It keeps the Task's locked
+context and has no preparation or ReviewFinding response. Both paths rerun the
 existing finalization and checker spine. A new current `allow_review` creates a
 queue entry preferred to the reviewer who issued the prior human revision
 request. Corrected checker work enters ordinary open routing.
