@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Protocol
 from uuid import UUID
 
 from app.core.hashing import canonical_json_hash
@@ -219,6 +219,18 @@ class SelectedPreSubmitLeaseFacts:
             or self.lease_expires_at.tzinfo is None
         ):
             raise ValueError("selected PRE lease facts are invalid")
+
+
+class SelectedPreSubmitExecutionAuthority(Protocol):
+    """Process-local capability for one committed durable PRE lease."""
+
+    def consume(
+        self,
+        *,
+        run_id: UUID,
+        lease: SelectedPreSubmitLeaseFacts,
+    ) -> SelectedPreSubmitLeaseFacts:
+        """Return the exact lease once, or refuse stale/substituted execution."""
 
 
 @dataclass(frozen=True, slots=True)

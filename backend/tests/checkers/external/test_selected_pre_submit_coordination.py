@@ -11,11 +11,13 @@ from sqlalchemy.schema import CreateTable
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
 from app.modules.checkers.api.selected_pre_submit import (
+    SelectedPreSubmitLeaseFacts,
     SelectedPreSubmitReservationFacts,
 )
 from app.modules.checkers.models import SelectedPreSubmitRun
 from app.modules.checkers.selected_pre_submit_coordination import (
     SelectedPreSubmitAdmissionCapability,
+    SelectedPreSubmitExecutionCapability,
     SelectedPreSubmitUnavailable,
 )
 from tests.checkers.external.support import SHA
@@ -89,3 +91,32 @@ def test_selected_pre_admission_capability_is_exact_and_single_use() -> None:
     assert capability.consume(**values) == run_id
     with pytest.raises(SelectedPreSubmitUnavailable):
         capability.consume(**values)
+
+
+def test_selected_pre_execution_capability_is_exact_and_single_use() -> None:
+    from datetime import UTC, datetime
+
+    reservation = _reservation()
+    lease = SelectedPreSubmitLeaseFacts(
+        reservation=reservation,
+        lease_id=new_record_id(),
+        lease_generation=1,
+        lease_expires_at=datetime.now(UTC),
+    )
+    owner = SimpleNamespace(_execution_capability=None)
+    capability = SelectedPreSubmitExecutionCapability._issued(
+        owner=owner,
+        run_id=reservation.attempt_id,
+        lease=lease,
+    )
+    owner._execution_capability = capability
+    with pytest.raises(
+        SelectedPreSubmitUnavailable, match="selected_pre_submit_execution_unavailable"
+    ):
+        capability.consume(run_id=new_record_id(), lease=lease)
+    assert capability.consume(
+        run_id=reservation.attempt_id,
+        lease=lease,
+    ) == lease
+    with pytest.raises(SelectedPreSubmitUnavailable):
+        capability.consume(run_id=reservation.attempt_id, lease=lease)

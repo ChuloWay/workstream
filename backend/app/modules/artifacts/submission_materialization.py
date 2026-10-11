@@ -56,6 +56,7 @@ from app.modules.checkers.api import (
 from app.modules.checkers.api.default_checker import (
     WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
     WorkstreamDefaultCheckerInput,
+    workstream_default_input_body,
 )
 from app.modules.checkers.api.external import (
     ExternalCheckerExecutionRequest,
@@ -63,6 +64,11 @@ from app.modules.checkers.api.external import (
     PreSubmitExternalCheckerMaterial,
 )
 from app.modules.checkers.api.external_policy import LockedExternalPreSubmitPolicy
+from app.modules.checkers.api.selected_pre_submit import (
+    SelectedPreSubmitExecutionAuthority,
+    SelectedPreSubmitExecutionFacts,
+    SelectedPreSubmitLeaseFacts,
+)
 from app.modules.projects.api import ProjectLockedPolicyContextPort
 from app.modules.tasks.api import TaskSubmissionContextPort
 
@@ -115,6 +121,14 @@ class PreSubmitExternalGrantPort(Protocol):
         request: ExternalCheckerExecutionRequest,
         workspace: Path,
     ) -> AbstractContextManager[ExternalCheckerMaterialGrant]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class _SelectedGrantClaim:
+    """Minimum genuine selected-run identity required by the ART grant issuer."""
+
+    attempt_id: UUID
+    request_digest: str
 
 
 class _PreSubmitExternalGrantIssuer:
@@ -426,6 +440,75 @@ class PreparedBundleMaterializationService:
         )
         claim.finish(execution)
         return execution
+
+    async def materialize_selected_pre_submit(
+        self,
+        request: PreparedBundleMaterializationRequest,
+        *,
+        run_id: UUID,
+        lease: SelectedPreSubmitLeaseFacts,
+        execution_authority: SelectedPreSubmitExecutionAuthority,
+    ) -> SelectedPreSubmitExecutionFacts:
+        """Execute the committed selected lease without the legacy invocation store."""
+        if self._session.in_transaction():
+            raise RuntimeError("selected pre-submit execution requires no transaction")
+        checked = execution_authority.consume(run_id=run_id, lease=lease)
+        reservation = checked.reservation
+        commitment = request.prepared_artifact.commitment
+        if (
+            run_id != reservation.attempt_id
+            or request.task_id != reservation.task_id
+            or request.assignment_id != reservation.assignment_id
+            or request.prepared_artifact.generation_id
+            != reservation.prepared_generation_id
+            or request.external_policy is None
+            or request.external_policy.policy_sha256 != reservation.policy_sha256
+            or request.default_checker_input is None
+            or canonical_json_hash(
+                workstream_default_input_body(request.default_checker_input)
+            )
+            != reservation.default_input_sha256
+            or commitment.sha256 != reservation.archive_sha256
+            or commitment.byte_count != reservation.archive_byte_count
+            or request.manifest.sha256 != reservation.semantic_manifest_sha256
+        ):
+            raise PreSubmitEvidenceConflict("selected_pre_submit_execution_invalid")
+        processor = self._checker_execution.build(
+            PreSubmitCheckerExecutionRequest(
+                plan=request.effective_plan,
+                task_id=request.task_id,
+                assignment_id=request.assignment_id,
+                commitment=commitment,
+                inspection=request.inspection,
+                manifest=request.manifest,
+                change_gate=request.change_gate,
+                packet=request.packet,
+                prepared_generation_id=request.prepared_artifact.generation_id,
+                storage_scheme=self._storage_scheme,
+                external_policy=request.external_policy,
+                default_checker_input=request.default_checker_input,
+                attempt_id=run_id,
+                attempt_request_digest=reservation.request_digest,
+                external_grants=_PreSubmitExternalGrantIssuer(
+                    preparation=self._preparation,
+                    prepared=request.prepared_artifact,
+                    request=request,
+                    claim=_SelectedGrantClaim(
+                        attempt_id=run_id,
+                        request_digest=reservation.request_digest,
+                    ),
+                ),
+            )
+        )
+        result = await self._preparation._process_prepared_submission(
+            request.prepared_artifact,
+            processor,
+            reserved_bytes=request.manifest.total_expanded_bytes,
+            maximum_entries=request.manifest.entry_count + 1,
+        )
+        if type(result) is not SelectedPreSubmitExecutionFacts:
+            raise PreSubmitEvidenceConflict("selected_pre_submit_execution_invalid")
+        return result
 
     async def authorize_inspected(self, request: PreparedBundleMaterializationRequest) -> None:
         """Authorize inspected custody for reservation without invoking checker members."""

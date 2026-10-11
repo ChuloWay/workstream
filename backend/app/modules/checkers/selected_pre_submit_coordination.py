@@ -128,6 +128,54 @@ class SelectedPreSubmitAdmissionCapability:
             return self.run_id
 
 
+class SelectedPreSubmitExecutionCapability:
+    """One-use authority for the committed lease's process-local ART callback."""
+
+    __slots__ = ("_consumed", "_owner", "_seal", "_lock", "run_id", "lease")
+
+    def __init__(self, *_: object, **__: object) -> None:
+        raise TypeError("selected PRE execution capabilities are coordinator-issued")
+
+    @classmethod
+    def _issued(
+        cls,
+        *,
+        owner: SelectedPreSubmitCoordinator,
+        run_id: UUID,
+        lease: SelectedPreSubmitLeaseFacts,
+    ) -> SelectedPreSubmitExecutionCapability:
+        value = object.__new__(cls)
+        value._owner = owner
+        value._seal = _CAPABILITY_SEAL
+        value._lock = threading.Lock()
+        value._consumed = False
+        value.run_id = run_id
+        value.lease = lease
+        return value
+
+    def consume(
+        self,
+        *,
+        run_id: UUID,
+        lease: SelectedPreSubmitLeaseFacts,
+    ) -> SelectedPreSubmitLeaseFacts:
+        """Consume only for the exact committed run generation and request facts."""
+        with self._lock:
+            if (
+                self._seal is not _CAPABILITY_SEAL
+                or self._consumed
+                or self._owner._execution_capability is not self
+                or run_id != self.run_id
+                or lease != self.lease
+            ):
+                raise SelectedPreSubmitUnavailable(
+                    "selected_pre_submit_execution_unavailable"
+                )
+            self._consumed = True
+            self._owner._execution_capability = None
+            return self.lease
+
+
 def _require_root(session: AsyncSession) -> None:
     transaction = session.sync_session.get_transaction()
     if (
@@ -171,6 +219,7 @@ class SelectedPreSubmitCoordinator:
         self._session = session
         self._tasks = tasks
         self._capability: SelectedPreSubmitAdmissionCapability | None = None
+        self._execution_capability: SelectedPreSubmitExecutionCapability | None = None
 
     async def reserve(self, facts: SelectedPreSubmitReservationFacts) -> UUID:
         """Acquire TASK custody before the CHECKERS key and exact request row."""
@@ -246,6 +295,34 @@ class SelectedPreSubmitCoordinator:
         row.status = "running"
         await self._session.flush()
         return lease
+
+    async def committed_execution(
+        self,
+        *,
+        run_id: UUID,
+        lease: SelectedPreSubmitLeaseFacts,
+    ) -> SelectedPreSubmitExecutionCapability:
+        """Mint execution authority only after a fresh root observes the committed lease."""
+        if self._session.in_transaction():
+            raise RuntimeError("selected PRE execution requires a committed lease")
+        async with self._session.begin():
+            row = await self._lock(run_id=run_id, facts=lease.reservation)
+            if (
+                row.status != "running"
+                or row.lease_id != str(lease.lease_id)
+                or row.lease_generation != lease.lease_generation
+                or row.lease_expires_at != lease.lease_expires_at
+            ):
+                raise SelectedPreSubmitUnavailable(
+                    "selected_pre_submit_execution_unavailable"
+                )
+        capability = SelectedPreSubmitExecutionCapability._issued(
+            owner=self,
+            run_id=run_id,
+            lease=lease,
+        )
+        self._execution_capability = capability
+        return capability
 
     async def finalize(
         self,
@@ -325,6 +402,7 @@ __all__ = (
     "SelectedPreSubmitAdmissionCapability",
     "SelectedPreSubmitCompletion",
     "SelectedPreSubmitCoordinator",
+    "SelectedPreSubmitExecutionCapability",
     "SelectedPreSubmitTaskGuard",
     "SelectedPreSubmitUnavailable",
 )
