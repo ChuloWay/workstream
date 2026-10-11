@@ -654,6 +654,7 @@ async def test_selected_pre_terminal_publishes_self_contained_ready_admission() 
         pre_submit_policy_id=new_record_id(),
         pre_submit_policy_sha256=_sha("4"),
         effective_plan_sha256=_sha("5"),
+        rules_sha256=_sha("8"),
         locked_policy_context_hash=_sha("6"),
         semantic_manifest_id=new_record_id(),
         semantic_manifest_body=manifest,

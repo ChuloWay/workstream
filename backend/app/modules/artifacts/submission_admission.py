@@ -61,7 +61,6 @@ from app.modules.artifacts.submission_custody import SubmissionBundlePreparedCus
 from app.modules.artifacts.submission_manifest import (
     SubmissionCanonicalPredecessor,
     build_submission_manifest,
-    evaluate_submission_change,
 )
 from app.modules.artifacts.submission_materialization import (
     PreparedBundleMaterializationRequest,
@@ -69,10 +68,23 @@ from app.modules.artifacts.submission_materialization import (
     PreparedBundlePreSubmitEvidenceService,
     PreSubmissionEvaluationPort,
 )
+from app.modules.artifacts.selected_pre_submit_admission import (
+    bind_selected_pre_submit_admission,
+    build_selected_pre_submit_reservation,
+    selected_pre_submit_attempt_request_digest,
+)
+from app.modules.artifacts.selected_pre_submit_execution import (
+    SelectedPreSubmitExecutionService,
+)
 from app.modules.checkers.api.post_submit import PostSubmissionEvaluationContent
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitCompletion,
+    SelectedPreSubmitCoordinationPort,
     SelectedPreSubmitReservationFacts,
+)
+from app.modules.checkers.api.external_policy import (
+    LockedExternalCheckerPolicies,
+    selected_pre_submit_execution_budget_ms,
 )
 from app.modules.checkers.api import (
     EffectivePreSubmissionExecutionPlan,
@@ -524,6 +536,11 @@ class SubmissionBundleAdmissionPublisher:
                 if selected_lineage is not None
                 else evidence.effective_plan_sha256
             ),
+            selected_rules_sha256=(
+                selected_lineage.rules_sha256
+                if selected_lineage is not None
+                else None
+            ),
             packet_sha256=(
                 selected_lineage.packet_sha256
                 if selected_lineage is not None
@@ -679,15 +696,19 @@ async def current_submission_bundle_admission_id(
 class SubmissionBundlePreparationRuntime:
     preparation: ArtifactPreparationService
     inspector: SubmissionArchiveInspector
-    catalogue: EffectivePreSubmissionPlanningPort
     materialization: PreparedBundleMaterializationService
-    evidence: PreparedBundlePreSubmitEvidenceService
-    checker_service: PreSubmissionEvaluationPort
     durable_put: SubmissionBundleDurablePutService
+    selected_coordinator: SelectedPreSubmitCoordinationPort | None = None
+    selected_execution: SelectedPreSubmitExecutionService | None = None
+    storage_scheme: str | None = None
+    artifact_deadline_ms: int = 0
+    catalogue: EffectivePreSubmissionPlanningPort | None = None
+    evidence: PreparedBundlePreSubmitEvidenceService | None = None
+    checker_service: PreSubmissionEvaluationPort | None = None
     evaluation_content: Callable[
         [TaskSubmissionContextFacts, ProjectLockedPolicyContextFacts, SubmissionPacketView,
          tuple[SubmissionBundleFile, ...], str], PostSubmissionEvaluationContent,
-    ]
+    ] | None = None
 
 
 class PreparedSubmissionBundlePreparationCommand:
@@ -724,14 +745,18 @@ class PreparedSubmissionBundlePreparationCommand:
             if request.media_type.partition(";")[0].strip().lower() != "application/zip":
                 raise SubmissionBundlePreparationRejected("submission_bundle_media_type_invalid")
             async with self._runtime_factory() as runtime, AsyncExitStack() as scratch_cleanup:
+                if (
+                    runtime.selected_coordinator is None
+                    or runtime.selected_execution is None
+                    or runtime.storage_scheme is None
+                ):
+                    raise RuntimeError("selected PRE runtime is unavailable")
                 async with self._session.begin():
                     task_context, project_context = await self._lock_authorized_context(request)
-                    plan = self._compile_plan(
-                        task_context,
-                        project_context,
-                        runtime.catalogue,
-                    )
                     predecessor = await self._load_predecessor(task_context)
+                    predecessor_rules_sha256 = await self._load_predecessor_rules(
+                        task_context
+                    )
                 prepared = await runtime.preparation.prepare(
                     request.byte_source,
                     media_type="application/zip",
@@ -739,34 +764,68 @@ class PreparedSubmissionBundlePreparationCommand:
                 scratch_cleanup.push_async_callback(prepared.close)
                 async with self._session.begin():
                     task_context, project_context = await self._lock_authorized_context(request)
-                    materialization_handle = await runtime.materialization.prepare_authorization(
-                        task_id=request.task_id,
-                        assignment_id=request.assignment_id,
-                        submission_artifact_policy_id=project_context.effective_policy_id,
-                        checker_policy_id=project_context.pre_submit_policy_id,
-                        prepared_artifact=prepared,
-                        effective_plan=plan,
-                        idempotency_key=request.idempotency_key,
+                    policies = LockedExternalCheckerPolicies.model_validate_json(
+                        project_context.external_checker_policies.value
+                    )
+                    materialization_handle = (
+                        await runtime.materialization.prepare_selected_authorization(
+                            task=task_context,
+                            project=project_context,
+                            prepared_artifact=prepared,
+                            external_policy=policies.pre_submit,
+                            idempotency_key=request.idempotency_key,
+                        )
                     )
                     inspection = await prepared.inspect(runtime.inspector)
                     manifest = build_submission_manifest(inspection)
                     packet = SubmissionPacketView(
-                        summary=request.summary, contributor_attestation=request.contributor_attestation,
+                        summary=request.summary,
+                        contributor_attestation=request.contributor_attestation,
                     )
-                    try:
-                        runtime.evaluation_content(
-                            task_context, project_context, packet, manifest.file_facts(), prepared.commitment.sha256,
-                        )
-                    except (ValueError, TypeError, KeyError) as exc:
-                        raise SubmissionBundlePreparationRejected(
-                            "submission_evaluation_content_invalid"
-                        ) from exc
-                    change_gate = evaluate_submission_change(
+                    selected = bind_selected_pre_submit_admission(
+                        task=task_context,
+                        project=project_context,
                         commitment=prepared.commitment,
                         manifest=manifest,
                         predecessor=predecessor,
-                        predecessor_exists=request.predecessor_submission_id is not None,
-                        current_predecessor=predecessor,
+                        predecessor_rules_sha256=predecessor_rules_sha256,
+                        predecessor_exists=(
+                            request.predecessor_submission_id is not None
+                        ),
+                        packet=packet,
+                    )
+                    attempt_id = new_record_id()
+                    reservation = build_selected_pre_submit_reservation(
+                        actor_profile_id=request.actor.actor_profile_id,
+                        identity_link_id=request.actor.identity_link_id,
+                        task=task_context,
+                        project=project_context,
+                        prepared_generation_id=prepared.generation_id,
+                        attempt_id=attempt_id,
+                        attempt_request_digest=(
+                            selected_pre_submit_attempt_request_digest(
+                                actor_profile_id=request.actor.actor_profile_id,
+                                identity_link_id=request.actor.identity_link_id,
+                                task_id=request.task_id,
+                                assignment_id=request.assignment_id,
+                                predecessor_submission_id=(
+                                    request.predecessor_submission_id
+                                ),
+                                idempotency_key=request.idempotency_key,
+                                archive_sha256=prepared.commitment.sha256,
+                                archive_byte_count=prepared.commitment.byte_count,
+                                packet_sha256=packet.sha256,
+                            )
+                        ),
+                        commitment=prepared.commitment,
+                        manifest=manifest,
+                        packet=packet,
+                        selected=selected,
+                        storage_scheme=runtime.storage_scheme,
+                        execution_budget_ms=selected_pre_submit_execution_budget_ms(
+                            selected.policy,
+                            artifact_deadline_ms=runtime.artifact_deadline_ms,
+                        ),
                     )
                     materialization_request = PreparedBundleMaterializationRequest(
                         prepared_authorization=materialization_handle,
@@ -780,47 +839,63 @@ class PreparedSubmissionBundlePreparationCommand:
                             else None
                         ),
                         prepared_artifact=prepared,
-                        effective_plan=plan,
+                        effective_plan=None,
                         inspection=inspection,
                         manifest=manifest,
-                        change_gate=change_gate,
+                        change_gate=selected.change_gate,
                         packet=packet,
+                        external_policy=selected.policy,
+                        default_checker_input=selected.default_input,
+                        selected_reservation=reservation,
                     )
-                    reserved = await runtime.evidence.reserve(
-                        materialization_request, preparation_request=request,
+                    await runtime.materialization.authorize_inspected(
+                        materialization_request
                     )
-                evidence = await runtime.checker_service.evaluate_pre_submission(
-                    replace(materialization_request, prepared_authorization=None),
-                    reserved, preparation_request=request,
+                    reserved_id = await runtime.selected_coordinator.reserve(
+                        reservation
+                    )
+                    if reserved_id != reservation.attempt_id:
+                        raise RuntimeError("selected PRE reservation identity changed")
+                completion = await runtime.selected_execution.execute(
+                    reservation=reservation,
+                    materialization=replace(
+                        materialization_request,
+                        prepared_authorization=None,
+                    ),
                 )
-                if not evidence.execution.eligible:
+                terminal = completion.terminal
+                if terminal.outcome == "infrastructure_failed":
+                    raise SubmissionBundlePreparationInfrastructureUnavailable(
+                        terminal.infrastructure_failure_code
+                        or "pre_submission_checked_custody_unavailable"
+                    )
+                if terminal.execution is None:
+                    raise SubmissionBundlePreparationInfrastructureUnavailable(
+                        "pre_submission_checked_custody_unavailable"
+                    )
+                if not terminal.execution.eligible:
                     raise SubmissionBundlePreparationCheckFailed(
-                        evidence.execution.checker_facts
+                        terminal.execution
                     )
-                if evidence.pass_capability is None:
-                    replay = await self._existing_durable_result(evidence.evidence.evidence_set_id)
-                    if replay is None:
-                        raise SubmissionBundlePreparationInfrastructureUnavailable(
-                            "pre_submission_checked_custody_unavailable"
-                        )
-                    return replay
-                replay_intent_id = await self._matching_replay_intent(
-                    evidence.evidence.evidence_set_id
-                )
+                if completion.capability is None:
+                    raise SubmissionBundlePreparationInfrastructureUnavailable(
+                        "pre_submission_checked_custody_unavailable"
+                    )
                 async with self._authority.transaction():
                     await self._lock_authorized_context(request)
                     retained, _, durable = await runtime.durable_put.admit_in_transaction(
                         SubmissionBundleDurablePutRequest(
                             prepared_authorization=None,
                             prepared_artifact=prepared,
-                            pass_capability=evidence.pass_capability,
-                            replay_durable_intent_id=replay_intent_id,
+                            pass_capability=None,
+                            selected_completion=completion,
                         )
                     )
                 result = await runtime.durable_put.publish_after_commit(
                     retained,
-                    evidence.evidence.evidence_set_id,
+                    reservation.attempt_id,
                     durable,
+                    selected_pre_submit_run_id=reservation.attempt_id,
                 )
                 return self._result(result)
         except PreSubmitEvidenceConflict as exc:
@@ -1068,6 +1143,30 @@ class PreparedSubmissionBundlePreparationCommand:
             submission_version=predecessor.version,
             archive_sha256=admission.archive_sha256,
             semantic_manifest_sha256=admission.semantic_manifest_sha256,
+        )
+
+    async def _load_predecessor_rules(
+        self,
+        task_context: TaskSubmissionContextFacts,
+    ) -> str | None:
+        """Return exact selected rules, treating retained legacy context as changed."""
+        predecessor = task_context.predecessor
+        if predecessor is None:
+            return None
+        admission = await self._session.scalar(
+            select(SubmissionBundleAdmission).where(
+                SubmissionBundleAdmission.consumed_by_submission_id
+                == str(predecessor.submission_id),
+                SubmissionBundleAdmission.status == "consumed",
+            )
+        )
+        if admission is None:
+            raise SubmissionBundlePreparationRejected(
+                "submission_canonical_predecessor_unavailable"
+            )
+        return (
+            admission.selected_rules_sha256
+            or admission.locked_policy_context_hash
         )
 
     @staticmethod

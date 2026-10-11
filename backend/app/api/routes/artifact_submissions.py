@@ -1,6 +1,5 @@
 """Hidden delivery surface for ART-owned contributor bundle preparation."""
 
-from dataclasses import asdict
 from typing import Annotated
 from uuid import UUID
 
@@ -101,7 +100,7 @@ async def prepare_submission_bundle(
             details={
                 "status": "failed",
                 "eligible_to_submit": exc.facts.eligible,
-                "results": [asdict(entry) for entry in exc.facts.entries],
+                "results": exc.public_results(),
             },
         )
     except SubmissionBundlePreparationInfrastructureUnavailable as exc:

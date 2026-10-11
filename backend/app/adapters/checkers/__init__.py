@@ -99,6 +99,7 @@ def external_checker_registry_reader(session):
 
 class _ExecutionRequest(Protocol):
     plan: Any
+    project_id: Any
     task_id: Any
     assignment_id: Any
     commitment: Any
@@ -139,6 +140,10 @@ class PreSubmitCheckerExecutionAdapter:
         return self._catalogue.manifest_sha256
 
     def build(self, request: _ExecutionRequest) -> _PublicFactsCheckerProcessor:
+        if request.plan is None:
+            raise PreSubmissionInfrastructureUnavailableError(
+                "pre_submission_plan_identity_invalid"
+            )
         return _PublicFactsCheckerProcessor(
             EffectivePreSubmissionProcessor(
                 archive_inspector=self._archive_inspector,
@@ -182,7 +187,7 @@ class SelectedPreSubmitCheckerExecutionAdapter:
                 "external_pre_submit_context_unavailable"
             )
         identity = PreSubmitExternalCheckerIdentity(
-            project_id=request.plan.lineage.project_id,
+            project_id=request.project_id,
             task_id=request.task_id,
             assignment_id=request.assignment_id,
             prepared_generation_id=request.prepared_generation_id,

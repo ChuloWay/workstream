@@ -1317,6 +1317,13 @@ class SubmissionBundleAdmission(Base):
             SHA256_CHECK.format(column="effective_plan_sha256"), name="effective_plan_sha256"
         ),
         CheckConstraint(
+            "(selected_pre_submit_run_id is null and selected_rules_sha256 is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            + SHA256_CHECK.format(column="selected_rules_sha256")
+            + ")",
+            name="selected_rules_sha256",
+        ),
+        CheckConstraint(
             SHA256_CHECK.format(column="source_snapshot_sha256") + " and "
             + SHA256_CHECK.format(column="effective_policy_sha256") + " and "
             + SHA256_CHECK.format(column="pre_submit_policy_sha256"),
@@ -1404,6 +1411,7 @@ class SubmissionBundleAdmission(Base):
     pre_submit_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     pre_submit_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     effective_plan_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    selected_rules_sha256: Mapped[str | None] = mapped_column(String(71))
     packet_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     semantic_manifest_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)

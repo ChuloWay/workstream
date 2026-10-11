@@ -34,6 +34,39 @@ from app.modules.projects.api import ProjectLockedPolicyContextFacts
 from app.modules.tasks.api import TaskSubmissionContextFacts
 
 
+def selected_pre_submit_attempt_request_digest(
+    *,
+    actor_profile_id: UUID,
+    identity_link_id: UUID,
+    task_id: UUID,
+    assignment_id: UUID,
+    predecessor_submission_id: UUID | None,
+    idempotency_key: UUID,
+    archive_sha256: str,
+    archive_byte_count: int,
+    packet_sha256: str,
+) -> str:
+    """Bind the public command namespace to server-observed bytes and packet."""
+    return canonical_json_hash(
+        {
+            "domain": "workstream.selected_pre_submit_attempt_request.v1",
+            "actor_profile_id": str(actor_profile_id),
+            "identity_link_id": str(identity_link_id),
+            "task_id": str(task_id),
+            "assignment_id": str(assignment_id),
+            "predecessor_submission_id": (
+                str(predecessor_submission_id)
+                if predecessor_submission_id is not None
+                else None
+            ),
+            "idempotency_key": str(idempotency_key),
+            "archive_sha256": archive_sha256,
+            "archive_byte_count": archive_byte_count,
+            "packet_sha256": packet_sha256,
+        }
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class SelectedPreSubmitAdmissionContext:
     """Exact selected policy, default input and non-deciding change binding."""
@@ -112,6 +145,7 @@ def build_selected_pre_submit_reservation(
         pre_submit_policy_id=project.pre_submit_policy_id,
         pre_submit_policy_sha256=project.pre_submit_policy_bundle_hash,
         effective_plan_sha256=selected.policy.policy_sha256,
+        rules_sha256=selected.rules_sha256,
         locked_policy_context_hash=locked_policy_context_hash,
         semantic_manifest_id=semantic_manifest_identity(manifest.sha256),
         semantic_manifest_body=manifest.as_dict(),
@@ -217,4 +251,5 @@ __all__ = (
     "SelectedPreSubmitAdmissionContext",
     "bind_selected_pre_submit_admission",
     "build_selected_pre_submit_reservation",
+    "selected_pre_submit_attempt_request_digest",
 )

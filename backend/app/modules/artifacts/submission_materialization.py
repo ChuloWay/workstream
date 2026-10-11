@@ -68,9 +68,11 @@ from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitExecutionAuthority,
     SelectedPreSubmitExecutionFacts,
     SelectedPreSubmitLeaseFacts,
+    SelectedPreSubmitReservationFacts,
 )
 from app.modules.projects.api import ProjectLockedPolicyContextPort
-from app.modules.tasks.api import TaskSubmissionContextPort
+from app.modules.projects.api import ProjectLockedPolicyContextFacts
+from app.modules.tasks.api import TaskSubmissionContextFacts, TaskSubmissionContextPort
 
 @dataclass(frozen=True, slots=True)
 class PreparedBundleMaterializationRequest:
@@ -83,20 +85,22 @@ class PreparedBundleMaterializationRequest:
     checker_policy_id: UUID
     predecessor_submission_version: int | None
     prepared_artifact: PreparedArtifact
-    effective_plan: EffectivePreSubmissionExecutionPlan
+    effective_plan: EffectivePreSubmissionExecutionPlan | None
     inspection: SubmissionArchiveInspectionResult
     manifest: SubmissionManifest
     change_gate: SubmissionChangeGateResult
     packet: SubmissionPacketView
     external_policy: LockedExternalPreSubmitPolicy | None = None
     default_checker_input: WorkstreamDefaultCheckerInput | None = None
+    selected_reservation: SelectedPreSubmitReservationFacts | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class PreSubmitCheckerExecutionRequest:
     """Exact process-local input supplied to the composition CHECKER adapter."""
 
-    plan: EffectivePreSubmissionExecutionPlan
+    plan: EffectivePreSubmissionExecutionPlan | None
+    project_id: UUID
     task_id: UUID
     assignment_id: UUID
     commitment: object
@@ -394,10 +398,13 @@ class PreparedBundleMaterializationService:
         """Execute only after the authority root commits; no external work holds DB locks."""
         if type(claim) is not PreSubmitAttemptClaim:
             raise PreSubmitEvidenceConflict("pre_submit_attempt_claim_invalid")
+        if request.effective_plan is None:
+            raise PreSubmitEvidenceConflict("pre_submit_effective_plan_invalid")
         claim.require_execution(self._session, request)
         processor = self._checker_execution.build(
             PreSubmitCheckerExecutionRequest(
                 plan=request.effective_plan,
+                project_id=request.effective_plan.lineage.project_id,
                 task_id=request.task_id,
                 assignment_id=request.assignment_id,
                 commitment=request.prepared_artifact.commitment,
@@ -459,6 +466,7 @@ class PreparedBundleMaterializationService:
             run_id != reservation.attempt_id
             or request.task_id != reservation.task_id
             or request.assignment_id != reservation.assignment_id
+            or request.selected_reservation != reservation
             or request.prepared_artifact.generation_id
             != reservation.prepared_generation_id
             or request.external_policy is None
@@ -476,6 +484,7 @@ class PreparedBundleMaterializationService:
         processor = self._checker_execution.build(
             PreSubmitCheckerExecutionRequest(
                 plan=request.effective_plan,
+                project_id=reservation.project_id,
                 task_id=request.task_id,
                 assignment_id=request.assignment_id,
                 commitment=commitment,
@@ -533,9 +542,10 @@ class PreparedBundleMaterializationService:
         submission_artifact_policy_id: UUID,
         checker_policy_id: UUID,
         prepared_artifact: PreparedArtifact,
-        effective_plan: EffectivePreSubmissionExecutionPlan,
+        effective_plan: EffectivePreSubmissionExecutionPlan | None,
         idempotency_key: UUID,
         external_policy: LockedExternalPreSubmitPolicy | None = None,
+        selected_reservation: SelectedPreSubmitReservationFacts | None = None,
     ) -> object:
         """Deny unavailable service authority before inspecting the ZIP."""
         facts = self._preparation_facts(
@@ -546,6 +556,65 @@ class PreparedBundleMaterializationService:
             prepared_artifact=prepared_artifact,
             effective_plan=effective_plan,
             external_policy=external_policy,
+            selected_reservation=selected_reservation,
+        )
+        return await self._authorization.prepare(
+            facts=facts,
+            idempotency_key=idempotency_key,
+        )
+
+    async def prepare_selected_authorization(
+        self,
+        *,
+        task: TaskSubmissionContextFacts,
+        project: ProjectLockedPolicyContextFacts,
+        prepared_artifact: PreparedArtifact,
+        external_policy: LockedExternalPreSubmitPolicy,
+        idempotency_key: UUID,
+    ) -> object:
+        """Prepare selected material authority before inspecting contributor bytes."""
+        references = task.locked_project_context
+        commitment = prepared_artifact.commitment
+        if (
+            task.task_id is None
+            or task.assignment_id is None
+            or references.project_id != project.project_id
+            or references.guide_version != project.guide_version
+            or references.source_snapshot_id != project.source_snapshot_id
+            or references.source_snapshot_hash != project.source_snapshot_hash
+            or references.effective_policy_id != project.effective_policy_id
+            or references.effective_policy_hash != project.effective_policy_hash
+            or references.pre_submit_policy_id != project.pre_submit_policy_id
+            or references.pre_submit_policy_bundle_hash
+            != project.pre_submit_policy_bundle_hash
+            or external_policy.policy_sha256
+            != canonical_json_hash(
+                external_policy.model_dump(mode="json", exclude={"policy_sha256"})
+            )
+            or external_policy.workstream_default.behavior_sha256
+            != WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
+        ):
+            raise PreSubmissionInfrastructureUnavailableError(
+                "selected_pre_submission_materialization_context_invalid"
+            )
+        facts = PreSubmitMaterializationPreparationFacts(
+            task_id=task.task_id,
+            assignment_id=task.assignment_id,
+            project_id=project.project_id,
+            guide_id=project.guide_id,
+            guide_version=project.guide_version,
+            source_snapshot_id=project.source_snapshot_id,
+            source_snapshot_hash=project.source_snapshot_hash,
+            submission_artifact_policy_id=project.effective_policy_id,
+            submission_artifact_policy_hash=project.effective_policy_hash,
+            checker_policy_id=project.pre_submit_policy_id,
+            checker_policy_hash=project.pre_submit_policy_bundle_hash,
+            prepared_generation_id=prepared_artifact.generation_id,
+            plan_sha256=external_policy.policy_sha256,
+            catalogue_manifest_sha256=WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+            archive_sha256=commitment.sha256,
+            archive_byte_count=commitment.byte_count,
+            storage_scheme=self._storage_scheme,
         )
         return await self._authorization.prepare(
             facts=facts,
@@ -566,6 +635,7 @@ class PreparedBundleMaterializationService:
             prepared_artifact=request.prepared_artifact,
             effective_plan=plan,
             external_policy=request.external_policy,
+            selected_reservation=request.selected_reservation,
         )
         if (
             request.manifest != request.change_gate.manifest
@@ -590,11 +660,58 @@ class PreparedBundleMaterializationService:
         submission_artifact_policy_id: UUID,
         checker_policy_id: UUID,
         prepared_artifact: PreparedArtifact,
-        effective_plan: EffectivePreSubmissionExecutionPlan,
+        effective_plan: EffectivePreSubmissionExecutionPlan | None,
         external_policy: LockedExternalPreSubmitPolicy | None = None,
+        selected_reservation: SelectedPreSubmitReservationFacts | None = None,
     ) -> PreSubmitMaterializationPreparationFacts:
         """Build pre-inspection facts from locked lineage and byte commitment."""
         plan = effective_plan
+        if selected_reservation is not None:
+            lineage = selected_reservation.admission_lineage
+            commitment = prepared_artifact.commitment
+            if (
+                plan is not None
+                or lineage is None
+                or external_policy is None
+                or task_id != selected_reservation.task_id
+                or assignment_id != selected_reservation.assignment_id
+                or prepared_artifact.generation_id
+                != selected_reservation.prepared_generation_id
+                or submission_artifact_policy_id != lineage.effective_policy_id
+                or checker_policy_id != lineage.pre_submit_policy_id
+                or external_policy.policy_sha256
+                != selected_reservation.policy_sha256
+                or commitment.sha256 != selected_reservation.archive_sha256
+                or commitment.byte_count != selected_reservation.archive_byte_count
+            ):
+                raise PreSubmissionInfrastructureUnavailableError(
+                    "selected_pre_submission_materialization_context_invalid"
+                )
+            return PreSubmitMaterializationPreparationFacts(
+                task_id=task_id,
+                assignment_id=assignment_id,
+                project_id=selected_reservation.project_id,
+                guide_id=lineage.guide_id,
+                guide_version=lineage.guide_version,
+                source_snapshot_id=lineage.source_snapshot_id,
+                source_snapshot_hash=lineage.source_snapshot_sha256,
+                submission_artifact_policy_id=submission_artifact_policy_id,
+                submission_artifact_policy_hash=lineage.effective_policy_sha256,
+                checker_policy_id=checker_policy_id,
+                checker_policy_hash=lineage.pre_submit_policy_sha256,
+                prepared_generation_id=prepared_artifact.generation_id,
+                plan_sha256=selected_reservation.policy_sha256,
+                catalogue_manifest_sha256=(
+                    selected_reservation.default_behavior_sha256
+                ),
+                archive_sha256=commitment.sha256,
+                archive_byte_count=commitment.byte_count,
+                storage_scheme=self._storage_scheme,
+            )
+        if plan is None:
+            raise PreSubmissionInfrastructureUnavailableError(
+                "pre_submission_materialization_context_invalid"
+            )
         if plan.plan_sha256 != canonical_json_hash(plan.as_dict()):
             raise PreSubmissionInfrastructureUnavailableError(
                 "pre_submission_plan_identity_invalid"

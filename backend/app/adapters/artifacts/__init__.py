@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.api_controls import request_ids
 from app.api.deps.authorization import get_authorization_actor_identity
-from app.adapters.checkers import PreSubmitCheckerExecutionAdapter, post_submission_executor, checker_output_reservations
+from app.adapters.checkers import checker_output_reservations
 from app.adapters.projects import project_locked_policy_context_port
 from app.adapters.tasks import task_submission_context_port
-from app.db.session import get_db_session, get_session_factory
+from app.db.session import get_db_session
 from app.interfaces.artifact_operations import GuideArtifactIngestCommand
 from app.modules.projects.api.guide_documents import GuideDocumentUploadTargetPort
 from app.modules.artifacts.api import SubmissionBundlePreparationCommand
@@ -383,7 +383,6 @@ def get_submission_bundle_preparation_command(
     from app.modules.artifacts.submission_archive import SubmissionArchiveInspector
     from app.modules.artifacts.submission_materialization import (
         PreparedBundleMaterializationService,
-        PreparedBundlePreSubmitEvidenceService,
     )
     from app.modules.artifacts.submission_admission import (
         PreparedSubmissionBundlePreparationCommand,
@@ -422,10 +421,19 @@ def get_submission_bundle_preparation_command(
                 )
             )
             preparation = ArtifactPreparationService(manager)
-            catalogue = request.app.state.pre_submission_checker_catalogue
             inspector = SubmissionArchiveInspector(submission_archive_limits(settings))
-            checker_execution = PreSubmitCheckerExecutionAdapter(
-                catalogue=catalogue,
+            from app.adapters.auth import selected_pre_submit_authority
+            from app.adapters.checkers import selected_pre_submit_checker_execution
+            from app.adapters.tasks import selected_pre_submit_task_guard
+            from app.modules.artifacts.selected_pre_submit_execution import (
+                SelectedPreSubmitExecutionService,
+            )
+            from app.modules.checkers.selected_pre_submit_coordination import (
+                SelectedPreSubmitCoordinator,
+            )
+
+            checker_execution = selected_pre_submit_checker_execution(
+                settings=settings,
                 archive_inspector=inspector,
             )
             storage_schemes = {"local": "local", "s3_compatible": "s3"}
@@ -448,28 +456,25 @@ def get_submission_bundle_preparation_command(
                 settings,
                 internal_authority,
             )
-            evidence = PreparedBundlePreSubmitEvidenceService(
-                session=session,
-                materialization=materialization,
-                preparation_authorization=authority,
-                task_contexts=task_contexts,
-                project_contexts=project_contexts,
+            selected_coordinator = SelectedPreSubmitCoordinator(
+                session,
+                tasks=selected_pre_submit_task_guard(session),
             )
-            from app.adapters.checkers import submission_evaluation_content
 
             yield SubmissionBundlePreparationRuntime(
-                evaluation_content=submission_evaluation_content,
                 preparation=preparation,
                 inspector=inspector,
-                catalogue=catalogue,
                 materialization=materialization,
-                evidence=evidence,
-                checker_service=CheckerPhaseService(
-                    pre_submission=evidence,
-                    post_submission=post_submission_executor(
-                        sessions=get_session_factory(), materialization=post_submission_materialization(
-                            sessions=get_session_factory(), store=store, namespace=namespace,
-                            preparation=preparation, inspector=inspector)),
+                selected_coordinator=selected_coordinator,
+                selected_execution=SelectedPreSubmitExecutionService(
+                    session=session,
+                    coordinator=selected_coordinator,
+                    authority=selected_pre_submit_authority(session),
+                    materialization=materialization,
+                ),
+                storage_scheme=storage_scheme,
+                artifact_deadline_ms=int(
+                    settings.artifact_preparation_total_deadline_seconds * 1000
                 ),
                 durable_put=SubmissionBundleDurablePutService(
                     session=session,

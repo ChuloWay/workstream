@@ -30,6 +30,7 @@ class SelectedPreSubmitAdmissionLineage:
     pre_submit_policy_id: UUID
     pre_submit_policy_sha256: str
     effective_plan_sha256: str
+    rules_sha256: str
     locked_policy_context_hash: str
     semantic_manifest_id: UUID
     semantic_manifest_body: dict[str, object]
@@ -50,6 +51,7 @@ class SelectedPreSubmitAdmissionLineage:
             self.effective_policy_sha256,
             self.pre_submit_policy_sha256,
             self.effective_plan_sha256,
+            self.rules_sha256,
             self.locked_policy_context_hash,
             self.packet_sha256,
         )
@@ -99,6 +101,7 @@ class SelectedPreSubmitAdmissionLineage:
             "pre_submit_policy_id": str(self.pre_submit_policy_id),
             "pre_submit_policy_sha256": self.pre_submit_policy_sha256,
             "effective_plan_sha256": self.effective_plan_sha256,
+            "rules_sha256": self.rules_sha256,
             "locked_policy_context_hash": self.locked_policy_context_hash,
             "semantic_manifest_id": str(self.semantic_manifest_id),
             "semantic_manifest_body": self.semantic_manifest_body,
@@ -124,6 +127,7 @@ class SelectedPreSubmitAdmissionLineage:
             "pre_submit_policy_id",
             "pre_submit_policy_sha256",
             "effective_plan_sha256",
+            "rules_sha256",
             "locked_policy_context_hash",
             "semantic_manifest_id",
             "semantic_manifest_body",
@@ -147,6 +151,7 @@ class SelectedPreSubmitAdmissionLineage:
             pre_submit_policy_id=UUID(str(body["pre_submit_policy_id"])),
             pre_submit_policy_sha256=body["pre_submit_policy_sha256"],
             effective_plan_sha256=body["effective_plan_sha256"],
+            rules_sha256=body["rules_sha256"],
             locked_policy_context_hash=body["locked_policy_context_hash"],
             semantic_manifest_id=UUID(str(body["semantic_manifest_id"])),
             semantic_manifest_body=body["semantic_manifest_body"],
