@@ -471,7 +471,9 @@ the committed guide fixture had claimed ART's live `primary` namespace with
 fake local-provider facts. A diagnostic observed the exact
 `ArtifactStorageNamespaceError`; database, role and MinIO namespace cleanup
 completed. The fixture now uses its dedicated `committed-guide-fixture`
-namespace for the same native attempts, receipts and replicas. No production
+namespace for the same native attempts, receipts and replicas. The first repair
+execution at `0015caa7` rejected its overlong fixture ID against native varchar(20);
+the dedicated ID is now the bounded `committed-guide`. No production
 namespace validation or migration is changed; the failed public case and full
 26-case replay remain required before readiness.
 
