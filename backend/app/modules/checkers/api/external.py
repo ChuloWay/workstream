@@ -316,15 +316,51 @@ class ExternalCheckerRegistryPort(Protocol):
         """Resolve the one immutable registered phase identity during approval."""
 
 
-class ExternalCheckerMaterial(ExternalCheckerValue):
-    """One verified read-only material identity without provider coordinates."""
+class PreSubmitExternalCheckerMaterial(ExternalCheckerValue):
+    """Verified prepared bytes that exist before a Submission or ART binding."""
 
+    phase: Literal["pre_submit"] = "pre_submit"
     role: Identifier
+    prepared_generation_id: UUID = Field(strict=True)
+    attempt_id: UUID = Field(strict=True)
+    attempt_request_digest: Sha256
+    archive_sha256: Sha256
+    archive_byte_count: Annotated[
+        StrictInt, Field(ge=0, le=9_223_372_036_854_775_807)
+    ]
+    semantic_manifest_sha256: Sha256
+    media_type: Annotated[
+        StrictStr, Field(min_length=1, max_length=255, pattern=r"^[^\s/]+/[^\s/]+$")
+    ]
+
+
+class PostSubmitExternalCheckerMaterial(ExternalCheckerValue):
+    """Verified native Submission and ART ancestry selected for POST execution."""
+
+    phase: Literal["post_submit"] = "post_submit"
+    role: Identifier
+    submission_id: UUID = Field(strict=True)
+    submission_version: Annotated[StrictInt, Field(ge=1)]
+    binding_id: UUID = Field(strict=True)
     content_id: UUID = Field(strict=True)
     replica_id: UUID = Field(strict=True)
-    sha256: Sha256
+    content_sha256: Sha256
     byte_count: Annotated[StrictInt, Field(ge=0, le=9_223_372_036_854_775_807)]
-    media_type: Annotated[StrictStr, Field(min_length=1, max_length=255, pattern=r"^[^\s/]+/[^\s/]+$")]
+    media_type: Annotated[
+        StrictStr, Field(min_length=1, max_length=255, pattern=r"^[^\s/]+/[^\s/]+$")
+    ]
+    evidence_id: UUID = Field(strict=True)
+    verification_receipt_id: UUID = Field(strict=True)
+    verification_job_id: UUID = Field(strict=True)
+    verification_generation: Annotated[StrictInt, Field(ge=1)]
+    namespace_fingerprint: Sha256
+    semantic_manifest_sha256: Sha256
+
+
+ExternalCheckerMaterial = Annotated[
+    PreSubmitExternalCheckerMaterial | PostSubmitExternalCheckerMaterial,
+    Field(discriminator="phase"),
+]
 
 
 class PreSubmitExternalCheckerIdentity(ExternalCheckerValue):
@@ -377,7 +413,7 @@ class ExternalCheckerExecutionRequest(ExternalCheckerValue):
     configuration_sha256: Sha256
     input: dict[str, JsonValue]
     input_sha256: Sha256
-    materials: tuple[ExternalCheckerMaterial, ...] = Field(max_length=32)
+    materials: tuple[ExternalCheckerMaterial, ...] = Field(min_length=1, max_length=32)
     request_digest: Sha256
 
     @model_validator(mode="after")
@@ -387,6 +423,34 @@ class ExternalCheckerExecutionRequest(ExternalCheckerValue):
             raise ExternalCheckerContractError("external checker request phase mismatch")
         if len({item.role for item in self.materials}) != len(self.materials):
             raise ExternalCheckerContractError("external checker material role is duplicated")
+        if any(item.phase != self.identity.phase for item in self.materials):
+            raise ExternalCheckerContractError("external checker material phase mismatch")
+        if self.identity.phase == "pre_submit":
+            for material in self.materials:
+                if not isinstance(material, PreSubmitExternalCheckerMaterial) or (
+                    material.prepared_generation_id,
+                    material.attempt_id,
+                    material.attempt_request_digest,
+                ) != (
+                    self.identity.prepared_generation_id,
+                    self.identity.attempt_id,
+                    self.identity.attempt_request_digest,
+                ):
+                    raise ExternalCheckerContractError(
+                        "external checker prepared material identity mismatch"
+                    )
+        else:
+            for material in self.materials:
+                if not isinstance(material, PostSubmitExternalCheckerMaterial) or (
+                    material.submission_id,
+                    material.submission_version,
+                ) != (
+                    self.identity.submission_id,
+                    self.identity.submission_version,
+                ):
+                    raise ExternalCheckerContractError(
+                        "external checker submission material identity mismatch"
+                    )
         if self.configuration_sha256 != external_checker_json_hash(self.configuration):
             raise ExternalCheckerContractError(
                 "external checker configuration digest mismatch"

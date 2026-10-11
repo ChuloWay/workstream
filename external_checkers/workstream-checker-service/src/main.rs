@@ -583,7 +583,9 @@ fn grant_matches_request(manifest: &GrantManifest, request: &ValidatedRequest) -
     };
     let Some(archive) = materials.iter().find_map(|item| {
         let object = item.as_object()?;
-        (object.get("role")?.as_str()? == "submission_archive").then_some(object)
+        (object.get("phase")?.as_str()? == "pre_submit"
+            && object.get("role")?.as_str()? == "submission_archive")
+            .then_some(object)
     }) else {
         return false;
     };
@@ -597,8 +599,22 @@ fn grant_matches_request(manifest: &GrantManifest, request: &ValidatedRequest) -
             .get("attempt_request_digest")
             .and_then(Value::as_str)
             == Some(&manifest.attempt_request_digest)
-        && archive.get("sha256").and_then(Value::as_str) == Some(&manifest.archive_sha256)
-        && archive.get("byte_count").and_then(Value::as_u64) == Some(manifest.archive_byte_count)
+        && archive
+            .get("prepared_generation_id")
+            .and_then(Value::as_str)
+            == Some(&manifest.prepared_generation_id)
+        && archive.get("attempt_id").and_then(Value::as_str) == Some(&manifest.attempt_id)
+        && archive
+            .get("attempt_request_digest")
+            .and_then(Value::as_str)
+            == Some(&manifest.attempt_request_digest)
+        && archive.get("archive_sha256").and_then(Value::as_str) == Some(&manifest.archive_sha256)
+        && archive.get("archive_byte_count").and_then(Value::as_u64)
+            == Some(manifest.archive_byte_count)
+        && archive
+            .get("semantic_manifest_sha256")
+            .and_then(Value::as_str)
+            == Some(&manifest.semantic_manifest_sha256)
         && semantic_manifest_sha256.as_deref() == Some(&manifest.semantic_manifest_sha256)
 }
 
@@ -1617,11 +1633,11 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .into(),
-            archive_sha256: request.value["materials"][0]["sha256"]
+            archive_sha256: request.value["materials"][0]["archive_sha256"]
                 .as_str()
                 .unwrap()
                 .into(),
-            archive_byte_count: request.value["materials"][0]["byte_count"]
+            archive_byte_count: request.value["materials"][0]["archive_byte_count"]
                 .as_u64()
                 .unwrap(),
             semantic_manifest_sha256: String::new(),
@@ -1630,6 +1646,8 @@ mod tests {
             binding_digest: format!("sha256:{}", "9".repeat(64)),
         };
         manifest.semantic_manifest_sha256 = semantic_manifest_hash(&manifest).unwrap();
+        request.value["materials"][0]["semantic_manifest_sha256"] =
+            Value::String(manifest.semantic_manifest_sha256.clone());
         assert!(grant_matches_request(&manifest, &request));
         for field in 0..6 {
             let original = (

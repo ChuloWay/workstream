@@ -14,7 +14,9 @@ from app.modules.checkers.api.external import (
     ExternalCheckerRegistrySpec,
     ExternalCheckerResourceLimits,
     ExternalCheckerSchema,
+    PostSubmitExternalCheckerMaterial,
     PostSubmitExternalCheckerIdentity,
+    PreSubmitExternalCheckerMaterial,
     PreSubmitExternalCheckerIdentity,
     external_checker_json_hash,
     make_external_checker_registration_request,
@@ -110,4 +112,36 @@ def execution_identity(phase: str = "pre_submit"):
         lease_id=uuid4(),
         lease_generation=4,
         lease_expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+
+
+def execution_material(identity):
+    """Build one genuine phase-specific custody value for a test identity."""
+    if identity.phase == "pre_submit":
+        return PreSubmitExternalCheckerMaterial(
+            role="submission_archive",
+            prepared_generation_id=identity.prepared_generation_id,
+            attempt_id=identity.attempt_id,
+            attempt_request_digest=identity.attempt_request_digest,
+            archive_sha256=SHA,
+            archive_byte_count=4,
+            semantic_manifest_sha256=SHA,
+            media_type="application/zip",
+        )
+    return PostSubmitExternalCheckerMaterial(
+        role="submission_archive",
+        submission_id=identity.submission_id,
+        submission_version=identity.submission_version,
+        binding_id=uuid4(),
+        content_id=uuid4(),
+        replica_id=uuid4(),
+        content_sha256=SHA,
+        byte_count=4,
+        media_type="application/zip",
+        evidence_id=uuid4(),
+        verification_receipt_id=uuid4(),
+        verification_job_id=uuid4(),
+        verification_generation=1,
+        namespace_fingerprint=SHA,
+        semantic_manifest_sha256=SHA,
     )

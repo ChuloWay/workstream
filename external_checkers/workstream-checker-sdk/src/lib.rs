@@ -116,29 +116,87 @@ pub fn parse_request(bytes: &[u8]) -> Result<ValidatedRequest, ContractError> {
         .get("materials")
         .and_then(Value::as_array)
         .ok_or(ContractError("request materials are invalid"))?;
-    if materials.len() > 32 {
+    if materials.is_empty() || materials.len() > 32 {
         return Err(ContractError("request materials are unbounded"));
     }
     let mut roles = BTreeSet::new();
     for material in materials {
-        let material = exact_object(
-            material,
-            &[
-                "role",
-                "content_id",
-                "replica_id",
-                "sha256",
-                "byte_count",
-                "media_type",
-            ],
-        )?;
-        if !roles.insert(string(material, "role")?)
-            || unsigned(material, "byte_count")? > i64::MAX as u64
+        let material = material
+            .as_object()
+            .ok_or(ContractError("request material is invalid"))?;
+        if string(material, "phase")? != phase
+            || !roles.insert(string(material, "role")?)
             || !string(material, "media_type")?.contains('/')
         {
             return Err(ContractError("request material is invalid"));
         }
-        digest(material, "sha256")?;
+        if phase == "pre_submit" {
+            exact_map(
+                material,
+                &[
+                    "phase",
+                    "role",
+                    "prepared_generation_id",
+                    "attempt_id",
+                    "attempt_request_digest",
+                    "archive_sha256",
+                    "archive_byte_count",
+                    "semantic_manifest_sha256",
+                    "media_type",
+                ],
+            )?;
+            if unsigned(material, "archive_byte_count")? > i64::MAX as u64 {
+                return Err(ContractError("request material is invalid"));
+            }
+            digest(material, "attempt_request_digest")?;
+            digest(material, "archive_sha256")?;
+            digest(material, "semantic_manifest_sha256")?;
+            if string(material, "prepared_generation_id")?
+                != string(identity, "prepared_generation_id")?
+                || string(material, "attempt_id")? != string(identity, "attempt_id")?
+                || digest(material, "attempt_request_digest")?
+                    != digest(identity, "attempt_request_digest")?
+            {
+                return Err(ContractError("request material identity differs"));
+            }
+        } else {
+            exact_map(
+                material,
+                &[
+                    "phase",
+                    "role",
+                    "submission_id",
+                    "submission_version",
+                    "binding_id",
+                    "content_id",
+                    "replica_id",
+                    "content_sha256",
+                    "byte_count",
+                    "media_type",
+                    "evidence_id",
+                    "verification_receipt_id",
+                    "verification_job_id",
+                    "verification_generation",
+                    "namespace_fingerprint",
+                    "semantic_manifest_sha256",
+                ],
+            )?;
+            if unsigned(material, "byte_count")? > i64::MAX as u64
+                || unsigned(material, "submission_version")? == 0
+                || unsigned(material, "verification_generation")? == 0
+            {
+                return Err(ContractError("request material is invalid"));
+            }
+            digest(material, "content_sha256")?;
+            digest(material, "namespace_fingerprint")?;
+            digest(material, "semantic_manifest_sha256")?;
+            if string(material, "submission_id")? != string(identity, "submission_id")?
+                || unsigned(material, "submission_version")?
+                    != unsigned(identity, "submission_version")?
+            {
+                return Err(ContractError("request material identity differs"));
+            }
+        }
     }
     let resources = registry
         .get("resources")
@@ -654,7 +712,7 @@ mod tests {
             .expect("Python request fixture must satisfy the Rust contract");
         assert_eq!(
             request.request_digest,
-            "sha256:81adbc8a7cc0e13b4221ac06ecdd2f95850d6215c3a336d932ad14f8988a70b7"
+            "sha256:a06707b14348ffe5ef22a55de8d4ec4845c9029da7180d5731fb2c120b5591f3"
         );
         let result: Value = serde_json::from_slice(include_bytes!("../../fixtures/result.json"))
             .expect("result fixture is JSON");
