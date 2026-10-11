@@ -446,7 +446,6 @@ begin
       binding_digest,c.idempotency_key,c.request_digest) then
   raise exception 'task import command custody invalid' using errcode='23514';
  end if;
- perform public.validate_task_import_batch_custody(b.id);
 end
 $$
 """)
@@ -505,17 +504,34 @@ def _create_trigger_wrappers() -> None:
     op.execute(r"""
 create function public.trigger_validate_task_import_batch() returns trigger
 language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- perform public.validate_task_import_batch_custody(new.id); return new; end $$
+ if new.status='committed' and (tg_op='INSERT' or tg_op='UPDATE') then
+  perform public.validate_task_import_batch_custody(new.id);
+ end if;
+ return new;
+end $$
 """)
     op.execute(r"""
 create function public.trigger_validate_task_import_command() returns trigger
 language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- perform public.validate_task_import_command_custody(new.id); return new; end $$
+ if new.status='committed' and (tg_op='INSERT' or tg_op='UPDATE') then
+  perform public.validate_task_import_command_custody(new.id);
+ end if;
+ return new;
+end $$
 """)
     op.execute(r"""
 create function public.trigger_validate_task_import_member() returns trigger
-language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- perform public.validate_task_import_batch_custody(new.batch_id); return new; end $$
+language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare parent_status text; parent_xid bigint;
+begin
+ select status,(xmin::text)::bigint into parent_status,parent_xid
+ from public.task_import_batches where id=new.batch_id;
+ if not found or parent_status<>'committed'
+    or parent_xid<>pg_catalog.pg_current_xact_id()::text::bigint then
+  raise exception 'task import member must be committed with its batch root' using errcode='23514';
+ end if;
+ return new;
+end $$
 """)
 
 

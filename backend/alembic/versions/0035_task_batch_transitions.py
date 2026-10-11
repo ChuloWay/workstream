@@ -360,24 +360,39 @@ end $$
     op.execute(r"""
 create function public.trigger_validate_task_batch_transition() returns trigger
 language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- if not public.validate_task_batch_transition_custody(new.id) then
+ if new.status='committed' and (tg_op='INSERT' or tg_op='UPDATE')
+    and not public.validate_task_batch_transition_custody(new.id) then
    raise exception 'task batch transition custody mismatch' using errcode='23514';
  end if; return new; end $$
 """)
     op.execute(r"""
 create function public.trigger_validate_task_batch_transition_member() returns trigger
-language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- if not public.validate_task_batch_transition_custody(new.transition_receipt_id) then
-   raise exception 'task batch transition member custody mismatch' using errcode='23514';
- end if; return new; end $$
+language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare parent_status text; parent_xid bigint;
+begin
+ select status,(xmin::text)::bigint into parent_status,parent_xid
+ from public.task_batch_transition_receipts where id=new.transition_receipt_id;
+ if not found or parent_status<>'committed'
+    or parent_xid<>pg_catalog.pg_current_xact_id()::text::bigint then
+   raise exception 'task batch transition member must be committed with its root' using errcode='23514';
+ end if;
+ return new;
+end $$
 """)
     op.execute(r"""
 create function public.trigger_validate_task_batch_command_root() returns trigger
-language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- if new.batch_transition_receipt_id is not null
-    and not public.validate_task_batch_transition_custody(new.batch_transition_receipt_id) then
-   raise exception 'task batch transition command custody mismatch' using errcode='23514';
- end if; return new; end $$
+language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare parent_status text; parent_xid bigint;
+begin
+ if new.batch_transition_receipt_id is null then return new; end if;
+ select status,(xmin::text)::bigint into parent_status,parent_xid
+ from public.task_batch_transition_receipts where id=new.batch_transition_receipt_id;
+ if not found or parent_status<>'committed'
+    or parent_xid<>pg_catalog.pg_current_xact_id()::text::bigint then
+   raise exception 'task batch transition command must be committed with its root' using errcode='23514';
+ end if;
+ return new;
+end $$
 """)
     op.execute(
         "create constraint trigger task_batch_transition_custody after insert or update on public.task_batch_transition_receipts deferrable initially deferred for each row execute function public.trigger_validate_task_batch_transition()"
