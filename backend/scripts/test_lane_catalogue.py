@@ -72,6 +72,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_artifact_internal_authorization.py",
     "tests/test_artifact_cleanup_wiring.py",
     "tests/test_checker_materialization.py",
+    "tests/tasks/evaluation_delivery/test_worker_materialization.py",
     "tests/test_artifact_preparation.py",
     "tests/test_artifact_store_conformance.py",
     "tests/test_artifact_verification.py",
@@ -433,6 +434,10 @@ CHECKER_DELIVERY_MODULES = (
 
 
 TASK_MODULES = (
+    "tests/checkers/execution/test_completion_evidence.py",
+    "tests/checkers/execution/test_completion_contract.py",
+    "tests/tasks/post_submit_routing/test_failure_completion.py",
+
     # New completion proofs use TASK custody and its measured lane headroom.
     "tests/tasks/evaluation_delivery/test_completion.py",
     "tests/tasks/evaluation_delivery/test_completion_contracts.py",
