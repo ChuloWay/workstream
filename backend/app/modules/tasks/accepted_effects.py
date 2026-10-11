@@ -89,8 +89,7 @@ class TaskAcceptedEffectsParticipant:
                 "SELECT public.task_routing_acceptance_matches(:manifest, :acceptance, :decision, "
                 ":actor, :project, :task, :submission, :policy, :generation, :is_new) "
                 "FROM public.task_post_submit_routing_manifests m "
-                "WHERE m.id=:manifest AND m.content_sha256=:content_sha256 "
-                "AND m.routing_recommendation='allow_review'"
+                "WHERE m.id=:manifest AND m.content_sha256=:content_sha256"
             ),
             {
                 "manifest": manifest_id,

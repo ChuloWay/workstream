@@ -68,6 +68,26 @@ def test_valid_policy_branch_resources(human_review_required, recommendation):
         )
 
 
+@pytest.mark.parametrize("human", [True, False])
+@pytest.mark.parametrize("recommendation", ["allow_review", "needs_revision"])
+@pytest.mark.parametrize(("has_effects", "has_generation"), [(False, False), (True, False), (False, True), (True, True)])
+def test_authorization_adapter_requires_exact_branch_inputs(human, recommendation, has_effects, has_generation):
+    from app.adapters.auth import _routing_resource
+
+    resource = resource_for(human_review_required=human, routing_recommendation=recommendation)
+    source = SimpleNamespace(source=resource.source, request=resource.request)
+    effects = accepted_effects_for(resource.source) if has_effects else None
+    generation = 7 if has_generation else None
+    arguments = (source, resource.claim, effects, generation, resource.router_actor_id, resource.router_identity_link_id)
+    accepts = recommendation == "allow_review" and not human
+    if has_effects != accepts or has_generation != accepts:
+        with pytest.raises(PreparedAuthorizationHandleInvalid, match="routing consequence unavailable"):
+            _routing_resource(*arguments)
+    else:
+        result = _routing_resource(*arguments)
+        assert type(result.consequence) is type(resource.consequence)
+
+
 @pytest.mark.parametrize(
     ("field", "changed"),
     (

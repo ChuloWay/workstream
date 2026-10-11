@@ -243,7 +243,7 @@ class TaskRoutingRequest(Base):
         Uuid(), ForeignKey("outbox_events.event_id", name="fk_task_route_request_event", ondelete="RESTRICT"),
         nullable=False,
     )
-    routing_recommendation: Mapped[str] = mapped_column(String(32), nullable=False)
+    routing_recommendation: Mapped[str] = mapped_column(String(30), nullable=False)
     route_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
