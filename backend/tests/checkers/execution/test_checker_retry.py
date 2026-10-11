@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.adapters.checkers import checker_retry_service, evaluation_coordinator
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import ArtifactObjectMissingError
 from app.modules.authorization.catalogue import ActionId
@@ -17,8 +18,10 @@ from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable, CheckerRequestConflict, CheckerRetryCommand,
 )
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun
+from app.modules.outbox.api import HandlerOutcome
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import AuditEvent
+from app.modules.tasks.evaluation_delivery import EvaluationDeliveryRequestReader, EvaluationDeliveryUnavailable
 from app.modules.tasks.post_submit_routing.evaluation_guard import TaskEvaluationGuard
 from app.modules.tasks.repository import TaskRepository
 from tests.post_submit_materialization_helpers import material_fixture
@@ -251,6 +254,49 @@ async def test_retry_response_loss_and_later_generation_replay(
             assert await session.get(CheckerRun, str(later.attempt_id)) is not None
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 1
             assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 3
+
+
+async def test_retry_handler_rejects_crossed_event_and_payload_before_execution(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, delivery):
+        operator = await _operator_for(h)
+        async with h.factory.begin() as session:
+            created = await checker_retry_service(session, operator).retry(_command(h, operator))
+        claim = await delivery.delivery.claim(
+            created.successor.event_id, h.request.project_id, "retry-crossed-envelope",
+        )
+        assert claim is not None
+        envelope = await delivery.delivery._begin_invocation(claim)
+        assert envelope is not None
+        before, opens = await state(h), len(h.store.opens)
+        async with h.factory() as session, session.begin():
+            reader = EvaluationDeliveryRequestReader(session, evaluation_coordinator(session))
+            exact = await reader.read(envelope)
+            assert exact.evaluation_request_id == created.successor.request_id
+            crossed = []
+            for field, value in (
+                ("request_id", str(new_record_id())),
+                ("retry_receipt_id", str(new_record_id())),
+            ):
+                payload = json.loads(envelope.payload_json)
+                payload[field] = value
+                crossed.append(envelope.model_copy(update={
+                    "payload_json": json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    "claim": envelope.claim.model_copy(update={
+                        "payload_digest": canonical_json_hash(payload),
+                    }),
+                }))
+            crossed.append(envelope.model_copy(update={
+                "claim": envelope.claim.model_copy(update={
+                    "event_id": h.created.evaluation_event_id,
+                }),
+            }))
+            for mixed in crossed:
+                with pytest.raises(EvaluationDeliveryUnavailable, match="evaluation_delivery_unavailable"):
+                    await reader.read(mixed)
+                assert await delivery.handler(mixed) is HandlerOutcome.REJECT
+        assert await state(h) == before and len(h.store.opens) == opens
 
 
 async def test_same_key_independent_sessions_wait_for_task_then_replay_one_retry(
