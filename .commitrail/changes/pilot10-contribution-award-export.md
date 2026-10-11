@@ -87,6 +87,12 @@ and [exported snapshot lifetime](https://www.postgresql.org/docs/16/functions-ad
   `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`; no debt or thresholds grow.
 - Focused new contribution export and AUTH read tests, using real PostgreSQL
   for authority custody, canonical facts and concurrent-acceptance claims.
+  Existing `tests/authorization/setup_finalization/test_catalogue.py` and
+  `tests/test_api_controls.py` retain their closed inventories, adding only
+  the two exact contribution actions/routes and excluding those routes from
+  unchanged-route fingerprints. The audit allowed-action fixture remains part
+  of the sole migration author's schema handoff. Export fixtures use distinct
+  human readers; snapshot proof follows the actual separate actor/link locks.
 - `docs/spec_contribution_compensation.md`, `docs/spec_authorization_service.md`,
   ADR 0016, and coordinated contribution-specific README/roadmap sections.
   The agreed PM/Finance read scope and v0.1 fulfillment deferral replace only

@@ -63,8 +63,8 @@ async def test_first_auth_snapshot_excludes_source_committed_before_owner_projec
                 await asyncio.gather(read, return_exceptions=True)
                 event.remove(Engine, "before_cursor_execute", record_rr_sql)
             assert observed == ["repeatable read"]
-            assert "actor_profiles" in rr_statements[0] and "actor_identity_links" in rr_statements[0]
-            assert "FOR UPDATE" in rr_statements[0]
+            assert "actor_profiles" in rr_statements[0] and "FOR UPDATE" in rr_statements[0]
+            assert "actor_identity_links" in rr_statements[1] and "FOR UPDATE" in rr_statements[1]
             assert response.status_code == 200, response.text
             assert response.json()["items"] == []
             fresh = await admin_access.signed.client.get(export_path(project), headers=admin_access.target.headers)

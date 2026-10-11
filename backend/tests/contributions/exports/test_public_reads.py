@@ -59,9 +59,10 @@ async def test_project_export_requires_covering_pm_or_exact_project_finance(
     async with authorized_submitter_source(tmp_path, auth_database_env) as h:
         project = h.submitter_record.project_id
         foreign = await create_project("Foreign export scope") if scope == "foreign" else None
-        await admin_access.signed.grant(admin_access.admin, admin_access.target, role=role,
+        reader = await admin_access.signed.actor(f"export-reader-{role}-{scope}")
+        await admin_access.signed.grant(admin_access.admin, reader, role=role,
                                        project_id=project if scope == "project" else foreign)
-        response = await admin_access.signed.client.get(export_path(project), headers=admin_access.target.headers)
+        response = await admin_access.signed.client.get(export_path(project), headers=reader.headers)
         assert response.status_code == expected, response.text
         event, = await export_audits(h.factory)
         assert event["after_facts"]["allowed"] is (expected == 200)
