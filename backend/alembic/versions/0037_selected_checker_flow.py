@@ -609,6 +609,27 @@ end $$
     op.execute(definition.replace(old_plan, new_plan))
 
 
+def _replace_post_policy_custody() -> None:
+    definition = op.get_bind().execute(sa.text(
+        "select pg_get_functiondef('public.require_post_policy_operation()'::regprocedure)"
+    )).scalar_one()
+    old_policy = """         OR p.policy_hash IS DISTINCT FROM guide_proposal_hash(p.policy_body::jsonb)
+         OR p.policy_body->>'catalogue_manifest_sha256' IS DISTINCT FROM t->'proposal'->>'post_catalogue_manifest_hash'"""
+    new_policy = """         OR (p.policy_body->>'schema_version'='external_post_submit_policy.v1' AND (
+           p.policy_hash IS DISTINCT FROM p.policy_body->>'policy_sha256'
+           OR p.policy_hash IS DISTINCT FROM guide_proposal_hash(
+             p.policy_body::jsonb-'policy_sha256')
+           OR p.policy_body::jsonb IS DISTINCT FROM
+             a.effective_pre_submit_plan::jsonb->'post_submit'))
+         OR (p.policy_body->>'schema_version'<>'external_post_submit_policy.v1' AND (
+           p.policy_hash IS DISTINCT FROM guide_proposal_hash(p.policy_body::jsonb)
+           OR p.policy_body->>'catalogue_manifest_sha256' IS DISTINCT FROM
+             t->'proposal'->>'post_catalogue_manifest_hash'))"""
+    if definition.count(old_policy) != 1:
+        raise RuntimeError("post policy custody shape changed")
+    op.execute(definition.replace(old_policy, new_policy))
+
+
 def upgrade() -> None:
     op.execute("set local search_path=pg_catalog,public,pg_temp")
     op.execute("lock table public.actor_profiles, public.actor_identity_links, public.audit_events, public.submissions, public.checker_runs, public.submission_bundle_durable_intents, public.submission_bundle_admissions in access exclusive mode")
@@ -618,6 +639,7 @@ def upgrade() -> None:
     _replace_admission_guards()
     _selected_run_guards()
     _replace_guide_approval_custody()
+    _replace_post_policy_custody()
 
 
 def downgrade() -> None:
