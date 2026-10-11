@@ -1,4 +1,4 @@
-"""Recover the committed initial evaluation; outbox values never grant authority."""
+"""Recover a committed initial or Operator-retry evaluation request."""
 
 from collections.abc import Callable
 import json
@@ -22,11 +22,11 @@ from app.modules.tasks.submission_dispatch import evaluation_request_event
 
 
 class EvaluationDeliveryUnavailable(RuntimeError):
-    """The initial event and its retained request do not have exact custody."""
+    """The event and its retained request do not have exact custody."""
 
 
 class EvaluationDeliveryRequestReader:
-    """TASK owns dispatch selection; CHECKERS owns the stored request body."""
+    """TASK owns initial dispatch; CHECKERS owns retry and stored request facts."""
 
     def __init__(self, session: AsyncSession, evaluations: EvaluationCoordinationPort):
         self._session, self._evaluations = session, evaluations
