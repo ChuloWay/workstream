@@ -153,8 +153,35 @@ async def test_public_pages_exclude_pre_snapshot_uncommitted_record_after_it_com
         assert set(ids) == {str(h.submitter_record.id), str(second_outcome.economic.contribution_record_id)}
         assert str(late_outcome.economic.contribution_record_id) not in ids
         assert all(len(row["awards"]) == 2 for page in (first, next_page) for row in page.json()["items"])
+        # Construct only private expiry metadata around the same real immutable
+        # facts; no economic row or clock is changed. The next public first page
+        # must remove this nonempty expired selection through its native cascade.
+        expired_id = new_record_id()
+        async with h.factory() as session, session.begin():
+            await session.execute(text(
+                "INSERT INTO contribution_export_memberships "
+                "(id, actor_profile_id, audience, project_id, output_format, page_size, "
+                "contribution_type, recorded_from, recorded_before, member_count, sealed, "
+                "query_digest, exported_at, expires_at) "
+                "SELECT :new, actor_profile_id, audience, project_id, output_format, page_size, "
+                "contribution_type, recorded_from, recorded_before, 3, false, query_digest, "
+                "exported_at - interval '16 minutes', expires_at - interval '16 minutes' "
+                "FROM contribution_export_memberships WHERE id=:export"
+            ), {"new": expired_id, "export": export_id})
+            await session.execute(text(
+                "INSERT INTO contribution_export_members (export_id, contribution_id, recorded_at) "
+                "SELECT :export, id, created_at FROM contribution_records WHERE project_id=:project"
+            ), {"export": expired_id, "project": h.submitter_record.project_id})
+            await session.execute(text(
+                "UPDATE contribution_export_memberships SET sealed=true WHERE id=:export"
+            ), {"export": expired_id})
         fresh = await signed_access.client.get(path, headers=reader.headers)
         assert fresh.status_code == 200
+        async with h.factory() as session:
+            assert await session.get(ContributionExportMembership, expired_id) is None
+            assert await session.scalar(select(func.count()).select_from(ContributionExportMember).where(
+                ContributionExportMember.export_id == expired_id,
+            )) == 0
         assert {row["contribution_id"] for row in fresh.json()["items"]} == set(ids) | {
             str(late_outcome.economic.contribution_record_id),
         }

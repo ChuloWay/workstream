@@ -94,12 +94,13 @@ registration in a fresh process. Membership declarations now live in CON's
 existing registered records/models.py; the separate declaration module was
 removed, with a fresh-process regression preserving native FK compilation.
 Prepared public regression now includes direct installed-guard checks for sealed
-append, header/member mutation, premature deletion and deferred unsealed commit.
+append, header/member mutation, premature deletion, deferred unsealed commit,
+and public cleanup of a nonempty expired private selection.
 These collect successfully but are not runtime proof until the native migration
 is installed. Implementation still requires installed-schema proof.
 
 ## Reconciliation
 
-- Current-source reconciliation: starts from main d47ee1e, including merged PILOT-10A.
+- Current-source reconciliation: started from main d47ee1e; reconciled main e31e1777 after PR #539 merged.
 - Next usable boundary: separate CLI export PR and the pilot closing drill.
 - Remaining risks: native membership mechanism and restore binding not yet frozen.
