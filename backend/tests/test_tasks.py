@@ -2931,7 +2931,7 @@ async def test_task_metadata_round_trips(task_client: AsyncClient) -> None:
 async def test_catalogue_rollout_blocks_task_transition_without_writes(
     task_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, transition: str, phase: str,
 ) -> None:
-    from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+    from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
     from app.modules.checkers.runner import default_checker_registry
 
     project = await create_active_project(task_client)

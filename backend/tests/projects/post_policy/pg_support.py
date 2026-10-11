@@ -127,7 +127,7 @@ async def prepare_post_policy(factory, command, actor, grant, setup_actor):
 
 
 async def operate(factory, actor, project_id, grant, operation, command, *, close_error=False, guide_close_error=False):
-    from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+    from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
     from app.modules.projects.post_policy.service import PostPolicyService
     from tests.projects.guide_compilation.proposals.pg_support import ProposalAuthority
 

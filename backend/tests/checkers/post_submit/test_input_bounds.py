@@ -14,7 +14,7 @@ from app.modules.checkers.api.post_submit import (
     PostSubmitManifestEntry,
     PostSubmitPolicyInputs,
 )
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     PostSubmitResourceLimits,
     canonical_post_submit_bytes,
 )

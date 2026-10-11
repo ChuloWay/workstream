@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from app.db import session as db_session
 from app.modules.authorization.models import AdminRoleGrant
-from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
+from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
 from app.modules.tasks.lifecycle import ALLOWED_TASK_TRANSITIONS
 from app.modules.tasks.models import WorkstreamTask
 from tests.authorization.task_locked_context.support import KINDS, grant_for, path

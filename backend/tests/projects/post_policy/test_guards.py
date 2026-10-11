@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 from app.modules.projects.api.guide_proposals import GuideProposalError, GuideProposalSelection
 from app.modules.projects.api.post_policy import (
     PostPolicyApproval,

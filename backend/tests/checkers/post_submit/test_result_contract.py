@@ -199,7 +199,7 @@ def test_consumers_revalidate_unchecked_copies():
 
 
 def test_closed_result_shape_stays_below_declared_byte_ceilings():
-    from app.modules.checkers.api.post_submit_catalogue import (
+    from app.modules.checkers.api.historical_post_submit import (
         PostSubmitResourceLimits, canonical_post_submit_bytes,
     )
 

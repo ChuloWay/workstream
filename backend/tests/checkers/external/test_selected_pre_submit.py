@@ -5,9 +5,13 @@ from __future__ import annotations
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 import json
+from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 from unittest.mock import AsyncMock
+import zipfile
 import pytest
 
 from app.core.hashing import canonical_json_hash
@@ -47,17 +51,130 @@ from app.modules.checkers.api.selected_pre_submit import (
 from app.modules.checkers.selected_pre_submit_execution import SelectedPreSubmitProcessor
 from app.adapters.checkers import SelectedPreSubmitCheckerExecutionAdapter
 from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim
+from app.modules.artifacts.preparation import (
+    HARD_MAXIMUM_ARTIFACT_BYTES,
+    ArtifactPreparationLimits,
+    ArtifactPreparationService,
+    ArtifactScratchManager,
+)
 from app.modules.artifacts.selected_pre_submit_admission import (
     bind_selected_pre_submit_admission,
     build_selected_pre_submit_reservation,
 )
-from app.modules.artifacts.submission_manifest import SubmissionCanonicalPredecessor
+from app.modules.artifacts.submission_archive import (
+    SubmissionArchiveInspector,
+    SubmissionArchiveLimits,
+)
+from app.modules.artifacts.submission_manifest import (
+    SubmissionCanonicalPredecessor,
+    build_submission_manifest,
+    evaluate_submission_change,
+)
 from app.modules.artifacts.submission_materialization import (
+    PreparedBundleMaterializationRequest,
     PreparedBundleMaterializationService,
 )
-from app.modules.checkers.api.pre_submit import SubmissionPacketView
+from app.modules.authorization.prepared import PreparedAuthorizationHandle
+from app.modules.checkers.api.pre_submit import (
+    EffectivePreSubmissionExecutionPlan,
+    EffectivePreSubmissionPlanLineage,
+    SubmissionPacketView,
+)
 from tests.checkers.external.support import SHA, registry_entry
-from tests.test_default_pre_submit_execution import _request
+
+
+async def _bytes(value: bytes):
+    yield value
+
+
+def _archive(primary_bytes: bytes) -> bytes:
+    output = BytesIO()
+    with zipfile.ZipFile(output, "w") as archive:
+        for name, value in (
+            ("task.toml", primary_bytes),
+            ("evidence/results", b"verified\n"),
+        ):
+            entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            archive.writestr(entry, value)
+    return output.getvalue()
+
+
+def _limits() -> ArtifactPreparationLimits:
+    return ArtifactPreparationLimits(
+        aggregate_reserved_bytes=2 * HARD_MAXIMUM_ARTIFACT_BYTES,
+        maximum_files=2,
+        maximum_concurrency=2,
+        minimum_free_bytes=0,
+        reservation_ttl_seconds=30,
+        total_deadline_seconds=10,
+        cleanup_margin_seconds=5,
+        stream_buffer_bytes=1024,
+        maximum_source_bytes=1024 * 1024,
+        maximum_workspace_entries=2_000,
+    )
+
+
+class _PreparedHandle:
+    pass
+
+
+async def _request(
+    tmp_path: Path,
+    *,
+    primary_bytes: bytes = b"[task]\nname='proof'\n",
+):
+    lineage = EffectivePreSubmissionPlanLineage(
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
+        guide_version="v1",
+        source_snapshot_id=new_record_id(),
+        source_snapshot_hash=SHA,
+        effective_policy_id=new_record_id(),
+        effective_policy_hash=SHA,
+        pre_submit_policy_id=new_record_id(),
+        pre_submit_policy_bundle_hash=SHA,
+    )
+    plan = EffectivePreSubmissionExecutionPlan(
+        lineage=lineage,
+        catalogue_id="retired.test.fixture",
+        catalogue_version="v1",
+        catalogue_schema_version="retired",
+        catalogue_manifest_sha256=SHA,
+        entries=(),
+        plan_sha256=SHA,
+    )
+    plan = replace(plan, plan_sha256=canonical_json_hash(plan.as_dict()))
+    inspector = SubmissionArchiveInspector(SubmissionArchiveLimits())
+    manager = ArtifactScratchManager(root=tmp_path / "scratch", limits=_limits())
+    preparation = ArtifactPreparationService(manager)
+    prepared = await preparation.prepare(
+        _bytes(_archive(primary_bytes)), media_type="application/zip"
+    )
+    inspection = await prepared.inspect(inspector)
+    manifest = build_submission_manifest(inspection)
+    request = PreparedBundleMaterializationRequest(
+        prepared_authorization=cast(PreparedAuthorizationHandle, _PreparedHandle()),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
+        submission_artifact_policy_id=lineage.effective_policy_id,
+        checker_policy_id=lineage.pre_submit_policy_id,
+        predecessor_submission_version=None,
+        prepared_artifact=prepared,
+        effective_plan=plan,
+        inspection=inspection,
+        manifest=manifest,
+        change_gate=evaluate_submission_change(
+            commitment=prepared.commitment,
+            manifest=manifest,
+            predecessor=None,
+            predecessor_exists=False,
+        ),
+        packet=SubmissionPacketView(
+            summary="Completed exact project work.",
+            contributor_attestation="rights_confirmed",
+        ),
+    )
+    return request, inspector, manager, preparation, None
 
 
 def _open_input_schema() -> ExternalCheckerSchema:

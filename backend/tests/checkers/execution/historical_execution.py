@@ -25,7 +25,7 @@ from app.modules.checkers.api.post_submit import (
     PostSubmissionEvaluationResult,
     PostSubmitCurrentResultReference,
 )
-from app.modules.checkers.api.post_submit_catalogue import canonical_post_submit_bytes
+from app.modules.checkers.api.historical_post_submit import canonical_post_submit_bytes
 from app.modules.checkers.execution_repository import request_text
 from app.modules.checkers.execution_results import classify_result
 from app.modules.checkers.models import CheckerRun, CheckerResult

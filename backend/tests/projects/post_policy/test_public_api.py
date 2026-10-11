@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from app.main import create_app
 from app.modules.projects.post_policy.compiler import compile_saved_post_policy
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 from app.interfaces.project_agents import ProjectGuideCompilationResult
 from tests.projects.guide_compilation.proposals.pg_support import revoke_review_grant, seed_review_actor
 from tests.projects.guide_compilation.proposals.public_support import proposal_client, proposal_path

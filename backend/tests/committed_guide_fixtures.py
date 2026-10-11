@@ -95,7 +95,7 @@ async def create_compiled_report_fixture(
     """Project a scripted unified result under real service authority and custody."""
     from app.adapters.auth import guide_compilation_request_authority, guide_compilation_execution_authority, guide_sufficiency_projection_authorization, artifact_policy_projection_authorization
     from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue, project_guide_pre_submission_capabilities
-    from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+    from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
     from app.modules.projects.api import ProjectGuideCompilationExecutionCommand, ProjectGuideProjectionCommand, ProjectGuideCompilationExecutionClassification
     from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
     from app.modules.projects.guide_compilation.request_inputs import (

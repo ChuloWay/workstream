@@ -18,7 +18,7 @@ from app.modules.checkers.catalogue import build_pre_submission_checker_catalogu
 from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
 from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
 from app.modules.projects.models import ProjectSetupRun
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 
 from tests.projects.client_fixtures import (
     project_client as project_client,

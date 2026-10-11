@@ -19,7 +19,7 @@ from app.modules.checkers.catalogue import (
     build_pre_submission_checker_catalogue,
     project_guide_pre_submission_capabilities,
 )
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 from app.modules.projects.api.guide_proposals import (
     GuideProposalApproval,
     GuideProposalCorrection,

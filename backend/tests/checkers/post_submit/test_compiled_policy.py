@@ -7,7 +7,7 @@ from pydantic import ValidationError
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api import CompiledPostSubmitPolicy
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 from app.modules.projects.post_submit_policy import build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec, parse_locked_post_submit_checker_policy_body
 from tests.checkers.post_submit.support import PROJECT, altered_catalogue, catalogue, request
 

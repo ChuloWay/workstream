@@ -41,7 +41,7 @@ from app.modules.checkers.runner import (
     canonical_artifact_manifest_hash,
 )
 from app.modules.checkers.api.history import CheckerRoutingRecommendation
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 from app.modules.projects.post_submit_policy import (
     DEFAULT_DURABLE_CHECKERS,
     POST_SUBMIT_CHECKER_POLICY_SPEC_SCHEMA_VERSION,
@@ -1027,7 +1027,7 @@ def test_attestation_and_policy_projection_helpers_preserve_required_only_rules(
 
 @pytest.mark.asyncio
 async def test_checker_registry_preserves_policy_order_and_rejects_name_drift() -> None:
-    from app.modules.checkers.api.post_submit_catalogue import structural_definition
+    from app.modules.checkers.api.historical_post_submit import structural_definition
     registry = CheckerRegistry()
     async def outcome(name: str) -> CheckerOutcome:
         return CheckerOutcome(name, "passed", "info", f"{name} passed")

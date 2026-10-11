@@ -11,7 +11,7 @@ from app.interfaces.project_agents import (
     ProjectGuideCompilationResult,
     validate_project_guide_compilation_result,
 )
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     PostSubmitCatalogue,
 )
 from tests.test_project_guide_compilation_contracts import _artifact_policy, _context, _evidence

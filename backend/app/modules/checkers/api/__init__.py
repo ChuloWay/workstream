@@ -70,7 +70,7 @@ __all__ = (
     "SelectedPreSubmitInfrastructureUnavailable",
 )
 
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     CompiledPostSubmitPolicy,
     EmptyPostSubmitConfiguration,
     PostSubmitCatalogue,

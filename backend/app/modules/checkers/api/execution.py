@@ -14,7 +14,7 @@ from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionResult,
 )
 from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     PostSubmitValue,
     ResourceId,
     Sha256,

@@ -10,7 +10,7 @@ from app.modules.checkers.api.post_submit import (
     PostSubmitEvidenceEntry,
     PostSubmitMemberResult,
 )
-from app.modules.checkers.api.post_submit_catalogue import PostSubmitDefinition
+from app.modules.checkers.api.historical_post_submit import PostSubmitDefinition
 from app.modules.checkers.runner import (
     CheckerContext,
     CheckerOutcome,

@@ -12,7 +12,7 @@ from app.modules.checkers.api import (
     PostSubmitManifestEntry,
     PostSubmitPolicyInputs,
 )
-from app.modules.checkers.api.post_submit_catalogue import PostSubmitCatalogue, PostSubmitDefinition
+from app.modules.checkers.api.historical_post_submit import PostSubmitCatalogue, PostSubmitDefinition
 from app.modules.checkers.post_submit_catalogue import build_post_submit_catalogue
 from app.modules.checkers.api.post_submit import make_post_submit_request
 from app.modules.checkers.runner import default_checker_registry

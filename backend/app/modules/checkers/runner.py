@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Awaitable
 from typing import Protocol
 
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     PostSubmitDefinition, PostSubmitPolicyEntry, structural_definition,
 )
 from app.modules.checkers.api.post_submit import (

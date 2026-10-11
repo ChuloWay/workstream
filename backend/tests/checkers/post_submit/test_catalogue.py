@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.hashing import canonical_json_hash
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     structural_definition,
     PostSubmitCatalogue,
     PostSubmitDefinition,

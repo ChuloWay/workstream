@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
-from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
+from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
 from uuid import UUID
 
 from sqlalchemy import Row, Select, and_, or_, select, tuple_

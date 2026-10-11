@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.core.hashing import canonical_json_hash
-from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
+from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
 from app.modules.authorization.api import ActorKind
 from app.modules.authorization.api.post_policy import PostPolicyAuthorityReceipt

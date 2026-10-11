@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     PostSubmitCatalogue,
     current_post_submit_catalogue,
 )

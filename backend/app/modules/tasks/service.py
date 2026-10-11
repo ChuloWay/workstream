@@ -15,7 +15,7 @@ from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
     LockedExternalPostSubmitPolicy,
 )
-from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
+from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
 from app.modules.projects.api.locked_policy import (
     ProjectLockedPolicyContextFacts,
     ProjectLockedPolicyContextPort,

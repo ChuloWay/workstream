@@ -8,7 +8,7 @@ from uuid import UUID
 from pydantic import Field, StrictInt, model_validator
 
 from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     Identifier,
     PostSubmitValue,
     ResourceId,

@@ -17,7 +17,7 @@ from app.modules.authorization.runtime import (
 )
 from app.modules.authorization.api import ActorKind
 from app.modules.actors.api import ServiceIdentity
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 from app.modules.projects.post_policy.service import PostPolicyService
 from app.modules.projects.api.post_policy import (
     PostPolicyApproval,

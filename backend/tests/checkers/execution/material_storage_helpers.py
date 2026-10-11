@@ -11,7 +11,7 @@ from app.adapters.outbox import outbox_append
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import COMPLETION_EVENT, EvaluationCompletion
 from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
-from app.modules.checkers.api.post_submit_catalogue import canonical_post_submit_bytes
+from app.modules.checkers.api.historical_post_submit import canonical_post_submit_bytes
 from app.modules.checkers.execution_results import classify_result
 from app.modules.checkers.models import CheckerResult, CheckerRun
 from app.modules.outbox.api import OutboxAppendInput

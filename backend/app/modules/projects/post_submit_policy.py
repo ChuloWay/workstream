@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Any
 from uuid import UUID
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     CompiledPostSubmitPolicy,
     EmptyPostSubmitConfiguration,
     PostSubmitPolicyEntry,

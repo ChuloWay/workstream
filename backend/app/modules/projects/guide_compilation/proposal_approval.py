@@ -15,7 +15,7 @@ from app.modules.authorization.api.guide_proposal_review import (
     GuideProposalAuthorizationLocator,
     PreparedGuideProposalOperation,
 )
-from app.modules.checkers.api.policy_compilation import CompiledPreSubmitCheckerPolicy
+from app.modules.checkers.api.policy_custody import CompiledPreSubmitCheckerPolicy
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
 from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.checkers.api.external_policy import (

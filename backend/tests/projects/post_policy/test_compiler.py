@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 from app.interfaces.project_agents import ProjectGuideCompilationResult
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 from app.modules.projects.post_policy.compiler import compile_saved_post_policy
 from tests.projects.guide_compilation.helpers import result
 

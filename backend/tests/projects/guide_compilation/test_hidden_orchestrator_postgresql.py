@@ -46,7 +46,7 @@ from app.modules.projects.guide_compilation.orchestrator import (
 from app.modules.checkers.catalogue import (
     build_pre_submission_checker_catalogue,
 )
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 
 from .helpers import context, identity, result, seed_database
 from .runtime_fixtures import document_access, record_scripted_document_access

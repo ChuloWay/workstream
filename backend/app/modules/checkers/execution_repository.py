@@ -22,7 +22,7 @@ from app.modules.checkers.api.evaluation_contract import (
 from app.modules.checkers.api.selected_post_submit import (
     SelectedPostSubmissionEvaluationResult,
 )
-from app.modules.checkers.api.post_submit_catalogue import canonical_post_submit_bytes
+from app.modules.checkers.api.historical_post_submit import canonical_post_submit_bytes
 from app.modules.checkers.models import CheckerResult, CheckerRun, CheckerSubmissionFence
 
 

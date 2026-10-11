@@ -236,7 +236,7 @@ async def request_corrected_attempt(factory, actor, correction):
         build_pre_submission_checker_catalogue,
         project_guide_pre_submission_capabilities,
     )
-    from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+    from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
     from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
     from app.modules.projects.guide_compilation.service import GuideCompilationService
     from tests.projects.guide_compilation.helpers import runtime_configuration

@@ -7,7 +7,7 @@ from typing import Annotated, Literal, Protocol, Self
 from pydantic import TypeAdapter, Field, StrictInt, StrictStr, model_validator
 
 from app.core.hashing import canonical_json_hash
-from app.modules.checkers.api.post_submit_catalogue import (
+from app.modules.checkers.api.historical_post_submit import (
     ByteCount,
     CompiledPostSubmitPolicy,
     GuideVersion,
