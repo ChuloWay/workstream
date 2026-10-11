@@ -13,7 +13,9 @@ frozen and no import functionality is implemented here.
 
 ## Current behavior
 
-The inspected main is `a51cf06ccb5ab85f2c41528855f537d4362ec26b`. The catalogue
+The implementation base is `35314a926503fae889e548ac5dae1c3c9e1a2ee7`, preserving
+main's incoming checker-completion and CLI approval owners. The measured earlier
+main is `a51cf06ccb5ab85f2c41528855f537d4362ec26b`. Before this change, the catalogue
 in `backend/scripts/test_lane_catalogue.py` partitions project nodes across A/B/C.
 `tests/test_projects.py` and `tests/test_guide_document_intake.py` use A/C after a
 previous three-way allocation overloaded B. The workflow has nine lanes total,
@@ -54,8 +56,8 @@ capacity margin; they do not prove a specific current node's elapsed time.
   require ten complete results in hosted timing/aggregate checks.
 - Existing `run_test_lanes.py`, `merge_test_lane_evidence.py` and
   `validate_test_lane_evidence.py`: update affected exact inventory consumers.
-  A small existing-plugin timing extension may record node/phase/duration facts
-  before interruption if needed; it supplies diagnostics, never completion proof.
+  The runner and merger already derive their inventory from the shared catalogue;
+  their existing implementations are retained. No timing extension is included.
 - Existing CI lane/catalogue/merge/evidence tests and affected ownership
   expectations: protect the exact canonical union and newest-attempt custody.
 - `docs/operations_backend_testing.md` and this record: reconcile the declared
@@ -86,9 +88,9 @@ capacity margin; they do not prove a specific current node's elapsed time.
    inventory; update intentional independent workflow cardinality assertions to
    ten. Do not replace exact counts with a permissive minimum or accept arbitrary
    artifacts. Review every consumer before implementation.
-5. If timing is added, append observed setup/call/teardown durations as each report
-   arrives using the existing private output discipline. An interrupted phase
-   stays incomplete; elapsed timing must never fabricate a completed node.
+5. Keep the existing bounded slowest-25 phase diagnostic. The repair changes
+   execution capacity without expanding evidence output; interruption still
+   invalidates completion regardless of timing or successfully finished nodes.
 
 ## Acceptance criteria
 
@@ -118,18 +120,23 @@ capacity margin; they do not prove a specific current node's elapsed time.
 |---|---|---|---|
 | Prior/main/current capacity | Download nine lane bundles for runs 38049464143, 38056091618 and 38056709666; inspect summary, node and job-step timing | Measurements above; latest C timed out and cleaned DB/role/MinIO | Current individual phase times were not retained |
 | Proposed allocation | Reapply the existing hash function to actual merge 5dfb6501's canonical manifest with four project candidates | 2,205 project nodes, A645/B485/C622/D453 | No implementation or hosted runtime result |
-| Complete repair | Planned affected lane/catalogue/evidence/merge tests, independent canonical comparison and full hosted aggregate | Not run; record-only preparation | Scope review and exact candidate required |
+| Affected repair controls | `pytest -q tests/test_ci_lane_catalogue.py tests/test_ci_test_lanes.py tests/test_test_lane_evidence.py tests/test_merge_test_lane_evidence.py` | First run 147 passed / one timing fixture failed; the fixture now has ten entries and still rejects nine | Final frozen result and canonical projection recorded in the PR |
+| Full integration | Complete hosted ten-lane run and independent aggregate | Pending; no complete PASS claim | Actual frozen merge, all node/cleanup evidence and measured headroom required |
 
 ## Review findings
 
 The latest source run is not complete PASS evidence. Eight successful lanes and
 cleanup cannot replace the 92 unfinished project C nodes. No assertion failure
-or specific deadlock is claimed from that interrupted artifact.
+or specific deadlock is claimed from that interrupted artifact. The affected
+controls now require project D, reject its missing/foreign bundles, duplicated
+completion and interrupted execution, and refuse an invalid newest D attempt
+even when an older D bundle passed. Existing shared-lane controls remain.
 
 ## Reconciliation
 
-- Current-source reconciliation: prepare against main a51cf06c; reconcile the
-  actual current main before implementation. Source PR520 stays frozen at 7a3551e7.
+- Current-source reconciliation: cleanly integrated main 35314a926 before
+  implementation; its production, test owners and delivered documentation are
+  preserved. Source PR520 stays frozen at 7a3551e7.
 - Next usable boundary: reviewed CI allocation repair, then exact frozen source
   integration and full hosted evidence; atomic import remains a separate chunk.
 - Remaining risks: hosted runner variance and absent current per-node timing;
