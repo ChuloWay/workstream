@@ -363,6 +363,21 @@ catalogue suite passes 46 cases in 7.79 seconds without weakening any gate.
 Canonical TASK/CLI documentation distinguishes current-state transition replay
 from original import replay and still marks native aggregate readiness pending.
 
+The atomic predecessor is integrated from exact `09570d3a956a0c604b76c04037027c1dd8fd5c0f`,
+whose separately produced installed-0034 public proof passed 26 cases in 686.84
+seconds with database, role and MinIO cleanup confirmed. That evidence covers
+atomic import only. Sole-author `6d315a41e7511906793da4cbb86ee2d697066576`
+is consumed once as the unchanged 0035 successor; its separately captured
+exact-head graph/reset/native-UUID proof passed three cases in 18.95 seconds.
+The composed source is `a2c1c96cc2a83e17689e56e51327ae234593f242`.
+The additive ownership union preserves all 480 targets and the original
+protected base. Only the selected MCP authorization-context capture is updated
+to this exact source; all nine retained selected contract fragments are checked.
+These predecessor/schema controls do not prove the public bulk transaction.
+The retained 14-case bulk suite, including actual 200/500-member journeys,
+rollback, fresh-authority replay, observed PostgreSQL waits and direct-SQL
+refusals, is the next installed-schema proof and remains unexecuted here.
+
 - Current-source reconciliation: Preserve the atomic owner's import/status and
   source custody; shared-file regions require handoff before edits.
 - Next usable boundary: Complete the separate explicit bulk/CLI journey under
