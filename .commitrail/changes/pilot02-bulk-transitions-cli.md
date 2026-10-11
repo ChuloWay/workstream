@@ -23,6 +23,11 @@ Their current root transaction prevents composition across a complete batch.
   selection only. Extend exact existing SCREEN/RELEASE participants in
   `authorized_commands.py` through prepare/authorize/stage phases. Coordinate
   these regions with the atomic-import owner before edits.
+- Aggregate custody is owned in `task_batch_transition_models.py`: exactly one
+  actor/action/key aggregate and its complete native member links. Lead review
+  approved compact ordered receipt projections and a scoped batch-write client
+  deadline, to be selected after native 200/500 measurements. No global transport
+  change or claimed measured ten-minute requirement is authorized.
 - Explicit atomic-owner handoff permits the single native membership owner in
   `task_import_membership.py`, its small `api/task_import_membership.py` error/row
   facts, exact original-response wrapper replacement, and batch error import
@@ -33,6 +38,15 @@ Their current root transaction prevents composition across a complete batch.
   transition owner. Shared TASK `router.py`, `schemas.py`, model/receipt and AUTH
   regions require an explicit owner handoff before edits. Existing per-Task
   SCREEN/RELEASE actions and canonical denial handling remain mandatory.
+- Atomic-owner-approved canonical custody hunks are the nullable
+  `TaskCommandReceipt.batch_transition_receipt_id` column/closed action constraint,
+  optional `command_replay.reserve` binding argument, and SCREEN/RELEASE
+  preparation/digest validation only. CREATE and other retained command digests
+  remain unchanged. New delivery is exactly `task_batch_transition_router.py`,
+  `api/deps/task_batch_transitions.py`, one TASK-router include and one TASK-adapter
+  factory. The new dependency composes inside the existing `get_task_commands`
+  yielding lifecycle; it neither duplicates AUTH denial handling nor creates an
+  alternate authority owner.
 - New Go CLI `internal/taskimport/` conversion/validation, scoped
   `internal/api/task_import*.go`, `internal/command/task_batch*.go`, and one
   registration in `internal/command/command.go`; focused native Go/HTTP and
@@ -49,6 +63,10 @@ Their current root transaction prevents composition across a complete batch.
 - Native participant lifetime/composition proof is owned in
   `backend/tests/authorization/task_authority/test_management_participants.py`;
   it extends the existing management proof using actual PostgreSQL and AUTH.
+- Closed response proof is `tests/tasks/test_task_batch_transition_contract.py`;
+  actual public native journeys/rollback/revocation/wait proof is
+  `tests/tasks/test_task_batch_transitions.py`. These two modules require exact
+  TASK lane/inventory registration after coordinated atomic/current-main union.
 - Current TASK/AUTH/ART and CLI contracts, README, affected roadmap sections,
   this record, and exact coordinated owner/lane/selected-contract metadata.
 - Required schema/receipt changes only through the sole migration author after
@@ -113,6 +131,37 @@ member set/count; no subset, duplicate, substituted Task, action, actor, project
 decision, receipt or response is admitted. Reservation actor/Task/batch FKs must
 defer premature AUTH/ART locks. The atomic owner independently reviewed this
 namespace/closure design and found no shared-region blocker.
+
+Links alone could reuse earlier committed single-Task receipts and misrepresent
+one aggregate root. The lead approved explicit nullable canonical receipt root
+binding, subject to the atomic owner's exact model/replay handoff. Bulk receipts
+bind `batch_transition_receipt_id` into their request digest; existing null
+single-Task and CREATE request digests remain byte-compatible. Deferred closure
+must require that exact binding and its canonical success/AUTH evidence, so a
+historical standalone success cannot be enrolled after the fact.
+
+### Implemented aggregate checkpoint, migration pending
+
+The aggregate models, compact public DTO, native membership selection, reservation,
+sorted all-Task preparation, fresh all-member AUTH, canonical staging and exact
+ordered replay are implemented. Both public routes compose through the actual
+canonical Task denial lifecycle. Successful AUTH, Task effects, member links and
+both receipt layers share one root; the response is validated/serialized before
+commit. Complete replay compares all native links and canonical root binding,
+recovers each normal retained current-state receipt, and compares the complete
+original compact response. An identity-link mismatch also rolls back the root.
+
+Pure compact-contract plus retained parser verification passed 41 cases. Ruff and
+the protected module-boundary validator passed without exemptions or new private
+edges. Native participant proof at the earlier exact clean extraction head
+`4400568a484a8a3fdf1a428d3ef78e560c892c27` passed five cases in 225.05 seconds
+through migration 0031 with cleanup complete; it proves the extraction only.
+The newly written aggregate tests cover complete 200/500-member public journeys,
+fresh-authorized exact replay, injected failure after the second actual canonical
+write, changed-input/partial-advance rollback, real grant-revocation denial and an
+observed native holder/waiter before concurrent same-key recovery. They have not
+run because aggregate custody DDL is pending the sole migration author. No native
+aggregate, native 200/500 timing, full CI, or readiness claim is made here.
 
 No migration ordinal is allocated here. The sole author receives the final exact
 models and constraints only after this custody design and shared regions are

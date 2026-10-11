@@ -84,6 +84,7 @@ class TaskTransitionPreparation:
     reserved: bool
     facts: TaskAuthorityFacts
     transaction: AsyncSessionTransaction
+    batch_transition_receipt_id: UUID | None = None
 
 
 class AuthorizedTaskCommands:
@@ -264,6 +265,7 @@ class AuthorizedTaskCommands:
     async def prepare_transition(
         self, task_id: UUID, operation: TaskAuthorityOperation, reason: str | None,
         *, idempotency_key: UUID, project_id: UUID | None = None,
+        batch_transition_receipt_id: UUID | None = None,
     ) -> TaskTransitionPreparation:
         """Reserve canonical retry custody and lock TASK before the caller takes AUTH."""
         if operation not in {TaskAuthorityOperation.SCREEN, TaskAuthorityOperation.RELEASE}:
@@ -273,6 +275,7 @@ class AuthorizedTaskCommands:
             raise RuntimeError("task transition preparation requires the caller transaction")
         receipt, digest, reserved = await self._replay.reserve(
             self._actor_id, operation, idempotency_key, task_id, reason,
+            batch_transition_receipt_id=batch_transition_receipt_id,
         )
         task = (await self._repo.lock_project_task(project_id, task_id) if project_id is not None
                 else await self._repo.get_task(str(task_id), for_update=True))
@@ -284,7 +287,7 @@ class AuthorizedTaskCommands:
             replay_command_id=self._replay.manager_replay(receipt, operation, task_id, self._actor_id, idempotency_key),
         )
         return TaskTransitionPreparation(task, assignment, operation, reason, receipt, digest,
-                                         reserved, facts, transaction)
+                                         reserved, facts, transaction, batch_transition_receipt_id)
 
     def _validate_transition_preparation(self, prepared: TaskTransitionPreparation) -> None:
         if (self._session.get_transaction() is not prepared.transaction or not prepared.transaction.is_active
@@ -298,8 +301,12 @@ class AuthorizedTaskCommands:
                 prepared.facts.idempotency_key,
             ),
         )
+        values = {"task_id": prepared.task.id, "reason": prepared.reason}
+        if prepared.batch_transition_receipt_id is not None:
+            values["batch_transition_receipt_id"] = str(prepared.batch_transition_receipt_id)
         if (current != prepared.facts
-                or prepared.request_digest != canonical_json_hash({"task_id": prepared.task.id, "reason": prepared.reason})):
+                or prepared.receipt.batch_transition_receipt_id != prepared.batch_transition_receipt_id
+                or prepared.request_digest != canonical_json_hash(values)):
             raise TaskValidationError("task transition preparation changed")
 
     async def authorize_transition(self, prepared: TaskTransitionPreparation) -> TaskAuthorityDecision:
