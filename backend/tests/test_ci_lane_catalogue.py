@@ -299,6 +299,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_ready_queue.py",
             "tests/tasks/test_public_queues.py",
             "tests/tasks/test_locked_compensation.py",
+            "tests/tasks/test_task_import_contract.py",
             "tests/authorization/task_queues/test_authority.py",
             "tests/authorization/task_queues/test_contracts.py",
             "tests/authorization/task_queues/test_transactions.py",
@@ -369,6 +370,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert "tests/tasks/evaluation_delivery/test_worker_materialization.py" in shared_a
     assert "tests/artifacts/test_review_packet_contract.py" in shared_a
     assert {
+        "tests/test_task_import_sources.py",
         "tests/authorization/post_submit/test_atomicity.py",
         "tests/authorization/post_submit/test_concurrency.py",
         "tests/authorization/post_submit/test_live_authority.py",

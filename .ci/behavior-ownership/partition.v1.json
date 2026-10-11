@@ -113,6 +113,10 @@
       "target": "backend/app/api/routes/artifact_submissions.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/api/routes/artifact_task_import_sources.py"
+    },
+    {
       "group": "auth",
       "target": "backend/app/api/routes/auth.py"
     },
@@ -298,6 +302,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/api/task_import_source.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/authorization.py"
     },
     {
@@ -407,6 +415,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/artifacts/task_guide_documents.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/task_import_sources.py"
     },
     {
       "group": "artifacts",
@@ -539,6 +551,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/adapter_bindings.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/artifact_storage.py"
     },
     {
       "group": "auth",
@@ -819,6 +835,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/task_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/task_import_sources.py"
     },
     {
       "group": "auth",
@@ -1534,6 +1554,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_import.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/transition_audit.py"
     },
     {
@@ -1781,7 +1805,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "e0033570cbf11cae268c4f7e2e22a6b802108b2174d9cc9922a9b7c3cffe8421",
+  "authority_digest": "93906ccf711fb56664d96d5ad646991ab2877131a2c83e09643a84180e547c27",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
