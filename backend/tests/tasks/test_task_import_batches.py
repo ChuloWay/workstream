@@ -103,6 +103,28 @@ async def test_200_rows_create_one_native_batch_and_exact_task_evidence(import_s
     assert await _counts(project) == (1, 200, 2, 200, 200, 200)
 
 
+@pytest.mark.parametrize("metadata", [None, {"label": None}], ids=["omitted", "null-label"])
+async def test_optional_label_import_and_exact_file_recovery(import_source_client, metadata):
+    """Absent and explicit-null display labels retain valid immutable byte custody."""
+    client, value = import_source_client, document(2)
+    if metadata is None:
+        value.pop("metadata")
+    else:
+        value["metadata"] = metadata
+    project = await _project(client)
+    source = await _verified_source(client, project, value)
+    imported = await client.post(_batch_path(project), headers=auth_headers(),
+                                 json={"source_id": source["source_id"]})
+    assert imported.status_code == 201, imported.text
+    result = imported.json()
+    assert result["label"] is None
+    assert (result["sha256"], result["byte_count"]) == (source["sha256"], source["byte_count"])
+    replay = await client.post(_batch_path(project), headers=auth_headers(),
+                               json={"source_id": source["source_id"]})
+    assert replay.status_code == 201 and replay.json() == result, replay.text
+    assert await _counts(project) == (1, 2, 2, 2, 2, 2)
+
+
 async def test_replay_keeps_original_facts_after_advancement_without_provider_or_parser(import_source_client, monkeypatch):
     """Committed replay reads native ancestry; current Tasks remain separate facts."""
     client = import_source_client
