@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from io import BytesIO
+import json
 from types import SimpleNamespace
 from uuid import UUID
 from zipfile import ZipFile
@@ -18,6 +20,7 @@ from app.adapters.artifacts.local import LocalStorageAdapter
 from app.core.identifiers import new_record_id
 from app.modules.actors.api.service_identities import ServiceIdentity
 from app.modules.artifacts.api import (
+    SubmissionBundlePreparationCheckFailed,
     SubmissionBundlePreparationRejected,
     SubmissionBundlePreparationRequest,
 )
@@ -39,13 +42,20 @@ from app.modules.artifacts.submission_manifest import (
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
 from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.api.submission_context import (
+    TaskSubmissionContextRequest,
+    TaskSubmissionContextUnavailable,
+)
 from app.modules.tasks.models import SubmissionDispatch
+from app.adapters.tasks import task_submission_context_port
 from tests.artifact_store_helpers import artifact_byte_stream
+from tests.checkers.execution.support import reserve
+from tests.checkers.execution.completion_fixture import completed_evidence
 from tests.tasks.post_submit_routing.remediation_support import (
     no_economic_effects,
     remediation_source,
 )
-from tests.tasks.post_submit_routing.support import revision_archive
+from tests.tasks.post_submit_routing.support import next_request, revision_archive
 from tests.tasks.submission_lineage_support import _verified_admission
 
 
@@ -190,6 +200,20 @@ async def _assert_dispatch_valid(h) -> None:
         )
 
 
+async def _forbidden_bytes():
+    pytest.fail("rejected replacement consumed contributor ZIP bytes")
+    yield b""
+
+
+def _context_request(h) -> TaskSubmissionContextRequest:
+    return TaskSubmissionContextRequest(
+        task_id=h.request.task_id,
+        assignment_id=h.request.assignment_id,
+        contributor_id=h.actor_context.actor_profile_id,
+        predecessor_submission_id=h.created.submission_id,
+    )
+
+
 @pytest.mark.parametrize("human_review_required", [True, False])
 async def test_real_replacement_compares_consumed_predecessor_and_replays_exactly(
     tmp_path,
@@ -216,6 +240,21 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
         tmp_path, isolated_database_env, human_review_required=human_review_required,
     ) as h:
         await _assert_dispatch_valid(h)
+        provider_writes.clear()
+        before_route = await _snapshot(h)
+        with pytest.raises(
+            SubmissionBundlePreparationRejected,
+            match="submission_bundle_preparation_context_changed",
+        ):
+            await _prepare(h, replace(
+                _replacement_request(
+                    h, revision_archive(h.data), predecessor_id=h.created.submission_id,
+                    idempotency_key=new_record_id(),
+                ),
+                byte_source=_forbidden_bytes(),
+            ))
+        assert await _snapshot(h) == before_route
+        assert provider_writes == []
         source_id = await _fixture_revision_context(h)
         provider_writes.clear()
         loaded.clear()
@@ -242,6 +281,23 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
             assert provider_writes == []
 
         changed_data = revision_archive(h.data)
+        with pytest.raises(SubmissionBundlePreparationCheckFailed) as blocked:
+            await _prepare(h, replace(
+                _replacement_request(
+                    h, changed_data, predecessor_id=predecessor_id,
+                    idempotency_key=new_record_id(),
+                ),
+                contributor_attestation="",
+            ))
+        assert blocked.value.facts.eligible is False
+        assert any(entry.checker_execution_status == "failed"
+                   for entry in blocked.value.facts.entries)
+        assert provider_writes == []
+        async with h.factory() as session:
+            assert await session.scalar(text("SELECT count(*) FROM public.submissions")) == 1
+            assert await session.scalar(text(
+                "SELECT status FROM public.workstream_tasks WHERE id=:id"
+            ), {"id": h.request.task_id}) == "needs_revision"
         idempotency_key = new_record_id()
         changed_request = _replacement_request(
             h,
@@ -324,6 +380,22 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
                 SELECT public.submission_dispatch_valid(d) FROM public.submission_dispatches d
                 WHERE d.submission_id=:id
             """), {"id": created.submission_id}) is True
+            dispatch_body = await session.scalar(text(
+                "SELECT to_jsonb(d) FROM public.submission_dispatches d WHERE submission_id=:id"
+            ), {"id": created.submission_id})
+            validate = text(
+                "SELECT public.submission_dispatch_valid("
+                "pg_catalog.jsonb_populate_record(NULL::public.submission_dispatches, "
+                "CAST(:body AS jsonb)))"
+            )
+            for field, substituted in (
+                ("checker_remediation_manifest_id", str(new_record_id())),
+                ("creation_decision_id", str(h.created.creation_decision_id)),
+                ("binding_decision_id", str(h.created.binding_decision_id)),
+            ):
+                assert await session.scalar(
+                    validate, {"body": json.dumps(dispatch_body | {field: substituted})}
+                ) is False, field
             immutable_after = (await session.execute(text("""
                 SELECT (SELECT to_jsonb(s) FROM public.submissions s WHERE s.id=:prior),
                   (SELECT to_jsonb(m) FROM public.task_post_submit_routing_manifests m WHERE m.id=:cause),
@@ -338,7 +410,7 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
                 correlation_id=new_record_id(),
             ).create(creation) == created
 
-        assert len(loaded) == 4
+        assert len(loaded) == 5
         for task_predecessor, artifact_predecessor in loaded:
             assert task_predecessor.submission_id == predecessor_id
             assert task_predecessor.version == 1
@@ -366,14 +438,29 @@ async def test_foreign_predecessor_stops_at_task_context_before_art_effects(
         ) as foreign:
             await _assert_dispatch_valid(local)
             await _assert_dispatch_valid(foreign)
-            await _fixture_revision_context(local)
-            await _fixture_revision_context(foreign)
+            local_source = await _fixture_revision_context(local)
+            foreign_source = await _fixture_revision_context(foreign)
+            async with local.factory.begin() as session:
+                contexts = task_submission_context_port(session)
+                own = _context_request(local)
+                assert (await contexts.lock_submission_context(
+                    own
+                )).checker_remediation_manifest_id == local_source
+                for field, value in (
+                    ("task_id", foreign.request.task_id),
+                    ("assignment_id", foreign.request.assignment_id),
+                    ("contributor_id", foreign.actor_context.actor_profile_id),
+                    ("predecessor_submission_id", foreign.created.submission_id),
+                ):
+                    with pytest.raises(TaskSubmissionContextUnavailable):
+                        await contexts.lock_submission_context(replace(own, **{field: value}))
             provider_writes.clear()
             baseline = await _snapshot(local)
 
             async def forbidden_load(*_args, **_kwargs):
                 pytest.fail("foreign predecessor reached ART predecessor loading")
 
+            original_load = PreparedSubmissionBundlePreparationCommand._load_predecessor
             monkeypatch.setattr(
                 PreparedSubmissionBundlePreparationCommand,
                 "_load_predecessor",
@@ -392,3 +479,110 @@ async def test_foreign_predecessor_stops_at_task_context_before_art_effects(
                 await _prepare(local, request)
             assert await _snapshot(local) == baseline
             assert provider_writes == []
+            monkeypatch.setattr(
+                PreparedSubmissionBundlePreparationCommand,
+                "_load_predecessor",
+                original_load,
+            )
+
+            changed_data = revision_archive(local.data)
+            admission_id = await _verified_admission(
+                local.factory, local.store, local.namespace, local.settings,
+                local.actor_context,
+                _replacement_request(
+                    local, changed_data, predecessor_id=local.created.submission_id,
+                    idempotency_key=new_record_id(),
+                ),
+            )
+            async with local.factory() as session:
+                created = await compose_hidden_submission_creation_command(
+                    session, local.actor_context, request_id=new_record_id(),
+                    correlation_id=new_record_id(),
+                ).create(SubmissionCreationRequest(
+                    task_id=local.request.task_id,
+                    assignment_id=local.request.assignment_id,
+                    contributor_id=local.actor_context.actor_profile_id,
+                    predecessor_submission_id=local.created.submission_id,
+                    admission_id=admission_id,
+                    summary=local.creation_request.summary,
+                    contributor_attestation=local.creation_request.contributor_attestation,
+                ))
+            async with local.factory() as session:
+                body = await session.scalar(text(
+                    "SELECT to_jsonb(d) FROM public.submission_dispatches d WHERE submission_id=:id"
+                ), {"id": created.submission_id})
+                assert body["checker_remediation_manifest_id"] == str(local_source)
+                validate = text(
+                    "SELECT public.submission_dispatch_valid("
+                    "pg_catalog.jsonb_populate_record(NULL::public.submission_dispatches, "
+                    "CAST(:body AS jsonb)))"
+                )
+                assert await session.scalar(validate, {"body": json.dumps(body)}) is True
+                assert await session.scalar(validate, {"body": json.dumps(
+                    body | {"checker_remediation_manifest_id": str(foreign_source)}
+                )}) is False
+
+
+@pytest.mark.parametrize("recommendation", ["task_setup_blocked", "allow_review"])
+async def test_setup_fault_or_success_cannot_authorize_replacement_before_bytes(
+    tmp_path, isolated_database_env, monkeypatch, recommendation,
+):
+    provider_writes = _trace_provider_writes(monkeypatch)
+    async with completed_evidence(tmp_path, isolated_database_env, recommendation) as h:
+        assert h.run.routing_recommendation == recommendation
+        before = await _snapshot(h)
+        provider_writes.clear()
+        with pytest.raises(
+            SubmissionBundlePreparationRejected,
+            match="submission_bundle_preparation_context_changed",
+        ):
+            await _prepare(h, replace(
+                _replacement_request(
+                    h, revision_archive(h.data), predecessor_id=h.created.submission_id,
+                    idempotency_key=new_record_id(),
+                ),
+                byte_source=_forbidden_bytes(),
+            ))
+        assert await _snapshot(h) == before
+        assert provider_writes == []
+
+
+async def test_source_superseded_during_zip_read_stops_before_art_effects(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    provider_writes = _trace_provider_writes(monkeypatch)
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        source_id = await _fixture_revision_context(h)
+        async with h.factory.begin() as session:
+            current = await task_submission_context_port(session).lock_submission_context(
+                _context_request(h)
+            )
+            assert current.checker_remediation_manifest_id == source_id
+        before = await _snapshot(h)
+        provider_writes.clear()
+        opened = []
+
+        async def superseding_bytes():
+            opened.append(True)
+            await reserve(h, await next_request(h))
+            yield revision_archive(h.data)
+
+        with pytest.raises(
+            SubmissionBundlePreparationRejected,
+            match="submission_bundle_preparation_context_changed",
+        ):
+            await _prepare(h, replace(
+                _replacement_request(
+                    h, revision_archive(h.data), predecessor_id=h.created.submission_id,
+                    idempotency_key=new_record_id(),
+                ),
+                byte_source=superseding_bytes(),
+            ))
+        assert opened == [True]
+        assert await _snapshot(h) == before
+        assert provider_writes == []
+        async with h.factory.begin() as session:
+            with pytest.raises(TaskSubmissionContextUnavailable):
+                await task_submission_context_port(session).lock_submission_context(
+                    _context_request(h)
+                )
