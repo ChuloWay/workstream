@@ -135,6 +135,18 @@ it is not an authoritative native-UUID batch relationship.
   state-conflict semantics remain intact.
 - The ART binding participant validates actual immutable source/verification
   rows in the caller's root; an application-created DTO supplies no authority.
+  The reviewed handoff must name the original source ID/operation identity,
+  put-attempt ID, artifact content/replica IDs, verification job ID/generation
+  and append-only verification receipt with its observed SHA/count. Exactly one
+  existing operation acknowledgement or confirmed observation receipt must bind
+  that same attempt and stored object ancestry. Reuse ART's existing native
+  admission/receipt custody pattern; do not copy it into TASK or accept a DTO as
+  proof. Initial import still uses the existing actual verified-byte read.
+  Committed recovery validates retained immutable ancestry through an ART-owned
+  participant and must not depend on the source read helper's current replica
+  availability/integrity flags, active namespace or provider access. Native
+  substitutions must fail without treating changed operational health as a new
+  import or reinterpreting original rows.
   Direct SQL must reject foreign ancestry, partial closure and changed tuples.
   Native FK representations follow each existing owner, including string-mapped
   actor/audit UUIDs. The sole migration author receives the reviewed field/lock
