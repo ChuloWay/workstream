@@ -3,8 +3,10 @@
 ## Status
 
 Accepted for implementation through the human-approved WS-CON-001 plan and
-`WS-CON-001-01` chunk. Runtime adoption remains chunked and hidden until its
-AUTH, REV, migration, evidence, and joint release gates pass.
+`WS-CON-001-01` chunk. Recognition mutations remain subject to AUTH, REV,
+migration, evidence and joint release gates. PILOT-10's bounded authorized
+contribution evidence reads consume existing facts without activating recognition
+or external fulfillment.
 
 ## Context
 
@@ -139,8 +141,10 @@ root ordinal. During drain, only same-generation roots at or below REV's
 persisted cutoff may complete; no new successor or repair obligation is
 admitted.
 
-All CON routes remain hidden until their behavior, exact AUTH activation, and
-joint release proof pass.
+Recognition mutation and fulfillment routes remain hidden until their behavior,
+exact AUTH activation and applicable joint release proof pass. Bounded evidence
+reads instead require their exact fresh read authority and response-transaction
+proof; they do not enable writers or fulfillment.
 The false acceptance milestone proves its exact TASK/shared-acceptance manifest
 using that same controller and fence. It exposes no human review or CON
 fulfillment/read endpoint and does not wait for those later surfaces. The
@@ -170,7 +174,8 @@ Tradeoffs:
   receipts until an explicit preservation design is approved;
 - protected background handlers require separate service authorities instead of
   inheriting dispatcher access;
-- public surfaces stay hidden until the complete joint gate passes.
+- recognition writers stay hidden until their applicable joint gate passes;
+  fresh authorized evidence reads do not wait for payment fulfillment.
 
 ## Human-Owned Gates
 
@@ -178,8 +183,10 @@ Before their dependent chunks begin, the human owner must approve:
 
 - a preservation design if migration 0023 refuses retained economic facts or
   immutable receipts;
-- exact D11 AdminRole candidates for award detail, delivery recovery, and CON
-  audit surfaces;
+- exact D11 AdminRole candidates for standalone award administration, delivery
+  recovery, and CON audit surfaces. Contribution evidence export uses the
+  separately selected covering PM/exact-project Finance scope and human self
+  reads; it exports complete immutable awards without asserting payment;
 - exact AUTH ServiceIdentity/ActionId/static-row contracts for protected
   handlers and callbacks;
 - any future optional contribution-evidence projection.
