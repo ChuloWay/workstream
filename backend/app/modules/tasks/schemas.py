@@ -153,6 +153,13 @@ class TaskCreate(BaseModel):
     deadline_at: datetime | None = None
 
 
+class ImportedTaskCreate(TaskCreate):
+    """Server-stamped JSON creation values; not a public manual-create request."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    source_type: Literal["json_import"] = "json_import"
+
+
 class TaskTransitionRequest(BaseModel):
     """Optional request body for task lifecycle transitions."""
 

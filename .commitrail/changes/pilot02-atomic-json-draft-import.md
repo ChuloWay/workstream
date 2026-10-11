@@ -14,7 +14,7 @@ Issue #489 remains open after this chunk; batch transitions and CLI remain.
 
 ## Current behavior
 
-The inspected integration is `f831fda0fc8373910a71bcc0726e2a342898e890`,
+The inspected integration is `0524e56b6aa7576f748d645f672d42ce069141af`,
 based on main `7e499849ab871f445012cf9e343ff97fbb95d62d`. PR520 remains
 the separate source prerequisite. Its parser in `tasks/api/task_import.py`
 accepts one strict UTF-8 JSON document with 1..500 rows, required case-sensitive
@@ -168,8 +168,10 @@ it is not an authoritative native-UUID batch relationship.
   fields. Server metadata stamps additive source type `json_import`,
   `source_ref=task-import-source:<native source UUID>`, the actual verified
   `source_payload_hash`, and native batch UUID spelling in `import_batch_id`.
-  Select exactly `json_import` across TaskCreate, TaskTransitionFacts and the
-  closed TaskCreated payload. The sole-author successor updates the current
+  Select exactly `json_import` in the server-only ImportedTaskCreate subtype,
+  TaskTransitionFacts and the closed TaskCreated payload. Public manual-create
+  TaskCreate keeps its existing three source types; callers cannot select the
+  server-only import value through that route. The sole-author successor updates the current
   lifecycle SQL custody validator to admit that same exact token; historical
   baseline files stay unchanged. Normal manual/markdown/CSV entries remain.
   Caller input cannot choose or relabel these atomic-import server stamps.
@@ -378,7 +380,7 @@ never silently reinterprets retained rows under a later mapping.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Scope preparation only; no product code or import operation implemented | Exact schema and replay facts require affected review |
+| Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical create now has caller-root prepare/AUTH/stage phases; atomic import operation remains unimplemented | Exact schema and replay facts require affected review |
 | Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Not run; tests not authored | All positive/negative/concurrency cases above must pass |
 | Schema, guards and complete integration | Sole-author native graph/reset/UUID proof, affected guards, complete hosted lanes and aggregate | Not run for this chunk | Exact frozen candidate, actual merge tree and cleanup required |
 
@@ -395,10 +397,13 @@ still unimplemented; these are recorded schema contracts, not runtime findings.
 ## Reconciliation
 
 - Current-source reconciliation: this preparation branch incorporates source
-  prerequisite `f831fda0fc8373910a71bcc0726e2a342898e890` and main `7e499849`,
+  prerequisite `0524e56b6aa7576f748d645f672d42ce069141af` and main `7e499849`,
   retaining its ten-lane CI, hidden materialization/completion/failure/feedback
   owners and CLI approval/correction contracts. Only this planning record differs from the
-  source candidate; no atomic-import product code, test or DDL is authored.
+  source candidate before implementation. Canonical Task creation now shares
+  caller-root phases with its normal public wrapper; atomic batch creation and
+  all new native schema are not yet implemented or proven. No migration is
+  authored in this worktree.
 - Next usable boundary: review the exact batch/membership/receipt schema and
   owner preparation/replay graph, then coordinate the sole-author migration and
   implement atomic JSON-to-DRAFT import. Explicit batch screen/release and CLI

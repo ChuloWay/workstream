@@ -3,7 +3,7 @@
 import json
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import UUID
 from app.core.identifiers import new_record_id
@@ -40,6 +40,7 @@ from app.modules.tasks.schemas import (
     ManagementTaskLockedContext, OperationalTaskLockedContext, AuditTaskLockedContext,
     AssignmentResponse,
     TaskCreate,
+    ImportedTaskCreate,
     TaskResponse,
     TaskWithAssignmentResponse,
 )
@@ -53,6 +54,20 @@ from app.modules.tasks.service import (
     TaskTransitionBlocked,
     TaskValidationError,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class TaskCreationPreparation:
+    """Caller-root reservation and immutable values prepared before AUTH locks."""
+
+    project_id: UUID
+    task_id: UUID
+    payload_json: str
+    receipt: TaskCommandReceipt
+    request_digest: str
+    reserved: bool
+    current: WorkstreamTask | None
+    facts: TaskAuthorityFacts
 
 
 class AuthorizedTaskCommands:
@@ -136,37 +151,73 @@ class AuthorizedTaskCommands:
             self._authorization.close(handle)
 
     async def create_task(self, project_id: UUID, payload: TaskCreate, *, idempotency_key: UUID) -> TaskResponse:
-        """Authorize the exact proposed task before creating it in the same transaction."""
-        operation = TaskAuthorityOperation.CREATE
+        """Own the single-create root over the same preparation/AUTH/staging phases."""
         async with self._session.begin():
-            receipt, digest, reserved = await self._replay.reserve(
-                self._actor_id, operation, idempotency_key, new_record_id(), None,
-                request_value={"project_id": str(project_id), "payload": payload.model_dump(mode="json")},
-            )
-            # A duplicate may address an existing task: keep TASK before AUTH.
-            current = await self._repo.get_task(receipt.task_id, for_update=True) if not reserved else None
-            proposed = WorkstreamTask(id=receipt.task_id, project_id=str(project_id), status="draft",
-                                     created_by=str(self._actor_id), **payload.model_dump())
-            facts = replace(self._facts(proposed, None, operation, None, idempotency_key),
-                            request_digest=digest, replay_command_id=self._replay.manager_replay(receipt, operation, UUID(proposed.id), self._actor_id, idempotency_key))
-            handle = await self._authorization.prepare(facts)
-            try:
-                decision_id = await self._authorization.consume(handle, facts)
-            finally:
-                self._authorization.close(handle)
-            project = await self._contexts._project_contexts.read_project_display(project_id)
-            if project is None or project.id != project_id:
-                raise TaskProjectNotReady("project not found")
-            task = current if current is not None else proposed
-            replayed = self._replay.recover(receipt, digest, self._facts(task, None, operation, None),
-                                           task, None, reserved=reserved)
-            if replayed is not None:
-                return replayed
-            task = await self._repo.add_task(task)
-            await self._record_management(task, operation, decision_id, None, None)
-            response = self._contexts.task_response_for_authority(task, can_manage=True)
-            self._replay.complete(receipt, None, self._facts(task, None, operation, None), response)
-            await self._session.flush()
+            prepared = await self.prepare_creation(project_id, payload, idempotency_key=idempotency_key)
+            decision = await self.authorize_creation(prepared)
+            return await self.stage_creation(prepared, decision)
+
+    async def prepare_creation(
+        self, project_id: UUID, payload: TaskCreate | ImportedTaskCreate, *, idempotency_key: UUID,
+    ) -> TaskCreationPreparation:
+        """Reserve and acquire any existing TASK custody before the caller takes AUTH."""
+        if not self._session.in_transaction():
+            raise RuntimeError("task creation preparation requires the caller transaction")
+        operation = TaskAuthorityOperation.CREATE
+        receipt, digest, reserved = await self._replay.reserve(
+            self._actor_id, operation, idempotency_key, new_record_id(), None,
+            request_value={"project_id": str(project_id), "payload": payload.model_dump(mode="json")},
+        )
+        current = await self._repo.get_task(receipt.task_id, for_update=True) if not reserved else None
+        proposed = WorkstreamTask(id=receipt.task_id, project_id=str(project_id), status="draft",
+                                 created_by=str(self._actor_id), **payload.model_dump())
+        facts = replace(
+            self._facts(proposed, None, operation, None, idempotency_key), request_digest=digest,
+            replay_command_id=self._replay.manager_replay(
+                receipt, operation, UUID(proposed.id), self._actor_id, idempotency_key,
+            ),
+        )
+        return TaskCreationPreparation(project_id, UUID(proposed.id), payload.model_dump_json(),
+                                       receipt, digest, reserved, current, facts)
+
+    async def authorize_creation(self, prepared: TaskCreationPreparation) -> TaskAuthorityDecision:
+        """Consume exact current per-Task authority after all caller preparation locks."""
+        if not self._session.in_transaction() or prepared.facts.actor_profile_id != self._actor_id:
+            raise RuntimeError("task creation authority requires its original caller transaction")
+        handle = await self._authorization.prepare(prepared.facts)
+        try:
+            return await self._authorization.consume(handle, prepared.facts)
+        finally:
+            self._authorization.close(handle)
+
+    async def stage_creation(
+        self, prepared: TaskCreationPreparation, decision: TaskAuthorityDecision,
+    ) -> TaskResponse:
+        """Stage canonical creation/evidence/receipt without opening or committing a root."""
+        if not self._session.in_transaction() or prepared.facts.actor_profile_id != self._actor_id:
+            raise RuntimeError("task creation staging requires its original caller transaction")
+        payload = TypeAdapter(TaskCreate | ImportedTaskCreate).validate_json(prepared.payload_json)
+        digest = canonical_json_hash({"project_id": str(prepared.project_id), "payload": payload.model_dump(mode="json")})
+        if digest != prepared.request_digest or prepared.receipt.task_id != str(prepared.task_id):
+            raise TaskValidationError("task creation preparation changed")
+        project = await self._contexts._project_contexts.read_project_display(prepared.project_id)
+        if project is None or project.id != prepared.project_id:
+            raise TaskProjectNotReady("project not found")
+        task = prepared.current if prepared.current is not None else WorkstreamTask(
+            id=str(prepared.task_id), project_id=str(prepared.project_id), status="draft",
+            created_by=str(self._actor_id), **payload.model_dump(),
+        )
+        facts = self._facts(task, None, TaskAuthorityOperation.CREATE, None)
+        replayed = self._replay.recover(
+            prepared.receipt, prepared.request_digest, facts, task, None, reserved=prepared.reserved,
+        )
+        if replayed is not None:
+            return replayed
+        task = await self._repo.add_task(task)
+        await self._record_management(task, TaskAuthorityOperation.CREATE, decision, None, None)
+        response = self._contexts.task_response_for_authority(task, can_manage=True)
+        self._replay.complete(prepared.receipt, None, self._facts(task, None, TaskAuthorityOperation.CREATE, None), response)
+        await self._session.flush()
         return response
 
     async def screen(self, task_id: UUID, reason: str | None, *, idempotency_key: UUID) -> TaskResponse:
