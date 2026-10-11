@@ -87,7 +87,7 @@ def _command(h, operator):
     )
 
 
-async def test_retry_atomic_denial_and_rollback_after_real_missing_object(
+async def test_retry_sql_rejects_unreceipted_terminal_supersession(
     tmp_path, isolated_database_env, monkeypatch,
 ):
     async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
@@ -99,30 +99,52 @@ async def test_retry_atomic_denial_and_rollback_after_real_missing_object(
                 await evaluation_coordinator(session).reserve_current_evaluation(direct_successor)
         async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
-
-        operator = await _operator_for(h, grant=False)
-        command = _command(h, operator)
-        with pytest.raises(CheckerExecutionUnavailable, match="checker_retry_authority_unavailable"):
-            async with h.factory.begin() as session:
-                await checker_retry_service(session, operator).retry(command)
-        async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
             assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
-        async with h.factory.begin() as session:
-            await grant_fixture_admin_role(
-                session, operator.actor_profile_id, role="operator", scope="system",
-            )
+
+
+async def test_retry_without_operator_grant_denies_without_effects(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
+        operator = await _operator_for(h, grant=False)
+        with pytest.raises(CheckerExecutionUnavailable, match="checker_retry_authority_unavailable"):
+            async with h.factory.begin() as session:
+                await checker_retry_service(session, operator).retry(_command(h, operator))
+        async with h.factory() as session:
+            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+            assert await session.scalar(select(func.count()).select_from(
+                AuditEvent
+            ).where(AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value)) == 0
+
+
+async def test_retry_caller_rollback_removes_whole_successor(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
+        operator = await _operator_for(h)
         with pytest.raises(RuntimeError, match="planned caller rollback"):
             async with h.factory.begin() as session:
-                staged = await checker_retry_service(session, operator).retry(command)
+                staged = await checker_retry_service(session, operator).retry(_command(h, operator))
                 assert staged.successor.generation == 2
                 raise RuntimeError("planned caller rollback")
         async with h.factory() as session:
+            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
             assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
             assert await session.get(CheckerRun, str(staged.successor.run_id)) is None
             assert await session.get(AuditEvent, str(staged.authorization_decision_id)) is None
-        from app.adapters.audit import _CheckerRetryAudit
+
+
+async def test_retry_audit_failure_removes_whole_successor(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    from app.adapters.audit import _CheckerRetryAudit
+
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
+        operator = await _operator_for(h)
 
         async def audit_unavailable(_participant, _preparation, _successor, _authority):
             raise RuntimeError("controlled initiation audit outage")
@@ -131,14 +153,14 @@ async def test_retry_atomic_denial_and_rollback_after_real_missing_object(
             patch.setattr(_CheckerRetryAudit, "record", audit_unavailable)
             with pytest.raises(RuntimeError, match="controlled initiation audit outage"):
                 async with h.factory.begin() as session:
-                    await checker_retry_service(session, operator).retry(command)
+                    await checker_retry_service(session, operator).retry(_command(h, operator))
         async with h.factory() as session:
+            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
             assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
-            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
-        async with h.factory.begin() as session:
-            created = await checker_retry_service(session, operator).retry(command)
-        assert created.successor.generation == 2
+            assert await session.scalar(select(func.count()).select_from(
+                AuditEvent
+            ).where(AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value)) == 0
 
 
 @pytest.mark.parametrize("provider", ["local", "minio"])
