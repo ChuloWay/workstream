@@ -1,142 +1,148 @@
-# [PILOT-04] Define The One Workstream Default Checker
+# [PILOT-04] Deliver The External Checker Flow End To End
 
 - Initiative: None
-- Durable disposition: Complete
-- Intended merge outcome: Deliver one versioned, unselected Workstream default
-  checker contract and implementation with exactly four blocking defaults and
-  warning-only summary and attestation observations.
+- Durable disposition: Planned
+- Intended merge outcome: Replace both built-in checker catalogues with one
+  versioned Workstream default checker and immutable digest-pinned project
+  images, then prove ZIP-to-prechecks-to-Submission-to-post-checks without a
+  parallel runtime.
 
 ## Intent
 
-Issue #491 replaces the built-in pre- and post-submit catalogues with one
-Workstream-owned default checker plus digest-pinned project images. The merged
-external service can execute project images, but the repository does not yet
-have the one default checker whose behavior must precede those images. This
-change establishes that executable behavior and its stable result contract
-without selecting it in the current intake path.
+Issue #491 owns the complete checker cutover. A contributor ZIP must first pass
+the one Workstream default checker and every required project pre-submit image.
+Only then may the existing caller-owned transaction create an immutable
+Submission, move the task to `evaluation_pending`, and retain its durable
+initial post-submit dispatch. Post-submit images produce evidence only.
 
 ## Current behavior
 
-`backend/app/modules/checkers/pre_submit_execution.py` dispatches the current
-versioned pre-submit catalogue. It mixes platform custody checks, project rules,
-packet requirements and advisories. The post-submit catalogue separately owns
-structural defaults. Both remain active until complete replacement proof permits
-one clean cutover. The merged external runtime is intentionally unselected.
+This branch contains the normalized external contract, immutable registry,
+long-lived Rust service and SDK, typed Unix-socket client, callback-scoped ART
+grant, and the exact four-behavior Workstream default checker. Those components
+are unselected. Production still uses the older pre/post catalogues.
 
 ## Bounded change
 
 ### Allowed
 
-- This record.
-- `backend/app/modules/checkers/api/default_checker.py` for closed input/result
-  contracts, stable checker identity and behavior digest.
-- `backend/app/modules/checkers/default_checker.py` for the four Workstream
-  defaults over detached ART/TASK facts and the existing CHECKERS-owned bounded
-  material-read capability.
-- Focused tests under `backend/tests/checkers/default/` for every positive,
-  negative, infrastructure and warning boundary.
-- The existing checker custody-consumer inventory in
-  `backend/tests/test_artifact_architecture.py` for the two new same-owner
-  materialization-contract consumers.
-- The minimum test-lane and behavior-owner metadata needed to run the new tests
-  and assign the two new modules exactly once.
-- `docs/architecture_checker_framework.md` and the exact PILOT-04 checker rows
-  in `docs/roadmap_status.md` for the implemented but unselected boundary.
+- This record and affected current PILOT-04 architecture, roadmap and owner docs.
+- CHECKERS policy contracts, registry reads, default/external execution,
+  durable attempt/result custody, post routing and composition roots.
+- ART preparation, verified-material callback, evidence, admission and
+  post-submit materialization owners needed by the one selected runtime.
+- PROJECT approval persistence and activation readiness for exact registry,
+  requirement, stage, configuration and resource-limit binding.
+- TASK's existing submission composition and CHECKERS dispatch owners only to
+  compose the already-owned atomic Submission/`evaluation_pending`/outbox
+  operation after prechecks pass and to route post-submit evidence.
+- The intake route and backend/CLI schemas needed for the actual operation.
+- One successor migration plus model, Alembic graph, fingerprint, reset
+  inventory and direct-SQL guards if existing evidence tables cannot retain the
+  exact external execution and latency facts. Its ordinal follows the actual
+  single linear predecessor at publication.
+- Removal of both obsolete catalogue implementations, callers and obsolete
+  tests after replacement proof.
+- Focused contract, AUTH, custody, replay, concurrency, failure, service,
+  public API, CLI, PostgreSQL and MinIO tests and their exact CI ownership.
 
 ### Not allowed
 
-- No policy binding, guide activation/F-020, external project-image selection,
-  service composition, public route, CLI or Submission/admission caller wiring.
-- No migration, registry mutation, durable run/result/receipt, scheduler,
-  retry worker, acceptance or routing behavior.
-- No deletion, bypass or parallel execution of either current catalogue. No
-  change to their hashes, policies, active callers or tests.
-- No project required-file, project size, forbidden-file or generic rule logic.
-  No extra blocking Workstream default. Summary and attestation remain warnings.
-- No held PILOT-05, PILOT-06 or PILOT-09 work, deployment, merge or issue closure.
+- No second scheduler, store, submission lifecycle, acceptance operation,
+  policy representation, compatibility alias or parallel execution.
+- No checker-owned acceptance, Review fabrication, ContributionPolicy change,
+  payment work, provider-path authority, host socket exposure, or external
+  execution inside a database transaction.
+- No optional summary/attestation blocker. Their absence remains a warning.
+- No generic Workstream implementation of project rules; every project
+  pre/post check is an approved digest-pinned external image.
+- No PILOT-05, PILOT-06 or PILOT-09 work, deployment, merge or issue closure.
 
 ## Design and decisions
 
-The checker consumes detached owner facts rather than reparsing a ZIP or
-inventing storage access: ART's structural inspection, server-computed archive
-commitment and canonical semantic manifest, plus TASK/ART canonical predecessor
-identity. It reads bytes only through the existing CHECKERS-owned callback-scoped
-material capability, recomputes the manifest identity and rechecks every file
-digest. The existing ART sealed-tree projection satisfies that capability without
-a CHECKERS-to-ART dependency or any path/storage authority. Unsafe contributor
-archives become the one archive-safety finding; storage-integrity and timeout
-failures remain recoverable infrastructure outcomes. Exact material/manifest
-disagreement also fails as infrastructure instead of blaming the contributor.
+Approval resolves every project binding to an immutable phase-specific registry
+row and persists its row ID, entry digest, platform image manifest digest,
+schemas, configuration and resource ceilings under the locked policy hash.
+Runtime never selects a latest version or trusts a proposal string as authority.
 
-The result always has four ordered blocking slots: archive safety, received
-identity, high-confidence secrets and task-rule-aware unchanged resubmission.
-An evaluated slot is `passed` or `failed`; a slot unavailable after an unsafe
-archive is `not_run`. Warning-only summary and attestation observations are
-separate closed values. Findings retain only stable categories and counts, not
-matched bytes or contributor text.
+ART computes and verifies received bytes and the canonical file manifest before
+external execution. Its callback grant maps one sealed read-only workspace into
+the Rust service and expires on completion, timeout, disconnect or cancellation.
+The Workstream checker implements exactly archive safety, server-owned receipt
+and manifest identity, high-confidence secret detection and task-rule-aware
+unchanged-resubmission refusal. Missing summary/attestation yields warnings.
+Every required project pre image then runs in locked order. Work failures retain
+bounded findings, create no Submission or dispatch, consume no contributor
+attempt and leave the task `in_progress`. Infrastructure outcomes are
+recoverable and are not contributor-failure facts.
 
-The checker has a code-owned version and canonical behavior digest. Its manifest
-contains the exact four check identities, warning identities, and each secret
-signature's category, executable regex source and flags. The implementation
-compiles from that same canonical constant, so detector changes alter the
-behavior digest and golden contract proof. This is a Workstream implementation
-that changes only with a deploy; project rules remain external images.
+External work remains outside database transactions. After every required
+precheck passes, the caller opens one root and invokes the existing TASK
+submission composition operation, which consumes the exact admission while
+atomically creating Submission, advancing to `evaluation_pending`, reserving
+the initial evaluation and appending the dispatch event. Post workers resolve
+only locked entries, read immutable Submission material through ART and persist
+normalized evidence; they cannot accept work.
 
-This component is unselected. A later bounded cutover will bind approved
-external policy entries, execute every required pre-image through the merged
-service, and invoke the existing caller-owned atomic Submission operation only
-after this checker and all required project checks pass. Both catalogues are
-removed only after complete pre/post replacement proof; no parallel runtime is
-introduced here.
+Activation refuses any required capability suggestion without an exact
+requirement/stage binding to a registered digest-pinned image in the same
+approved generation. Registration alone, wrong project/stage/requirement, or a
+stale approval does not clear F-020. Existing false-policy and warning-
+acknowledgment guards remain.
+
+The old pre/post catalogues are removed in the same final change after every
+production caller and required proof uses the selected runtime.
 
 ## Acceptance criteria
 
-- [x] The result contract admits exactly four ordered blocking checks and only
-  the closed warning-only summary/attestation observations.
-- [x] Valid safe ZIP custody, recomputed manifest identity, no high-confidence
-  secret and first/changed work pass all four defaults.
-- [x] Malformed, encrypted, unsafe, colliding or platform-limit archives return
-  one bounded archive finding and do not expose material to later checks.
-- [x] Stored-byte/manifest disagreement, inspection timeout/integrity failure or
-  stale/unavailable predecessor facts are infrastructure outcomes, never work
-  findings or silent passes.
-- [x] Exact private-key, cloud-credential and API-token signatures fail without
-  retaining matched content; representative near misses pass.
-- [x] Exact archive or semantic-manifest replay fails unless the canonical task
-  rules/predecessor changed, with parity against the canonical owner semantics.
-- [x] Empty summary and attestation add warnings only and never change the four
-  blocking verdicts.
-- [x] Existing catalogue identities, hashes and execution tests remain unchanged;
-  no production composition selects the new checker.
+- [ ] Approval binds the default behavior digest and every project binding to
+  an exact immutable registry row, phase, image, schemas, configuration and
+  limits; substitutions and stale approvals fail closed.
+- [ ] Activation enforces exact F-020 requirement/stage/generation coverage and
+  retains false-policy and warning-acknowledgment guards.
+- [ ] ART verifies server receipt identity and a bounded safe manifest before
+  any project image reads material.
+- [ ] The default checker runs exactly four blockers; absent summary and
+  attestation remain warning-only.
+- [ ] Every required pre image passes before admission consumption. Work
+  findings create no Submission/dispatch and keep the task `in_progress`;
+  infrastructure failures remain recoverable and consume no attempt.
+- [ ] Passing preparation invokes the existing caller-owned atomic operation
+  and commits Submission, `evaluation_pending` and initial dispatch together.
+- [ ] Required post images consume immutable Submission custody, persist
+  normalized evidence and never decide acceptance.
+- [ ] Timeout, cancellation, crash/restart, changed policy/material,
+  cross-project access and duplicate delivery cannot create partial effects;
+  latency and queue/execution lineage are retained.
+- [ ] Both obsolete catalogues, implementations, callers and obsolete tests are
+  removed without a fallback or parallel runtime.
+- [ ] A real PostgreSQL 16, MinIO and Rust-service journey proves pass, work
+  failure, infrastructure/retry and post-dispatch paths with cleanup.
 
 ## Risk and review routing
 
 - Risk class: L1
-- Required reviewers: architecture, security, reuse_dedup, qa, test_delta,
-  documentation, product_ops, ci_integrity
-- Human review focus: Exact four-default boundary, high-confidence pattern
-  precision, contributor-vs-infrastructure classification, reuse of ART custody
-  and predecessor ownership, bounded secret-free results, and absence of a
-  parallel active execution path.
+- Required reviewers: architecture, security, authorization, product_ops,
+  reuse_dedup, qa, test_delta, documentation, ci_integrity
+- Human review focus: Locked policy/registry custody, TASK-before-CHECKERS
+  ordering, all-pre-before-Submission, transaction boundaries, grant lifetime,
+  work-versus-infrastructure outcomes, replay, F-020, post non-acceptance and
+  complete catalogue removal.
 
 ## Evidence
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current owner map | Source inspection of ART inspection/manifest/change owners, both current catalogues and the merged external runtime | Complete and reconciled through main `e31e1777c47b794b1d4d8240192608e4fff4f536` | Policy binding, live pre-admission orchestration, post cutover and catalogue removal remain later slices |
-| Default behavior and actual ART callback | `pytest -q tests/checkers/default/test_contract.py tests/checkers/default/test_execution.py` | 25 passed | Component remains deliberately unselected |
-| Test-lane ownership and focused behavior | `pytest -q tests/checkers/default/test_contract.py tests/checkers/default/test_execution.py tests/test_ci_lane_catalogue.py` | 71 passed | Hosted full-suite evidence follows in the draft PR |
-| Public module boundary | `pytest -q tests/architecture/test_module_boundaries.py::test_repository_matches_the_protected_module_boundary tests/architecture/test_module_boundaries.py::test_art_implements_checker_consumer_ports_without_a_public_cycle` | 2 passed | Existing catalogues retain their recorded debt until cutover |
-| Closed materialization consumer inventory | `pytest -q tests/test_artifact_architecture.py::test_checker_custody_ports_have_exact_owner_and_art_consumers` | Passed | The inventory still rejects every unregistered owner or ART consumer |
-| Behavior-owner partition | `python -m scripts.behavior_ownership validate` | Passed | Hosted evidence still validates the exact merge tree |
+| Existing component custody | Prior PR538 default, Rust service/SDK, ART callback and contract reviews | Passed at recorded component heads | Final selected flow/current-main integration pending |
+| Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | In progress | Persistence delta and migration ordinal await actual linear predecessor |
+| End-to-end replacement | Real PostgreSQL/MinIO/Rust public and worker journey | Not run | Implementation incomplete |
 
 ## Reconciliation
 
-- Current-source reconciliation: Started from merged PR #528 at
-  `e77c48b1086c95cc4c2fc05bdf2fdcffdce52494` and reconciled additively with
-  current main `e31e1777c47b794b1d4d8240192608e4fff4f536`.
-- Next usable boundary: Bind approved external policy identities and compose the
-  default plus every required project pre-image before the existing atomic
-  Submission operation.
-- Remaining risks: No caller selects this component in this change; whole-issue
-  acceptance, F-020 and both-catalogue removal remain open.
+- Current-source reconciliation: implementation starts at PR538 head
+  `7453a0d8c5664cfd486872a381899f3755393004`; final publication will reconcile
+  actual merged `main` and intervening owners.
+- Next usable boundary: full selected checker journey; no component-only merge.
+- Remaining risks: exact durable external pre-attempt/result projection may
+  require a successor migration. Numbering and fingerprints resolve only
+  against the actual linear graph; no competing ordinal is reserved here.
