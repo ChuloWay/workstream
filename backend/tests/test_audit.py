@@ -1203,6 +1203,7 @@ def _lifecycle_input(**overrides) -> LifecycleAuditEventInput:
 
 def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
     event_groups = {
+        LifecycleAuditEntityType.CHECKER_RUN: {LifecycleAuditEventType.CHECKER_RETRY_REQUESTED},
         LifecycleAuditEntityType.TASK: {
             LifecycleAuditEventType.TASK_CREATED,
             LifecycleAuditEventType.TASK_SCREENED,
@@ -1261,6 +1262,7 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
     }
     assert set().union(*event_groups.values()) == set(LifecycleAuditEventType)
     entity_references = {
+        LifecycleAuditEntityType.CHECKER_RUN: LifecycleAuditReferenceKind.CHECKER_RUN,
         LifecycleAuditEntityType.TASK: LifecycleAuditReferenceKind.TASK,
         LifecycleAuditEntityType.REVIEW_QUEUE_ENTRY: LifecycleAuditReferenceKind.REVIEW_QUEUE_ENTRY,
         LifecycleAuditEntityType.REVIEW_LEASE: LifecycleAuditReferenceKind.REVIEW_LEASE,
@@ -1306,6 +1308,16 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
             elif event_type is LifecycleAuditEventType.COMPENSATION_AWARD_CREATED:
                 references[LifecycleAuditReferenceKind.CONTRIBUTION_RECORD] = new_record_id()
             transition = {}
+            if event_type is LifecycleAuditEventType.CHECKER_RETRY_REQUESTED:
+                references.update({reference: new_record_id() for reference in (
+                    LifecycleAuditReferenceKind.TASK, LifecycleAuditReferenceKind.ASSIGNMENT,
+                    LifecycleAuditReferenceKind.SUBMISSION, LifecycleAuditReferenceKind.SOURCE_CHECKER_RUN,
+                    LifecycleAuditReferenceKind.AUTHORIZATION_DECISION, LifecycleAuditReferenceKind.OUTBOX_EVENT,
+                )})
+                transition.update(
+                    authorization_resource_digest="sha256:" + "a" * 64,
+                    operator_reason="Retry known infrastructure failure",
+                )
             if entity_type is LifecycleAuditEntityType.TASK:
                 references.update({
                     LifecycleAuditReferenceKind.ASSIGNMENT: new_record_id(),
