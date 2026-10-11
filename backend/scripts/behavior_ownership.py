@@ -137,6 +137,13 @@ PILOT_04_REGISTRY_TARGETS = frozenset(
         "backend/app/modules/checkers/external_registry.py",
     }
 )
+PILOT_04_RUNTIME_TARGETS = frozenset(
+    {
+        "backend/app/adapters/checkers/external_service.py",
+        "backend/app/interfaces/external_checker_execution.py",
+        "backend/app/modules/artifacts/preparation.py",
+    }
+)
 LOCAL_PILOT_HELPER_TARGETS = frozenset(
     {
         "backend/scripts/ensure_local_minio_bucket.py",
@@ -630,6 +637,8 @@ PILOT_02A_IMPORT_SOURCE_TARGETS = frozenset({
 })
 PILOT_02B_ATOMIC_IMPORT_TARGETS = frozenset({
     "backend/app/modules/tasks/task_import_batches.py",
+    "backend/app/modules/tasks/task_import_membership.py",
+    "backend/app/modules/tasks/api/task_import_membership.py",
 })
 
 
@@ -812,6 +821,7 @@ def _validate_additive_partition_transition(
         | ARCH_03B9_TARGETS
         | CI_LANE_CATALOGUE_TARGETS
         | PILOT_04_REGISTRY_TARGETS
+        | PILOT_04_RUNTIME_TARGETS
         | LOCAL_PILOT_HELPER_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS

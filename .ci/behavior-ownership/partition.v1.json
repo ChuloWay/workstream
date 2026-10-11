@@ -37,6 +37,10 @@
       "target": "backend/app/adapters/auth/metrics.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/external_service.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/adapters/observability.py"
     },
@@ -215,6 +219,10 @@
     {
       "group": "auth",
       "target": "backend/app/interfaces/auth.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/interfaces/external_checker_execution.py"
     },
     {
       "group": "artifacts",
@@ -1550,6 +1558,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_import_membership.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/transition_audit.py"
     },
     {
@@ -1651,6 +1663,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/task_import_batches.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_import_membership.py"
     },
     {
       "group": "auth",
@@ -1801,7 +1817,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "fccb894db43d59f708dde7c3b9839b778f9715f685e34070be564c11ad6a5efe",
+  "authority_digest": "36fe9ccf77c46fdfed571b5a853cb6495c4a9a2f45d29d794b5840ce75270cb3",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

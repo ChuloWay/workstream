@@ -37,6 +37,13 @@ it is not an authoritative native-UUID batch relationship.
   `authorized_commands.py`, `command_replay.py`, `models.py`, `schemas.py`,
   `repository.py` and `router.py`: typed import/status contracts, immutable batch
   receipt and row membership, server provenance and reuse of canonical creation.
+- Coordinated shared extraction: `task_import_membership.py` and its typed
+  `api/task_import_membership.py` are the single native original-response/member
+  validator used by import/status and the separate bulk owner. SCREEN/RELEASE
+  prepare/authorize/stage phases preserve the existing single-Task wrapper;
+  CREATE and source preparation remain unchanged. Retain the native participant
+  test in `tests/authorization/task_authority/test_management_participants.py`
+  and its exact shared-lane/owner inventory.
 - ART: `task_import_sources.py` implements TASK’s bounded source-consumer
   preparation/binding port over the existing verified source. ART already
   depends on TASK’s canonical parser; the consumer contract remains in TASK
@@ -446,6 +453,7 @@ never silently reinterprets retained rows under a later mapping.
 |---|---|---|---|
 | Canonical creation participant | Exact `59d47a6c` isolated native execution of five retained CREATE, denial, rollback and receipt controls | 5 passed in 69.02 seconds; schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Proves preservation of normal creation; no atomic batch success claim |
 | Source consumer and current CREATE participants | Exact `37d8705d` isolated execution of actual immutable-binding substitution/provider-health, public source, canonical denial, CREATE rollback and receipt controls | 10 passed in 120.95 seconds; runner exit 0, schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Raw `/tmp/pilot02-atomic-37d-source-create-corrected.log` and `.json`; validates existing owner integration, not installed batch schema |
+| Shared SCREEN/RELEASE participant and membership extraction | Inspected sibling exact `4400568a` native replay; seven source/test files integrated as `96b1fb820` without its separate CLI record | 5 passed in 225.05 seconds; runner exit 0, schema `0031_task_import_source`; database/role cleanup complete | Raw `/tmp/pilot02-bulk-4400568-native.log` and `.json`; historical exact extraction proof, not a new batch-schema or public bulk success claim |
 | Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical caller-root phases, closed batch DTOs, model representations, ART immutable-binding participant and batch/root/AUTH composition are implemented | New table constraints and guards require sole-author DDL and native proof |
 | Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Twenty-four native acceptance cases collect; not executed because batch schema is not installed | Actual 200-Task creation, immutable replay, late-stage rollback, direct SQL guards, exact original-authority revocation and intermediate-wait controls must pass after sole-author DDL |
 | Schema, guards and complete integration | Sole-author native graph/reset/UUID proof, affected guards, complete hosted lanes and aggregate | Not run for this chunk | Exact frozen candidate, actual merge tree and cleanup required |
@@ -467,7 +475,7 @@ not prove installed custody or a public import result.
 ## Reconciliation
 
 - Current-source reconciliation: this preparation branch incorporates source
-  prerequisite PR520 and merged main `d3c50e15`,
+  prerequisite PR520 and merged main `e77c48b10`,
   retaining its ten-lane CI, hidden materialization/completion/failure/feedback
   owners and CLI approval/correction contracts. Before implementation, only
   this planning record differed from the source candidate. Canonical Task creation now shares
@@ -481,6 +489,7 @@ not prove installed custody or a public import result.
   the coded atomic JSON-to-DRAFT operation through public native acceptance cases.
   No migration ordinal is allocated before the actual merged predecessor and
   delegated migration queue are reconciled. Explicit batch screen/release and CLI
-  project/source/batch commands with client CSV conversion remain later chunks.
+  project/source/batch commands with client CSV conversion are implemented on a
+  separate coordinated lane; its public/native aggregate journey remains pending.
 - Remaining risks: source prerequisite and current required CI/actual external
   review remain separate; no deployed import capability or whole Issue 489 claim.

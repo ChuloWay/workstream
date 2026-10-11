@@ -48,6 +48,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/external/test_migration.py",
         "tests/checkers/external/test_postgresql.py",
         "tests/checkers/external/test_registry.py",
+        "tests/checkers/external/test_runtime.py",
         "tests/checkers/execution/test_results.py",
         "tests/checkers/execution/test_execution.py",
         "tests/checkers/execution/test_coordination.py",
@@ -375,6 +376,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
     assert "tests/tasks/evaluation_delivery/test_worker_materialization.py" in shared_a
     assert "tests/artifacts/test_review_packet_contract.py" in shared_a
+    assert "tests/authorization/task_authority/test_management_participants.py" in shared_a
     assert {
         "tests/test_task_import_sources.py",
         "tests/authorization/post_submit/test_atomicity.py",
@@ -739,6 +741,16 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
         "name: backend-semantic-lane-evidence-${{ steps.identity.outputs.tree_sha }}-attempt-${{ github.run_attempt }}"
         in source
     )
+
+
+def test_workflow_requires_the_locked_external_checker_workspace() -> None:
+    source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
+    assert source.count("external-checker-runtime:") == 1
+    assert "rustup toolchain install 1.84.0 --profile minimal --component rustfmt" in source
+    assert "cargo fmt --all --check" in source
+    assert "cargo test --workspace --locked" in source
+    assert "EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}" in source
+    assert 'test "${EXTERNAL_CHECKER_RESULT}" = success' in source
 
 
 def test_former_coverage_reruns_remain_in_full_suite_lanes() -> None:

@@ -166,6 +166,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/task_authority/test_lifecycle_races.py",
     "tests/authorization/task_authority/test_task_commands.py",
     "tests/authorization/task_authority/test_management_commands.py",
+    "tests/authorization/task_authority/test_management_participants.py",
     "tests/authorization/task_authority/test_management_concurrency.py",
     "tests/authorization/task_authority/test_management_authority.py",
     "tests/authorization/task_authority/test_management_contracts.py",
@@ -417,6 +418,7 @@ PROJECT_AC_PARTITION_MODULES = (
 # three-way partition; exclusive placement exceeded the hosted execution cap.
 CHECKER_DELIVERY_MODULES = (
     "tests/checkers/external/test_contracts.py",
+    "tests/checkers/external/test_runtime.py",
     "tests/checkers/external/test_migration.py",
     "tests/checkers/external/test_postgresql.py",
     "tests/checkers/external/test_registry.py",
