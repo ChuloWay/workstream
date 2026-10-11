@@ -380,6 +380,13 @@ complete returned target, and never activates a guide or retries automatically.
 --input FILE --idempotency-key UUID` requests a unified setup successor for the
 inspected policy and supplied feedback. Its saved correction receipt does not
 dispatch setup, replace policy content or activate a guide.
+`workstream project guide correct PROJECT_ID GUIDE_ID COMPILATION_ID --input
+FILE --idempotency-key UUID` saves correction feedback for the exact finalized
+proposal. `workstream project guide dispatch-correction PROJECT_ID GUIDE_ID
+COMPILATION_ID --input FILE` explicitly dispatches the successor identified by
+that saved correction receipt (or the `correction` member from `correct-post`).
+It reports the backend's diagnostic status, not completed processing or activation;
+uncertain writes are never automatically retried.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
