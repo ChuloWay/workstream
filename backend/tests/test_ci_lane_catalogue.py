@@ -119,6 +119,14 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         set(catalogue.CHECKER_DELIVERY_MODULES)
         | set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
         | {
+            "tests/contributions/test_export_csv.py",
+            "tests/contributions/test_export_projection.py",
+            "tests/authorization/test_contribution_read_scope.py",
+            "tests/authorization/test_contribution_read_kernel.py",
+            "tests/contributions/exports/test_source_reads.py",
+            "tests/contributions/exports/test_public_reads.py",
+            "tests/contributions/exports/test_failures.py",
+            "tests/contributions/exports/test_concurrency.py",
             "tests/tasks/evaluation_delivery/test_custody.py",
             "tests/tasks/evaluation_delivery/test_delivery.py",
             "tests/tasks/evaluation_delivery/test_isolation.py",

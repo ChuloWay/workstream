@@ -954,8 +954,9 @@ records. It accepts no contributor selector. `GET
 /api/v1/projects/{project_id}/contributions/export` selects exactly one project.
 A Project Manager's active system or exact-project grant covers that project;
 a Finance Authority must have an active grant on that exact project. A
-system-only Finance grant, Operator, Audit Authority, service principal or token
-role claim does not authorize project disclosure. Missing or ungranted project
+system-only Finance grant, Operator, Audit Authority or service principal does
+not authorize project disclosure. Token claims confer no Workstream grant.
+Missing or ungranted project
 selectors are concealed and absent from target audit evidence. Historical project
 status does not erase immutable contribution facts.
 

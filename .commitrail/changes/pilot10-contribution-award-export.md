@@ -93,6 +93,18 @@ and [exported snapshot lifetime](https://www.postgresql.org/docs/16/functions-ad
   affected obsolete D11/read-release clauses.
 - Required additive test-lane/behavior ownership metadata and the selected MCP
   authorization-context enum snapshot only after shared-file coordination.
+  Root authorizes the exact eight new test modules in existing
+  `backend/scripts/test_lane_catalogue.py`'s `PROJECT_MODULES`; no lane, cap or
+  workflow reduction. Update only the corresponding exact inventory set in
+  `backend/tests/test_ci_lane_catalogue.py`; keep its equality assertions.
+  `backend/scripts/behavior_ownership.py` admits only the
+  21 new eligible source paths in a closed PILOT-10 frozenset. Regenerate
+  `.ci/behavior-ownership/partition.v1.json` preserving its protected base and
+  all existing target assignments. Capture only
+  `mcp_server/contracts/authorization_context_get.json`, whose ActionId enum
+  gains the two exact contribution reads; other selected contracts must stay
+  byte-equivalent. P02 owns its separate source-module additions and later
+  enum/metadata union after source migration merge.
 - Any necessary audit-constraint or snapshot DDL only by the existing sole
   migration author, after an exact schema handoff and linear-head allocation.
 
