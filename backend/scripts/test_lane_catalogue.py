@@ -166,6 +166,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/task_authority/test_lifecycle_races.py",
     "tests/authorization/task_authority/test_task_commands.py",
     "tests/authorization/task_authority/test_management_commands.py",
+    "tests/authorization/task_authority/test_management_participants.py",
     "tests/authorization/task_authority/test_management_concurrency.py",
     "tests/authorization/task_authority/test_management_authority.py",
     "tests/authorization/task_authority/test_management_contracts.py",
@@ -261,12 +262,15 @@ SHARED_FOUNDATION_MODULES = (
 PROJECT_MODULES = (
     "tests/contributions/test_export_csv.py",
     "tests/contributions/test_export_projection.py",
+    "tests/contributions/test_export_cursors.py",
+    "tests/contributions/test_export_model_registry.py",
     "tests/authorization/test_contribution_read_scope.py",
     "tests/authorization/test_contribution_read_kernel.py",
     "tests/contributions/exports/test_source_reads.py",
     "tests/contributions/exports/test_public_reads.py",
     "tests/contributions/exports/test_failures.py",
     "tests/contributions/exports/test_concurrency.py",
+    "tests/contributions/exports/test_pagination.py",
     # Atomic submission composition shares the existing multi-owner project lanes;
     # task C and schema are close to their cap on the merged baseline.
     "tests/tasks/evaluation_delivery/test_custody.py",
@@ -424,6 +428,7 @@ PROJECT_AC_PARTITION_MODULES = (
 # Checker delivery shares project dispatch ownership and the existing
 # three-way partition; exclusive placement exceeded the hosted execution cap.
 CHECKER_DELIVERY_MODULES = (
+    "tests/authorization/pre_submit/test_contracts.py",
     "tests/checkers/default/test_contract.py",
     "tests/checkers/default/test_execution.py",
     "tests/checkers/external/test_contracts.py",
@@ -431,6 +436,12 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers/external/test_migration.py",
     "tests/checkers/external/test_postgresql.py",
     "tests/checkers/external/test_registry.py",
+    "tests/checkers/external/test_policy.py",
+    "tests/checkers/external/test_selected_post_submit.py",
+    "tests/checkers/external/test_selected_pre_submit.py",
+    "tests/checkers/external/test_selected_pre_submit_coordination.py",
+    "tests/checkers/external/test_selected_pre_submit_service.py",
+    "tests/checkers/external/test_selected_preparation_command.py",
     "tests/checkers/execution/test_results.py",
     "tests/checkers/execution/test_execution.py",
     "tests/checkers/execution/test_coordination.py",
@@ -448,7 +459,12 @@ CHECKER_DELIVERY_MODULES = (
 
 
 TASK_MODULES = (
+    "tests/tasks/test_task_batch_transition_contract.py",
+    "tests/tasks/test_task_batch_transitions.py",
     "tests/tasks/test_task_import_contract.py",
+    "tests/tasks/test_task_import_batch_contract.py",
+    "tests/tasks/test_task_import_batch_bindings.py",
+    "tests/tasks/test_task_import_batches.py",
     "tests/checkers/execution/test_completion_evidence.py",
     "tests/checkers/execution/test_completion_contract.py",
     "tests/tasks/post_submit_routing/test_failure_completion.py",
