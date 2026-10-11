@@ -36,7 +36,11 @@ are unselected. Production still uses the older pre/post catalogues.
 - TASK's existing submission composition and CHECKERS dispatch owners only to
   compose the already-owned atomic Submission/`evaluation_pending`/outbox
   operation after prechecks pass and to route post-submit evidence.
-- The intake route and backend/CLI schemas needed for the actual operation.
+- The minimum existing hidden preparation-to-Submission composition needed to
+  prove PILOT-04. PILOT-12 retains assignment-bound upload intent, contributor
+  REST/CLI intake and requirements-read surfaces. The existing hidden command
+  stops rejecting absent summary/attestation so the default checker can retain
+  warning-only observations; this does not publish the PILOT-12 surface.
 - One successor migration plus model, Alembic graph, fingerprint, reset
   inventory and direct-SQL guards if existing evidence tables cannot retain the
   exact external execution and latency facts. Its ordinal follows the actual
@@ -92,6 +96,23 @@ acknowledgment guards remain.
 
 The old pre/post catalogues are removed in the same final change after every
 production caller and required proof uses the selected runtime.
+Retained approvals, locked guides, evidence and completed runs are never
+rewritten or deleted. Historical decoders remain narrowly scoped to immutable
+old evidence. An unresolved old-catalogue queue item or locked guide fails
+closed and requires an authorized recompile/reapproval transition; it is never
+silently run through a new image. This retained-data reader is not an executable
+compatibility runtime.
+
+Pre execution uses a durable lease/generation fence. One root reserves the
+exact prepared-generation, policy, registry and request identities, commits,
+then the ART callback and external service execute without a database
+transaction. A fresh root locks TASK currentness before CHECKERS attempt state,
+verifies lease/generation and material/result/isolation identities, and appends
+the immutable outcome or marks a recoverable infrastructure result. Expired
+leases may be reclaimed under the same locks; a crashed process-local grant is
+never serialized or resumed. Queue/read-current/reserve, completion, replay and
+acknowledgment all acquire TASK custody before CHECKERS state, including the
+retained intermediate-wait regression.
 
 ## Acceptance criteria
 
@@ -114,6 +135,9 @@ production caller and required proof uses the selected runtime.
 - [ ] Timeout, cancellation, crash/restart, changed policy/material,
   cross-project access and duplicate delivery cannot create partial effects;
   latency and queue/execution lineage are retained.
+- [ ] Retained old evidence remains readable without rewriting hashes; unresolved
+  old execution cannot cross into the new runtime and requires authorized policy
+  transition.
 - [ ] Both obsolete catalogues, implementations, callers and obsolete tests are
   removed without a fallback or parallel runtime.
 - [ ] A real PostgreSQL 16, MinIO and Rust-service journey proves pass, work
@@ -125,9 +149,10 @@ production caller and required proof uses the selected runtime.
 - Required reviewers: architecture, security, authorization, product_ops,
   reuse_dedup, qa, test_delta, documentation, ci_integrity
 - Human review focus: Locked policy/registry custody, TASK-before-CHECKERS
-  ordering, all-pre-before-Submission, transaction boundaries, grant lifetime,
-  work-versus-infrastructure outcomes, replay, F-020, post non-acceptance and
-  complete catalogue removal.
+  ordering for read-current/reserve/enqueue/complete/replay/acknowledge,
+  all-pre-before-Submission, transaction boundaries, durable pre lease and
+  process-local grant lifetime, work-versus-infrastructure outcomes, retained
+  history, F-020, post non-acceptance and complete catalogue removal.
 
 ## Evidence
 
