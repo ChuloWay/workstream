@@ -129,7 +129,9 @@ async def test_replay_keeps_original_facts_after_advancement_without_provider_or
     """Committed replay reads native ancestry; current Tasks remain separate facts."""
     client = import_source_client
     project = (await create_active_project(client, slug="batch-advance-" + uuid4().hex))["id"]
-    source = await _verified_source(client, project, document(2))
+    value = document(2)
+    value["tasks"][0]["acceptance_criteria"] = "Preserve the source meaning and include supporting evidence."
+    source = await _verified_source(client, project, value)
     headers = auth_headers()
     imported = await client.post(_batch_path(project), headers=headers, json={"source_id": source["source_id"]})
     assert imported.status_code == 201, imported.text

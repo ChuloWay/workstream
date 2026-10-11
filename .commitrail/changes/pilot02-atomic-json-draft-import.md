@@ -481,6 +481,14 @@ scripted; actual source bytes still use real MinIO PUT and verification. No
 production validation or migration is changed; the failed public case and full
 26-case replay remain required before readiness.
 
+At exact `99b4d170`, the integrated replay again passed the 200-row and two label
+controls. The startup repair also allowed source upload and the advancement
+import to succeed; canonical SCREEN then correctly rejected its minimal input
+for missing acceptance criteria. The advancement fixture now includes legitimate
+criteria in the original verified JSON, rather than changing a Task or weakening
+SCREEN. That run ended 3 passed / 1 failed in 180.57 seconds with complete owned
+cleanup; the complete 26-case acceptance remains pending.
+
 Independent schema/lock handoff review at exact `37d8705d` found no actionable
 architecture/reuse/security issue in the non-DDL models, replay and preparation
 graph. This qualified review does not prove native guards or public batch
