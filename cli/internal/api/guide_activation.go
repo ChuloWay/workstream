@@ -158,8 +158,15 @@ func (c *Client) safeActivationReceipt(raw json.RawMessage) bool {
 		if err != nil {
 			return false
 		}
-		if text, ok := token.(string); ok && (!c.safeMetadata(text) || sameUUID(text, c.token)) {
-			return false
+		switch value := token.(type) {
+		case string:
+			if !c.safeMetadata(value) || sameUUID(value, c.token) {
+				return false
+			}
+		case json.Number:
+			if !c.safeMetadata(value.String()) {
+				return false
+			}
 		}
 	}
 }

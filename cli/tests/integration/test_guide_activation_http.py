@@ -292,6 +292,7 @@ def test_activation_credentials_denials_and_no_transport_retry(cli, tmp_path):
         path = write_input(tmp_path)
         response["body"] = json.dumps(receipt()).encode()
         unknown(invoke(cli, origin, path, token=UUID(OTHER).hex))
+        unknown(invoke(cli, origin, path, token=str(LARGE)))
         response["drop"] = True
         result = invoke(cli, origin, path, output="text")
         assert result.returncode == 1 and result.stdout == ""
@@ -299,7 +300,7 @@ def test_activation_credentials_denials_and_no_transport_retry(cli, tmp_path):
             "unchanged project, guide, input file contents and idempotency key"
             in result.stderr
         )
-        assert len(requests) == 12
+        assert len(requests) == 13
     with goaway_fixture(tmp_path) as (origin, env, bodies, connections):
         unknown(invoke(cli, origin, path, extra_env=env), "service_unavailable")
         assert connections == ["h2"] and bodies == [path.read_bytes()]
