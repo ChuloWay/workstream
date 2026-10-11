@@ -249,7 +249,7 @@ class GuideActivationService:
                 raise GuideProposalError("approval_blocked")
         else:
             require_catalogues(target, self.pre_catalogue, self.post_catalogue)
-        post.compiled.validate_catalogue(self.post_catalogue)
+            post.compiled.validate_catalogue(self.post_catalogue)
         ProjectService(self.session).validate_activation_ready(
             locked.view.guide,
             locked.view.snapshot,
