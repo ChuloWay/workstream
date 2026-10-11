@@ -2402,8 +2402,7 @@ class ArtifactAdmissionService:
                 if current.predecessor_submission_id is not None
                 else None,
                 current.predecessor_submission_version,
-                str(current.checker_remediation_manifest_id)
-                if current.checker_remediation_manifest_id is not None else None,
+                current.checker_remediation_manifest_id,
                 str(current.guide_id),
                 current.guide_version,
                 str(current.source_snapshot_id),
@@ -2491,10 +2490,7 @@ class ArtifactAdmissionService:
                 else None
             )
             or evidence.checker_remediation_manifest_id
-            != (
-                str(pass_capability.checker_remediation_manifest_id)
-                if pass_capability.checker_remediation_manifest_id is not None else None
-            )
+            != pass_capability.checker_remediation_manifest_id
             or evidence.effective_plan_sha256 != pass_capability.effective_plan_sha256
             or evidence.semantic_manifest_sha256 != pass_capability.semantic_manifest_sha256
             or evidence.storage_scheme != pass_capability.storage_scheme
@@ -2537,8 +2533,7 @@ class ArtifactAdmissionService:
             locked.project_id != UUID(evidence.project_id)
             or (task.predecessor.version if task.predecessor else None)
             != evidence.predecessor_submission_version
-            or (str(task.checker_remediation_manifest_id)
-                if task.checker_remediation_manifest_id is not None else None)
+            or task.checker_remediation_manifest_id
             != evidence.checker_remediation_manifest_id
             or task.submitter_contribution_policy_version_id
             != locked.activation_receipt.command.contribution_policy_version_id
@@ -2571,10 +2566,7 @@ class ArtifactAdmissionService:
                 else None
             ),
             predecessor_submission_version=evidence.predecessor_submission_version,
-            checker_remediation_manifest_id=(
-                UUID(evidence.checker_remediation_manifest_id)
-                if evidence.checker_remediation_manifest_id is not None else None
-            ),
+            checker_remediation_manifest_id=evidence.checker_remediation_manifest_id,
             pre_submit_evidence_set_id=UUID(evidence.id),
             prepared_generation_id=UUID(evidence.prepared_generation_id),
             guide_id=UUID(evidence.guide_id),

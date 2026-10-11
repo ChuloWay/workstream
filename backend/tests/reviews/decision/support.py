@@ -29,7 +29,7 @@ from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
 from app.modules.tasks.models import Submission
 from tests.checkers.execution.support import live_executor, reserve
 from tests.reviews.packet.support import packet_source, prepare_packet
-from tests.tasks.post_submit_routing.support import source_values
+from tests.tasks.post_submit_routing.support import next_request, source_values
 from tests.tasks.submission_lineage_support import _verified_admission
 from tests.test_artifact_admission import _context
 from tests.test_default_pre_submit_execution import _bytes
@@ -175,8 +175,74 @@ async def close_review_lease(session, source):
     )
 
 
+async def _route_replacement_cause(h):
+    """Route a later real contributor failure without changing the reviewed run."""
+    from app.adapters.tasks import evaluation_completion_handler
+    from app.modules.outbox.api import HandlerOutcome
+    from tests.authorization.post_submit_routing.support import provision_router
+    from tests.checkers.execution.completion_fixture import controlled_registry
+    from tests.tasks.post_submit_routing.outcome_support import invoked_completion
+
+    async with h.factory() as session:
+        current = (
+            await session.execute(
+                text("""
+            SELECT t.status, f.current_run_id FROM public.workstream_tasks t
+            JOIN public.checker_submission_fences f ON f.submission_id=:submission
+            WHERE t.id=:task
+        """),
+                {"submission": h.request.submission_id, "task": h.request.task_id},
+            )
+        ).one()
+        assert current.status == "evaluation_pending"
+        assert str(current.current_run_id) == str(h.result.attempt_id)
+    failure = SimpleNamespace(**vars(h))
+    await next_request(failure)
+    await reserve(failure)
+    failure.result = await live_executor(
+        failure, registry=controlled_registry("needs_revision")
+    ).evaluate_post_submission(failure.request)
+    async with h.factory() as session:
+        run = await session.get(CheckerRun, str(failure.result.attempt_id))
+        assert run.status == "completed" and run.routing_recommendation == "needs_revision"
+        failure.material = dict(run.material_custody)
+    failure.source = await source_values(failure)
+    async with h.factory() as session, session.begin():
+        await session.execute(
+            text("UPDATE public.task_assignments SET accepted_at=clock_timestamp() WHERE id=:id"),
+            {"id": h.request.assignment_id},
+        )
+    await provision_router(h.factory)
+    failure.envelope = await invoked_completion(failure)
+    assert (
+        await evaluation_completion_handler(sessions=h.factory)(failure.envelope)
+        is HandlerOutcome.ACKNOWLEDGE
+    )
+    async with h.factory() as session:
+        assert (
+            await session.scalar(
+                text("SELECT status FROM public.workstream_tasks WHERE id=:id"),
+                {"id": h.request.task_id},
+            )
+            == "needs_revision"
+        )
+        assert (
+            await session.scalar(
+                text("""
+            SELECT public.task_routing_outcome_complete(m)
+            FROM public.task_post_submit_routing_manifests m
+            WHERE m.checker_run_id=:run
+        """),
+                {"run": failure.result.attempt_id},
+            )
+            is True
+        )
+
+
 async def _admit_successor(h):
-    """Create real admitted successor bytes; only task routing is fixture-arranged."""
+    """Create real admitted successor bytes from an authorized later failure."""
+
+    await _route_replacement_cause(h)
 
     async with h.factory() as session:
         prior = await session.get(Submission, str(h.request.submission_id))
@@ -189,11 +255,6 @@ async def _admit_successor(h):
         context = _context(
             actor_profile_id=UUID(prior.contributor_id), identity_link_id=UUID(str(link))
         )
-        await session.execute(
-            text("UPDATE public.workstream_tasks SET status='needs_revision' WHERE id=:id"),
-            {"id": h.request.task_id},
-        )
-        await session.commit()
 
     revised_bytes = BytesIO()
     with (

@@ -566,6 +566,7 @@ class _PreSubmitEvidenceRepository:
             key: str(value) if isinstance(value, UUID) else value
             for key, value in asdict(context).items()
         }
+        values["checker_remediation_manifest_id"] = context.checker_remediation_manifest_id
         values = {
             "operation_identity": operation_identity,
             **values,

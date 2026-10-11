@@ -336,8 +336,7 @@ class SubmissionAdmissionConsumptionService:
             and admission.predecessor_submission_version
             == (predecessor.version if predecessor is not None else None)
             and admission.checker_remediation_manifest_id
-            == (str(context.checker_remediation_manifest_id)
-                if context.checker_remediation_manifest_id is not None else None)
+            == context.checker_remediation_manifest_id
             and evidence.guide_version == references.guide_version
             and evidence.source_snapshot_id == str(references.source_snapshot_id)
             and evidence.source_snapshot_sha256 == references.source_snapshot_hash
@@ -368,10 +367,7 @@ class SubmissionAdmissionConsumptionService:
                 else None
             ),
             predecessor_submission_version=admission.predecessor_submission_version,
-            checker_remediation_manifest_id=(
-                UUID(admission.checker_remediation_manifest_id)
-                if admission.checker_remediation_manifest_id is not None else None
-            ),
+            checker_remediation_manifest_id=admission.checker_remediation_manifest_id,
             submission_id=request.submission_id,
             submission_version=request.submission_version,
             guide_id=UUID(evidence.guide_id),
