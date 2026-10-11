@@ -119,31 +119,45 @@ class SelectedPreSubmitExecutionFacts:
 
 
 @dataclass(frozen=True, slots=True)
-class SelectedPreSubmitLeaseFacts:
-    """Database-timed generation for one genuine pre-admission ART attempt."""
+class SelectedPreSubmitReservationFacts:
+    """Complete durable PRE request reserved before any external work starts."""
 
+    actor_profile_id: UUID
+    identity_link_id: UUID
+    project_id: UUID
+    task_id: UUID
+    assignment_id: UUID
     attempt_id: UUID
     attempt_request_digest: str
     prepared_generation_id: UUID
     policy_sha256: str
     default_behavior_sha256: str
-    lease_id: UUID
-    lease_generation: int
-    lease_expires_at: datetime
+    default_input_sha256: str
+    archive_sha256: str
+    archive_byte_count: int
+    semantic_manifest_sha256: str
 
     def __post_init__(self) -> None:
-        """Reject a copied identifier or an unbounded/non-current lease shape."""
+        """Reject partial authority, material, policy or default-input custody."""
+        identifiers = (
+            self.actor_profile_id,
+            self.identity_link_id,
+            self.project_id,
+            self.task_id,
+            self.assignment_id,
+            self.attempt_id,
+            self.prepared_generation_id,
+        )
         digests = (
             self.attempt_request_digest,
             self.policy_sha256,
             self.default_behavior_sha256,
+            self.default_input_sha256,
+            self.archive_sha256,
+            self.semantic_manifest_sha256,
         )
         if (
-            any(type(value) is not UUID for value in (
-                self.attempt_id,
-                self.prepared_generation_id,
-                self.lease_id,
-            ))
+            any(type(value) is not UUID for value in identifiers)
             or any(
                 type(value) is not str
                 or len(value) != 71
@@ -151,6 +165,51 @@ class SelectedPreSubmitLeaseFacts:
                 for value in digests
             )
             or self.default_behavior_sha256 != WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
+            or type(self.archive_byte_count) is not int
+            or self.archive_byte_count < 0
+        ):
+            raise ValueError("selected PRE reservation facts are invalid")
+
+    def canonical_body(self) -> dict[str, object]:
+        """Bind the actual contributor, task, ART generation, policy and bytes."""
+        return {
+            "schema_version": "workstream.selected_pre_submit_reservation.v1",
+            "actor_profile_id": str(self.actor_profile_id),
+            "identity_link_id": str(self.identity_link_id),
+            "project_id": str(self.project_id),
+            "task_id": str(self.task_id),
+            "assignment_id": str(self.assignment_id),
+            "attempt_id": str(self.attempt_id),
+            "attempt_request_digest": self.attempt_request_digest,
+            "prepared_generation_id": str(self.prepared_generation_id),
+            "policy_sha256": self.policy_sha256,
+            "default_behavior_sha256": self.default_behavior_sha256,
+            "default_input_sha256": self.default_input_sha256,
+            "archive_sha256": self.archive_sha256,
+            "archive_byte_count": self.archive_byte_count,
+            "semantic_manifest_sha256": self.semantic_manifest_sha256,
+        }
+
+    @property
+    def request_digest(self) -> str:
+        """Return the immutable request identity used by reserve and replay."""
+        return canonical_json_hash(self.canonical_body())
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedPreSubmitLeaseFacts:
+    """Database-timed generation for one genuine pre-admission ART attempt."""
+
+    reservation: SelectedPreSubmitReservationFacts
+    lease_id: UUID
+    lease_generation: int
+    lease_expires_at: datetime
+
+    def __post_init__(self) -> None:
+        """Reject a copied identifier or an unbounded/non-current lease shape."""
+        if (
+            type(self.reservation) is not SelectedPreSubmitReservationFacts
+            or type(self.lease_id) is not UUID
             or type(self.lease_generation) is not int
             or self.lease_generation < 1
             or self.lease_expires_at.tzinfo is None
@@ -184,7 +243,8 @@ class SelectedPreSubmitTerminalFacts:
             if (
                 type(self.execution) is not SelectedPreSubmitExecutionFacts
                 or self.infrastructure_failure_code is not None
-                or self.execution.policy_sha256 != self.lease.policy_sha256
+                or self.execution.policy_sha256
+                != self.lease.reservation.policy_sha256
             ):
                 raise ValueError("selected PRE completed outcome is invalid")
         elif (
@@ -203,11 +263,8 @@ class SelectedPreSubmitTerminalFacts:
         """Return persisted latency, lease and terminal facts without private paths."""
         return {
             "schema_version": "workstream.selected_pre_submit_terminal.v1",
-            "attempt_id": str(self.lease.attempt_id),
-            "attempt_request_digest": self.lease.attempt_request_digest,
-            "prepared_generation_id": str(self.lease.prepared_generation_id),
-            "policy_sha256": self.lease.policy_sha256,
-            "default_behavior_sha256": self.lease.default_behavior_sha256,
+            "reservation": self.lease.reservation.canonical_body(),
+            "request_digest": self.lease.reservation.request_digest,
             "lease_id": str(self.lease.lease_id),
             "lease_generation": self.lease.lease_generation,
             "lease_expires_at": self.lease.lease_expires_at.isoformat(),
@@ -253,5 +310,6 @@ __all__ = (
     "SelectedPreSubmitExecutionFacts",
     "SelectedPreSubmitInfrastructureUnavailable",
     "SelectedPreSubmitLeaseFacts",
+    "SelectedPreSubmitReservationFacts",
     "SelectedPreSubmitTerminalFacts",
 )

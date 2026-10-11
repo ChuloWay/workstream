@@ -20,6 +20,7 @@ from app.interfaces.external_checker_execution import (
 from app.modules.checkers.api.default_checker import (
     WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
     WorkstreamDefaultCheckerInput,
+    workstream_default_input_sha256,
 )
 from app.modules.checkers.api.external import (
     PRE_SUBMIT_INPUT_SCHEMA_ID,
@@ -40,6 +41,7 @@ from app.modules.checkers.api.external_policy import (
 from app.modules.checkers.api.materialization import SubmissionMaterialEntry
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitLeaseFacts,
+    SelectedPreSubmitReservationFacts,
     SelectedPreSubmitTerminalFacts,
 )
 from app.modules.checkers.selected_pre_submit_execution import SelectedPreSubmitProcessor
@@ -269,12 +271,24 @@ async def test_selected_pre_runs_default_then_locked_external_image(
         assert grants.requests[0].request_digest == execution.requests[0].request_digest
         assert result.result_digest == canonical_json_hash(result.canonical_body())
         now = datetime.now(UTC)
-        lease = SelectedPreSubmitLeaseFacts(
+        reservation = SelectedPreSubmitReservationFacts(
+            actor_profile_id=new_record_id(),
+            identity_link_id=new_record_id(),
+            project_id=identity.project_id,
+            task_id=identity.task_id,
+            assignment_id=identity.assignment_id,
             attempt_id=identity.attempt_id,
             attempt_request_digest=identity.attempt_request_digest,
             prepared_generation_id=identity.prepared_generation_id,
             policy_sha256=policy.policy_sha256,
             default_behavior_sha256=WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+            default_input_sha256=workstream_default_input_sha256(default_input),
+            archive_sha256=material.archive_sha256,
+            archive_byte_count=material.archive_byte_count,
+            semantic_manifest_sha256=material.semantic_manifest_sha256,
+        )
+        lease = SelectedPreSubmitLeaseFacts(
+            reservation=reservation,
             lease_id=new_record_id(),
             lease_generation=1,
             lease_expires_at=now + timedelta(minutes=2),
@@ -290,6 +304,7 @@ async def test_selected_pre_runs_default_then_locked_external_image(
         )
         assert terminal.canonical_body()["queue_latency_ms"] == 25
         assert terminal.canonical_body()["execution_latency_ms"] == 50
+        assert terminal.canonical_body()["request_digest"] == reservation.request_digest
         assert terminal.terminal_digest == canonical_json_hash(terminal.canonical_body())
     finally:
         await request.prepared_artifact.close()

@@ -164,6 +164,55 @@ class WorkstreamDefaultCheckerInput:
             _require_sha256(self.predecessor_rules_sha256)
 
 
+def workstream_default_input_body(
+    value: WorkstreamDefaultCheckerInput,
+) -> dict[str, object]:
+    """Return the exact detached input committed by durable PRE reservation."""
+    if type(value) is not WorkstreamDefaultCheckerInput:
+        raise ValueError("default checker input is invalid")
+
+    def predecessor_body(item: WorkstreamDefaultPredecessor | None):
+        return (
+            None
+            if item is None
+            else {
+                "submission_id": str(item.submission_id),
+                "submission_version": item.submission_version,
+                "archive_sha256": item.archive_sha256,
+                "semantic_manifest_sha256": item.semantic_manifest_sha256,
+            }
+        )
+
+    return {
+        "schema_version": "workstream.default_checker_input.v1",
+        "archive_sha256": value.archive_sha256,
+        "archive_byte_count": value.archive_byte_count,
+        "archive_media_type": value.archive_media_type,
+        "semantic_manifest_sha256": value.semantic_manifest_sha256,
+        "entries": [
+            {
+                "normalized_path": item.normalized_path,
+                "entry_type": item.entry_type,
+                "byte_count": item.byte_count,
+                "sha256": item.sha256,
+                "executable": item.executable,
+            }
+            for item in value.entries
+        ],
+        "predecessor": predecessor_body(value.predecessor),
+        "predecessor_exists": value.predecessor_exists,
+        "current_predecessor": predecessor_body(value.current_predecessor),
+        "current_rules_sha256": value.current_rules_sha256,
+        "predecessor_rules_sha256": value.predecessor_rules_sha256,
+        "packet_sha256": value.packet.sha256,
+    }
+
+
+def workstream_default_input_sha256(value: WorkstreamDefaultCheckerInput) -> str:
+    """Bind every executable default-checker input without private file bytes."""
+    return canonical_json_hash(workstream_default_input_body(value))
+
+
 class WorkstreamDefaultCheckerValue(BaseModel):
     """Strict immutable value emitted by the default checker."""
 
@@ -272,4 +321,6 @@ __all__ = (
     "WorkstreamDefaultFailureCode",
     "WorkstreamDefaultPredecessor",
     "WorkstreamDefaultWarning",
+    "workstream_default_input_body",
+    "workstream_default_input_sha256",
 )
