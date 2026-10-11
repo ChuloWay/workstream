@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from app.core.hashing import canonical_json_hash
 from app.interfaces.project_agents import (
     PostSubmissionBindingProposal,
-    PreSubmissionBindingProposal,
     ProjectGuideCompilationResult,
     RequirementDisposition,
 )
@@ -19,11 +18,16 @@ from app.modules.checkers.api.default_checker import (
     WORKSTREAM_DEFAULT_CHECKER_VERSION,
 )
 from app.modules.checkers.api.external import (
+    EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS,
     ExternalCheckerPhase,
     ExternalCheckerRegistryEntry,
     ExternalCheckerRegistryPort,
     external_checker_json_hash,
 )
+
+
+WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS = 60_000
+MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS = 7_200_000
 
 
 class ExternalCheckerPolicyError(ValueError):
@@ -260,3 +264,28 @@ def _make_policy(model, entries):
             policy_sha256=canonical_json_hash(hash_body),
         )
     return model(entries=entries, policy_sha256=canonical_json_hash(hash_body))
+
+
+def selected_pre_submit_execution_budget_ms(
+    policy: LockedExternalPreSubmitPolicy,
+    *,
+    artifact_deadline_ms: int,
+) -> int:
+    """Return the exact ordered work budget only when ART can keep custody alive."""
+    if (
+        type(policy) is not LockedExternalPreSubmitPolicy
+        or type(artifact_deadline_ms) is not int
+        or artifact_deadline_ms <= 0
+        or artifact_deadline_ms > MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS
+    ):
+        raise ExternalCheckerPolicyError("selected PRE execution budget is invalid")
+    required = WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS + sum(
+        binding.registry.resources.deadline_ms
+        + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+        for binding in policy.entries
+    )
+    if required > artifact_deadline_ms:
+        raise ExternalCheckerPolicyError(
+            "selected PRE execution exceeds ART custody deadline"
+        )
+    return required

@@ -21,6 +21,7 @@ from app.modules.checkers.api.external_policy import (
     ExternalCheckerPolicyError,
     LockedWorkstreamDefault,
     compile_external_checker_policies,
+    selected_pre_submit_execution_budget_ms,
 )
 from tests.checkers.external.support import registry_spec
 from tests.projects.guide_compilation.helpers import result
@@ -151,3 +152,23 @@ async def test_compilation_refuses_blocked_capability_coverage():
 def test_locked_default_refuses_substituted_behavior_digest():
     with pytest.raises(ValueError, match="behavior"):
         LockedWorkstreamDefault(behavior_sha256="sha256:" + "0" * 64)
+
+
+@pytest.mark.asyncio
+async def test_selected_pre_budget_binds_ordered_deadlines_to_art_custody():
+    pre, _ = await compile_external_checker_policies(
+        _proposal(),
+        _Registry(
+            (
+                _entry("acme.safe_archive", "pre_submit"),
+                _entry("acme.quality_review", "post_submit"),
+            )
+        ),
+    )
+    assert selected_pre_submit_execution_budget_ms(
+        pre, artifact_deadline_ms=150_000
+    ) == 150_000
+    with pytest.raises(ExternalCheckerPolicyError, match="exceeds ART"):
+        selected_pre_submit_execution_budget_ms(
+            pre, artifact_deadline_ms=149_999
+        )

@@ -33,6 +33,7 @@ SchemaVersion = Annotated[
     StrictStr, Field(min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0-9_.-]*$")
 ]
 ExternalCheckerPhase = Literal["pre_submit", "post_submit"]
+EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS = 60_000
 
 PRE_SUBMIT_INPUT_SCHEMA_ID = "external_checker_pre_submit_input"
 POST_SUBMIT_INPUT_SCHEMA_ID = "external_checker_post_submit_input"

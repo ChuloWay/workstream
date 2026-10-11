@@ -23,8 +23,8 @@ from app.core.hashing import canonical_json_hash
 
 from app.interfaces.artifacts import (
     ArtifactInputMismatchError,
-    ArtifactIntegrityError,
     ArtifactLimitExceededError,
+    ArtifactScratchIntegrityError,
     ArtifactStoreUnavailableError,
 )
 from app.core.cancellation import (
@@ -78,12 +78,6 @@ class ArtifactPreparationDeadlineError(ArtifactStoreUnavailableError):
     """Raised when preparation or second-pass streaming exceeds its deadline."""
 
     code = "artifact_preparation_deadline_exceeded"
-
-
-class ArtifactScratchIntegrityError(ArtifactIntegrityError):
-    """Raised when private scratch state violates its filesystem contract."""
-
-    code = "artifact_scratch_integrity_failure"
 
 
 @dataclass(frozen=True, slots=True)

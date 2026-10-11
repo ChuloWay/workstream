@@ -286,6 +286,7 @@ async def test_selected_pre_runs_default_then_locked_external_image(
             archive_sha256=material.archive_sha256,
             archive_byte_count=material.archive_byte_count,
             semantic_manifest_sha256=material.semantic_manifest_sha256,
+            execution_budget_ms=120_000,
         )
         lease = SelectedPreSubmitLeaseFacts(
             reservation=reservation,

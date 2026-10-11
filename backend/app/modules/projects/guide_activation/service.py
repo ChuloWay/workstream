@@ -8,6 +8,7 @@ from app.core.identifiers import new_record_id
 from app.modules.authorization.api import ActorKind
 from app.modules.checkers.api.pre_submit import EffectivePreSubmissionPlanLineage
 from app.modules.checkers.api.external_policy import LockedExternalCheckerPolicies
+from app.modules.checkers.api.external import ExternalCheckerRegistryPort
 from app.modules.projects.api.guide_activation import (
     GuideActivationCommand,
     GuideActivationFacts,
@@ -41,7 +42,7 @@ class GuideActivationService:
 
     def __init__(
         self, session, *, contribution, planner, pre_catalogue, post_catalogue,
-        authorization=None, registry=None,
+        authorization=None, registry: ExternalCheckerRegistryPort | None = None,
     ):
         self.session = session
         self.authorization = authorization
@@ -54,10 +55,6 @@ class GuideActivationService:
         self.projects = ProjectRepository(session)
         self.replay = GuideMutationRepository(session)
         self.post = PostPolicyRepository(session)
-        if registry is None:
-            from app.modules.checkers.external_registry import ExternalCheckerRegistryReader
-
-            registry = ExternalCheckerRegistryReader(session)
         self.registry = registry
 
     async def activate(
@@ -234,6 +231,8 @@ class GuideActivationService:
             == "external_checker_policies.v1"
         )
         if external:
+            if self.registry is None:
+                raise GuideProposalError("approval_blocked")
             policies = LockedExternalCheckerPolicies.model_validate(
                 approval.operation.effective_pre_submit_plan
             )

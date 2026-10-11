@@ -33,6 +33,7 @@ from app.modules.projects.api.guide_documents import GuideDocumentManifestPort
 from app.modules.checkers.api.pre_submit_catalogue import PreSubmissionCapabilityProjection
 from app.modules.checkers.api.post_submit_catalogue import PostSubmitCatalogue
 from app.modules.checkers.api.policy_compilation import PreSubmissionPolicyCompilationPort
+from app.modules.checkers.api.external import ExternalCheckerRegistryPort
 from app.modules.projects.api.guide_proposal_package import GuideProposalReviewPackage
 
 from .proposal_repository import GuideProposalRepository
@@ -46,13 +47,12 @@ class GuideProposalService:
         self,
         session: AsyncSession,
         authorization: GuideProposalAuthorizationPort,
+        registry: ExternalCheckerRegistryPort | None = None,
     ) -> None:
         self.session = session
         self.authorization = authorization
         self.repository = GuideProposalRepository(session)
-        from app.modules.checkers.external_registry import ExternalCheckerRegistryReader
-
-        self.registry = ExternalCheckerRegistryReader(session)
+        self.registry = registry
 
     async def review_package(
         self,
@@ -112,6 +112,8 @@ class GuideProposalService:
         from .proposal_approval import approve_proposal
 
         self._require_transaction()
+        if self.registry is None:
+            raise GuideProposalError("proposal_unavailable")
         async with self._bounded_errors():
             return await approve_proposal(
                 self.session,

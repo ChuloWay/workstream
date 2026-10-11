@@ -6,13 +6,12 @@ import asyncio
 from dataclasses import asdict
 
 from app.core.cancellation import await_cancellation_resistant
+from app.interfaces.artifacts import ArtifactScratchIntegrityError
 from app.interfaces.external_checker_execution import ExternalCheckerExecutionAdapter
 from app.interfaces.external_services import (
     ExternalServiceProtocolError,
     ExternalServiceUnavailableError,
 )
-from app.modules.artifacts.preparation import ArtifactScratchIntegrityError
-from app.modules.artifacts.submission_archive import SealedSubmissionTree
 from app.modules.checkers.api.default_checker import WorkstreamDefaultCheckerInput
 from app.modules.checkers.api.external import (
     PreSubmitExternalCheckerIdentity,
@@ -132,7 +131,7 @@ class SelectedPreSubmitProcessor:
         projection = self._inspector._projected_tree(
             reader, workspace, expected=self._inspection
         )
-        tree: SealedSubmissionTree = await asyncio.to_thread(projection.__enter__)
+        tree = await asyncio.to_thread(projection.__enter__)
         try:
             if self._aborted:
                 raise asyncio.CancelledError

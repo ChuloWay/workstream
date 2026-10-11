@@ -31,6 +31,14 @@ and terminal latency body suitable for the durable owner. Its reservation
 digest binds the contributor identity, TASK/assignment, genuine ART attempt
 and prepared generation, approved policy/default, complete default input and
 server-owned archive/manifest identity before the lease is issued.
+The selected durable owner is now modeled separately from the retained legacy
+evidence decoder: its UUIDv7 run identifier is the genuine PRE attempt identity,
+so selection does not reserve through or foreign-key to the obsolete invocation
+store. The coordinator takes TASK custody before CHECKERS state, issues a
+database-timed generation lease, finalizes one terminal body, and mints a
+process-local one-use admission capability only for a complete pass. Its
+ordered work budget is derived from the default plus each locked image deadline
+and service cleanup margin and must fit ART's configured custody deadline.
 The selected POST processor consumes only actual Submission and ART material
 through the phase-typed callback grant, runs every locked POST image in order,
 and returns canonical evidence and observed isolation without any acceptance
@@ -187,6 +195,7 @@ intermediate-wait regression.
 | Selected admission binding | `pytest -q backend/tests/test_submission_change_gate.py backend/tests/checkers/external/test_selected_pre_submit.py`; Ruff and `git diff --check` on the affected files | 11 passed; existing callers retain their exact archive/manifest rejection while the selected binder carries unchanged work plus exact predecessor/current rules into the default checker | The binder is not yet selected by the durable admission caller |
 | Selected durable result contract | `pytest -q backend/tests/checkers/external/test_selected_pre_submit.py`; Ruff and `git diff --check` on the affected files | 5 passed; canonical result/terminal digests bind the default, ordered external results, isolation, generation lease, outcome and measured queue/execution latency | PostgreSQL reservation, lease and finalize storage remain pending |
 | Selected durable request contract | The same five selected-PRE tests plus focused Ruff and `git diff --check` | Passed; the reservation digest covers contributor/link, TASK, assignment, ART attempt/generation, policy/default, exact default input and archive/manifest custody, and the terminal includes that request digest | PostgreSQL ownership and SQL custody remain pending |
+| Selected durable owner source | `pytest -q` over selected PRE, policy, coordination, PROJECT activation/proposal contracts and architecture module boundaries; focused Ruff | 51 focused/architecture tests passed; the selected run is its own durable attempt identity, TASK locks precede CHECKERS state, one-use admission facts are substitution-resistant, ordered deadlines fit ART custody, and four private module edges were removed through public ports/composition | Native migration, exact AUTH SQL closure, crash reclaim and admission composition remain pending |
 | Selected POST callback | `pytest -q backend/tests/checkers/external/test_selected_post_submit.py`; Ruff and `git diff --check` on the affected files | 3 passed; actual Submission/ART identity reaches every locked POST image through its short-lived grant, work pass/fail remains evidence only, and infrastructure failure stays recoverable | Durable POST reservation/finalization, worker restart and routing composition remain pending |
 | Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | In progress | Persistence delta and migration ordinal await actual linear predecessor |
 | End-to-end replacement | Real PostgreSQL/MinIO/Rust public and worker journey | Not run | Implementation incomplete |

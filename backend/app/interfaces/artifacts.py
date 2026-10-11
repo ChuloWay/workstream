@@ -252,6 +252,12 @@ class ArtifactIntegrityError(ArtifactStoreError):
     category = "integrity"
 
 
+class ArtifactScratchIntegrityError(ArtifactIntegrityError):
+    """Raised when private scratch state violates its filesystem contract."""
+
+    code = "artifact_scratch_integrity_failure"
+
+
 class ArtifactRangeInvalidError(ArtifactStoreError):
     """Raised when a requested range starts past the object end."""
 

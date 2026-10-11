@@ -136,6 +136,7 @@ class SelectedPreSubmitReservationFacts:
     archive_sha256: str
     archive_byte_count: int
     semantic_manifest_sha256: str
+    execution_budget_ms: int
 
     def __post_init__(self) -> None:
         """Reject partial authority, material, policy or default-input custody."""
@@ -167,6 +168,8 @@ class SelectedPreSubmitReservationFacts:
             or self.default_behavior_sha256 != WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
             or type(self.archive_byte_count) is not int
             or self.archive_byte_count < 0
+            or type(self.execution_budget_ms) is not int
+            or not 100 <= self.execution_budget_ms <= 14_400_000
         ):
             raise ValueError("selected PRE reservation facts are invalid")
 
@@ -188,6 +191,7 @@ class SelectedPreSubmitReservationFacts:
             "archive_sha256": self.archive_sha256,
             "archive_byte_count": self.archive_byte_count,
             "semantic_manifest_sha256": self.semantic_manifest_sha256,
+            "execution_budget_ms": self.execution_budget_ms,
         }
 
     @property

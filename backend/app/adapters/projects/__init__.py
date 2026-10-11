@@ -148,9 +148,12 @@ def project_guide_proposal_service(
     PostSubmitCatalogue, PreSubmissionPolicyCompilationPort,
 ]:
     """Compose the sole proposal owner with explicit authority."""
+    from app.adapters.checkers import external_checker_registry_reader
     from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 
-    return GuideProposalService(session, authorization)
+    return GuideProposalService(
+        session, authorization, external_checker_registry_reader(session)
+    )
 
 
 def project_guide_correction_dispatch(
@@ -209,9 +212,11 @@ def project_guide_activation_port(
     authorization: GuideActivationAuthorizationPort | None = None,
 ) -> GuideActivationPort[ActorIdentityFacts]:
     """Compose canonical activation with explicit CON validation and authority."""
+    from app.adapters.checkers import external_checker_registry_reader
     from app.modules.projects.guide_activation.service import GuideActivationService
 
     return GuideActivationService(
         session, contribution=contribution, planner=planner, pre_catalogue=pre_catalogue,
         post_catalogue=post_catalogue, authorization=authorization,
+        registry=external_checker_registry_reader(session),
     )
