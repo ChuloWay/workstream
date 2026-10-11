@@ -151,7 +151,7 @@ async def test_late_staging_failure_and_partial_advance_replay_roll_back_whole_b
     assert advanced.status_code == 200, advanced.text
     before = await _success_facts(project)
     replay = await client.post(_path(project, batch, "screen"), headers=key, json=payload)
-    assert replay.status_code in {403, 409}, replay.text
+    assert replay.status_code == 409 and replay.json()["error"]["code"] == "task_replay_state_changed", replay.text
     assert await _success_facts(project) == before
 
 
