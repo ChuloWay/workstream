@@ -63,10 +63,9 @@ async def prepare_submission_bundle(
     ] = None,
 ) -> SubmissionBundlePreparationResponse | JSONResponse:
     """Run the hidden continuous ZIP preparation surface; AUTH remains fail closed."""
-    if None in (assignment_id, idempotency_key, summary, contributor_attestation):
+    if None in (assignment_id, idempotency_key):
         raise HTTPException(status_code=404, detail="Task not found")
     assert assignment_id is not None and idempotency_key is not None
-    assert summary is not None and contributor_attestation is not None
     try:
         identifiers = (
             UUID(task_id),
@@ -87,8 +86,8 @@ async def prepare_submission_bundle(
                 assignment_id=identifiers[1],
                 predecessor_submission_id=identifiers[3],
                 idempotency_key=identifiers[2],
-                summary=summary,
-                contributor_attestation=contributor_attestation,
+                summary=summary or "",
+                contributor_attestation=contributor_attestation or "",
                 media_type=request.headers.get("content-type", ""),
                 byte_source=request.stream(),
             )

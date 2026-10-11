@@ -27,6 +27,7 @@ from app.modules.artifacts.api import (
     SubmissionBundlePreparationRequest,
     SubmissionBundlePreparationRejected, SubmissionBundlePreparationUnavailable,
     SubmissionBundlePreparationInfrastructureUnavailable, SubmissionBundlePreparationResult,
+    SubmissionBundlePreparationStatus,
 )
 from app.modules.checkers.api import (
     PreSubmissionExecutionEntryFacts,
@@ -219,6 +220,30 @@ async def test_hidden_preparation_maps_context_custody_and_authority_distinctly(
 
     assert failure.value.status_code == status_code
     assert failure.value.detail == detail
+
+
+@pytest.mark.asyncio
+async def test_hidden_preparation_treats_missing_optional_packet_text_as_warnings() -> None:
+    """Missing summary and attestation reach PRE as empty warning-only values."""
+    command = SimpleNamespace(prepare=AsyncMock(return_value=SubmissionBundlePreparationResult(
+        put_attempt_id=new_record_id(), admission_id=None,
+        submission_bundle_preparation_status=SubmissionBundlePreparationStatus.PREPARED,
+        replayed=False,
+    )))
+    request = Request({
+        "type": "http", "method": "POST", "path": "/",
+        "headers": [(b"content-type", b"application/zip")],
+    })
+
+    await prepare_submission_bundle(
+        task_id=str(new_record_id()), request=request, actor=_actor(), command=command,
+        assignment_id=str(new_record_id()), idempotency_key=str(new_record_id()),
+        summary=None, contributor_attestation=None,
+    )
+
+    prepared = command.prepare.await_args.args[0]
+    assert prepared.summary == ""
+    assert prepared.contributor_attestation == ""
 
 
 
