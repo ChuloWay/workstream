@@ -376,6 +376,8 @@ async def test_retry_audit_failure_removes_whole_successor(
                 assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
                 assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
                 assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+                fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+                assert fence.current_run_id == str(h.created.evaluation_attempt_id)
                 assert await session.scalar(select(func.count()).select_from(
                     AuditEvent
                 ).where(AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value)) == 0
