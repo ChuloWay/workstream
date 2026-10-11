@@ -60,6 +60,8 @@ capacity margin; they do not prove a specific current node's elapsed time.
   their existing implementations are retained. No timing extension is included.
 - Existing CI lane/catalogue/merge/evidence tests and affected ownership
   expectations: protect the exact canonical union and newest-attempt custody.
+- `scripts/test_lightweight_agent_gates.py`: preserve its strict independent
+  workflow matrix assertion with the added project D entry.
 - `docs/operations_backend_testing.md` and this record: reconcile the declared
   lane count and evidence protocol without changing product capability claims.
 
@@ -120,7 +122,9 @@ capacity margin; they do not prove a specific current node's elapsed time.
 |---|---|---|---|
 | Prior/main/current capacity | Download nine lane bundles for runs 38049464143, 38056091618 and 38056709666; inspect summary, node and job-step timing | Measurements above; latest C timed out and cleaned DB/role/MinIO | Current individual phase times were not retained |
 | Proposed allocation | Reapply the existing hash function to actual merge 5dfb6501's canonical manifest with four project candidates | 2,205 project nodes, A645/B485/C622/D453 | No implementation or hosted runtime result |
-| Affected repair controls | `pytest -q tests/test_ci_lane_catalogue.py tests/test_ci_test_lanes.py tests/test_test_lane_evidence.py tests/test_merge_test_lane_evidence.py` | First run 147 passed / one timing fixture failed; the fixture now has ten entries and still rejects nine | Final frozen result and canonical projection recorded in the PR |
+| Affected repair controls | `pytest -q tests/test_ci_lane_catalogue.py tests/test_ci_test_lanes.py tests/test_test_lane_evidence.py tests/test_merge_test_lane_evidence.py` | Exact 51ed6e543: 148 passed in 37.29 seconds; old nine-lane partition mutant failed the retained inventory assertion | Full hosted execution pending |
+| Exact canonical union | Independent validator collection; old/new catalogue projection at the same 51ed6e543 head | 8,946 nodes unchanged; non-project assignment unchanged; project A646/B487/C622/D450; no app/DDL/CLI/MCP changes | Allocation is not a runtime prediction |
+| Repository checks | Configured docstrings, full backend Ruff, Commitrail, links and stale contract guards | Passed; the initial process batch exposed a strict nine-entry Agent Gates matrix fixture, now updated to require D | Final affected process result in PR; full hosted gates pending |
 | Full integration | Complete hosted ten-lane run and independent aggregate | Pending; no complete PASS claim | Actual frozen merge, all node/cleanup evidence and measured headroom required |
 
 ## Review findings
