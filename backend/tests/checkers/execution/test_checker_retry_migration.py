@@ -192,6 +192,34 @@ async def _source_custody(connection, submission_id):
     )
 
 
+async def _predecessor_evidence(connection, submission_id):
+    """Verify the actual old writer's complete source before comparing its upgrade."""
+    assert await connection.fetchval("SELECT version_num FROM public.alembic_version") == PREDECESSOR
+    assert await connection.fetchval(
+        "SELECT to_regclass('public.checker_retry_receipts') IS NULL"
+    ) is True
+    before = await _retained_rows(connection)
+    assert all(before[table] for table in (
+        "submissions", "submission_dispatches", "checker_runs",
+        "checker_submission_fences", "audit_events", "outbox_events",
+        "pre_submit_evidence_sets", "submission_bundle_admissions", "artifact_bindings",
+    ))
+    assert await connection.fetchval("""
+        SELECT count(*) FROM public.audit_events
+        WHERE action_id='checker.post_submit.finalize'
+    """) == 1
+    source = await _source_custody(connection, submission_id)
+    assert source["status"] == "infrastructure_failed"
+    assert source["failure_code"] == "material_unavailable"
+    assert source["result_digest"].startswith("sha256:")
+    assert all(source[key] is True for key in (
+        "finalized", "finalize_authority_valid", "finalize_allowed",
+        "no_completion_event", "current_run", "dispatch_valid", "binding_valid",
+        "creation_authority_valid", "binding_authority_valid",
+    ))
+    return before, source
+
+
 async def test_retry_upgrade_preserves_evidence_and_installs_closure(
     tmp_path,
     isolated_database_env,
@@ -209,56 +237,7 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
         assert request.submission_id == submission_id
         connection = await _connection(isolated_database_env)
         try:
-            assert (
-                await connection.fetchval("SELECT version_num FROM public.alembic_version")
-                == PREDECESSOR
-            )
-            assert (
-                await connection.fetchval(
-                    "SELECT to_regclass('public.checker_retry_receipts') IS NULL"
-                )
-                is True
-            )
-            before = await _retained_rows(connection)
-            assert all(
-                before[table]
-                for table in (
-                    "submissions",
-                    "submission_dispatches",
-                    "checker_runs",
-                    "checker_submission_fences",
-                    "audit_events",
-                    "outbox_events",
-                    "pre_submit_evidence_sets",
-                    "submission_bundle_admissions",
-                    "artifact_bindings",
-                )
-            )
-            assert (
-                await connection.fetchval("""
-                SELECT count(*) FROM public.audit_events
-                WHERE action_id='checker.post_submit.finalize'
-            """)
-                == 1
-            )
-            source = await _source_custody(connection, submission_id)
-            assert source["status"] == "infrastructure_failed"
-            assert source["failure_code"] == "material_unavailable"
-            assert source["result_digest"].startswith("sha256:")
-            assert all(
-                source[key] is True
-                for key in (
-                    "finalized",
-                    "finalize_authority_valid",
-                    "finalize_allowed",
-                    "no_completion_event",
-                    "current_run",
-                    "dispatch_valid",
-                    "binding_valid",
-                    "creation_authority_valid",
-                    "binding_authority_valid",
-                )
-            )
+            before, source = await _predecessor_evidence(connection, submission_id)
         finally:
             await connection.close()
 

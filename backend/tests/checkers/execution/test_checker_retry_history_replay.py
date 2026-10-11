@@ -104,17 +104,13 @@ async def test_retry_replays_after_real_later_submission_without_reopening_old_s
         assert before[-1]["status"] == "evaluation_pending"
         provider_opens = len(h.store.opens)
 
-        fresh_request_id = new_record_id()
-        fresh_operator = operator.model_copy(update={
-            "request_id": fresh_request_id, "correlation_id": fresh_request_id,
-        })
         def forbidden_open(_store, _reference):
             pytest.fail("historical retry replay touched artifact bytes")
 
         with monkeypatch.context() as patch:
             patch.setattr(LocalStorageAdapter, "open", forbidden_open)
             async with h.factory.begin() as session:
-                replay = await checker_retry_service(session, fresh_operator).retry(command)
+                replay = await checker_retry_service(session, operator).retry(command)
         assert replay == created
         assert await retained_state() == before
         assert len(h.store.opens) == provider_opens
