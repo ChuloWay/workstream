@@ -217,12 +217,13 @@ No database transaction crosses the client call.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Baseline and owner map | Implementation began at merged registry main `3110353363547e603e7527a782467f95c00cb1f7`; final reconciliation merges current intake-feedback and ten-lane CI main `251bc29bc5661934b2b70cde4ceecd52dbfa9687` without changing the runtime sources | Complete | Later product selection and hosted deployment remain outside this chunk |
+| Baseline and owner map | Implementation began at merged registry main `3110353363547e603e7527a782467f95c00cb1f7`; final reconciliation merges current CLI-correction and ten-lane CI main `7e499849ab871f445012cf9e343ff97fbb95d62d` without changing the runtime sources | Complete | Later product selection and hosted deployment remain outside this chunk |
 | Rust SDK and service | `cd external_checkers && cargo fmt --all --check && cargo test --workspace --locked` | Thirteen tests pass: shared Python fixtures, exact numeric/NUL/extra-field and Unicode controls, closed cache/runtime health, absolute request/response-frame budgets, bounded process/client-disconnect behavior, uncertain-create cleanup, directory inventory and missing-image outcome | Cargo and hosted CI remain required on the final reviewed commit |
 | Numeric parity discriminator | The SDK numeric fixture test was also run against the reviewer's 2,000 finite-float Python corpus before restoring the checked-in representative fixture | All 2,000 canonical encodings match Python, including `203472594891988.12`, which the predecessor emitted as `203472594891988.13` | The retained fixture keeps representative boundary cases rather than the generated review corpus |
 | Python transport and ART grant | Locked review environment Ruff plus `pytest -q tests/checkers/external/test_runtime.py` | Eight tests pass: cross-language fixtures, complete settings, typed health/execute/factory and cancellation, actual prepared ZIP callback grant, live-owner enforcement, semantic-manifest substitution and symlink rejection | Product caller is intentionally absent |
 | Test and owner routing | Exact lane ownership regression, module boundary, test-structure and behavior-ownership validators | Pass after registering the new runtime test and two new Python owner paths | Full hosted lane evidence remains required |
 | CI fan-in regression | `python3 -m unittest -v scripts.test_commitrail_contracts scripts.test_commitrail_contribution_paths scripts.test_commitrail_archive_batch scripts.test_commitrail_markdown_structure scripts.test_lightweight_agent_gates` | The lightweight gate requires the Rust runtime job in the aggregate dependencies and exercises success plus each failure/cancelled/skipped/empty/unknown result without weakening another required job | Full hosted lane evidence remains required |
+| Pre-reconciliation hosted run | Backend run `38123659866` at `24c73b67d320942793be76bf8c1a13176c75506d`; Agent Gates `38123659624`; MCP `38123659627` | Rust runtime, preflight, CLI, MinIO, all ten backend lanes and the required aggregate pass; Agent Gates and both MCP jobs pass | This honestly records the completed predecessor-head run; fresh hosted evidence remains required for the current-main merge |
 | Real local service | Isolated registry `ws-pilot-backend-p04-registry` on loopback port `35104`; `/tmp/ws-pilot04-runtime-repair-probe.json` SHA-256 `873b7455be71a8a19a43d00a98dcb5a335b2627c317e1e4692183c0fa3ea7a42` was produced by the checked-in probe | Digest-pinned Linux/amd64 manifest `sha256:8fe601562e34c74bb90943c5ae5cdce12d51ac6e827cbd19113adfe77ffd59ba` and config ID `sha256:43d669716bb289c21d5cc926692dd21e564c339b65d849fef342e13b4a4a4114` returned `passed`; changed/expired grants mapped to `material_unavailable`, deadline to `deadline_exceeded`, oversized output to `invalid_output`; exact workspace and labelled-container cleanup confirmed | Explicit `docker-dev`/runc proof only; hosted runsc deployment and representative workload sizing remain unproved |
 
 ## Review findings
@@ -305,10 +306,10 @@ No database transaction crosses the client call.
 
 - Current-source reconciliation: branch `codex/pilot04-external-runtime`
   started at merged PR #521 and merged current main
-  `251bc29bc5661934b2b70cde4ceecd52dbfa9687`; the incoming CLI approval,
-  inspection, hidden routing-outcome, completion delivery, verified failure
-  evidence, same-request pre-submit feedback, ten-lane CI capacity, ownership
-  metadata and roadmap statements are preserved.
+  `7e499849ab871f445012cf9e343ff97fbb95d62d`; the incoming CLI approval,
+  inspection and correction, hidden routing-outcome, completion delivery,
+  verified failure evidence, same-request pre-submit feedback, ten-lane CI
+  capacity, ownership metadata and roadmap statements are preserved.
 - Parallel-lane reconciliation: PILOT-02 owns task-import product and ART source
   code. Its migration is authored separately by this lane as the next linear revision after merged routing
   revision 0030 and is not part of this runtime PR. No PILOT-02 worktree is edited here.
