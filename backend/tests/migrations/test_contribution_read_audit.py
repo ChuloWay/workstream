@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from uuid import uuid4
-
 from alembic import command
 import asyncpg
 import pytest
 
+from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from tests.conftest import _drop_test_database_schema
 from tests.migration_fixtures import _config as config
@@ -56,15 +55,15 @@ async def _seed_template(database_url: str) -> str:
                 auth_source,is_dev_auth,event_payload,event_domain,event_version,actor_ref_kind,
                 request_id,correlation_id,permission_id,action_id,reason,project_id,resource_type,
                 resource_id,after_facts,matched_grant_id,target_ref_kind,target_ref_id,denial_code)
-                select identity,'authorization_decision',identity,
+                select $1::uuid,'authorization_decision',$1::uuid,
                 'SensitiveAuthorizationDenied',gen_random_uuid()::text,'[]','{}',
                 'local_authority',false,'{}','authority',1,'actor_profile',
                 gen_random_uuid(),gen_random_uuid(),'project.read','project.read',
                 'authorization_evaluation',null,null,null,
                 jsonb_build_object('allowed',false,'resource_context_digest',
                   'sha256:'||repeat('a',64)),null,null,null,'permission_not_granted'
-                from (select gen_random_uuid() identity) seed
-                returning id"""
+                returning id""",
+                str(new_record_id()),
             )
         )
     finally:
@@ -111,7 +110,7 @@ def test_contribution_read_upgrade_closes_exact_pairs_and_preserves_predecessors
                 _clone(
                     isolated_database_env,
                     source=template,
-                    identity=str(uuid4()),
+                    identity=str(new_record_id()),
                     action=action,
                     permission=action,
                 )
@@ -122,7 +121,7 @@ def test_contribution_read_upgrade_closes_exact_pairs_and_preserves_predecessors
                         _clone(
                             isolated_database_env,
                             source=template,
-                            identity=str(uuid4()),
+                            identity=str(new_record_id()),
                             action=action,
                             permission=permission,
                         )

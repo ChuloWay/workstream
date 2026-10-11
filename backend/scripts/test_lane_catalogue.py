@@ -583,6 +583,7 @@ LANES = (
         "schema_contracts",
         (
             SCHEMA_MODULE,
+            "tests/migrations/test_contribution_read_audit.py",
             "tests/authorization/post_submit/test_receipt_custody.py",
             "tests/authorization/post_submit/test_migration.py",
             "tests/reviews/packet/test_storage.py",
