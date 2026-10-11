@@ -95,7 +95,7 @@ def test_contribution_read_upgrade_closes_exact_pairs_and_preserves_predecessors
         assert all(action not in before_evidence for action in ACTIONS)
 
         template = asyncio.run(_seed_template(isolated_database_env))
-        command.upgrade(config(), "head")
+        command.upgrade(config(), "0033_contribution_reads")
         after_evidence = asyncio.run(_definition(isolated_database_env, EVIDENCE_CONSTRAINT))
         after_registry = asyncio.run(_definition(isolated_database_env, REGISTRY_CONSTRAINT))
         for token in (

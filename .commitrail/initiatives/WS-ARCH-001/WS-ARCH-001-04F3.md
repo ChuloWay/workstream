@@ -162,6 +162,9 @@ replacement writer or route would fork the atomic creation operation.
   seeding helpers with temporary all-null cause columns. Remove those columns
   before upgrade and assert original row values and column shape are restored;
   this test support does not add a runtime compatibility path.
+- `backend/tests/migrations/test_contribution_read_audit.py` pins the newly
+  merged contribution-read migration's own upgrade/downgrade proof to 0033,
+  so later migrations do not intercept its retained-evidence refusal assertion.
 - `backend/tests/conftest.py` only for the deterministic 0034 public-schema
   fingerprint, with the existing strict schema guard and resettable-table list
   retained. The lead independently verifies the integrated fingerprint.
