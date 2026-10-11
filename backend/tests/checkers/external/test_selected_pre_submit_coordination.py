@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from types import SimpleNamespace
+from uuid import UUID
 
 import pytest
 from sqlalchemy.dialects import postgresql
@@ -12,6 +13,7 @@ from sqlalchemy.schema import CreateTable
 from app.core.identifiers import new_record_id
 from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.schemas import SubmissionBundleArtifactAdmissionRequest
+from app.modules.artifacts.submission_bindings import SubmissionAdmissionConsumptionService
 from app.modules.artifacts.models import (
     SubmissionBundleAdmission,
     SubmissionBundleDurableIntent,
@@ -222,6 +224,9 @@ def test_selected_pre_request_binds_complete_later_admission_lineage() -> None:
     )
 
     assert reservation.canonical_body()["admission_lineage"] == lineage.canonical_body()
+    assert SelectedPreSubmitReservationFacts.from_canonical_body(
+        reservation.canonical_body()
+    ) == reservation
     assert reservation.request_digest != replace(
         reservation,
         admission_lineage=replace(lineage, packet_sha256="sha256:" + "9" * 64),
@@ -250,3 +255,52 @@ def test_submission_artifact_request_selects_exactly_one_pre_lineage() -> None:
         )
     with pytest.raises(ValueError, match="lineage"):
         replace(request, selected_terminal_digest=None)
+
+
+def test_selected_ready_admission_no_longer_requires_legacy_evidence() -> None:
+    run_id = new_record_id()
+    admission = SimpleNamespace(
+        id=str(new_record_id()),
+        pre_submit_evidence_set_id=None,
+        selected_pre_submit_run_id=str(run_id),
+        artifact_content_id=str(new_record_id()),
+        actor_profile_id=str(new_record_id()),
+        identity_link_id=str(new_record_id()),
+        project_id=str(new_record_id()),
+        task_id=str(new_record_id()),
+        assignment_id=str(new_record_id()),
+        predecessor_submission_id=None,
+        predecessor_submission_version=None,
+        guide_id=str(new_record_id()),
+        guide_version="v1",
+        source_snapshot_id=str(new_record_id()),
+        source_snapshot_sha256=SHA,
+        effective_policy_id=str(new_record_id()),
+        effective_policy_sha256=SHA,
+        pre_submit_policy_id=str(new_record_id()),
+        pre_submit_policy_sha256=SHA,
+        locked_policy_context_hash=SHA,
+        semantic_manifest_id=str(new_record_id()),
+        semantic_manifest_sha256=SHA,
+        archive_sha256=SHA,
+        archive_byte_count=42,
+    )
+    content = SimpleNamespace(
+        id=admission.artifact_content_id,
+        sha256=admission.archive_sha256,
+        byte_count=admission.archive_byte_count,
+    )
+    request = SimpleNamespace(
+        admission_id=UUID(admission.id),
+        submission_id=new_record_id(),
+        submission_version=1,
+    )
+
+    assert SubmissionAdmissionConsumptionService._art_lineage_is_intact(
+        admission, None, content
+    )
+    facts = SubmissionAdmissionConsumptionService._authority_facts(
+        admission, request
+    )
+    assert facts.evidence_set_id is None
+    assert facts.selected_pre_submit_run_id == run_id

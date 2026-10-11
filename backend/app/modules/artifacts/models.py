@@ -1235,6 +1235,17 @@ class SubmissionBundleDurableIntent(Base):
             "(selected_pre_submit_run_id is not null)::int) = 1",
             name="pre_submit_lineage",
         ),
+        CheckConstraint(
+            "(pre_submit_evidence_set_id is not null and selected_request_json is null "
+            "and selected_request_digest is null and selected_terminal_json is null "
+            "and selected_terminal_digest is null) or "
+            "(selected_pre_submit_run_id is not null "
+            "and jsonb_typeof(selected_request_json)='object' "
+            "and selected_request_digest ~ '^sha256:[0-9a-f]{64}$' "
+            "and jsonb_typeof(selected_terminal_json)='object' "
+            "and selected_terminal_digest ~ '^sha256:[0-9a-f]{64}$')",
+            name="selected_snapshot",
+        ),
     )
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
@@ -1248,6 +1259,10 @@ class SubmissionBundleDurableIntent(Base):
         nullable=True,
         index=True,
     )
+    selected_request_json: Mapped[dict | None] = mapped_column(JSONB)
+    selected_request_digest: Mapped[str | None] = mapped_column(String(71))
+    selected_terminal_json: Mapped[dict | None] = mapped_column(JSONB)
+    selected_terminal_digest: Mapped[str | None] = mapped_column(String(71))
     put_attempt_id: Mapped[str] = mapped_column(
         ForeignKey("artifact_put_attempts.id", ondelete="RESTRICT"),
         nullable=False,

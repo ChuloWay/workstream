@@ -316,6 +316,17 @@ class ArtifactRepository:
             )
         )
 
+    async def get_submission_bundle_intent_by_selected_run(
+        self, run_id: str
+    ) -> SubmissionBundleDurableIntent | None:
+        """Load the durable ART intent copied from one selected PRE terminal."""
+        return await self._session.scalar(
+            select(SubmissionBundleDurableIntent).where(
+                SubmissionBundleDurableIntent.selected_pre_submit_run_id == run_id
+            )
+        )
+
+
     async def lock_submission_bundle_intent(
         self, intent_id: str
     ) -> SubmissionBundleDurableIntent | None:

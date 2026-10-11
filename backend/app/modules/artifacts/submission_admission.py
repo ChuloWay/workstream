@@ -7,6 +7,7 @@ from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from dataclasses import dataclass, replace
 import json
 from uuid import UUID
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 
 from sqlalchemy import func, select
@@ -69,6 +70,10 @@ from app.modules.artifacts.submission_materialization import (
     PreSubmissionEvaluationPort,
 )
 from app.modules.checkers.api.post_submit import PostSubmissionEvaluationContent
+from app.modules.checkers.api.selected_pre_submit import (
+    SelectedPreSubmitCompletion,
+    SelectedPreSubmitReservationFacts,
+)
 from app.modules.checkers.api import (
     EffectivePreSubmissionExecutionPlan,
     EffectivePreSubmissionPlanLineage,
@@ -106,8 +111,13 @@ class SubmissionBundleDurablePutRequest:
 
     prepared_authorization: object
     prepared_artifact: PreparedArtifact
-    pass_capability: PreSubmitPassCapability
+    pass_capability: PreSubmitPassCapability | None
     replay_durable_intent_id: UUID | None = None
+    selected_completion: SelectedPreSubmitCompletion | None = None
+
+    def __post_init__(self) -> None:
+        if (self.pass_capability is None) == (self.selected_completion is None):
+            raise ValueError("submission bundle durable PRE custody is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,11 +125,12 @@ class SubmissionBundleDurablePutResult:
     """Bounded durable operation result without provider coordinates."""
 
     put_attempt_id: UUID
-    pre_submit_evidence_set_id: UUID
+    pre_submit_evidence_set_id: UUID | None
     operation_identity: str
     status: str
     replayed: bool
     admission_id: UUID | None
+    selected_pre_submit_run_id: UUID | None = None
 
 
 class SubmissionBundleDurablePutService:
@@ -160,22 +171,45 @@ class SubmissionBundleDurablePutService:
             or not transaction.is_active
             or self._session.in_nested_transaction()
             or type(prepared) is not PreparedArtifact
-            or type(request.pass_capability) is not PreSubmitPassCapability
+            or (
+                request.pass_capability is not None
+                and type(request.pass_capability) is not PreSubmitPassCapability
+            )
+            or (
+                request.selected_completion is not None
+                and type(request.selected_completion) is not SelectedPreSubmitCompletion
+            )
         ):
             if type(prepared) is PreparedArtifact:
                 await prepared.close()
             raise RuntimeError("submission bundle durable transaction is unavailable")
         try:
-            evidence_set_id = request.pass_capability.evidence_set_id
-            custody = SubmissionBundlePreparedCustody._from_live_preparation(
-                prepared=prepared,
-                capability=request.pass_capability,
-            )
+            if request.selected_completion is not None:
+                custody = SubmissionBundlePreparedCustody._from_selected_pre_submit(
+                    prepared=prepared,
+                    completion=request.selected_completion,
+                )
+                evidence_set_id = None
+                selected_run_id = custody.selected_reservation.attempt_id
+            else:
+                assert request.pass_capability is not None
+                evidence_set_id = request.pass_capability.evidence_set_id
+                selected_run_id = None
+                custody = SubmissionBundlePreparedCustody._from_live_preparation(
+                    prepared=prepared,
+                    capability=request.pass_capability,
+                )
             admission = await self._admission.admit(
                 SubmissionBundleArtifactAdmissionRequest(
                     pre_submit_evidence_set_id=evidence_set_id,
                     custody=custody,
                     replay_durable_intent_id=request.replay_durable_intent_id,
+                    selected_pre_submit_run_id=selected_run_id,
+                    selected_terminal_digest=(
+                        custody.selected_terminal_digest
+                        if selected_run_id is not None
+                        else None
+                    ),
                 ),
                 submission_prepared_authorization=self._authorization,
                 submission_task_contexts=self._task_contexts,
@@ -183,7 +217,7 @@ class SubmissionBundleDurablePutService:
                 prepared_authorization=request.prepared_authorization,
                 existing_transaction=True,
             )
-            return prepared, evidence_set_id, admission
+            return prepared, evidence_set_id or selected_run_id, admission
         except BaseException:
             await prepared.close()
             raise
@@ -191,10 +225,21 @@ class SubmissionBundleDurablePutService:
     async def publish_after_commit(
         self,
         prepared: PreparedArtifact,
-        evidence_set_id: UUID,
+        lineage_id: UUID,
         admission: ArtifactAdmissionResult,
+        *,
+        selected_pre_submit_run_id: UUID | None = None,
     ) -> SubmissionBundleDurablePutResult:
         """Hand the exact ZIP to storage only after the durable transaction ended."""
+        if (
+            selected_pre_submit_run_id is not None
+            and selected_pre_submit_run_id != lineage_id
+        ):
+            await prepared.close()
+            raise RuntimeError("submission bundle selected lineage changed")
+        evidence_set_id = (
+            None if selected_pre_submit_run_id is not None else lineage_id
+        )
         if self._session.in_transaction():
             await prepared.close()
             raise RuntimeError("submission bundle durable transaction is still active")
@@ -214,6 +259,7 @@ class SubmissionBundleDurablePutService:
                     status="ready",
                     replayed=True,
                     admission_id=admission_id,
+                    selected_pre_submit_run_id=selected_pre_submit_run_id,
                 )
             if admission.replayed and admission.status == "object_confirmed":
                 return SubmissionBundleDurablePutResult(
@@ -223,6 +269,7 @@ class SubmissionBundleDurablePutService:
                     status="object_confirmed",
                     replayed=True,
                     admission_id=None,
+                    selected_pre_submit_run_id=selected_pre_submit_run_id,
                 )
             if admission.replayed:
                 status = await self._storage.resume_committed_put(
@@ -246,6 +293,7 @@ class SubmissionBundleDurablePutService:
                 status=status,
                 replayed=admission.replayed,
                 admission_id=admission_id,
+                selected_pre_submit_run_id=selected_pre_submit_run_id,
             )
         finally:
             await prepared.close()
@@ -298,11 +346,40 @@ class SubmissionBundleAdmissionPublisher:
         )
         if existing is not None:
             return existing
-        evidence = await self._session.scalar(
-            select(PreSubmitEvidenceSet)
-            .where(PreSubmitEvidenceSet.id == intent.pre_submit_evidence_set_id)
-            .with_for_update(key_share=True)
+        evidence = (
+            await self._session.scalar(
+                select(PreSubmitEvidenceSet)
+                .where(PreSubmitEvidenceSet.id == intent.pre_submit_evidence_set_id)
+                .with_for_update(key_share=True)
+            )
+            if intent.pre_submit_evidence_set_id is not None
+            else None
         )
+        selected = None
+        if intent.selected_pre_submit_run_id is not None:
+            try:
+                selected = SelectedPreSubmitReservationFacts.from_canonical_body(
+                    intent.selected_request_json
+                )
+            except (TypeError, ValueError) as exc:
+                raise SubmissionBundleAdmissionPublicationError(
+                    "selected PRE request snapshot is invalid"
+                ) from exc
+            terminal = intent.selected_terminal_json
+            if (
+                selected.admission_lineage is None
+                or selected.attempt_id != UUID(intent.selected_pre_submit_run_id)
+                or selected.request_digest != intent.selected_request_digest
+                or type(terminal) is not dict
+                or canonical_json_hash(terminal) != intent.selected_terminal_digest
+                or terminal.get("request_digest") != selected.request_digest
+                or terminal.get("outcome") != "completed"
+                or type(terminal.get("execution")) is not dict
+                or terminal["execution"].get("eligible") is not True
+            ):
+                raise SubmissionBundleAdmissionPublicationError(
+                    "selected PRE terminal snapshot is invalid"
+                )
         replica = await self._session.scalar(
             select(ArtifactReplica)
             .where(ArtifactReplica.id == job.replica_id)
@@ -322,48 +399,157 @@ class SubmissionBundleAdmissionPublisher:
             if replica is not None
             else None
         )
-        if not self._matches_verified_lineage(evidence, attempt, job, replica, content, receipt):
+        lineage = selected.admission_lineage if selected is not None else evidence
+        if (
+            lineage is None
+            or (
+                evidence is not None
+                and (evidence.terminal_status != "passed" or not evidence.eligible)
+            )
+            or not self._matches_verified_bytes(
+                attempt,
+                job,
+                replica,
+                content,
+                receipt,
+                project_id=str(
+                    selected.project_id if selected is not None else evidence.project_id
+                ),
+                task_id=str(
+                    selected.task_id if selected is not None else evidence.task_id
+                ),
+                actor_profile_id=str(
+                    selected.actor_profile_id
+                    if selected is not None
+                    else evidence.actor_profile_id
+                ),
+                archive_sha256=(
+                    selected.archive_sha256
+                    if selected is not None
+                    else evidence.archive_sha256
+                ),
+                archive_byte_count=(
+                    selected.archive_byte_count
+                    if selected is not None
+                    else evidence.archive_byte_count
+                ),
+            )
+        ):
             raise SubmissionBundleAdmissionPublicationError(
                 "verified submission bundle lineage does not match"
             )
         operation_receipt_id, observation_receipt_id = await self._write_receipt_ids(attempt)
-        assert evidence is not None and replica is not None and content is not None
+        assert replica is not None and content is not None
         assert receipt is not None
+        selected_lineage = selected.admission_lineage if selected is not None else None
         now = await self._session.scalar(select(func.now()))
         admission = SubmissionBundleAdmission(
             id=str(new_record_id()),
             durable_intent_id=intent.id,
-            pre_submit_evidence_set_id=evidence.id,
-            selected_pre_submit_run_id=None,
+            pre_submit_evidence_set_id=(evidence.id if evidence is not None else None),
+            selected_pre_submit_run_id=(
+                str(selected.attempt_id) if selected is not None else None
+            ),
             put_attempt_id=attempt.id,
             artifact_content_id=content.id,
             verified_replica_id=replica.id,
             verification_receipt_id=receipt.id,
             put_operation_receipt_id=operation_receipt_id,
             put_observation_receipt_id=observation_receipt_id,
-            actor_profile_id=evidence.actor_profile_id,
-            identity_link_id=evidence.identity_link_id,
-            project_id=evidence.project_id,
-            task_id=evidence.task_id,
-            assignment_id=evidence.assignment_id,
-            predecessor_submission_id=evidence.predecessor_submission_id,
-            predecessor_submission_version=evidence.predecessor_submission_version,
-            locked_policy_context_hash=evidence.locked_policy_context_hash,
-            guide_id=evidence.guide_id,
-            guide_version=evidence.guide_version,
-            source_snapshot_id=evidence.source_snapshot_id,
-            source_snapshot_sha256=evidence.source_snapshot_sha256,
-            effective_policy_id=evidence.effective_policy_id,
-            effective_policy_sha256=evidence.locked_artifact_policy_sha256,
-            pre_submit_policy_id=evidence.pre_submit_policy_id,
-            pre_submit_policy_sha256=evidence.locked_checker_policy_sha256,
-            effective_plan_sha256=evidence.effective_plan_sha256,
-            packet_sha256=evidence.packet_sha256,
-            semantic_manifest_id=evidence.semantic_manifest_id,
-            semantic_manifest_sha256=evidence.semantic_manifest_sha256,
-            semantic_manifest_body=evidence.semantic_manifest_body,
-            archive_sha256=evidence.archive_sha256,
-            archive_byte_count=evidence.archive_byte_count,
+            actor_profile_id=str(
+                selected.actor_profile_id if selected is not None else evidence.actor_profile_id
+            ),
+            identity_link_id=str(
+                selected.identity_link_id if selected is not None else evidence.identity_link_id
+            ),
+            project_id=str(selected.project_id if selected is not None else evidence.project_id),
+            task_id=str(selected.task_id if selected is not None else evidence.task_id),
+            assignment_id=str(
+                selected.assignment_id if selected is not None else evidence.assignment_id
+            ),
+            predecessor_submission_id=(
+                str(selected_lineage.predecessor_submission_id)
+                if selected_lineage is not None
+                and selected_lineage.predecessor_submission_id is not None
+                else evidence.predecessor_submission_id if evidence is not None else None
+            ),
+            predecessor_submission_version=(
+                selected_lineage.predecessor_submission_version
+                if selected_lineage is not None
+                else evidence.predecessor_submission_version
+            ),
+            locked_policy_context_hash=(
+                selected_lineage.locked_policy_context_hash
+                if selected_lineage is not None
+                else evidence.locked_policy_context_hash
+            ),
+            guide_id=str(
+                selected_lineage.guide_id if selected_lineage is not None else evidence.guide_id
+            ),
+            guide_version=(
+                selected_lineage.guide_version if selected_lineage is not None else evidence.guide_version
+            ),
+            source_snapshot_id=str(
+                selected_lineage.source_snapshot_id
+                if selected_lineage is not None
+                else evidence.source_snapshot_id
+            ),
+            source_snapshot_sha256=(
+                selected_lineage.source_snapshot_sha256
+                if selected_lineage is not None
+                else evidence.source_snapshot_sha256
+            ),
+            effective_policy_id=str(
+                selected_lineage.effective_policy_id
+                if selected_lineage is not None
+                else evidence.effective_policy_id
+            ),
+            effective_policy_sha256=(
+                selected_lineage.effective_policy_sha256
+                if selected_lineage is not None
+                else evidence.locked_artifact_policy_sha256
+            ),
+            pre_submit_policy_id=str(
+                selected_lineage.pre_submit_policy_id
+                if selected_lineage is not None
+                else evidence.pre_submit_policy_id
+            ),
+            pre_submit_policy_sha256=(
+                selected_lineage.pre_submit_policy_sha256
+                if selected_lineage is not None
+                else evidence.locked_checker_policy_sha256
+            ),
+            effective_plan_sha256=(
+                selected_lineage.effective_plan_sha256
+                if selected_lineage is not None
+                else evidence.effective_plan_sha256
+            ),
+            packet_sha256=(
+                selected_lineage.packet_sha256
+                if selected_lineage is not None
+                else evidence.packet_sha256
+            ),
+            semantic_manifest_id=str(
+                selected_lineage.semantic_manifest_id
+                if selected_lineage is not None
+                else evidence.semantic_manifest_id
+            ),
+            semantic_manifest_sha256=(
+                selected.semantic_manifest_sha256
+                if selected is not None
+                else evidence.semantic_manifest_sha256
+            ),
+            semantic_manifest_body=(
+                selected_lineage.semantic_manifest_body
+                if selected_lineage is not None
+                else evidence.semantic_manifest_body
+            ),
+            archive_sha256=(
+                selected.archive_sha256 if selected is not None else evidence.archive_sha256
+            ),
+            archive_byte_count=(
+                selected.archive_byte_count if selected is not None else evidence.archive_byte_count
+            ),
             status="ready",
             ready_at=now,
             consumed_at=None,
@@ -376,12 +562,21 @@ class SubmissionBundleAdmissionPublisher:
         return admission
 
     @staticmethod
-    def _matches_verified_lineage(evidence, attempt, job, replica, content, receipt) -> bool:
+    def _matches_verified_bytes(
+        attempt,
+        job,
+        replica,
+        content,
+        receipt,
+        *,
+        project_id: str,
+        task_id: str,
+        actor_profile_id: str,
+        archive_sha256: str,
+        archive_byte_count: int,
+    ) -> bool:
         return bool(
-            evidence is not None
-            and evidence.terminal_status == "passed"
-            and evidence.eligible
-            and replica is not None
+            replica is not None
             and content is not None
             and receipt is not None
             and receipt.verification_job_id == job.id
@@ -390,11 +585,11 @@ class SubmissionBundleAdmissionPublisher:
             and receipt.observed_sha256
             == attempt.sha256
             == content.sha256
-            == evidence.archive_sha256
+            == archive_sha256
             and receipt.observed_byte_count
             == attempt.byte_count
             == content.byte_count
-            == evidence.archive_byte_count
+            == archive_byte_count
             and job.originating_put_attempt_id == attempt.id
             and job.replica_id == replica.id
             and attempt.replica_id == replica.id
@@ -402,10 +597,31 @@ class SubmissionBundleAdmissionPublisher:
             and replica.verification_state == "verified"
             and replica.availability_state == "available"
             and replica.integrity_state == "valid"
-            and attempt.project_id == evidence.project_id
-            and attempt.task_id == evidence.task_id
-            and attempt.producer_ref == evidence.actor_profile_id
+            and attempt.project_id == project_id
+            and attempt.task_id == task_id
+            and attempt.producer_ref == actor_profile_id
             and attempt.media_type == "application/zip"
+        )
+
+    @staticmethod
+    def _matches_verified_lineage(evidence, attempt, job, replica, content, receipt) -> bool:
+        """Retain the historical evidence decoder over the shared byte verifier."""
+        return bool(
+            evidence is not None
+            and evidence.terminal_status == "passed"
+            and evidence.eligible
+            and SubmissionBundleAdmissionPublisher._matches_verified_bytes(
+                attempt,
+                job,
+                replica,
+                content,
+                receipt,
+                project_id=evidence.project_id,
+                task_id=evidence.task_id,
+                actor_profile_id=evidence.actor_profile_id,
+                archive_sha256=evidence.archive_sha256,
+                archive_byte_count=evidence.archive_byte_count,
+            )
         )
 
     async def _write_receipt_ids(

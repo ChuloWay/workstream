@@ -106,6 +106,54 @@ class SelectedPreSubmitAdmissionLineage:
             "storage_scheme": self.storage_scheme,
         }
 
+    @classmethod
+    def from_canonical_body(
+        cls, body: object
+    ) -> SelectedPreSubmitAdmissionLineage:
+        """Parse the exact closed body copied into ART's durable intent."""
+        if type(body) is not dict or set(body) != {
+            "predecessor_submission_id",
+            "predecessor_submission_version",
+            "guide_id",
+            "guide_version",
+            "source_snapshot_id",
+            "source_snapshot_sha256",
+            "locked_guide_sha256",
+            "effective_policy_id",
+            "effective_policy_sha256",
+            "pre_submit_policy_id",
+            "pre_submit_policy_sha256",
+            "effective_plan_sha256",
+            "locked_policy_context_hash",
+            "semantic_manifest_id",
+            "semantic_manifest_body",
+            "packet_sha256",
+            "storage_scheme",
+        }:
+            raise ValueError("selected PRE admission lineage is invalid")
+        predecessor = body["predecessor_submission_id"]
+        return cls(
+            predecessor_submission_id=(
+                UUID(str(predecessor)) if predecessor is not None else None
+            ),
+            predecessor_submission_version=body["predecessor_submission_version"],
+            guide_id=UUID(str(body["guide_id"])),
+            guide_version=body["guide_version"],
+            source_snapshot_id=UUID(str(body["source_snapshot_id"])),
+            source_snapshot_sha256=body["source_snapshot_sha256"],
+            locked_guide_sha256=body["locked_guide_sha256"],
+            effective_policy_id=UUID(str(body["effective_policy_id"])),
+            effective_policy_sha256=body["effective_policy_sha256"],
+            pre_submit_policy_id=UUID(str(body["pre_submit_policy_id"])),
+            pre_submit_policy_sha256=body["pre_submit_policy_sha256"],
+            effective_plan_sha256=body["effective_plan_sha256"],
+            locked_policy_context_hash=body["locked_policy_context_hash"],
+            semantic_manifest_id=UUID(str(body["semantic_manifest_id"])),
+            semantic_manifest_body=body["semantic_manifest_body"],
+            packet_sha256=body["packet_sha256"],
+            storage_scheme=body["storage_scheme"],
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class ExternalPreSubmitIsolationFacts:
@@ -309,6 +357,55 @@ class SelectedPreSubmitReservationFacts:
                 else None
             ),
         }
+
+    @classmethod
+    def from_canonical_body(
+        cls, body: object
+    ) -> SelectedPreSubmitReservationFacts:
+        """Recover and validate the durable request snapshot at ART publication."""
+        if type(body) is not dict or set(body) != {
+            "schema_version",
+            "actor_profile_id",
+            "identity_link_id",
+            "project_id",
+            "task_id",
+            "assignment_id",
+            "attempt_id",
+            "attempt_request_digest",
+            "prepared_generation_id",
+            "policy_sha256",
+            "default_behavior_sha256",
+            "default_input_sha256",
+            "archive_sha256",
+            "archive_byte_count",
+            "semantic_manifest_sha256",
+            "execution_budget_ms",
+            "admission_lineage",
+        } or body["schema_version"] != "workstream.selected_pre_submit_reservation.v1":
+            raise ValueError("selected PRE reservation facts are invalid")
+        lineage_body = body["admission_lineage"]
+        return cls(
+            actor_profile_id=UUID(str(body["actor_profile_id"])),
+            identity_link_id=UUID(str(body["identity_link_id"])),
+            project_id=UUID(str(body["project_id"])),
+            task_id=UUID(str(body["task_id"])),
+            assignment_id=UUID(str(body["assignment_id"])),
+            attempt_id=UUID(str(body["attempt_id"])),
+            attempt_request_digest=body["attempt_request_digest"],
+            prepared_generation_id=UUID(str(body["prepared_generation_id"])),
+            policy_sha256=body["policy_sha256"],
+            default_behavior_sha256=body["default_behavior_sha256"],
+            default_input_sha256=body["default_input_sha256"],
+            archive_sha256=body["archive_sha256"],
+            archive_byte_count=body["archive_byte_count"],
+            semantic_manifest_sha256=body["semantic_manifest_sha256"],
+            execution_budget_ms=body["execution_budget_ms"],
+            admission_lineage=(
+                SelectedPreSubmitAdmissionLineage.from_canonical_body(lineage_body)
+                if lineage_body is not None
+                else None
+            ),
+        )
 
     @property
     def request_digest(self) -> str:

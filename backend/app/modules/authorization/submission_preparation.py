@@ -36,7 +36,11 @@ class SubmissionBundlePreparationResourceContext(SubmissionBundlePreparationRequ
     resource_type: Literal["submission_bundle_preparation"]
     resource_id: UUID
     predecessor_submission_version: int | None = Field(default=None, ge=1)
-    pre_submit_evidence_set_id: UUID
+    pre_submit_evidence_set_id: UUID | None
+    selected_pre_submit_run_id: UUID | None = None
+    selected_terminal_digest: str | None = Field(
+        default=None, pattern=r"^sha256:[0-9a-f]{64}$"
+    )
     prepared_generation_id: UUID
     guide_id: UUID
     guide_version: str
@@ -49,6 +53,8 @@ class SubmissionBundlePreparationResourceContext(SubmissionBundlePreparationRequ
     effective_plan_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     semantic_manifest_id: UUID
     semantic_manifest_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    semantic_manifest_body: dict[str, object]
+    packet_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     archive_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     archive_byte_count: int = Field(ge=0)
     media_type: Literal["application/zip"]
@@ -65,6 +71,13 @@ class SubmissionBundlePreparationResourceContext(SubmissionBundlePreparationRequ
             self.predecessor_submission_version is None
         ):
             raise ValueError("submission predecessor identity is incomplete")
+        if (
+            (self.pre_submit_evidence_set_id is None)
+            == (self.selected_pre_submit_run_id is None)
+            or (self.selected_pre_submit_run_id is None)
+            != (self.selected_terminal_digest is None)
+        ):
+            raise ValueError("submission preparation lineage is incomplete")
         return self
 
 
@@ -91,7 +104,6 @@ def parse_submission_preparation(
     if "prepared_generation_id" not in value:
         return request_context, request_digest, None, None
     for field in (
-        "pre_submit_evidence_set_id",
         "prepared_generation_id",
         "guide_id",
         "source_snapshot_id",
@@ -100,6 +112,9 @@ def parse_submission_preparation(
         "semantic_manifest_id",
     ):
         value[field] = UUID(str(value[field]))
+    for field in ("pre_submit_evidence_set_id", "selected_pre_submit_run_id"):
+        if value.get(field) is not None:
+            value[field] = UUID(str(value[field]))
     if value.get("replay_durable_intent_id") is not None:
         value["replay_durable_intent_id"] = UUID(str(value["replay_durable_intent_id"]))
     final = SubmissionBundlePreparationResourceContext(

@@ -63,6 +63,8 @@ async def test_final_preparation_rejects_cross_request_facts() -> None:
         effective_plan_sha256=_sha("4"),
         semantic_manifest_id=new_record_id(),
         semantic_manifest_sha256=_sha("5"),
+        semantic_manifest_body={"schema_version": "submission_manifest.v1", "entries": []},
+        packet_sha256=_sha("8"),
         archive_sha256=_sha("6"),
         archive_byte_count=42,
         media_type="application/zip",

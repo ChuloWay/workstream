@@ -111,5 +111,17 @@ class SubmissionBundlePreparedCustody:
         return self._selected.terminal_digest
 
     @property
+    def selected_terminal_body(self) -> dict[str, object]:
+        """Return a fresh canonical terminal body for the durable ART snapshot."""
+        if self._selected is None:
+            raise TypeError("selected submission custody is unavailable")
+        return self._selected.canonical_body()
+
+    @property
     def source(self) -> CommittedArtifactSource:
         return self._prepared.committed_source
+
+    @property
+    def is_selected(self) -> bool:
+        """Distinguish new selected custody from the retained legacy decoder."""
+        return self._selected is not None

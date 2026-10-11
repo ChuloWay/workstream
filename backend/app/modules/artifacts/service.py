@@ -198,6 +198,7 @@ class _AdmissionFacts:
     pre_submit_evidence_set_id: str | None
     operation_identity: str
     task_import_source_id: str | None = None
+    selected_pre_submit_run_id: str | None = None
 
 
 def artifact_storage_namespace_spec(
@@ -2039,18 +2040,19 @@ class ArtifactAdmissionService:
                         authority_facts,
                         operation_identity=replay_attempt.operation_identity,
                     )
-                consumed_evidence_id = request.custody.pass_capability.consume(
-                    prepared_generation_id=authority_facts.prepared_generation_id,
-                    predecessor_submission_id=authority_facts.predecessor_submission_id,
-                    effective_plan_sha256=authority_facts.effective_plan_sha256,
-                    archive_sha256=authority_facts.archive_sha256,
-                    semantic_manifest_sha256=authority_facts.semantic_manifest_sha256,
-                    storage_scheme=authority_facts.storage_scheme,
-                )
-                if consumed_evidence_id != authority_facts.pre_submit_evidence_set_id:
-                    raise ArtifactAdmissionRelationshipError(
-                        "submission bundle pass capability evidence changed"
+                if not request.custody.is_selected:
+                    consumed_evidence_id = request.custody.pass_capability.consume(
+                        prepared_generation_id=authority_facts.prepared_generation_id,
+                        predecessor_submission_id=authority_facts.predecessor_submission_id,
+                        effective_plan_sha256=authority_facts.effective_plan_sha256,
+                        archive_sha256=authority_facts.archive_sha256,
+                        semantic_manifest_sha256=authority_facts.semantic_manifest_sha256,
+                        storage_scheme=authority_facts.storage_scheme,
                     )
+                    if consumed_evidence_id != authority_facts.pre_submit_evidence_set_id:
+                        raise ArtifactAdmissionRelationshipError(
+                            "submission bundle pass capability evidence changed"
+                        )
                 prepared_authorization = await submission_prepared_authorization.prepare_final(
                     facts=authority_facts
                 )
@@ -2090,6 +2092,7 @@ class ArtifactAdmissionService:
                         else {}
                     ),
                     "pre_submit_evidence_set_id": facts.pre_submit_evidence_set_id,
+                    "selected_pre_submit_run_id": facts.selected_pre_submit_run_id,
                     "sha256": commitment.sha256,
                     "byte_count": commitment.byte_count,
                     "media_type": commitment.media_type,
@@ -2126,9 +2129,18 @@ class ArtifactAdmissionService:
                     counter.scope_type, counter.counted_bytes, counter.limit_bytes
                 )
             if replay is not None:
-                if facts.pre_submit_evidence_set_id is not None:
-                    intent = await self._repo.get_submission_bundle_intent_by_evidence(
-                        facts.pre_submit_evidence_set_id
+                if (
+                    facts.pre_submit_evidence_set_id is not None
+                    or facts.selected_pre_submit_run_id is not None
+                ):
+                    intent = (
+                        await self._repo.get_submission_bundle_intent_by_evidence(
+                            facts.pre_submit_evidence_set_id
+                        )
+                        if facts.pre_submit_evidence_set_id is not None
+                        else await self._repo.get_submission_bundle_intent_by_selected_run(
+                            facts.selected_pre_submit_run_id or ""
+                        )
                     )
                     if intent is None or intent.put_attempt_id != replay.id:
                         raise ArtifactAdmissionConfigurationError(
@@ -2180,12 +2192,45 @@ class ArtifactAdmissionService:
                 terminal_at=None,
             )
             await self._repo.add_put_attempt(attempt, charges)
-            if facts.pre_submit_evidence_set_id is not None:
+            if (
+                facts.pre_submit_evidence_set_id is not None
+                or facts.selected_pre_submit_run_id is not None
+            ):
+                selected_request = (
+                    request.custody.selected_reservation
+                    if type(request) is SubmissionBundleArtifactAdmissionRequest
+                    and request.custody.is_selected
+                    else None
+                )
                 await self._repo.add_submission_bundle_intent(
                     SubmissionBundleDurableIntent(
                         id=str(new_record_id()),
                         pre_submit_evidence_set_id=facts.pre_submit_evidence_set_id,
-                        selected_pre_submit_run_id=None,
+                        selected_pre_submit_run_id=facts.selected_pre_submit_run_id,
+                        selected_request_json=(
+                            selected_request.canonical_body()
+                            if selected_request is not None
+                            else None
+                        ),
+                        selected_request_digest=(
+                            selected_request.request_digest
+                            if selected_request is not None
+                            else None
+                        ),
+                        selected_terminal_json=(
+                            request.custody.selected_terminal_body
+                            if selected_request is not None
+                            and type(request)
+                            is SubmissionBundleArtifactAdmissionRequest
+                            else None
+                        ),
+                        selected_terminal_digest=(
+                            request.custody.selected_terminal_digest
+                            if selected_request is not None
+                            and type(request)
+                            is SubmissionBundleArtifactAdmissionRequest
+                            else None
+                        ),
                         put_attempt_id=attempt.id,
                     )
                 )
@@ -2350,6 +2395,39 @@ class ArtifactAdmissionService:
             raise ArtifactAdmissionRelationshipError(
                 "submission bundle replay intent is unavailable"
             )
+        if request.custody.is_selected:
+            reservation = request.custody.selected_reservation
+            attempt = await self._repo.lock_put_attempt(intent.put_attempt_id)
+            if (
+                attempt is None
+                or intent.selected_pre_submit_run_id != str(reservation.attempt_id)
+                or intent.pre_submit_evidence_set_id is not None
+                or intent.selected_request_json != reservation.canonical_body()
+                or intent.selected_request_digest != reservation.request_digest
+                or intent.selected_terminal_json
+                != request.custody.selected_terminal_body
+                or intent.selected_terminal_digest
+                != request.custody.selected_terminal_digest
+                or attempt.producer_request_type != "submission_bundle"
+                or attempt.status
+                not in {
+                    "prepared",
+                    "acknowledgement_unknown",
+                    "absent_replay_required",
+                    "object_confirmed",
+                }
+                or attempt.sha256 != current.archive_sha256
+                or attempt.byte_count != current.archive_byte_count
+                or attempt.media_type != current.media_type
+            ):
+                raise ArtifactAdmissionRelationshipError(
+                    "selected submission bundle replay intent does not match custody"
+                )
+            return attempt
+        if intent.pre_submit_evidence_set_id is None:
+            raise ArtifactAdmissionRelationshipError(
+                "submission bundle replay intent is unavailable"
+            )
         prior = await self._repo.lock_pre_submit_evidence_set(intent.pre_submit_evidence_set_id)
         fresh = await self._repo.lock_pre_submit_evidence_set(
             str(current.pre_submit_evidence_set_id)
@@ -2465,6 +2543,12 @@ class ArtifactAdmissionService:
 
         if type(request.custody) is not SubmissionBundlePreparedCustody:
             raise ArtifactAuthorityDeniedError("submission bundle prepared custody is unavailable")
+        if request.custody.is_selected:
+            return await self._selected_submission_bundle_facts(
+                request,
+                task_contexts=task_contexts,
+                project_contexts=project_contexts,
+            )
         pass_capability = request.custody.pass_capability
         if type(pass_capability) is not PreSubmitPassCapability:
             raise ArtifactAuthorityDeniedError("submission bundle pass capability is unavailable")
@@ -2572,6 +2656,8 @@ class ArtifactAdmissionService:
             effective_plan_sha256=evidence.effective_plan_sha256,
             semantic_manifest_id=UUID(evidence.semantic_manifest_id),
             semantic_manifest_sha256=evidence.semantic_manifest_sha256,
+            semantic_manifest_body=evidence.semantic_manifest_body,
+            packet_sha256=evidence.packet_sha256,
             archive_sha256=evidence.archive_sha256,
             archive_byte_count=evidence.archive_byte_count,
             media_type=commitment.media_type,
@@ -2596,6 +2682,141 @@ class ArtifactAdmissionService:
             checker_request_digest_facts=None,
             pre_submit_evidence_set_id=evidence.id,
             operation_identity=operation_identity,
+        )
+
+    async def _selected_submission_bundle_facts(
+        self,
+        request: SubmissionBundleArtifactAdmissionRequest,
+        *,
+        task_contexts: TaskSubmissionContextPort,
+        project_contexts: ProjectLockedPolicyContextPort,
+    ) -> tuple[SubmissionBundleDurableIntentAuthorityFacts, _AdmissionFacts]:
+        """Revalidate selected terminal custody against current TASK and PROJECT locks."""
+        reservation = request.custody.selected_reservation
+        lineage = reservation.admission_lineage
+        commitment = request.source.commitment
+        if (
+            lineage is None
+            or request.pre_submit_evidence_set_id is not None
+            or request.selected_pre_submit_run_id != reservation.attempt_id
+            or request.selected_terminal_digest
+            != request.custody.selected_terminal_digest
+            or reservation.prepared_generation_id
+            != request.custody.prepared_generation_id
+            or reservation.archive_sha256 != commitment.sha256
+            or reservation.archive_byte_count != commitment.byte_count
+            or commitment.media_type != "application/zip"
+            or canonical_json_hash(lineage.semantic_manifest_body)
+            != reservation.semantic_manifest_sha256
+        ):
+            raise ArtifactAdmissionRelationshipError(
+                "selected submission bundle passing evidence is unavailable"
+            )
+        try:
+            task = await task_contexts.lock_submission_context(
+                TaskSubmissionContextRequest(
+                    task_id=reservation.task_id,
+                    assignment_id=reservation.assignment_id,
+                    contributor_id=reservation.actor_profile_id,
+                    predecessor_submission_id=lineage.predecessor_submission_id,
+                )
+            )
+            locked = await project_contexts.lock_locked_policy_context(
+                ProjectLockedPolicyContextRequest(
+                    project_id=reservation.project_id,
+                    guide_version=lineage.guide_version,
+                    source_snapshot_id=lineage.source_snapshot_id,
+                    source_snapshot_hash=lineage.source_snapshot_sha256,
+                    effective_policy_id=lineage.effective_policy_id,
+                    effective_policy_hash=lineage.effective_policy_sha256,
+                    pre_submit_policy_id=lineage.pre_submit_policy_id,
+                    pre_submit_policy_bundle_hash=lineage.pre_submit_policy_sha256,
+                )
+            )
+        except (TaskSubmissionContextUnavailable, ProjectLockedPolicyContextUnavailable) as exc:
+            raise ArtifactAdmissionRelationshipError(
+                "selected_pre_submit_locked_context_changed"
+            ) from exc
+        predecessor = task.predecessor
+        if (
+            task.contributor_id != reservation.actor_profile_id
+            or task.task_id != reservation.task_id
+            or task.assignment_id != reservation.assignment_id
+            or (predecessor.submission_id if predecessor is not None else None)
+            != lineage.predecessor_submission_id
+            or (predecessor.version if predecessor is not None else None)
+            != lineage.predecessor_submission_version
+            or locked.project_id != reservation.project_id
+            or locked.guide_id != lineage.guide_id
+            or locked.guide_version != lineage.guide_version
+            or locked.source_snapshot_id != lineage.source_snapshot_id
+            or locked.source_snapshot_hash != lineage.source_snapshot_sha256
+            or locked.effective_policy_id != lineage.effective_policy_id
+            or locked.effective_policy_hash != lineage.effective_policy_sha256
+            or locked.pre_submit_policy_id != lineage.pre_submit_policy_id
+            or locked.pre_submit_policy_bundle_hash
+            != lineage.pre_submit_policy_sha256
+            or reservation.policy_sha256 != lineage.effective_plan_sha256
+        ):
+            raise ArtifactAdmissionRelationshipError(
+                "selected submission bundle locked context changed"
+            )
+        operation_identity = canonical_json_hash(
+            {
+                "request_type": "submission_bundle",
+                "selected_pre_submit_run_id": str(reservation.attempt_id),
+            }
+        )
+        authority_facts = SubmissionBundleDurableIntentAuthorityFacts(
+            actor_profile_id=reservation.actor_profile_id,
+            identity_link_id=reservation.identity_link_id,
+            project_id=reservation.project_id,
+            task_id=reservation.task_id,
+            assignment_id=reservation.assignment_id,
+            predecessor_submission_id=lineage.predecessor_submission_id,
+            predecessor_submission_version=lineage.predecessor_submission_version,
+            pre_submit_evidence_set_id=None,
+            prepared_generation_id=reservation.prepared_generation_id,
+            guide_id=lineage.guide_id,
+            guide_version=lineage.guide_version,
+            source_snapshot_id=lineage.source_snapshot_id,
+            source_snapshot_sha256=lineage.source_snapshot_sha256,
+            effective_policy_id=lineage.effective_policy_id,
+            effective_policy_sha256=lineage.effective_policy_sha256,
+            pre_submit_policy_id=lineage.pre_submit_policy_id,
+            pre_submit_policy_sha256=lineage.pre_submit_policy_sha256,
+            effective_plan_sha256=lineage.effective_plan_sha256,
+            semantic_manifest_id=lineage.semantic_manifest_id,
+            semantic_manifest_sha256=reservation.semantic_manifest_sha256,
+            semantic_manifest_body=lineage.semantic_manifest_body,
+            packet_sha256=lineage.packet_sha256,
+            archive_sha256=reservation.archive_sha256,
+            archive_byte_count=reservation.archive_byte_count,
+            media_type=commitment.media_type,
+            storage_scheme=lineage.storage_scheme,
+            operation_identity=operation_identity,
+            replay_durable_intent_id=request.replay_durable_intent_id,
+            selected_pre_submit_run_id=reservation.attempt_id,
+            selected_terminal_digest=request.custody.selected_terminal_digest,
+        )
+        return authority_facts, _AdmissionFacts(
+            request_type="submission_bundle",
+            producer_type="actor_profile",
+            producer_ref=str(reservation.actor_profile_id),
+            project_id=str(reservation.project_id),
+            guide_id=str(lineage.guide_id),
+            task_id=str(reservation.task_id),
+            guide_source_item_id=None,
+            guide_source_snapshot_id=str(lineage.source_snapshot_id),
+            checker_run_id=None,
+            logical_role=None,
+            submission_id=None,
+            submission_version=None,
+            checker_request_digest=None,
+            checker_request_digest_facts=None,
+            pre_submit_evidence_set_id=None,
+            operation_identity=operation_identity,
+            selected_pre_submit_run_id=str(reservation.attempt_id),
         )
 
     async def _require_active_human_actor(self, context: AuthorizationContext) -> None:
