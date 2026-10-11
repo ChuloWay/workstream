@@ -18,6 +18,11 @@ from app.modules.checkers.api.post_submit import (
     PostSubmissionEvaluationContent, ExpectedPostSubmitContext, ObservedPostSubmitContext,
     PostSubmitPolicyInputs, PostSubmissionStructuralInput, PostSubmitManifestEntry, PostSubmitEvidenceEntry,
 )
+from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmissionContent,
+    SelectedPostSubmitLockedContext,
+)
 from app.modules.checkers.api.history import CheckerHistoryReadPort
 from app.modules.checkers.api.execution import EvaluationCoordinationPort
 from typing import Any, BinaryIO, Protocol
@@ -344,6 +349,39 @@ def submission_evaluation_content(
             policy_inputs=policy_inputs,
             observed_context=ObservedPostSubmitContext(**expected.model_dump()),
         ),
+    )
+
+
+def selected_submission_evaluation_content(
+    task_context: TaskSubmissionContextFacts,
+    policy: LockedExternalPostSubmitPolicy,
+) -> SelectedPostSubmissionContent:
+    """Bind selected POST policy to exact TASK lineage without a catalogue hash."""
+    locked = task_context.locked_policy
+    references = task_context.locked_project_context
+    return SelectedPostSubmissionContent(
+        project_id=references.project_id,
+        expected_context=SelectedPostSubmitLockedContext(
+            guide_version=locked.locked_guide_version,
+            source_id=locked.locked_guide_source_snapshot_id,
+            source_hash=locked.locked_guide_source_snapshot_hash,
+            effective_policy_id=(
+                locked.locked_effective_project_submission_artifact_policy_id
+            ),
+            effective_policy_hash=(
+                locked.locked_effective_project_submission_artifact_policy_hash
+            ),
+            pre_policy_id=locked.locked_pre_submit_checker_policy_id,
+            pre_policy_hash=locked.locked_pre_submit_checker_bundle_hash,
+            selected_post_policy_hash=policy.policy_sha256,
+            review_policy_id=locked.locked_review_policy_id,
+            review_generation=locked.locked_review_policy_generation,
+            review_hash=locked.locked_review_policy_hash,
+            revision_policy_id=locked.locked_revision_policy_id,
+            revision_generation=locked.locked_revision_policy_generation,
+            revision_hash=locked.locked_revision_policy_hash,
+        ),
+        policy=policy,
     )
 
 

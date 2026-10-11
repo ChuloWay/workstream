@@ -7,6 +7,7 @@ from uuid import UUID
 from app.modules.checkers.api import SubmissionPacketView
 from app.modules.checkers.api.post_submit import PostSubmissionEvaluationContent
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
+from app.modules.checkers.api.selected_post_submit import SelectedPostSubmissionContent
 from app.modules.projects.api import ProjectLockedPolicyContextFacts
 from app.modules.tasks.api import TaskSubmissionContextFacts
 
@@ -34,6 +35,20 @@ class SubmissionArtifactBindingFacts:
 class SubmissionArtifactAdmissionResult(SubmissionArtifactBindingFacts):
     evaluation_content: PostSubmissionEvaluationContent
     selected_post_submit_policy: LockedExternalPostSubmitPolicy | None = None
+    selected_evaluation_content: SelectedPostSubmissionContent | None = None
+
+    def __post_init__(self) -> None:
+        """Require selected policy and its locked request content together."""
+        if (self.selected_post_submit_policy is None) != (
+            self.selected_evaluation_content is None
+        ):
+            raise ValueError("selected POST admission content is incomplete")
+        if (
+            self.selected_evaluation_content is not None
+            and self.selected_evaluation_content.policy
+            != self.selected_post_submit_policy
+        ):
+            raise ValueError("selected POST admission policy differs")
 
 
 @dataclass(frozen=True, slots=True)

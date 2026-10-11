@@ -184,7 +184,10 @@ class _ArtifactAdmissionAdapter:
         if (result.binding_id is None or result.status != "consumed"
                 or result.material is None or result.binding_decision_id is None):
             raise RuntimeError("admission did not produce a binding")
-        from app.adapters.checkers import submission_evaluation_content
+        from app.adapters.checkers import (
+            selected_submission_evaluation_content,
+            submission_evaluation_content,
+        )
         from app.modules.checkers.api.external_policy import (
             LockedExternalPostSubmitPolicy,
         )
@@ -205,6 +208,13 @@ class _ArtifactAdmissionAdapter:
                 result.material.files, result.material.archive_sha256,
             ),
             selected_post_submit_policy=selected_post_policy,
+            selected_evaluation_content=(
+                selected_submission_evaluation_content(
+                    request.task_context, selected_post_policy
+                )
+                if selected_post_policy is not None
+                else None
+            ),
         )
 
     async def read_consumed(self, request: SubmissionArtifactReplayRequest) -> SubmissionArtifactBindingFacts:

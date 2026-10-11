@@ -6,12 +6,11 @@ from dataclasses import asdict, dataclass
 from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.external import ExternalCheckerExecutionResult
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
-from app.modules.checkers.api.post_submit import ExpectedPostSubmitContext
 from app.modules.checkers.api.post_submit_catalogue import (
     ByteCount,
     PostSubmitValue,
@@ -21,17 +20,39 @@ from app.modules.checkers.api.post_submit_catalogue import (
 )
 
 
+class SelectedPostSubmitLockedContext(PostSubmitValue):
+    """Exact TASK and selected-policy lineage carried by a new Submission."""
+
+    guide_version: str = Field(min_length=1, max_length=50)
+    source_id: ResourceId
+    source_hash: Sha256
+    effective_policy_id: ResourceId
+    effective_policy_hash: Sha256
+    pre_policy_id: ResourceId
+    pre_policy_hash: Sha256
+    selected_post_policy_hash: Sha256
+    review_policy_id: ResourceId
+    review_generation: VersionNumber
+    review_hash: Sha256
+    revision_policy_id: ResourceId
+    revision_generation: VersionNumber
+    revision_hash: Sha256
+
+
 class SelectedPostSubmissionContent(PostSubmitValue):
     """Approved POST image policy plus the exact locked TASK context."""
 
     project_id: ResourceId
-    expected_context: ExpectedPostSubmitContext
+    expected_context: SelectedPostSubmitLockedContext
     policy: LockedExternalPostSubmitPolicy
 
     @model_validator(mode="after")
     def validate_content(self) -> Self:
         """Require the exact approved policy digest stamped on the Submission."""
-        if self.expected_context.post_policy_hash != self.policy.policy_sha256:
+        if (
+            self.expected_context.selected_post_policy_hash
+            != self.policy.policy_sha256
+        ):
             raise ValueError("selected POST locked policy mismatch")
         return self
 
@@ -269,6 +290,7 @@ __all__ = (
     "ExternalPostSubmitMemberFacts",
     "SelectedPostSubmitExecutionFacts",
     "SelectedPostSubmitInfrastructureUnavailable",
+    "SelectedPostSubmitLockedContext",
     "SelectedPostSubmissionContent",
     "SelectedPostSubmissionEvaluationRequest",
     "SelectedPostSubmissionEvaluationResult",

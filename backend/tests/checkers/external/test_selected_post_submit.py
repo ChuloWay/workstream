@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from types import SimpleNamespace
 
 import pytest
 
+from app.adapters.checkers import selected_submission_evaluation_content
 from app.core.hashing import canonical_json_hash
 from app.interfaces.external_checker_execution import (
     ExternalCheckerExecutionResponse,
@@ -27,8 +29,8 @@ from app.modules.checkers.api.materialization import SubmissionMaterialEntry
 from app.modules.checkers.selected_post_submit_execution import (
     SelectedPostSubmitProcessor,
 )
-from app.modules.checkers.api.post_submit import ExpectedPostSubmitContext
 from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmitLockedContext,
     make_selected_post_submit_request,
     make_selected_post_submit_result,
 )
@@ -176,7 +178,7 @@ async def test_selected_post_separates_infrastructure_from_work_findings() -> No
 async def test_selected_post_request_and_result_bind_exact_locked_policy() -> None:
     identity = execution_identity("post_submit")
     policy = _policy()
-    context = ExpectedPostSubmitContext(
+    context = SelectedPostSubmitLockedContext(
         guide_version="guide-v1",
         source_id=new_record_id(),
         source_hash=SHA,
@@ -184,9 +186,7 @@ async def test_selected_post_request_and_result_bind_exact_locked_policy() -> No
         effective_policy_hash=SHA,
         pre_policy_id=new_record_id(),
         pre_policy_hash=SHA,
-        post_policy_id=new_record_id(),
-        post_policy_version="guide-v1",
-        post_policy_hash=policy.policy_sha256,
+        selected_post_policy_hash=policy.policy_sha256,
         review_policy_id=new_record_id(),
         review_generation=1,
         review_hash=SHA,
@@ -243,7 +243,41 @@ async def test_selected_post_request_and_result_bind_exact_locked_policy() -> No
                 ),
                 policy=empty_policy,
                 expected_context=context.model_copy(
-                    update={"post_policy_hash": empty_policy.policy_sha256}
+                    update={
+                        "selected_post_policy_hash": empty_policy.policy_sha256
+                    }
                 ),
             )
         )
+
+
+def test_selected_post_content_uses_selected_digest_not_catalogue_hash() -> None:
+    policy = _policy()
+    locked = SimpleNamespace(
+        locked_guide_version="guide-v1",
+        locked_guide_source_snapshot_id=new_record_id(),
+        locked_guide_source_snapshot_hash=SHA,
+        locked_effective_project_submission_artifact_policy_id=new_record_id(),
+        locked_effective_project_submission_artifact_policy_hash=SHA,
+        locked_pre_submit_checker_policy_id=new_record_id(),
+        locked_pre_submit_checker_bundle_hash=SHA,
+        locked_post_submit_checker_policy_hash="sha256:" + "1" * 64,
+        locked_review_policy_id=new_record_id(),
+        locked_review_policy_generation=1,
+        locked_review_policy_hash=SHA,
+        locked_revision_policy_id=new_record_id(),
+        locked_revision_policy_generation=1,
+        locked_revision_policy_hash=SHA,
+    )
+    task = SimpleNamespace(
+        locked_policy=locked,
+        locked_project_context=SimpleNamespace(project_id=new_record_id()),
+    )
+
+    content = selected_submission_evaluation_content(task, policy)
+
+    assert content.expected_context.selected_post_policy_hash == policy.policy_sha256
+    assert (
+        content.expected_context.selected_post_policy_hash
+        != locked.locked_post_submit_checker_policy_hash
+    )
