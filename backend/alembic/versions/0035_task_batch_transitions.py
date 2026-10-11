@@ -359,8 +359,14 @@ end $$
 """)
     op.execute(r"""
 create function public.trigger_validate_task_batch_transition() returns trigger
-language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- if new.status='committed' and (tg_op='INSERT' or tg_op='UPDATE')
+language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare final_status text;
+begin
+ select status into final_status from public.task_batch_transition_receipts where id=new.id;
+ if not found or final_status<>'committed' then
+   raise exception 'task batch transition cannot remain pending' using errcode='23514';
+ end if;
+ if new.status='committed'
     and not public.validate_task_batch_transition_custody(new.id) then
    raise exception 'task batch transition custody mismatch' using errcode='23514';
  end if; return new; end $$
@@ -368,12 +374,12 @@ language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
     op.execute(r"""
 create function public.trigger_validate_task_batch_transition_member() returns trigger
 language plpgsql set search_path=pg_catalog,public,pg_temp as $$
-declare parent_status text; parent_xid bigint;
+declare parent_status text; parent_xid xid;
 begin
- select status,(xmin::text)::bigint into parent_status,parent_xid
+ select status,xmin into parent_status,parent_xid
  from public.task_batch_transition_receipts where id=new.transition_receipt_id;
  if not found or parent_status<>'committed'
-    or parent_xid<>pg_catalog.pg_current_xact_id()::text::bigint then
+    or parent_xid<>pg_catalog.pg_current_xact_id()::xid then
    raise exception 'task batch transition member must be committed with its root' using errcode='23514';
  end if;
  return new;
@@ -382,13 +388,13 @@ end $$
     op.execute(r"""
 create function public.trigger_validate_task_batch_command_root() returns trigger
 language plpgsql set search_path=pg_catalog,public,pg_temp as $$
-declare parent_status text; parent_xid bigint;
+declare parent_status text; parent_xid xid;
 begin
  if new.batch_transition_receipt_id is null then return new; end if;
- select status,(xmin::text)::bigint into parent_status,parent_xid
+ select status,xmin into parent_status,parent_xid
  from public.task_batch_transition_receipts where id=new.batch_transition_receipt_id;
  if not found or parent_status<>'committed'
-    or parent_xid<>pg_catalog.pg_current_xact_id()::text::bigint then
+    or parent_xid<>pg_catalog.pg_current_xact_id()::xid then
    raise exception 'task batch transition command must be committed with its root' using errcode='23514';
  end if;
  return new;
