@@ -201,18 +201,41 @@ Review must freeze the chosen key/order and native intermediate-wait regression,
 including normal create versus overlapping import and revoked-authority races.
 No fence, source participant, model or migration is implemented by this record.
 
-Field mapping also has one concrete pending native-parity decision:
+Field mapping has one confirmed native-parity decision:
 `TaskImportRow.difficulty` publishes an 80-character limit, whereas the current
 `WorkstreamTask.difficulty` column is `varchar(50)` and `TaskCreate` has no length
 validator. A valid retained source must not fail as an unexplained late database
-error. Proposed handoff expands that TASK display column to 80 in the sole-author
-successor migration, preserving existing values and the published source shape;
-the alternative is an explicitly reviewed parser-contract narrowing to 50.
+error. The lead confirmed expanding that TASK display column to 80 in the
+sole-author successor migration, preserving existing values and the published
+source shape. Source intake is not narrowed and retained values are not rewritten.
 Native 51/80-character controls and an indexed 81-character rejection must
-discriminate the chosen boundary. No schema choice or alteration is claimed here.
+discriminate the chosen boundary. No alteration is authored by this record.
 The batch retains the actual `workstream.task_import.v1` document identity and
 an explicit row-mapping/parser commitment, alongside verified bytes, so replay
 never silently reinterprets retained rows under a later mapping.
+
+Further owner tracing identifies a smaller proposed lock solution for review:
+the current normal create already consumes fresh AUTH before inserting its Task
+(`authorized_commands.py` lines 152..165). The PM kernel locks the current
+actor/profile/link and effective PM grant (`kernel.py` lines 499..527); it does
+not acquire a shared project-global creation lock. Imports can reserve their
+TASK batch/row retry identities first, validate ART custody, consume fresh AUTH,
+then insert external-ID-bearing Tasks in deterministic project/UTF-8 external-ID
+order. They must reserve every per-row identity before the first AUTH lock and
+retain document row indexes independently from the insertion order.
+
+The bad schedule is an import's pre-AUTH external-ID write, a normal create's
+actor lock, the normal create waiting on that external-ID write, then the import
+waiting on the actor. With both entries consuming AUTH before uniqueness writes,
+the same actor's contender waits on AUTH before owning that external key.
+Different actors keep independent AUTH locks, so overlapping multi-row imports
+must insert external IDs in the same order to avoid crossed-key index waits;
+normal create has only one such key. This proposed common ordering avoids a new
+advisory fence or custody table. Native intermediate-wait controls must include
+same-actor create/import and different-actor reversed-document-order imports.
+Review must settle this ordering and all implicit FK locks before replacing the
+earlier fence proposal or authoring implementation/DDL. No concurrency PASS is
+claimed from this source analysis.
 
 ## Acceptance criteria
 
