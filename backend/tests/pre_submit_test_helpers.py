@@ -1,8 +1,11 @@
 """Shared dependency-safe construction for focused pre-submit tests."""
 
 import json
+import asyncio
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, BinaryIO
 from unittest.mock import AsyncMock
 
 import pytest
@@ -11,7 +14,15 @@ from sqlalchemy.exc import DBAPIError
 from uuid import UUID, uuid4
 from app.core.identifiers import new_record_id
 
-from app.adapters.checkers import PreSubmitCheckerExecutionAdapter
+from app.modules.checkers.api import (
+    PreSubmissionExecutionFacts,
+    PreSubmissionInfrastructureUnavailableError,
+)
+from app.modules.checkers.pre_submit_execution import (
+    DefaultPreSubmissionExecutionError,
+    DefaultPreSubmissionExecutionInput,
+    EffectivePreSubmissionProcessor,
+)
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
 from app.modules.artifacts.submission_materialization import (
     PreparedBundleMaterializationService,
@@ -56,9 +67,64 @@ async def execute_evidence_workflow(workflow, request, *, preparation_request):
     return await workflow.execute_reserved(request, selected, preparation_request=preparation_request)
 
 
-def checker_execution(inspector, catalogue) -> PreSubmitCheckerExecutionAdapter:
-    """Build the owner adapter used by ART materialization tests."""
-    return PreSubmitCheckerExecutionAdapter(
+class _HistoricalFactsProcessor:
+    """Execute only pre-cutover test evidence while its SQL fixtures are retained."""
+
+    def __init__(self, processor: EffectivePreSubmissionProcessor) -> None:
+        self._processor = processor
+
+    def abort(self) -> None:
+        self._processor.abort()
+
+    async def process(
+        self, reader: BinaryIO, workspace: Path
+    ) -> PreSubmissionExecutionFacts:
+        try:
+            result = await asyncio.to_thread(
+                self._processor.process_blocking, reader, workspace
+            )
+            return result.bounded_facts()
+        except DefaultPreSubmissionExecutionError as exc:
+            raise PreSubmissionInfrastructureUnavailableError(str(exc)) from exc
+
+
+class _HistoricalCheckerExecution:
+    """Test-only adapter for predecessor evidence; never a product composition root."""
+
+    def __init__(self, *, catalogue: Any, archive_inspector: Any) -> None:
+        self._catalogue = catalogue
+        self._archive_inspector = archive_inspector
+
+    @property
+    def catalogue_manifest_sha256(self) -> str:
+        return self._catalogue.manifest_sha256
+
+    def build(self, request) -> _HistoricalFactsProcessor:
+        if request.plan is None:
+            raise PreSubmissionInfrastructureUnavailableError(
+                "pre_submission_plan_identity_invalid"
+            )
+        return _HistoricalFactsProcessor(
+            EffectivePreSubmissionProcessor(
+                archive_inspector=self._archive_inspector,
+                catalogue=self._catalogue,
+                execution_input=DefaultPreSubmissionExecutionInput(
+                    plan=request.plan,
+                    commitment=request.commitment,
+                    inspection=request.inspection,
+                    manifest=request.manifest,
+                    change_gate=request.change_gate,
+                    packet=request.packet,
+                    prepared_generation_id=request.prepared_generation_id,
+                    storage_scheme=request.storage_scheme,
+                ),
+            )
+        )
+
+
+def checker_execution(inspector, catalogue) -> _HistoricalCheckerExecution:
+    """Build the test-only predecessor evidence adapter."""
+    return _HistoricalCheckerExecution(
         archive_inspector=inspector,
         catalogue=catalogue,
     )
