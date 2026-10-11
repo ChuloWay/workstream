@@ -117,7 +117,7 @@ async def create_compiled_report_fixture(
         status, findings = diagnostic.status, diagnostic.findings
     manifest = await create_committed_document_fixture(source_snapshot_id)
     configuration = runtime_configuration()
-    async with sessions() as session:
+    async with sessions() as session, session.begin():
         capabilities = await external_checker_capability_projection(session)
     async with sessions() as session:
         setup = await session.get(ProjectSetupRun, str(manifest.setup_run_id))

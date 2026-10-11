@@ -4,8 +4,6 @@ These prerequisites exercise canonical storage guards, not deployment/provider
 conformance. Local/MinIO execution has its own focused integration proof.
 """
 
-from app.adapters.checkers import submission_evaluation_content
-
 from contextlib import asynccontextmanager
 from io import BytesIO
 from pathlib import Path
@@ -15,14 +13,21 @@ from zipfile import ZipFile
 
 from sqlalchemy import select
 
-from app.adapters.artifacts import CheckerPhaseService
+from app.adapters.auth import selected_pre_submit_authority
+from app.adapters.checkers import (
+    SelectedPreSubmitCheckerExecutionAdapter,
+    selected_pre_submit_coordinator,
+)
 from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import (
     ArtifactObjectHead, ArtifactPutObservation, ArtifactPutResult, artifact_provider_object_ref,
 )
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
-from app.modules.artifacts.authorization import PreparedSubmissionBundlePreparationAuthorization
+from app.modules.artifacts.authorization import (
+    PreparedPreSubmitMaterializationAuthorization,
+    PreparedSubmissionBundlePreparationAuthorization,
+)
 from app.modules.artifacts.models import ArtifactStorageNamespace, ArtifactVerificationJob, SubmissionBundleAdmission
 from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactScratchManager
 from app.modules.artifacts.service import ArtifactAdmissionService, ArtifactStorageNamespaceSpec, ArtifactStorageOrchestrator
@@ -30,17 +35,26 @@ from app.modules.artifacts.submission_admission import (
     PreparedSubmissionBundlePreparationCommand, SubmissionBundleDurablePutService,
     SubmissionBundlePreparationRuntime,
 )
+from app.modules.artifacts.selected_pre_submit_execution import SelectedPreSubmitExecutionService
 from app.modules.artifacts.submission_archive import SubmissionArchiveInspector, SubmissionArchiveLimits
+from app.modules.artifacts.submission_materialization import PreparedBundleMaterializationService
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
+from app.modules.actors.api import ServiceIdentity
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
 from app.modules.projects.models import EffectiveProjectSubmissionArtifactPolicy
 from app.modules.tasks.repository import TaskRepository
-from tests.checkers.execution.support import forbidden_post_submission
-from tests.pre_submit_test_helpers import evidence_workflow
 from tests.test_artifact_admission import _AllowArtifactAuthority, _context, _settings
 from tests.test_checker_materialization import _limits
-from tests.test_default_pre_submit_execution import _AllowAuthority, _bytes
+from tests.checkers.execution.support import provision_post_submit_service
+
+
+async def _bytes(value: bytes):
+    yield value
+
+
+class _ForbiddenExternalExecution:
+    async def execute(self, *_args, **_kwargs):
+        raise AssertionError("empty selected policy invoked an external image")
 
 
 class MemoryStore:
@@ -75,8 +89,19 @@ class MemoryStore:
         return ArtifactObjectHead(ref, data is not None, len(data) if data is not None else None)
 
 
-async def retained_admission(factory, task, assignment, link, packet, predecessor_id):
+async def retained_admission(
+    factory,
+    task,
+    assignment,
+    link,
+    packet,
+    predecessor_id,
+    *,
+    external_execution=None,
+):
     """Prepare/check/publish/verify actual ZIP bytes for this existing assignment."""
+    await provision_post_submit_service(factory, ServiceIdentity.ARTIFACT_MATERIALIZER)
+    await provision_post_submit_service(factory, ServiceIdentity.CHECKER_PRE_SUBMIT)
     async with factory() as session:
         persisted = await session.get(ArtifactStorageNamespace, "primary")
         namespace = ArtifactStorageNamespaceSpec(
@@ -116,27 +141,55 @@ async def retained_admission(factory, task, assignment, link, packet, predecesso
         try:
             async with factory() as session:
                 authority = PreparedSubmissionBundlePreparationAuthorization(session, context)
+                materialization_authority = PreparedPreSubmitMaterializationAuthorization(
+                    session,
+                    request_id=request.request_id,
+                    correlation_id=request.correlation_id,
+                )
                 tasks, projects = TaskRepository(session), ProjectLockedPolicyRepository(session)
                 preparation = ArtifactPreparationService(manager)
                 inspector = SubmissionArchiveInspector(SubmissionArchiveLimits())
-                catalogue = build_pre_submission_checker_catalogue()
-                evidence = evidence_workflow(
-                    session=session, preparation=preparation, inspector=inspector, catalogue=catalogue,
-                    materialization_authorization=_AllowAuthority(), preparation_authorization=authority,
+                materialization = PreparedBundleMaterializationService(
+                    session=session,
+                    authorization=materialization_authority,
+                    preparation=preparation,
+                    checker_execution=SelectedPreSubmitCheckerExecutionAdapter(
+                        archive_inspector=inspector,
+                        external_execution=external_execution
+                        or _ForbiddenExternalExecution(),
+                    ),
+                    storage_scheme="s3",
                 )
                 storage = ArtifactStorageOrchestrator(session, store, namespace, settings, _AllowArtifactAuthority())
+                coordinator = selected_pre_submit_coordinator(session)
 
                 @asynccontextmanager
                 async def runtime():
-                    yield SubmissionBundlePreparationRuntime(
-                        preparation, inspector, catalogue, evidence._materialization, evidence,
-                        CheckerPhaseService(pre_submission=evidence, post_submission=forbidden_post_submission()),
-                        SubmissionBundleDurablePutService(
-                            session=session, admission=ArtifactAdmissionService(session, settings, namespace),
-                            storage=storage, authorization=authority, task_contexts=tasks, project_contexts=projects,
-                        ),
-                        submission_evaluation_content,
-                    )
+                    try:
+                        yield SubmissionBundlePreparationRuntime(
+                            preparation=preparation,
+                            inspector=inspector,
+                            materialization=materialization,
+                            durable_put=SubmissionBundleDurablePutService(
+                                session=session,
+                                admission=ArtifactAdmissionService(session, settings, namespace),
+                                storage=storage,
+                                authorization=authority,
+                                task_contexts=tasks,
+                                project_contexts=projects,
+                            ),
+                            selected_coordinator=coordinator,
+                            selected_execution=SelectedPreSubmitExecutionService(
+                                session=session,
+                                coordinator=coordinator,
+                                authority=selected_pre_submit_authority(session),
+                                materialization=materialization,
+                            ),
+                            storage_scheme="s3",
+                            artifact_deadline_ms=180_000,
+                        )
+                    finally:
+                        materialization_authority.close()
 
                 result = await PreparedSubmissionBundlePreparationCommand(
                     session=session, authority=authority, task_contexts=tasks,
