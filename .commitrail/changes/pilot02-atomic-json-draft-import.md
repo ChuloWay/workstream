@@ -193,7 +193,12 @@ and native discriminating proofs before any concurrency PASS:
 3. Validate actual ART source/verification custody through its typed participant
    after TASK custody and before fresh AUTH consumption. Read immutable tuples
    with the weakest required lock; do not lock a mutable put attempt merely to
-   trust an application DTO. Preserve existing TASK-before-CHECKERS/ART order.
+   trust an application DTO. The source row is acquired FOR KEY SHARE here and
+   retained through commit: its existing upload/replay operation uses FOR UPDATE,
+   so postponing source FK custody until after AUTH could invert SOURCE/AUTH.
+   This compatible immutable-parent lock also satisfies deferred final custody
+   without reacquiring a conflicting source lock after actor authority.
+   Preserve existing TASK-before-CHECKERS/ART order.
 4. Consume fresh current batch/source authority and exact per-row CREATE
    authority through the shared TASK owner. After AUTH, insert external-ID-bearing
    Tasks in deterministic project/UTF-8 external-ID order. Retain document row
