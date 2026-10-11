@@ -166,6 +166,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/task_authority/test_lifecycle_races.py",
     "tests/authorization/task_authority/test_task_commands.py",
     "tests/authorization/task_authority/test_management_commands.py",
+    "tests/authorization/task_authority/test_management_participants.py",
     "tests/authorization/task_authority/test_management_concurrency.py",
     "tests/authorization/task_authority/test_management_authority.py",
     "tests/authorization/task_authority/test_management_contracts.py",
@@ -449,7 +450,12 @@ CHECKER_DELIVERY_MODULES = (
 
 
 TASK_MODULES = (
+    "tests/tasks/test_task_batch_transition_contract.py",
+    "tests/tasks/test_task_batch_transitions.py",
     "tests/tasks/test_task_import_contract.py",
+    "tests/tasks/test_task_import_batch_contract.py",
+    "tests/tasks/test_task_import_batch_bindings.py",
+    "tests/tasks/test_task_import_batches.py",
     "tests/checkers/execution/test_completion_evidence.py",
     "tests/checkers/execution/test_completion_contract.py",
     "tests/tasks/post_submit_routing/test_failure_completion.py",

@@ -3,14 +3,131 @@
 import hashlib
 import json
 import unicodedata
+from collections.abc import AsyncIterator
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from enum import StrEnum
+from typing import Annotated, Literal, Protocol
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
 
 TASK_IMPORT_MAXIMUM_BYTES = 8 * 1024 * 1024
+TASK_IMPORT_MAPPING_VERSION = "workstream.task_import.draft_mapping.v1"
+
+
+class TaskImportBatchAction(StrEnum):
+    """Covered-manager import and membership status, separate from Task transitions."""
+
+    IMPORT = "project.task.import"
+    READ = "project.task.import_batch.read"
+
+
+class TaskImportBatchAuthorityDenied(RuntimeError):
+    """The exact native batch operation lacks current covered-manager authority."""
+
+
+@dataclass(frozen=True, slots=True)
+class TaskImportBatchAuthorityFacts:
+    """Caller and exact native file/result identities consumed by the AUTH owner."""
+
+    batch_id: UUID
+    project_id: UUID
+    source_id: UUID
+    actor_profile_id: UUID
+    sha256: str
+    byte_count: int
+    row_count: int
+    manifest_digest: str
+    source_binding_digest: str
+    idempotency_key: UUID
+    request_digest: str
+
+
+class TaskImportBatchAuthorizationPort(Protocol):
+    """Consume exact prepared authority and retain its original denial after rollback."""
+
+    async def authorize(self, action: TaskImportBatchAction, facts: TaskImportBatchAuthorityFacts) -> UUID:
+        """Return the fresh canonical decision for the current batch caller."""
+        ...
+
+    async def restage_denial(self, error: TaskImportBatchAuthorityDenied) -> None:
+        """Commit canonical denied evidence only through the instance that captured it."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class TaskImportSourceCommitment:
+    """Actual native declaration selected by ART; it supplies no authority."""
+
+    source_id: UUID
+    project_id: UUID
+    sha256: str
+    byte_count: int
+    operation_identity: str
+
+
+class VerifiedTaskImportSourceBinding(BaseModel):
+    """Immutable native byte ancestry; the ART participant revalidates every reference."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+
+    source_id: UUID
+    project_id: UUID
+    sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    byte_count: int = Field(ge=1, le=8388608)
+    operation_identity: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    put_attempt_id: UUID
+    content_id: UUID
+    replica_id: UUID
+    verification_job_id: UUID
+    verification_generation: int = Field(ge=1)
+    verification_receipt_id: UUID
+    operation_receipt_id: UUID | None
+    observation_receipt_id: UUID | None
+
+    @model_validator(mode="after")
+    def exact_acknowledgement(self):
+        """Require precisely one retained operation or observation acknowledgement."""
+        if (self.operation_receipt_id is None) == (self.observation_receipt_id is None):
+            raise ValueError("verified source requires exactly one acknowledgement")
+        return self
+
+
+class TaskImportSourceByteRead(Protocol):
+    """A bounded, already-verified byte stream scoped to the owning read context."""
+
+    @property
+    def stream(self) -> AsyncIterator[bytes]: ...
+
+
+class TaskImportSourceConsumerPort(Protocol):
+    """TASK's required source capability, implemented only by the existing ART owner."""
+
+    async def source_commitment(self, project_id: UUID, source_id: UUID) -> TaskImportSourceCommitment:
+        """Read actual immutable preparation facts without granting authority."""
+        ...
+
+    async def authorize_commitment(self, facts: TaskImportSourceCommitment) -> UUID:
+        """Check fresh actual source authority before exposing preparation outcomes."""
+        ...
+
+    async def prepare_binding(
+        self, project_id: UUID, source_id: UUID,
+        expected: VerifiedTaskImportSourceBinding | None = None,
+    ) -> VerifiedTaskImportSourceBinding:
+        """Retain SOURCE KEY SHARE and validate native receipts before caller AUTH."""
+        ...
+
+    async def authorize_binding(self, binding: VerifiedTaskImportSourceBinding) -> UUID:
+        """Revalidate prepared custody and authorize the current caller freshly."""
+        ...
+
+    def open(self, project_id: UUID, source_id: UUID) -> AbstractAsyncContextManager[TaskImportSourceByteRead]:
+        """Verify actual provider bytes before yielding the bounded source stream."""
+        ...
 
 
 class TaskImportRow(BaseModel):

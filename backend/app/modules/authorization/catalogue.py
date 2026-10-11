@@ -109,6 +109,8 @@ class ActionId(StrEnum):
     PROJECT_TASK_QUEUE_READ = "project.task.queue.read"
     OPERATIONS_TASK_QUEUE_READ = "operations.task.queue.read"
     PROJECT_TASK_CREATE = "project.task.create"
+    PROJECT_TASK_IMPORT = "project.task.import"
+    PROJECT_TASK_IMPORT_BATCH_READ = "project.task.import_batch.read"
     PROJECT_TASK_SCREEN = "project.task.screen"
     PROJECT_TASK_RELEASE = "project.task.release"
     TASK_CLAIM = "task.claim"
@@ -293,6 +295,7 @@ class ActionOwner(StrEnum):
     TASK_PROJECT_GRANT = "task-project-grant-authorization"
     PILOT_13 = "PILOT-13"
     PILOT_02A = "PILOT-02A"
+    PILOT_02B = "PILOT-02B"
     PILOT_04 = "PILOT-04"
     PILOT_10 = "PILOT-10"
 
@@ -565,6 +568,8 @@ ACTION_DEFINITIONS = (
     _active(ActionId.PROJECT_TASK_QUEUE_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C4),
     _active(ActionId.OPERATIONS_TASK_QUEUE_READ, PermissionId.OPERATIONS_STATUS_READ, ActionOwner.ARCH_03C4),
     _active(ActionId.PROJECT_TASK_CREATE, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C3),
+    _active(ActionId.PROJECT_TASK_IMPORT, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02B),
+    _active(ActionId.PROJECT_TASK_IMPORT_BATCH_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02B),
     _active(ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02A),
     _active(ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02A),
     _active(ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02A),
@@ -774,7 +779,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 78 or len(ACTION_IDS) != 150:
+    if len(PERMISSION_IDS) != 78 or len(ACTION_IDS) != 152:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 29:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -913,6 +918,7 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         ActionId.TASK_GUIDE_READ,
         ActionId.PROJECT_TASK_WORK_CONTEXT_READ, ActionId.OPERATIONS_TASK_START_OVERRIDE,
         ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,
+        ActionId.PROJECT_TASK_IMPORT, ActionId.PROJECT_TASK_IMPORT_BATCH_READ,
         ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE, ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
         ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ,
         ActionId.TASK_QUEUE_READ, ActionId.PROJECT_TASK_QUEUE_READ, ActionId.OPERATIONS_TASK_QUEUE_READ,

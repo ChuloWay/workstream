@@ -34,15 +34,25 @@ class TaskCommandReplay:
     async def reserve(
         self, actor_id: UUID, operation: TaskAuthorityOperation, key: UUID,
         task_id: UUID, reason: str | None, *, request_value: dict | None = None,
+        batch_transition_receipt_id: UUID | None = None,
     ) -> tuple[TaskCommandReceipt, str, bool]:
         if not isinstance(key, UUID):
             raise ValueError("task command requires an idempotency UUID")
-        digest = canonical_json_hash(request_value if request_value is not None else {"task_id": str(task_id), "reason": reason})
+        if batch_transition_receipt_id is not None and (
+            operation not in {TaskAuthorityOperation.SCREEN, TaskAuthorityOperation.RELEASE}
+            or request_value is not None or not isinstance(batch_transition_receipt_id, UUID)
+        ):
+            raise ValueError("batch receipt binding requires a canonical SCREEN/RELEASE participant")
+        values = request_value if request_value is not None else {"task_id": str(task_id), "reason": reason}
+        if batch_transition_receipt_id is not None:
+            values = {**values, "batch_transition_receipt_id": str(batch_transition_receipt_id)}
+        digest = canonical_json_hash(values)
         inserted_id = new_record_id()
         receipt_id = await self._session.scalar(
             insert(TaskCommandReceipt).values(
                 id=inserted_id, actor_profile_id=str(actor_id), action_id=operation.value,
                 idempotency_key=key, request_digest=digest, task_id=str(task_id), status="pending",
+                batch_transition_receipt_id=batch_transition_receipt_id,
             ).on_conflict_do_update(
                 index_elements=[TaskCommandReceipt.actor_profile_id, TaskCommandReceipt.action_id,
                                 TaskCommandReceipt.idempotency_key],
