@@ -37,6 +37,10 @@
       "target": "backend/app/adapters/auth/metrics.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/adapters/checkers/external_service.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/adapters/observability.py"
     },
@@ -231,6 +235,10 @@
     {
       "group": "auth",
       "target": "backend/app/interfaces/auth.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/interfaces/external_checker_execution.py"
     },
     {
       "group": "artifacts",
@@ -1881,7 +1889,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "dbac5faa6723705a923bfb433ff3327c31e7e9fc6bcedcc8fcae87864363d687",
+  "authority_digest": "f735dc65412c3c09d4d06ff704d5a44d885385dd42d2cb06dddc9c4492e21675",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
