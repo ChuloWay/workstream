@@ -21,7 +21,7 @@ from app.modules.tasks.api.authorization import TaskAuthorityDenied
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask
 from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.authorization.task_authority.test_concurrency import actor_context
-from tests.test_pre_submit_role_issue_lock_order import _issue_body, _issue_role, _issue_runtime
+from tests.project_role_issue_fixtures import issue_body, issue_role, issue_runtime
 from tests.test_tasks import (
     task_database_env as task_database_env,
     task_client as task_client,
@@ -51,7 +51,7 @@ async def test_role_issuance_and_claim_linearize_at_real_authority(
         )
         manager_id, link_id = UUID(manager_link.actor_profile_id), UUID(manager_link.id)
     body = ProjectRoleGrantIssueBody.model_validate(
-        _issue_body(UUID(contributor)).model_dump(mode="json") | {"role": "submitter"},
+        issue_body(UUID(contributor)).model_dump(mode="json") | {"role": "submitter"},
     )
     entered, release = asyncio.Event(), asyncio.Event()
     names = {side: f"cp08_{side}_{new_record_id().hex}" for side in ("claim", "issue")}
@@ -89,8 +89,8 @@ async def test_role_issuance_and_claim_linearize_at_real_authority(
     async def issue():
         async with AsyncSession(engines["issue"], expire_on_commit=False) as session:
             session.info["cp08_issue"] = True
-            prepared, resolved = await _issue_runtime(session, manager_id, link_id)
-            return await _issue_role(
+            prepared, resolved = await issue_runtime(session, manager_id, link_id)
+            return await issue_role(
                 session, UUID(project["id"]), body, new_record_id(), resolved, prepared
             )
 

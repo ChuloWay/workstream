@@ -35,7 +35,6 @@ from app.modules.artifacts.submission_manifest import (
     SubmissionChangeRejectedError,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
 from tests.artifact_store_helpers import artifact_byte_stream
 from tests.post_submit_materialization_helpers import material_fixture
 from tests.tasks.post_submit_routing.support import revision_archive
@@ -80,7 +79,6 @@ def _http_request(settings) -> Request:
             "app": SimpleNamespace(
                 state=SimpleNamespace(
                     settings=settings,
-                    pre_submission_checker_catalogue=(build_pre_submission_checker_catalogue()),
                 )
             ),
         }

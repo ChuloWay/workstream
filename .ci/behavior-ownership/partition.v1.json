@@ -926,6 +926,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/historical_post_submit.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/history.py"
     },
     {
@@ -946,19 +950,15 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/policy_custody.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/post_submit.py"
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/api/post_submit_catalogue.py"
-    },
-    {
-      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/pre_submit.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/api/pre_submit_catalogue.py"
     },
     {
       "group": "artifacts",
@@ -970,23 +970,11 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/catalogue.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/compiler.py"
-    },
-    {
-      "group": "artifacts",
       "target": "backend/app/modules/checkers/default_checker.py"
     },
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/delivery_authority.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/effective_plan.py"
     },
     {
       "group": "artifacts",
@@ -1018,15 +1006,7 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/post_submit_catalogue.py"
-    },
-    {
-      "group": "artifacts",
       "target": "backend/app/modules/checkers/post_submit_contracts.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/post_submit_implementations.py"
     },
     {
       "group": "artifacts",
@@ -1034,15 +1014,7 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/pre_submit_execution.py"
-    },
-    {
-      "group": "artifacts",
       "target": "backend/app/modules/checkers/router.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/runner.py"
     },
     {
       "group": "artifacts",
@@ -1522,10 +1494,6 @@
     },
     {
       "group": "lifecycle",
-      "target": "backend/app/modules/projects/post_submit_policy.py"
-    },
-    {
-      "group": "lifecycle",
       "target": "backend/app/modules/projects/repository.py"
     },
     {
@@ -1981,7 +1949,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "54f17769f0826105e68a14fbd9d142336749d95685b8f523a23ce7086806b34d",
-  "protected_base_commit": "e31e1777c47b794b1d4d8240192608e4fff4f536",
+  "authority_digest": "680cffbc4aab0f6abde3520ac34fe36f4d581cba475e5b6316f6b90ccf7731de",
+  "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

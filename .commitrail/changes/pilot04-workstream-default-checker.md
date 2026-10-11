@@ -59,9 +59,12 @@ request handler alongside assignment invalidation, leases worker-owned ART
 material only during execution, and creates the configured Rust adapter only
 for a selected request. New TASK submission composition now requires selected
 POST custody and refuses an unresolved legacy admission instead of executing
-it; retained legacy envelopes remain read-only decoding inputs. Native SQL
-custody and the live worker journey remain unfinished.
-Production still uses the older pre/post catalogues.
+it; retained legacy envelopes remain read-only decoding inputs. Admission,
+routing completion and remediation fixtures now exercise the selected PRE/POST
+owners. Both obsolete executable catalogues and their isolated callers and
+tests have been removed; retained immutable evidence has only its bounded
+historical decoder. F-020 recovery and the combined public/native journey remain
+unfinished.
 
 ## Bounded change
 
@@ -190,7 +193,7 @@ intermediate-wait regression.
 - [ ] Retained old evidence remains readable without rewriting hashes; unresolved
   old execution cannot cross into the new runtime and requires authorized policy
   transition.
-- [ ] Both obsolete catalogues, implementations, callers and obsolete tests are
+- [x] Both obsolete catalogues, implementations, callers and obsolete tests are
   removed without a fallback or parallel runtime.
 - [ ] A real PostgreSQL 16, MinIO and Rust-service journey proves pass, work
   failure, infrastructure/retry and post-dispatch paths with cleanup.
@@ -230,8 +233,9 @@ intermediate-wait regression.
 | Actual selected PRE Rust service | `PYTHONPATH=.:backend /tmp/workstream-pilot-review-locked-env/bin/python experiments/pilot04_external_checker_runtime/run_selected_pre_probe.py --image-reference localhost:35104/ws-pilot04-checker@sha256:c664d8d85d6dfcded31710223c8d91441548e5445f0aa9b59d246fc464a129ef --service-binary external_checkers/target/debug/workstream-checker-service`; Ruff and `py_compile` | PASS. Genuine prepared ART bytes and the server-computed manifest enter the selected default-plus-project-image processor before any Submission exists. The callback-scoped grant launches the exact digest-pinned image through the Rust service in explicit local `runc`/`docker-dev` mode, returns matching result/isolation custody, and confirms the workspace is empty after the callback. | This is the actual selected PRE execution boundary, not the final PostgreSQL/MinIO admission-to-dispatch journey or a hosted `runsc` claim. |
 | Production delivery registration and owner boundaries | `pytest -q backend/tests/architecture/test_module_boundaries.py backend/tests/test_artifact_architecture.py backend/tests/outbox/test_contracts.py`; focused Ruff and a direct registry construction probe | 116 passed; the existing production outbox registry exposes assignment invalidation and evaluation request handlers, selected Rust configuration is lazy, and PRE coordination stays behind CHECKERS' public adapter root | Database-backed legacy/selected delivery and worker restart proofs remain pending |
 | New Submission selected-only boundary | `pytest -q backend/tests/test_submission_bundle_admission.py backend/tests/checkers/external/test_selected_post_submit.py backend/tests/test_artifact_architecture.py::test_checker_custody_ports_have_exact_owner_and_art_consumers`; focused Ruff | 59 passed; retained legacy and selected admission projections are mutually exclusive, and the TASK writer accepts only selected POST custody for a new immutable Submission | Native rollback proof for a retained unresolved legacy admission remains pending |
+| Obsolete catalogue removal | Focused lane/architecture/ownership suite; recursive collection of every modified surviving test module; Ruff, module-boundary inventory and stale-import scan | 84 focused tests passed and 94 surviving tests collected. Ten obsolete executable catalogue/runner targets, their private-edge debt and tests are absent; exact ownership metadata admits only the selected owners and those retirements. | The stacked branch still has separately tracked structural-debt growth from earlier P02/P10/P04 source, so the repository-wide structural-debt gate is not claimed by this deletion checkpoint. |
 | Retained admission migration shape | `pytest -q backend/tests/test_submission_bundle_admission.py backend/tests/checkers/external/test_selected_pre_submit_coordination.py backend/tests/checkers/external/test_selected_preparation_command.py backend/tests/test_artifact_architecture.py::test_checker_materialization_contract_has_one_canonical_consumer_owner`; focused Ruff | 62 passed; selected rows require complete new custody while every new column stays null on retained legacy rows, avoiding fabricated backfill or historical hash rewrites | Successor SQL and direct retained/selected row controls remain pending |
-| Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | Selected PRE uses durable reserve/lease/finalize roots around the genuine ART callback; a pass is consumed only by TASK's existing atomic Submission/evaluation reservation/outbox composition, while POST uses immutable Submission/ART custody | Final F-020 recovery, retained-history transition, catalogue deletion and combined native journey remain pending |
+| Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | Selected PRE uses durable reserve/lease/finalize roots around the genuine ART callback; a pass is consumed only by TASK's existing atomic Submission/evaluation reservation/outbox composition, while POST uses immutable Submission/ART custody | Final F-020 recovery, retained-history transition and combined native journey remain pending |
 | End-to-end replacement | Real PostgreSQL/MinIO/Rust public and worker journey | Not run | Implementation incomplete |
 
 ## Reconciliation
