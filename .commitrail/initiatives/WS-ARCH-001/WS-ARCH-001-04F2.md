@@ -6,7 +6,7 @@
   routes an exact current contributor-correctable result to TASK `needs_revision`,
   retaining its source and actual AUTH receipt without Review or acceptance effects.
 
-## Intent and current behavior
+## Intent
 
 Group 1 of the first contributor milestone requires failed post-submit work to
 reach its contributor without being mistaken for a human review or acceptance.
@@ -96,7 +96,7 @@ predecessor cause before public intake. Existing ART predecessor comparison is
 reused; its committed admission scope is already checked by dispatch SQL.
 Parallel ART proof must not invent a defect or duplicate those safeguards.
 
-## Acceptance and verification
+## Acceptance criteria
 
 - Real PostgreSQL current contributor failure routes once under true and false
   review policies, retaining exact source/receipt/result/assignment/Submission.
@@ -137,7 +137,7 @@ spies and held-row tests independently prove no observation/lock for false failu
 - Human focus: failure is contributor remediation, never acceptance or human
   revision; no premature production activation or new delivery subsystem.
 
-## Evidence and reconciliation
+## Evidence
 
 Planning is based on merged main `8f5fe6e0a`, including 04F1, 04E3A and 02I-A.
 Current migration head is 0030; coordinate any newly merged migration before
@@ -147,6 +147,12 @@ and 533 (CI lanes) are separate; preserve their owners on integration.
 Remaining: exact-cause replacement intake, setup-fault/Operator recovery,
 production composition/false readiness, public intake and the first-layer drill.
 No new capability is claimed by this plan or by parallel ART-only proof.
+
+The diff exceeds the preferred L1 size because the same transition must close
+across TASK, AUTH, audit and database custody, with real migration, rollback and
+concurrency proofs. Production changes extend existing owners; most added lines
+are focused tests and reconciliation of current documentation. Splitting those
+guards from the transition would leave an incomplete invariant.
 
 ## Plan review dispositions
 
