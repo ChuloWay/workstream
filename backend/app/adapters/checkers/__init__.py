@@ -112,34 +112,6 @@ def external_checker_registry_reader(session):
     return ExternalCheckerRegistryReader(session)
 
 
-def project_guide_approval_compiler(*, disabled_checker_ids: str = ""):
-    """Build frozen catalogue fixtures for retained pre-cutover test evidence.
-
-    Production proposal approval and activation use the immutable external
-    registry projection. This helper remains temporarily available to decode
-    and seed historical guide evidence while those fixtures are migrated.
-    """
-    from app.modules.checkers.catalogue import (
-        build_pre_submission_checker_catalogue,
-        parse_disabled_pre_submission_checker_ids,
-        project_guide_pre_submission_capabilities,
-    )
-    from app.modules.checkers.api.historical_post_submit import (
-        current_post_submit_catalogue,
-    )
-
-    planner = build_pre_submission_checker_catalogue(
-        disabled_entry_ids=parse_disabled_pre_submission_checker_ids(
-            disabled_checker_ids
-        ),
-    )
-    return (
-        planner,
-        project_guide_pre_submission_capabilities(planner),
-        current_post_submit_catalogue(),
-    )
-
-
 async def external_checker_capability_projection(
     session,
 ) -> ExternalCheckerCapabilityProjection:
