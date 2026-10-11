@@ -190,6 +190,9 @@ uses caller-prepared input and a retry key, validates the full returned target
 and preserves backend-owned fresh replay authority; it does not activate a guide.
 Exact post-policy correction submits the inspected target and manager feedback,
 returning one saved unified successor without dispatch or activation.
+Exact proposal correction and explicit saved-successor dispatch are also
+available: dispatch preserves backend diagnostic status, including enqueue
+failure, rather than claiming processing completion or activation.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -433,7 +436,11 @@ cannot be reused as post-submission review-gate evidence. See the
   sends the inspected target and manager feedback to the existing public write;
   the receipt identifies one saved unified setup successor, not dispatch or
   activation. Exact replay retains backend authority and adds no successor.
-  Correction dispatch and activation remain future CLI commands; backend owners retain all authority.
+  [CLI guide correction and dispatch](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-17.md)
+  saves feedback for an exact finalized proposal and explicitly dispatches the
+  saved unified successor. Complete response identity and manual-only recovery
+  protect the journey; dispatch diagnostics are not completion or activation.
+  Activation remains future CLI work; backend owners retain all authority.
   [PILOT-13 assigned-guide access](../.commitrail/changes/pilot13-assigned-task-guide-documents.md)
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads
