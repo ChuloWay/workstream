@@ -31,21 +31,28 @@ from tests.test_submission_predecessor_custody import (
 
 async def _ready_replacement(h, data: bytes):
     """Prepare once, then replay through the independent verifier to ready."""
+    idempotency_key = new_record_id()
     request = _replacement_request(
         h,
         data,
         predecessor_id=h.created.submission_id,
-        idempotency_key=new_record_id(),
+        idempotency_key=idempotency_key,
     )
     prepared = await _prepare(h, request)
     assert prepared.replayed is False
+    replay = _replacement_request(
+        h,
+        data,
+        predecessor_id=h.created.submission_id,
+        idempotency_key=idempotency_key,
+    )
     admission_id = await _verified_admission(
         h.factory,
         h.store,
         h.namespace,
         h.settings,
         h.actor_context,
-        request,
+        replay,
     )
     assert admission_id == prepared.admission_id
     return request, admission_id
