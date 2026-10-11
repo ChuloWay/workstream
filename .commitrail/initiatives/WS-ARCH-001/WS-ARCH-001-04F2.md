@@ -14,6 +14,11 @@ reach its contributor without being mistaken for a human review or acceptance.
 feedback. Neither performs this post-submit handoff. Current TASK request, source,
 outcome, completion handler and SQL closure accept only `allow_review`.
 
+This child makes the hidden lifecycle handoff representable and authorized. It
+does not add a public route or response body: contributors continue to use the
+existing bounded Submission/checker-history projections when public intake is
+connected later.
+
 Extend those owners rather than add another dispatcher, checker command or
 findings store. Existing immutable checker results and authorized history reads
 retain bounded findings. Preserve success behavior and default human review.
