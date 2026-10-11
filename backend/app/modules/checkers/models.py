@@ -225,6 +225,13 @@ class CheckerRun(Base):
         ForeignKeyConstraint(["task_id", "project_id"], ["workstream_tasks.id", "workstream_tasks.project_id"],
                              name="fk_checker_runs_task_project"),
         CheckConstraint("phase = 'post_submission'", name="phase"),
+        CheckConstraint(
+            "(selected_post_submit_policy_sha256 is null and "
+            "selected_post_submit_policy_body is null) or "
+            "(selected_post_submit_policy_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "jsonb_typeof(selected_post_submit_policy_body)='object')",
+            name="selected_post_submit_policy",
+        ),
         CheckConstraint("evaluation_generation > 0 and worker_lease_generation >= 0", name="generations"),
         CheckConstraint("status in ('queued','running','completed','infrastructure_failed')", name="state"),
         CheckConstraint("octet_length(request_json) <= 1048576 and request_digest = 'sha256:' || encode(sha256(convert_to(request_json, 'UTF8')), 'hex')", name="request_digest"),
@@ -288,7 +295,7 @@ class CheckerRun(Base):
     )
     locked_post_submit_checker_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     selected_post_submit_policy_sha256: Mapped[str | None] = mapped_column(String(71))
-    selected_post_submit_policy_body: Mapped[dict | None] = mapped_column(JSON)
+    selected_post_submit_policy_body: Mapped[dict | None] = mapped_column(JSONB)
     locked_review_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_review_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_review_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
