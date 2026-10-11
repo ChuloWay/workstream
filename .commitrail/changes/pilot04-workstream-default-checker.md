@@ -142,7 +142,10 @@ rewritten or deleted. Historical decoders remain narrowly scoped to immutable
 old evidence. An unresolved old-catalogue queue item or locked guide fails
 closed and requires an authorized recompile/reapproval transition; it is never
 silently run through a new image. This retained-data reader is not an executable
-compatibility runtime.
+compatibility runtime. New selected admission columns are nullable only for
+those retained legacy rows; native checks require the complete guide, policy,
+packet, manifest and selected-run custody whenever selected lineage is present,
+so migration does not synthesize or rewrite historical facts.
 
 Pre execution uses a durable lease/generation fence. One root reserves the
 exact prepared-generation, policy, registry and request identities, commits,
@@ -223,6 +226,7 @@ intermediate-wait regression.
 | Selected POST scheduler compatibility | `pytest -q backend/tests/checkers/external/test_selected_post_submit.py backend/tests/checkers/execution/test_results.py backend/tests/checkers/execution/test_completion_contract.py backend/tests/checkers/post_submit/test_request.py backend/tests/test_submission_bundle_admission.py`; focused Ruff | 84 passed; one discriminated owner accepts retained legacy and selected request/result envelopes, selected leases cover the ordered image budget and finalization margin, ART recomputes the selected manifest, and focused scheduler controls prove exact completed/infrastructure envelopes and generic replay parsing | Native selected columns/constraints and live Rust worker proof remain pending |
 | Production delivery registration and owner boundaries | `pytest -q backend/tests/architecture/test_module_boundaries.py backend/tests/test_artifact_architecture.py backend/tests/outbox/test_contracts.py`; focused Ruff and a direct registry construction probe | 116 passed; the existing production outbox registry exposes assignment invalidation and evaluation request handlers, selected Rust configuration is lazy, and PRE coordination stays behind CHECKERS' public adapter root | Database-backed legacy/selected delivery and worker restart proofs remain pending |
 | New Submission selected-only boundary | `pytest -q backend/tests/test_submission_bundle_admission.py backend/tests/checkers/external/test_selected_post_submit.py backend/tests/test_artifact_architecture.py::test_checker_custody_ports_have_exact_owner_and_art_consumers`; focused Ruff | 59 passed; retained legacy and selected admission projections are mutually exclusive, and the TASK writer accepts only selected POST custody for a new immutable Submission | Native rollback proof for a retained unresolved legacy admission remains pending |
+| Retained admission migration shape | `pytest -q backend/tests/test_submission_bundle_admission.py backend/tests/checkers/external/test_selected_pre_submit_coordination.py backend/tests/checkers/external/test_selected_preparation_command.py backend/tests/test_artifact_architecture.py::test_checker_materialization_contract_has_one_canonical_consumer_owner`; focused Ruff | 62 passed; selected rows require complete new custody while every new column stays null on retained legacy rows, avoiding fabricated backfill or historical hash rewrites | Successor SQL and direct retained/selected row controls remain pending |
 | Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | In progress | Persistence delta and migration ordinal await actual linear predecessor |
 | End-to-end replacement | Real PostgreSQL/MinIO/Rust public and worker journey | Not run | Implementation incomplete |
 

@@ -1309,12 +1309,24 @@ class SubmissionBundleAdmission(Base):
             SHA256_CHECK.format(column="semantic_manifest_sha256"), name="manifest_sha256"
         ),
         CheckConstraint(
-            "jsonb_typeof(semantic_manifest_body)='object'",
+            "(selected_pre_submit_run_id is null and semantic_manifest_body is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            "jsonb_typeof(semantic_manifest_body)='object')",
             name="manifest_body",
         ),
-        CheckConstraint(SHA256_CHECK.format(column="packet_sha256"), name="packet_sha256"),
         CheckConstraint(
-            SHA256_CHECK.format(column="effective_plan_sha256"), name="effective_plan_sha256"
+            "(selected_pre_submit_run_id is null and packet_sha256 is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            + SHA256_CHECK.format(column="packet_sha256")
+            + ")",
+            name="packet_sha256",
+        ),
+        CheckConstraint(
+            "(selected_pre_submit_run_id is null and effective_plan_sha256 is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            + SHA256_CHECK.format(column="effective_plan_sha256")
+            + ")",
+            name="effective_plan_sha256",
         ),
         CheckConstraint(
             "(selected_pre_submit_run_id is null and selected_rules_sha256 is null) or "
@@ -1333,9 +1345,21 @@ class SubmissionBundleAdmission(Base):
             name="selected_post_submit_policy",
         ),
         CheckConstraint(
-            SHA256_CHECK.format(column="source_snapshot_sha256") + " and "
-            + SHA256_CHECK.format(column="effective_policy_sha256") + " and "
-            + SHA256_CHECK.format(column="pre_submit_policy_sha256"),
+            "(selected_pre_submit_run_id is null and guide_id is null and "
+            "guide_version is null and source_snapshot_id is null and "
+            "source_snapshot_sha256 is null and effective_policy_id is null and "
+            "effective_policy_sha256 is null and pre_submit_policy_id is null and "
+            "pre_submit_policy_sha256 is null) or "
+            "(selected_pre_submit_run_id is not null and guide_id is not null and "
+            "octet_length(guide_version) between 1 and 50 and "
+            "source_snapshot_id is not null and effective_policy_id is not null and "
+            "pre_submit_policy_id is not null and "
+            + SHA256_CHECK.format(column="source_snapshot_sha256")
+            + " and "
+            + SHA256_CHECK.format(column="effective_policy_sha256")
+            + " and "
+            + SHA256_CHECK.format(column="pre_submit_policy_sha256")
+            + ")",
             name="locked_policy_digests",
         ),
         CheckConstraint(SHA256_CHECK.format(column="archive_sha256"), name="archive_sha256"),
@@ -1411,24 +1435,24 @@ class SubmissionBundleAdmission(Base):
     )
     predecessor_submission_version: Mapped[int | None] = mapped_column(Integer)
     locked_policy_context_hash: Mapped[str] = mapped_column(String(71), nullable=False)
-    guide_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
-    guide_version: Mapped[str] = mapped_column(String(50), nullable=False)
-    source_snapshot_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
-    source_snapshot_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
-    effective_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
-    effective_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
-    pre_submit_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
-    pre_submit_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
-    effective_plan_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    guide_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    guide_version: Mapped[str | None] = mapped_column(String(50))
+    source_snapshot_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    source_snapshot_sha256: Mapped[str | None] = mapped_column(String(71))
+    effective_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    effective_policy_sha256: Mapped[str | None] = mapped_column(String(71))
+    pre_submit_policy_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    pre_submit_policy_sha256: Mapped[str | None] = mapped_column(String(71))
+    effective_plan_sha256: Mapped[str | None] = mapped_column(String(71))
     selected_rules_sha256: Mapped[str | None] = mapped_column(String(71))
     selected_post_submit_policy_sha256: Mapped[str | None] = mapped_column(
         String(71)
     )
     selected_post_submit_policy_body: Mapped[dict | None] = mapped_column(JSONB)
-    packet_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    packet_sha256: Mapped[str | None] = mapped_column(String(71))
     semantic_manifest_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
-    semantic_manifest_body: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    semantic_manifest_body: Mapped[dict | None] = mapped_column(JSONB)
     archive_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     archive_byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ready", index=True)
