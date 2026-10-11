@@ -7,6 +7,8 @@ from typing import Literal, Protocol, get_args
 from uuid import UUID
 import re
 
+from app.core.hashing import canonical_json_hash
+
 from app.modules.tasks.api import TaskSubmissionContextFacts
 
 SubmissionAdmissionConsumptionStatus = Literal["consumed", "stale"]
@@ -123,6 +125,8 @@ class SubmissionAdmissionConsumptionResult:
     replayed: bool
     material: SubmissionAdmissionMaterial | None
     binding_decision_id: UUID | None
+    selected_post_submit_policy_sha256: str | None = None
+    selected_post_submit_policy_body: dict[str, object] | None = None
 
     def __post_init__(self) -> None:
         if self.status == "consumed":
@@ -130,6 +134,23 @@ class SubmissionAdmissionConsumptionResult:
                 raise ValueError("consumed admission requires verified material")
         elif self.status != "stale" or self.material is not None or self.binding_id is not None:
             raise ValueError("stale admission has no material")
+        if (self.selected_post_submit_policy_sha256 is None) != (
+            self.selected_post_submit_policy_body is None
+        ):
+            raise ValueError("selected POST policy custody is incomplete")
+        if self.selected_post_submit_policy_body is not None and (
+            self.selected_post_submit_policy_body.get("policy_sha256")
+            != self.selected_post_submit_policy_sha256
+            or canonical_json_hash(
+                {
+                    key: value
+                    for key, value in self.selected_post_submit_policy_body.items()
+                    if key != "policy_sha256"
+                }
+            )
+            != self.selected_post_submit_policy_sha256
+        ):
+            raise ValueError("selected POST policy custody is invalid")
 
 
 class SubmissionAdmissionConsumptionPort(Protocol):

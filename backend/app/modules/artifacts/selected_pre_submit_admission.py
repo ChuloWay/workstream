@@ -22,6 +22,7 @@ from app.modules.checkers.api.default_checker import (
 )
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
+    LockedExternalPostSubmitPolicy,
     LockedExternalPreSubmitPolicy,
 )
 from app.modules.checkers.api.materialization import SubmissionMaterialEntry
@@ -72,6 +73,8 @@ class SelectedPreSubmitAdmissionContext:
     """Exact selected policy, default input and non-deciding change binding."""
 
     policy: LockedExternalPreSubmitPolicy
+    post_policy: LockedExternalPostSubmitPolicy
+    policies_sha256: str
     default_input: WorkstreamDefaultCheckerInput
     change_gate: SubmissionChangeGateResult
     rules_sha256: str
@@ -147,6 +150,9 @@ def build_selected_pre_submit_reservation(
         pre_submit_policy_sha256=project.pre_submit_policy_bundle_hash,
         effective_plan_sha256=selected.policy.policy_sha256,
         rules_sha256=selected.rules_sha256,
+        external_checker_policies_sha256=selected.policies_sha256,
+        post_submit_policy_sha256=selected.post_policy.policy_sha256,
+        post_submit_policy_body=selected.post_policy.model_dump(mode="json"),
         locked_policy_context_hash=locked_policy_context_hash,
         semantic_manifest_id=semantic_manifest_identity(manifest.sha256),
         semantic_manifest_body=manifest.as_dict(),
@@ -231,6 +237,8 @@ def bind_selected_pre_submit_admission(
     )
     return SelectedPreSubmitAdmissionContext(
         policy=policies.pre_submit,
+        post_policy=policies.post_submit,
+        policies_sha256=policies.policies_sha256,
         default_input=WorkstreamDefaultCheckerInput(
             archive_sha256=commitment.sha256,
             archive_byte_count=commitment.byte_count,

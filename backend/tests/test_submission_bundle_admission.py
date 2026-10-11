@@ -641,6 +641,12 @@ async def test_verified_submission_lineage_publishes_one_ready_admission(
 @pytest.mark.asyncio
 async def test_selected_pre_terminal_publishes_self_contained_ready_admission() -> None:
     manifest = {"schema_version": "submission_manifest.v1", "entries": []}
+    post_policy = {
+        "schema_version": "external_post_submit_policy.v1",
+        "entries": [],
+    }
+    post_policy_sha256 = canonical_json_hash(post_policy)
+    post_policy["policy_sha256"] = post_policy_sha256
     lineage = SelectedPreSubmitAdmissionLineage(
         predecessor_submission_id=None,
         predecessor_submission_version=None,
@@ -655,6 +661,9 @@ async def test_selected_pre_terminal_publishes_self_contained_ready_admission() 
         pre_submit_policy_sha256=_sha("4"),
         effective_plan_sha256=_sha("5"),
         rules_sha256=_sha("8"),
+        external_checker_policies_sha256=_sha("9"),
+        post_submit_policy_sha256=post_policy_sha256,
+        post_submit_policy_body=post_policy,
         locked_policy_context_hash=_sha("6"),
         semantic_manifest_id=new_record_id(),
         semantic_manifest_body=manifest,
@@ -760,6 +769,11 @@ async def test_selected_pre_terminal_publishes_self_contained_ready_admission() 
     assert admission.selected_pre_submit_run_id == str(selected.attempt_id)
     assert admission.packet_sha256 == lineage.packet_sha256
     assert admission.semantic_manifest_body == manifest
+    assert (
+        admission.selected_post_submit_policy_sha256
+        == lineage.post_submit_policy_sha256
+    )
+    assert admission.selected_post_submit_policy_body == post_policy
 
 
 @pytest.mark.asyncio

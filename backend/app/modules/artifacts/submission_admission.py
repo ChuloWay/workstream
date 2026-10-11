@@ -543,6 +543,16 @@ class SubmissionBundleAdmissionPublisher:
                 if selected_lineage is not None
                 else None
             ),
+            selected_post_submit_policy_sha256=(
+                selected_lineage.post_submit_policy_sha256
+                if selected_lineage is not None
+                else None
+            ),
+            selected_post_submit_policy_body=(
+                selected_lineage.post_submit_policy_body
+                if selected_lineage is not None
+                else None
+            ),
             packet_sha256=(
                 selected_lineage.packet_sha256
                 if selected_lineage is not None

@@ -19,6 +19,7 @@ from app.modules.artifacts.api import (
 )
 from app.modules.artifacts.api.submission_admission import ConsumedSubmissionAdmissionRequest
 from app.modules.artifacts.submission_manifest import SubmissionManifest
+from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
 from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
@@ -319,8 +320,21 @@ class SubmissionAdmissionConsumptionService:
             and evidence.terminal_status == "passed"
             and evidence.eligible is True
         )
+        selected_policy_intact = admission.selected_pre_submit_run_id is None
+        if admission.selected_pre_submit_run_id is not None:
+            try:
+                selected_policy = LockedExternalPostSubmitPolicy.model_validate(
+                    admission.selected_post_submit_policy_body
+                )
+                selected_policy_intact = (
+                    selected_policy.policy_sha256
+                    == admission.selected_post_submit_policy_sha256
+                )
+            except (TypeError, ValueError):
+                selected_policy_intact = False
         return bool(
             legacy_intact
+            and selected_policy_intact
             and (admission.pre_submit_evidence_set_id is None)
             != (admission.selected_pre_submit_run_id is None)
             and content.id == admission.artifact_content_id
@@ -433,4 +447,10 @@ class SubmissionAdmissionConsumptionService:
             replayed=replayed,
             material=material,
             binding_decision_id=binding_decision_id,
+            selected_post_submit_policy_sha256=(
+                getattr(admission, "selected_post_submit_policy_sha256", None)
+            ),
+            selected_post_submit_policy_body=(
+                getattr(admission, "selected_post_submit_policy_body", None)
+            ),
         )

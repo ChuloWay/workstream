@@ -1324,6 +1324,15 @@ class SubmissionBundleAdmission(Base):
             name="selected_rules_sha256",
         ),
         CheckConstraint(
+            "(selected_pre_submit_run_id is null and "
+            "selected_post_submit_policy_sha256 is null and "
+            "selected_post_submit_policy_body is null) or "
+            "(selected_pre_submit_run_id is not null and "
+            + SHA256_CHECK.format(column="selected_post_submit_policy_sha256")
+            + " and jsonb_typeof(selected_post_submit_policy_body)='object')",
+            name="selected_post_submit_policy",
+        ),
+        CheckConstraint(
             SHA256_CHECK.format(column="source_snapshot_sha256") + " and "
             + SHA256_CHECK.format(column="effective_policy_sha256") + " and "
             + SHA256_CHECK.format(column="pre_submit_policy_sha256"),
@@ -1412,6 +1421,10 @@ class SubmissionBundleAdmission(Base):
     pre_submit_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     effective_plan_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     selected_rules_sha256: Mapped[str | None] = mapped_column(String(71))
+    selected_post_submit_policy_sha256: Mapped[str | None] = mapped_column(
+        String(71)
+    )
+    selected_post_submit_policy_body: Mapped[dict | None] = mapped_column(JSONB)
     packet_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     semantic_manifest_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)

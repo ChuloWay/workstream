@@ -6,6 +6,7 @@ from uuid import UUID
 
 from app.modules.checkers.api import SubmissionPacketView
 from app.modules.checkers.api.post_submit import PostSubmissionEvaluationContent
+from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
 from app.modules.projects.api import ProjectLockedPolicyContextFacts
 from app.modules.tasks.api import TaskSubmissionContextFacts
 
@@ -32,6 +33,7 @@ class SubmissionArtifactBindingFacts:
 @dataclass(frozen=True, slots=True)
 class SubmissionArtifactAdmissionResult(SubmissionArtifactBindingFacts):
     evaluation_content: PostSubmissionEvaluationContent
+    selected_post_submit_policy: LockedExternalPostSubmitPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)

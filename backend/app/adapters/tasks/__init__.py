@@ -185,6 +185,16 @@ class _ArtifactAdmissionAdapter:
                 or result.material is None or result.binding_decision_id is None):
             raise RuntimeError("admission did not produce a binding")
         from app.adapters.checkers import submission_evaluation_content
+        from app.modules.checkers.api.external_policy import (
+            LockedExternalPostSubmitPolicy,
+        )
+        selected_post_policy = (
+            LockedExternalPostSubmitPolicy.model_validate(
+                result.selected_post_submit_policy_body
+            )
+            if result.selected_post_submit_policy_body is not None
+            else None
+        )
         return SubmissionArtifactAdmissionResult(
             binding_id=result.binding_id, content_id=result.content_id,
             binding_decision_id=result.binding_decision_id,
@@ -194,6 +204,7 @@ class _ArtifactAdmissionAdapter:
                 request.task_context, request.project_context, request.packet,
                 result.material.files, result.material.archive_sha256,
             ),
+            selected_post_submit_policy=selected_post_policy,
         )
 
     async def read_consumed(self, request: SubmissionArtifactReplayRequest) -> SubmissionArtifactBindingFacts:

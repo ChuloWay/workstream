@@ -31,6 +31,9 @@ class SelectedPreSubmitAdmissionLineage:
     pre_submit_policy_sha256: str
     effective_plan_sha256: str
     rules_sha256: str
+    external_checker_policies_sha256: str
+    post_submit_policy_sha256: str
+    post_submit_policy_body: dict[str, object]
     locked_policy_context_hash: str
     semantic_manifest_id: UUID
     semantic_manifest_body: dict[str, object]
@@ -52,6 +55,8 @@ class SelectedPreSubmitAdmissionLineage:
             self.pre_submit_policy_sha256,
             self.effective_plan_sha256,
             self.rules_sha256,
+            self.external_checker_policies_sha256,
+            self.post_submit_policy_sha256,
             self.locked_policy_context_hash,
             self.packet_sha256,
         )
@@ -78,6 +83,17 @@ class SelectedPreSubmitAdmissionLineage:
                 for value in digests
             )
             or type(self.semantic_manifest_body) is not dict
+            or type(self.post_submit_policy_body) is not dict
+            or canonical_json_hash(
+                {
+                    key: value
+                    for key, value in self.post_submit_policy_body.items()
+                    if key != "policy_sha256"
+                }
+            )
+            != self.post_submit_policy_sha256
+            or self.post_submit_policy_body.get("policy_sha256")
+            != self.post_submit_policy_sha256
             or self.storage_scheme not in {"local", "s3"}
         ):
             raise ValueError("selected PRE admission lineage is invalid")
@@ -102,6 +118,11 @@ class SelectedPreSubmitAdmissionLineage:
             "pre_submit_policy_sha256": self.pre_submit_policy_sha256,
             "effective_plan_sha256": self.effective_plan_sha256,
             "rules_sha256": self.rules_sha256,
+            "external_checker_policies_sha256": (
+                self.external_checker_policies_sha256
+            ),
+            "post_submit_policy_sha256": self.post_submit_policy_sha256,
+            "post_submit_policy_body": self.post_submit_policy_body,
             "locked_policy_context_hash": self.locked_policy_context_hash,
             "semantic_manifest_id": str(self.semantic_manifest_id),
             "semantic_manifest_body": self.semantic_manifest_body,
@@ -128,6 +149,9 @@ class SelectedPreSubmitAdmissionLineage:
             "pre_submit_policy_sha256",
             "effective_plan_sha256",
             "rules_sha256",
+            "external_checker_policies_sha256",
+            "post_submit_policy_sha256",
+            "post_submit_policy_body",
             "locked_policy_context_hash",
             "semantic_manifest_id",
             "semantic_manifest_body",
@@ -152,6 +176,11 @@ class SelectedPreSubmitAdmissionLineage:
             pre_submit_policy_sha256=body["pre_submit_policy_sha256"],
             effective_plan_sha256=body["effective_plan_sha256"],
             rules_sha256=body["rules_sha256"],
+            external_checker_policies_sha256=body[
+                "external_checker_policies_sha256"
+            ],
+            post_submit_policy_sha256=body["post_submit_policy_sha256"],
+            post_submit_policy_body=body["post_submit_policy_body"],
             locked_policy_context_hash=body["locked_policy_context_hash"],
             semantic_manifest_id=UUID(str(body["semantic_manifest_id"])),
             semantic_manifest_body=body["semantic_manifest_body"],

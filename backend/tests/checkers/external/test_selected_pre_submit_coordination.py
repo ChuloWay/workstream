@@ -40,6 +40,16 @@ from app.modules.checkers.selected_pre_submit_coordination import (
 from tests.checkers.external.support import SHA
 
 
+_POST_POLICY_WITHOUT_DIGEST = {
+    "schema_version": "external_post_submit_policy.v1",
+    "entries": [],
+}
+_POST_POLICY_SHA256 = canonical_json_hash(_POST_POLICY_WITHOUT_DIGEST)
+_POST_POLICY = _POST_POLICY_WITHOUT_DIGEST | {
+    "policy_sha256": _POST_POLICY_SHA256
+}
+
+
 def _reservation() -> SelectedPreSubmitReservationFacts:
     return SelectedPreSubmitReservationFacts(
         actor_profile_id=new_record_id(),
@@ -138,6 +148,9 @@ async def test_selected_pre_task_guard_rechecks_exact_locked_lineage(monkeypatch
         pre_submit_policy_sha256="sha256:" + "8" * 64,
         effective_plan_sha256="sha256:" + "9" * 64,
         rules_sha256="sha256:" + "d" * 64,
+        external_checker_policies_sha256=SHA,
+        post_submit_policy_sha256=_POST_POLICY_SHA256,
+        post_submit_policy_body=_POST_POLICY,
         locked_policy_context_hash="sha256:" + "a" * 64,
         semantic_manifest_id=new_record_id(),
         semantic_manifest_body={"schema_version": "test"},
@@ -340,6 +353,9 @@ def test_selected_pre_request_binds_complete_later_admission_lineage() -> None:
         pre_submit_policy_sha256=SHA,
         effective_plan_sha256="sha256:" + "1" * 64,
         rules_sha256="sha256:" + "2" * 64,
+        external_checker_policies_sha256=SHA,
+        post_submit_policy_sha256=_POST_POLICY_SHA256,
+        post_submit_policy_body=_POST_POLICY,
         locked_policy_context_hash=SHA,
         semantic_manifest_id=new_record_id(),
         semantic_manifest_body=manifest,
@@ -409,6 +425,8 @@ def test_selected_ready_admission_no_longer_requires_legacy_evidence() -> None:
         effective_policy_sha256=SHA,
         pre_submit_policy_id=str(new_record_id()),
         pre_submit_policy_sha256=SHA,
+        selected_post_submit_policy_sha256=_POST_POLICY_SHA256,
+        selected_post_submit_policy_body=_POST_POLICY,
         locked_policy_context_hash=SHA,
         semantic_manifest_id=str(new_record_id()),
         semantic_manifest_sha256=SHA,
