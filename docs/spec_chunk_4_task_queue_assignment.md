@@ -80,8 +80,8 @@ no surrounding whitespace or control characters), nonblank `title` and
 `estimated_time_minutes`, `acceptance_criteria` and `rejection_criteria`. Text and collection bounds
 are part of the schema. External IDs must be unique inside the document;
 duplicate errors identify the zero-based row and the first duplicate's row.
-The parser accepts strict UTF-8 JSON without a BOM, duplicate object members,
-non-finite numbers, NUL or unpaired surrogates. The source ceiling is 8 MiB.
+The parser accepts only strict UTF-8 JSON. It rejects a BOM, duplicate object
+members, non-finite numbers, NUL and unpaired surrogates. The source ceiling is 8 MiB.
 
 Client conversions map category to `task_type`, languages/tools to `skill_tags`
 and the external source ID to `external_task_id`. ART retains the exact received

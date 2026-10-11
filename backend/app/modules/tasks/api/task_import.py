@@ -146,7 +146,8 @@ def task_import_json_schema() -> dict:
     schema["description"] = (
         "UTF-8 JSON source, maximum 8388608 bytes. Object member names must be unique. "
         "external_task_id is required, case-sensitive, with no surrounding whitespace/control characters; "
-        "IDs must be unique across rows. Atomic TASK import additionally rejects existing project IDs. "
+        "IDs must be unique across rows. Atomic TASK import additionally rejects external_task_id values "
+        "that already exist in the target project. "
         "Client conversions map category to task_type, languages/tools to skill_tags, and source ID to external_task_id. "
         "The received JSON is the retained server source, not the original CSV."
     )
