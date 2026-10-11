@@ -142,7 +142,7 @@ jobs:
             --timeout-seconds 240 \
             -- python -m pytest -q "${guide_files[@]}"
 
-      - name: Exercise existing native CLI public API callers
+      - name: Exercise existing native guide API callers
         working-directory: backend
         env:
           WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
@@ -152,7 +152,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           native_files=()
-          for test_path in ../cli/tests/integration/*_public_api.py ../cli/tests/integration/test_public_self_service.py; do
+          for test_path in ../cli/tests/integration/*_public_api.py; do
             if [[ "${test_path}" != ../cli/tests/integration/test_task_batch_public_api.py ]]; then
               native_files+=("${test_path}")
             fi
@@ -162,6 +162,17 @@ jobs:
             --metadata-json "${RUNNER_TEMP}/workstream-cli-native-isolation.json" \
             --timeout-seconds 240 \
             -- python -m pytest -q "${native_files[@]}"
+
+      - name: Exercise existing native CLI self-service caller
+        working-directory: backend
+        env:
+          WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
+          WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
+        run: |
+          python scripts/run_isolated_tests.py \
+            --metadata-json "${RUNNER_TEMP}/workstream-cli-self-service-isolation.json" \
+            --timeout-seconds 240 \
+            -- python -m pytest -q ../cli/tests/integration/test_public_self_service.py
 
       - name: Exercise complete native CLI batch journey
         working-directory: backend

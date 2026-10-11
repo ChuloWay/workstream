@@ -97,8 +97,9 @@ Their current root transaction prevents composition across a complete batch.
   task/local HTTP checks, guide HTTP checks and existing native public API callers,
   each with the unchanged
   240-second isolated-run cap. Select existing native `*_public_api.py` files
-  automatically plus `test_public_self_service.py`, excluding only the owned bulk
-  file, which has its separate 240-second isolated run. HTTP/local selection is
+  automatically, excluding only the owned bulk file. Existing
+  `test_public_self_service.py` and the owned bulk file each have a separate
+  240-second isolated run. HTTP/local selection is
   the exact complementary file set: guide `test_guide*.py` files excluding native
   files, and remaining HTTP/local files. Refuse empty native or guide arrays.
   Every test stays selected once, the fifteen-minute job cap and aggregate
@@ -483,6 +484,17 @@ the remaining task/local HTTP files, keeping 240 seconds for each group and the
 fifteen-minute job limit. Exact collection must prove their union plus the nine
 retained native and two bulk native cases equals the original 167, with no
 overlap. Actual measured partition results remain required.
+
+At exact clean `32d033903`, guide HTTP passed all 58 cases in 74.66 seconds and
+task/local HTTP passed all 98 in 173.76 seconds, each with complete cleanup. The
+retained nine-case native selection then exhausted 240 seconds after eight
+passing cases, during the final existing self-service case; no assertion failure
+was reported and cleanup completed. Native guide callers and that self-service
+file are now separate bounded selections, each still capped at 240 seconds.
+The job limit stays fifteen minutes and its required workflow result covers all
+groups. These partitions retain the original 167 tests exactly once; no test,
+deadline, fixture or product owner changes. Their measured results are required
+before a final workflow claim.
 
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
