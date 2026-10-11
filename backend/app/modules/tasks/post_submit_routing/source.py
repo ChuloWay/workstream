@@ -171,11 +171,17 @@ class TaskRoutingSourcePreparer:
             predecessor_submission_id=UUID(predecessor.id) if predecessor else None,
             predecessor_submission_version=predecessor.version if predecessor else None,
             locked_policy=lineage,
-            routing_recommendation="allow_review",
+            routing_recommendation=completion.routing_recommendation,
             **material.model_dump(exclude={"submission_id", "submission_version"}),
         )
         if retained is not None:
-            expected_status = "review_pending" if source.human_review_required else "accepted"
+            expected_status = (
+                "needs_revision"
+                if source.routing_recommendation == "needs_revision"
+                else "review_pending"
+                if source.human_review_required
+                else "accepted"
+            )
             if task.status != expected_status or retained.authority_context.get(
                 "source"
             ) != source.model_dump(mode="json"):

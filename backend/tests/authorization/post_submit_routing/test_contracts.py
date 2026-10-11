@@ -1,6 +1,7 @@
 """Pure exact-value proofs for hidden post-submit routing preparation."""
 
 from datetime import timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
@@ -15,6 +16,7 @@ from app.modules.authorization.domain.audit import (
 )
 from app.modules.authorization.domain.post_submit_routing import (
     AutomatedAcceptanceConsequence,
+    CheckerRemediationConsequence,
     HumanAdmissionConsequence,
     PostSubmitRoutingResourceContext,
     parse_post_submit_routing_prepare,
@@ -27,6 +29,7 @@ from app.modules.authorization.runtime import PreparedAuthorizationInput
 from app.modules.authorization.post_submit_routing_authorization import _PreparedRouting
 from app.modules.authorization.prepared import FixedServicePreparedAuthorization
 from app.modules.tasks.api.post_submit_routing import TaskRoutingRequestFacts
+from app.adapters.tasks.routing_acceptance import _PreparedAdapter
 from tests.tasks.post_submit_routing.contract_fixtures import SHA_A, SHA_B
 
 from tests.authorization.post_submit_routing.support import (
@@ -36,16 +39,25 @@ from tests.authorization.post_submit_routing.support import (
 )
 
 
-@pytest.mark.parametrize("human_review_required", (True, False))
-def test_valid_policy_branch_resources(human_review_required):
-    resource = resource_for(human_review_required=human_review_required)
+@pytest.mark.parametrize(
+    ("human_review_required", "recommendation"),
+    ((True, "allow_review"), (False, "allow_review"),
+     (True, "needs_revision"), (False, "needs_revision")),
+)
+def test_valid_policy_branch_resources(human_review_required, recommendation):
+    resource = resource_for(
+        human_review_required=human_review_required,
+        routing_recommendation=recommendation,
+    )
 
     assert resource.source.human_review_required is human_review_required
     assert resource.resource_id == resource.request.routing_manifest_id == resource.source.id
     assert resource.scope_project_id == resource.request.project_id == resource.source.project_id
     assert resource.claim.event_id == resource.request.completion_event_id
     assert resource.validate_identity() is resource
-    if human_review_required:
+    if recommendation == "needs_revision":
+        assert resource.consequence == CheckerRemediationConsequence()
+    elif human_review_required:
         assert resource.consequence == HumanAdmissionConsequence()
     else:
         assert isinstance(resource.consequence, AutomatedAcceptanceConsequence)
@@ -86,7 +98,7 @@ def test_each_request_source_selector_rejects(field, changed):
         TaskRoutingRequestFacts(
             **(
                 control.request.model_dump()
-                | {"routing_recommendation": "needs_revision"}
+                | {"routing_recommendation": "task_setup_blocked"}
             )
         )
 
@@ -130,8 +142,10 @@ def test_acceptance_identity_requires_uuid7():
 def test_exclusive_branch_consequences():
     human = resource_for(human_review_required=True)
     automated = resource_for(human_review_required=False)
+    remediation = resource_for(routing_recommendation="needs_revision")
     assert human.validate_identity() is human
     assert automated.validate_identity() is automated
+    assert remediation.validate_identity() is remediation
 
     with pytest.raises(ValidationError, match="routing consequence differs from review policy"):
         PostSubmitRoutingResourceContext(
@@ -149,6 +163,19 @@ def test_exclusive_branch_consequences():
         PostSubmitRoutingResourceContext(
             **(automated.model_dump() | {"consequence": HumanAdmissionConsequence()})
         )
+    for consequence in (
+        HumanAdmissionConsequence(),
+        AutomatedAcceptanceConsequence(
+            authorized_lifecycle_generation=2,
+            task_effects=accepted_effects_for(remediation.source),
+        ),
+    ):
+        with pytest.raises(
+            ValidationError, match="routing consequence differs from recommendation"
+        ):
+            PostSubmitRoutingResourceContext(
+                **(remediation.model_dump() | {"consequence": consequence})
+            )
 
 
 @pytest.mark.parametrize(
@@ -328,6 +355,7 @@ def test_digest_binds_all_source_semantics(source_field):
 def test_digest_binds_each_branch_consequence():
     human = resource_for(human_review_required=True)
     automated = resource_for(human_review_required=False)
+    remediation = resource_for(routing_recommendation="needs_revision")
     original = post_submit_routing_resource_digest(automated)
     consequence = automated.consequence
     assert isinstance(consequence, AutomatedAcceptanceConsequence)
@@ -342,7 +370,26 @@ def test_digest_binds_each_branch_consequence():
     )
 
     assert post_submit_routing_resource_digest(human) != original
+    assert post_submit_routing_resource_digest(remediation) != original
     assert post_submit_routing_resource_digest(changed_resource) != original
+
+
+async def test_acceptance_adapter_rejects_remediation_source_before_delegation():
+    class Prepared:
+        async def participate(self, *_, **__):
+            pytest.fail("remediation reached final acceptance")
+
+    source = SimpleNamespace(
+        source=SimpleNamespace(
+            routing_recommendation="needs_revision",
+            human_review_required=False,
+        )
+    )
+
+    with pytest.raises(ValueError, match="false acceptance source unavailable"):
+        await _PreparedAdapter(Prepared(), 1).participate(
+            source, object(), object(), 1
+        )
 
 
 @pytest.mark.parametrize(

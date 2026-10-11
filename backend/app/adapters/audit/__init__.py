@@ -169,7 +169,13 @@ class _TaskRoutingAudit:
                 actor_id=authority.actor_id,
                 reason=LifecycleAuditReason.STATE_CHANGED,
                 from_status="evaluation_pending",
-                to_status="review_pending" if s.human_review_required else "accepted",
+                to_status=(
+                    "needs_revision"
+                    if s.routing_recommendation == "needs_revision"
+                    else "review_pending"
+                    if s.human_review_required
+                    else "accepted"
+                ),
                 references={
                     LifecycleAuditReferenceKind.PROJECT: s.project_id,
                     LifecycleAuditReferenceKind.TASK: s.task_id,

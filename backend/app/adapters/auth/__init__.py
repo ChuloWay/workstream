@@ -4,6 +4,7 @@ import json
 
 from app.modules.authorization.domain.post_submit_routing import (
     AutomatedAcceptanceConsequence,
+    CheckerRemediationConsequence,
     HumanAdmissionConsequence,
     PostSubmitRoutingResourceContext,
 )
@@ -270,7 +271,9 @@ def lifecycle_transition_authorization(session: AsyncSession, context):
 
 def _routing_resource(source, claim, effects, authorized_generation, actor_id, link_id):
     consequence = (
-        HumanAdmissionConsequence()
+        CheckerRemediationConsequence()
+        if source.source.routing_recommendation == "needs_revision"
+        else HumanAdmissionConsequence()
         if effects is None
         else AutomatedAcceptanceConsequence(
             task_effects=effects,

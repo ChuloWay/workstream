@@ -58,16 +58,18 @@ class TaskPostSubmitOutcome:
             or envelope.aggregate_type != "checker_run"
             or envelope.aggregate_id != completion.reference.attempt_id
             or envelope.claim.project_id != completion.project_id
-            or completion.routing_recommendation != "allow_review"
+            or completion.routing_recommendation
+            not in {"allow_review", "needs_revision"}
             or await self._observer.observe_invocation(envelope) is None
         ):
             raise TaskRoutingRequestUnavailable("routing invocation unavailable")
         human = await self._observe_review_mode(completion)
-        if (current_generation is None) != human:
+        accepts = completion.routing_recommendation == "allow_review" and not human
+        if accepts != (current_generation is not None):
             raise TaskRoutingRequestUnavailable("routing branch unavailable")
         async with AsyncExitStack() as stack:
             acceptance = None
-            if not human:
+            if accepts:
                 acceptance = await stack.enter_async_context(
                     self._acceptance.prepare(current_generation)
                 )
@@ -83,13 +85,11 @@ class TaskPostSubmitOutcome:
             authorized_generation = (
                 stored.authorized_lifecycle_generation if replay else current_generation
             )
-            acceptance_id = (
-                stored.final_acceptance_id if replay else (None if human else new_record_id())
+            acceptance_id = stored.final_acceptance_id if replay else (
+                new_record_id() if accepts else None
             )
             effects = (
-                None
-                if human
-                else TaskAcceptedEffectsRequest(
+                TaskAcceptedEffectsRequest(
                     **source.source.model_dump(
                         include={
                             "project_id",
@@ -106,8 +106,12 @@ class TaskPostSubmitOutcome:
                     final_acceptance_id=acceptance_id,
                     expected_task_status="evaluation_pending",
                 )
+                if accepts
+                else None
             )
-            if human != (acceptance_id is None) or human != (authorized_generation is None):
+            if accepts != (acceptance_id is not None) or accepts != (
+                authorized_generation is not None
+            ):
                 raise TaskRoutingRequestUnavailable("routing retained consequence unavailable")
             authority = await stack.enter_async_context(self._authorization.prepare(source.request))
             if await self._invocation_fence.fence_invocation(envelope) is None:
@@ -136,7 +140,11 @@ class TaskPostSubmitOutcome:
                 self._session.add(stored)
                 await self._session.flush()
             economic = None
-            if human:
+            if source.source.routing_recommendation == "needs_revision":
+                task = await self._session.get(WorkstreamTask, str(source.source.task_id))
+                if not replay:
+                    task.status = "needs_revision"
+            elif human:
                 task = await self._session.get(WorkstreamTask, str(source.source.task_id))
                 if not replay:
                     task.status = "review_pending"
@@ -160,6 +168,7 @@ class TaskPostSubmitOutcome:
                 routing_manifest_id=stored.id,
                 authorization_decision_id=receipt.decision_id,
                 outcome_event_id=stored.outcome_event_id,
+                routing_recommendation=source.source.routing_recommendation,
                 final_acceptance_id=acceptance_id,
                 economic=economic,
                 replayed=replay,
@@ -168,6 +177,8 @@ class TaskPostSubmitOutcome:
     async def observe_delivery_generation(self, envelope: OutboxEventEnvelope) -> int | None:
         """Select server-owned generation without authority or mutation locks."""
         completion = EvaluationCompletion.model_validate_json(envelope.payload_json)
+        if completion.routing_recommendation == "needs_revision":
+            return None
         human = await self._observe_review_mode(completion)
         if human:
             return None
