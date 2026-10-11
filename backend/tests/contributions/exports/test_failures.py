@@ -1,6 +1,7 @@
 """Serialization and explicit refusal roll back staged read ALLOW evidence."""
 
 import pytest
+from sqlalchemy import text
 
 from app.api.deps import contribution_exports
 from app.modules.contributions.api.records import ContributionExportTooLarge
@@ -45,3 +46,46 @@ async def test_over_limit_refusal_rolls_back_allow_and_never_starts_serializatio
         response = await signed_access.client.get("/api/v1/actors/me/contributions?format=csv", headers=actor.headers)
         assert response.status_code == 422 and response.json()["error"]["code"] == "contribution_export_too_large"
         assert await export_audits(h.factory) == []
+
+
+@pytest.mark.parametrize("code,failures,expected,calls", [
+    ("40001", 1, 200, 2),
+    ("40001", 2, 503, 2),
+    ("23514", 1, 503, 1),
+    ("40P01", 1, 503, 1),
+])
+async def test_driver_error_retry_is_bounded_and_preserves_one_fresh_decision(
+    tmp_path, auth_database_env, signed_access, live_acceptance_lifecycle, monkeypatch,
+    code, failures, expected, calls,
+):
+    """Server-raised codes prove retry classification, not an actual deadlock."""
+    async with authorized_submitter_source(tmp_path, auth_database_env) as h:
+        actor = await source_actor(signed_access, h)
+        original = ContributionReadRepository.read
+        attempts = []
+
+        async def controlled_driver_failure(repository, selected):
+            attempts.append(selected)
+            if len(attempts) <= failures:
+                # AUTH already staged ALLOW in this attempt's actual root.
+                # Each fixed SQLSTATE comes from PostgreSQL.
+                await repository._session.execute(text(
+                    "DO $$ BEGIN RAISE EXCEPTION 'controlled export refusal' "
+                    "USING ERRCODE = '" + code + "'; END $$"
+                ))
+            return await original(repository, selected)
+
+        monkeypatch.setattr(ContributionReadRepository, "read", controlled_driver_failure)
+        response = await signed_access.client.get(
+            "/api/v1/actors/me/contributions", headers=actor.headers,
+        )
+        assert response.status_code == expected, response.text
+        assert len(attempts) == calls
+        assert all(selected == attempts[0] for selected in attempts)
+        evidence = await export_audits(h.factory)
+        assert len(evidence) == int(expected == 200)
+        if expected == 200:
+            assert response.json()["items"][0]["contribution_id"] == str(h.submitter_record.id)
+            assert evidence[0]["after_facts"]["allowed"] is True
+        else:
+            assert response.json()["error"]["code"] == "contribution_export_unavailable"

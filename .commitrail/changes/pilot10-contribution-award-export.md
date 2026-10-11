@@ -270,3 +270,28 @@ the new surface; it must not infer delivery authority or activate other D11 work
   under current namespaces in a later separately authorized bounded change.
 - Remaining risks: fixed-membership pagination remains undelivered; migration
   allocation remains with the sole migration author. Full issue 497 remains open.
+
+## Reproduced revocation-first serialization repair
+
+At clean `487488ebf6493906ad88ca99af102f5e197f422c`, the real PostgreSQL
+revocation-first regression returns 503 instead of concealed 404. The reader's
+repeatable-read snapshot precedes the committed grant update; locking the changed
+grant produces a serialization conflict. The failed root rolls back and exposes
+no contribution facts, but it does not yet retain the required fresh DENY.
+
+Bounded repair: move the existing response transaction into the existing
+`contribution_export_response` owner, leaving its dependency single-yield and
+responsible for identity capture, public error mapping and cleanup. Permit one
+retry only for driver SQLSTATE 40001, after the whole failed root rolls back.
+Reuse canonical AUTH and projection operations with the identical request;
+re-evaluate current actor, link and grant in a new repeatable-read root. Serialize
+and commit only that attempt's response, and commit a fresh denial before raising
+concealed 404. Do not retry durable product mutations, denials, arbitrary storage
+errors or serializer errors; a second serialization conflict remains 503.
+
+Allowed repair files: existing contribution-export dependency and transaction
+regressions, exact schema-lane expectation, this record and affected current
+read-contract documentation. No new service/factory, alternate authorization,
+isolation downgrade, global retry middleware or weakened revocation assertion.
+Verify both real lock interleavings, first-snapshot visibility, serialization
+rollback, exact DENY custody, retry exhaustion and non-serialization refusal.

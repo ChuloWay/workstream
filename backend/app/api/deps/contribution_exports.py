@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import Depends, Request, Response
 from pydantic import ValidationError
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth import contribution_read_authorization
@@ -48,21 +48,17 @@ async def get_contribution_export_request(
     resolved: Annotated[Any, Depends(get_authorization_actor)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AsyncIterator[ContributionExportRequest]:
-    """Discard admission's refresh transaction and select RR before the first AUTH SQL."""
+    """Capture identity once; the response owns each complete authorized snapshot."""
     request_id, correlation_id = (UUID(value) for value in request_ids(request))
     context = _authorization_context(resolved, request_id, correlation_id)
     actor = await get_authorization_actor_identity(resolved)
     await session.rollback()
     try:
-        async with session.begin():
-            await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
-            try:
-                yield ContributionExportRequest(session, contribution_export_service(
-                    session, authorization=contribution_read_authorization(session, context),
-                ), actor.actor_profile_id)
-            except ContributionReadDenied as exc:
-                await session.commit()
-                raise contribution_export_http_error(404) from exc
+        yield ContributionExportRequest(session, contribution_export_service(
+            session, authorization=contribution_read_authorization(session, context),
+        ), actor.actor_profile_id)
+    except ContributionReadDenied as exc:
+        raise contribution_export_http_error(404) from exc
     except ContributionExportTooLarge as exc:
         raise contribution_export_http_error(422) from exc
     except (ContributionExportUnavailable, SQLAlchemyError, ValidationError, TypeError) as exc:
@@ -72,18 +68,46 @@ async def get_contribution_export_request(
             await session.rollback()
 
 
+def _serialization_conflict(error: BaseException) -> bool:
+    """Recognize only a driver's serialization refusal through owner wrappers."""
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, DBAPIError) and getattr(current.orig, "sqlstate", None) == "40001":
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 async def contribution_export_response(
     context: ContributionExportRequest, selected: ContributionReadRequest,
 ) -> Response:
-    """Fully validate and serialize bytes while authority locks remain held, then commit."""
-    projection = ContributionExportResponse.model_validate(await context.service.read(selected))
-    if selected.output_format == "csv":
-        body = contribution_export_csv(projection)
-        response = Response(body, media_type="text/csv; charset=utf-8",
-                            headers={"Content-Disposition": 'attachment; filename="contributions.csv"'})
-    else:
-        body = projection.model_dump_json().encode("utf-8")
-        ContributionExportResponse.model_validate_json(body)
-        response = Response(body, media_type="application/json")
-    await context.session.commit()
-    return response
+    """Retry one refused read snapshot; retain only fully serialized fresh evidence."""
+    for attempt in range(2):
+        try:
+            async with context.session.begin():
+                await context.session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+                try:
+                    projection = ContributionExportResponse.model_validate(await context.service.read(selected))
+                except ContributionReadDenied:
+                    # The canonical DENY belongs to this fresh attempt, not the
+                    # aborted snapshot. Preserve it before public concealment.
+                    await context.session.commit()
+                    raise
+                if selected.output_format == "csv":
+                    body = contribution_export_csv(projection)
+                    response = Response(body, media_type="text/csv; charset=utf-8",
+                                        headers={"Content-Disposition": 'attachment; filename="contributions.csv"'})
+                else:
+                    body = projection.model_dump_json().encode("utf-8")
+                    ContributionExportResponse.model_validate_json(body)
+                    response = Response(body, media_type="application/json")
+                await context.session.commit()
+                return response
+        except (ContributionExportUnavailable, SQLAlchemyError) as exc:
+            if attempt or not _serialization_conflict(exc):
+                raise
+            if context.session.in_transaction():
+                await context.session.rollback()
+    raise AssertionError("bounded contribution read attempt did not return")

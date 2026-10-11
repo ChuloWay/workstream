@@ -116,10 +116,17 @@ async def test_public_export_serializes_with_revocation_and_reauthorizes_next_re
 
         second = "revoke" if first == "read" else "read"
         tasks = []
+        serialization_errors = []
+
+        def capture_serialization(error_context):
+            code = getattr(error_context.original_exception, "sqlstate", None)
+            if code == "40001":
+                serialization_errors.append(code)
         with monkeypatch.context() as patch:
             patch.setattr(ContributionReadService, "read", paused_read)
             patch.setattr(AdminRoleGrantService, "complete_revoke", paused_revoke)
             event.listen(Session, "after_begin", named_transaction)
+            event.listen(Engine, "handle_error", capture_serialization)
             try:
                 tasks.append(asyncio.create_task(invoke(first), name=identity + "-" + first))
                 await asyncio.wait_for(held.wait(), 30)
@@ -138,6 +145,8 @@ async def test_public_export_serializes_with_revocation_and_reauthorizes_next_re
                         task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
                 event.remove(Session, "after_begin", named_transaction)
+                event.remove(Engine, "handle_error", capture_serialization)
+        assert serialization_errors == (["40001"] if first == "revoke" else [])
         results = dict(zip((first, second), responses, strict=True))
         assert results["revoke"].status_code == 200, results["revoke"].text
         assert results["read"].status_code == (200 if first == "read" else 404), results["read"].text
