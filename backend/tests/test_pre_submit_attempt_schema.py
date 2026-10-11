@@ -249,7 +249,11 @@ async def test_manifest_upgrade_preserves_old_evidence_without_inventing_metadat
                 after = await session.scalar(text(
                     "select to_jsonb(e) from pre_submit_evidence_sets e where id=:id"
                 ), {"id": evidence_id})
+            assert set(after) == set(before) | {
+                "semantic_manifest_body", "checker_remediation_manifest_id",
+            }
             assert after.pop("semantic_manifest_body") is None
+            assert after.pop("checker_remediation_manifest_id") is None
             assert after == before
             async with harness.factory() as session:
                 workflow = harness.workflow(session, calls)
