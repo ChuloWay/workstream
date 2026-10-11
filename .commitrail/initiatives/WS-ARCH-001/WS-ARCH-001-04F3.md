@@ -128,8 +128,11 @@ replacement writer or route would fork the atomic creation operation.
   `backend/tests/test_submission_composition.py`,
   `backend/tests/test_submission_preparation_authorization.py`,
   `backend/tests/authorization/task_authority/test_submission_authority.py`,
-  `backend/tests/test_tasks.py`, and one new focused integration test file under
-  `backend/tests/tasks/submission_dispatch/` if needed for the joined journey.
+  `backend/tests/test_tasks.py`, plus
+  `backend/tests/tasks/submission_dispatch/test_replacement_migration.py` for
+  retained-row upgrade proof and
+  `backend/tests/tasks/submission_dispatch/test_replacement_creation.py` for
+  ready-admission supersession, concurrent creation and late-insert rollback.
 - Direct callers of the superseded repository context method also require
   bounded test/support migration in `backend/tests/historical_submission_fixtures.py`,
   `backend/tests/authorization/task_authority/test_lifecycle_races.py`,
