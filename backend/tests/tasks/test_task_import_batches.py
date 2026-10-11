@@ -114,7 +114,8 @@ async def test_replay_keeps_original_facts_after_advancement_without_provider_or
     result = imported.json()
     first = result["tasks"][0]["id"]
     for action in ("screen", "release"):
-        advanced = await client.post(f"/api/v1/tasks/{first}/{action}", headers=auth_headers(), json={})
+        payload = {"reason": "Release the screened imported Task"} if action == "release" else {}
+        advanced = await client.post(f"/api/v1/tasks/{first}/{action}", headers=auth_headers(), json=payload)
         assert advanced.status_code == 200, advanced.text
     async with db_session.get_session_factory()() as session, session.begin():
         header = await session.get(TaskImportBatch, result["batch_id"])
