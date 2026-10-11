@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.actors.service import ResolvedActor
+from app.core.identifiers import new_record_id
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.repository import AdminAuthorizationRepository
@@ -35,7 +36,15 @@ from tests.projects.guide_compilation.finalization.pg_support import finalize
 from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor
 
 
-async def create_compiled_guide(factory, values, actor, *, version="v1", artifact_proposal=None):
+async def create_compiled_guide(
+    factory,
+    values,
+    actor,
+    *,
+    version="v1",
+    artifact_proposal=None,
+    post_submit_registry_entry=None,
+):
     """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
     async with factory() as session, session.begin():
         resolved = ResolvedActor(
@@ -85,7 +94,16 @@ async def create_compiled_guide(factory, values, actor, *, version="v1", artifac
         "snapshot": manifest.source_snapshot_id,
         "setup_1": manifest.setup_run_id,
     }
-    compilation_context = context(values, guide_version=version).model_copy(
+    checker_capabilities = None
+    if post_submit_registry_entry is not None:
+        from tests.checkers.external.support import capability_projection
+
+        checker_capabilities = capability_projection(post_submit_registry_entry)
+    compilation_context = context(
+        values,
+        guide_version=version,
+        checker_capabilities=checker_capabilities,
+    ).model_copy(
         update={"material": manifest}
     )
     outcome = result()
@@ -102,6 +120,33 @@ async def create_compiled_guide(factory, values, actor, *, version="v1", artifac
     outcome = outcome.model_copy(
         update={"findings": (outcome.findings[0].model_copy(update={"evidence_refs": refs}),)}
     )
+    if post_submit_registry_entry is not None:
+        from app.interfaces.project_agents import (
+            AtomicGuideRequirement,
+            PostSubmissionBindingProposal,
+        )
+
+        outcome = outcome.model_copy(
+            update={
+                "requirements": (
+                    AtomicGuideRequirement(
+                        requirement_id="project.post_evidence",
+                        statement="Evaluate the submitted evidence package.",
+                        disposition="supported_post_submit",
+                        evidence_refs=refs,
+                    ),
+                ),
+                "post_submit_bindings": (
+                    PostSubmissionBindingProposal(
+                        requirement_id="project.post_evidence",
+                        capability_id=post_submit_registry_entry.capability_id,
+                        capability_version=post_submit_registry_entry.capability_version,
+                        stage="post_submit",
+                        parameters=(),
+                    ),
+                ),
+            }
+        )
     url = factory.kw["bind"].url.render_as_string(hide_password=False)
     finalization = await compilation_and_projections(
         url,
@@ -115,7 +160,14 @@ async def create_compiled_guide(factory, values, actor, *, version="v1", artifac
 
 
 @asynccontextmanager
-async def source_case(url, *, namespace=None, guide_version="v1", artifact_proposal=None):
+async def source_case(
+    url,
+    *,
+    namespace=None,
+    guide_version="v1",
+    artifact_proposal=None,
+    post_submit_registry_spec=None,
+):
     """An authorized draft Project plus a genuinely created complete guide source."""
     engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -152,9 +204,68 @@ async def source_case(url, *, namespace=None, guide_version="v1", artifact_propo
             ).one()
             values.update(actor=UUID(service_id), link=UUID(link_id))
         actor, grant = await seed_review_actor(factory, values["project"])
+        registry_entry = (
+            await _register_external_checker_fixture(factory, post_submit_registry_spec)
+            if post_submit_registry_spec is not None
+            else None
+        )
         async with current_art_attempt_seed_schema(url):
-            values, finalization = await create_compiled_guide(factory, values, actor, version=guide_version,
-                                                               artifact_proposal=artifact_proposal)
+            values, finalization = await create_compiled_guide(
+                factory,
+                values,
+                actor,
+                version=guide_version,
+                artifact_proposal=artifact_proposal,
+                post_submit_registry_entry=registry_entry,
+            )
         yield values, factory, finalization, actor, grant
     finally:
         await engine.dispose()
+
+
+async def _register_external_checker_fixture(factory, spec):
+    """Publish one real Operator-authorized immutable entry before compilation."""
+    from app.modules.authorization.checker_registry_authorization import (
+        ExternalCheckerRegistryAuthorizationAdapter,
+    )
+    from app.modules.checkers.api.external import make_external_checker_registration_request
+    from app.modules.checkers.external_registry import ExternalCheckerRegistryService
+    from tests.project_create_fixtures import (
+        grant_fixture_admin_role,
+        seed_fixture_actor,
+    )
+
+    async with factory() as session, session.begin():
+        profile, link = await seed_fixture_actor(
+            session,
+            issuer="https://external-checker-fixture.test",
+            subject_prefix="external-checker-operator",
+        )
+        await grant_fixture_admin_role(
+            session,
+            profile.id,
+            role="operator",
+            scope="system",
+        )
+        operation_id = new_record_id()
+        request = make_external_checker_registration_request(
+            actor_profile_id=UUID(profile.id),
+            operation_id=operation_id,
+            registry_entry_id=new_record_id(),
+            spec=spec,
+        )
+        authority_context = HumanAuthorizationContext(
+            actor_profile_id=UUID(profile.id),
+            actor_kind=ActorKind.HUMAN,
+            actor_status=ActorStatus.ACTIVE,
+            identity_link_id=UUID(link.id),
+            identity_link_status=IdentityLinkStatus.ACTIVE,
+            request_id=uuid4(),
+            correlation_id=operation_id,
+        )
+        return await ExternalCheckerRegistryService(
+            session,
+            ExternalCheckerRegistryAuthorizationAdapter(
+                AuthorizationService(session, authority_context)
+            ),
+        ).register(request)

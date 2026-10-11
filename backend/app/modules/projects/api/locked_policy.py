@@ -225,10 +225,10 @@ class ProjectLockedPolicyContextFacts:
         external_body = json.loads(self.external_checker_policies.value)
         if external_body.get("schema_version") == "external_checker_policies.v1":
             from app.modules.checkers.api.external_policy import (
-                LockedExternalCheckerPolicies,
+                validate_stored_external_checker_policies,
             )
 
-            external_policies = LockedExternalCheckerPolicies.model_validate(external_body)
+            external_policies = validate_stored_external_checker_policies(external_body)
             pre_body = json.loads(self.compiled_pre_submit_bundle.value)
             post_body = json.loads(self.compiled_post_submit_policy.value)
             external_hashes_match = (

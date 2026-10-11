@@ -11,8 +11,8 @@ from app.core.hashing import canonical_json_hash
 from app.modules.authorization.api import ActorIdentityFacts
 from app.modules.authorization.api.guide_proposal_review import GuideProposalAuthorizationPort
 from app.modules.checkers.api.external_policy import (
-    LockedExternalCheckerPolicies,
     LockedExternalPostSubmitPolicy,
+    validate_stored_external_checker_policies,
 )
 from app.modules.authorization.api.post_policy import (
     PostPolicyAuthorizationFacts,
@@ -99,7 +99,7 @@ class PostPolicyService:
                     raise GuideProposalError("proposal_stale")
                 compiled = compile_saved_post_policy(
                     result=locked.result,
-                    policies=LockedExternalCheckerPolicies.model_validate(
+                    policies=validate_stored_external_checker_policies(
                         upstream.effective_pre_submit_plan
                     ),
                 )
@@ -156,7 +156,7 @@ class PostPolicyService:
                     raise GuideProposalError("proposal_stale")
                 compiled = compile_saved_post_policy(
                     result=locked.result,
-                    policies=LockedExternalCheckerPolicies.model_validate(
+                    policies=validate_stored_external_checker_policies(
                         locked.view.approval_custody.operation.effective_pre_submit_plan
                     ),
                 )

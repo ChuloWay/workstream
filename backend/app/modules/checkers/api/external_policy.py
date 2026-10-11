@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
@@ -125,6 +126,29 @@ class LockedExternalCheckerPolicies(_PolicyValue):
         ):
             raise ExternalCheckerPolicyError("checker policies digest mismatch")
         return self
+
+
+def validate_stored_external_checker_policies(
+    value: object,
+) -> LockedExternalCheckerPolicies:
+    """Decode retained JSON through strict UUID and timestamp model boundaries."""
+    return LockedExternalCheckerPolicies.model_validate_json(
+        json.dumps(value, ensure_ascii=False, allow_nan=False)
+    )
+
+
+def validate_stored_external_pre_policy(value: object) -> LockedExternalPreSubmitPolicy:
+    """Decode one retained selected PRE policy without Python-string coercion."""
+    return LockedExternalPreSubmitPolicy.model_validate_json(
+        json.dumps(value, ensure_ascii=False, allow_nan=False)
+    )
+
+
+def validate_stored_external_post_policy(value: object) -> LockedExternalPostSubmitPolicy:
+    """Decode one retained selected POST policy without Python-string coercion."""
+    return LockedExternalPostSubmitPolicy.model_validate_json(
+        json.dumps(value, ensure_ascii=False, allow_nan=False)
+    )
 
 
 def _validate_entries(

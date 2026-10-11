@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
-from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
+from app.modules.checkers.api.external_policy import validate_stored_external_post_policy
 from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
 from uuid import UUID
 
@@ -736,7 +736,7 @@ class TaskRepository:
             )
             post_body = task.locked_post_submit_checker_policy_body
             if post_body.get("schema_version") == "external_post_submit_policy.v1":
-                selected_post = LockedExternalPostSubmitPolicy.model_validate(post_body)
+                selected_post = validate_stored_external_post_policy(post_body)
                 if (
                     selected_post.policy_sha256
                     != locked_policy.locked_post_submit_checker_policy_hash

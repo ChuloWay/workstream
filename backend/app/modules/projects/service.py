@@ -1191,10 +1191,10 @@ class ProjectService:
             "external_pre_submit_policy.v1"
         ):
             from app.modules.checkers.api.external_policy import (
-                LockedExternalPreSubmitPolicy,
+                validate_stored_external_pre_policy,
             )
 
-            compiled_pre = LockedExternalPreSubmitPolicy.model_validate(
+            compiled_pre = validate_stored_external_pre_policy(
                 pre_submit_checker_policy.compiled_bundle
             )
             compiled_pre_hash = compiled_pre.policy_sha256

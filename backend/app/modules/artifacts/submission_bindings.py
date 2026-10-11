@@ -19,7 +19,7 @@ from app.modules.artifacts.api import (
 )
 from app.modules.artifacts.api.submission_admission import ConsumedSubmissionAdmissionRequest
 from app.modules.artifacts.submission_manifest import SubmissionManifest
-from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
+from app.modules.checkers.api.external_policy import validate_stored_external_post_policy
 from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
@@ -323,7 +323,7 @@ class SubmissionAdmissionConsumptionService:
         selected_policy_intact = admission.selected_pre_submit_run_id is None
         if admission.selected_pre_submit_run_id is not None:
             try:
-                selected_policy = LockedExternalPostSubmitPolicy.model_validate(
+                selected_policy = validate_stored_external_post_policy(
                     admission.selected_post_submit_policy_body
                 )
                 selected_policy_intact = (

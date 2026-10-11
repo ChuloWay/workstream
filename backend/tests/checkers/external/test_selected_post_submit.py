@@ -18,6 +18,7 @@ from app.interfaces.external_checker_execution import (
 from app.modules.checkers.api.external import (
     POST_SUBMIT_INPUT_SCHEMA_ID,
     ExternalCheckerRegistryEntry,
+    ExternalCheckerRegistrySpec,
     ExternalCheckerSchema,
     external_checker_json_hash,
     make_external_checker_execution_result,
@@ -47,6 +48,7 @@ from tests.checkers.external.support import (
     execution_identity,
     execution_material,
     registry_entry,
+    registry_spec,
 )
 from tests.checkers.execution.support import live_executor, reserve
 from tests.post_submit_materialization_helpers import material_fixture
@@ -91,6 +93,19 @@ def _policy() -> LockedExternalPostSubmitPolicy:
         entries=(binding,),
         policy_sha256=canonical_json_hash(body),
     )
+
+
+def _post_spec() -> ExternalCheckerRegistrySpec:
+    """Use the exact selected POST schema with the shared immutable registry facts."""
+    values = registry_spec("post_submit").model_dump(mode="json")
+    document = {"type": "object"}
+    values["input_schema"] = ExternalCheckerSchema(
+        schema_id=POST_SUBMIT_INPUT_SCHEMA_ID,
+        schema_version="v1",
+        document=document,
+        schema_sha256=external_checker_json_hash(document),
+    ).model_dump(mode="json")
+    return ExternalCheckerRegistrySpec.model_validate(values)
 
 
 def _request(identity, policy):
@@ -235,6 +250,32 @@ async def test_selected_post_materializes_actual_submission_and_replays(
         assert result.execution.external_members == ()
         assert await executor.evaluate_post_submission(h.request) == result
         assert len(h.store.opens) == 1
+
+
+@pytest.mark.postgres_schema_contract
+async def test_selected_post_persists_locked_external_member(
+    tmp_path, isolated_database_env,
+) -> None:
+    """Compile, approve and execute one real registered POST requirement."""
+    async with material_fixture(
+        tmp_path,
+        isolated_database_env,
+        post_submit_registry_spec=_post_spec(),
+    ) as h:
+        assert len(h.request.policy.entries) == 1
+        execution = _Execution()
+        result = await live_executor(
+            h,
+            selected_execution=execution,
+        ).evaluate_post_submission(h.request)
+        assert result.outcome == "completed"
+        assert result.execution is not None
+        assert len(result.execution.external_members) == 1
+        member = result.execution.external_members[0]
+        assert member.requirement_id == "project.post_evidence"
+        assert member.registry_entry_id == h.request.policy.entries[0].registry.registry_entry_id
+        assert member.result.verdict == "passed"
+        assert len(execution.requests) == 1
 
 
 @pytest.mark.asyncio

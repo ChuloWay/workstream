@@ -17,7 +17,9 @@ from app.modules.projects.models import (
     SubmissionPolicyMutationIdempotencyRecord,
     SubmissionArtifactPolicy,
 )
-from app.modules.checkers.api.external_policy import LockedExternalCheckerPolicies
+from app.modules.checkers.api.external_policy import (
+    validate_stored_external_checker_policies,
+)
 
 from .custody_payloads import policy_digest
 from .models import ProjectGuideProposalApproval
@@ -103,7 +105,7 @@ def approved_projection_digest(view) -> str:
     if operation.effective_pre_submit_plan.get("schema_version") == (
         "external_checker_policies.v1"
     ):
-        external_policies = LockedExternalCheckerPolicies.model_validate(
+        external_policies = validate_stored_external_checker_policies(
             operation.effective_pre_submit_plan
         )
         external_plan_hash = external_policies.policies_sha256
@@ -221,7 +223,7 @@ def _require_plan_and_provenance(view, custody, target) -> None:
         "manifest_sha256": target.pre_catalogue_manifest_hash,
     }
     if operation.effective_pre_submit_plan.get("schema_version") == "external_checker_policies.v1":
-        policies = LockedExternalCheckerPolicies.model_validate(
+        policies = validate_stored_external_checker_policies(
             operation.effective_pre_submit_plan
         )
         if policies.pre_submit.model_dump(mode="json") != pre.compiled_bundle:

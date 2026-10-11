@@ -112,12 +112,12 @@ def _backend(factory):
     )
 
 
-def _port(factory, runtime):
+def _port(factory, runtime, *, checker_capabilities=None):
     return project_guide_compilation_execution_port(
         factory,
         material_factory=guide_document_manifest_port,
         document_access_factory=document_access,
-        checker_capabilities=capability_projection(),
+        checker_capabilities=checker_capabilities or capability_projection(),
         authorization_context=_fixed_service_authorization,
         runtime_factory=lambda configuration: runtime,
     )

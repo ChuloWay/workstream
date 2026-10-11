@@ -6,7 +6,9 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 from app.core.identifiers import new_record_id
 
 from app.modules.authorization.api import ActorKind
-from app.modules.checkers.api.external_policy import LockedExternalCheckerPolicies
+from app.modules.checkers.api.external_policy import (
+    validate_stored_external_checker_policies,
+)
 from app.modules.checkers.api.external import ExternalCheckerRegistryPort
 from app.modules.projects.api.guide_activation import (
     GuideActivationCommand,
@@ -227,7 +229,7 @@ class GuideActivationService:
         )
         if not external or self.registry is None:
             raise GuideProposalError("approval_blocked")
-        policies = LockedExternalCheckerPolicies.model_validate(
+        policies = validate_stored_external_checker_policies(
             approval.operation.effective_pre_submit_plan
         )
         if policies.pre_submit.model_dump(mode="json") != approval.pre.compiled_bundle:

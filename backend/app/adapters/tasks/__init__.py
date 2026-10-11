@@ -249,11 +249,11 @@ class _ArtifactAdmissionAdapter:
             raise RuntimeError("admission did not produce a binding")
         from app.adapters.checkers import selected_submission_evaluation_content
         from app.modules.checkers.api.external_policy import (
-            LockedExternalPostSubmitPolicy,
+            validate_stored_external_post_policy,
         )
 
         selected_post_policy = (
-            LockedExternalPostSubmitPolicy.model_validate(result.selected_post_submit_policy_body)
+            validate_stored_external_post_policy(result.selected_post_submit_policy_body)
             if result.selected_post_submit_policy_body is not None
             else None
         )
@@ -298,11 +298,11 @@ class _ArtifactAdmissionAdapter:
             raise RuntimeError("retained admission custody unavailable")
         from app.adapters.checkers import selected_submission_evaluation_content
         from app.modules.checkers.api.external_policy import (
-            LockedExternalPostSubmitPolicy,
+            validate_stored_external_post_policy,
         )
 
         selected_post_policy = (
-            LockedExternalPostSubmitPolicy.model_validate(
+            validate_stored_external_post_policy(
                 result.selected_post_submit_policy_body
             )
             if result.selected_post_submit_policy_body is not None

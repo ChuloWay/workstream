@@ -10,7 +10,10 @@ from app.modules.checkers.api.historical_post_submit import (
     CompiledPostSubmitPolicy,
     parse_locked_post_submit_policy,
 )
-from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
+from app.modules.checkers.api.external_policy import (
+    LockedExternalPostSubmitPolicy,
+    validate_stored_external_post_policy,
+)
 from app.modules.authorization.api import ActorKind
 from app.modules.authorization.api.post_policy import PostPolicyAuthorityReceipt
 from app.modules.projects.api.guide_proposals import GuideProposalError
@@ -128,7 +131,7 @@ async def load_post_policy_custody(session, policy) -> PostPolicyCustody:
         raise GuideProposalError("proposal_unavailable")
     target = operation_receipt(projection).target
     if policy.policy_body.get("schema_version") == "external_post_submit_policy.v1":
-        compiled = LockedExternalPostSubmitPolicy.model_validate(policy.policy_body)
+        compiled = validate_stored_external_post_policy(policy.policy_body)
         if (
             compiled.policy_sha256 != policy.policy_hash
             or policy.required_checkers
@@ -294,7 +297,7 @@ def validate_activation_post_policy(
             post_submit_checker_policy.policy_body.get("schema_version")
             == "external_post_submit_policy.v1"
         ):
-            parsed = LockedExternalPostSubmitPolicy.model_validate(
+            parsed = validate_stored_external_post_policy(
                 post_submit_checker_policy.policy_body
             )
             if (

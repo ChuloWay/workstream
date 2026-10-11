@@ -13,6 +13,7 @@ async def approved_selected_policy_fixture(
     guide_version,
     contribution_awards=(),
     human_review_required=True,
+    post_submit_registry_spec=None,
 ):
     """Build an activated guide backed only by immutable external policy custody."""
     from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
@@ -32,6 +33,7 @@ async def approved_selected_policy_fixture(
             required_evidence=("results",),
             attestation_terms=("rights_confirmed",),
         ),
+        post_submit_registry_spec=post_submit_registry_spec,
     )
     async with factory() as session:
         guide = await session.get(ProjectGuide, str(values["guide"]))
@@ -58,4 +60,3 @@ async def approved_selected_policy_fixture(
             "evidence_path": "evidence/"
             + effective["effective_policy"]["required_evidence"][0]["key"],
         }
-

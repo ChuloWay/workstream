@@ -14,6 +14,7 @@ from app.modules.tasks.api import TaskSubmissionContextFacts
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
     LockedExternalPostSubmitPolicy,
+    validate_stored_external_post_policy,
 )
 from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
 from app.modules.projects.api.locked_policy import (
@@ -262,7 +263,7 @@ class TaskService:
         """Decode selected policy bodies while retaining historical read custody."""
         body = json.loads(facts.compiled_post_submit_policy.value)
         if body.get("schema_version") == "external_post_submit_policy.v1":
-            selected = LockedExternalPostSubmitPolicy.model_validate(body)
+            selected = validate_stored_external_post_policy(body)
             policies = LockedExternalCheckerPolicies.model_validate_json(
                 facts.external_checker_policies.value
             )

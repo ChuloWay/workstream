@@ -118,6 +118,7 @@ async def _material_fixture(
     provision_checker=True,
     contribution_awards=(),
     human_review_required=True,
+    post_submit_registry_spec=None,
 ):
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -149,6 +150,7 @@ async def _material_fixture(
             guide_version="v1",
             contribution_awards=contribution_awards,
             human_review_required=human_review_required,
+            post_submit_registry_spec=post_submit_registry_spec,
         )
         context = _context()
         await provision_material_services(factory, artifacts=provision_services, checker=provision_checker)
