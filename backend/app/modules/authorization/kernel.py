@@ -38,7 +38,10 @@ from app.modules.authorization.domain.prepared_service import (
 )
 from app.modules.authorization.policy import ACTIVE_GUIDE_ADMIN_ROLES
 from app.modules.authorization.domain.read_dispatch import READ_ACTIONS, read_denial
-from app.modules.authorization.prepared_admin_authority import lock_admin_mutation_authority
+from app.modules.authorization.prepared_admin_authority import (
+    lock_admin_mutation_authority, lock_project_create_authority,
+    project_create_prelocked_denial,
+)
 from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.authorization.schemas import AdminRole
 from app.modules.authorization.runtime import (
@@ -78,7 +81,6 @@ from app.modules.authorization.runtime import (
     MatchedAuthorityKind,
     PermissionCatalogueResourceContext,
     ProjectContributorCandidateCollectionResourceContext,
-    ProjectCreateResourceContext,
     ProjectReadResourceContext,
     ProjectDiagnosticReadResourceContext,
     ProjectPolicyReadResourceContext,
@@ -439,27 +441,9 @@ class AuthorizationService:
                 context, action.permission_id, scope, action_id,
             )
         elif action_id is ActionId.PROJECT_CREATE:
-            if not isinstance(context, HumanAuthorizationContext):
-                raise PreparedAuthorizationUnsupported(
-                    AuthorizationDenialCode.PERMISSION_NOT_GRANTED
-                )
-            if scope.kind is not PreparedAuthorityScopeKind.SYSTEM:
-                raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED)
-            locked = await self._admin.lock_request_actor(
-                context.identity_link_id, context.actor_profile_id
+            context, grant = await lock_project_create_authority(
+                self._admin, context, scope, self._locked_human_context,
             )
-            context = self._locked_human_context(locked, context)
-            grant = await self._admin.find_effective_grant(
-                context.actor_profile_id,
-                PermissionId.PROJECT_CREATE,
-                scope_project_id=None,
-                system_scope_only=True,
-                for_update=True,
-            )
-            if grant is None:
-                raise PreparedAuthorizationUnsupported(
-                    AuthorizationDenialCode.PERMISSION_NOT_GRANTED
-                )
         elif action_id in PROJECT_AUTHORITY_ACTIONS:
             context, grant = await lock_project_authority(
                 self._admin, context, scope, action, self._locked_human_context,
@@ -829,17 +813,9 @@ class AuthorizationService:
                 matched_grant_id = authority.matched_grant_id
                 matched_project_id = authority.matched_grant_scope_project_id
         elif action_id is ActionId.PROJECT_CREATE:
-            denial = self._lifecycle_denial(context)
-            if denial is None and action.availability is not ActionAvailability.ACTIVE:
-                denial = AuthorizationDenialCode.ACTION_UNAVAILABLE
-            if denial is None and not isinstance(resource_context, ProjectCreateResourceContext):
-                denial = AuthorizationDenialCode.RESOURCE_GUARD_DENIED
-            if denial is None and authority.scope_project_id is not None:
-                denial = AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED
-            if denial is None and (
-                authority.matched_grant_id is None or authority.matched_grant_status != "active"
-            ):
-                denial = AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+            denial = project_create_prelocked_denial(
+                action, resource_context, authority, self._lifecycle_denial(context),
+            )
             if denial is None:
                 matched_kind = MatchedAuthorityKind.ADMIN_ROLE_GRANT
                 matched_grant_id = authority.matched_grant_id
