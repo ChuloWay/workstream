@@ -331,6 +331,10 @@ begin
          ~ '^sha256:[0-9a-f]{64}$',false)
        and (b.action_id='project.task.screen' or
          e.event_payload::jsonb#>>'{manager_authority_facts,locked_context_hash}'=c.locked_context_hash)
+       and public.external_checker_registry_digest(jsonb_build_object(
+         'resource_context',jsonb_strip_nulls(
+           e.event_payload::jsonb->'manager_authority_facts')))
+         =d.after_facts::jsonb->>'resource_context_digest'
        and e.event_payload::jsonb->>'authorization_resource_digest'
          =d.after_facts::jsonb->>'resource_context_digest'
        and e.event_payload::jsonb->>'locked_guide_version'=c.response::jsonb->>'locked_guide_version'
