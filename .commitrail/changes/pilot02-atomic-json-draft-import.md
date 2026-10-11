@@ -152,6 +152,29 @@ it is not an authoritative native-UUID batch relationship.
   actor/audit UUIDs. The sole migration author receives the reviewed field/lock
   contract against then-current main before allocating a linear successor.
 
+### Proposed public and row-mapping contract
+
+- POST `/projects/{project_id}/task-import-batches` accepts a closed
+  `{source_id: UUID}` body and the shared UUID idempotency header. Its import
+  action is `project.task.import`; proposed native resource facts use the
+  bounded `task_import_batch` classification with project/source identity.
+- GET `/projects/{project_id}/task-import-batches/{batch_id}` uses
+  `project.task.import_batch.read`, returns only native membership, and separates
+  immutable original creation facts from current Task states. All responses are
+  bounded by the retained maximum 500 rows and keep document row order.
+- The validated source's instruction fields map directly to canonical TaskCreate
+  fields. Server metadata stamps additive source type `json_import`,
+  `source_ref=task-import-source:<native source UUID>`, the actual verified
+  `source_payload_hash`, and native batch UUID spelling in `import_batch_id`.
+  These labels add no authority; a manually stamped matching label remains
+  outside native membership. The server does not infer deadline, assignment,
+  guide locks, contribution terms or release state.
+- Parser/mapping identity captures this exact field mapping and the published
+  `workstream.task_import.v1` document version. Source metadata labels are retained
+  as display values, never used as replay, project or authorization selectors.
+  Actual provider bytes are parsed only on first import; stored creation facts
+  and verified native receipts govern committed replay.
+
 ### Concrete owner and schema preparation for review
 
 The next reviewed application boundary separates canonical Task creation into
