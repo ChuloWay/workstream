@@ -57,7 +57,8 @@ Their current root transaction prevents composition across a complete batch.
   canonical error envelope for POST/PUT. Disable automatic body replay and retain
   uncertain-write reporting; no other shared-client changes are authorized.
 - Exact CLI proof paths are new `cli/tests/integration/test_task_batch_csv.py`
-  and `test_task_batch_sources_http.py`; the existing HTTP fixture receives one
+  and `test_task_batch_sources_http.py`, plus
+  `test_task_batch_commands_http.py`; the existing HTTP fixture receives one
   PUT handler delegating to its unchanged exact-body POST capture. No retained
   GET/PATCH/POST expectations or test guards are removed.
 - Native participant lifetime/composition proof is owned in
@@ -162,6 +163,35 @@ write, changed-input/partial-advance rollback, real grant-revocation denial and 
 observed native holder/waiter before concurrent same-key recovery. They have not
 run because aggregate custody DDL is pending the sole migration author. No native
 aggregate, native 200/500 timing, full CI, or readiness claim is made here.
+
+Peer review of aggregate checkpoint `42900b036` found that the new dependency
+projected immutable identity after the canonical Task dependency rolled back and
+expired the resolved ORM actor/link. The repair projects the existing public
+`ActorIdentityFacts` first, before that rollback; no row refresh, implicit read,
+new authority owner or private actor import is introduced. Peer native dependency
+expiration replay and installed aggregate public proof remain separate evidence.
+The same peer review found missing/blank RELEASE input reached the native pending
+receipt reason CHECK before normal validation. The repair uses the canonical
+`TaskValidationError` reason requirement before opening/reserving the root,
+retains the native CHECK, and adds public missing/blank negative controls asserting
+unchanged aggregate, Task, lifecycle and successful authority facts. Valid inputs
+still consume every member's fresh canonical AUTH.
+The repaired pure compact/admission plus retained parser checks passed 44 cases
+in 7.40 seconds; the protected module-boundary check also exited successfully.
+The owned idle PostgreSQL container was stopped after the earlier native proof's
+isolated DB/role cleanup, while aggregate DDL remains pending.
+
+CLI import/status/screen/release are implemented as separate exact typed calls.
+Original/status responses are bounded to 16MiB, compact transitions to 2MiB,
+with complete 1..500 ordered membership and strict original DRAFT/source custody.
+Status validates original and current identities independently. The six new
+built-CLI HTTP cases passed in 15.03 seconds, including complete 500-row output,
+crossed/malformed/partial refusal, invalid selectors/keys producing zero requests,
+canonical versus unrecognized denial, dropped connections and one-body/one-h2
+GOAWAY behavior. These are controlled HTTP fixtures, not native batch proof.
+Go compilation, focused package tests and `go vet ./...` passed. The longer
+deadline for batch writes has not been selected: it remains dependent on actual
+native 200/500 timing, and existing transport semantics remain unchanged.
 
 No migration ordinal is allocated here. The sole author receives the final exact
 models and constraints only after this custody design and shared regions are

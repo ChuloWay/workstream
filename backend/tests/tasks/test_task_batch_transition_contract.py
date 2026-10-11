@@ -6,6 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from app.modules.tasks.api.task_batch_transition import TaskBatchTransitionRequest, TaskBatchTransitionResponse
+from app.modules.tasks.service import TaskValidationError
+from app.modules.tasks.task_batch_transitions import TaskBatchTransitionCommands
 
 
 def response_value(count=2):
@@ -61,3 +63,11 @@ def test_release_and_reason_contracts_are_separate_from_screen():
         TaskBatchTransitionRequest(reason="x" * 4001)
     with pytest.raises(ValidationError):
         TaskBatchTransitionRequest.model_validate({"task_ids": [str(uuid4())]})
+
+
+@pytest.mark.parametrize("reason", [None, "", " \n"])
+async def test_release_reason_is_refused_before_any_transaction_or_authority(reason):
+    """Admission must reject incomplete input without accessing a session or Task port."""
+    owner = TaskBatchTransitionCommands(None, actor_profile_id=uuid4(), identity_link_id=uuid4(), tasks=None)
+    with pytest.raises(TaskValidationError, match="release decision reason is required"):
+        await owner.release(uuid4(), uuid4(), reason, idempotency_key=uuid4())

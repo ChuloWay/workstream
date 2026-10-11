@@ -138,6 +138,10 @@ async def test_late_staging_failure_and_partial_advance_replay_roll_back_whole_b
     successful = await client.post(_path(project, batch, "screen"), headers=key, json=payload)
     assert successful.status_code == 200, successful.text
     before = await _success_facts(project)
+    for reason in (None, " \n"):
+        refused = await client.post(_path(project, batch, "release"), headers=auth_headers(), json={"reason": reason})
+        assert refused.status_code == 422 and refused.json()["error"]["code"] == "task_batch_transition_invalid", refused.text
+        assert await _success_facts(project) == before
     changed = await client.post(_path(project, batch, "screen"), headers=key, json={"reason": "Changed reason"})
     assert changed.status_code == 409 and changed.json()["error"]["code"] == "idempotency_mismatch", changed.text
     assert await _success_facts(project) == before

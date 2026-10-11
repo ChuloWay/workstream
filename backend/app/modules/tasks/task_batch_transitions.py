@@ -18,6 +18,7 @@ from app.modules.tasks.api.task_import_membership import TaskImportBatchError, T
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands, TaskTransitionPreparation
 from app.modules.tasks.command_replay import TaskReplayConflict
 from app.modules.tasks.schemas import TaskResponse
+from app.modules.tasks.service import TaskValidationError
 from app.modules.tasks.task_batch_transition_models import TaskBatchTransitionMember, TaskBatchTransitionReceipt
 from app.modules.tasks.task_import_membership import TaskImportMembership, TaskImportMembershipSnapshot
 
@@ -164,6 +165,8 @@ class TaskBatchTransitionCommands:
         if not all(isinstance(value, UUID) for value in (project_id, batch_id, key)):
             raise ValueError("task batch transition selectors are invalid")
         reason = TaskBatchTransitionRequest(reason=reason).reason
+        if operation is TaskAuthorityOperation.RELEASE and (not reason or not reason.strip()):
+            raise TaskValidationError("release decision reason is required")
         digest = canonical_json_hash({"project_id": str(project_id), "batch_id": str(batch_id),
                                       "operation": operation.value, "reason": reason})
         async with self._session.begin():

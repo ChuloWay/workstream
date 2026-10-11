@@ -15,6 +15,7 @@ func addTaskBatch(project *cobra.Command, client func() (*api.Client, error), ou
 	batch := &cobra.Command{Use: "task-batch", Short: "Explicit task import, screening and release operations"}
 	addTaskBatchCSV(batch, output, stdout)
 	addTaskBatchSources(batch, client, output, stdout)
+	addTaskBatchCommands(batch, client, output, stdout)
 	project.AddCommand(batch)
 }
 

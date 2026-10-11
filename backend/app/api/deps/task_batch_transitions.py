@@ -12,8 +12,8 @@ from app.modules.tasks.api.task_batch_transition import TaskBatchTransitionPort
 
 
 async def get_task_batch_transition_commands(
-    tasks: Annotated[object, Depends(get_task_commands)],
     identity: Annotated[ActorIdentityFacts, Depends(get_authorization_actor_identity)],
+    tasks: Annotated[object, Depends(get_task_commands)],
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> TaskBatchTransitionPort:
     """Reuse the actual issuing AUTH owner for rollback and denial-only restaging."""

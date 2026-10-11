@@ -463,6 +463,33 @@ The CLI verifies returned selectors and, for writes, the exact file commitment.
 A returned source/status establishes byte custody only; it does not create,
 screen or release Tasks.
 
+Continue with explicit batch operations after source verification:
+
+```sh
+workstream project task-batch import PROJECT_ID SOURCE_ID --idempotency-key IMPORT_UUID --output json
+workstream project task-batch status PROJECT_ID BATCH_ID --output json
+workstream project task-batch screen PROJECT_ID BATCH_ID --idempotency-key SCREEN_UUID --reason 'Briefs meet the approved guide' --output json
+workstream project task-batch release PROJECT_ID BATCH_ID --idempotency-key RELEASE_UUID --reason 'All members are ready for work' --output json
+```
+
+Import returns the complete original ordered DRAFT creation facts. Status keeps
+those originals separate from the current member states. SCREEN and RELEASE
+select every member from immutable native membership and return ordered compact
+Task IDs, statuses and locked lineage. Normal guide/policy prerequisites still
+apply; release requires a nonblank reason. Each write requires its own retained
+caller UUID. No command combines upload/import/screen/release or chooses per-row
+retry keys. Responses are limited to 1..500 complete members: original/status
+JSON is bounded to 16MiB and compact transition JSON to 2MiB. Invalid, crossed,
+duplicate or partial responses are refused without partial output.
+
+Batch writes never retry automatically. An unknown outcome requires inspection
+of `status` as an observation, followed by manual replay of the unchanged project,
+source/batch, action, reason and key. SCREEN/RELEASE replay also requires every
+member to retain its original post-state, locked context and unassigned custody;
+later Task changes or revoked authority can prevent recovery with the same key.
+The aggregate migration and real 200/500-row journey/timing proofs remain pending
+in this draft implementation; no native bulk readiness is claimed.
+
 Source writes never retry automatically, including after HTTP/2 GOAWAY. If a
 declaration outcome is unknown, manually replay only the unchanged project,
 JSON file bytes and caller key. For an uncertain upload, inspect `source-status`
