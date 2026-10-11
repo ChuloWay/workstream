@@ -688,6 +688,26 @@ def _replace_checker_run_custody() -> None:
     op.execute(definition.replace(old_context, new_context))
 
 
+def _replace_submission_dispatch_custody() -> None:
+    definition = op.get_bind().execute(sa.text(
+        "select pg_get_functiondef('public.submission_dispatch_valid(public.submission_dispatches)'::regprocedure)"
+    )).scalar_one()
+    old_packet = """  AND (r.request_json::jsonb->'structural_input'->>'summary')=s.summary
+  AND (r.request_json::jsonb->'structural_input'->>'worker_attestation')=s.worker_attestation"""
+    new_packet = """  AND ((r.request_json::jsonb->>'schema_version'=
+    'workstream.selected_post_submit_request.v1'
+    AND r.selected_post_submit_policy_sha256=s.selected_post_submit_policy_sha256
+    AND r.selected_post_submit_policy_body::jsonb=s.selected_post_submit_policy_body::jsonb
+    AND r.request_json::jsonb->'policy'=s.selected_post_submit_policy_body::jsonb)
+   OR (r.request_json::jsonb->>'schema_version'<>
+    'workstream.selected_post_submit_request.v1'
+    AND (r.request_json::jsonb->'structural_input'->>'summary')=s.summary
+    AND (r.request_json::jsonb->'structural_input'->>'worker_attestation')=s.worker_attestation))"""
+    if definition.count(old_packet) != 1:
+        raise RuntimeError("submission dispatch packet custody shape changed")
+    op.execute(definition.replace(old_packet, new_packet))
+
+
 def upgrade() -> None:
     op.execute("set local search_path=pg_catalog,public,pg_temp")
     op.execute("lock table public.actor_profiles, public.actor_identity_links, public.audit_events, public.submissions, public.checker_runs, public.submission_bundle_durable_intents, public.submission_bundle_admissions in access exclusive mode")
@@ -699,6 +719,7 @@ def upgrade() -> None:
     _replace_guide_approval_custody()
     _replace_post_policy_custody()
     _replace_checker_run_custody()
+    _replace_submission_dispatch_custody()
 
 
 def downgrade() -> None:
