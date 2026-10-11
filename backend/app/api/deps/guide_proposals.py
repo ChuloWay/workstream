@@ -80,9 +80,11 @@ async def get_correction_dispatch(
     from app.core.project_agents import project_guide_runtime_configuration
 
     actor = await get_authorization_actor_identity(resolved)
-    await session.rollback()
     _, pre, post = project_guide_approval_compiler()
     async with prepared_authorization_service(request, resolved, session) as prepared:
+        # Capture the immutable AUTH context before rollback expires the ORM
+        # identity rows; dispatch still owns a fresh product transaction.
+        await session.rollback()
         yield CorrectionDispatchRequest(project_guide_correction_dispatch(
             session, human_guide_compilation_authorization(prepared),
             material=guide_document_manifest_port(session), pre=pre, post=post,

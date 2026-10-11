@@ -120,7 +120,7 @@ introduced here.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Current owner map | Source inspection of ART inspection/manifest/change owners, both current catalogues and the merged external runtime | Complete at main `e77c48b1086c95cc4c2fc05bdf2fdcffdce52494` | Policy binding, live pre-admission orchestration, post cutover and catalogue removal remain later slices |
+| Current owner map | Source inspection of ART inspection/manifest/change owners, both current catalogues and the merged external runtime | Complete and reconciled through main `3cf40503691ab05533247a6a80bb2cff84c54721` | Policy binding, live pre-admission orchestration, post cutover and catalogue removal remain later slices |
 | Default behavior and actual ART callback | `pytest -q tests/checkers/default/test_contract.py tests/checkers/default/test_execution.py` | 25 passed | Component remains deliberately unselected |
 | Test-lane ownership and focused behavior | `pytest -q tests/checkers/default/test_contract.py tests/checkers/default/test_execution.py tests/test_ci_lane_catalogue.py` | 71 passed | Hosted full-suite evidence follows in the draft PR |
 | Public module boundary | `pytest -q tests/architecture/test_module_boundaries.py::test_repository_matches_the_protected_module_boundary tests/architecture/test_module_boundaries.py::test_art_implements_checker_consumer_ports_without_a_public_cycle` | 2 passed | Existing catalogues retain their recorded debt until cutover |
@@ -128,8 +128,9 @@ introduced here.
 
 ## Reconciliation
 
-- Current-source reconciliation: Started from merged PR #528 at main
-  `e77c48b1086c95cc4c2fc05bdf2fdcffdce52494`.
+- Current-source reconciliation: Started from merged PR #528 at
+  `e77c48b1086c95cc4c2fc05bdf2fdcffdce52494` and reconciled additively with
+  current main `3cf40503691ab05533247a6a80bb2cff84c54721`.
 - Next usable boundary: Bind approved external policy identities and compose the
   default plus every required project pre-image before the existing atomic
   Submission operation.
