@@ -363,7 +363,7 @@ class CheckerRetryReceipt(Base):
         CheckConstraint("successor_generation = source_generation + 1 and source_generation > 0", name="generation"),
         CheckConstraint("length(reason) between 1 and 500 and reason !~ '[[:cntrl:]]'", name="reason"),
         CheckConstraint("source_request_digest ~ '^sha256:[0-9a-f]{64}$' and source_result_digest ~ '^sha256:[0-9a-f]{64}$' and successor_request_digest ~ '^sha256:[0-9a-f]{64}$' and resource_digest ~ '^sha256:[0-9a-f]{64}$'", name="digests"),
-        CheckConstraint("octet_length(resource_json) <= 8192 and resource_digest = 'sha256:' || encode(sha256(convert_to(resource_json, 'UTF8')), 'hex')", name="resource_json_digest"),
+        CheckConstraint("octet_length(resource_json) <= 8192 and resource_json = public.project_guide_projection_canonical_json(resource_json::jsonb) and resource_digest = 'sha256:' || encode(sha256(convert_to(resource_json, 'UTF8')), 'hex')", name="resource_json_digest"),
         UniqueConstraint("actor_profile_id", "request_key", name="uq_checker_retry_actor_key"),
         UniqueConstraint("source_run_id", name="uq_checker_retry_source"),
         UniqueConstraint("successor_run_id", name="uq_checker_retry_successor"),

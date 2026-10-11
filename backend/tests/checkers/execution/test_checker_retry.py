@@ -2,6 +2,8 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+import hashlib
 import json
 import os
 
@@ -20,7 +22,10 @@ from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable, CheckerRequestConflict, CheckerRetryCommand,
 )
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence
-from app.modules.outbox.api import HandlerOutcome, OutboxAppendInput, OutboxIdempotencyConflict
+from app.modules.outbox.api import (
+    HandlerOutcome, OutboxAppendDisposition, OutboxAppendInput,
+    OutboxAppendResult, OutboxIdempotencyConflict,
+)
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import AuditEvent
 from app.modules.tasks.evaluation_delivery import EvaluationDeliveryRequestReader, EvaluationDeliveryUnavailable
@@ -158,6 +163,108 @@ async def test_retry_sql_rejects_crossed_receipt_with_real_authority_participant
             assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
             assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+        async with h.factory.begin() as session:
+            valid = await checker_retry_service(session, operator).retry(command)
+        assert valid.successor.generation == 2
+
+
+async def test_retry_sql_rejects_noncanonical_authority_resource_even_with_matching_raw_hash(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
+        operator = await _operator_for(h)
+        captured = []
+        original_add = AsyncSession.add
+
+        def omit_only_receipt(session, value):
+            if isinstance(value, CheckerRetryReceipt):
+                captured.append(value)
+                return
+            return original_add(session, value)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(AsyncSession, "add", omit_only_receipt)
+            with pytest.raises(IntegrityError, match="resource_json_digest"):
+                async with h.factory.begin() as session:
+                    await checker_retry_service(session, operator).retry(_command(h, operator))
+                    assert len(captured) == 1
+                    receipt = captured[0]
+                    values = {
+                        column.name: getattr(receipt, column.name)
+                        for column in CheckerRetryReceipt.__table__.columns
+                        if column.name != "created_at"
+                    }
+                    values["resource_json"] = " " + receipt.resource_json
+                    values["resource_digest"] = "sha256:" + hashlib.sha256(
+                        values["resource_json"].encode("utf-8")
+                    ).hexdigest()
+                    await session.execute(insert(CheckerRetryReceipt).values(**values))
+        async with h.factory() as session:
+            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+        async with h.factory.begin() as session:
+            valid = await checker_retry_service(session, operator).retry(_command(h, operator))
+        assert valid.successor.generation == 2
+
+
+async def test_retry_sql_actor_status_validation_preserves_fresh_historical_replay(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
+        operator = await _operator_for(h)
+        command = _command(h, operator)
+        async with h.factory.begin() as session:
+            created = await checker_retry_service(session, operator).retry(command)
+        async with h.factory() as session:
+            await session.begin()
+            valid = text("select public.checker_retry_receipt_valid(:receipt_id)")
+            assert await session.scalar(valid, {"receipt_id": created.receipt_id}) is True
+            await session.execute(text("""
+                update actor_profiles set status='suspended', suspended_by='test',
+                  suspended_at=clock_timestamp(), suspension_reason='test'
+                where id=:actor_id
+            """), {"actor_id": operator.actor_profile_id})
+            assert await session.scalar(valid, {"receipt_id": created.receipt_id}) is False
+            await session.rollback()
+        async with h.factory.begin() as session:
+            assert await checker_retry_service(session, operator).retry(command) == created
+
+
+async def test_retry_sql_rejects_outbox_payload_with_false_digest(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    from app.modules.outbox.service import OutboxService
+
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
+        operator = await _operator_for(h)
+        command = _command(h, operator)
+        false_digest = "sha256:" + "0" * 64
+
+        async def false_digest_append(service, event):
+            event_id = new_record_id()
+            await service._repository._session.execute(insert(OutboxEvent).values(
+                event_id=event_id, event_type=event.event_type,
+                event_version=event.event_version, aggregate_type=event.aggregate_type,
+                aggregate_id=event.aggregate_id, project_id=str(event.project_id),
+                correlation_id=event.correlation_id,
+                causation_event_id=event.causation_event_id,
+                idempotency_key=event.idempotency_key,
+                payload=event.payload, payload_digest=false_digest,
+            ))
+            return OutboxAppendResult(
+                event_id=event_id, disposition=OutboxAppendDisposition.CREATED,
+                payload_digest=false_digest, occurred_at=datetime.now(UTC),
+            )
+
+        with monkeypatch.context() as patch:
+            patch.setattr(OutboxService, "append", false_digest_append)
+            with pytest.raises(IntegrityError, match="checker retry receipt closure invalid|terminal checker infrastructure retry requires Operator receipt"):
+                async with h.factory.begin() as session:
+                    await checker_retry_service(session, operator).retry(command)
+        async with h.factory() as session:
+            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
         async with h.factory.begin() as session:
             valid = await checker_retry_service(session, operator).retry(command)
         assert valid.successor.generation == 2

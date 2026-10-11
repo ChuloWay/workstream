@@ -47,7 +47,7 @@ def upgrade():
         sa.CheckConstraint("successor_generation = source_generation + 1 and source_generation > 0", name="generation"),
         sa.CheckConstraint("length(reason) between 1 and 500 and reason !~ '[[:cntrl:]]'", name="reason"),
         sa.CheckConstraint("source_request_digest ~ '^sha256:[0-9a-f]{64}$' and source_result_digest ~ '^sha256:[0-9a-f]{64}$' and successor_request_digest ~ '^sha256:[0-9a-f]{64}$' and resource_digest ~ '^sha256:[0-9a-f]{64}$'", name="digests"),
-        sa.CheckConstraint("octet_length(resource_json) <= 8192 and resource_digest = 'sha256:' || encode(sha256(convert_to(resource_json, 'UTF8')), 'hex')", name="resource_json_digest"),
+        sa.CheckConstraint("octet_length(resource_json) <= 8192 and resource_json = public.project_guide_projection_canonical_json(resource_json::jsonb) and resource_digest = 'sha256:' || encode(sha256(convert_to(resource_json, 'UTF8')), 'hex')", name="resource_json_digest"),
         sa.UniqueConstraint("actor_profile_id", "request_key", name="uq_checker_retry_actor_key"),
         sa.UniqueConstraint("source_run_id", name="uq_checker_retry_source"),
         sa.UniqueConstraint("successor_run_id", name="uq_checker_retry_successor"),
@@ -164,6 +164,8 @@ def upgrade():
         OR authority.denial_code IS NOT NULL
         OR authority.after_facts::jsonb IS DISTINCT FROM jsonb_build_object(
             'allowed',true,'resource_context_digest',r.resource_digest)
+        OR NOT EXISTS (SELECT 1 FROM public.actor_profiles p
+            WHERE p.id=r.actor_profile_id AND p.actor_kind='human' AND p.status='active')
         OR NOT EXISTS (SELECT 1 FROM public.admin_role_grants g
             WHERE g.id::text=authority.matched_grant_id
               AND g.target_actor_profile_id=r.actor_profile_id
@@ -200,6 +202,8 @@ def upgrade():
         OR request_event.correlation_id IS DISTINCT FROM r.source_run_id::text
         OR request_event.causation_event_id IS NOT NULL
         OR request_event.idempotency_key IS DISTINCT FROM 'checker-retry:'||r.source_run_id::text
+        OR request_event.payload_digest IS DISTINCT FROM 'sha256:' || encode(sha256(convert_to(
+            public.project_guide_projection_canonical_json(request_event.payload), 'UTF8')), 'hex')
         OR request_event.payload IS DISTINCT FROM jsonb_build_object(
             'project_id',r.project_id::text,'task_id',r.task_id::text,
             'submission_id',r.submission_id::text,'submission_version',r.submission_version,
