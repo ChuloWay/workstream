@@ -93,7 +93,10 @@ transaction-ID coupling. Source review reproduced missing canonical-only model
 registration in a fresh process. Membership declarations now live in CON's
 existing registered records/models.py; the separate declaration module was
 removed, with a fresh-process regression preserving native FK compilation.
-Implementation still requires installed-schema proof.
+Prepared public regression now includes direct installed-guard checks for sealed
+append, header/member mutation, premature deletion and deferred unsealed commit.
+These collect successfully but are not runtime proof until the native migration
+is installed. Implementation still requires installed-schema proof.
 
 ## Reconciliation
 

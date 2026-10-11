@@ -2,12 +2,15 @@
 
 import asyncio
 import csv
+
+import pytest
 from io import StringIO
 
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import IntegrityError
 
 from app.core.identifiers import new_record_id
-from app.modules.contributions.records.models import ContributionExportMembership
+from app.modules.contributions.records.models import ContributionExportMembership, ContributionExportMember
 from app.modules.authorization.repository import AdminAuthorizationRepository
 from tests.contributions.records.support import authorized_submitter_source
 from tests.tasks.post_submit_routing.support import completed_sibling_source
@@ -72,6 +75,54 @@ async def test_public_pages_exclude_pre_snapshot_uncommitted_record_after_it_com
                     task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
             assert first.status_code == 200, first.text
+        # The installed guards must protect the original selection even when a
+        # later real contribution now exists and would match the same query.
+        async with h.factory() as session:
+            membership = await session.scalar(select(ContributionExportMembership).where(
+                ContributionExportMembership.actor_profile_id == str(reader.id),
+                ContributionExportMembership.project_id == h.submitter_record.project_id,
+                ContributionExportMembership.page_size == 1,
+            ).order_by(ContributionExportMembership.exported_at.desc()).limit(1))
+            assert membership is not None and membership.sealed and membership.member_count == 2
+            export_id = membership.id
+            assert await session.scalar(select(func.count()).select_from(ContributionExportMember).where(
+                ContributionExportMember.export_id == export_id,
+            )) == 2
+        for statement, parameters in (
+            ("UPDATE contribution_export_memberships SET page_size=2 WHERE id=:export", {}),
+            ("DELETE FROM contribution_export_memberships WHERE id=:export", {}),
+            ("UPDATE contribution_export_members SET recorded_at=recorded_at + interval '1 second' "
+             "WHERE export_id=:export", {}),
+            ("DELETE FROM contribution_export_members WHERE export_id=:export", {}),
+            ("INSERT INTO contribution_export_members (export_id, contribution_id, recorded_at) "
+             "SELECT :export, id, created_at FROM contribution_records WHERE id=:late",
+             {"late": late_outcome.economic.contribution_record_id}),
+        ):
+            async with h.factory() as session:
+                with pytest.raises(IntegrityError) as rejected:
+                    async with session.begin():
+                        await session.execute(text(statement), {"export": export_id} | parameters)
+                assert rejected.value.orig.sqlstate == "23514"
+        async with h.factory() as session:
+            assert await session.scalar(select(func.count()).select_from(ContributionExportMember).where(
+                ContributionExportMember.export_id == export_id,
+            )) == 2
+        async with h.factory() as session:
+            await session.begin()
+            await session.execute(text(
+                "INSERT INTO contribution_export_memberships "
+                "(id, actor_profile_id, audience, project_id, output_format, page_size, "
+                "contribution_type, recorded_from, recorded_before, member_count, sealed, "
+                "query_digest, exported_at, expires_at) "
+                "SELECT :new, actor_profile_id, audience, project_id, output_format, page_size, "
+                "contribution_type, recorded_from, recorded_before, 3, false, "
+                "query_digest, exported_at, expires_at "
+                "FROM contribution_export_memberships WHERE id=:export"
+            ), {"new": new_record_id(), "export": export_id})
+            with pytest.raises(IntegrityError) as unsealed:
+                await session.commit()
+            assert unsealed.value.orig.sqlstate == "23514"
+            await session.rollback()
         cursor = first.json()["next_cursor"]
         assert cursor is not None
         for changed in ({"page_size": 2}, {"format": "csv"}, {"contribution_type": "completed_review"}):
