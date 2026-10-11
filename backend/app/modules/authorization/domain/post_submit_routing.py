@@ -40,6 +40,14 @@ class AutomatedAcceptanceConsequence(_RoutingValue):
     authorized_lifecycle_generation: int = Field(gt=0, le=9_223_372_036_854_775_807)
 
 
+class CheckerRemediationConsequence(_RoutingValue):
+    """Bind a contributor remediation transition without Review or acceptance."""
+
+    kind: Literal["checker_remediation"] = "checker_remediation"
+    expected_task_status: Literal["evaluation_pending"] = "evaluation_pending"
+    target_task_status: Literal["needs_revision"] = "needs_revision"
+
+
 class PostSubmitRoutingResourceContext(_RoutingValue):
     """Closed, detached facts awaiting owner verification in one transaction."""
 
@@ -51,7 +59,12 @@ class PostSubmitRoutingResourceContext(_RoutingValue):
     request: TaskRoutingRequestFacts
     source: TaskPostSubmitSourceProposal
     claim: OutboxClaim
-    consequence: Annotated[HumanAdmissionConsequence | AutomatedAcceptanceConsequence, Field(discriminator="kind")]
+    consequence: Annotated[
+        HumanAdmissionConsequence
+        | AutomatedAcceptanceConsequence
+        | CheckerRemediationConsequence,
+        Field(discriminator="kind"),
+    ]
 
     @model_validator(mode="after")
     def validate_identity(self):
@@ -75,7 +88,11 @@ class PostSubmitRoutingResourceContext(_RoutingValue):
         ):
             if getattr(request, field) != getattr(source, field):
                 raise ValueError("routing request source differs")
-        if source.human_review_required:
+        if source.routing_recommendation == "needs_revision":
+            if type(self.consequence) is not CheckerRemediationConsequence:
+                raise ValueError("routing consequence differs from recommendation")
+            CheckerRemediationConsequence.model_validate(self.consequence.model_dump())
+        elif source.human_review_required:
             if type(self.consequence) is not HumanAdmissionConsequence:
                 raise ValueError("routing consequence differs from review policy")
             HumanAdmissionConsequence.model_validate(self.consequence.model_dump())

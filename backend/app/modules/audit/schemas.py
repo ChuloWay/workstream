@@ -41,7 +41,7 @@ _RESOURCE_TYPES = frozenset(
     project_guide_compilation_attempt project_guide_sufficiency_projection
     project_submission_artifact_policy_projection project_guide_setup_finalization
     project_guide_compilation_review_package project_guide_compilation_correction
-    project_post_submit_checker_policy_mutation external_checker_registry_entry""".split()
+    project_post_submit_checker_policy_mutation external_checker_registry_entry task_import_source""".split()
 )
 _UUID_TARGET_KINDS = frozenset(
     {
@@ -52,6 +52,7 @@ _UUID_TARGET_KINDS = frozenset(
         "qualification_snapshot",
         "project_role_grant",
         "external_checker_registry_entry",
+        "task_import_source",
     }
 )
 _TARGET_REF_KINDS = _UUID_TARGET_KINDS | {"project"}
@@ -434,7 +435,7 @@ class LifecycleAuditEventInput(BaseModel):
             if self.event_type is LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED:
                 expected = (
                     ("evaluation_pending", self.to_status)
-                    if self.to_status in {"review_pending", "accepted"}
+                    if self.to_status in {"review_pending", "accepted", "needs_revision"}
                     else None
                 )
             if self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:

@@ -13,10 +13,14 @@ submitter contribution, applicable awards and audit/outbox evidence. Database
 closure rejects incomplete outcomes; fresh-authorized replay returns the stored
 complete tuple. No Review or reviewer contribution is fabricated.
 
-B8 supplies hidden completion delivery with commit-before-ACK. Next: 04F remediation, 04E3 production
-composition, public intake and the first-layer drill. False-guide activation,
-live human review/revision and payment delivery remain unavailable. Internally
-valid false-policy fixtures establish the hidden operation, not public readiness.
+B8 supplies hidden completion delivery with commit-before-ACK.
+[ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
+operation so an exact current contributor-correctable result reaches
+`needs_revision` under either policy mode, with no Review, FinalAcceptance,
+ContributionRecord or award. Exact-cause replacement intake,
+setup-fault/Operator recovery, 04E3 production composition, public intake and
+the first-layer drill remain. False-guide activation, live human review/revision
+and payment delivery remain unavailable.
 
 Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
 and the [capability ledger](../../../docs/roadmap_status.md).
@@ -68,9 +72,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [CON-07](WS-CON-001-07.md) adds hidden source-neutral submitter participation
   and complete frozen award-set staging/replay; no recognition route or
   fulfillment operation is live.
-- Next usable boundary: prove 04F
-  remediation, 04E3 live composition and false-guide readiness, public intake
-  and the first-layer drill. True handoff remains independent of REV/CON;
+- Next usable boundary: complete 04F exact-cause replacement intake and recovery,
+  04E3 live composition and false-guide readiness, public intake and the
+  first-layer drill. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: `docs/spec_contribution_compensation.md`,
   [`CONFORMANCE.md`](CONFORMANCE.md), code, migrations, and tests.

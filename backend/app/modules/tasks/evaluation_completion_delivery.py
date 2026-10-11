@@ -34,7 +34,8 @@ class EvaluationCompletionHandler:
             or envelope.aggregate_type != "checker_run"
             or envelope.aggregate_id != completion.reference.attempt_id
             or envelope.claim.project_id != completion.project_id
-            or completion.routing_recommendation != "allow_review"
+            or completion.routing_recommendation
+            not in {"allow_review", "needs_revision"}
         ):
             return HandlerOutcome.REJECT
         observed = await self._observer.observe_invocation(envelope)
@@ -52,5 +53,7 @@ class EvaluationCompletionHandler:
                 envelope.claim.event_id,
             ) or ((result.final_acceptance_id is None) != (generation is None)):
                 raise TaskRoutingRequestUnavailable("routing outcome identity differs")
+            if result.routing_recommendation != completion.routing_recommendation:
+                raise TaskRoutingRequestUnavailable("routing outcome recommendation differs")
         # Context exit includes deferred constraints and the actual root commit.
         return HandlerOutcome.ACKNOWLEDGE

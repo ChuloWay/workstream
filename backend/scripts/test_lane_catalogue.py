@@ -77,6 +77,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_artifact_preparation.py",
     "tests/test_artifact_store_conformance.py",
     "tests/test_artifact_verification.py",
+    "tests/test_task_import_sources.py",
     "tests/test_artifacts.py",
     "tests/test_assertion_helpers.py",
     "tests/test_aws_credential_isolation.py",
@@ -225,6 +226,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_submission_bundle_preparation_recovery.py",
     "tests/checkers/test_phase_service.py",
     "tests/test_submission_preparation_adapter.py",
+    "tests/test_submission_predecessor_custody.py",
     "tests/test_submission_preparation_authorization.py",
     "tests/test_submission_composition.py",
     "tests/test_artifact_bindings.py",
@@ -435,9 +437,14 @@ CHECKER_DELIVERY_MODULES = (
 
 
 TASK_MODULES = (
+    "tests/tasks/test_task_import_contract.py",
     "tests/checkers/execution/test_completion_evidence.py",
     "tests/checkers/execution/test_completion_contract.py",
     "tests/tasks/post_submit_routing/test_failure_completion.py",
+    "tests/tasks/post_submit_routing/test_remediation.py",
+    "tests/tasks/post_submit_routing/test_remediation_storage.py",
+    "tests/tasks/post_submit_routing/test_remediation_currentness.py",
+    "tests/tasks/post_submit_routing/test_remediation_migration.py",
 
     # New completion proofs use TASK custody and its measured lane headroom.
     "tests/tasks/evaluation_delivery/test_completion.py",

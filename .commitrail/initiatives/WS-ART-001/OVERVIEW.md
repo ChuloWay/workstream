@@ -17,6 +17,10 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md), without a runtime reader,
   writer or published route. Output-file authority remains unavailable for the
   zero-output catalogue.
+- Delivered routing dependency: [ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md)
+  routes the exact current contributor-correctable result through existing
+  TASK/AUTH owners under either policy mode, with no new ART write or REV/CON
+  effect.
 - Delivered contract: [ART-07A1](WS-ART-001-07A1.md) defines exact, metadata-only
   reviewer packet membership. REV-03B corrects its original `guide_binding_id`
   to live upload `ingest_id`; the completed ART record preserves the original
@@ -26,23 +30,24 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
-- Next usable boundary: for the selected automated-acceptance delivery sequence, mandatory acceptance-source authority hardening, then CON-07 using the delivered
-  REV-12A1 disabled controller/fence. ARCH-04F remediation and public intake follow
-  acceptance and routing composition.
+- Next usable boundary: exact-cause replacement intake through the existing ART
+  ports, setup-fault/Operator recovery, 04E3 production composition/readiness,
+  public intake and the first-layer drill.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
 - Preserve: SHA-256/byte-count identity, reread verification, isolation,
   idempotency, and no local-filesystem provider coupling.
 
-Delivered [REV-12A1](../WS-REV-001/WS-REV-001-12A1.md) supplies only disabled
-generation-zero controller storage and transaction locking. Acceptance-source AUTH custody,
-CON participation and authorized activation remain separate required work.
+REV-12A1 supplies the original disabled controller/fence foundation. REV-12A4A,
+04E2-B and CON-07 now supply hidden scoped lifecycle control, exact acceptance
+source custody and CON participation. Production activation remains separate.
 
 This is delivery priority, not a prerequisite of true human admission. Both
-routing branches require hidden 04E1B → exact AUTH 04E2 → live 04E3; true routing
-can proceed after its own prerequisites without CON-07/shared acceptance or
-scoped lifecycle activation. False routing adds those requirements. Human final
-acceptance later uses the same authorized shared acceptance/CON operation.
+hidden success branches have 04E1B request/source custody, exact AUTH 04E2
+outcomes and B8 completion delivery; 04F2 adds the policy-independent failure
+handoff. Live 04E3 remains. True routing has no CON-07/shared-acceptance
+prerequisite; false routing does. Human final acceptance later uses the same
+authorized shared acceptance/CON operation.
 
 ## Delivered
 
@@ -64,13 +69,13 @@ must prove exact approved lineage at preparation, consumption and binding.
 1. ARCH-04B hidden exact Submission materialization, ARCH-04B2 hidden output
    custody, ARCH-04C hidden durable execution, ARCH-04D2 fixed-service authority
    and ARCH-04E1A source-only material lineage are delivered.
-2. ART-07A1 metadata-only membership types are delivered. REV-03B packet
-   storage, REV-04A Review sources and REV-04B shared FinalAcceptance storage are
-   delivered. CON-03C contribution/award storage is delivered. REV-12A1 disabled fencing is delivered. Mandatory
-   acceptance-source authority hardening comes next, then CON-07 before acceptance/routing composition.
-3. ARCH-04F owns checker-remediation resubmission using existing ART ports;
-   later reviewer-requested revision remains a separate REV boundary. Add those dependencies before public Submission
-   cutover.
+2. ART-07A1 metadata-only membership types, REV packet/Review/FinalAcceptance
+   storage, CON contribution/award storage and participation, exact routing AUTH,
+   B8 completion delivery and the 04F2 hidden remediation handoff are delivered.
+3. Remaining ARCH-04F owns exact-cause checker-remediation resubmission using
+   existing ART ports plus setup-fault/Operator recovery; later reviewer-requested
+   revision remains a separate REV boundary. Add those remaining dependencies
+   before public Submission cutover.
 4. Perform ARCH-02I only after those replacement paths exist; historical
    ART-05/06 and XINT-05 designs remain non-executable.
 

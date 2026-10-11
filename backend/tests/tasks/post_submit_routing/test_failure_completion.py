@@ -13,7 +13,7 @@ from tests.checkers.execution.test_completion_evidence import verify
 from .outcome_support import invoked_completion
 
 
-@pytest.mark.parametrize("recommendation", ["needs_revision", "task_setup_blocked"])
+@pytest.mark.parametrize("recommendation", ["task_setup_blocked"])
 async def test_stored_failure_cannot_enter_task_routing_or_completion_delivery(tmp_path, isolated_database_env, recommendation):
     async with completed_evidence(tmp_path, isolated_database_env, recommendation) as h:
         async with h.factory() as session, session.begin():
