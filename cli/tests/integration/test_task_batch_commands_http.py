@@ -1,7 +1,10 @@
 """Built batch CLI uses separate typed calls and preserves uncertain-write recovery."""
 
 from copy import deepcopy
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+from threading import Thread
 import time
 from uuid import UUID
 
@@ -13,6 +16,123 @@ from test_http_boundary import ACTOR, PROJECT, TOKEN, http_fixture
 from test_task_batch_sources_http import SOURCE
 
 BATCH = "018f0ebc-7966-7e8d-bc4d-1cae1e000006"
+ALTERNATE_SOURCE = "018f0ebc-7966-7e8d-bc4d-1cae1e000007"
+
+
+@contextmanager
+def equivalent_source_fixture(selected, read_status=200):
+    """Serve distinct original import and exact selected-source read responses."""
+    requests, commands = [], []
+    prefix = f"/api/v1/projects/{PROJECT}"
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802 - standard HTTP handler interface
+            commands.append(
+                (
+                    self.headers.get_all("Idempotency-Key"),
+                    json.loads(self.rfile.read(int(self.headers["Content-Length"]))),
+                )
+            )
+            self.respond(201, creation())
+
+        def do_GET(self):  # noqa: N802 - standard HTTP handler interface
+            self.respond(read_status, selected)
+
+        def respond(self, status, body):
+            requests.append(
+                (self.command, self.path, self.headers.get("Authorization"))
+            )
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(body).encode())
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield (
+            f"http://127.0.0.1:{server.server_port}",
+            requests,
+            commands,
+            [
+                ("POST", f"{prefix}/task-import-batches", "Bearer " + TOKEN),
+                (
+                    "GET",
+                    f"{prefix}/task-import-sources/{ALTERNATE_SOURCE}",
+                    "Bearer " + TOKEN,
+                ),
+            ],
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def selected_source():
+    return {
+        "source_id": ALTERNATE_SOURCE,
+        "project_id": PROJECT,
+        "sha256": creation()["sha256"],
+        "byte_count": creation()["byte_count"],
+        "media_type": "application/json",
+        "status": "verified",
+        "created_at": "2026-10-11T12:00:00Z",
+    }
+
+
+def test_equivalent_verified_source_preserves_original_response_without_write_retry(
+    cli,
+):
+    with equivalent_source_fixture(selected_source()) as (
+        origin,
+        requests,
+        commands,
+        expected,
+    ):
+        result = invoke(cli, origin, "import", target=ALTERNATE_SOURCE)
+        assert result.returncode == 0 and json.loads(result.stdout) == creation(), (
+            result.stderr
+        )
+        assert requests == expected
+        assert commands == [([KEY], {"source_id": ALTERNATE_SOURCE})]
+
+
+@pytest.mark.parametrize(
+    "change", ["digest", "count", "unverified", "selector", "denied", "malformed"]
+)
+def test_post_import_source_verification_failure_stays_unknown(cli, change):
+    selected, read_status = selected_source(), 200
+    if change == "digest":
+        selected["sha256"] = "sha256:" + "b" * 64
+    elif change == "count":
+        selected["byte_count"] += 1
+    elif change == "unverified":
+        selected["status"] = "declared"
+    elif change == "selector":
+        selected["source_id"] = SOURCE
+    elif change == "denied":
+        selected, read_status = canonical_error(), 403
+    else:
+        selected["provider_path"] = "private"
+    with equivalent_source_fixture(selected, read_status) as (
+        origin,
+        requests,
+        commands,
+        expected,
+    ):
+        result = invoke(cli, origin, "import", target=ALTERNATE_SOURCE)
+        assert result.returncode == 1 and result.stdout == ""
+        error = json.loads(result.stderr)["error"]
+        assert (
+            error["code"] == "invalid_api_response" and error["outcome_unknown"] is True
+        )
+        assert requests == expected
+        assert commands == [([KEY], {"source_id": ALTERNATE_SOURCE})]
 
 
 def creation(count=2):

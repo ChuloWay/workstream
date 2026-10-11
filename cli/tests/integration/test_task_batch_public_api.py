@@ -49,6 +49,7 @@ from tests.test_tasks import (  # noqa: E402
 )
 from tests.tasks.test_task_batch_transitions import _success_facts  # noqa: E402
 from tests.tasks.test_task_import_contract import document  # noqa: E402
+from tests.tasks.test_task_import_batches import _counts  # noqa: E402
 
 # CLI collection uses strict asyncio mode. Preserve the canonical fixture body.
 import_source_client = pytest_asyncio.fixture(_import_source_client.__wrapped__)
@@ -106,6 +107,66 @@ async def successful(origin, operation, *args):
     result = await invoke(origin, operation, *args)
     assert result.returncode == 0 and result.stderr == "", result.stderr
     return json.loads(result.stdout)
+
+
+@pytest.mark.asyncio
+async def test_equivalent_verified_source_recovers_original_and_changed_key_conflicts(
+    import_source_client,
+    tmp_path,
+):
+    """Actual distinct verified selectors preserve one native batch and its originals."""
+    path = tmp_path / "briefs.json"
+    path.write_text(json.dumps(document(2), ensure_ascii=False), encoding="utf-8")
+    project_response = await import_source_client.post(
+        "/api/v1/projects",
+        headers=auth_headers(),
+        json={"name": "Equivalent source", "slug": "cli-recovery-" + uuid4().hex},
+    )
+    assert project_response.status_code == 201, project_response.text
+    project = project_response.json()["id"]
+    async with socket_api(create_app()) as origin:
+        sources = []
+        for _ in range(2):
+            source = await successful(
+                origin,
+                "source-declare",
+                project,
+                "--input",
+                str(path),
+                "--idempotency-key",
+                str(uuid4()),
+            )
+            await successful(
+                origin,
+                "source-upload",
+                project,
+                source["source_id"],
+                "--input",
+                str(path),
+            )
+            sources.append(source["source_id"])
+        assert sources[0] != sources[1]
+        key = str(uuid4())
+        original = await successful(
+            origin, "import", project, sources[0], "--idempotency-key", key
+        )
+        recovered = await successful(
+            origin, "import", project, sources[1], "--idempotency-key", str(uuid4())
+        )
+        assert recovered == original and recovered["source_id"] == sources[0]
+        before = await _counts(project)
+        assert before == (1, 2, 2, 2, 2, 2)
+        changed = await invoke(
+            origin, "import", project, sources[1], "--idempotency-key", key
+        )
+        assert changed.returncode == 1 and changed.stdout == ""
+        error = json.loads(changed.stderr)["error"]
+        assert (
+            error["status"] == 409
+            and error["code"] == "task_import_idempotency_mismatch"
+        )
+        assert not error.get("outcome_unknown", False)
+        assert await _counts(project) == before
 
 
 @pytest.mark.asyncio

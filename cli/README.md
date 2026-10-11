@@ -535,6 +535,12 @@ retry keys. Responses are limited to 1..500 complete members: original/status
 JSON is bounded to 16MiB and compact transition JSON to 2MiB. Invalid, crossed,
 duplicate or partial responses are refused without partial output.
 
+A different verified source with identical SHA and byte count can recover the
+original batch with a new import key. The response retains the original source
+ID and rows; the CLI checks the selected source's public verified status before
+displaying it. Changing the source selector under an existing key conflicts.
+If the verification read fails after import, the write outcome remains unknown.
+
 Batch writes never retry automatically. An unknown outcome requires inspection
 of `status` as an observation, followed by manual replay of the unchanged project,
 source/batch, action, reason and key. SCREEN/RELEASE replay also requires every

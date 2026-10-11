@@ -113,9 +113,18 @@ func (c *Client) ImportTaskBatch(ctx context.Context, project, source, key strin
 	if err != nil {
 		return result, taskBatchWriteFailure(err)
 	}
-	value, err := c.decodeTaskImportBatch(raw, project, "", source)
+	value, err := c.decodeTaskImportBatch(raw, project, "")
 	if err != nil {
 		return result, taskBatchWriteFailure(&Failure{Code: "invalid_api_response", OutcomeUnknown: true})
+	}
+	// Exact-file recovery retains the original source and rows. A different
+	// selector must establish verified equivalent bytes through its own public
+	// read; failure after the successful POST cannot become a known write denial.
+	if !sameUUID(value.SourceID, source) {
+		selected, err := c.TaskImportSourceStatus(ctx, project, source)
+		if err != nil || selected.Value.Status != "verified" || selected.Value.SHA256 != value.SHA256 || selected.Value.ByteCount != value.ByteCount {
+			return result, taskBatchWriteFailure(&Failure{Code: "invalid_api_response", OutcomeUnknown: true})
+		}
 	}
 	return Result[TaskImportBatch]{Raw: raw, Value: value}, nil
 }
@@ -136,7 +145,7 @@ func (c *Client) TaskBatchStatus(ctx context.Context, project, batch string) (Re
 	if _, err = contextObject(raw, &envelope, []string{"creation", "current_tasks"}, nil); err != nil {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
-	creation, err := c.decodeTaskImportBatch(envelope.Creation, project, batch, "")
+	creation, err := c.decodeTaskImportBatch(envelope.Creation, project, batch)
 	if err != nil || len(envelope.CurrentTasks) != creation.RowCount {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
@@ -218,11 +227,11 @@ func (c *Client) decodeBatchTransition(raw json.RawMessage, project, batch, oper
 	return value, nil
 }
 
-func (c *Client) decodeTaskImportBatch(raw json.RawMessage, project, batch, source string) (TaskImportBatch, error) {
+func (c *Client) decodeTaskImportBatch(raw json.RawMessage, project, batch string) (TaskImportBatch, error) {
 	var envelope taskImportEnvelope
 	_, err := contextObject(raw, &envelope, []string{"batch_id", "project_id", "source_id", "sha256", "byte_count", "schema_version", "mapping_version", "row_count", "created_at", "tasks"}, nil)
 	if err != nil || !validUUID(envelope.BatchID) || !sameUUID(envelope.ProjectID, project) || !validUUID(envelope.SourceID) ||
-		(batch != "" && !sameUUID(envelope.BatchID, batch)) || (source != "" && !sameUUID(envelope.SourceID, source)) ||
+		(batch != "" && !sameUUID(envelope.BatchID, batch)) ||
 		!policyHash.MatchString(envelope.SHA256) || envelope.ByteCount < 1 || envelope.ByteCount > taskimport.MaxBytes ||
 		envelope.RowCount < 1 || envelope.RowCount > taskimport.MaxRows || len(envelope.Tasks) != envelope.RowCount ||
 		envelope.SchemaVersion != "workstream.task_import.v1" || envelope.MappingVersion != "workstream.task_import.draft_mapping.v1" || !validTime(envelope.CreatedAt) {

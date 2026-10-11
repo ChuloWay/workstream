@@ -59,6 +59,12 @@ Their current root transaction prevents composition across a complete batch.
   registration in `internal/command/command.go`; focused native Go/HTTP and
   real public backend journey tests. Reuse existing HTTP client and output/error
   conventions. Source admission, import, status, screen and release stay explicit.
+  Import validates the original retained source and complete row custody. If an
+  equivalent verified source selector recovers that original batch, it reads only
+  the exact requested source's public status and requires verified SHA/byte-count
+  equality. Any failed post-write comparison/read remains an unknown outcome;
+  no retry, replacement response or arbitrary source lookup is permitted. Focused
+  controlled HTTP and real socket tests cover recovery and changed-key refusal.
 - Lead-approved exact `cli/internal/api/client.go` PUT additions: classify PUT
   alongside POST/PATCH at the three existing mutation checks and require the
   canonical error envelope for POST/PUT. Disable automatic body replay and retain
@@ -367,6 +373,21 @@ business request because its fixture omitted the canonical pagination HMAC
 secret required by application lifespan. Database, role and MinIO cleanup were
 complete. The fixture imports the existing canonical secret provisioner; no
 startup guard or product configuration requirement is relaxed.
+
+At clean `b8ae5e0646b11f3f7de3af7722834f67e2665853`, the actual built-CLI
+200-row socket journey passed in 198.99 seconds with installed 0035 and complete
+database, role and MinIO cleanup. Import took 20.63 seconds, SCREEN 59.95 and
+RELEASE 59.04. This is exact-head caller evidence, not final-head full CI or
+readiness. Inspection then found the CLI wrongly required the original batch's
+source ID to equal a different verified equivalent source used for recovery.
+The atomic owner deliberately retains the original source/rows and permits that
+recovery with a new key; the CLI must validate equal verified bytes while keeping
+that original response. An unchanged key with a changed selector still conflicts.
+The owned native bulk module also adds a genuine missing-active-guide negative:
+verified source and DRAFT import succeed in a bare project, but SCREEN must fail
+with the canonical prerequisite error and no successful Task, aggregate, receipt,
+lifecycle or authorization effects. The added equivalent-source and prerequisite
+controls are written but not yet executed at this repair checkpoint.
 
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch

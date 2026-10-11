@@ -26,7 +26,7 @@ from app.modules.tasks.task_import_membership import TaskImportMembership
 from tests.authorization.guide_activation.pg_support import revoke_manager_grant
 from tests.test_task_import_sources import import_source_client as import_source_client
 from tests.test_tasks import task_database_env as task_database_env, auth_headers, create_active_project
-from tests.tasks.test_task_import_batches import _batch_path, _verified_source
+from tests.tasks.test_task_import_batches import _batch_path, _verified_source, _project
 from tests.tasks.test_task_import_contract import document
 
 
@@ -128,6 +128,23 @@ async def test_public_source_import_screen_release_complete_journey(import_sourc
     facts = await _success_facts(project)
     assert len(facts[1]) == 2 and all(len(values) == count * 2 for values in facts[2:5])
     assert all(row.status == "ready" for row in facts[0])
+
+
+async def test_missing_active_guide_refuses_whole_batch_without_success_effects(import_source_client):
+    """Actual unscreenable project imports DRAFTs but cannot bypass guide admission."""
+    client = import_source_client
+    project = await _project(client)
+    value = document(2)
+    for row in value["tasks"]:
+        row.update(acceptance_criteria="Accurate, complete work", rejection_criteria="Incomplete work")
+    source = await _verified_source(client, project, value)
+    imported = await client.post(_batch_path(project), headers=auth_headers(), json={"source_id": source["source_id"]})
+    assert imported.status_code == 201, imported.text
+    before = await _success_facts(project)
+    refused = await client.post(_path(project, imported.json(), "screen"), headers=auth_headers(), json={"reason": "No approved guide"})
+    assert refused.status_code == 422 and refused.json()["error"]["code"] == "task_batch_transition_invalid", refused.text
+    assert "active guide" in refused.json()["detail"]
+    assert await _success_facts(project) == before
 
 
 async def test_late_staging_failure_and_partial_advance_replay_roll_back_whole_batch(import_source_client, monkeypatch):
