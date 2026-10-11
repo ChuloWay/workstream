@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import event, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.modules.authorization.admin_service import AdminRoleGrantService
@@ -27,6 +28,12 @@ async def test_first_auth_snapshot_excludes_source_committed_before_owner_projec
         reached, proceed = asyncio.Event(), asyncio.Event()
         original = AdminAuthorizationRepository.lock_project
         observed = []
+        rr_statements = []
+
+        def record_rr_sql(connection, cursor, statement, parameters, context, executemany):
+            if (asyncio.current_task().get_name() == "pilot10-late-source-read"
+                    and connection.get_execution_options().get("isolation_level") == "REPEATABLE READ"):
+                rr_statements.append(statement)
 
         async def before_project_lock(repository, project_id):
             if asyncio.current_task().get_name() == "pilot10-late-source-read":
@@ -40,6 +47,7 @@ async def test_first_auth_snapshot_excludes_source_committed_before_owner_projec
         async with h.factory() as producer:
             await producer.begin()
             outcome = await apply_outcome(producer, h, 2)
+            event.listen(Engine, "before_cursor_execute", record_rr_sql)
             read = asyncio.create_task(admin_access.signed.client.get(
                 export_path(project), headers=admin_access.target.headers,
             ), name="pilot10-late-source-read")
@@ -53,7 +61,10 @@ async def test_first_auth_snapshot_excludes_source_committed_before_owner_projec
                 if not read.done():
                     read.cancel()
                 await asyncio.gather(read, return_exceptions=True)
+                event.remove(Engine, "before_cursor_execute", record_rr_sql)
             assert observed == ["repeatable read"]
+            assert "actor_profiles" in rr_statements[0] and "actor_identity_links" in rr_statements[0]
+            assert "FOR UPDATE" in rr_statements[0]
             assert response.status_code == 200, response.text
             assert response.json()["items"] == []
             fresh = await admin_access.signed.client.get(export_path(project), headers=admin_access.target.headers)

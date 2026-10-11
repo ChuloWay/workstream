@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.db.session import get_session_factory
 from app.modules.actors.models import ActorIdentityLink
+from app.modules.actors.api import ServiceIdentity
 from tests.authentication.support import issue_asymmetric_token
 from tests.contributions.records.support import authorized_submitter_source, rows
 from tests.authorization.admin_access.support import create_project
@@ -124,3 +125,26 @@ async def test_service_claims_cannot_provision_a_contribution_reader(signed_acce
         assert await session.scalar(select(ActorIdentityLink).where(
             ActorIdentityLink.subject == "unprovisioned-contribution-reader",
         )) is None
+
+
+async def test_provisioned_service_cannot_read_project_contribution_facts(
+    tmp_path, auth_database_env, admin_access, live_acceptance_lifecycle,
+):
+    async with authorized_submitter_source(tmp_path, auth_database_env) as h:
+        subject = "provisioned-contribution-denial-" + uuid4().hex
+        provisioned = await admin_access.signed.client.post(
+            "/api/v1/service-actors", headers=admin_access.admin.headers | {"Idempotency-Key": str(uuid4())},
+            json={"service_identity": ServiceIdentity.REVIEW_PROJECTION.value, "subject": subject,
+                  "reason": "Prove fixed service cannot disclose contribution evidence"},
+        )
+        assert provisioned.status_code == 201, provisioned.text
+        token = issue_asymmetric_token(admin_access.signed.private_key, scope="workstream:service", claims={
+            "sub": subject, "subject_kind": "service", "roles": ["project_manager", "finance_authority"],
+        })
+        denied = await admin_access.signed.client.get(
+            export_path(h.submitter_record.project_id), headers={"Authorization": f"Bearer {token}"},
+        )
+        assert denied.status_code == 404, denied.text
+        event, = await export_audits(h.factory)
+        assert event["after_facts"]["allowed"] is False
+        assert event["target_ref_id"] is event["project_id"] is None
