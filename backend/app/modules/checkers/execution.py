@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import math
 from dataclasses import asdict
 from datetime import timedelta
 from uuid import UUID
@@ -26,11 +27,26 @@ from app.modules.checkers.api.execution import (
     PreparedFinalization,
     VerifiedMaterialFacts,
 )
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
-    PostSubmitCurrentResultReference,
+from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    PostSubmissionExecutionResult,
+    validate_execution_request,
 )
+from app.modules.checkers.api.external import PostSubmitExternalCheckerIdentity
+from app.modules.checkers.api.external_policy import (
+    SELECTED_POST_FINALIZATION_MARGIN_MS,
+    selected_post_submit_execution_budget_ms,
+)
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmissionEvaluationRequest,
+    SelectedPostSubmitInfrastructureUnavailable,
+    make_selected_post_submit_result,
+)
+from app.modules.checkers.selected_post_submit_execution import (
+    SelectedPostSubmitProcessor,
+)
+from app.interfaces.external_checker_execution import ExternalCheckerExecutionAdapter
 from app.modules.checkers.api.post_submit_catalogue import canonical_post_submit_bytes
 from app.modules.checkers.execution_repository import (
     ExecutionRepository,
@@ -129,6 +145,63 @@ class _StructuralConsumer:
         )
 
 
+class _SelectedExternalConsumer:
+    """Run the selected POST policy through the existing ART callback lifetime."""
+
+    def __init__(
+        self,
+        execution: ExternalCheckerExecutionAdapter,
+        lease: ExecutionLease,
+    ) -> None:
+        self._execution = execution
+        self._lease = lease
+
+    async def evaluate(self, request, material):
+        request = SelectedPostSubmissionEvaluationRequest.model_validate(request)
+        reservation = self._lease.reservation
+        identity = PostSubmitExternalCheckerIdentity(
+            project_id=request.project_id,
+            task_id=request.task_id,
+            assignment_id=request.assignment_id,
+            submission_id=request.submission_id,
+            submission_version=request.submission_version,
+            evaluation_request_id=request.evaluation_request_id,
+            evaluation_request_digest=request.request_sha256,
+            evaluation_generation=request.evaluation_generation,
+            attempt_id=reservation.attempt_id,
+            result_id=reservation.result_id,
+            lease_id=self._lease.lease_id,
+            lease_generation=self._lease.lease_generation,
+            lease_expires_at=self._lease.expires_at,
+        )
+        values = dict(
+            request_id=request.evaluation_request_id,
+            request_digest=request.request_sha256,
+            attempt_id=reservation.attempt_id,
+            evaluation_generation=request.evaluation_generation,
+            result_id=reservation.result_id,
+        )
+        try:
+            execution = await SelectedPostSubmitProcessor(
+                policy=request.policy,
+                identity=identity,
+                execution=self._execution,
+            ).evaluate(request, material)
+            return make_selected_post_submit_result(
+                **values,
+                outcome="completed",
+                execution=execution,
+                infrastructure_failure_code=None,
+            )
+        except SelectedPostSubmitInfrastructureUnavailable as exc:
+            return make_selected_post_submit_result(
+                **values,
+                outcome="infrastructure_failed",
+                execution=None,
+                infrastructure_failure_code=exc.code,
+            )
+
+
 class PostSubmissionExecutor:
     """Own short execution transactions; all materialization happens outside them."""
 
@@ -140,12 +213,29 @@ class PostSubmissionExecutor:
         finalize_authority: Callable[[AsyncSession], FinalizationAuthorityPort],
         materialization: PostSubmissionMaterializationPort,
         registry: CheckerRegistry,
+        selected_execution: ExternalCheckerExecutionAdapter | None = None,
         outbox: Callable[[AsyncSession], OutboxAppendPort],
     ):
         """Receive explicit session, authority, materialization and publication ports."""
         self._sessions = sessions
         self._execute_authority, self._finalize_authority = execute_authority, finalize_authority
         self._materialization, self._registry, self._outbox = materialization, registry, outbox
+        self._selected_execution = selected_execution
+
+    @staticmethod
+    def _execution_budget_seconds(request: PostSubmissionExecutionRequest) -> int:
+        if isinstance(request, SelectedPostSubmissionEvaluationRequest):
+            return math.ceil(selected_post_submit_execution_budget_ms(request.policy) / 1000)
+        return EXECUTION_TIMEOUT_SECONDS
+
+    def _consumer(self, request, lease):
+        if isinstance(request, SelectedPostSubmissionEvaluationRequest):
+            if self._selected_execution is None:
+                raise CheckerExecutionUnavailable(
+                    "checker_external_execution_unavailable"
+                )
+            return _SelectedExternalConsumer(self._selected_execution, lease)
+        return _StructuralConsumer(self._registry, lease)
 
     async def _claim(self, request):
         """Authorize replay or acquire the next database-timed lease atomically."""
@@ -179,11 +269,15 @@ class PostSubmissionExecutor:
                 now = await repo.now()
                 if run.status == "running" and run.worker_lease_expires_at > now:
                     raise CheckerExecutionUnavailable("checker_execution_lease_unavailable")
+                execution_seconds = self._execution_budget_seconds(request)
+                lease_seconds = execution_seconds + math.ceil(
+                    SELECTED_POST_FINALIZATION_MARGIN_MS / 1000
+                ) if isinstance(request, SelectedPostSubmissionEvaluationRequest) else LEASE_SECONDS
                 lease = ExecutionLease(
                     reservation=reservation(run),
                     lease_id=new_record_id(),
                     lease_generation=run.worker_lease_generation + 1,
-                    expires_at=now + timedelta(seconds=LEASE_SECONDS),
+                    expires_at=now + timedelta(seconds=lease_seconds),
                 )
                 facts = ExecuteFacts(request=request, lease=lease)
                 evidence_id = _evidence(await prepared.consume(facts), ExecuteEvidence, facts)
@@ -197,19 +291,20 @@ class PostSubmissionExecutor:
                 return lease, None
 
     async def evaluate_post_submission(
-        self, request: PostSubmissionEvaluationRequest
-    ) -> PostSubmissionEvaluationResult:
+        self, request: PostSubmissionExecutionRequest
+    ) -> PostSubmissionExecutionResult:
         """Evaluate outside custody transactions, then separately authorize finalization."""
-        request = PostSubmissionEvaluationRequest.model_validate(request)
+        request = validate_execution_request(request)
         lease, replay = await self._claim(request)
         if replay is not None:
             return await self.finalize(replay)
         material = None
         input_materialization_evidence_id = None
         try:
-            async with asyncio.timeout(EXECUTION_TIMEOUT_SECONDS):
+            async with asyncio.timeout(self._execution_budget_seconds(request)):
                 materialized = await self._materialization.materialize(
-                    ExecuteFacts(request=request, lease=lease), _StructuralConsumer(self._registry, lease)
+                    ExecuteFacts(request=request, lease=lease),
+                    self._consumer(request, lease),
                 )
             material = VerifiedMaterialFacts(
                 **{
@@ -221,17 +316,29 @@ class PostSubmissionExecutor:
             input_materialization_evidence_id = materialized.input_materialization_evidence_id
             result = materialized.evaluation
         except (TimeoutError, PostSubmissionMaterializationFailure) as error:
-            result = make_post_submit_result(
+            values = dict(
                 request_id=request.evaluation_request_id,
                 request_digest=request.request_sha256,
                 attempt_id=lease.reservation.attempt_id,
                 result_id=lease.reservation.result_id,
                 evaluation_generation=request.evaluation_generation,
                 outcome="infrastructure_failed",
-                member_results=(),
                 infrastructure_failure_code=(
-                    "deadline_exceeded" if isinstance(error, TimeoutError) else "material_unavailable"
+                    "deadline_exceeded"
+                    if isinstance(error, TimeoutError)
+                    else "material_unavailable"
                 ),
+            )
+            result = (
+                make_selected_post_submit_result(
+                    **values,
+                    execution=None,
+                )
+                if isinstance(request, SelectedPostSubmissionEvaluationRequest)
+                else make_post_submit_result(
+                    **values,
+                    member_results=(),
+                )
             )
         return await self.finalize(
             FinalizeFacts(
@@ -244,7 +351,7 @@ class PostSubmissionExecutor:
             )
         )
 
-    async def finalize(self, facts: FinalizeFacts) -> PostSubmissionEvaluationResult:
+    async def finalize(self, facts: FinalizeFacts) -> PostSubmissionExecutionResult:
         """Fresh phase-specific PREP and one atomic terminal/member/outbox commit."""
         facts = FinalizeFacts.model_validate(facts)
         request, result = facts.request, facts.result

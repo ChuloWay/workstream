@@ -30,6 +30,9 @@ class SelectedPostSubmitLockedContext(PostSubmitValue):
     effective_policy_hash: Sha256
     pre_policy_id: ResourceId
     pre_policy_hash: Sha256
+    retained_catalogue_policy_id: ResourceId
+    retained_catalogue_policy_version: str = Field(min_length=1, max_length=50)
+    retained_catalogue_policy_hash: Sha256
     selected_post_policy_hash: Sha256
     review_policy_id: ResourceId
     review_generation: VersionNumber

@@ -323,10 +323,14 @@ class PostSubmitCurrentResultReference(PostSubmitValue):
     result_id: ResourceId
     result_digest: Sha256
 
-    def validate_result(self, result: PostSubmissionEvaluationResult) -> None:
+    def validate_result(self, result: object) -> None:
         """Match exact completed result identity; the repository must prove currentness."""
         self = PostSubmitCurrentResultReference.model_validate(self)
-        result = PostSubmissionEvaluationResult.model_validate(result)
+        from app.modules.checkers.api.evaluation_contract import (
+            validate_execution_result,
+        )
+
+        result = validate_execution_result(result)
         names = (
             "request_id",
             "request_digest",

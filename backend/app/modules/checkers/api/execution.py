@@ -9,11 +9,11 @@ from pydantic import AwareDatetime, Field, model_validator
 
 from app.core.hashing import canonical_json_hash
 
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
-    PostSubmitCurrentResultReference,
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    PostSubmissionExecutionResult,
 )
+from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
 from app.modules.checkers.api.post_submit_catalogue import (
     PostSubmitValue,
     ResourceId,
@@ -46,7 +46,7 @@ class EvaluationReservation(PostSubmitValue):
 class ReservedEvaluation(PostSubmitValue):
     """Exact retained request and identities, without a currentness assertion."""
 
-    request: PostSubmissionEvaluationRequest
+    request: PostSubmissionExecutionRequest
     reservation: EvaluationReservation
 
 
@@ -62,7 +62,7 @@ class ExecutionLease(PostSubmitValue):
 class ExecuteFacts(PostSubmitValue):
     """Exact request and lease consumed by execution authority."""
 
-    request: PostSubmissionEvaluationRequest
+    request: PostSubmissionExecutionRequest
     lease: ExecutionLease
 
 
@@ -83,7 +83,7 @@ class VerifiedMaterialFacts(PostSubmitValue):
 class FinalizeFacts(ExecuteFacts):
     """Exact terminal result and material custody consumed by finalization authority."""
 
-    result: PostSubmissionEvaluationResult
+    result: PostSubmissionExecutionResult
     material: VerifiedMaterialFacts | None
     input_materialization_evidence_id: ResourceId | None
     output_binding_ids: tuple[ResourceId, ...] = Field(max_length=0)
@@ -208,12 +208,12 @@ class CurrentExecutionPort(Protocol):
 class ExecutionAuthorityPort(Protocol):
     """Provide fresh authorization before acquiring an execution lease."""
 
-    async def preflight(self, request: PostSubmissionEvaluationRequest) -> None:
+    async def preflight(self, request: PostSubmissionExecutionRequest) -> None:
         """Reject unavailable execution authority before entering preparation."""
         ...
 
     def prepare_execution(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> AbstractAsyncContextManager[PreparedExecution]:
         """Hold execution preparation within the caller transaction."""
         ...
@@ -222,12 +222,12 @@ class ExecutionAuthorityPort(Protocol):
 class FinalizationAuthorityPort(Protocol):
     """Provide fresh authorization for atomic terminal publication."""
 
-    async def preflight(self, request: PostSubmissionEvaluationRequest) -> None:
+    async def preflight(self, request: PostSubmissionExecutionRequest) -> None:
         """Reject unavailable finalization authority before preparation."""
         ...
 
     def prepare_finalization(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> AbstractAsyncContextManager[PreparedFinalization]:
         """Hold finalization preparation within the terminal transaction."""
         ...
@@ -238,13 +238,13 @@ class CompletedEvaluation(PostSubmitValue):
 
     reference: PostSubmitCurrentResultReference
     routing_recommendation: Literal["allow_review", "needs_revision", "task_setup_blocked"]
-    result: PostSubmissionEvaluationResult
+    result: PostSubmissionExecutionResult
 
 
 class EvaluationTaskGuard(Protocol):
     """TASK locks exact evaluation scope; the boolean is reservation eligibility, not authority."""
 
-    async def lock_evaluation_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+    async def lock_evaluation_scope(self, request: PostSubmissionExecutionRequest) -> bool:
         """Hold TASK locks through commit; False forbids new reservations, not current reads."""
         ...
 
@@ -266,13 +266,13 @@ class EvaluationCoordinationPort(Protocol):
         ...
 
     async def reserve_current_evaluation(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> EvaluationReservation:
         """Reserve or replay the exact request without committing the caller transaction."""
         ...
 
     async def read_current_result(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> CompletedEvaluation:
         """Lock and return the completed evaluation for the exact current request."""
         ...
@@ -298,7 +298,7 @@ class VerifiedEvaluationCompletion(PostSubmitValue):
     submission_version: VersionNumber
     material: VerifiedMaterialFacts
     input_materialization_evidence_id: ResourceId
-    result: PostSubmissionEvaluationResult
+    result: PostSubmissionExecutionResult
 
     @model_validator(mode="after")
     def bind_completed_result(self):

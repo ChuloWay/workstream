@@ -373,6 +373,15 @@ def selected_submission_evaluation_content(
             ),
             pre_policy_id=locked.locked_pre_submit_checker_policy_id,
             pre_policy_hash=locked.locked_pre_submit_checker_bundle_hash,
+            retained_catalogue_policy_id=(
+                locked.locked_post_submit_checker_policy_id
+            ),
+            retained_catalogue_policy_version=(
+                locked.locked_post_submit_checker_policy_version
+            ),
+            retained_catalogue_policy_hash=(
+                locked.locked_post_submit_checker_policy_hash
+            ),
             selected_post_policy_hash=policy.policy_sha256,
             review_policy_id=locked.locked_review_policy_id,
             review_generation=locked.locked_review_policy_generation,

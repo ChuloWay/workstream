@@ -28,6 +28,9 @@ from app.modules.checkers.api.external import (
 
 WORKSTREAM_DEFAULT_EXECUTION_BUDGET_MS = 60_000
 MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS = 7_200_000
+SELECTED_POST_MATERIALIZATION_BUDGET_MS = 60_000
+MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS = 3_600_000
+SELECTED_POST_FINALIZATION_MARGIN_MS = 60_000
 
 
 class ExternalCheckerPolicyError(ValueError):
@@ -287,5 +290,23 @@ def selected_pre_submit_execution_budget_ms(
     if required > artifact_deadline_ms:
         raise ExternalCheckerPolicyError(
             "selected PRE execution exceeds ART custody deadline"
+        )
+    return required
+
+
+def selected_post_submit_execution_budget_ms(
+    policy: LockedExternalPostSubmitPolicy,
+) -> int:
+    """Bound ART materialization and every ordered POST image under one lease."""
+    if type(policy) is not LockedExternalPostSubmitPolicy:
+        raise ExternalCheckerPolicyError("selected POST execution budget is invalid")
+    required = SELECTED_POST_MATERIALIZATION_BUDGET_MS + sum(
+        binding.registry.resources.deadline_ms
+        + EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+        for binding in policy.entries
+    )
+    if required > MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS:
+        raise ExternalCheckerPolicyError(
+            "selected POST execution exceeds durable worker deadline"
         )
     return required

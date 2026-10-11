@@ -33,6 +33,9 @@ from app.modules.tasks.submission_replay import read_creation_replay
 from app.modules.tasks.lifecycle import ensure_allowed_transition
 from app.modules.checkers.api.execution import EvaluationCoordinationPort
 from app.modules.checkers.api.post_submit import make_post_submit_request
+from app.modules.checkers.api.selected_post_submit import (
+    make_selected_post_submit_request,
+)
 from app.modules.outbox.api import OutboxAppendPort
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.service import TaskService
@@ -197,18 +200,39 @@ class TaskSubmissionCreationService:
             submission.submission_bundle_admission_id = str(request.admission_id)
             submission.artifact_binding_id = str(consumed.binding_id)
             submission.artifact_content_id = str(consumed.content_id)
+            if consumed.selected_evaluation_content is not None:
+                submission.selected_post_submit_policy_sha256 = (
+                    consumed.selected_evaluation_content.policy.policy_sha256
+                )
+                submission.selected_post_submit_policy_body = (
+                    consumed.selected_evaluation_content.policy.model_dump(mode="json")
+                )
             await self._session.flush()
             creation_decision_id = await self._authorization.consume(prepared_authorization, final)
             if not isinstance(creation_decision_id, UUID):
                 raise SubmissionCreationUnavailable("submission creation is unavailable")
-            evaluation = make_post_submit_request(
-                **consumed.evaluation_content.model_dump(),
-                evaluation_request_id=new_record_id(), evaluation_generation=1,
-                task_id=request.task_id, assignment_id=request.assignment_id,
-                submission_id=submission_id, submission_version=version,
-                content_id=consumed.content_id, binding_id=consumed.binding_id,
-                content_sha256=consumed.archive_sha256, byte_count=consumed.byte_count,
+            request_fields = dict(
+                evaluation_request_id=new_record_id(),
+                evaluation_generation=1,
+                task_id=request.task_id,
+                assignment_id=request.assignment_id,
+                submission_id=submission_id,
+                submission_version=version,
+                content_id=consumed.content_id,
+                binding_id=consumed.binding_id,
+                content_sha256=consumed.archive_sha256,
+                byte_count=consumed.byte_count,
             )
+            if consumed.selected_evaluation_content is not None:
+                evaluation = make_selected_post_submit_request(
+                    **consumed.selected_evaluation_content.model_dump(),
+                    **request_fields,
+                )
+            else:
+                evaluation = make_post_submit_request(
+                    **consumed.evaluation_content.model_dump(),
+                    **request_fields,
+                )
             ensure_allowed_transition(task.status, "submitted")
             task.status = "submitted"
             await self._session.flush()

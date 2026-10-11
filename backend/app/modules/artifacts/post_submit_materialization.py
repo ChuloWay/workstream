@@ -29,7 +29,13 @@ from app.modules.artifacts.submission_archive import (
     SubmissionArchiveRejectedError,
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
-from app.modules.checkers.api import PostSubmissionEvaluationResult
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionResult,
+    validate_execution_result,
+)
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmissionEvaluationRequest,
+)
 from app.modules.checkers.api.execution import (
     ExecuteFacts, CurrentExecutionPort, VerifiedMaterialFacts, CheckerExecutionUnavailable,
 )
@@ -196,7 +202,7 @@ class _MaterialProcessor:
         self._execution, self._materialization = execution, materialization
         self._media_type = media_type
         self._aborted = False
-        self._consumer_task: asyncio.Task[PostSubmissionEvaluationResult] | None = None
+        self._consumer_task: asyncio.Task[PostSubmissionExecutionResult] | None = None
         self._view: _MaterialView | None = None
 
     def abort(self) -> None:
@@ -207,7 +213,7 @@ class _MaterialProcessor:
         if self._consumer_task is not None:
             self._consumer_task.cancel()
 
-    async def process(self, reader, workspace) -> PostSubmissionEvaluationResult:
+    async def process(self, reader, workspace) -> PostSubmissionExecutionResult:
         """Project off-loop, validate callback output, and drain projection cleanup."""
         projection = self._inspector._projected_tree(reader, workspace, expected=self._inspection)
         # The preparation owner shields and drains this entire operation, including
@@ -222,7 +228,7 @@ class _MaterialProcessor:
                 materialization=self._materialization, media_type=self._media_type,
             )
             self._consumer_task = asyncio.create_task(self._consumer.evaluate(self._request, self._view))
-            result = PostSubmissionEvaluationResult.model_validate(await self._consumer_task)
+            result = validate_execution_result(await self._consumer_task)
             result.validate_request(self._request)
             return result
         finally:
@@ -318,9 +324,20 @@ class PostSubmissionMaterializer:
                 expected_files = tuple((entry.normalized_path, entry.sha256, entry.byte_count)
                                        for entry in manifest.entries
                                        if entry.entry_type is SubmissionArchiveEntryType.FILE)
-                supplied_files = tuple(sorted((entry.artifact, entry.hash, entry.size_bytes)
-                                              for entry in request.structural_input.manifest))
-                if manifest.sha256 != selected.semantic_manifest_sha256 or supplied_files != expected_files:
+                supplied_files = (
+                    expected_files
+                    if isinstance(request, SelectedPostSubmissionEvaluationRequest)
+                    else tuple(
+                        sorted(
+                            (entry.artifact, entry.hash, entry.size_bytes)
+                            for entry in request.structural_input.manifest
+                        )
+                    )
+                )
+                if (
+                    manifest.sha256 != selected.semantic_manifest_sha256
+                    or supplied_files != expected_files
+                ):
                     raise PostSubmissionMaterializationFailure("post_submit_material_manifest_mismatch")
                 materialization_facts = self._authority_facts(facts, selected)
                 evaluation = await self._preparation._process_prepared_submission(

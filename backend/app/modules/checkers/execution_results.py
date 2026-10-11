@@ -6,6 +6,14 @@ from app.modules.checkers.api.post_submit import (
     PostSubmissionEvaluationRequest,
     PostSubmissionEvaluationResult,
 )
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    PostSubmissionExecutionResult,
+)
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmissionEvaluationRequest,
+    SelectedPostSubmissionEvaluationResult,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,12 +28,28 @@ class ResultClassification:
 
 
 def classify_result(
-    request: PostSubmissionEvaluationRequest, result: PostSubmissionEvaluationResult
+    request: PostSubmissionExecutionRequest, result: PostSubmissionExecutionResult
 ) -> ResultClassification:
     """Validate every selected member before deriving policy-governed routing."""
     result.validate_request(request)
     if result.outcome == "infrastructure_failed":
         return ResultClassification("not_evaluated", 0, 0, 0, 0)
+    if isinstance(request, SelectedPostSubmissionEvaluationRequest) and isinstance(
+        result, SelectedPostSubmissionEvaluationResult
+    ):
+        members = result.execution.external_members if result.execution else ()
+        failed = sum(member.result.verdict == "failed" for member in members)
+        return ResultClassification(
+            "needs_revision" if failed else "allow_review",
+            sum(member.result.verdict == "passed" for member in members),
+            0,
+            failed,
+            failed,
+        )
+    if not isinstance(request, PostSubmissionEvaluationRequest) or not isinstance(
+        result, PostSubmissionEvaluationResult
+    ):
+        raise ValueError("post-submit request and result schemas differ")
     members = result.member_results
     blocking = tuple(
         m

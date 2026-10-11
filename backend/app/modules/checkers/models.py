@@ -287,6 +287,8 @@ class CheckerRun(Base):
         nullable=False,
     )
     locked_post_submit_checker_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    selected_post_submit_policy_sha256: Mapped[str | None] = mapped_column(String(71))
+    selected_post_submit_policy_body: Mapped[dict | None] = mapped_column(JSON)
     locked_review_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_review_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_review_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)

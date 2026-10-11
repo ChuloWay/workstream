@@ -19,9 +19,13 @@ from app.modules.checkers.api.execution import (
     VerifiedMaterialFacts,
     VerifiedEvaluationCompletion,
 )
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmitCurrentResultReference,
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    validate_execution_request,
+)
+from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmissionEvaluationRequest,
 )
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
@@ -49,10 +53,10 @@ class EvaluationCoordinator:
         self._tasks = tasks
 
     async def reserve_current_evaluation(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> EvaluationReservation:
         """Serialize initial creation, exact replay and the next current generation."""
-        request = PostSubmissionEvaluationRequest.model_validate(request)
+        request = validate_execution_request(request)
         with self._session.no_autoflush:
             can_create = await self._lock_task_scope(request)
             if not can_create:
@@ -90,6 +94,7 @@ class EvaluationCoordinator:
         if request.evaluation_generation != expected:
             raise CheckerRequestConflict("checker_generation_conflict")
         context = request.expected_context
+        selected = isinstance(request, SelectedPostSubmissionEvaluationRequest)
         run = CheckerRun(
             id=str(new_record_id()),
             project_id=str(request.project_id),
@@ -109,9 +114,31 @@ class EvaluationCoordinator:
             worker_lease_generation=0,
             supersedes_checker_run_id=prior.id if prior else None,
             locked_guide_version=context.guide_version,
-            locked_post_submit_checker_policy_id=str(context.post_policy_id),
-            locked_post_submit_checker_policy_version=context.post_policy_version,
-            locked_post_submit_checker_policy_hash=context.post_policy_hash,
+            locked_post_submit_checker_policy_id=str(
+                context.retained_catalogue_policy_id
+                if selected
+                else context.post_policy_id
+            ),
+            locked_post_submit_checker_policy_version=(
+                context.retained_catalogue_policy_version
+                if selected
+                else context.post_policy_version
+            ),
+            locked_post_submit_checker_policy_hash=(
+                context.retained_catalogue_policy_hash
+                if selected
+                else context.post_policy_hash
+            ),
+            selected_post_submit_policy_sha256=(
+                request.policy.policy_sha256
+                if selected
+                else None
+            ),
+            selected_post_submit_policy_body=(
+                request.policy.model_dump(mode="json")
+                if selected
+                else None
+            ),
             locked_review_policy_id=str(context.review_policy_id),
             locked_review_policy_generation=context.review_generation,
             locked_review_policy_hash=context.review_hash,
@@ -158,7 +185,7 @@ class EvaluationCoordinator:
             raise CheckerExecutionUnavailable("checker_reservation_unavailable")
         return ReservedEvaluation(request=request, reservation=reservation(run))
 
-    async def _lock_task_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+    async def _lock_task_scope(self, request: PostSubmissionExecutionRequest) -> bool:
         """Retain root-transaction TASK custody before any coordination fence lock."""
         require_transaction(self._session)
         connection = await self._session.connection()
@@ -176,7 +203,7 @@ class EvaluationCoordinator:
             raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
         return can_create
 
-    async def _replay(self, request: PostSubmissionEvaluationRequest) -> CheckerRun | None:
+    async def _replay(self, request: PostSubmissionExecutionRequest) -> CheckerRun | None:
         """Read an exact stored envelope; never repair or restore its current fence."""
         replay = await self._session.scalar(select(CheckerRun).where(
             CheckerRun.evaluation_request_id == str(request.evaluation_request_id),
@@ -190,10 +217,10 @@ class EvaluationCoordinator:
         return replay
 
     async def read_current_result(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> CompletedEvaluation:
         """Return only a locked completed result matching the entire current request."""
-        request = PostSubmissionEvaluationRequest.model_validate(request)
+        request = validate_execution_request(request)
         with self._session.no_autoflush:
             await self._lock_task_scope(request)
             run = await ExecutionRepository(self._session).lock_current(request)

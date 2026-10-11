@@ -26,7 +26,10 @@ from pydantic import (
 )
 
 from app.modules.projects.api.task_examples import ProjectGuideTaskExamples
-from app.modules.checkers.api import PostSubmitCatalogue, PostSubmitDefinition
+from app.modules.checkers.api.post_submit_catalogue import (
+    PostSubmitCatalogue,
+    PostSubmitDefinition,
+)
 from app.modules.checkers.api.pre_submit_catalogue import (
     PreSubmissionCapabilityDefinition,
     PreSubmissionCapabilityProjection,

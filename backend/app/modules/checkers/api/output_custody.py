@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import Field, StrictInt, model_validator
 
-from app.modules.checkers.api.post_submit import PostSubmissionEvaluationRequest
+from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
 from app.modules.checkers.api.post_submit_catalogue import (
     Identifier,
     PostSubmitValue,
@@ -23,7 +23,7 @@ class CheckerOutputUnavailable(RuntimeError):
 class CheckerOutputSelector(PostSubmitValue):
     """Select exact immutable evaluation and the caller's claimed execution lease."""
 
-    evaluation: PostSubmissionEvaluationRequest
+    evaluation: PostSubmissionExecutionRequest
     checker_run_id: ResourceId
     worker_lease_id: ResourceId
     worker_lease_generation: VersionNumber
@@ -41,7 +41,7 @@ class CheckerOutputSlot(PostSubmitValue):
 class CheckerOutputReservation(PostSubmitValue):
     """Detached owner facts, never a substitute for fresh action authority."""
 
-    evaluation: PostSubmissionEvaluationRequest
+    evaluation: PostSubmissionExecutionRequest
     checker_run_id: ResourceId
     worker_lease_id: ResourceId
     worker_lease_generation: VersionNumber

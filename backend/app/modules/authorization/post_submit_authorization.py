@@ -20,7 +20,7 @@ from app.modules.checkers.api.execution import (
 from app.modules.checkers.api.materialization import (
     PreparedMaterialization, PostSubmissionMaterializationUnavailable,
 )
-from app.modules.checkers.api.post_submit import PostSubmissionEvaluationRequest
+from app.modules.checkers.api.evaluation_contract import validate_execution_request
 
 
 @contextmanager
@@ -75,7 +75,7 @@ class _PreparedMaterialize(_PreparedPhase, PreparedMaterialization):
 async def _prepare(session, action, request, *, execution=None):
     """Acquire fixed principal custody before any CHECKERS or ART feature locks."""
     try:
-        PostSubmissionEvaluationRequest.model_validate_json(request.model_dump_json())
+        validate_execution_request(request)
         prepare_values = post_submit_prepare_values(action, request, execution)
     except (AttributeError, ValueError, TypeError) as error:
         exception = PostSubmissionMaterializationUnavailable if action == MATERIALIZE else CheckerExecutionUnavailable
@@ -105,7 +105,7 @@ class PostSubmitExecutionAuthorization:
 
     async def preflight(self, request):
         """Validate value shape; preparation admits and locks the live principal before owner access."""
-        PostSubmissionEvaluationRequest.model_validate_json(request.model_dump_json())
+        validate_execution_request(request)
 
     def prepare_execution(self, request):
         return _prepare(self._session, EXECUTE, request)

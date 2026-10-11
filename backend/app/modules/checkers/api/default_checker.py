@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.hashing import canonical_json_hash
-from app.modules.checkers.api.materialization import SubmissionMaterialEntry
+from app.modules.checkers.api.material import SubmissionMaterialEntry
 from app.modules.checkers.api.pre_submit import SubmissionPacketView
 
 

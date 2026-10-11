@@ -92,6 +92,15 @@ from app.modules.checkers.api.post_submit import (
     PostSubmitMemberResult,
     PostSubmitPolicyInputs,
 )
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmissionContent,
+    SelectedPostSubmissionEvaluationRequest,
+    SelectedPostSubmissionEvaluationResult,
+    SelectedPostSubmitExecutionFacts,
+    SelectedPostSubmitLockedContext,
+    make_selected_post_submit_request,
+    make_selected_post_submit_result,
+)
 
 __all__ += (
     "CompiledPostSubmitPolicy", "EmptyPostSubmitConfiguration", "PostSubmitCatalogue",
@@ -100,6 +109,10 @@ __all__ += (
     "PostSubmissionExecutionPort", "PostSubmissionStructuralInput",
     "PostSubmitCurrentResultReference", "PostSubmitEvidenceEntry", "PostSubmitManifestEntry",
     "PostSubmitMemberResult", "PostSubmitPolicyInputs",
+    "SelectedPostSubmissionContent", "SelectedPostSubmissionEvaluationRequest",
+    "SelectedPostSubmissionEvaluationResult", "SelectedPostSubmitExecutionFacts",
+    "SelectedPostSubmitLockedContext", "make_selected_post_submit_request",
+    "make_selected_post_submit_result",
 )
 
 __all__ += (
