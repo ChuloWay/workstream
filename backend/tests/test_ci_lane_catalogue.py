@@ -276,6 +276,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/post_submit_routing/test_failure_completion.py",
             "tests/tasks/post_submit_routing/test_remediation.py",
             "tests/tasks/post_submit_routing/test_remediation_storage.py",
+            "tests/tasks/post_submit_routing/test_remediation_currentness.py",
             "tests/tasks/evaluation_delivery/test_completion.py",
             "tests/tasks/evaluation_delivery/test_completion_contracts.py",
             "tests/tasks/evaluation_delivery/test_completion_custody.py",

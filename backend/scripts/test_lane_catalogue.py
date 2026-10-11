@@ -439,6 +439,7 @@ TASK_MODULES = (
     "tests/tasks/post_submit_routing/test_failure_completion.py",
     "tests/tasks/post_submit_routing/test_remediation.py",
     "tests/tasks/post_submit_routing/test_remediation_storage.py",
+    "tests/tasks/post_submit_routing/test_remediation_currentness.py",
 
     # New completion proofs use TASK custody and its measured lane headroom.
     "tests/tasks/evaluation_delivery/test_completion.py",

@@ -10,9 +10,9 @@ from tests.tasks.post_submit_routing.outcome_support import invoked_completion
 
 
 @asynccontextmanager
-async def remediation_source(tmp_path, database_url, *, human_review_required=True):
+async def remediation_source(tmp_path, database_url, *, human_review_required=True, **options):
     async with completed_evidence(
-        tmp_path, database_url, human_review_required=human_review_required,
+        tmp_path, database_url, human_review_required=human_review_required, **options,
     ) as h:
         async with h.factory() as session, session.begin():
             await session.execute(text(
