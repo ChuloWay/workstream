@@ -203,9 +203,7 @@ async def test_guide_correction_public_save_dispatch_replay_and_authority(
                             == body["target"]["source_snapshot_id"]
                         )
                         assert successor["status"] == (
-                            dispatched["status"]
-                            if dispatched
-                            else "correction_requested"
+                            "queued" if dispatched else "correction_requested"
                         )
                         assert (successor["celery_task_id"] is not None) == (
                             dispatched is not None
@@ -282,7 +280,8 @@ async def test_guide_correction_public_save_dispatch_replay_and_authority(
                     "correction_operation_id": saved["operation_id"],
                     "setup_run_id": saved["successor_setup_run_id"],
                     "setup_generation": saved["successor_setup_generation"],
-                    "status": "queued",
+                    # Diagnostic attempt custody is distinct from queue state.
+                    "status": "compilation_reserved",
                 }
                 assert success(call(dispatch=True)) == observed
                 await stored(1, saved, observed)
