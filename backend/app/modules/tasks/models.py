@@ -771,6 +771,7 @@ class TaskImportBatch(Base):
         CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("project_id", "sha256", "byte_count", name="uq_task_import_batch_file"),
         UniqueConstraint("id", "project_id", name="uq_task_import_batch_project"),
+        UniqueConstraint("creation_command_receipt_id", name="uq_task_import_batch_creation_command"),
         ForeignKeyConstraint(
             ["source_id", "project_id", "sha256", "byte_count", "media_type"],
             ["artifact_task_import_sources.id", "artifact_task_import_sources.project_id",
@@ -804,6 +805,9 @@ class TaskImportBatch(Base):
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
     source_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    creation_command_receipt_id: Mapped[str] = mapped_column(ForeignKey(
+        "task_import_batch_command_receipts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED",
+    ))
     sha256: Mapped[str] = mapped_column(String(71))
     byte_count: Mapped[int] = mapped_column(BigInteger)
     media_type: Mapped[str] = mapped_column(String(255), default="application/json")
@@ -811,6 +815,7 @@ class TaskImportBatch(Base):
     mapping_version: Mapped[str] = mapped_column(String(80))
     manifest_digest: Mapped[str] = mapped_column(String(71))
     row_count: Mapped[int] = mapped_column(Integer)
+    metadata_label: Mapped[str | None] = mapped_column(String(255))
     actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
     identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     authorization_decision_id: Mapped[str | None] = mapped_column(ForeignKey("audit_events.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
@@ -871,6 +876,9 @@ class TaskImportBatchCommandReceipt(Base):
         UniqueConstraint("actor_profile_id", "action_id", "idempotency_key", name="uq_task_import_command_namespace"),
         ForeignKeyConstraint(["batch_id", "project_id"], ["task_import_batches.id", "task_import_batches.project_id"],
                              name="fk_task_import_command_batch", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
+        ForeignKeyConstraint(["identity_link_id", "actor_profile_id"],
+                             ["actor_identity_links.id", "actor_identity_links.actor_profile_id"],
+                             name="fk_task_import_command_actor_link", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
         ForeignKeyConstraint(
             ["source_id", "project_id", "sha256", "byte_count", "media_type"],
             ["artifact_task_import_sources.id", "artifact_task_import_sources.project_id",
@@ -896,6 +904,7 @@ class TaskImportBatchCommandReceipt(Base):
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
     action_id: Mapped[str] = mapped_column(String(160))
     idempotency_key: Mapped[UUID] = mapped_column(Uuid())
     request_digest: Mapped[str] = mapped_column(String(71))

@@ -9,12 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
-from app.modules.artifacts.api.task_import_source import (
-    TaskImportSourceAuthorityFacts, TaskImportSourceBindingPort,
-    TaskImportSourceCommandPort, VerifiedTaskImportSourceBinding,
-)
 from app.modules.tasks.api.task_import import (
     ParsedTaskImport, TASK_IMPORT_MAPPING_VERSION, TASK_IMPORT_MAXIMUM_BYTES,
+    TaskImportSourceCommitment, TaskImportSourceConsumerPort, VerifiedTaskImportSourceBinding,
     TaskImportBatchAction, TaskImportBatchAuthorityFacts, TaskImportBatchAuthorizationPort,
     TaskImportRow, parse_task_import,
 )
@@ -36,7 +33,7 @@ class TaskImportBatchError(RuntimeError):
         super().__init__(code)
 
 
-def imported_task_payload(row: TaskImportRow, source: TaskImportSourceAuthorityFacts, batch_id: UUID) -> ImportedTaskCreate:
+def imported_task_payload(row: TaskImportRow, source: TaskImportSourceCommitment, batch_id: UUID) -> ImportedTaskCreate:
     """Map instructions directly and stamp provenance solely from actual native custody."""
     return ImportedTaskCreate(
         **row.model_dump(), source_type="json_import", source_ref=f"task-import-source:{source.source_id}",
@@ -72,11 +69,11 @@ class TaskImportBatchCommands:
     def __init__(
         self, session: AsyncSession, *, actor_profile_id: UUID, identity_link_id: UUID,
         authorization: TaskImportBatchAuthorizationPort, tasks: AuthorizedTaskCommands,
-        source_reader: TaskImportSourceCommandPort, source_binding: TaskImportSourceBindingPort,
+        source: TaskImportSourceConsumerPort,
     ) -> None:
         self._session, self._actor_id, self._link_id = session, actor_profile_id, identity_link_id
         self._authorization, self._tasks = authorization, tasks
-        self._source_reader, self._source_binding = source_reader, source_binding
+        self._source = source
 
     @staticmethod
     def _request_digest(project_id: UUID, source_id: UUID) -> str:
@@ -90,30 +87,30 @@ class TaskImportBatchCommands:
         ).execution_options(populate_existing=True)
         return await self._session.scalar(query.with_for_update() if lock else query)
 
-    async def _file_batch(self, facts: TaskImportSourceAuthorityFacts, *, lock: bool = False) -> TaskImportBatch | None:
+    async def _file_batch(self, facts: TaskImportSourceCommitment, *, lock: bool = False) -> TaskImportBatch | None:
         query = select(TaskImportBatch).where(
             TaskImportBatch.project_id == str(facts.project_id), TaskImportBatch.sha256 == facts.sha256,
             TaskImportBatch.byte_count == facts.byte_count,
         ).execution_options(populate_existing=True)
         return await self._session.scalar(query.with_for_update() if lock else query)
 
-    async def _preflight(self, project_id: UUID, source_id: UUID, key: UUID) -> tuple[TaskImportSourceAuthorityFacts, bool]:
+    async def _preflight(self, project_id: UUID, source_id: UUID, key: UUID) -> tuple[TaskImportSourceCommitment, bool]:
         """Determine whether immutable recovery exists without reading provider bytes."""
         async with self._session.begin():
             command = await self._command(key)
             if command is not None:
-                facts = await self._source_binding.source_commitment(UUID(command.project_id), UUID(command.source_id))
-                await self._source_binding.authorize_commitment(facts)
+                facts = await self._source.source_commitment(UUID(command.project_id), UUID(command.source_id))
+                await self._source.authorize_commitment(facts)
                 return facts, True
-            facts = await self._source_binding.source_commitment(project_id, source_id)
-            await self._source_binding.authorize_commitment(facts)
+            facts = await self._source.source_commitment(project_id, source_id)
+            await self._source.authorize_commitment(facts)
             batch = await self._file_batch(facts)
             return facts, batch is not None
 
-    async def _read_first_import(self, facts: TaskImportSourceAuthorityFacts) -> ParsedTaskImport:
+    async def _read_first_import(self, facts: TaskImportSourceCommitment) -> ParsedTaskImport:
         """Finish bounded actual provider verification and parsing before TASK locks."""
         raw = bytearray()
-        async with self._source_reader.open(facts.project_id, facts.source_id) as opened:
+        async with self._source.open(facts.project_id, facts.source_id) as opened:
             async for chunk in opened.stream:
                 raw.extend(chunk)
                 if len(raw) > TASK_IMPORT_MAXIMUM_BYTES:
@@ -124,26 +121,32 @@ class TaskImportBatchCommands:
         return parsed
 
     async def _reserve_command(
-        self, facts: TaskImportSourceAuthorityFacts, key: UUID, request_digest: str,
+        self, facts: TaskImportSourceCommitment, key: UUID, request_digest: str,
     ) -> TaskImportBatchCommandReceipt:
         """Reserve the exact actor/action/key before batch, ART or AUTH locks."""
         await self._session.execute(insert(TaskImportBatchCommandReceipt).values(
-            id=str(new_record_id()), actor_profile_id=str(self._actor_id), action_id=TaskImportBatchAction.IMPORT.value,
+            id=str(new_record_id()), actor_profile_id=str(self._actor_id), identity_link_id=str(self._link_id),
+            action_id=TaskImportBatchAction.IMPORT.value,
             idempotency_key=key, request_digest=request_digest, project_id=str(facts.project_id),
             source_id=str(facts.source_id), sha256=facts.sha256, byte_count=facts.byte_count,
             media_type="application/json", source_operation_identity=facts.operation_identity, status="pending",
         ).on_conflict_do_nothing(constraint="uq_task_import_command_namespace"))
         return await self._command(key, lock=True)
 
-    async def _reserve_batch(self, facts: TaskImportSourceAuthorityFacts, parsed: ParsedTaskImport | None) -> TaskImportBatch:
+    async def _reserve_batch(
+        self, facts: TaskImportSourceCommitment, parsed: ParsedTaskImport | None,
+        command: TaskImportBatchCommandReceipt,
+    ) -> TaskImportBatch:
         """Serialize only the exact project/file identity; native FKs remain deferred."""
         if parsed is not None:
             await self._session.execute(insert(TaskImportBatch).values(
                 id=str(new_record_id()), project_id=str(facts.project_id), source_id=str(facts.source_id),
+                creation_command_receipt_id=command.id,
                 sha256=facts.sha256, byte_count=facts.byte_count, media_type="application/json",
                 schema_version=parsed.document.schema_version, mapping_version=TASK_IMPORT_MAPPING_VERSION,
                 manifest_digest=canonical_json_hash(parsed.document.model_dump(mode="json")),
                 row_count=len(parsed.document.tasks), actor_profile_id=str(self._actor_id), identity_link_id=str(self._link_id),
+                metadata_label=parsed.document.metadata.label,
                 source_operation_identity=facts.operation_identity, status="pending",
             ).on_conflict_do_nothing(constraint="uq_task_import_batch_file"))
         batch = await self._file_batch(facts, lock=True)
@@ -161,7 +164,7 @@ class TaskImportBatchCommands:
         )
 
     async def _prepare_rows(
-        self, batch: TaskImportBatch, facts: TaskImportSourceAuthorityFacts, parsed: ParsedTaskImport,
+        self, batch: TaskImportBatch, facts: TaskImportSourceCommitment, parsed: ParsedTaskImport,
     ) -> list[tuple[int, TaskCreationPreparation]]:
         """Prepare every canonical Task retry identity before any ART/AUTH lock."""
         prepared = []
@@ -185,7 +188,7 @@ class TaskImportBatchCommands:
         expected.setdefault(command.source_id, None)
         prepared = {}
         for source_id in sorted(expected):
-            prepared[source_id] = await self._source_binding.prepare_binding(
+            prepared[source_id] = await self._source.prepare_binding(
                 UUID(batch.project_id), UUID(source_id), expected[source_id],
             )
         selected = prepared[command.source_id]
@@ -206,6 +209,10 @@ class TaskImportBatchCommands:
             TaskCommandReceipt, TaskCommandReceipt.id == TaskImportBatchMember.task_command_receipt_id,
         ).where(TaskImportBatchMember.batch_id == batch.id).order_by(TaskImportBatchMember.row_index))).all()
         if len(rows) != batch.row_count:
+            raise TaskImportBatchError("task_import_batch_custody_invalid", 409)
+        manifest = {"schema_version": response.schema_version, "metadata": {"label": response.label},
+                    "tasks": [{field: getattr(task, field) for field in TaskImportRow.model_fields} for task in response.tasks]}
+        if response.label != batch.metadata_label or canonical_json_hash(manifest) != batch.manifest_digest:
             raise TaskImportBatchError("task_import_batch_custody_invalid", 409)
         for index, (member, receipt) in enumerate(rows):
             original = response.tasks[index]
@@ -255,6 +262,7 @@ class TaskImportBatchCommands:
             batch_id=UUID(batch.id), project_id=UUID(batch.project_id), source_id=UUID(batch.source_id),
             sha256=batch.sha256, byte_count=batch.byte_count, schema_version=batch.schema_version,
             mapping_version=batch.mapping_version, row_count=batch.row_count, created_at=batch.created_at,
+            label=batch.metadata_label,
             tasks=tuple(originals[index] for index in range(batch.row_count)),
         )
 
@@ -266,11 +274,11 @@ class TaskImportBatchCommands:
         async with self._session.begin():
             command = await self._reserve_command(facts, idempotency_key, digest)
             # Namespace custody may now point at the original selector from a competing commit.
-            facts = await self._source_binding.source_commitment(UUID(command.project_id), UUID(command.source_id))
-            batch = await self._reserve_batch(facts, parsed)
+            facts = await self._source.source_commitment(UUID(command.project_id), UUID(command.source_id))
+            batch = await self._reserve_batch(facts, parsed, command)
             prepared = (await self._prepare_rows(batch, facts, parsed)) if batch.status == "pending" else []
             selected = await self._prepare_sources(batch, command)
-            await self._source_binding.authorize_binding(selected)
+            await self._source.authorize_binding(selected)
             decision_id = await self._authorization.authorize(
                 TaskImportBatchAction.IMPORT, self._facts(batch, selected, idempotency_key, digest),
             )
@@ -303,8 +311,8 @@ class TaskImportBatchCommands:
             ).execution_options(populate_existing=True))
             if batch is None:
                 raise TaskImportBatchError("task_import_batch_not_found", 404)
-            binding = await self._source_binding.prepare_binding(project_id, UUID(batch.source_id), _binding(batch))
-            await self._source_binding.authorize_binding(binding)
+            binding = await self._source.prepare_binding(project_id, UUID(batch.source_id), _binding(batch))
+            await self._source.authorize_binding(binding)
             await self._authorization.authorize(TaskImportBatchAction.READ, self._facts(
                 batch, binding, request_id, canonical_json_hash({"project_id": str(project_id), "batch_id": str(batch_id)}),
             ))

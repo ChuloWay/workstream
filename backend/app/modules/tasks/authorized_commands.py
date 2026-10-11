@@ -12,7 +12,7 @@ from pydantic import TypeAdapter
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
 from app.modules.contributions.api import LockedCompensationTermsPort
 from app.core.hashing import canonical_json_hash
@@ -68,6 +68,7 @@ class TaskCreationPreparation:
     reserved: bool
     current: WorkstreamTask | None
     facts: TaskAuthorityFacts
+    transaction: AsyncSessionTransaction
 
 
 class AuthorizedTaskCommands:
@@ -178,11 +179,12 @@ class AuthorizedTaskCommands:
             ),
         )
         return TaskCreationPreparation(project_id, UUID(proposed.id), payload.model_dump_json(),
-                                       receipt, digest, reserved, current, facts)
+                                       receipt, digest, reserved, current, facts, self._session.get_transaction())
 
     async def authorize_creation(self, prepared: TaskCreationPreparation) -> TaskAuthorityDecision:
         """Consume exact current per-Task authority after all caller preparation locks."""
-        if not self._session.in_transaction() or prepared.facts.actor_profile_id != self._actor_id:
+        if (self._session.get_transaction() is not prepared.transaction or not prepared.transaction.is_active
+                or prepared.facts.actor_profile_id != self._actor_id):
             raise RuntimeError("task creation authority requires its original caller transaction")
         handle = await self._authorization.prepare(prepared.facts)
         try:
@@ -194,7 +196,8 @@ class AuthorizedTaskCommands:
         self, prepared: TaskCreationPreparation, decision: TaskAuthorityDecision,
     ) -> TaskResponse:
         """Stage canonical creation/evidence/receipt without opening or committing a root."""
-        if not self._session.in_transaction() or prepared.facts.actor_profile_id != self._actor_id:
+        if (self._session.get_transaction() is not prepared.transaction or not prepared.transaction.is_active
+                or prepared.facts.actor_profile_id != self._actor_id):
             raise RuntimeError("task creation staging requires its original caller transaction")
         payload = TypeAdapter(TaskCreate | ImportedTaskCreate).validate_json(prepared.payload_json)
         digest = canonical_json_hash({"project_id": str(prepared.project_id), "payload": payload.model_dump(mode="json")})

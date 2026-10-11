@@ -1,14 +1,12 @@
 """Instruction mapping and closed original/current batch projections."""
 
 from datetime import UTC, datetime
-from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
 
 from app.core.identifiers import new_record_id
-from app.modules.artifacts.api.task_import_source import TaskImportSourceAuthorityFacts
-from app.modules.tasks.api.task_import import TaskImportRow
+from app.modules.tasks.api.task_import import TaskImportRow, TaskImportSourceCommitment
 from app.modules.tasks.schemas import (
     TaskCreate, TaskImportBatchCurrentTask, TaskImportBatchRequest, TaskImportBatchResponse,
     TaskImportBatchStatus, TaskResponse,
@@ -17,8 +15,8 @@ from app.modules.tasks.task_import_batches import imported_task_payload
 
 
 def _source():
-    return TaskImportSourceAuthorityFacts(new_record_id(), new_record_id(), new_record_id(),
-                                        "sha256:" + "a" * 64, 100, "sha256:" + "b" * 64, uuid4())
+    return TaskImportSourceCommitment(new_record_id(), new_record_id(),
+                                     "sha256:" + "a" * 64, 100, "sha256:" + "b" * 64)
 
 
 def _original(source, batch_id, external_id):
@@ -27,7 +25,7 @@ def _original(source, batch_id, external_id):
         TaskImportRow(external_task_id=external_id, title="Instructions", description="Actual work"), source, batch_id,
     ).model_dump())
     values.update(id=str(new_record_id()), project_id=str(source.project_id), status="draft",
-                  created_by=str(source.actor_profile_id), created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
+                  created_by=str(new_record_id()), created_at=datetime.now(UTC), updated_at=datetime.now(UTC))
     return TaskResponse.model_validate(values)
 
 

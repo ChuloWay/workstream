@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "0deac394853f543579cb0c73b2adfb150c3389759e3141540becd92c5e1e08de",
+  "canonical_sha256": "79a0f0e17d6352cd70294e0a1b8d976510f2ecdad5b8b0bf8434052558dc02f9",
   "components": {
     "schemas": {
       "ActionId": {
@@ -17,6 +17,8 @@
           "project.task.queue.read",
           "operations.task.queue.read",
           "project.task.create",
+          "project.task.import",
+          "project.task.import_batch.read",
           "project.task.screen",
           "project.task.release",
           "task.claim",
@@ -539,7 +541,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.authorization_context.read",
-    "backend_git_sha": "7f154137b5e3ad9f597ca2d2d377b8f9d4bda1b3",
+    "backend_git_sha": "3eb281df518ed0d7f12a6e8eaa4ada29e7e15c87",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me/authorization-context"

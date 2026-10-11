@@ -14,9 +14,8 @@ Issue #489 remains open after this chunk; batch transitions and CLI remain.
 
 ## Current behavior
 
-The inspected integration is `0524e56b6aa7576f748d645f672d42ce069141af`,
-based on main `7e499849ab871f445012cf9e343ff97fbb95d62d`. PR520 remains
-the separate source prerequisite. Its parser in `tasks/api/task_import.py`
+The implementation incorporates merged source prerequisite PR520 on main
+`d3c50e1500beffea684fe881cd0a2b3431e6ccb9`. Its parser in `tasks/api/task_import.py`
 accepts one strict UTF-8 JSON document with 1..500 rows, required case-sensitive
 external IDs, indexed duplicate errors and an 8 MiB ceiling. ART's
 `api/task_import_source.py` and `task_import_sources.py` own project-bound
@@ -38,9 +37,12 @@ it is not an authoritative native-UUID batch relationship.
   `authorized_commands.py`, `command_replay.py`, `models.py`, `schemas.py`,
   `repository.py` and `router.py`: typed import/status contracts, immutable batch
   receipt and row membership, server provenance and reuse of canonical creation.
-- ART: `api/task_import_source.py` and `task_import_sources.py`: the smallest
-  typed preparation/binding port over the existing verified source. No second
-  provider path, storage lifecycle or inspector.
+- ART: `task_import_sources.py` implements TASK’s bounded source-consumer
+  preparation/binding port over the existing verified source. ART already
+  depends on TASK’s canonical parser; the consumer contract remains in TASK
+  `api/task_import.py` to preserve the acyclic owner graph. Existing ART public
+  source/AUTH contracts remain intact. No second provider path, storage lifecycle
+  or inspector.
 - Composition: existing `adapters/tasks/__init__.py`,
   `adapters/artifacts/__init__.py`, `adapters/auth/__init__.py` and
   `api/deps/authorization.py`: explicit owner ports and one transaction root.
@@ -48,7 +50,8 @@ it is not an authoritative native-UUID batch relationship.
   action/permission/resource classifications in the existing TASK authority
   owner; reuse covered Project Manager grant evaluation and canonical denials.
 - Focused TASK/ART/AUTH public-contract and native PostgreSQL/MinIO tests;
-  affected ownership/lane/inventory expectations; current TASK/ART/AUTH specs,
+  affected ownership/lane/inventory expectations and the selected MCP
+  `authorization_context_get` snapshot for additive ActionId parity; current TASK/ART/AUTH specs,
   README and roadmap claims for this chunk only.
 - AUDIT: the existing closed TaskCreated payload source-type classification in
   `audit/schemas.py`; preserve every existing type and canonical event owner.
@@ -197,9 +200,10 @@ No public route or per-row command transaction is invoked from the batch owner.
 The proposed native tables are `task_import_batches`,
 `task_import_batch_members` and `task_import_batch_command_receipts`:
 
-- Batch reservation has UUIDv7 ID, project UUID, original source UUID and its
+- Batch reservation has UUIDv7 ID, project UUID, original command receipt UUID
+  (deferred circular closure), original source UUID and its
   operation identity, exact source SHA/count, document schema and parser/mapping
-  identity, row count, original actor/link, current batch creation decision and
+  identity, row count, retained optional metadata label, original actor/link, current batch creation decision and
   original immutable ordered result. Project/SHA/count identifies one original
   batch. A reservation may be incomplete only inside its caller root; a deferred
   closure check rejects any committed pending header, missing or extra member,
@@ -214,7 +218,7 @@ The proposed native tables are `task_import_batches`,
   and batch/project composite FKs close custody; unique Task membership,
   batch/index and project/external-ID identities reject substitutions. Existing
   arbitrary `import_batch_id` metadata never supplies these relationships.
-- Batch command receipt has UUIDv7 ID, actor, closed import action, UUID key,
+- Batch command receipt has UUIDv7 ID, current actor/link, closed import action, UUID key,
   exact request digest over project/selected-source IDs, selected verified
   ancestry, original batch ID and closed immutable ordered result. Actor/action/
   key is unique. A changed selector conflicts after fresh authority; new-key
@@ -232,6 +236,66 @@ reopened or deleted. Native reset restores these guards through the canonical
 owned reset helper, without leaving them disabled for product writes. The sole migration author reviews native
 constraints, deferred closure and exact owner representations before DDL work;
 these proposed names/columns are planning, not installed schema.
+
+### Concrete non-DDL schema handoff
+
+The ORM representations now declare these exact owner relationships for the
+sole migration author’s affected review. They do not install any table or guard:
+
+- `task_import_batches`: native string-mapped UUIDv7 `id`, project and original
+  source UUIDs, unique original `creation_command_receipt_id`, exact SHA/count/
+  JSON media, document/mapping versions, normalized-document `manifest_digest`,
+  retained nullable `metadata_label`, row count, original actor/link, original
+  batch ALLOW decision, pending/committed shape, original response and timestamps.
+  Project/SHA/count and ID/project are unique. The original command receipt FK
+  is deferred, closing the intentional header/receipt cycle at root commit.
+- Both batch and retry receipt store native put-attempt/content/replica IDs,
+  verification job/generation/receipt, original source operation identity and
+  exactly one operation/observation acknowledgement UUID. Pending ancestry may
+  be NULL only inside the creating root; committed generation is explicitly
+  non-NULL and positive. Source/project/SHA/count/media uses the existing ART
+  composite custody FK, deferred until commit. Every other ART UUID FK uses its
+  owner’s string-mapped native UUID representation and is deferred.
+- `task_import_batch_members`: native UUIDv7 ID, batch/project/Task UUIDs,
+  original index/external ID/normalized row digest, server-generated CREATE key,
+  original `TaskCommandReceipt` UUID (its existing Python UUID representation),
+  actual CREATE decision UUID, exact original Task response and timestamp.
+  Unique Task, batch/index, project/external-ID and CREATE receipt prevent
+  duplicated or substituted membership; Task/project and batch/project FKs
+  are deferred and bind actual native owners.
+- `task_import_batch_command_receipts`: native UUIDv7 ID, current actor/link,
+  exact action `project.task.import`, UUID key, immutable selector request digest,
+  selected source/project/SHA/count/media and complete ART ancestry, original
+  batch ID, this invocation’s batch ALLOW decision, pending/committed result and
+  timestamps. Actor/action/key is unique; batch/project and actor/link custody
+  is deferred. New-key exact-file recovery creates only this receipt and fresh
+  authority evidence, with the original header/members/result unchanged.
+- The header’s complete normalized-document digest is reconstructible from its
+  retained metadata label and ordered original Task instruction fields. It must
+  equal the original parsed document; native closure must also prove the exact
+  member count/indexes, original CREATE receipt/decision/action/actor/key/result,
+  truthful `json_import`/source-ref/hash/batch metadata and all ART ancestry.
+  Retry closure binds its fresh actor/link/decision and selected native source
+  while returning the original immutable ordered result. A pending header or
+  receipt cannot survive commit. All three tables reject DELETE/TRUNCATE and
+  committed UPDATE; only exact staged completion is admitted.
+- Native TASK changes remain the approved global case-sensitive project/non-NULL
+  external-ID uniqueness with retained duplicate diagnostic preflight, difficulty
+  width 80 preserving values, and additive current lifecycle `json_import`
+  evidence. Current sensitive-audit constraints/guards must admit only the exact
+  batch resource/actions. Historical baseline SQL remains unchanged. Canonical
+  reset and graph/fingerprint/UUID inventories must retain every merged owner.
+
+Reservation order is retry namespace, exact-file header, all canonical Task
+CREATE reservations, explicit sorted SOURCE KEY SHARE, then fresh batch/source/
+row AUTH and sorted external-ID writes. New batch FKs are deferred to avoid
+implicit actor/source locks before this preparation. A separate provider-free
+source read preflight authorizes before preparation outcomes are observable;
+it commits no Task or batch effect. Each creation preparation is bound to its
+original active SQLAlchemy root, preventing reuse after rollback/commit. The
+sole author allocates a successor only after the lead names the actual merged
+predecessor; source `0031` is merged, PR534 is reconciling to `0032`, and this
+chunk reserves no ordinal.
 
 ### Scope decisions and transaction preparation
 
@@ -381,7 +445,7 @@ never silently reinterprets retained rows under a later mapping.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Canonical creation participant | Exact `59d47a6c` isolated native execution of five retained CREATE, denial, rollback and receipt controls | 5 passed in 69.02 seconds; schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Proves preservation of normal creation; no atomic batch success claim |
-| Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical caller-root phases, closed batch DTOs, model representations and ART immutable-binding participant are implemented; batch operation remains unassembled | New table constraints and guards require sole-author DDL and native proof |
+| Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical caller-root phases, closed batch DTOs, model representations, ART immutable-binding participant and batch/root/AUTH composition are implemented | New table constraints and guards require sole-author DDL and native proof |
 | Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Not run; tests not authored | All positive/negative/concurrency cases above must pass |
 | Schema, guards and complete integration | Sole-author native graph/reset/UUID proof, affected guards, complete hosted lanes and aggregate | Not run for this chunk | Exact frozen candidate, actual merge tree and cleanup required |
 
@@ -398,14 +462,14 @@ not prove installed custody or a public import result.
 ## Reconciliation
 
 - Current-source reconciliation: this preparation branch incorporates source
-  prerequisite `0524e56b6aa7576f748d645f672d42ce069141af` and main `7e499849`,
+  prerequisite PR520 and merged main `d3c50e15`,
   retaining its ten-lane CI, hidden materialization/completion/failure/feedback
   owners and CLI approval/correction contracts. Before implementation, only
   this planning record differed from the source candidate. Canonical Task creation now shares
-  caller-root phases with its normal public wrapper; atomic batch creation and
-  the installed native schema are not yet implemented or proven. Model/API
-  representations and provider-free ART binding validation are in progress;
-  no batch route is exposed. No migration is
+  caller-root phases with its normal public wrapper; atomic batch creation
+  still lacks installed schema/native proof. Model/API representations,
+  provider-free ART binding validation and public route composition are coded
+  on this isolated branch; no delivered import capability is claimed. No migration is
   authored in this worktree.
 - Next usable boundary: review the exact batch/membership/receipt schema and
   owner preparation/replay graph, then coordinate the sole-author migration and

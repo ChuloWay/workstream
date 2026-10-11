@@ -279,6 +279,7 @@ class TaskImportBatchResponse(BaseModel):
     byte_count: int = Field(ge=1, le=8388608)
     schema_version: Literal["workstream.task_import.v1"]
     mapping_version: Literal["workstream.task_import.draft_mapping.v1"]
+    label: str | None = Field(default=None, min_length=1, max_length=255)
     row_count: int = Field(ge=1, le=500)
     created_at: datetime
     tasks: tuple[TaskResponse, ...] = Field(min_length=1, max_length=500)

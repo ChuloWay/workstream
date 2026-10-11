@@ -16,7 +16,7 @@ from app.modules.artifacts.api.task_import_source import (
     TaskImportSourceError,
     TaskImportSourceAction, TaskImportSourceAuthorityDenied, TaskImportSourceAuthorityFacts,
     TaskImportSourceAuthorizationPort, TaskImportSourceDeclare, TaskImportSourceResponse,
-    VerifiedTaskImportSourceRead, VerifiedTaskImportSourceBinding,
+    VerifiedTaskImportSourceRead,
 )
 from app.modules.artifacts.models import (
     ArtifactContent, ArtifactOperationReceipt, ArtifactPutAttempt, ArtifactPutObservationReceipt,
@@ -30,7 +30,9 @@ from app.modules.artifacts.service import (
     ArtifactAdmissionError, ArtifactAdmissionConflictError, ArtifactAdmissionCapacityError,
     validate_artifact_replica_execution_namespace,
 )
-from app.modules.tasks.api.task_import import parse_task_import, TASK_IMPORT_MAXIMUM_BYTES
+from app.modules.tasks.api.task_import import (
+    parse_task_import, TASK_IMPORT_MAXIMUM_BYTES, TaskImportSourceCommitment, VerifiedTaskImportSourceBinding,
+)
 
 
 class _TaskImportInspector:
@@ -252,10 +254,13 @@ class ArtifactTaskImportSourceCommands:
                 ArtifactPutObservationReceipt.observed_byte_count == source.byte_count,
                 ArtifactPutObservationReceipt.expected_byte_count == source.byte_count,
             )
-            if expected is None:
+            if require_operational:
                 query = query.where(ArtifactPutObservationReceipt.execution_generation == attempt.execution_generation)
-            else:
+            elif expected is not None:
                 query = query.where(ArtifactPutObservationReceipt.id == str(expected.observation_receipt_id))
+            else:
+                query = query.order_by(ArtifactPutObservationReceipt.execution_generation.desc(),
+                                       ArtifactPutObservationReceipt.id.desc()).limit(1)
             acknowledged = await self._session.scalar(query)
             observation_id = acknowledged
         if acknowledged is None:
@@ -273,7 +278,7 @@ class ArtifactTaskImportSourceCommands:
             raise TaskImportSourceError("task_import_source_custody_invalid", 409)
         return binding, replica
 
-    async def source_commitment(self, project_id: UUID, source_id: UUID) -> TaskImportSourceAuthorityFacts:
+    async def source_commitment(self, project_id: UUID, source_id: UUID) -> TaskImportSourceCommitment:
         """Read the actual declaration for preparation; this supplies no authority."""
         if not self._session.in_transaction():
             raise RuntimeError("source commitment requires a caller transaction")
@@ -282,9 +287,14 @@ class ArtifactTaskImportSourceCommands:
         ).execution_options(populate_existing=True))
         if source is None:
             raise TaskImportSourceError("task_import_source_not_found", 404)
-        return self._facts(source)
+        return self._commitment(source)
 
-    async def authorize_commitment(self, facts: TaskImportSourceAuthorityFacts) -> UUID:
+    @staticmethod
+    def _commitment(source: ArtifactTaskImportSource) -> TaskImportSourceCommitment:
+        return TaskImportSourceCommitment(UUID(source.id), UUID(source.project_id), source.sha256,
+                                          source.byte_count, source.operation_identity)
+
+    async def authorize_commitment(self, facts: TaskImportSourceCommitment) -> UUID:
         """Fence the actual declaration and authorize a provider-free preparation read."""
         if not self._session.in_transaction():
             raise RuntimeError("source authorization requires a caller transaction")
@@ -294,10 +304,10 @@ class ArtifactTaskImportSourceCommands:
         ).with_for_update(read=True, key_share=True).execution_options(populate_existing=True))
         if source is None:
             raise TaskImportSourceError("task_import_source_not_found", 404)
-        current = self._facts(source)
+        current = self._commitment(source)
         if current != facts:
             raise TaskImportSourceError("task_import_source_custody_invalid", 409)
-        return await self._authorization.authorize(TaskImportSourceAction.READ, current)
+        return await self._authorization.authorize(TaskImportSourceAction.READ, self._facts(source))
 
     async def prepare_binding(
         self, project_id: UUID, source_id: UUID,
