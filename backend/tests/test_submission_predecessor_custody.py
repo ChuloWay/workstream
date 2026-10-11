@@ -222,82 +222,14 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
     human_review_required,
 ):
     provider_writes = _trace_provider_writes(monkeypatch)
-    loaded = []
-    original_load = PreparedSubmissionBundlePreparationCommand._load_predecessor
-
-    async def traced_load(self, task_context):
-        predecessor = await original_load(self, task_context)
-        loaded.append((task_context.predecessor, predecessor))
-        return predecessor
-
-    monkeypatch.setattr(
-        PreparedSubmissionBundlePreparationCommand,
-        "_load_predecessor",
-        traced_load,
-    )
-
     async with remediation_source(
         tmp_path, isolated_database_env, human_review_required=human_review_required,
     ) as h:
         await _assert_dispatch_valid(h)
-        provider_writes.clear()
-        before_route = await _snapshot(h)
-        with pytest.raises(
-            SubmissionBundlePreparationRejected,
-            match="submission_bundle_preparation_context_changed",
-        ):
-            await _prepare(h, replace(
-                _replacement_request(
-                    h, revision_archive(h.data), predecessor_id=h.created.submission_id,
-                    idempotency_key=new_record_id(),
-                ),
-                byte_source=_forbidden_bytes(),
-            ))
-        assert await _snapshot(h) == before_route
-        assert provider_writes == []
         source_id = await _fixture_revision_context(h)
         provider_writes.clear()
-        loaded.clear()
-
-        baseline = await _snapshot(h)
         predecessor_id = h.created.submission_id
-        for data, expected in (
-            (h.data, SubmissionChangeFailureCode.ARCHIVE_UNCHANGED),
-            (
-                _same_semantics_different_archive(h.data),
-                SubmissionChangeFailureCode.MANIFEST_UNCHANGED,
-            ),
-        ):
-            request = _replacement_request(
-                h,
-                data,
-                predecessor_id=predecessor_id,
-                idempotency_key=new_record_id(),
-            )
-            with pytest.raises(SubmissionChangeRejectedError) as failure:
-                await _prepare(h, request)
-            assert failure.value.code is expected
-            assert await _snapshot(h) == baseline
-            assert provider_writes == []
-
         changed_data = revision_archive(h.data)
-        with pytest.raises(SubmissionBundlePreparationCheckFailed) as blocked:
-            await _prepare(h, replace(
-                _replacement_request(
-                    h, changed_data, predecessor_id=predecessor_id,
-                    idempotency_key=new_record_id(),
-                ),
-                contributor_attestation="",
-            ))
-        assert blocked.value.facts.eligible is False
-        assert any(entry.checker_execution_status == "failed"
-                   for entry in blocked.value.facts.entries)
-        assert provider_writes == []
-        async with h.factory() as session:
-            assert await session.scalar(text("SELECT count(*) FROM public.submissions")) == 1
-            assert await session.scalar(text(
-                "SELECT status FROM public.workstream_tasks WHERE id=:id"
-            ), {"id": h.request.task_id}) == "needs_revision"
         idempotency_key = new_record_id()
         changed_request = _replacement_request(
             h,
@@ -380,23 +312,6 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
                 SELECT public.submission_dispatch_valid(d) FROM public.submission_dispatches d
                 WHERE d.submission_id=:id
             """), {"id": created.submission_id}) is True
-            dispatch_body = await session.scalar(text(
-                "SELECT to_jsonb(d) FROM public.submission_dispatches d WHERE submission_id=:id"
-            ), {"id": created.submission_id})
-            validate = text(
-                "SELECT public.submission_dispatch_valid("
-                "pg_catalog.jsonb_populate_record(NULL::public.submission_dispatches, "
-                "CAST(:body AS jsonb)))"
-            )
-            for field, substituted in (
-                ("checker_remediation_manifest_id", None),
-                ("checker_remediation_manifest_id", str(new_record_id())),
-                ("creation_decision_id", str(h.created.creation_decision_id)),
-                ("binding_decision_id", str(h.created.binding_decision_id)),
-            ):
-                assert await session.scalar(
-                    validate, {"body": json.dumps(dispatch_body | {field: substituted})}
-                ) is False, field
             immutable_after = (await session.execute(text("""
                 SELECT (SELECT to_jsonb(s) FROM public.submissions s WHERE s.id=:prior),
                   (SELECT to_jsonb(m) FROM public.task_post_submit_routing_manifests m WHERE m.id=:cause),
@@ -411,6 +326,168 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
                 correlation_id=new_record_id(),
             ).create(creation) == created
 
+
+async def test_replacement_without_routed_cause_denied_before_bytes(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    provider_writes = _trace_provider_writes(monkeypatch)
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        before_route = await _snapshot(h)
+        provider_writes.clear()
+        with pytest.raises(
+            SubmissionBundlePreparationRejected,
+            match="submission_bundle_preparation_context_changed",
+        ):
+            await _prepare(h, replace(
+                _replacement_request(
+                    h, revision_archive(h.data), predecessor_id=h.created.submission_id,
+                    idempotency_key=new_record_id(),
+                ),
+                byte_source=_forbidden_bytes(),
+            ))
+        assert await _snapshot(h) == before_route
+        assert provider_writes == []
+
+        source_id = await _fixture_revision_context(h)
+        admission_id = await _verified_admission(
+            h.factory, h.store, h.namespace, h.settings, h.actor_context,
+            _replacement_request(
+                h, revision_archive(h.data), predecessor_id=h.created.submission_id,
+                idempotency_key=new_record_id(),
+            ),
+        )
+        async with h.factory() as session:
+            admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+            assert admission.checker_remediation_manifest_id == str(source_id)
+
+
+async def test_unchanged_replacement_archive_or_manifest_denied(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    provider_writes = _trace_provider_writes(monkeypatch)
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        await _fixture_revision_context(h)
+        baseline = await _snapshot(h)
+        provider_writes.clear()
+        predecessor_id = h.created.submission_id
+        for data, expected in (
+            (h.data, SubmissionChangeFailureCode.ARCHIVE_UNCHANGED),
+            (
+                _same_semantics_different_archive(h.data),
+                SubmissionChangeFailureCode.MANIFEST_UNCHANGED,
+            ),
+        ):
+            request = _replacement_request(
+                h, data, predecessor_id=predecessor_id, idempotency_key=new_record_id(),
+            )
+            with pytest.raises(SubmissionChangeRejectedError) as failure:
+                await _prepare(h, request)
+            assert failure.value.code is expected
+            assert await _snapshot(h) == baseline
+            assert provider_writes == []
+
+        admission_id = await _verified_admission(
+            h.factory, h.store, h.namespace, h.settings, h.actor_context,
+            _replacement_request(
+                h, revision_archive(h.data), predecessor_id=predecessor_id,
+                idempotency_key=new_record_id(),
+            ),
+        )
+        async with h.factory() as session:
+            admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+            assert admission.status == "ready"
+
+
+async def test_blocked_replacement_precheck_preserves_revision_state(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    provider_writes = _trace_provider_writes(monkeypatch)
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        await _fixture_revision_context(h)
+        provider_writes.clear()
+        changed_data = revision_archive(h.data)
+        with pytest.raises(SubmissionBundlePreparationCheckFailed) as blocked:
+            await _prepare(h, replace(
+                _replacement_request(
+                    h, changed_data, predecessor_id=h.created.submission_id,
+                    idempotency_key=new_record_id(),
+                ),
+                contributor_attestation="",
+            ))
+        assert blocked.value.facts.eligible is False
+        assert any(entry.checker_execution_status == "failed"
+                   for entry in blocked.value.facts.entries)
+        assert provider_writes == []
+        async with h.factory() as session:
+            assert await session.scalar(text("SELECT count(*) FROM public.submissions")) == 1
+            assert await session.scalar(text(
+                "SELECT status FROM public.workstream_tasks WHERE id=:id"
+            ), {"id": h.request.task_id}) == "needs_revision"
+
+        admission_id = await _verified_admission(
+            h.factory, h.store, h.namespace, h.settings, h.actor_context,
+            _replacement_request(
+                h, changed_data, predecessor_id=h.created.submission_id,
+                idempotency_key=new_record_id(),
+            ),
+        )
+        async with h.factory() as session:
+            admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+            assert admission.status == "ready"
+
+
+async def test_replacement_loads_exact_consumed_predecessor(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    loaded = []
+    original_load = PreparedSubmissionBundlePreparationCommand._load_predecessor
+
+    async def traced_load(self, task_context):
+        predecessor = await original_load(self, task_context)
+        loaded.append((task_context.predecessor, predecessor))
+        return predecessor
+
+    monkeypatch.setattr(
+        PreparedSubmissionBundlePreparationCommand, "_load_predecessor", traced_load,
+    )
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        predecessor_id = h.created.submission_id
+        await _fixture_revision_context(h)
+        loaded.clear()
+        for data in (h.data, _same_semantics_different_archive(h.data)):
+            with pytest.raises(SubmissionChangeRejectedError):
+                await _prepare(h, _replacement_request(
+                    h, data, predecessor_id=predecessor_id,
+                    idempotency_key=new_record_id(),
+                ))
+        changed_data = revision_archive(h.data)
+        with pytest.raises(SubmissionBundlePreparationCheckFailed):
+            await _prepare(h, replace(
+                _replacement_request(
+                    h, changed_data, predecessor_id=predecessor_id,
+                    idempotency_key=new_record_id(),
+                ),
+                contributor_attestation="",
+            ))
+        idempotency_key = new_record_id()
+        admission_id = await _verified_admission(
+            h.factory, h.store, h.namespace, h.settings, h.actor_context,
+            _replacement_request(
+                h, changed_data, predecessor_id=predecessor_id,
+                idempotency_key=idempotency_key,
+            ),
+        )
+        replay = await _prepare(h, _replacement_request(
+            h, changed_data, predecessor_id=predecessor_id,
+            idempotency_key=idempotency_key,
+        ))
+        assert replay.admission_id == admission_id
+        async with h.factory() as session:
+            predecessor_admission = await session.get(
+                SubmissionBundleAdmission, str(h.creation_request.admission_id)
+            )
+            admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+            assert admission.status == "ready"
         assert len(loaded) == 5
         for task_predecessor, artifact_predecessor in loaded:
             assert task_predecessor.submission_id == predecessor_id
@@ -422,6 +499,53 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
                 artifact_predecessor.semantic_manifest_sha256
                 == predecessor_admission.semantic_manifest_sha256
             )
+
+
+async def test_replacement_dispatch_sql_rejects_cause_and_receipt_substitution(
+    tmp_path, isolated_database_env,
+):
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        source_id = await _fixture_revision_context(h)
+        request = _replacement_request(
+            h, revision_archive(h.data), predecessor_id=h.created.submission_id,
+            idempotency_key=new_record_id(),
+        )
+        admission_id = await _verified_admission(
+            h.factory, h.store, h.namespace, h.settings, h.actor_context, request,
+        )
+        async with h.factory() as session:
+            created = await compose_hidden_submission_creation_command(
+                session, h.actor_context, request_id=new_record_id(),
+                correlation_id=new_record_id(),
+            ).create(SubmissionCreationRequest(
+                task_id=h.request.task_id,
+                assignment_id=h.request.assignment_id,
+                contributor_id=h.actor_context.actor_profile_id,
+                predecessor_submission_id=h.created.submission_id,
+                admission_id=admission_id,
+                summary=request.summary,
+                contributor_attestation=request.contributor_attestation,
+            ))
+        async with h.factory() as session:
+            dispatch_body = await session.scalar(text(
+                "SELECT to_jsonb(d) FROM public.submission_dispatches d WHERE submission_id=:id"
+            ), {"id": created.submission_id})
+            assert dispatch_body["checker_remediation_manifest_id"] == str(source_id)
+            validate = text(
+                "SELECT public.submission_dispatch_valid("
+                "pg_catalog.jsonb_populate_record(NULL::public.submission_dispatches, "
+                "CAST(:body AS jsonb)))"
+            )
+            assert await session.scalar(validate, {"body": json.dumps(dispatch_body)}) is True
+            for field, substituted in (
+                ("checker_remediation_manifest_id", None),
+                ("checker_remediation_manifest_id", str(new_record_id())),
+                ("creation_decision_id", str(h.created.creation_decision_id)),
+                ("binding_decision_id", str(h.created.binding_decision_id)),
+            ):
+                assert await session.scalar(
+                    validate, {"body": json.dumps(dispatch_body | {field: substituted})}
+                ) is False, field
 
 
 async def test_foreign_predecessor_stops_at_task_context_before_art_effects(
