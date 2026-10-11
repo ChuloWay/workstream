@@ -48,8 +48,9 @@ retain bounded findings. Preserve success behavior and default human review.
 - Focused routing/AUTH contract, PostgreSQL, delivery and migration tests under
   existing owner suites; existing ART replacement integration tests may be added
   in parallel without implying a completed remediation replacement workflow.
-- Current roadmap, ARCH overview/index/plan/chunk map, TASK/CHECKERS and AUTH
-  canonical documentation, and this record for the affected delivered boundary.
+- Current roadmap, affected ARCH/AUTH/REV/CON/POL/ART overviews, engineering
+  index, ARCH plan/chunk map, TASK/CHECKERS and AUTH canonical documentation,
+  and this record for the affected delivered boundary.
 
 ### Not allowed
 
