@@ -20,6 +20,7 @@ from app.adapters.artifacts import get_submission_bundle_preparation_command
 from app.adapters.tasks import task_post_submit_outcome
 from app.adapters.artifacts.local import LocalStorageAdapter
 from app.core.identifiers import new_record_id
+from app.core.hashing import canonical_json_hash
 from app.modules.actors.api.service_identities import ServiceIdentity
 from app.modules.artifacts.api import (
     SubmissionBundlePreparationCheckFailed,
@@ -603,6 +604,111 @@ async def test_sql_evidence_insert_rejects_superseded_checker_cause(
                     "donor_id": donor_id,
                 })
         assert await _snapshot(h) == before
+
+
+async def test_sql_attempt_reconstruction_rejects_foreign_routed_cause(
+    tmp_path, isolated_database_env,
+):
+    async with remediation_source(tmp_path / "local", isolated_database_env) as local:
+        async with remediation_source(
+            tmp_path / "foreign", isolated_database_env, provision_services=False,
+            storage_settings=local.settings,
+        ) as foreign:
+            local_source = await _fixture_revision_context(local)
+            foreign_source = await _fixture_revision_context(foreign)
+            admission_id = await _verified_admission(
+                local.factory, local.store, local.namespace, local.settings,
+                local.actor_context,
+                _replacement_request(
+                    local, revision_archive(local.data),
+                    predecessor_id=local.created.submission_id,
+                    idempotency_key=new_record_id(),
+                ),
+            )
+            async with local.factory() as session:
+                admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+                assert admission.status == "ready"
+                assert admission.checker_remediation_manifest_id == str(local_source)
+                donor_id = admission.pre_submit_evidence_set_id
+                donor = (await session.execute(text("""
+                    SELECT e.attempt_id, a.request_json::jsonb AS request_body
+                    FROM public.pre_submit_evidence_sets e
+                    JOIN public.pre_submit_execution_attempts a ON a.id=e.attempt_id
+                    WHERE e.id=:id
+                """), {"id": donor_id})).mappings().one()
+                result_ids = list((await session.execute(text(
+                    "SELECT id FROM public.pre_submit_evidence_results "
+                    "WHERE evidence_set_id=:id ORDER BY result_order"
+                ), {"id": donor_id})).scalars())
+            assert result_ids
+            request_body = dict(donor["request_body"])
+            assert request_body["checker_remediation_manifest_id"] == str(local_source)
+            request_body["checker_remediation_manifest_id"] = str(foreign_source)
+            request_digest = canonical_json_hash(request_body)
+            attempt_id, evidence_id = new_record_id(), new_record_id()
+            operation = canonical_json_hash({"test_clone_evidence_id": str(evidence_id)})
+            before = await _snapshot(local)
+            with pytest.raises(IntegrityError, match="pre-submit evidence resource mismatch"):
+                async with local.factory.begin() as session:
+                    await session.execute(text("""
+                        INSERT INTO public.pre_submit_execution_attempts
+                        SELECT (pg_catalog.jsonb_populate_record(
+                          NULL::public.pre_submit_execution_attempts,
+                          pg_catalog.to_jsonb(a) || pg_catalog.jsonb_build_object(
+                            'id', CAST(:attempt_id AS text),
+                            'idempotency_key', CAST(:idempotency_key AS text),
+                            'claim_nonce', CAST(:claim_nonce AS text),
+                            'request_json', CAST(:request_body AS jsonb),
+                            'request_digest', CAST(:request_digest AS text),
+                            'status', 'reserved', 'evidence_set_id', NULL,
+                            'created_at', transaction_timestamp()
+                          ))).*
+                        FROM public.pre_submit_execution_attempts a WHERE a.id=:donor_attempt
+                    """), {
+                        "attempt_id": str(attempt_id),
+                        "idempotency_key": str(new_record_id()),
+                        "claim_nonce": str(new_record_id()),
+                        "request_body": json.dumps(request_body),
+                        "request_digest": request_digest,
+                        "donor_attempt": donor["attempt_id"],
+                    })
+                    await session.execute(text("""
+                        INSERT INTO public.pre_submit_evidence_sets
+                        SELECT (pg_catalog.jsonb_populate_record(
+                          NULL::public.pre_submit_evidence_sets,
+                          pg_catalog.to_jsonb(e) || pg_catalog.jsonb_build_object(
+                            'id', CAST(:evidence_id AS text),
+                            'operation_identity', CAST(:operation AS text),
+                            'attempt_id', CAST(:attempt_id AS text),
+                            'attempt_request_digest', CAST(:request_digest AS text),
+                            'created_at', transaction_timestamp()
+                          ))).*
+                        FROM public.pre_submit_evidence_sets e WHERE e.id=:donor_id
+                    """), {
+                        "evidence_id": str(evidence_id), "operation": operation,
+                        "attempt_id": str(attempt_id), "request_digest": request_digest,
+                        "donor_id": donor_id,
+                    })
+                    for result_id in result_ids:
+                        await session.execute(text("""
+                            INSERT INTO public.pre_submit_evidence_results
+                            SELECT (pg_catalog.jsonb_populate_record(
+                              NULL::public.pre_submit_evidence_results,
+                              pg_catalog.to_jsonb(r) || pg_catalog.jsonb_build_object(
+                                'id', CAST(:new_id AS text),
+                                'evidence_set_id', CAST(:evidence_id AS text),
+                                'created_at', transaction_timestamp()
+                              ))).*
+                            FROM public.pre_submit_evidence_results r WHERE r.id=:donor_id
+                        """), {
+                            "new_id": str(new_record_id()),
+                            "evidence_id": str(evidence_id), "donor_id": result_id,
+                        })
+                    await session.execute(text("""
+                        UPDATE public.pre_submit_execution_attempts
+                        SET status='completed',evidence_set_id=:evidence_id WHERE id=:attempt_id
+                    """), {"evidence_id": evidence_id, "attempt_id": attempt_id})
+            assert await _snapshot(local) == before
 
 
 @pytest.mark.parametrize("advance_fence", [False, True])
