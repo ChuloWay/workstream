@@ -23,6 +23,12 @@ Their current root transaction prevents composition across a complete batch.
   selection only. Extend exact existing SCREEN/RELEASE participants in
   `authorized_commands.py` through prepare/authorize/stage phases. Coordinate
   these regions with the atomic-import owner before edits.
+- Explicit atomic-owner handoff permits the single native membership owner in
+  `task_import_membership.py`, its small `api/task_import_membership.py` error/row
+  facts, exact original-response wrapper replacement, and batch error import
+  updates in TASK router/import tests. A tiny `_locked_task` extraction shares
+  its unchanged AUTH prepare/consume/finally-close block through `_authorize_facts`.
+  CREATE methods/dataclass and source ancestry preparation remain untouched.
 - New route/dependency modules and append-only composition of the typed batch
   transition owner. Shared TASK `router.py`, `schemas.py`, model/receipt and AUTH
   regions require an explicit owner handoff before edits. Existing per-Task
@@ -40,6 +46,9 @@ Their current root transaction prevents composition across a complete batch.
   and `test_task_batch_sources_http.py`; the existing HTTP fixture receives one
   PUT handler delegating to its unchanged exact-body POST capture. No retained
   GET/PATCH/POST expectations or test guards are removed.
+- Native participant lifetime/composition proof is owned in
+  `backend/tests/authorization/task_authority/test_management_participants.py`;
+  it extends the existing management proof using actual PostgreSQL and AUTH.
 - Current TASK/AUTH/ART and CLI contracts, README, affected roadmap sections,
   this record, and exact coordinated owner/lane/selected-contract metadata.
 - Required schema/receipt changes only through the sole migration author after
@@ -98,6 +107,12 @@ Direct-SQL guards must enforce exact closed action, complete membership, canonic
 receipt/action/Task/actor/project equality, audit equality, original row order,
 success response equality and immutable committed rows. Pending reservations
 remain transaction-local, never a separately committed partial lifecycle.
+Committed aggregate/member UPDATE and DELETE and statement-level TRUNCATE must
+be refused. Deferred commit closure requires exactly the complete original native
+member set/count; no subset, duplicate, substituted Task, action, actor, project,
+decision, receipt or response is admitted. Reservation actor/Task/batch FKs must
+defer premature AUTH/ART locks. The atomic owner independently reviewed this
+namespace/closure design and found no shared-region blocker.
 
 No migration ordinal is allocated here. The sole author receives the final exact
 models and constraints only after this custody design and shared regions are
@@ -159,8 +174,9 @@ pending the sole-author migrations and actual isolated PostgreSQL/MinIO drills.
 The offline converter is implemented with focused Go boundary checks and built
 CLI/server-parser proof for quoting/Unicode, exact JSON commitment, no-clobber,
 invalid CSV zero-output effects and 500/501 rows. This proof needs no token/API
-configuration and makes no database or source-storage claim. Shared backend
-transition code is not yet edited; aggregate custody is awaiting owner review.
+configuration and makes no database or source-storage claim. Canonical
+SCREEN/RELEASE extraction and the single native membership owner are implemented;
+aggregate models/public composition remain pending.
 Source CLI uses separate existing declaration/upload/status routes and sends exact
 original JSON bytes. Go tests/vet/tidy-diff and built CLI CSV/source boundary plus
 retained HTTP/profile/project/guide declaration checks pass. The PUT transport
@@ -175,6 +191,15 @@ import/source ancestry and `_prepare_sources` remain with that owner. The shared
 validator extraction must preserve label/manifest, ordered native Member/CREATE
 receipt/response validation and advanced-state-independent original facts. Its
 commit will be shared back with the atomic owner to avoid parallel validators.
+Protected-base module-boundary validation and canonical import parser checks
+pass. A native preflight proves retained single-Task SCREEN/RELEASE replay/guide
+lock parity, successor-guide/currentness behavior, foreign-root participant
+refusal, and two-Task late-failure rollback including actual successful AUTH
+decisions. Its database/role cleanup is complete. The initial run used the dirty
+extraction atop the CLI checkpoint, so exact frozen-head replay is still required.
+This uses existing schema through source0031 and canonical seeded project
+prerequisites; it proves Task/AUTH transactions, not new batch DDL, provider bytes,
+live setup inference or a complete 200-member public bulk journey.
 
 ## Reconciliation
 
