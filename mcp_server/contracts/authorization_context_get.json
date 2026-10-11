@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "32f65bd5c5312523b92c713b8fd8bbd189d8b409044bc4f9d5404e85acb47df9",
+  "canonical_sha256": "d49f96eb6f6b2731b8b18ca023676402dfe7b0236e1615586839c3326b109316",
   "components": {
     "schemas": {
       "ActionId": {
@@ -128,6 +128,9 @@
           "artifact.audit.read",
           "operations.artifact_storage_admission.read",
           "artifact.guide_source.ingest",
+          "artifact.task_import_source.declare",
+          "artifact.task_import_source.upload",
+          "artifact.task_import_source.read",
           "artifact.guide_source.read",
           "artifact.submission_bundle.prepare",
           "artifact.submission.binding.create",

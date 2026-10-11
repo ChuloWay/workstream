@@ -13,10 +13,14 @@ submitter contribution, applicable awards and audit/outbox evidence. Database
 closure rejects incomplete outcomes; fresh-authorized replay returns the stored
 complete tuple. No Review or reviewer contribution is fabricated.
 
-B8 supplies hidden completion delivery with commit-before-ACK. Next: 04F remediation, 04E3 production
-composition, public intake and the first-layer drill. False-guide activation,
-live human review/revision and payment delivery remain unavailable. Internally
-valid false-policy fixtures establish the hidden operation, not public readiness.
+B8 supplies hidden completion delivery with commit-before-ACK.
+[ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
+operation so an exact current contributor-correctable result reaches
+`needs_revision` under either policy mode, without a Review, FinalAcceptance or
+CON effect. Exact-cause replacement intake, setup-fault/Operator recovery, 04E3
+production composition, public intake and the first-layer drill remain.
+False-guide activation, live human review/revision and payment delivery remain
+unavailable.
 
 Current upstream dependency: [ARCH-04E canonical `allow_review`](../WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md).
 This is the pre-review admission fact, not REV activation or implementation
@@ -44,9 +48,9 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: prove 04F
-  remediation, 04E3 live composition and false-guide readiness, public intake
-  and the first-layer drill. True handoff remains independent of REV/CON;
+- Next usable boundary: complete 04F exact-cause replacement intake and recovery,
+  04E3 live composition and false-guide readiness, public intake and the
+  first-layer drill. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: `docs/spec_review_lifecycle.md`,
   `docs/engineering/review_authorization_action_custody.md`, code, migrations,
@@ -102,8 +106,9 @@ acceptance signal.
 
 The [versioned policy setting](../../changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is available for draft configuration. ARCH-04E2-B supplies mandatory routing
-authority and atomic CON participation; B8 supplies hidden completion delivery. Remediation and
-production readiness still precede enabling false. The automated branch must not depend on
+authority and atomic CON participation; B8 supplies hidden completion delivery,
+and 04F2 supplies the zero-REV/CON remediation handoff. Exact-cause replacement
+intake, recovery and production readiness still precede enabling false. The automated branch must not depend on
 live human queues, ReviewLeases or decision endpoints. Human lifecycle work
 remains required for v0.1, but need not delay the first automated end-to-end
 proof. No adjudication setting or behavior is included.

@@ -58,8 +58,12 @@ def test_each_selector_is_bound(field):
     selected = selection()
     value = getattr(selected, field)
     if field == "routing_recommendation":
+        alternate = TaskRoutingSelection(
+            **(selected.model_dump() | {field: "needs_revision"})
+        )
+        assert task_routing_request_digest(alternate) != task_routing_request_digest(selected)
         with pytest.raises(ValidationError):
-            TaskRoutingSelection(**(selected.model_dump() | {field: "needs_revision"}))
+            TaskRoutingSelection(**(selected.model_dump() | {field: "task_setup_blocked"}))
         return
     changed = (value + 1 if isinstance(value, int) else
                "sha256:" + "c" * 64 if isinstance(value, str) else new_record_id())

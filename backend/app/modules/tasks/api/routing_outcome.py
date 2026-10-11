@@ -1,5 +1,6 @@
 """Detached immutable routing decision and economic identities; no authority."""
 
+from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, model_validator
 
@@ -34,6 +35,7 @@ class TaskRoutingOutcome(BaseModel):
     routing_manifest_id: UUID
     authorization_decision_id: UUID
     outcome_event_id: UUID
+    routing_recommendation: Literal["allow_review", "needs_revision"]
     final_acceptance_id: UUID | None
     economic: RoutingEconomicFacts | None
     replayed: bool
@@ -45,4 +47,6 @@ class TaskRoutingOutcome(BaseModel):
             raise ValueError("routing outcome economics are inconsistent")
         if self.economic is not None and self.economic.final_acceptance_id != self.final_acceptance_id:
             raise ValueError("routing outcome acceptance identity differs")
+        if self.routing_recommendation == "needs_revision" and self.economic is not None:
+            raise ValueError("remediation outcome cannot contain acceptance economics")
         return self

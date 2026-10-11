@@ -501,13 +501,25 @@ def test_openapi_documents_request_error_and_response_context() -> None:
         assert route in protected_inventory
         method, path = route.split(" ", 1)
         assert schema["paths"][path][method.lower()]["x-workstream-action-id"] == action
-    assert len(route_inventory) == 96
+    source_prefix = "/api/v1/projects/{project_id}/task-import-sources"
+    source_actions = {
+        f"POST {source_prefix}": "artifact.task_import_source.declare",
+        f"PUT {source_prefix}/{{source_id}}/content": "artifact.task_import_source.upload",
+        f"GET {source_prefix}/{{source_id}}": "artifact.task_import_source.read",
+        f"GET {source_prefix}/{{source_id}}/content": "artifact.task_import_source.read",
+    }
+    assert source_actions.keys() <= set(protected_inventory)
+    for route, action in source_actions.items():
+        method, path = route.split(" ", 1)
+        assert schema["paths"][path][method.lower()]["x-workstream-action-id"] == action
+    new_manager_reads |= source_actions.keys()
+    assert len(route_inventory) == 100
     retained_routes = sorted(set(route_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys())
     retained_protected = sorted(set(protected_inventory) - proposal_routes - post_policy_routes - queue_routes - new_manager_reads - guide_read - contribution_reads.keys())
     assert sha256("\n".join(retained_routes).encode()).hexdigest() == (
         "793237012e9256d308dd5d1e9c1a65e41381cf6306888fdd175dc9794b118444"
     )
-    assert len(protected_inventory) == 94
+    assert len(protected_inventory) == 98
     assert sha256("\n".join(retained_protected).encode()).hexdigest() == (
         "0953ae6392b81a4a7ba7c9f6b7fccc17768f34cd1f958572fdc553cd204ec82e"
     )
@@ -536,6 +548,7 @@ def test_openapi_documents_request_error_and_response_context() -> None:
     }
     assert action_declarations == {
         **contribution_reads,
+        **source_actions,
         "GET /api/v1/tasks/{task_id}/submissions": "task.submission.list",
         "GET /api/v1/submissions/{submission_id}": "submission.read",
         "GET /api/v1/submissions/{submission_id}/checker-runs": "submission.checker_run.list",

@@ -550,6 +550,7 @@ is not a permission alias.
 | `WS-AUTH-001-ART-02D-OPERATOR` | `artifact.binding.read`, `artifact.replica.read`, `artifact.receipt.read`, `artifact.verification_job.read`, `artifact.verification_job.retry`, `artifact.recovery_attempt.read`, `artifact.audit.read`, `operations.artifact_storage_admission.read` |
 | `WS-XINT-002-04A` | Active: `artifact.guide_source.ingest` |
 | `WS-XINT-002-04B` | Active: `artifact.guide_source.read` |
+| `PILOT-02A` | Active: `artifact.task_import_source.declare`, `artifact.task_import_source.upload`, `artifact.task_import_source.read` |
 | `WS-XINT-002-05A` | Active `artifact.submission_bundle.prepare`; registry custody retained while replacement implementation chunk WS-ARCH-001-02G supplies the executable PREP boundary |
 | `WS-XINT-002-06A` | `artifact.pre_submit.checker_input.materialize` |
 | `WS-AUTH-001-ART-05` | `artifact.submission.binding.create`; activated by replacement implementation chunk WS-ARCH-001-02H for only the fixed artifact-binding service |
@@ -706,11 +707,13 @@ Routers cannot invent identifiers or evaluate grant unions.
 `outbox.dispatch` and `task.assignment.authority_reconcile` are active for their
 separate fixed services and included in current catalogue counts. The dispatcher
 authorizes shared delivery mechanics; the reconciler authorizes the hidden
-assignment effect. Checker execute/finalize authority is implemented by ARCH-04D2. AUTH-19A
-registers task.post_submit.route and its fixed identity as planned and unavailable;
-registration is included in the catalogue counts but grants no authority. The named implementation boundaries must register
-typed parity, prove hidden behavior and activate only their exact manifests;
-a planning document does not grant a service permission.
+assignment effect. Checker execute/finalize authority is implemented by
+ARCH-04D2. AUTH-19A registered `task.post_submit.route` and its fixed identity;
+ARCH-04E2-B activated the exact success consequences and ARCH-04F2 extends the
+same action to the closed checker-remediation consequence. This is hidden feature
+authority, not production handler registration. Named implementation boundaries
+must register typed parity, prove hidden behavior and activate only their exact
+manifests; a planning document does not grant a service permission.
 
 | ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
 |---|---|---|---|
@@ -718,7 +721,7 @@ a planning document does not grant a service permission.
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B9 hidden handler/fence and ARCH-03C1 real feature authority/decision receipts complete; ARCH-03C2 atomic producer wiring and registration |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | Implemented by ARCH-04C/04D2; no dispatcher registration |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest, retained material and original execute receipt; fresh post-I/O authority and atomic evidence; current outputs are empty | Implemented by ARCH-04C/04D2; no dispatcher registration |
-| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state; true permits only the TASK manifest transition to `review_pending`, false/pass binds exact accepted TASK effects for the shared FinalAcceptance consequence; never a human review decision or generic CON write | 04E2-B delivers canonical fixed-router PREP consumption and actual receipt custody with the complete hidden true/false outcome. SQL rejects orphan allows and incomplete effects. B8 supplies hidden completion delivery; 04F remediation precedes 04E3 production registration. |
+| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state. `allow_review` with true permits only TASK `review_pending`; `allow_review` with false binds exact accepted TASK effects for shared FinalAcceptance. `needs_revision` under either mode permits only TASK remediation with the assignment active and no REV/CON effect. Never a human review decision or generic CON write | 04E2-B delivers canonical fixed-router PREP consumption and actual receipt custody for complete hidden success outcomes; ARCH-04F2 extends that same operation and receipt to exact checker remediation. SQL rejects orphan or incomplete outcomes and failure-to-acceptance substitution. B8 supplies hidden completion delivery; replacement intake/recovery and 04E3 production registration remain. |
 
 Each action maps to the identically named permission in this table and only
 its singleton fixed-service row. Humans, dispatchers and unrelated services
@@ -735,7 +738,23 @@ Separate management/operational/audit projections preserve their respective
 permissions rather than switching one action's mapping based on token roles.
 ARCH-03C3 activates `project.task.create`, `project.task.screen` and
 `project.task.release` under existing `project.task.manage`; no new permission or
-broader Project Manager permission set is introduced. ARCH-03C4 activates:
+broader Project Manager permission set is introduced.
+PILOT-02A adds only `artifact.task_import_source.declare`,
+`artifact.task_import_source.upload` and `artifact.task_import_source.read` under
+that same permission. Each requires an active human covering Project Manager
+grant and exact project/source facts; another role sharing the permission is
+ineligible. The frozen resource commitment includes source UUID, project,
+current actor/link, original declared SHA-256/count/media, operation identity
+and declaration idempotency key. Prepared consumption rechecks those exact
+facts and live authority at the protected transaction boundary. Declaration
+retains its exact ALLOW decision; admission and successful read decisions commit
+only with their protected operation. Preflight upload ALLOW is rolled back
+before scratch work; final admission authorizes again. Same-key declaration and
+upload replay require current authority. Selector denial is concealed as 404;
+failed transactions retain canonical denial evidence without partial source
+admission. These actions grant no task creation, screen/release, Submitter access
+or fixed-service membership.
+ARCH-03C4 activates:
 `task.queue.read` under `task.queue.read` for exact-project Submitters;
 `project.task.queue.read` under `project.task.manage` for covering Project Managers;
 and `operations.task.queue.read` under `operations.status.read` for system Operators.
@@ -1676,7 +1695,8 @@ Initial decisions have no inherited blockers. Accept requires zero new or inheri
 open blockers; needs_revision requires at least one, with at most 100 combined.
 
 The TASK-owned routing digest commits every revalidated manifest fact except
-PostgreSQL-owned created_at. Private AUTH projects those public facts into the
+PostgreSQL-owned created_at, including the closed routing recommendation.
+Private AUTH projects those public facts into the
 routing source commitment, adding a distinct route_operation_id and
 route_request_digest. These never reuse checker evaluation authority. Both locked
 ReviewPolicy branches remain representable; construction does not enable either.
@@ -1685,6 +1705,10 @@ closed branch consequence. True contains only the TASK
 `evaluation_pending -> review_pending` transition and no REV queue fields. False
 contains the exact `TaskAcceptedEffectsRequest`, including its allocated
 FinalAcceptance identity, for later shared acceptance without a fabricated Review.
+ARCH-04F2 adds a third closed consequence selected only by an exact current
+`needs_revision` recommendation: `checker_remediation` binds
+`evaluation_pending -> needs_revision` for either ReviewPolicy mode, with no
+accepted-effects request or lifecycle generation.
 
 Human receipt request/correlation identify its operation; idempotency_reference
 identifies its ReviewDecisionRequest, separately from the committed caller key.
@@ -1707,8 +1731,9 @@ digest and checks the actual AUTH event. FinalAcceptance requires the same
 routing decision. Submission creation/binding, input materialization and checker
 execute/finalize receipts remain distinct and are read from their canonical owners.
 
-An orphan allow or incomplete outcome cannot commit. Exact replay rechecks live
-authority and the complete original tuple without issuing another allow or
-repairing effects. B8 supplies hidden completion delivery; production registration
-remains unavailable. Human acceptance-source authority is still future work; detached
-human receipts grant nothing.
+An orphan allow or incomplete outcome cannot commit. A remediation source cannot
+authorize acceptance, FinalAcceptance, contribution or award effects. Exact
+replay rechecks live authority and the complete original tuple without issuing
+another allow or repairing effects. B8 supplies hidden completion delivery;
+production registration remains unavailable. Human acceptance-source authority
+is still future work; detached human receipts grant nothing.

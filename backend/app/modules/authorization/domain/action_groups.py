@@ -40,6 +40,9 @@ CONTEXT_DIGEST_ACTIONS = frozenset(
     {
         ActionId.CONTRIBUTION_READ_SELF, ActionId.CONTRIBUTION_READ_PROJECT,
         ActionId.ARTIFACT_GUIDE_SOURCE_INGEST,
+        ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE,
+        ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
+        ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ,
         ActionId.TASK_QUEUE_READ, ActionId.PROJECT_TASK_QUEUE_READ, ActionId.OPERATIONS_TASK_QUEUE_READ,
         ActionId.PROJECT_CREATE,
         *GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
@@ -56,6 +59,7 @@ def supports_prepared_denial(action_id: ActionId, resource_context: object) -> b
     from app.modules.authorization.domain.task_authority import TASK_ACTIONS, TaskAuthorityResourceContext
     from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
     from app.modules.authorization.runtime import (
+        TaskImportSourceResourceContext,
         ProjectGuideMutationPrepareDenialResourceContext, ProjectGuideSufficiencyMutationResourceContext,
         ProjectPolicyMutationPrepareDenialResourceContext, ProjectSubmissionArtifactPolicyMutationResourceContext,
     )
@@ -67,6 +71,11 @@ def supports_prepared_denial(action_id: ActionId, resource_context: object) -> b
         )
         or
         (action_id in TASK_ACTIONS and isinstance(resource_context, TaskAuthorityResourceContext))
+        or (
+            action_id in {ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE, ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
+                          ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ}
+            and type(resource_context) is TaskImportSourceResourceContext
+        )
         or
         (
             action_id is ActionId.PROJECT_CREATE
