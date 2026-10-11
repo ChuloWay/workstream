@@ -40,6 +40,8 @@ async def _ready_replacement(h, data: bytes):
     )
     prepared = await _prepare(h, request)
     assert prepared.replayed is False
+    assert prepared.put_attempt_id is not None
+    assert prepared.admission_id is None
     replay = _replacement_request(
         h,
         data,
@@ -54,7 +56,6 @@ async def _ready_replacement(h, data: bytes):
         h.actor_context,
         replay,
     )
-    assert admission_id == prepared.admission_id
     return request, admission_id
 
 
