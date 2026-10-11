@@ -398,7 +398,7 @@ begin
      and e.action_id='project.task.create' and e.permission_id='project.task.manage'
      and e.actor_id=b.actor_profile_id::text and e.project_id=b.project_id)
    or not exists(select 1 from public.audit_events e where e.event_type='TaskCreated'
-     and e.entity_id=m.task_id::text and e.event_payload::jsonb#>>'{references,authorization_decision_id}'=m.authorization_decision_id::text)
+     and e.entity_id=m.task_id and e.event_payload::jsonb#>>'{references,authorization_decision_id}'=m.authorization_decision_id::text)
   )) then raise exception 'task import batch member custody invalid' using errcode='23514'; end if;
  select pg_catalog.jsonb_build_object(
   'schema_version',b.schema_version,'metadata',pg_catalog.jsonb_build_object('label',b.metadata_label),
