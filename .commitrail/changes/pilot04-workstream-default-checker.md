@@ -25,6 +25,9 @@ genuine prepared-ART callback, but its durable result and admission caller are
 not selected yet. The admission binder now carries an unchanged byte/manifest
 comparison into the default checker with exact predecessor and current locked
 rules instead of treating that default behavior as an early ART rejection.
+The selected result contract now has one canonical digest over the default,
+ordered external results and observed isolation, plus a database-timed lease
+and terminal latency body suitable for the durable owner.
 Production still uses the older pre/post catalogues.
 
 ## Bounded change
@@ -175,6 +178,7 @@ intermediate-wait regression.
 | PRE transaction boundary | `pytest -q` for invalid claim controls and `test_checker_processor_starts_only_after_authority_transaction_commits`, plus Ruff on the four affected files | 5 passed; processor construction is refused while the authority root is active and reached only after it commits | Durable lease/generation schema and selected external sequence remain pending |
 | Selected PRE callback | `pytest -q backend/tests/checkers/external/test_selected_pre_submit.py`; Ruff and `git diff --check` on the affected files | 4 passed; exact default runs first, a real high-confidence secret prevents every external invocation, locked external pass/fail is retained, and the genuine request-bound ART grant completes cleanup with one bounded owned mount | Durable persistence, admission composition, crash recovery and native service journey remain pending |
 | Selected admission binding | `pytest -q backend/tests/test_submission_change_gate.py backend/tests/checkers/external/test_selected_pre_submit.py`; Ruff and `git diff --check` on the affected files | 11 passed; existing callers retain their exact archive/manifest rejection while the selected binder carries unchanged work plus exact predecessor/current rules into the default checker | The binder is not yet selected by the durable admission caller |
+| Selected durable result contract | `pytest -q backend/tests/checkers/external/test_selected_pre_submit.py`; Ruff and `git diff --check` on the affected files | 5 passed; canonical result/terminal digests bind the default, ordered external results, isolation, generation lease, outcome and measured queue/execution latency | PostgreSQL reservation, lease and finalize storage remain pending |
 | Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | In progress | Persistence delta and migration ordinal await actual linear predecessor |
 | End-to-end replacement | Real PostgreSQL/MinIO/Rust public and worker journey | Not run | Implementation incomplete |
 

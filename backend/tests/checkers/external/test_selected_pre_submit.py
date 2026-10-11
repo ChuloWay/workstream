@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -16,7 +17,10 @@ from app.interfaces.external_checker_execution import (
     ExternalCheckerIsolationReceipt,
     ExternalCheckerMaterialGrant,
 )
-from app.modules.checkers.api.default_checker import WorkstreamDefaultCheckerInput
+from app.modules.checkers.api.default_checker import (
+    WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+    WorkstreamDefaultCheckerInput,
+)
 from app.modules.checkers.api.external import (
     PRE_SUBMIT_INPUT_SCHEMA_ID,
     ExternalCheckerRegistryEntry,
@@ -34,6 +38,10 @@ from app.modules.checkers.api.external_policy import (
     LockedWorkstreamDefault,
 )
 from app.modules.checkers.api.materialization import SubmissionMaterialEntry
+from app.modules.checkers.api.selected_pre_submit import (
+    SelectedPreSubmitLeaseFacts,
+    SelectedPreSubmitTerminalFacts,
+)
 from app.modules.checkers.selected_pre_submit_execution import SelectedPreSubmitProcessor
 from app.adapters.checkers import SelectedPreSubmitCheckerExecutionAdapter
 from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim
@@ -259,6 +267,30 @@ async def test_selected_pre_runs_default_then_locked_external_image(
         assert result.external_members[0].result.verdict == verdict
         assert len(grants.requests) == len(execution.requests) == 1
         assert grants.requests[0].request_digest == execution.requests[0].request_digest
+        assert result.result_digest == canonical_json_hash(result.canonical_body())
+        now = datetime.now(UTC)
+        lease = SelectedPreSubmitLeaseFacts(
+            attempt_id=identity.attempt_id,
+            attempt_request_digest=identity.attempt_request_digest,
+            prepared_generation_id=identity.prepared_generation_id,
+            policy_sha256=policy.policy_sha256,
+            default_behavior_sha256=WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+            lease_id=new_record_id(),
+            lease_generation=1,
+            lease_expires_at=now + timedelta(minutes=2),
+        )
+        terminal = SelectedPreSubmitTerminalFacts(
+            lease=lease,
+            outcome="completed",
+            execution=result,
+            infrastructure_failure_code=None,
+            queued_at=now,
+            started_at=now + timedelta(milliseconds=25),
+            completed_at=now + timedelta(milliseconds=75),
+        )
+        assert terminal.canonical_body()["queue_latency_ms"] == 25
+        assert terminal.canonical_body()["execution_latency_ms"] == 50
+        assert terminal.terminal_digest == canonical_json_hash(terminal.canonical_body())
     finally:
         await request.prepared_artifact.close()
         manager.close()

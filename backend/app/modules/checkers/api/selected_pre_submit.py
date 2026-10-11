@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
+from app.core.hashing import canonical_json_hash
+from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
 from app.modules.checkers.api.default_checker import WorkstreamDefaultCheckerResult
 from app.modules.checkers.api.external import ExternalCheckerExecutionResult
 
@@ -86,6 +90,146 @@ class SelectedPreSubmitExecutionFacts:
         ):
             raise ValueError("selected PRE execution continued after a blocker")
 
+    def canonical_body(self) -> dict[str, object]:
+        """Return the complete bounded result body retained by the durable owner."""
+        return {
+            "schema_version": "workstream.selected_pre_submit_execution.v1",
+            "policy_sha256": self.policy_sha256,
+            "workstream_default": self.workstream_default.model_dump(mode="json"),
+            "required_external_count": self.required_external_count,
+            "external_members": [
+                {
+                    "order": member.order,
+                    "requirement_id": member.requirement_id,
+                    "registry_entry_id": str(member.registry_entry_id),
+                    "registry_entry_digest": member.registry_entry_digest,
+                    "request_digest": member.request_digest,
+                    "result": member.result.model_dump(mode="json"),
+                    "isolation": asdict(member.isolation),
+                }
+                for member in self.external_members
+            ],
+            "eligible": self.eligible,
+        }
+
+    @property
+    def result_digest(self) -> str:
+        """Bind every default, project-image and observed-isolation result fact."""
+        return canonical_json_hash(self.canonical_body())
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedPreSubmitLeaseFacts:
+    """Database-timed generation for one genuine pre-admission ART attempt."""
+
+    attempt_id: UUID
+    attempt_request_digest: str
+    prepared_generation_id: UUID
+    policy_sha256: str
+    default_behavior_sha256: str
+    lease_id: UUID
+    lease_generation: int
+    lease_expires_at: datetime
+
+    def __post_init__(self) -> None:
+        """Reject a copied identifier or an unbounded/non-current lease shape."""
+        digests = (
+            self.attempt_request_digest,
+            self.policy_sha256,
+            self.default_behavior_sha256,
+        )
+        if (
+            any(type(value) is not UUID for value in (
+                self.attempt_id,
+                self.prepared_generation_id,
+                self.lease_id,
+            ))
+            or any(
+                type(value) is not str
+                or len(value) != 71
+                or not value.startswith("sha256:")
+                for value in digests
+            )
+            or self.default_behavior_sha256 != WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
+            or type(self.lease_generation) is not int
+            or self.lease_generation < 1
+            or self.lease_expires_at.tzinfo is None
+        ):
+            raise ValueError("selected PRE lease facts are invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class SelectedPreSubmitTerminalFacts:
+    """Exact terminal value finalized under a fresh TASK-first transaction."""
+
+    lease: SelectedPreSubmitLeaseFacts
+    outcome: Literal["completed", "infrastructure_failed"]
+    execution: SelectedPreSubmitExecutionFacts | None
+    infrastructure_failure_code: str | None
+    queued_at: datetime
+    started_at: datetime
+    completed_at: datetime
+
+    def __post_init__(self) -> None:
+        """Keep work findings separate from recoverable infrastructure outcomes."""
+        if type(self.lease) is not SelectedPreSubmitLeaseFacts:
+            raise ValueError("selected PRE terminal lease is invalid")
+        if any(value.tzinfo is None for value in (
+            self.queued_at,
+            self.started_at,
+            self.completed_at,
+        )) or not (self.queued_at <= self.started_at <= self.completed_at):
+            raise ValueError("selected PRE terminal timing is invalid")
+        if self.outcome == "completed":
+            if (
+                type(self.execution) is not SelectedPreSubmitExecutionFacts
+                or self.infrastructure_failure_code is not None
+                or self.execution.policy_sha256 != self.lease.policy_sha256
+            ):
+                raise ValueError("selected PRE completed outcome is invalid")
+        elif (
+            self.execution is not None
+            or self.infrastructure_failure_code not in {
+                "capacity_exceeded",
+                "deadline_exceeded",
+                "material_unavailable",
+                "implementation_unavailable",
+                "invalid_output",
+            }
+        ):
+            raise ValueError("selected PRE infrastructure outcome is invalid")
+
+    def canonical_body(self) -> dict[str, object]:
+        """Return persisted latency, lease and terminal facts without private paths."""
+        return {
+            "schema_version": "workstream.selected_pre_submit_terminal.v1",
+            "attempt_id": str(self.lease.attempt_id),
+            "attempt_request_digest": self.lease.attempt_request_digest,
+            "prepared_generation_id": str(self.lease.prepared_generation_id),
+            "policy_sha256": self.lease.policy_sha256,
+            "default_behavior_sha256": self.lease.default_behavior_sha256,
+            "lease_id": str(self.lease.lease_id),
+            "lease_generation": self.lease.lease_generation,
+            "lease_expires_at": self.lease.lease_expires_at.isoformat(),
+            "outcome": self.outcome,
+            "execution": self.execution.canonical_body() if self.execution else None,
+            "infrastructure_failure_code": self.infrastructure_failure_code,
+            "queued_at": self.queued_at.isoformat(),
+            "started_at": self.started_at.isoformat(),
+            "completed_at": self.completed_at.isoformat(),
+            "queue_latency_ms": int(
+                (self.started_at - self.queued_at).total_seconds() * 1000
+            ),
+            "execution_latency_ms": int(
+                (self.completed_at - self.started_at).total_seconds() * 1000
+            ),
+        }
+
+    @property
+    def terminal_digest(self) -> str:
+        """Bind the exact terminal body used by replay and admission."""
+        return canonical_json_hash(self.canonical_body())
+
 
 class SelectedPreSubmitInfrastructureUnavailable(RuntimeError):
     """Retain a recoverable PRE infrastructure category, never a work failure."""
@@ -108,4 +252,6 @@ __all__ = (
     "ExternalPreSubmitMemberFacts",
     "SelectedPreSubmitExecutionFacts",
     "SelectedPreSubmitInfrastructureUnavailable",
+    "SelectedPreSubmitLeaseFacts",
+    "SelectedPreSubmitTerminalFacts",
 )
