@@ -105,6 +105,10 @@
       "target": "backend/app/api/deps/rate_controls.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/api/deps/task_batch_transitions.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/api/router.py"
     },
@@ -1550,6 +1554,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_batch_transition.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/task_detail.py"
     },
     {
@@ -1659,6 +1667,18 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/submitted_bundle.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transition/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transition_router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transitions.py"
     },
     {
       "group": "lifecycle",
@@ -1817,7 +1837,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "36fe9ccf77c46fdfed571b5a853cb6495c4a9a2f45d29d794b5840ce75270cb3",
+  "authority_digest": "05053353728987a58aaef286ffa68bdbb2ca94bba2f5dc3519423f95738f88b4",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

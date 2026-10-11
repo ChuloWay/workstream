@@ -75,6 +75,11 @@ Their current root transaction prevents composition across a complete batch.
   actual public native journeys/rollback/revocation/wait proof is
   `tests/tasks/test_task_batch_transitions.py`. These two modules require exact
   TASK lane/inventory registration after coordinated atomic/current-main union.
+- Exact metadata hunks are two TASK catalogue registrations and their unchanged
+  exact-set assertion in `backend/tests/test_ci_lane_catalogue.py`, plus five
+  explicit `PILOT_02C_BULK_TRANSITION_TARGETS` paths and additive partition
+  regeneration. Preserve all atomic/source and ten-lane entries, retained
+  assignments, protected-base custody and zero private-edge growth.
 - Current TASK/AUTH/ART and CLI contracts, README, affected roadmap sections,
   this record, and exact coordinated owner/lane/selected-contract metadata.
 - Required schema/receipt changes only through the sole migration author after
@@ -268,15 +273,17 @@ case-sensitive external IDs are preserved. One optional UTF-8 BOM is accepted.
 
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
-is based on the unmerged atomic candidate; reconcile after its human merge or
-use an explicitly coordinated stacked draft. Native schema/storage claims are
+is reconciled onto the unmerged atomic candidate `91183adafec37e7ad7eda624ad3556d89dc54ce6`;
+preserve its source/member/ten-lane metadata union and use only an explicitly
+coordinated stacked draft before its human merge. Native schema/storage claims are
 pending the sole-author migrations and actual isolated PostgreSQL/MinIO drills.
 The offline converter is implemented with focused Go boundary checks and built
 CLI/server-parser proof for quoting/Unicode, exact JSON commitment, no-clobber,
 invalid CSV zero-output effects and 500/501 rows. This proof needs no token/API
 configuration and makes no database or source-storage claim. Canonical
 SCREEN/RELEASE extraction and the single native membership owner are implemented;
-aggregate models/public composition remain pending.
+aggregate models/public composition are also implemented, with native aggregate
+DDL and actual public proof still pending.
 Source CLI uses separate existing declaration/upload/status routes and sends exact
 original JSON bytes. Go tests/vet/tidy-diff and built CLI CSV/source boundary plus
 retained HTTP/profile/project/guide declaration checks pass. The PUT transport
@@ -296,16 +303,26 @@ pass. A native preflight proves retained single-Task SCREEN/RELEASE replay/guide
 lock parity, successor-guide/currentness behavior, foreign-root participant
 refusal, and two-Task late-failure rollback including actual successful AUTH
 decisions. Its database/role cleanup is complete. The initial run used the dirty
-extraction atop the CLI checkpoint, so exact frozen-head replay is still required.
+extraction atop the CLI checkpoint; the later exact `4400568` five-case native
+replay above supplies the qualified frozen extraction proof.
 This uses existing schema through source0031 and canonical seeded project
 prerequisites; it proves Task/AUTH transactions, not new batch DDL, provider bytes,
 live setup inference or a complete 200-member public bulk journey.
 
 ## Reconciliation
 
+The additive bulk metadata preserves every trusted assignment and the existing
+protected base: 459 unique production targets validate, with exactly five new
+bulk paths. The complete ten-lane inventory covers 523 test modules. Its exact
+TASK owner assertion is extended by the two actual new proof modules; the focused
+catalogue suite passes 46 cases in 7.79 seconds without weakening any gate.
+Canonical TASK/CLI documentation distinguishes current-state transition replay
+from original import replay and still marks native aggregate readiness pending.
+
 - Current-source reconciliation: Preserve the atomic owner's import/status and
   source custody; shared-file regions require handoff before edits.
 - Next usable boundary: Complete the separate explicit bulk/CLI journey under
   issue 489; whole-issue completion requires every agreed acceptance criterion.
-- Remaining risks: Aggregate receipt/currentness design and native concurrency
-  proof remain to be established before backend public composition.
+- Remaining risks: The implemented aggregate receipt/currentness contract still
+  needs sole-author native closure DDL, direct-SQL refusal, public rollback and
+  concurrency proof, and measured 200/500 journeys before readiness.

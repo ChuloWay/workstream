@@ -439,6 +439,8 @@ CHECKER_DELIVERY_MODULES = (
 
 
 TASK_MODULES = (
+    "tests/tasks/test_task_batch_transition_contract.py",
+    "tests/tasks/test_task_batch_transitions.py",
     "tests/tasks/test_task_import_contract.py",
     "tests/tasks/test_task_import_batch_contract.py",
     "tests/tasks/test_task_import_batch_bindings.py",
