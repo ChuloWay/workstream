@@ -140,6 +140,13 @@ replacement writer or route would fork the atomic creation operation.
   `planning/CHUNK_MAP.md`. These currently assign replacement intake as the next
   boundary; reconcile that claim in the implementation PR without rewriting
   completed historical records or claiming recovery is delivered.
+- Lead-owned integration: `backend/alembic/env.py`,
+  `backend/scripts/test_lane_catalogue.py`,
+  `backend/scripts/behavior_ownership.py`,
+  `.ci/behavior-ownership/partition.v1.json`, and
+  `backend/tests/test_behavior_ownership.py`. Register the exact new context
+  module and migration proof without broadening permitted owners or dropping
+  tests; regenerate the combined partition digest after implementation arrives.
 
 Shared migration environment/fingerprint files, AUTH catalogue/action lists,
 and any overlapping current docs are **coordination-owned by the lead** unless
