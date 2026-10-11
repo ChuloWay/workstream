@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 from io import BytesIO
 import json
-import hashlib
 from types import SimpleNamespace
 from uuid import UUID
 from zipfile import ZipFile
@@ -569,6 +568,15 @@ async def test_sql_evidence_insert_rejects_superseded_checker_cause(
             assert admission.status == "ready"
             assert admission.checker_remediation_manifest_id == str(source_id)
             donor_id = admission.pre_submit_evidence_set_id
+            donor = (await session.execute(text(
+                "SELECT attempt_id,attempt_request_digest FROM public.pre_submit_evidence_sets "
+                "WHERE id=:id"
+            ), {"id": donor_id})).one()
+            result_ids = list((await session.execute(text(
+                "SELECT id FROM public.pre_submit_evidence_results "
+                "WHERE evidence_set_id=:id ORDER BY result_order"
+            ), {"id": donor_id})).scalars())
+            assert result_ids
 
         await reserve(h, await next_request(h))
         before = await _snapshot(h)
@@ -582,27 +590,62 @@ async def test_sql_evidence_insert_rejects_superseded_checker_cause(
                 "WHERE id=:id"
             ), {"id": source_id})
             assert current_run_id != routed_run_id
-        duplicate_id = new_record_id()
-        distinct_operation = "sha256:" + hashlib.sha256(str(duplicate_id).encode()).hexdigest()
+        attempt_id, evidence_id = new_record_id(), new_record_id()
+        operation = canonical_json_hash({"test_clone_evidence_id": str(evidence_id)})
         with pytest.raises(
             IntegrityError, match="pre-submit remediation evaluation is not current",
         ):
             async with h.factory() as session, session.begin():
                 await session.execute(text("""
+                    INSERT INTO public.pre_submit_execution_attempts
+                    SELECT (pg_catalog.jsonb_populate_record(
+                      NULL::public.pre_submit_execution_attempts,
+                      pg_catalog.to_jsonb(a) || pg_catalog.jsonb_build_object(
+                        'id', CAST(:attempt_id AS text),
+                        'idempotency_key', CAST(:idempotency_key AS text),
+                        'claim_nonce', CAST(:claim_nonce AS text),
+                        'status', 'reserved', 'evidence_set_id', NULL,
+                        'created_at', transaction_timestamp()
+                      ))).*
+                    FROM public.pre_submit_execution_attempts a WHERE a.id=:donor_attempt
+                """), {
+                    "attempt_id": str(attempt_id), "idempotency_key": str(new_record_id()),
+                    "claim_nonce": str(new_record_id()), "donor_attempt": donor.attempt_id,
+                })
+                await session.execute(text("""
                     INSERT INTO public.pre_submit_evidence_sets
                     SELECT (pg_catalog.jsonb_populate_record(
                       NULL::public.pre_submit_evidence_sets,
                       pg_catalog.to_jsonb(e) || pg_catalog.jsonb_build_object(
-                        'id', CAST(:new_id AS text),
-                        'operation_identity', CAST(:operation_identity AS text),
+                        'id', CAST(:evidence_id AS text),
+                        'operation_identity', CAST(:operation AS text),
+                        'attempt_id', CAST(:attempt_id AS text),
                         'created_at', transaction_timestamp()
                       ))).*
                     FROM public.pre_submit_evidence_sets e WHERE e.id=:donor_id
                 """), {
-                    "new_id": str(duplicate_id),
-                    "operation_identity": distinct_operation,
-                    "donor_id": donor_id,
+                    "evidence_id": str(evidence_id), "operation": operation,
+                    "attempt_id": str(attempt_id), "donor_id": donor_id,
                 })
+                for result_id in result_ids:
+                    await session.execute(text("""
+                        INSERT INTO public.pre_submit_evidence_results
+                        SELECT (pg_catalog.jsonb_populate_record(
+                          NULL::public.pre_submit_evidence_results,
+                          pg_catalog.to_jsonb(r) || pg_catalog.jsonb_build_object(
+                            'id', CAST(:new_id AS text),
+                            'evidence_set_id', CAST(:evidence_id AS text),
+                            'created_at', transaction_timestamp()
+                          ))).*
+                        FROM public.pre_submit_evidence_results r WHERE r.id=:donor_id
+                    """), {
+                        "new_id": str(new_record_id()),
+                        "evidence_id": str(evidence_id), "donor_id": result_id,
+                    })
+                await session.execute(text("""
+                    UPDATE public.pre_submit_execution_attempts
+                    SET status='completed',evidence_set_id=:evidence_id WHERE id=:attempt_id
+                """), {"evidence_id": evidence_id, "attempt_id": attempt_id})
         assert await _snapshot(h) == before
 
 
