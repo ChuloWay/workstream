@@ -70,8 +70,13 @@ it is not an authoritative native-UUID batch relationship.
 
 1. Public import selects a project and verified source with exactly one UUID
    idempotency key; input supplies no Task state, creator, locked lineage or
-   server provenance. ART verifies and bounds bytes before the TASK write root.
-   Its typed prepared facts bind source/project, exact SHA/count and actual
+   server provenance. First import verifies actual provider bytes and parses
+   them before the TASK write root. Committed exact-file replay instead recovers
+   immutable IDs/facts from verified native original-source/receipt ancestry,
+   with fresh batch/source authority and no provider read or reinterpretation.
+   A different selected source needs its own actual verified receipt and the same
+   exact original byte identity/count; a client-claimed digest is insufficient.
+   Typed prepared facts bind source/project, exact SHA/count and actual
    verification ancestry. Inside the write root, the ART participant validates
    the immutable reference again without provider I/O or a separate commit.
 2. TASK owns a UUIDv7 batch record, exact received-file commitment and ordered
@@ -176,9 +181,14 @@ no additional global advisory fence or custody table is introduced. The exact
 owner preparation and implicit-FK schedule still require affected schema review
 and native discriminating proofs before any concurrency PASS:
 
-1. Finish bounded ART provider verification and JSON parsing before the TASK
-   write root. Source read evidence belongs to that earlier read operation;
-   no provider stream, scratch cleanup or I/O occurs while TASK write locks wait.
+1. For first import, finish bounded ART provider verification and JSON parsing
+   before the TASK write root. Source read evidence belongs to that earlier
+   operation; no provider stream, scratch cleanup or I/O occurs while TASK
+   write locks wait. For committed exact-file replay, use stored immutable
+   batch/member results and actual native verified-source/receipt ancestry.
+   Do not depend on provider availability or parse old bytes again. If the
+   requested selector differs, validate its own completed verified receipt and
+   exact original SHA/count before recovering the original batch.
 2. Within the root, reserve the batch/file retry identity and every per-row TASK
    retry identity. Acquire existing Task/member custody needed by replay in
    deterministic order before the first AUTH lock. Proposed new batch/row tuples
@@ -243,6 +253,14 @@ never silently reinterprets retained rows under a later mapping.
 - [ ] Exact same-key and exact-file retries recover original IDs with fresh
   authority; changed bytes/key reuse conflicts; revoked replay fails. Source,
   actor, receipt and row-membership substitutions fail closed.
+- [ ] After successful import and Task advancement, provider unavailability
+  cannot prevent same-key or new-key exact-file recovery of original IDs/facts;
+  replay performs zero provider reads and emits no additional Task creation.
+  Revoked current authority still denies that recovery. A different verified
+  source with identical actual SHA/count recovers under a new key; a declaration
+  with only the claimed digest, foreign/missing receipt or different bytes never
+  recovers. Changing the selected source under the original key conflicts even
+  when both verified sources contain identical bytes.
 - [ ] Native PostgreSQL proves identical concurrent import recovery, overlapping
   external-ID conflicts, deterministic intermediate lock waits and complete
   rollback after an injected late-row/audit/binding failure.
