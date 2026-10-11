@@ -94,6 +94,9 @@ def http_fixture():
                 after_body()
             self.do_GET()
 
+        def do_PUT(self):  # noqa: N802 - same exact-byte capture for source writes
+            self.do_POST()
+
         def do_CONNECT(self):  # noqa: N802 - captures attempted HTTPS proxy use
             requests.append(
                 (self.command, self.path, self.headers.get("Authorization"))
