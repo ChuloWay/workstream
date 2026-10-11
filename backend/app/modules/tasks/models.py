@@ -35,6 +35,7 @@ class TaskCommandReceipt(Base):
     __table_args__ = (
         CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("actor_profile_id", "action_id", "idempotency_key", name="uq_task_command_namespace"),
+        Index("ix_task_command_receipts_batch_transition_receipt_id", "batch_transition_receipt_id"),
         ForeignKeyConstraint(
             ["assignment_id", "task_id", "contributor_id"],
             ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"],

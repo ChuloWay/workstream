@@ -329,7 +329,12 @@ reference, exact `manager_authority_facts` Task/project and identical context
 digest. Replay allow-count observations select the project resource too. This
 repairs the test's former Task-ID expectation without changing AUTH projection,
 product behavior or the immutable aggregate contract. Installed bulk/native
-proof remains pending the sole-author schema and source handoff.
+proof remains pending the sole-author schema and source handoff. The sole DDL
+author requested a source-model index named
+`ix_task_command_receipts_batch_transition_receipt_id` on the nullable aggregate
+root reference. Exact closure must count all attached canonical receipts,
+including surplus; the index avoids a growing global receipt-table scan per
+commit. The sole author mirrors this same index in the sequential migration.
 
 Main `d47ee1e9917689b94fd9439c09dffaf88c6d3ec1` now contains P10's linear audit
 migration 0033. This branch preserves its source and read contracts alongside the
