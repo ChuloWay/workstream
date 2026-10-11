@@ -169,7 +169,8 @@ replacement writer or route would fork the atomic creation operation.
   `backend/scripts/test_lane_catalogue.py`,
   `backend/scripts/behavior_ownership.py`,
   `.ci/behavior-ownership/partition.v1.json`, and
-  `backend/tests/test_behavior_ownership.py`. Register the exact new context
+  `backend/tests/test_behavior_ownership.py`, plus
+  `backend/tests/test_ci_lane_catalogue.py`. Register the exact new context
   module and migration proof without broadening permitted owners or dropping
   tests; regenerate the combined partition digest after implementation arrives.
 
