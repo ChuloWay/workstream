@@ -3,6 +3,7 @@
 from pydantic import BaseModel
 from app.modules.authorization.domain.post_submit_routing import PostSubmitRoutingResourceContext, post_submit_routing_resource_digest
 from app.modules.authorization.domain.post_submit import PostSubmitResourceContext, post_submit_digest
+from app.modules.authorization.domain.pre_submit import PreSubmitResourceContext
 from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
 from app.modules.tasks.api.assignment_invalidation import assignment_invalidation_resource_digest
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
@@ -30,6 +31,9 @@ def authorization_resource_digest(resource: BaseModel) -> str:
     if type(resource) is PostSubmitResourceContext:
         resource.validate_identity()
         return post_submit_digest(resource.facts)
+    if type(resource) is PreSubmitResourceContext:
+        resource.validate_identity()
+        return resource.facts.facts_digest
     if type(resource) is AssignmentInvalidationResourceContext:
         resource.validate_identity()
         return assignment_invalidation_resource_digest(resource.facts)

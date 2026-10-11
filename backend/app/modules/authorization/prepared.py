@@ -127,6 +127,11 @@ from app.modules.authorization.domain.post_submit_routing import (
 )
 from app.modules.tasks.api.post_submit_routing import TaskRoutingRequestFacts
 from app.modules.authorization.domain.post_submit import POST_SUBMIT_ACTIONS, PostSubmitResourceContext, post_submit_prepare_matches
+from app.modules.authorization.domain.pre_submit import (
+    PRE_SUBMIT_ACTIONS,
+    PreSubmitResourceContext,
+    pre_submit_prepare_matches,
+)
 from app.modules.authorization.prepared_submission_replay import validate_submission_replay
 from app.modules.authorization.prepared_post_submit_replay import validate_post_submit_replay
 from app.modules.authorization.pre_submit_materialization import (
@@ -196,6 +201,7 @@ class _PreparedAuthorizationBinding:
     assignment_invalidation_context: AssignmentInvalidationResourceContext | None = None
     outbox_dispatch_digest: str | None = None
     post_submit_prepare_context: dict | None = None
+    pre_submit_prepare_context: dict | None = None
     routing_request: TaskRoutingRequestFacts | None = None
     task_authority_context: TaskAuthorityResourceContext | None = None
     lifecycle_command: LifecycleTransitionCommand | None = None
@@ -636,6 +642,12 @@ class PreparedAuthorizationService:
             expected_action_id, issuance.binding.post_submit_prepare_context, final_resource_context,
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared post-submit authority")
+        if expected_action_id in PRE_SUBMIT_ACTIONS and not pre_submit_prepare_matches(
+            expected_action_id,
+            issuance.binding.pre_submit_prepare_context,
+            final_resource_context,
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid prepared selected PRE authority")
         if expected_action_id is ActionId.OUTBOX_DISPATCH and (
             type(final_resource_context) is not OutboxDispatchResourceContext
             or issuance.binding.outbox_dispatch_digest != authorization_resource_digest(final_resource_context)
@@ -943,7 +955,7 @@ class PreparedAuthorizationService:
                 artifact_resource_type=artifact_resource[0],
                 artifact_resource_id=resource.resource_id,
             )
-        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, AssignmentInvalidationResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext)):
+        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, AssignmentInvalidationResourceContext, PreSubmitResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext)):
             return PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.PROJECT,
                 project_id=resource.scope_project_id,

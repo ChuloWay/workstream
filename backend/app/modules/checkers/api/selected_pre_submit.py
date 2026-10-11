@@ -488,6 +488,10 @@ class SelectedPreSubmitInfrastructureUnavailable(RuntimeError):
         super().__init__(code)
 
 
+class SelectedPreSubmitAuthorityUnavailable(RuntimeError):
+    """Conceal fixed-service PRE authorization loss without product facts."""
+
+
 __all__ = (
     "ExternalPreSubmitIsolationFacts",
     "ExternalPreSubmitMemberFacts",
@@ -495,6 +499,7 @@ __all__ = (
     "PreparedSelectedPreSubmitFinalization",
     "SelectedPreSubmitAdmissionAuthority",
     "SelectedPreSubmitAuthorityEvidence",
+    "SelectedPreSubmitAuthorityUnavailable",
     "SelectedPreSubmitAuthorityPort",
     "SelectedPreSubmitCompletion",
     "SelectedPreSubmitCoordinationPort",
