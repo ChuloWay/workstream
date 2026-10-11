@@ -13,10 +13,13 @@ submitter contribution, applicable awards and audit/outbox evidence. Database
 closure rejects incomplete outcomes; fresh-authorized replay returns the stored
 complete tuple. No Review or reviewer contribution is fabricated.
 
-B8 supplies hidden completion delivery with commit-before-ACK. Next: 04F remediation, 04E3 production
-composition, public intake and the first-layer drill. False-guide activation,
-live human review/revision and payment delivery remain unavailable. Internally
-valid false-policy fixtures establish the hidden operation, not public readiness.
+B8 supplies hidden completion delivery with commit-before-ACK.
+[ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
+operation so an exact current contributor-correctable result reaches
+`needs_revision` under either locked ReviewPolicy mode, with no REV/CON effect.
+Exact-cause replacement intake, setup-fault/Operator recovery, 04E3 production
+composition/readiness, public intake and the first-layer drill remain.
+False-guide activation and live human review/revision remain unavailable.
 
 Latest completed POL behavior: [POL-07B checker phase service](WS-POL-003-07B.md),
 building on [POL-07A pre-submit attempt recovery](WS-POL-003-07A.md),
@@ -88,9 +91,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: prove 04F
-  remediation, 04E3 live composition and false-guide readiness, public intake
-  and the first-layer drill. True handoff remains independent of REV/CON;
+- Next usable boundary: complete 04F exact-cause replacement intake and recovery,
+  04E3 live composition and false-guide readiness, public intake and the
+  first-layer drill. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.

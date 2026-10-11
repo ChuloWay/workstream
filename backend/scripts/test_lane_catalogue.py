@@ -226,6 +226,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_submission_bundle_preparation_recovery.py",
     "tests/checkers/test_phase_service.py",
     "tests/test_submission_preparation_adapter.py",
+    "tests/test_submission_predecessor_custody.py",
     "tests/test_submission_preparation_authorization.py",
     "tests/test_submission_composition.py",
     "tests/test_artifact_bindings.py",
@@ -443,6 +444,10 @@ TASK_MODULES = (
     "tests/checkers/execution/test_completion_evidence.py",
     "tests/checkers/execution/test_completion_contract.py",
     "tests/tasks/post_submit_routing/test_failure_completion.py",
+    "tests/tasks/post_submit_routing/test_remediation.py",
+    "tests/tasks/post_submit_routing/test_remediation_storage.py",
+    "tests/tasks/post_submit_routing/test_remediation_currentness.py",
+    "tests/tasks/post_submit_routing/test_remediation_migration.py",
 
     # New completion proofs use TASK custody and its measured lane headroom.
     "tests/tasks/evaluation_delivery/test_completion.py",
