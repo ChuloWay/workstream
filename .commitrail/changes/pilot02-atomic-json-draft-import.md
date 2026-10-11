@@ -57,8 +57,9 @@ it is not an authoritative native-UUID batch relationship.
   action/permission/resource classifications in the existing TASK authority
   owner; reuse covered Project Manager grant evaluation and canonical denials.
 - Focused TASK/ART/AUTH public-contract and native PostgreSQL/MinIO tests;
-  `tests/committed_guide_fixtures.py` gives scripted guide storage its own exact
-  namespace so it cannot claim the live ART runtime's `primary` namespace;
+  `tests/test_task_import_sources.py` explicitly invokes the existing canonical
+  ART startup namespace owner omitted by ASGITransport, before scripted guide
+  prerequisites reuse the actual configured `primary` singleton;
   affected ownership/lane/inventory expectations and the selected MCP
   `authorization_context_get` snapshot for additive ActionId parity; current TASK/ART/AUTH specs,
   README and roadmap claims for this chunk only.
@@ -470,11 +471,14 @@ and both optional-label controls, then stopped before the advancement import:
 the committed guide fixture had claimed ART's live `primary` namespace with
 fake local-provider facts. A diagnostic observed the exact
 `ArtifactStorageNamespaceError`; database, role and MinIO namespace cleanup
-completed. The fixture now uses its dedicated `committed-guide-fixture`
-namespace for the same native attempts, receipts and replicas. The first repair
-execution at `0015caa7` rejected its overlong fixture ID against native varchar(20);
-the dedicated ID is now the bounded `committed-guide`. No production
-namespace validation or migration is changed; the failed public case and full
+completed. Two attempted dedicated fixture IDs were rejected by the native
+varchar(20) and singleton-ID constraints at `0015caa7` and `1f904cc7`; both runs
+completed cleanup and neither is passing proof. The shared guide fixture is
+restored unchanged. The actual MinIO source fixture now invokes canonical ART
+startup namespace validation before scripted guide prerequisites reuse its exact
+configured singleton, and closes its bootstrap. Guide object bytes remain
+scripted; actual source bytes still use real MinIO PUT and verification. No
+production validation or migration is changed; the failed public case and full
 26-case replay remain required before readiness.
 
 Independent schema/lock handoff review at exact `37d8705d` found no actionable
