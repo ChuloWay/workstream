@@ -35,7 +35,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
-- Next usable boundary: setup-fault/Operator recovery after hidden exact-cause
+- Next usable boundary: manager-visible setup-fault hold and Operator retry after hidden exact-cause
   replacement intake, 04E3 production composition/readiness,
   public intake and the first-layer drill.
 - Governing sources: artifact specifications, `ArtifactStore`,
@@ -78,7 +78,7 @@ must prove exact approved lineage at preparation, consumption and binding.
    storage, CON contribution/award storage and participation, exact routing AUTH,
    B8 completion delivery and the 04F2 hidden remediation handoff are delivered.
 3. ARCH-04F3 supplies exact-cause checker-remediation resubmission using
-   existing ART ports. Remaining ARCH-04F owns setup-fault/Operator recovery;
+   existing ART ports. Remaining ARCH-04F owns manager-visible setup-fault hold and Operator retry;
    later reviewer-requested revision remains a separate REV boundary. Add recovery
    before public Submission cutover.
 4. Perform ARCH-02I only after that recovery path exists; historical

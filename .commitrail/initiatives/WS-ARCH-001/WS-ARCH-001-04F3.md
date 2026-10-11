@@ -140,6 +140,10 @@ replacement writer or route would fork the atomic creation operation.
   `planning/CHUNK_MAP.md`. These currently assign replacement intake as the next
   boundary; reconcile that claim in the implementation PR without rewriting
   completed historical records or claiming recovery is delivered.
+  The adopted `planning/chunks/WS-ARCH-001-04F-checker-remediation.md` parent
+  also records the user's first-release decision: retain submitted work in a
+  manager-visible setup-fault hold without contributor penalty; defer changing
+  submitted-task rules. This is remaining-work scope, not an F3 runtime claim.
 - Lead-owned integration: `backend/alembic/env.py`,
   `backend/scripts/test_lane_catalogue.py`,
   `backend/scripts/behavior_ownership.py`,

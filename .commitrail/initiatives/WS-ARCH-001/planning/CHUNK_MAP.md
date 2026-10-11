@@ -1,6 +1,6 @@
 # WS-ARCH-001 — Current remaining change map
 
-[ARCH-04F1](../WS-ARCH-001-04F1.md) extends the existing CHECKERS completion read to verified contributor/setup failure evidence, including retained typed results. [ARCH-04F2](../WS-ARCH-001-04F2.md) reuses the hidden 04E TASK/AUTH outcome operation to route an exact current contributor-correctable result to `needs_revision` under either locked ReviewPolicy mode. 04F3 supplies hidden exact-cause replacement intake; authorized setup-fault/Operator recovery remains; no public surface or production registration is activated.
+[ARCH-04F1](../WS-ARCH-001-04F1.md) extends the existing CHECKERS completion read to verified contributor/setup failure evidence, including retained typed results. [ARCH-04F2](../WS-ARCH-001-04F2.md) reuses the hidden 04E TASK/AUTH outcome operation to route an exact current contributor-correctable result to `needs_revision` under either locked ReviewPolicy mode. 04F3 supplies hidden exact-cause replacement intake; authorized manager-visible setup-fault hold and Operator retry remains; no public surface or production registration is activated.
 
 [ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. ARCH-04E1B-B6 reuses this projection in atomic Submission/dispatch creation with exact AUTH receipts and select-only replay. B7 delivers hidden request delivery with exact invocation fencing; 04E2-B supplies complete authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff. 04F3 supplies hidden exact-cause replacement intake; recovery remains. Production registration remains unavailable.
 
@@ -28,7 +28,7 @@ complete tuple. No Review or reviewer contribution is fabricated.
 
 B8 supplies hidden completion delivery with commit-before-ACK; 04F2 extends that
 operation with policy-independent checker remediation. 04F3 adds hidden exact-cause replacement intake. Next: authorized
-setup-fault/Operator recovery, then 04E3 production
+manager-visible setup-fault hold and Operator retry, then 04E3 production
 composition, public intake and the first-layer drill. False-guide activation,
 live human review/revision and payment delivery remain unavailable. Internally
 valid false-policy fixtures establish the hidden operation, not public readiness.

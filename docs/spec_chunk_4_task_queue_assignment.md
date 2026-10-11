@@ -696,7 +696,7 @@ shared OUTBOX UNKNOWN, never an automatic uncertain-effect retry. A still-curren
 unfinalized invocation can replay the exact outcome with fresh authority.
 The true branch never observes REV generation or enters CON. Both request and
 completion handlers remain absent from production registration. Connected
-production readiness and authorized setup-fault/Operator recovery
+production readiness and authorized manager-visible setup-fault hold and Operator retry
 precede public intake; 04F3 supplies hidden exact-cause replacement intake.
 
 ARCH-04F2 extends this handler and the existing root outcome transaction for an

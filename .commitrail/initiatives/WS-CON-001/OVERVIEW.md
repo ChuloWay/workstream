@@ -18,7 +18,7 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either policy mode, with no Review, FinalAcceptance,
 ContributionRecord or award. 04F3 hidden exact-cause replacement intake is delivered;
-setup-fault/Operator recovery, 04E3 production composition, public intake and
+manager-visible setup-fault hold and Operator retry, 04E3 production composition, public intake and
 the first-layer drill remain. False-guide activation, live human review/revision
 and payment delivery remain unavailable.
 

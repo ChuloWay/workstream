@@ -4,8 +4,9 @@ Disposition: Planned. [04F1](../../WS-ARCH-001-04F1.md) supplies verified curren
 failure evidence through the existing CHECKERS port. [04F2](../../WS-ARCH-001-04F2.md)
 supplies the hidden TASK/AUTH handoff: an exact current contributor-correctable
 result reaches `needs_revision` under either locked ReviewPolicy mode without
-REV/CON effects. Exact-cause replacement intake and authorized setup-fault/Operator
-recovery remain. This non-executable coordination parent is split into owner-sized
+REV/CON effects. [04F3](../../WS-ARCH-001-04F3.md) supplies hidden exact-cause
+replacement intake. Authorized terminal infrastructure retry and a manager-visible
+setup-fault hold remain. This non-executable coordination parent is split into owner-sized
 hidden behavior, authority and live integration changes; it is not one combined
 multi-owner PR. Risk: L1. Outcome: final current contributor-correctable checker
 outcomes create one bounded, contributor-readable remediation lineage without
@@ -39,14 +40,17 @@ Transport recovery of an unfinished attempt reuses its identity. Retrying a
 terminal infrastructure failure requires an authorized Operator request and a
 new superseding generation through the coordinated currentness participant;
 it cannot resurrect a completed failed attempt. Project/setup
-faults go to the authorized manager/operator. Neither creates contributor
-remediation or negative contribution facts. No public 02I cutover occurs here.
+faults retain the Submission and locked rules in a manager-visible hold. A valid
+current setup-fault completion must be acknowledged rather than dead-lettered;
+malformed or stale completion still denies. Changing submitted tasks under new
+rules is deferred. Neither failure class creates contributor remediation or
+negative contribution facts. No public 02I cutover occurs here.
 
 Each remaining owner-sized implementation uses a current-main child record naming
 exact files, commands, migration head, authorization gates and reviewers. The
-delivered 04F1/04F2 boundary covers evidence verification and hidden lifecycle
-handoff only; it adds no replacement Submission writer, setup-fault recovery,
-Operator retry, production registration or public API.
+delivered 04F1/04F2/04F3 boundaries cover verified failure evidence, hidden lifecycle
+handoff and exact-cause replacement through the canonical writer. Setup-fault
+hold, Operator retry, production registration and public intake remain separate.
 
 ## Merge state
 

@@ -1,6 +1,6 @@
 # WS-ARCH-001 — Modular monolith boundaries
 
-[ARCH-04F1](WS-ARCH-001-04F1.md) extends the existing CHECKERS completion read to verified contributor/setup failure evidence, including retained typed results. [ARCH-04F2](WS-ARCH-001-04F2.md) routes an exact current contributor-correctable result through the existing hidden TASK/AUTH outcome operation to `needs_revision` under either locked ReviewPolicy mode. 04F3 supplies hidden exact-cause replacement intake; authorized setup-fault/Operator recovery remains; no production registration or public surface is activated.
+[ARCH-04F1](WS-ARCH-001-04F1.md) extends the existing CHECKERS completion read to verified contributor/setup failure evidence, including retained typed results. [ARCH-04F2](WS-ARCH-001-04F2.md) routes an exact current contributor-correctable result through the existing hidden TASK/AUTH outcome operation to `needs_revision` under either locked ReviewPolicy mode. 04F3 supplies hidden exact-cause replacement intake; authorized manager-visible setup-fault hold and Operator retry remains; no production registration or public surface is activated.
 
 [REV-12A4A](../WS-REV-001/WS-REV-001-12A4A.md) adds internal Operator-controlled lifecycle transitions and current-generation terminal replay. New acceptance effects require LIVE; 04E2-B supplies hidden source AUTH custody, while production routing remains unavailable. Conditional award facts stay atomic, while fulfillment admission, payment delivery and their root/cutoff machinery remain deferred until a successor manifest enables them.
 
@@ -32,7 +32,7 @@ B8 supplies hidden completion delivery with commit-before-ACK. 04E3A supplies
 the hidden request handler with the existing Celery ART provider lease and
 invocation-scoped scratch, without production registration. 04F2 extends the
 existing hidden outcome with exact policy-independent checker remediation. 04F3 adds hidden exact-cause replacement intake. Next: authorized
-setup-fault/Operator recovery, 04E3 production composition, public intake and the first-layer drill. False-guide activation,
+manager-visible setup-fault hold and Operator retry, 04E3 production composition, public intake and the first-layer drill. False-guide activation,
 live human review/revision and payment delivery remain unavailable. Internally
 valid false-policy fixtures establish the hidden operation, not public readiness.
 
