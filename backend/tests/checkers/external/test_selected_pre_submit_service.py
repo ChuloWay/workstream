@@ -89,6 +89,11 @@ class _Coordinator:
         self.order.append("committed_execution")
         return object()
 
+    async def read_expired_lease(self, **_values):
+        assert self.session.active
+        self.order.append("read_expired_lease")
+        return self.lease
+
     async def finalize(self, *, authority, execution, infrastructure_failure_code, **_values):
         assert self.session.active
         self.order.append("finalize")
@@ -171,3 +176,48 @@ async def test_selected_pre_execution_commits_lease_before_work_and_finalizes_af
         "consume_finalize",
         "commit",
     ]
+
+
+@pytest.mark.asyncio
+async def test_selected_pre_recovery_finalizes_expired_lease_without_material() -> None:
+    order: list[str] = []
+    session = _Session(order)
+    reservation = _reservation()
+    lease = SelectedPreSubmitLeaseFacts(
+        reservation=reservation,
+        lease_id=new_record_id(),
+        lease_generation=1,
+        lease_expires_at=datetime.now(UTC) - timedelta(seconds=1),
+    )
+    service = SelectedPreSubmitExecutionService(
+        session=session,
+        coordinator=_Coordinator(session, order, lease),
+        authority=_Authority(session, order),
+        materialization=_Materialization(session, order),
+    )
+
+    completed = await service.recover_expired(
+        run_id=reservation.attempt_id,
+        reservation=reservation,
+    )
+
+    assert completed.terminal.infrastructure_failure_code == "deadline_exceeded"
+    assert order == [
+        "begin",
+        "read_expired_lease",
+        "commit",
+        "begin",
+        "prepare_finalize",
+        "finalize",
+        "consume_finalize",
+        "commit",
+    ]
+
+    with pytest.raises(
+        SelectedPreSubmitInfrastructureUnavailable,
+        match="material_unavailable",
+    ):
+        await service.recover_expired(
+            run_id=new_record_id(),
+            reservation=reservation,
+        )

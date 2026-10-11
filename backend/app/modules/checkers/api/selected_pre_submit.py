@@ -693,6 +693,11 @@ class SelectedPreSubmitCoordinationPort(Protocol):
     ) -> SelectedPreSubmitExecutionAuthority:
         """Mint process-local execution authority for a committed lease."""
 
+    async def read_expired_lease(
+        self, *, run_id: UUID, facts: SelectedPreSubmitReservationFacts
+    ) -> SelectedPreSubmitLeaseFacts:
+        """Read one expired committed lease under TASK-first custody."""
+
     async def finalize(
         self,
         *,

@@ -404,6 +404,29 @@ class SelectedPreSubmitCoordinator:
         self._execution_capability = capability
         return capability
 
+    async def read_expired_lease(
+        self, *, run_id: UUID, facts: SelectedPreSubmitReservationFacts
+    ) -> SelectedPreSubmitLeaseFacts:
+        """Discover an expired lease without reconstructing its ART capability."""
+        row = await self._lock(run_id=run_id, facts=facts)
+        now = await self._session.scalar(select(func.clock_timestamp()))
+        if (
+            now is None
+            or row.status != "running"
+            or row.lease_id is None
+            or row.lease_expires_at is None
+            or row.lease_expires_at >= now
+        ):
+            raise SelectedPreSubmitUnavailable(
+                "selected_pre_submit_expired_lease_unavailable"
+            )
+        return SelectedPreSubmitLeaseFacts(
+            reservation=facts,
+            lease_id=UUID(row.lease_id),
+            lease_generation=row.lease_generation,
+            lease_expires_at=row.lease_expires_at,
+        )
+
     async def finalize(
         self,
         *,

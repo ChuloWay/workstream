@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.artifacts.submission_materialization import (
@@ -82,6 +84,40 @@ class SelectedPreSubmitExecutionService:
                     authority=prepared,
                     execution=execution,
                     infrastructure_failure_code=infrastructure_failure_code,
+                )
+
+    async def recover_expired(
+        self,
+        *,
+        run_id: UUID,
+        reservation: SelectedPreSubmitReservationFacts,
+    ) -> SelectedPreSubmitCompletion:
+        """Finalize a crashed lease without recreating its process-local grant."""
+        if run_id != reservation.attempt_id:
+            raise SelectedPreSubmitInfrastructureUnavailable(
+                "material_unavailable"
+            )
+        async with self._session.begin():
+            lease = await self._coordinator.read_expired_lease(
+                run_id=reservation.attempt_id,
+                facts=reservation,
+            )
+
+        finalize_facts = SelectedPreSubmitFinalizeFacts(
+            lease=lease,
+            execution=None,
+            infrastructure_failure_code="deadline_exceeded",
+        )
+        async with self._session.begin():
+            async with self._authority.prepare_finalization(
+                finalize_facts
+            ) as prepared:
+                return await self._coordinator.finalize(
+                    run_id=reservation.attempt_id,
+                    lease=lease,
+                    authority=prepared,
+                    execution=None,
+                    infrastructure_failure_code="deadline_exceeded",
                 )
 
 

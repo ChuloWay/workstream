@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import UUID
@@ -130,6 +131,36 @@ async def test_selected_pre_current_replays_only_stable_actor_key_facts() -> Non
         await coordinator.read_current(
             replace(fresh, archive_sha256="sha256:" + "f" * 64)
         )
+
+
+@pytest.mark.asyncio
+async def test_selected_pre_expired_lease_read_keeps_task_first_custody() -> None:
+    reservation = _reservation()
+    row = _queued_row(reservation)
+    row.status = "running"
+    row.lease_id = str(new_record_id())
+    row.lease_generation = 3
+    row.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    now = datetime.now(UTC)
+    transaction = SimpleNamespace(is_active=True)
+    session = SimpleNamespace(
+        sync_session=SimpleNamespace(get_transaction=lambda: transaction),
+        in_nested_transaction=lambda: False,
+        scalar=AsyncMock(side_effect=[row, now]),
+    )
+    tasks = SimpleNamespace(lock_selected_pre_submit_scope=AsyncMock())
+    coordinator = SelectedPreSubmitCoordinator(session, tasks=tasks)
+
+    lease = await coordinator.read_expired_lease(
+        run_id=reservation.attempt_id,
+        facts=reservation,
+    )
+
+    assert lease.reservation == reservation
+    assert lease.lease_id == UUID(row.lease_id)
+    assert lease.lease_generation == 3
+    assert lease.lease_expires_at == row.lease_expires_at
+    tasks.lock_selected_pre_submit_scope.assert_awaited_once_with(reservation)
 
 
 @pytest.mark.asyncio
