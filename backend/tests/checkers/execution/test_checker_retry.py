@@ -42,6 +42,7 @@ from tests.checkers.post_submit.support import change_request
 from tests.checkers.execution.completion_fixture import completed_evidence
 from tests.checkers.execution.support import live_executor, reserve
 from tests.project_create_fixtures import grant_fixture_admin_role
+from tests.reviews.lifecycle.fixtures import live_acceptance_lifecycle as live_acceptance_lifecycle
 from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome, state
 from tests.tasks.evaluation_delivery.test_worker_materialization import _worker_port
 from tests.tasks.post_submit_routing.support import source_values
