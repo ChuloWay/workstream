@@ -41,9 +41,7 @@ from app.modules.authorization.domain.guide_compilation import (
 from app.modules.authorization.domain.guide_proposals import (
     GUIDE_PROPOSAL_RESOURCE_BY_ACTION,
 )
-from app.modules.authorization.domain.checker_retry import (
-    CheckerRetryResourceContext, checker_retry_resource_matches, parse_checker_retry_prepare,
-)
+from app.modules.authorization.domain.checker_retry import checker_retry_resource_matches, parse_checker_retry_prepare
 from app.modules.checkers.api.execution import CheckerRetryPreparation
 from app.modules.authorization.domain.prepared_submission_policy import parse_submission_policy_prepare
 from app.modules.authorization.domain.prepared_compilation import prepared_compilation_matches
@@ -606,8 +604,7 @@ class PreparedAuthorizationService:
         return issuance
 
     def _validate_consumption(
-        self, issuance, expected_action_id, caller_input, final_resource_context,
-        *, historical_checker_retry_link=False,
+        self, issuance, expected_action_id, caller_input, final_resource_context, *, historical_checker_retry_link=False,
     ):
         """Bind consumption to its issued request, root transaction and exact resource."""
         if expected_action_id is not issuance.binding.action_id:
@@ -648,15 +645,9 @@ class PreparedAuthorizationService:
             or issuance.binding.outbox_dispatch_digest != authorization_resource_digest(final_resource_context)
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared outbox authority")
-        if expected_action_id is ActionId.OPERATIONS_CHECKER_RETRY and not (
-            checker_retry_resource_matches(
-                issuance.binding.checker_retry_preparation, final_resource_context,
-            )
-            and type(final_resource_context) is CheckerRetryResourceContext
-            and (
-                historical_checker_retry_link
-                or final_resource_context.identity_link_id == issuance.authority.context.identity_link_id
-            )
+        if expected_action_id is ActionId.OPERATIONS_CHECKER_RETRY and not checker_retry_resource_matches(
+            issuance.binding.checker_retry_preparation, final_resource_context,
+            issuance.authority.context.identity_link_id, historical_checker_retry_link,
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared checker retry authority")
 
@@ -913,8 +904,7 @@ class PreparedAuthorizationService:
             idempotency_key=caller_input.idempotency_key,
             request_digest=prepared_request_digest(caller_input.request_value),
             checker_retry_preparation=parse_checker_retry_prepare(
-                action_id, caller_input, scope, self._context,
-                PreparedAuthorizationHandleInvalid,
+                action_id, caller_input, scope, self._context, PreparedAuthorizationHandleInvalid,
             ),
             **service_bindings,
             project_create_operation_id=operation_id,

@@ -60,11 +60,14 @@ def parse_checker_retry_prepare(action_id, caller_input, scope, context, invalid
         raise invalid_error("invalid prepared checker retry") from None
 
 
-def checker_retry_resource_matches(preparation, resource) -> bool:
+def checker_retry_resource_matches(
+    preparation, resource, identity_link_id: UUID, historical_link: bool,
+) -> bool:
     """A successor can differ only in fields absent from the prepared source."""
     return (
         type(resource) is CheckerRetryResourceContext
         and preparation == resource.preparation
+        and (historical_link or resource.identity_link_id == identity_link_id)
     )
 
 

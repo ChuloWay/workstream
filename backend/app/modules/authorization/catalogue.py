@@ -911,8 +911,7 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         ActionId.TASK_QUEUE_READ, ActionId.PROJECT_TASK_QUEUE_READ, ActionId.OPERATIONS_TASK_QUEUE_READ,
         ActionId.TASK_READ, ActionId.TASK_SUBMISSION_REQUIREMENTS_READ,
         ActionId.PROJECT_TASK_READ, ActionId.PROJECT_TASK_SUBMISSION_REQUIREMENTS_READ,
-        ActionId.AUDIT_TASK_EVIDENCE_READ,
-        ActionId.OPERATIONS_CHECKER_RETRY,
+        ActionId.AUDIT_TASK_EVIDENCE_READ, ActionId.OPERATIONS_CHECKER_RETRY,
     } | TASK_LOCKED_CONTEXT_READ_ACTIONS | HISTORY_READ_ACTIONS:
         raise RuntimeError("authorization active action boundary mismatch")
     _validate_action_definitions(definitions)
