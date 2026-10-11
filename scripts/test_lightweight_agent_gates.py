@@ -183,6 +183,7 @@ class LightweightAgentGateTests(unittest.TestCase):
             "          - project_lifecycle_a\n"
             "          - project_lifecycle_b\n"
             "          - project_lifecycle_c\n"
+            "          - project_lifecycle_d\n"
             "          - task_lifecycle_a\n"
             "          - task_lifecycle_b\n"
             "          - task_lifecycle_c",
