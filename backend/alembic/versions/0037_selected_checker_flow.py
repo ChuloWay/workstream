@@ -542,6 +542,21 @@ end $$
         external_plan:=a.effective_pre_submit_plan::jsonb->>'schema_version'
           ='external_checker_policies.v1';""",
     )
+    selected_pre = """        SELECT * INTO pre FROM pre_submit_checker_policies WHERE id=a.pre_submit_policy_id;"""
+    if definition.count(selected_pre) != 1:
+        raise RuntimeError("guide approval pre policy lookup shape changed")
+    definition = definition.replace(
+        selected_pre,
+        selected_pre + """
+        IF external_plan AND pre.compiled_bundle::jsonb IS DISTINCT FROM
+             a.effective_pre_submit_plan::jsonb->'pre_submit' THEN
+          RAISE EXCEPTION 'external proposal PRE policy custody mismatch' USING ERRCODE='23514';
+        END IF;
+        IF external_plan AND NOT public.external_checker_locked_policies_valid(
+             a.effective_pre_submit_plan::jsonb,a.effective_pre_submit_plan_hash) THEN
+          RAISE EXCEPTION 'external proposal policy custody mismatch' USING ERRCODE='23514';
+        END IF;""",
+    )
     old_hashes = """           OR guide_proposal_hash(pre.compiled_bundle::jsonb) IS DISTINCT FROM pre.compiled_bundle_hash
            OR guide_proposal_hash(a.effective_pre_submit_plan::jsonb) IS DISTINCT FROM a.effective_pre_submit_plan_hash"""
     new_hashes = """           OR (NOT external_plan AND (
