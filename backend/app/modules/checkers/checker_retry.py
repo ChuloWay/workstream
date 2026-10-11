@@ -256,7 +256,8 @@ class CheckerRetryService:
                 project_id=source.project_id, submission_id=source.submission_id,
                 event_id=successor.event_id,
             )
-            if delivery is None or delivery.reservation.attempt_id != successor.run_id:
+            # The reader already binds the retained run/result/generation to this receipt.
+            if delivery is None or delivery.request.evaluation_request_id != successor.request_id:
                 raise CheckerExecutionUnavailable("checker_retry_replay_unavailable")
             await self._authorization.validate_replay(
                 handle, preparation, successor, UUID(receipt.identity_link_id),
