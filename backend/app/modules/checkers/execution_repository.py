@@ -16,8 +16,8 @@ from app.modules.checkers.api.execution import (
 from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionRequest,
     PostSubmissionExecutionResult,
-    validate_execution_request,
     validate_execution_result,
+    validate_stored_execution_request,
 )
 from app.modules.checkers.api.selected_post_submit import (
     SelectedPostSubmissionEvaluationResult,
@@ -52,7 +52,9 @@ def stored_request(run: CheckerRun) -> PostSubmissionExecutionRequest:
     """Reconstitute and validate the stored request with its digest."""
     body = json.loads(run.request_json)
     body["request_sha256"] = run.request_digest
-    return validate_execution_request(body)
+    return validate_stored_execution_request(
+        json.dumps(body, separators=(",", ":"), sort_keys=True)
+    )
 
 
 def stored_result(run: CheckerRun) -> PostSubmissionExecutionResult:

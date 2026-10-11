@@ -708,6 +708,38 @@ def _replace_submission_dispatch_custody() -> None:
     op.execute(definition.replace(old_packet, new_packet))
 
 
+def _replace_submission_binding_resource() -> None:
+    op.execute("""
+CREATE OR REPLACE FUNCTION public.submission_binding_resource(admission_id uuid) RETURNS jsonb
+LANGUAGE sql STABLE SET search_path = pg_catalog, public, pg_temp AS $$
+ SELECT pg_catalog.jsonb_build_object(
+  'resource_type','submission_binding','resource_id',a.id,'admission_id',a.id,
+  'evidence_set_id',a.pre_submit_evidence_set_id,
+  'selected_pre_submit_run_id',a.selected_pre_submit_run_id,
+  'actor_profile_id',a.actor_profile_id,'identity_link_id',a.identity_link_id,
+  'project_id',a.project_id,'task_id',a.task_id,'assignment_id',a.assignment_id,
+  'predecessor_submission_id',a.predecessor_submission_id,
+  'predecessor_submission_version',a.predecessor_submission_version,
+  'submission_id',a.consumed_by_submission_id,
+  'submission_version',a.consumed_by_submission_version,
+  'guide_id',a.guide_id,'guide_version',a.guide_version,
+  'source_snapshot_id',a.source_snapshot_id,
+  'source_snapshot_sha256',a.source_snapshot_sha256,
+  'effective_policy_id',a.effective_policy_id,
+  'effective_policy_sha256',a.effective_policy_sha256,
+  'pre_submit_policy_id',a.pre_submit_policy_id,
+  'pre_submit_policy_sha256',a.pre_submit_policy_sha256,
+  'locked_policy_context_hash',a.locked_policy_context_hash,
+  'semantic_manifest_id',a.semantic_manifest_id,
+  'semantic_manifest_sha256',a.semantic_manifest_sha256,
+  'content_id',a.artifact_content_id,'sha256',a.archive_sha256,
+  'byte_count',a.archive_byte_count,'logical_role','submission_bundle_original'
+ ) FROM public.submission_bundle_admissions a
+ WHERE a.id=$1 AND a.status='consumed'
+$$;
+""")
+
+
 def _replace_submission_packet_custody() -> None:
     definition = op.get_bind().execute(sa.text(
         "select pg_get_functiondef('public.validate_submission_packet_custody()'::regprocedure)"
@@ -739,6 +771,7 @@ def upgrade() -> None:
     _replace_guide_approval_custody()
     _replace_post_policy_custody()
     _replace_checker_run_custody()
+    _replace_submission_binding_resource()
     _replace_submission_dispatch_custody()
     _replace_submission_packet_custody()
 

@@ -29,6 +29,7 @@ class SubmissionArtifactBindingFacts:
     binding_decision_id: UUID
     archive_sha256: str
     byte_count: int
+    selected_evaluation_content: SelectedPostSubmissionContent | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,7 @@ class SubmissionArtifactReplayRequest:
     submission_id: UUID
     submission_version: int
     packet_sha256: str
+    task_context: TaskSubmissionContextFacts
 
 
 class SubmissionArtifactAdmissionPort(Protocol):

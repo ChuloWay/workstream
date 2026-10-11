@@ -34,6 +34,11 @@ def validate_execution_request(value: object) -> PostSubmissionExecutionRequest:
     return _REQUEST.validate_python(value)
 
 
+def validate_stored_execution_request(value: str) -> PostSubmissionExecutionRequest:
+    """Decode retained canonical JSON using strict models' JSON boundary."""
+    return _REQUEST.validate_json(value)
+
+
 def validate_execution_result(value: object) -> PostSubmissionExecutionResult:
     """Validate the selected writer or a retained legacy result by schema."""
     return _RESULT.validate_python(value)
@@ -43,5 +48,6 @@ __all__ = (
     "PostSubmissionExecutionRequest",
     "PostSubmissionExecutionResult",
     "validate_execution_request",
+    "validate_stored_execution_request",
     "validate_execution_result",
 )

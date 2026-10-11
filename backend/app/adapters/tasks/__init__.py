@@ -296,12 +296,31 @@ class _ArtifactAdmissionAdapter:
             or result.status != "consumed"
         ):
             raise RuntimeError("retained admission custody unavailable")
+        from app.adapters.checkers import selected_submission_evaluation_content
+        from app.modules.checkers.api.external_policy import (
+            LockedExternalPostSubmitPolicy,
+        )
+
+        selected_post_policy = (
+            LockedExternalPostSubmitPolicy.model_validate(
+                result.selected_post_submit_policy_body
+            )
+            if result.selected_post_submit_policy_body is not None
+            else None
+        )
         return SubmissionArtifactBindingFacts(
             binding_id=result.binding_id,
             content_id=result.content_id,
             binding_decision_id=result.binding_decision_id,
             archive_sha256=result.material.archive_sha256,
             byte_count=result.material.archive_byte_count,
+            selected_evaluation_content=(
+                selected_submission_evaluation_content(
+                    request.task_context, selected_post_policy
+                )
+                if selected_post_policy is not None
+                else None
+            ),
         )
 
 

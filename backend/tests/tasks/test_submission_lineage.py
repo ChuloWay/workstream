@@ -228,10 +228,10 @@ async def _assert_bound_packet_immutable(h, created):
                 await session.execute(text(f"UPDATE public.submissions SET {update} WHERE id=:id"),
                                       {"id": created.submission_id, "foreign": new_record_id()})
     for statement, message in (
-        ("UPDATE public.pre_submit_evidence_sets SET packet_sha256='sha256:' || repeat('0',64) "
-         "WHERE id=(SELECT pre_submit_evidence_set_id FROM public.submission_bundle_admissions WHERE id=:id)",
-         "pre_submit_evidence_sets rows are immutable"),
-        ("UPDATE public.submission_bundle_admissions SET pre_submit_evidence_set_id=:foreign WHERE id=:id",
+        ("UPDATE public.selected_pre_submit_runs SET request_digest='sha256:' || repeat('0',64) "
+         "WHERE id=(SELECT selected_pre_submit_run_id FROM public.submission_bundle_admissions WHERE id=:id)",
+         "selected PRE request custody is immutable"),
+        ("UPDATE public.submission_bundle_admissions SET selected_pre_submit_run_id=:foreign WHERE id=:id",
          "submission bundle admission lineage is immutable"),
     ):
         with pytest.raises(DBAPIError, match=message):
