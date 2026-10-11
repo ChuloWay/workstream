@@ -216,7 +216,11 @@ CHECKERS custody and historical PROJECTS policy, without inserting a manifest
 or granting authority by itself. ARCH-04E2-B consumes this source in the complete
 authorized outcome. B8 supplies hidden completion delivery; 04F2 routes verified
 contributor-correctable failures to `needs_revision` under either policy mode.
-Exact-cause replacement intake, setup-fault/Operator recovery and production
+ARCH-04F3 admits a changed full replacement ZIP only for that exact current
+authorized checker-remediation source. The existing intake and atomic Submission
+writer retain its cause, predecessor and locked policy lineage while creating
+the successor evaluation request. This hidden path creates no Review or
+contribution on failure. Setup-fault/Operator recovery and production
 composition remain before public intake and the first real end-to-end drill.
 
 Active work stays on that first contribution path. Live human review/revision,
@@ -834,8 +838,10 @@ the original tuple with fresh authority instead of repairing it.
 
 B6 supplies atomic Submission/dispatch, B7 hidden request delivery and B8 hidden
 completion handling with commit-before-ACK. 04F2 supplies the hidden remediation
-handoff without Review, acceptance, contribution or award effects. Exact-cause
-replacement intake, setup-fault/Operator recovery, live registration, false-guide
+handoff without Review, acceptance, contribution or award effects. 04F3 supplies
+hidden exact-cause replacement intake through the canonical Submission writer;
+it neither creates failure economics nor activates human revision. Setup-fault/Operator
+recovery, live registration, false-guide
 activation and public intake remain subsequent gates.
 The hidden false-path proof uses explicitly seeded valid policy lineage;
 normal guide activation still rejects false until the runtime is ready.

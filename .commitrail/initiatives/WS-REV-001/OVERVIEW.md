@@ -17,7 +17,7 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 [ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either policy mode, without a Review, FinalAcceptance or
-CON effect. Exact-cause replacement intake, setup-fault/Operator recovery, 04E3
+CON effect. 04F3 hidden exact-cause replacement intake is delivered; setup-fault/Operator recovery, 04E3
 production composition, public intake and the first-layer drill remain.
 False-guide activation, live human review/revision and payment delivery remain
 unavailable.
@@ -48,7 +48,7 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: complete 04F exact-cause replacement intake and recovery,
+- Next usable boundary: complete 04F recovery after 04F3 hidden exact-cause replacement intake,
   04E3 live composition and false-guide readiness, public intake and the
   first-layer drill. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
