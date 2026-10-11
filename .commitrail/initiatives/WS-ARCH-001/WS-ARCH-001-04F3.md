@@ -6,8 +6,9 @@
   canonical pre-submit intake again and creates a new immutable Submission and
   generation-one evaluation request only when its immediate predecessor has the
   exact current authorized checker-remediation outcome.
-- Base: merged main `735cf2659` (PR 534); current migration head
-  `0032_checker_remediation`. This record is group 1 of the first complete
+- Original base: merged main `735cf2659` (PR 534), with
+  `0032_checker_remediation`; reconciled with main `d47ee1e99` (PR 535) and
+  its `0033_contribution_reads` predecessor. This record is group 1 of the first complete
   contributor milestone in the [current plan](planning/PLAN.md).
 
 ## Intent
@@ -89,7 +90,7 @@ replacement writer or route would fork the atomic creation operation.
    reserve the successor evaluation and outbox event inside the same root
    transaction. Fresh-authorized replay checks the committed source/receipts
    by the same admission key and does not require the old run still be current.
-4. A linear migration after `0032_checker_remediation` adds the minimal cause
+4. A linear migration after main’s `0033_contribution_reads` adds the minimal cause
    columns/checks/FKs and replaces the existing admission, AUTH-resource and
    dispatch SQL closure as necessary. Retained initial evidence and its exact
    receipts remain valid. If retained `revision` dispatches cannot prove the
@@ -117,8 +118,8 @@ replacement writer or route would fork the atomic creation operation.
   the cause, and `backend/app/modules/authorization/artifact_project_authority.py`
   only if its typed guard needs the new closed kind. Existing action and grant
   identities stay unchanged.
-- One linear `backend/alembic/versions/0033_checker_remediation_replacement.py`
-  migration after 0032; matching model/schema registration and
+- One linear `backend/alembic/versions/0034_checker_remediation_replacement.py`
+  migration after 0033 contribution reads; matching model/schema registration and
   `backend/tests/test_alembic.py` migration graph assertion.
 - Focused existing owner tests under
   `backend/tests/test_submission_predecessor_custody.py`,
@@ -146,8 +147,10 @@ replacement writer or route would fork the atomic creation operation.
   `backend/tests/test_blocked_pre_submit_feedback_postgresql.py`,
   `backend/tests/test_artifact_bindings.py`,
   `backend/tests/test_submission_bundle_preparation_recovery.py`,
-  `backend/tests/test_pre_submit_attempt_schema.py`, and
-  `backend/tests/reviews/decision/support.py`. The shared
+  `backend/tests/test_pre_submit_attempt_schema.py`,
+  `backend/tests/reviews/decision/support.py`,
+  `backend/tests/submission_fixtures.py`, and
+  `backend/tests/authorization/submission_history/test_isolation.py`. The shared
   retained-material and pre-submit fixtures must also compose the canonical
   context port. Existing routing successor fixtures must publish the real
   checker-remediation outcome before intake; historical migration fixtures must
@@ -159,7 +162,7 @@ replacement writer or route would fork the atomic creation operation.
   seeding helpers with temporary all-null cause columns. Remove those columns
   before upgrade and assert original row values and column shape are restored;
   this test support does not add a runtime compatibility path.
-- `backend/tests/conftest.py` only for the deterministic 0033 public-schema
+- `backend/tests/conftest.py` only for the deterministic 0034 public-schema
   fingerprint, with the existing strict schema guard and resettable-table list
   retained. The lead independently verifies the integrated fingerprint.
 - This record and affected current capability claims in `docs/roadmap_status.md`,
@@ -280,7 +283,7 @@ controls; replace only synthetic-status fixtures that would bypass the new
 causality rule. Each negative must first demonstrate its adjacent valid path,
 then fail at the named boundary rather than fixture setup.
 
-## Required verification
+## Evidence
 
 The implementation PR carries actual command, CI and reviewer evidence; this
 record defines the required proof, not an executed-test attestation. Verify

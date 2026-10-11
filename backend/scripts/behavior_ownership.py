@@ -129,6 +129,29 @@ AUTH_OUTBOX_02_TARGETS = frozenset({
 })
 CON_02B_DELIVERY_TARGETS = frozenset({'backend/app/modules/outbox/delivery_repository.py', 'backend/app/modules/outbox/api.py', 'backend/app/modules/outbox/delivery.py', 'backend/app/modules/outbox/registry.py'})
 CI_LANE_CATALOGUE_TARGETS = frozenset({"backend/scripts/test_lane_catalogue.py"})
+PILOT_10_EXPORT_TARGETS = frozenset({
+    "backend/app/adapters/reviews/contribution_reads.py",
+    "backend/app/adapters/tasks/contribution_reads.py",
+    "backend/app/api/deps/contribution_exports.py",
+    "backend/app/api/routes/contributions.py",
+    "backend/app/modules/actors/api/contribution_labels.py",
+    "backend/app/modules/actors/contribution_labels.py",
+    "backend/app/modules/authorization/contribution_read.py",
+    "backend/app/modules/authorization/domain/contribution_reads.py",
+    "backend/app/modules/authorization/domain/read_dispatch.py",
+    "backend/app/modules/compensation/api/award_reads.py",
+    "backend/app/modules/compensation/awards/read_repository.py",
+    "backend/app/modules/contributions/api/records.py",
+    "backend/app/modules/contributions/api/source_reads.py",
+    "backend/app/modules/contributions/records/csv.py",
+    "backend/app/modules/contributions/records/read_facts.py",
+    "backend/app/modules/contributions/records/read_repository.py",
+    "backend/app/modules/contributions/records/read_service.py",
+    "backend/app/modules/reviews/acceptance/read_repository.py",
+    "backend/app/modules/reviews/api/acceptance_reads.py",
+    "backend/app/modules/tasks/api/contribution_evidence.py",
+    "backend/app/modules/tasks/contribution_evidence.py",
+})
 PILOT_04_REGISTRY_TARGETS = frozenset(
     {
         "backend/app/modules/authorization/checker_registry_authorization.py",
@@ -825,6 +848,7 @@ def _validate_additive_partition_transition(
         | ARCH_03B9_TARGETS
         | CI_LANE_CATALOGUE_TARGETS
         | PILOT_04_REGISTRY_TARGETS
+        | PILOT_10_EXPORT_TARGETS
         | PILOT_04_RUNTIME_TARGETS
         | LOCAL_PILOT_HELPER_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS

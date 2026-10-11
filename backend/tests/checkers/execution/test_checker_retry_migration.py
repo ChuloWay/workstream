@@ -1,4 +1,4 @@
-"""0034 preserves retained checker custody and installs terminal retry closure."""
+"""0035 preserves retained checker custody and installs terminal retry closure."""
 
 import asyncio
 import io
@@ -24,9 +24,9 @@ from tests.migration_fixtures import _config
 
 
 pytestmark = pytest.mark.postgres_schema_contract
-PREDECESSOR = "0033_checker_replacement"
-SUCCESSOR = "0034_checker_retry"
-# Pin the last F3 writer: current F4 delivery reads the 0034 retry table.
+PREDECESSOR = "0034_checker_replacement"
+SUCCESSOR = "0035_checker_retry"
+# Pin the last F3 writer: current F4 delivery reads the 0035 retry table.
 HISTORICAL_WRITER = "926b4ef118db3708e50d1869db5ee78a79e5b5de"
 HISTORICAL_SEED = """
 import asyncio

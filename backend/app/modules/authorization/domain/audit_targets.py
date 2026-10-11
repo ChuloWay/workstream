@@ -1,5 +1,7 @@
 """Exact project resource audit selectors, without raw product facts."""
 
+from uuid import UUID
+
 from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.lifecycle import ReviewLifecycleActivationContract
 from app.modules.authorization.domain.post_submit_routing import PostSubmitRoutingResourceContext
@@ -19,12 +21,14 @@ from app.modules.authorization.domain.submission_history import HistoryReadResou
 
 def project_authority_audit_target(
     resource: object, action_id: ActionId,
+    *, matched_scope_project_id: UUID | None = None,
 ) -> tuple[str | None, str | None, str | None, str, str] | None:
     """Project-scoped exact contexts share bounded audit selectors, never raw facts."""
     from app.modules.authorization.domain.contribution_policies import (
         ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext,
         ContributionPolicyMutationScopeDenialResourceContext,
     )
+    from app.modules.authorization.domain.contribution_reads import ContributionProjectReadResourceContext
     from app.modules.authorization.domain.adapter_bindings import (
         AdapterBindingReadResourceContext,
         AdapterBindingMutationResourceContext,
@@ -51,6 +55,11 @@ def project_authority_audit_target(
 
     if type(resource) is ReviewLifecycleActivationContract:
         return None, resource.resource_type, str(resource.resource_id), "joint_lifecycle_control", str(resource.resource_id)
+    if type(resource) is ContributionProjectReadResourceContext:
+        if matched_scope_project_id != resource.scope_project_id:
+            return None
+        project_id = str(resource.scope_project_id)
+        return project_id, "project", project_id, "project", project_id
     if type(resource) is ContributionPolicyMutationScopeDenialResourceContext:
         project_id = str(resource.scope_project_id)
         if resource.project_exists:

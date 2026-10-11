@@ -1438,7 +1438,7 @@ admission's exact checker-remediation cause. The new Submission and generation-o
 evaluation dispatch commit through the same canonical writer. Direct SQL cannot
 substitute that cause or the required AUTH receipts. A retained uncaused
 `revision` dispatch cannot be invented into this lineage: migration
-`0033_checker_remediation_replacement` refuses upgrade before DDL if its exact
+`0034_checker_remediation_replacement` refuses upgrade before DDL if its exact
 cause and receipts cannot be proven, preserving the 0032 schema and rows.
 Any denial, cancellation, stale execution, or persistence failure rolls back
 all effects.
