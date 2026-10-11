@@ -11,6 +11,7 @@ from sqlalchemy.schema import CreateTable
 
 from app.core.identifiers import new_record_id
 from app.core.hashing import canonical_json_hash
+from app.modules.artifacts.schemas import SubmissionBundleArtifactAdmissionRequest
 from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitExecuteFacts,
@@ -202,3 +203,25 @@ def test_selected_pre_request_binds_complete_later_admission_lineage() -> None:
     ).request_digest
     with pytest.raises(ValueError, match="reservation"):
         replace(reservation, semantic_manifest_sha256=SHA)
+
+
+def test_submission_artifact_request_selects_exactly_one_pre_lineage() -> None:
+    selected_id = new_record_id()
+    request = SubmissionBundleArtifactAdmissionRequest(
+        pre_submit_evidence_set_id=None,
+        custody=object(),
+        replay_durable_intent_id=None,
+        selected_pre_submit_run_id=selected_id,
+        selected_terminal_digest=SHA,
+    )
+    assert request.selected_pre_submit_run_id == selected_id
+    with pytest.raises(ValueError, match="lineage"):
+        SubmissionBundleArtifactAdmissionRequest(
+            pre_submit_evidence_set_id=new_record_id(),
+            custody=object(),
+            replay_durable_intent_id=None,
+            selected_pre_submit_run_id=selected_id,
+            selected_terminal_digest=SHA,
+        )
+    with pytest.raises(ValueError, match="lineage"):
+        replace(request, selected_terminal_digest=None)

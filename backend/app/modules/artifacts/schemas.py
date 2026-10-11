@@ -99,9 +99,27 @@ class CheckerOutputAdmissionAuthority(Protocol):
 class SubmissionBundleArtifactAdmissionRequest:
     """One passing prepared bundle selected for durable provider intent."""
 
-    pre_submit_evidence_set_id: UUID
+    pre_submit_evidence_set_id: UUID | None
     custody: object
     replay_durable_intent_id: UUID | None
+    selected_pre_submit_run_id: UUID | None = None
+    selected_terminal_digest: str | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            (self.pre_submit_evidence_set_id is None)
+            == (self.selected_pre_submit_run_id is None)
+            or (self.selected_pre_submit_run_id is None)
+            != (self.selected_terminal_digest is None)
+            or (
+                self.selected_terminal_digest is not None
+                and (
+                    len(self.selected_terminal_digest) != 71
+                    or not self.selected_terminal_digest.startswith("sha256:")
+                )
+            )
+        ):
+            raise ValueError("submission bundle admission lineage is invalid")
 
     @property
     def source(self) -> CommittedArtifactSource:
