@@ -5,7 +5,7 @@ import asyncio
 from sqlalchemy import func, select, text
 
 from app.core.identifiers import new_record_id
-from app.modules.contributions.records.export_models import ContributionExportMembership
+from app.modules.contributions.records.models import ContributionExportMembership
 from app.modules.authorization.repository import AdminAuthorizationRepository
 from tests.contributions.records.support import authorized_submitter_source
 from tests.tasks.post_submit_routing.support import completed_sibling_source

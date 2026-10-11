@@ -88,7 +88,11 @@ CLI is a separate bounded PR.
 ## Review findings
 
 Focused peer plan review selected private expiring membership over cluster-local
-transaction-ID coupling. Implementation still requires installed-schema proof.
+transaction-ID coupling. Source review reproduced missing canonical-only model
+registration in a fresh process. Membership declarations now live in CON's
+existing registered records/models.py; the separate declaration module was
+removed, with a fresh-process regression preserving native FK compilation.
+Implementation still requires installed-schema proof.
 
 ## Reconciliation
 

@@ -18,7 +18,7 @@ from app.modules.contributions.models import (
 from app.modules.contributions.records.models import ContributionRecord
 from app.core.identifiers import new_record_id
 from app.modules.contributions.records.cursors import ContributionCursor, ContributionCursorCodec, contribution_query_digest
-from app.modules.contributions.records.export_models import ContributionExportMember, ContributionExportMembership
+from app.modules.contributions.records.models import ContributionExportMember, ContributionExportMembership
 from app.modules.contributions.records.read_facts import ContributionReadFacts, ContributionReadPage, FrozenContributionAward
 
 
