@@ -12,6 +12,10 @@ from sqlalchemy.schema import CreateTable
 from app.core.identifiers import new_record_id
 from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.schemas import SubmissionBundleArtifactAdmissionRequest
+from app.modules.artifacts.models import (
+    SubmissionBundleAdmission,
+    SubmissionBundleDurableIntent,
+)
 from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitExecuteFacts,
@@ -64,6 +68,27 @@ def test_selected_pre_model_compiles_complete_owner_and_authority_custody() -> N
     ):
         assert value in sql
     assert "pre_submit_execution_attempts" not in sql
+
+    intent_sql = str(
+        CreateTable(SubmissionBundleDurableIntent.__table__).compile(
+            dialect=postgresql.dialect()
+        )
+    )
+    admission_sql = str(
+        CreateTable(SubmissionBundleAdmission.__table__).compile(
+            dialect=postgresql.dialect()
+        )
+    )
+    for compiled in (intent_sql, admission_sql):
+        assert "selected_pre_submit_run_id" in compiled
+        assert "pre_submit_lineage" in compiled
+    for value in (
+        "semantic_manifest_body",
+        "packet_sha256",
+        "effective_plan_sha256",
+        "pre_submit_policy_sha256",
+    ):
+        assert value in admission_sql
 
 
 def test_selected_pre_admission_capability_is_exact_and_single_use() -> None:

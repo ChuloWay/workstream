@@ -2185,6 +2185,7 @@ class ArtifactAdmissionService:
                     SubmissionBundleDurableIntent(
                         id=str(new_record_id()),
                         pre_submit_evidence_set_id=facts.pre_submit_evidence_set_id,
+                        selected_pre_submit_run_id=None,
                         put_attempt_id=attempt.id,
                     )
                 )
