@@ -89,6 +89,10 @@ saved successor intent, not dispatch, inference, policy replacement or activatio
 `project guide dispatch-correction PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE`
 explicitly dispatches the successor selected by the saved correction receipt.
 It observes backend diagnostic status, not completion, approval or activation.
+`project guide activate PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID`
+separately submits exact approved policy selections and validates the immutable
+activation receipt. It does not publish contribution policy, approve missing
+inputs or infer readiness; the backend owns authority and supersession.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
