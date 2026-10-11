@@ -282,6 +282,29 @@ case-sensitive external IDs are preserved. One optional UTF-8 BOM is accepted.
 
 ## Evidence
 
+The exact `34256da51b5041561877b797affb4f4b5189cdd8` full native batch ended
+at the unchanged 1800-second runner limit (exit 124), with database, role and
+MinIO cleanup complete. It produced one completed-case progress marker and no
+final JUnit report; no complete-suite or 200/500 timing claim follows from it.
+Live PostgreSQL observations showed active COMMIT with no wait event during
+both aggregate and 500-row import closure. Repeated deferred child triggers
+were invoking the whole membership validator for each member.
+
+The sole migration author supplied `136e20199e77ab7f90d3380ce906e19265ea4c5b`
+and its reviewed repair `90069d357c5dc65c88648c0807f36ad4e1daf617`. Complete
+closure now runs on the committed root event; child admission requires a
+committed parent written in the same top-level transaction. Import replay
+commands validate their own immutable facts against retained original custody.
+Every root/command event checks the final persisted status, so an empty pending
+declaration cannot escape closure. Native xid comparison preserves epoch
+semantics, and the sole author measured the changed public function fingerprint.
+The owned native test adds an empty-root/no-child refusal and a surplus command
+attachment to an earlier committed aggregate. These controls distinguish the
+new admission guards from member completeness and immutable UPDATE guards.
+The composed native proof, complete suite and measured batch-write CLI deadline
+remain pending; source and focused two-case proof qualifications below remain
+unchanged.
+
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
 is reconciled onto the unmerged atomic candidate `91183adafec37e7ad7eda624ad3556d89dc54ce6`;

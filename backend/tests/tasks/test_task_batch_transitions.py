@@ -303,6 +303,55 @@ async def test_sql_cannot_attach_old_standalone_successes_to_a_new_aggregate(imp
     assert await _success_facts(project) == before
 
 
+async def test_native_commit_refuses_empty_pending_root_and_late_command_attachment(import_source_client):
+    """Fast-path closure rejects declarations without children and later surplus receipts."""
+    client = import_source_client
+    project, batch = await _import(client)
+    before = await _success_facts(project)
+    async with db_session.get_session_factory()() as session:
+        with pytest.raises(DBAPIError) as caught:
+            async with session.begin():
+                snapshot = await TaskImportMembership(session).prepare(UUID(project), UUID(batch["batch_id"]))
+                actor = await session.scalar(select(TaskCommandReceipt.actor_profile_id).where(
+                    TaskCommandReceipt.task_id == batch["tasks"][0]["id"],
+                    TaskCommandReceipt.action_id == "project.task.create",
+                ))
+                link = (await session.scalars(select(ActorIdentityLink).where(
+                    ActorIdentityLink.actor_profile_id == actor,
+                ))).one()
+                session.add(TaskBatchTransitionReceipt(
+                    id=new_record_id(), actor_profile_id=actor, identity_link_id=link.id,
+                    action_id="project.task.screen", idempotency_key=uuid4(),
+                    request_digest=canonical_json_hash({"project_id": project, "batch_id": batch["batch_id"],
+                        "operation": "project.task.screen", "reason": None}),
+                    reason=None, project_id=project, batch_id=batch["batch_id"], row_count=2,
+                    manifest_digest=snapshot.manifest_digest, membership_digest=_membership_digest(snapshot),
+                    status="pending",
+                ))
+                await session.flush()
+        assert getattr(caught.value.orig, "sqlstate", None) == "23514"
+        assert "task batch transition cannot remain pending" in str(caught.value.orig)
+    assert await _success_facts(project) == before
+
+    screened = await client.post(_path(project, batch, "screen"), headers=auth_headers(), json={})
+    assert screened.status_code == 200, screened.text
+    before = await _success_facts(project)
+    async with db_session.get_session_factory()() as session:
+        with pytest.raises(DBAPIError) as caught:
+            async with session.begin():
+                retained = (await session.scalars(select(TaskCommandReceipt).where(
+                    TaskCommandReceipt.task_id == batch["tasks"][0]["id"],
+                    TaskCommandReceipt.action_id == "project.task.screen",
+                ))).one()
+                values = {column.key: getattr(retained, column.key) for column in TaskCommandReceipt.__table__.columns}
+                values.update(id=new_record_id(), idempotency_key=uuid4())
+                session.add(TaskCommandReceipt(**values))
+                await session.flush()
+        assert getattr(caught.value.orig, "sqlstate", None) == "23514"
+        assert "task batch transition command must be committed with its root" in str(caught.value.orig)
+    assert await _success_facts(project) == before
+
+
 @pytest.mark.parametrize("corruption", ["missing_member", "pending_root", "authority_facts_digest"])
 async def test_native_commit_refuses_incomplete_aggregate_after_real_canonical_stages(
     import_source_client, corruption,
