@@ -1,7 +1,7 @@
 # ARCH-04F2 — Authorized checker remediation handoff
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: the existing hidden completion operation atomically
   routes an exact current contributor-correctable result to TASK `needs_revision`,
   retaining its source and actual AUTH receipt without Review or acceptance effects.
@@ -113,7 +113,7 @@ Parallel ART proof must not invent a defect or duplicate those safeguards.
   survives the migration; function search paths and table references are safe.
 - Discriminating guard-removal probes must fail at their intended assertions,
   not fixture setup or unrelated digest errors. Reuse existing valid fixtures.
-Named future regression groups (not executed proof):
+Named regression groups:
 `test_remediation_outcome_and_replay` (true/false and all zero-effect tables),
 `test_false_remediation_does_not_wait_for_rev` (independent held REV row),
 `test_remediation_rejects_crossed_source` (valid foreign controls),
@@ -146,7 +146,8 @@ and 533 (CI lanes) are separate; preserve their owners on integration.
 
 Remaining: exact-cause replacement intake, setup-fault/Operator recovery,
 production composition/false readiness, public intake and the first-layer drill.
-No new capability is claimed by this plan or by parallel ART-only proof.
+The delivered boundary is the hidden authorized failure handoff. Parallel
+ART-only proof does not establish replacement-cause authorization or public intake.
 
 The diff exceeds the preferred L1 size because the same transition must close
 across TASK, AUTH, audit and database custody, with real migration, rollback and
