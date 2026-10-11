@@ -57,6 +57,9 @@ it is not an authoritative native-UUID batch relationship.
   action/permission/resource classifications in the existing TASK authority
   owner; reuse covered Project Manager grant evaluation and canonical denials.
 - Focused TASK/ART/AUTH public-contract and native PostgreSQL/MinIO tests;
+  `tests/test_task_import_sources.py` explicitly invokes the existing canonical
+  ART startup namespace owner omitted by ASGITransport, before scripted guide
+  prerequisites reuse the actual configured `primary` singleton;
   affected ownership/lane/inventory expectations and the selected MCP
   `authorization_context_get` snapshot for additive ActionId parity; current TASK/ART/AUTH specs,
   README and roadmap claims for this chunk only.
@@ -301,8 +304,9 @@ source read preflight authorizes before preparation outcomes are observable;
 it commits no Task or batch effect. Each creation preparation is bound to its
 original active SQLAlchemy root, preventing reuse after rollback/commit. The
 sole author allocates a successor only after the lead names the actual merged
-predecessor; source `0031` is merged, PR534 is reconciling to `0032`, and this
-chunk reserves no ordinal.
+predecessor. Source `0031`, remediation `0032` and contribution reads `0033` are
+merged at main `d47ee1e9917689b94fd9439c09dffaf88c6d3ec1`. The lead delegated
+atomic successor `0034` to that sole author; this source worktree authors no DDL.
 
 ### Scope decisions and transaction preparation
 
@@ -455,10 +459,35 @@ never silently reinterprets retained rows under a later mapping.
 | Source consumer and current CREATE participants | Exact `37d8705d` isolated execution of actual immutable-binding substitution/provider-health, public source, canonical denial, CREATE rollback and receipt controls | 10 passed in 120.95 seconds; runner exit 0, schema `0031_task_import_source`; owned database/role/MinIO cleanup complete | Raw `/tmp/pilot02-atomic-37d-source-create-corrected.log` and `.json`; validates existing owner integration, not installed batch schema |
 | Shared SCREEN/RELEASE participant and membership extraction | Inspected sibling exact `4400568a` native replay; seven source/test files integrated as `96b1fb820` without its separate CLI record | 5 passed in 225.05 seconds; runner exit 0, schema `0031_task_import_source`; database/role cleanup complete | Raw `/tmp/pilot02-bulk-4400568-native.log` and `.json`; historical exact extraction proof, not a new batch-schema or public bulk success claim |
 | Current owners and concrete gap | Inspect source port/parser, TASK create/replay/models and Issue 489 | Canonical caller-root phases, closed batch DTOs, model representations, ART immutable-binding participant and batch/root/AUTH composition are implemented | New table constraints and guards require sole-author DDL and native proof |
-| Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Twenty-four native acceptance cases collect; not executed because batch schema is not installed | Actual 200-Task creation, immutable replay, late-stage rollback, direct SQL guards, exact original-authority revocation and intermediate-wait controls must pass after sole-author DDL |
+| Current-main owner reconciliation | Source-equivalent `13c031333` focused catalogue/import contracts and protected API inventory | 50 passed in 2.09 seconds; one API inventory case passed in 16.01 seconds after its exact two import routes were registered; retained route hashes unchanged | Module boundary, Ruff, Commitrail and Markdown link checks pass; partition has 475 unique exact-union targets. Live OpenAPI comparison and tamper hash pass for all nine selected MCP fragments, plus the transitive-reference control. These pure/contract checks do not prove installed batch schema or public native import success |
+| First installed-schema acceptance diagnostic | Exact combined `28e72311f` source plus sole-author `0034_task_import_batches`; isolated PostgreSQL 16/MinIO runner | First actual 200-row import failed in 61.03 seconds with safe 503; runner exit 1 and complete database/role/MinIO cleanup | PostgreSQL records an ambiguous `project_id` parameter in the binding validator at COMMIT. The migration owner repairs DDL; no native success is claimed. Retained public absent/null-label controls bind the optional label to JSON null rather than SQL NULL. The retained advancement fixture supplies the required canonical nonblank RELEASE reason before the next execution |
+| Public import and atomic effects | Planned isolated runner: `pytest -q tests/tasks/test_task_import_batches.py` with real PostgreSQL 16/MinIO | Twenty-four original native acceptance cases collected before the DDL handoff; two optional-label controls are added for the installed-schema replay. The first integrated execution failed and final native proof remains pending | Actual 200-Task creation, immutable replay, late-stage rollback, direct SQL guards, exact original-authority revocation and intermediate-wait controls must pass after sole-author DDL |
 | Schema, guards and complete integration | Sole-author native graph/reset/UUID proof, affected guards, complete hosted lanes and aggregate | Not run for this chunk | Exact frozen candidate, actual merge tree and cleanup required |
 
 ## Review findings
+
+The installed-schema replay at exact `e56fd60a` passed the real 200-row closure
+and both optional-label controls, then stopped before the advancement import:
+the committed guide fixture had claimed ART's live `primary` namespace with
+fake local-provider facts. A diagnostic observed the exact
+`ArtifactStorageNamespaceError`; database, role and MinIO namespace cleanup
+completed. Two attempted dedicated fixture IDs were rejected by the native
+varchar(20) and singleton-ID constraints at `0015caa7` and `1f904cc7`; both runs
+completed cleanup and neither is passing proof. The shared guide fixture is
+restored unchanged. The actual MinIO source fixture now invokes canonical ART
+startup namespace validation before scripted guide prerequisites reuse its exact
+configured singleton, and closes its bootstrap. Guide object bytes remain
+scripted; actual source bytes still use real MinIO PUT and verification. No
+production validation or migration is changed; the failed public case and full
+26-case replay remain required before readiness.
+
+At exact `99b4d170`, the integrated replay again passed the 200-row and two label
+controls. The startup repair also allowed source upload and the advancement
+import to succeed; canonical SCREEN then correctly rejected its minimal input
+for missing acceptance criteria. The advancement fixture now includes legitimate
+criteria in the original verified JSON, rather than changing a Task or weakening
+SCREEN. That run ended 3 passed / 1 failed in 180.57 seconds with complete owned
+cleanup; the complete 26-case acceptance remains pending.
 
 Independent schema/lock handoff review at exact `37d8705d` found no actionable
 architecture/reuse/security issue in the non-DDL models, replay and preparation
@@ -475,9 +504,15 @@ not prove installed custody or a public import result.
 ## Reconciliation
 
 - Current-source reconciliation: this preparation branch incorporates source
-  prerequisite PR520 and merged main `e77c48b10`,
+  prerequisite PR520 and merged main `d47ee1e9917689b94fd9439c09dffaf88c6d3ec1`,
   retaining its ten-lane CI, hidden materialization/completion/failure/feedback
-  owners and CLI approval/correction contracts. Before implementation, only
+  owners, contribution export and CLI approval/correction contracts. The additive
+  AUTH union retains all 152 actions (116 active and 36 planned), all 78
+  permissions, both contribution-read audit arms and the reviewed atomic import
+  classifications. Shared metadata retains every incoming assignment and lane;
+  the selected MCP context contract is recaptured from clean backend commit
+  `13c0313334d20acbaecd6ea76c54b3573336a40d` after the owner union.
+  Before implementation, only
   this planning record differed from the source candidate. Canonical Task creation now shares
   caller-root phases with its normal public wrapper; atomic batch creation
   still lacks installed schema/native proof. Model/API representations,

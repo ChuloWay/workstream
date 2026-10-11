@@ -225,6 +225,7 @@ def test_exact_active_action_inventory():
         ActionId.PROJECT_TASK_QUEUE_READ,
         ActionId.OPERATIONS_TASK_QUEUE_READ,
         ActionId.PROJECT_TASK_CREATE,
+        ActionId.PROJECT_TASK_IMPORT, ActionId.PROJECT_TASK_IMPORT_BATCH_READ,
         ActionId.PROJECT_TASK_SCREEN,
         ActionId.PROJECT_TASK_RELEASE,
         ActionId.OPERATIONS_TASK_START_OVERRIDE,
