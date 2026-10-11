@@ -399,7 +399,7 @@ cannot be reused as post-submission review-gate evidence. See the
   Qualified native negative controls cover rollback, native waits, revocation
   and immutable custody. The recorded built-CLI 200-row socket journey and
   equivalent verified-source recovery also pass against actual PostgreSQL and
-  MinIO. Complete final-head proof and required review/CI remain pending.
+  MinIO. Required independent review and complete final-head CI remain pending.
   Issue 489 stays open.
   [CLI manager task browsing](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-04.md)
   adds one-page task discovery and exact task detail through existing manager

@@ -111,6 +111,12 @@ Their current root transaction prevents composition across a complete batch.
   explicit `PILOT_02C_BULK_TRANSITION_TARGETS` paths and additive partition
   regeneration. Preserve all atomic/source and ten-lane entries, retained
   assignments, protected-base custody and zero private-edge growth.
+- Exact public API inventory hunk is the existing `batch_actions` block in
+  `backend/tests/test_api_controls.py`: append SCREEN/RELEASE with canonical
+  actions and change complete/protected route counts from 102/100 to 104/102.
+  Preserve atomic POST/GET and both retained-route hashes unchanged. The real
+  OpenAPI check at `932412232` failed on the missing two-route registration;
+  this updates the closed expected inventory rather than weakening a gate.
 - Current-main reconciliation preserves both the atomic import and merged P10
   AUTH arms/action registries. Update the exact closed catalogue count and its
   assertion to their 152-action union, preserving permissions and evaluators;
@@ -369,7 +375,7 @@ not separately prove the redundant aggregate hash predicate or a completed
 second receipt/root. The earlier assumption that no SQL manager-fact binding
 existed missed the retained baseline and is corrected here.
 
-The measured 500-member SCREEN maximum of 121.36 seconds exceeds the default
+The measured 500-member SCREEN maximum of 153.72 seconds exceeds the default
 twelve-second CLI deadline. The scoped batch-write deadline is three minutes,
 an explicit budget with headroom above these local timings, not a production
 latency promise. Other requests retain the default deadline. All-body/connection
@@ -407,6 +413,31 @@ with a changed source conflicts without duplicated effects. The genuine missing
 active-guide SCREEN refusal passed in 16.37 seconds with zero success effects.
 Both isolated native runs used installed 0035 and completed database, role and
 MinIO cleanup. These focused proofs do not claim final full-suite or hosted CI.
+
+The complete 18-case native bulk selection passed in 859.62 seconds at clean
+`932412232c6af92d94c74558841f0858f9a68ac0`, installed 0035, with all database,
+role and MinIO cleanup complete. Real 200/500 source→DRAFT import→SCREEN→RELEASE
+and fresh-authority replay passed; SCREEN took 56.08/153.72 seconds and RELEASE
+47.35/131.30. Complete native membership, partial advancement, late real Task
+write rollback, canonical grant revocation, observed PostgreSQL holder/waiter,
+empty pending roots, surplus/old standalone receipt attachment, immutable SQL
+UPDATE/DELETE/TRUNCATE and advanced-state original import replay all passed.
+The initial command misspelled the replay test selector and exited during
+collection without running tests; its cleanup and raw result are retained. The
+corrected exact eighteen-node selection was collected before this complete run.
+No timeout, lifecycle guard, authority rule or migration was changed for it.
+
+At the same frozen head, Go test/build/vet, full backend Ruff, all 25 owned
+CSV/source/batch HTTP controls and existing documentation/stacked-record/boundary
+checks passed. All nine protected MCP fragments match actual backend OpenAPI
+and their canonical digests using the canonical selected-fragment helpers; the
+reused environment cannot execute the whole MCP suite because its older MCP
+dependency lacks `mcp.server.context`. Hosted complete checks remain required.
+Actual final CLI collection is 167 tests, split disjointly into 165 retained and
+two native caller cases. The source-artifact shell binding accepts only the
+exact SHA/attempt and rejects a prior attempt; removing that guard admits the
+same wrong artifact. The new 240-second native CLI partition budget remains to
+be executed. Required independent review and complete CI remain pending.
 
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
