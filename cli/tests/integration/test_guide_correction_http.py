@@ -281,6 +281,8 @@ def test_guide_correction_uncertainty_credentials_and_bodyless_no_replay(cli, tm
     with http_fixture() as (origin, response, _):
         response.update(status=202, body=json.dumps(dispatched(status=TOKEN)).encode())
         unknown(invoke(cli, origin, path, dispatch=True))
+        response["body"] = json.dumps(dispatched(status=PROJECT)).encode()
+        unknown(invoke(cli, origin, path, dispatch=True, token=UUID(PROJECT).hex))
     with goaway_fixture(tmp_path) as (origin, env, bodies, connections):
         result = invoke(cli, origin, path, dispatch=True, extra_env=env)
         unknown(result, "service_unavailable")

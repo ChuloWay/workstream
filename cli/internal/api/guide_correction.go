@@ -68,7 +68,7 @@ func (c *Client) DispatchGuideCorrection(ctx context.Context, project, guide, co
 	if err != nil || !sameUUID(value.CorrectionOperationID, saved.OperationID) || !sameUUID(value.SetupRunID, saved.SuccessorSetupRunID) ||
 		value.SetupGeneration.Cmp(saved.SuccessorSetupGeneration) != 0 ||
 		!c.safeMetadata(value.CorrectionOperationID) || !c.safeMetadata(value.SetupRunID) || !c.safeMetadata(value.Status) ||
-		sameUUID(value.CorrectionOperationID, c.token) || sameUUID(value.SetupRunID, c.token) {
+		sameUUID(value.CorrectionOperationID, c.token) || sameUUID(value.SetupRunID, c.token) || sameUUID(value.Status, c.token) {
 		return result, guideCorrectionFailure(&Failure{Code: "invalid_api_response", OutcomeUnknown: true}, true)
 	}
 	return Result[GuideCorrectionDispatch]{Raw: raw, Value: value}, nil
