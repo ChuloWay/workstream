@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import replace
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 import pytest
@@ -27,6 +28,8 @@ from app.modules.checkers.api.external import (
 )
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerBinding,
+    LockedExternalCheckerPolicies,
+    LockedExternalPostSubmitPolicy,
     LockedExternalPreSubmitPolicy,
     LockedWorkstreamDefault,
 )
@@ -34,6 +37,10 @@ from app.modules.checkers.api.materialization import SubmissionMaterialEntry
 from app.modules.checkers.selected_pre_submit_execution import SelectedPreSubmitProcessor
 from app.adapters.checkers import SelectedPreSubmitCheckerExecutionAdapter
 from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim
+from app.modules.artifacts.selected_pre_submit_admission import (
+    bind_selected_pre_submit_admission,
+)
+from app.modules.artifacts.submission_manifest import SubmissionCanonicalPredecessor
 from app.modules.artifacts.submission_materialization import (
     PreparedBundleMaterializationService,
 )
@@ -89,6 +96,28 @@ def _policy() -> LockedExternalPreSubmitPolicy:
         workstream_default=default,
         entries=(binding,),
         policy_sha256=canonical_json_hash(body),
+    )
+
+
+def _policies() -> LockedExternalCheckerPolicies:
+    pre = _policy()
+    post_body = {
+        "schema_version": "external_post_submit_policy.v1",
+        "entries": [],
+    }
+    post = LockedExternalPostSubmitPolicy(
+        entries=(),
+        policy_sha256=canonical_json_hash(post_body),
+    )
+    body = {
+        "schema_version": "external_checker_policies.v1",
+        "pre_submit": pre.model_dump(mode="json"),
+        "post_submit": post.model_dump(mode="json"),
+    }
+    return LockedExternalCheckerPolicies(
+        pre_submit=pre,
+        post_submit=post,
+        policies_sha256=canonical_json_hash(body),
     )
 
 
@@ -311,6 +340,59 @@ async def test_selected_pre_default_secret_blocker_precedes_external_image(
         assert result.external_members == ()
         assert grants.requests == []
         assert execution.requests == []
+    finally:
+        await request.prepared_artifact.close()
+        manager.close()
+
+
+@pytest.mark.asyncio
+async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
+    tmp_path,
+) -> None:
+    request, _inspector, manager, _preparation, _catalogue = await _request(tmp_path)
+    policies = _policies()
+    project_id = request.effective_plan.lineage.project_id
+    task = SimpleNamespace(
+        locked_project_context=SimpleNamespace(project_id=project_id),
+        locked_policy=SimpleNamespace(
+            model_dump=lambda **_kwargs: {
+                "locked_guide_version": "v1",
+                "locked_pre_submit_checker_bundle_hash": SHA,
+            }
+        ),
+    )
+    project = SimpleNamespace(
+        project_id=project_id,
+        external_checker_policies=SimpleNamespace(
+            value=json.dumps(
+                policies.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        ),
+    )
+    predecessor = SubmissionCanonicalPredecessor(
+        submission_id=new_record_id(),
+        submission_version=1,
+        archive_sha256=request.prepared_artifact.commitment.sha256,
+        semantic_manifest_sha256=request.manifest.sha256,
+    )
+    try:
+        bound = bind_selected_pre_submit_admission(
+            task=task,
+            project=project,
+            commitment=request.prepared_artifact.commitment,
+            manifest=request.manifest,
+            predecessor=predecessor,
+            predecessor_rules_sha256="sha256:" + "d" * 64,
+            predecessor_exists=True,
+            packet=request.packet,
+        )
+        assert bound.change_gate.outcome.value == "unchanged"
+        assert bound.default_input.predecessor is not None
+        assert bound.default_input.predecessor_rules_sha256 == "sha256:" + "d" * 64
+        assert bound.default_input.current_rules_sha256 == bound.rules_sha256
+        assert bound.policy.policy_sha256 == policies.pre_submit.policy_sha256
     finally:
         await request.prepared_artifact.close()
         manager.close()
