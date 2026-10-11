@@ -325,7 +325,16 @@ begin
        and e.event_payload::jsonb#>>'{manager_authority_facts,idempotency_key}'=c.idempotency_key::text
        and e.event_payload::jsonb#>>'{manager_authority_facts,request_digest}'=c.request_digest
        and e.event_payload::jsonb#>>'{manager_authority_facts,identity_link_id}'=b.identity_link_id::text
-       and e.event_payload::jsonb#>>'{manager_authority_facts,locked_context_hash}'=c.locked_context_hash
+       and e.event_payload::jsonb#>>'{manager_authority_facts,task_status}'=
+         case b.action_id when 'project.task.screen' then 'draft' else 'screening' end
+       and coalesce((e.event_payload::jsonb#>>'{manager_authority_facts,locked_context_hash}')
+         ~ '^sha256:[0-9a-f]{64}$',false)
+       and (b.action_id='project.task.screen' or
+         e.event_payload::jsonb#>>'{manager_authority_facts,locked_context_hash}'=c.locked_context_hash)
+       and public.external_checker_registry_digest(jsonb_build_object(
+         'resource_context',jsonb_strip_nulls(
+           e.event_payload::jsonb->'manager_authority_facts')))
+         =d.after_facts::jsonb->>'resource_context_digest'
        and e.event_payload::jsonb->>'authorization_resource_digest'
          =d.after_facts::jsonb->>'resource_context_digest'
        and e.event_payload::jsonb->>'locked_guide_version'=c.response::jsonb->>'locked_guide_version'
@@ -350,25 +359,46 @@ end $$
 """)
     op.execute(r"""
 create function public.trigger_validate_task_batch_transition() returns trigger
-language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- if not public.validate_task_batch_transition_custody(new.id) then
+language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare final_status text;
+begin
+ select status into final_status from public.task_batch_transition_receipts where id=new.id;
+ if not found or final_status<>'committed' then
+   raise exception 'task batch transition cannot remain pending' using errcode='23514';
+ end if;
+ if new.status='committed'
+    and not public.validate_task_batch_transition_custody(new.id) then
    raise exception 'task batch transition custody mismatch' using errcode='23514';
  end if; return new; end $$
 """)
     op.execute(r"""
 create function public.trigger_validate_task_batch_transition_member() returns trigger
-language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- if not public.validate_task_batch_transition_custody(new.transition_receipt_id) then
-   raise exception 'task batch transition member custody mismatch' using errcode='23514';
- end if; return new; end $$
+language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare parent_status text; parent_xid xid;
+begin
+ select status,xmin into parent_status,parent_xid
+ from public.task_batch_transition_receipts where id=new.transition_receipt_id;
+ if not found or parent_status<>'committed'
+    or parent_xid<>pg_catalog.pg_current_xact_id()::xid then
+   raise exception 'task batch transition member must be committed with its root' using errcode='23514';
+ end if;
+ return new;
+end $$
 """)
     op.execute(r"""
 create function public.trigger_validate_task_batch_command_root() returns trigger
-language plpgsql set search_path=pg_catalog,public,pg_temp as $$ begin
- if new.batch_transition_receipt_id is not null
-    and not public.validate_task_batch_transition_custody(new.batch_transition_receipt_id) then
-   raise exception 'task batch transition command custody mismatch' using errcode='23514';
- end if; return new; end $$
+language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare parent_status text; parent_xid xid;
+begin
+ if new.batch_transition_receipt_id is null then return new; end if;
+ select status,xmin into parent_status,parent_xid
+ from public.task_batch_transition_receipts where id=new.batch_transition_receipt_id;
+ if not found or parent_status<>'committed'
+    or parent_xid<>pg_catalog.pg_current_xact_id()::xid then
+   raise exception 'task batch transition command must be committed with its root' using errcode='23514';
+ end if;
+ return new;
+end $$
 """)
     op.execute(
         "create constraint trigger task_batch_transition_custody after insert or update on public.task_batch_transition_receipts deferrable initially deferred for each row execute function public.trigger_validate_task_batch_transition()"
