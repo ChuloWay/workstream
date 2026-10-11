@@ -5,12 +5,14 @@ from __future__ import annotations
 from dataclasses import replace
 from io import BytesIO
 import json
+import hashlib
 from types import SimpleNamespace
 from uuid import UUID
 from zipfile import ZipFile
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from starlette.requests import Request
 
 from app.api.deps.authorization import compose_hidden_submission_creation_command
@@ -47,6 +49,7 @@ from app.modules.tasks.api.submission_context import (
     TaskSubmissionContextUnavailable,
 )
 from app.modules.tasks.models import SubmissionDispatch
+from app.modules.tasks.submission_composition import TaskSubmissionCreationService
 from app.adapters.tasks import task_submission_context_port
 from tests.artifact_store_helpers import artifact_byte_stream
 from tests.checkers.execution.support import reserve
@@ -546,6 +549,154 @@ async def test_replacement_dispatch_sql_rejects_cause_and_receipt_substitution(
                 assert await session.scalar(
                     validate, {"body": json.dumps(dispatch_body | {field: substituted})}
                 ) is False, field
+
+
+async def test_sql_evidence_insert_rejects_superseded_checker_cause(
+    tmp_path, isolated_database_env,
+):
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        source_id = await _fixture_revision_context(h)
+        admission_id = await _verified_admission(
+            h.factory, h.store, h.namespace, h.settings, h.actor_context,
+            _replacement_request(
+                h, revision_archive(h.data), predecessor_id=h.created.submission_id,
+                idempotency_key=new_record_id(),
+            ),
+        )
+        async with h.factory() as session:
+            admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+            assert admission.status == "ready"
+            assert admission.checker_remediation_manifest_id == str(source_id)
+            donor_id = admission.pre_submit_evidence_set_id
+
+        await reserve(h, await next_request(h))
+        before = await _snapshot(h)
+        async with h.factory() as session:
+            current_run_id = await session.scalar(text(
+                "SELECT current_run_id FROM public.checker_submission_fences "
+                "WHERE submission_id=:id"
+            ), {"id": h.created.submission_id})
+            routed_run_id = await session.scalar(text(
+                "SELECT checker_run_id FROM public.task_post_submit_routing_manifests "
+                "WHERE id=:id"
+            ), {"id": source_id})
+            assert current_run_id != routed_run_id
+        duplicate_id = new_record_id()
+        distinct_operation = "sha256:" + hashlib.sha256(str(duplicate_id).encode()).hexdigest()
+        with pytest.raises(
+            IntegrityError, match="pre-submit remediation evaluation is not current",
+        ):
+            async with h.factory() as session, session.begin():
+                await session.execute(text("""
+                    INSERT INTO public.pre_submit_evidence_sets
+                    SELECT (pg_catalog.jsonb_populate_record(
+                      NULL::public.pre_submit_evidence_sets,
+                      pg_catalog.to_jsonb(e) || pg_catalog.jsonb_build_object(
+                        'id', CAST(:new_id AS text),
+                        'operation_identity', CAST(:operation_identity AS text),
+                        'created_at', transaction_timestamp()
+                      ))).*
+                    FROM public.pre_submit_evidence_sets e WHERE e.id=:donor_id
+                """), {
+                    "new_id": str(duplicate_id),
+                    "operation_identity": distinct_operation,
+                    "donor_id": donor_id,
+                })
+        assert await _snapshot(h) == before
+
+
+@pytest.mark.parametrize("advance_fence", [False, True])
+async def test_dispatch_commit_requires_current_predecessor_checker_fence(
+    tmp_path, isolated_database_env, monkeypatch, advance_fence,
+):
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        source_id = await _fixture_revision_context(h)
+        request = _replacement_request(
+            h, revision_archive(h.data), predecessor_id=h.created.submission_id,
+            idempotency_key=new_record_id(),
+        )
+        admission_id = await _verified_admission(
+            h.factory, h.store, h.namespace, h.settings, h.actor_context, request,
+        )
+        async with h.factory.begin() as session:
+            frozen = await task_submission_context_port(session).lock_submission_context(
+                _context_request(h)
+            )
+        assert frozen.checker_remediation_manifest_id == source_id
+        creation = SubmissionCreationRequest(
+            task_id=h.request.task_id,
+            assignment_id=h.request.assignment_id,
+            contributor_id=h.actor_context.actor_profile_id,
+            predecessor_submission_id=h.created.submission_id,
+            admission_id=admission_id,
+            summary=request.summary,
+            contributor_attestation=request.contributor_attestation,
+        )
+
+        if advance_fence:
+            await reserve(h, await next_request(h))
+            async with h.factory.begin() as session:
+                with pytest.raises(TaskSubmissionContextUnavailable):
+                    await task_submission_context_port(session).lock_submission_context(
+                        _context_request(h)
+                    )
+
+        class FrozenTaskContextPort:
+            async def lock_submission_context(self, selected):
+                assert selected == _context_request(h)
+                return frozen
+
+        staged = []
+        original_create = TaskSubmissionCreationService.create
+
+        async def traced_create(service, selected):
+            result = await original_create(service, selected)
+            assert await service._session.scalar(text(
+                "SELECT count(*) FROM public.submission_dispatches WHERE submission_id=:id"
+            ), {"id": result.submission_id}) == 1
+            staged.append(result.submission_id)
+            return result
+
+        monkeypatch.setattr(TaskSubmissionCreationService, "create", traced_create)
+        if advance_fence:
+            # Deliberately stale TASK port only: the writer still executes real
+            # AUTH, ART consumption, CHECKERS reservation, outbox and SQL commit.
+            monkeypatch.setattr(
+                "app.adapters.tasks.task_submission_context_port",
+                lambda _session: FrozenTaskContextPort(),
+            )
+            with pytest.raises(
+                IntegrityError, match="replacement dispatch evaluation is not current",
+            ):
+                async with h.factory() as session:
+                    await compose_hidden_submission_creation_command(
+                        session, h.actor_context, request_id=new_record_id(),
+                        correlation_id=new_record_id(),
+                    ).create(creation)
+            assert len(staged) == 1
+            async with h.factory() as session:
+                assert await session.scalar(text("SELECT count(*) FROM public.submissions")) == 1
+                assert await session.scalar(text("SELECT count(*) FROM public.submission_dispatches")) == 1
+                admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+                assert admission.status == "ready"
+                assert await session.scalar(text(
+                    "SELECT status FROM public.workstream_tasks WHERE id=:id"
+                ), {"id": h.request.task_id}) == "needs_revision"
+        else:
+            async with h.factory() as session:
+                created = await compose_hidden_submission_creation_command(
+                    session, h.actor_context, request_id=new_record_id(),
+                    correlation_id=new_record_id(),
+                ).create(creation)
+            assert staged == [created.submission_id]
+            assert created.submission_version == 2
+            async with h.factory() as session:
+                dispatch = await session.get(SubmissionDispatch, str(created.submission_id))
+                assert dispatch.checker_remediation_manifest_id == source_id
+                assert await session.scalar(text(
+                    "SELECT public.submission_dispatch_valid(d) "
+                    "FROM public.submission_dispatches d WHERE d.submission_id=:id"
+                ), {"id": created.submission_id}) is True
 
 
 async def test_foreign_predecessor_stops_at_task_context_before_art_effects(
