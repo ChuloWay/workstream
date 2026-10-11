@@ -23,7 +23,7 @@ from app.modules.artifacts.models import (
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.models import AuditEvent, Submission, TaskAssignment, WorkstreamTask
-from tests.pre_submit_test_helpers import approved_pre_submit_fixture
+from tests.selected_policy_fixtures import approved_selected_policy_fixture
 from tests.submission_preparation_auth_helpers import install_submitter_grant
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.test_artifact_admission import (
@@ -43,11 +43,17 @@ from tests.tasks.submission_lineage_support import _seed_services, _verified_adm
 async def _prepared_packet(isolated_database_env, tmp_path):
     engine = create_async_engine(isolated_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    settings = _settings(tmp_path, maximum_bytes=1024 * 1024)
+    settings = _settings(
+        tmp_path,
+        maximum_bytes=1024 * 1024,
+        external_checker=True,
+    )
     namespace = _namespace(settings)
     bootstrap, store = _local_store(settings, namespace)
     try:
-        plan, policy = await approved_pre_submit_fixture(factory, namespace, guide_version="v1")
+        plan, policy = await approved_selected_policy_fixture(
+            factory, namespace, guide_version="v1"
+        )
         context = _context()
         await _seed_services(factory)
         task_id, assignment_id = new_record_id(), new_record_id()

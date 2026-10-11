@@ -23,7 +23,7 @@ from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
 from tests.artifact_store_helpers import artifact_admission_limit_settings
-from tests.pre_submit_test_helpers import approved_pre_submit_fixture
+from tests.selected_policy_fixtures import approved_selected_policy_fixture
 from tests.submission_preparation_auth_helpers import install_submitter_grant
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.tasks.submission_lineage_support import _seed_services, _verified_admission
@@ -131,7 +131,11 @@ async def _material_fixture(
             "artifact_scratch_minimum_free_bytes": 0,
         })
     else:
-        settings = _settings(tmp_path, maximum_bytes=1024 * 1024)
+        settings = _settings(
+            tmp_path,
+            maximum_bytes=1024 * 1024,
+            external_checker=True,
+        )
     bootstrap = create_artifact_store_bootstrap(settings)
     namespace = artifact_storage_namespace_spec(settings, bootstrap)
     store = bootstrap.initialize_after_namespace_claim(ArtifactStoreNamespaceClaim(
@@ -139,7 +143,7 @@ async def _material_fixture(
     ))
     manager = ArtifactScratchManager(root=tmp_path / "post-scratch", limits=scratch_limits if scratch_limits is not None else _limits())
     try:
-        plan, policy = await approved_pre_submit_fixture(
+        plan, policy = await approved_selected_policy_fixture(
             factory,
             namespace,
             guide_version="v1",

@@ -166,10 +166,15 @@ def admission_database_env(isolated_database_env: str) -> Iterator[str]:
     yield isolated_database_env
 
 
-def _settings(tmp_path: Path, *, maximum_bytes: int = 1024) -> Settings:
+def _settings(
+    tmp_path: Path,
+    *,
+    maximum_bytes: int = 1024,
+    external_checker: bool = False,
+) -> Settings:
     durable_root = tmp_path / "durable"
     durable_root.mkdir(mode=0o700, parents=True)
-    return Settings(
+    values = dict(
         _env_file=None,
         **artifact_admission_limit_settings(maximum_bytes),
         environment="test",
@@ -178,6 +183,12 @@ def _settings(tmp_path: Path, *, maximum_bytes: int = 1024) -> Settings:
         artifact_scratch_root=tmp_path / "scratch",
         artifact_scratch_minimum_free_bytes=0,
     )
+    if external_checker:
+        values.update(
+            external_checker_service_socket=tmp_path / "checker.sock",
+            external_checker_material_root=tmp_path / "scratch",
+        )
+    return Settings(**values)
 
 
 def _namespace(settings: Settings) -> ArtifactStorageNamespaceSpec:
