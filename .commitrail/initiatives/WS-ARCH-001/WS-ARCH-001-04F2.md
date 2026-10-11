@@ -12,7 +12,7 @@ Group 1 of the first contributor milestone requires failed post-submit work to
 reach its contributor without being mistaken for a human review or acceptance.
 04F1 already supplies current verified failure results; 02I-A supplies pre-submit
 feedback. Neither performs this post-submit handoff. Before this change TASK request, source,
-outcome, completion handler and SQL closure accept only `allow_review`.
+outcome, completion handler and SQL closure accepted only `allow_review`.
 
 This child makes the hidden lifecycle handoff representable and authorized. It
 does not add a public route or response body: contributors continue to use the

@@ -1002,7 +1002,8 @@ remaining trace sequence is:
   and [CON-07 hidden participation](../.commitrail/initiatives/WS-CON-001/WS-CON-001-07.md),
   plus the REV-04C hidden FinalAcceptance/TASK/CON participant, support the
   additional false-path acceptance-source AUTH custody and activation prerequisites. Both branches have delivered request reservation `04E1B-A` and AUTH preparation `04E2-A`,
-  then authorized success outcomes/completion delivery/live `04E2-B -> 04E1B-B -> 04E3`; true
+  followed by delivered authorized success outcomes `04E2-B` and hidden completion
+  delivery `04E1B-B8`. Production registration/live composition `04E3` remains pending; true
   routing proceeds after its own prerequisites without shared acceptance. 04F1
   supplies verified failure evidence and 04F2 supplies the hidden remediation
   handoff; exact-cause replacement intake and recovery remain. The mandatory
@@ -1015,9 +1016,10 @@ remaining trace sequence is:
   300-second hard limit under prefork.
   ARCH-03C2 enforces a dedicated non-eager prefork delivery queue.
   ARCH-04E1A proves source storage and detached contracts only; its false scalar
-  proof does not make false activation available. Automatic `04E` delivery still needs its
-  separately authorized checker-routing handler; the installed assignment handler
-  does not supply that authority. These foundations do not require REV or fulfillment.
+  proof does not make false activation available. Automatic `04E` delivery still needs
+  production registration and live composition of the implemented authorized
+  checker-routing handler; the installed assignment handler does not provide them.
+  The true handoff does not require REV or fulfillment.
   TASK request/source-identity reservation `04E1B-A`, hidden AUTH preparation
   `04E2-A`, CON-07 participation and REV-04C hidden FinalAcceptance/TASK/CON
   composition are delivered. The hidden `04E2-B` operation now supplies mandatory authority/evidence
