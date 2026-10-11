@@ -109,7 +109,7 @@ func (c *Client) ImportTaskBatch(ctx context.Context, project, source, key strin
 		return result, errors.New("PROJECT_ID, SOURCE_ID and --idempotency-key must be UUIDs")
 	}
 	body, _ := json.Marshal(map[string]string{"source_id": source})
-	raw, err := c.requestWithResponseLimit(ctx, http.MethodPost, taskImportBatchPath(project), "", body, key, http.StatusCreated, taskImportResponseLimit)
+	raw, err := c.requestWithClientAndResponseLimit(ctx, c.taskBatchHTTP, http.MethodPost, taskImportBatchPath(project), "", body, key, http.StatusCreated, taskImportResponseLimit)
 	if err != nil {
 		return result, taskBatchWriteFailure(err)
 	}
@@ -167,7 +167,7 @@ func (c *Client) TransitionTaskBatch(ctx context.Context, project, batch, operat
 	if err != nil {
 		return result, err
 	}
-	raw, err := c.requestWithResponseLimit(ctx, http.MethodPost, taskImportBatchPath(project)+"/"+url.PathEscape(batch)+"/"+operation, "", body, key, http.StatusOK, taskBatchTransitionResponseLimit)
+	raw, err := c.requestWithClientAndResponseLimit(ctx, c.taskBatchHTTP, http.MethodPost, taskImportBatchPath(project)+"/"+url.PathEscape(batch)+"/"+operation, "", body, key, http.StatusOK, taskBatchTransitionResponseLimit)
 	if err != nil {
 		return result, taskBatchWriteFailure(err)
 	}

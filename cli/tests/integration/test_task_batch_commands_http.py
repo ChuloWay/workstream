@@ -2,8 +2,10 @@
 
 from copy import deepcopy
 import json
+import time
 from uuid import UUID
 
+import pytest
 from app.modules.tasks.schemas import TaskResponse
 from http2_fixture import goaway_fixture
 from test_contributor_task_mutations import KEY, canonical_error
@@ -140,6 +142,39 @@ def test_explicit_commands_preserve_original_and_current_facts_and_exact_request
             ("application/json", [KEY], {"source_id": SOURCE}),
             *[("application/json", [KEY], {"reason": "Decision"}) for _ in range(4)],
         ]
+
+
+@pytest.mark.parametrize("operation", ["import", "screen", "release"])
+def test_batch_write_waits_past_ordinary_deadline_without_retry(cli, operation):
+    """Actual delayed headers use the scoped write budget through each public command."""
+    expected = creation() if operation == "import" else transition(operation)
+    with http_fixture() as (origin, response, requests):
+        response.update(
+            status=201 if operation == "import" else 200,
+            body=json.dumps(expected).encode(),
+            delay=13,
+        )
+        result = invoke(cli, origin, operation)
+        assert result.returncode == 0 and json.loads(result.stdout) == expected, (
+            result.stderr
+        )
+        assert len(requests) == len(response["commands"]) == 1
+        assert response["commands"][0][1] == [KEY]
+
+
+def test_batch_status_keeps_ordinary_deadline(cli):
+    """A delayed observation remains bounded by the normal read transport."""
+    with http_fixture() as (origin, response, requests):
+        response.update(body=json.dumps(status()).encode(), delay=13)
+        started = time.monotonic()
+        result = invoke(cli, origin, "status")
+        assert time.monotonic() - started < 15
+        assert result.returncode == 1 and result.stdout == ""
+        error = json.loads(result.stderr)["error"]
+        assert error["code"] == "service_unavailable" and not error.get(
+            "outcome_unknown", False
+        )
+        assert len(requests) == 1 and response["commands"] == []
 
 
 def test_complete_500_row_original_status_and_compact_results_are_not_truncated(cli):

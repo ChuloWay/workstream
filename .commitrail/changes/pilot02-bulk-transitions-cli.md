@@ -62,7 +62,12 @@ Their current root transaction prevents composition across a complete batch.
 - Lead-approved exact `cli/internal/api/client.go` PUT additions: classify PUT
   alongside POST/PATCH at the three existing mutation checks and require the
   canonical error envelope for POST/PUT. Disable automatic body replay and retain
-  uncertain-write reporting; no other shared-client changes are authorized.
+  uncertain-write reporting. Measured batch writes also permit one explicit
+  `taskBatchHTTP` client cloned from the unchanged transport, with a three-minute
+  timeout, and a narrow extraction of the existing bounded-response operation to
+  accept that client. Only import/SCREEN/RELEASE use it. Status, source operations,
+  redirects, proxies, automatic retries and default twelve-second requests stay
+  under their existing contracts. Real delayed HTTP controls prove the scope.
 - Exact CLI proof paths are new `cli/tests/integration/test_task_batch_csv.py`
   and `test_task_batch_sources_http.py`, plus
   `test_task_batch_commands_http.py`; the existing HTTP fixture receives one
@@ -327,6 +332,23 @@ multiple grants. The bounded repair revokes every actual covering PM grant in
 deterministic order through the unchanged canonical revocation operation. It
 retains permission denial, denial-only evidence and unchanged successful facts.
 
+Focused replay at exact `0e642e9f4ee091d4be7bafd6ee41388c69fac35e` passed both
+repaired controls in 49.68 seconds, with installed 0035 and all cleanup complete.
+The original statement trace qualifies the digest refusal: the existing
+`guard_task_management_audit` baseline INSERT guard reports SQLSTATE 23514,
+`task management audit mismatch`. It already recomputes the null-stripped
+resource-context digest and compares the consumed decision. The control proves
+two real Task writes followed by native refusal and complete rollback; it does
+not separately prove the redundant aggregate hash predicate or a completed
+second receipt/root. The earlier assumption that no SQL manager-fact binding
+existed missed the retained baseline and is corrected here.
+
+The measured 500-member SCREEN maximum of 121.36 seconds exceeds the default
+twelve-second CLI deadline. The scoped batch-write deadline is three minutes,
+an explicit budget with headroom above these local timings, not a production
+latency promise. Other requests retain the default deadline. All-body/connection
+failure uncertainty, caller keys and no automatic write retry remain mandatory.
+
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
 is reconciled onto the unmerged atomic candidate `91183adafec37e7ad7eda624ad3556d89dc54ce6`;
@@ -435,13 +457,13 @@ refusal measured fingerprint `b280e4e561f83740799a4fe29c43ba73145262d05d663d4bf7
 sole-author `fc1794b8` records that measurement. All these runs cleaned up their
 database, role and MinIO namespaces.
 
-Further source review found that digest-shape plus event/decision equality did
-not cryptographically bind the actual lifecycle manager facts in SQL. Sole-author
+Further source review required an explicit aggregate check of the actual
+lifecycle manager facts. Sole-author
 `af2bdc2d` adds the exact canonical hash of the null-stripped manager resource
 context against the consumed decision. Its changed function body requires a new
 measured schema fingerprint. The existing native incomplete-custody control now
 also alters a digest-shaped initial lifecycle pre-write hash while retaining the
-genuine decision and event digest. It must refuse commit and roll back all staged
+genuine decision and event digest. It must refuse admission and roll back all staged
 effects. This is an additive test-only admission control; no production or gate
 owner changes. The 15-case suite retains the actual 200/500 journeys, currentness,
 fresh authority, observed PostgreSQL waits and immutable SQL controls. Native
@@ -453,7 +475,7 @@ passed two cases in 99.73 seconds with installed 0035 and database, role and Min
 cleanup all confirmed. It proves late-stage rollback followed by legitimate
 SCREEN, changed-payload and partially advanced replay refusal, and the new
 altered-manager-facts refusal. The negative control additionally observes both
-canonical Task lifecycle stages before refusal; the full 15-case run must verify
+canonical Task writes before refusal; the full 15-case run must verify
 that stronger observation and the larger journeys before any readiness claim.
 
 - Current-source reconciliation: Preserve the atomic owner's import/status and

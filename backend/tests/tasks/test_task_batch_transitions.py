@@ -413,11 +413,11 @@ async def test_native_commit_refuses_incomplete_aggregate_after_real_canonical_s
     try:
         refused = await client.post(
             _path(project, batch, "screen"), headers=auth_headers(),
-            json={"reason": "Complete canonical stages before native refusal"},
+            json={"reason": "Canonical Task writes before native refusal"},
         )
         assert changed, "the intended final aggregate INSERT/completion was not reached"
         if corruption == "authority_facts_digest":
-            assert staged_task_ids == {row["id"] for row in batch["tasks"]}, "all canonical stages must precede native refusal"
+            assert staged_task_ids == {row["id"] for row in batch["tasks"]}, "all canonical Task writes must precede native refusal"
         assert refused.status_code == 503 and refused.json()["error"]["retryable"] is True, refused.text
         assert await _success_facts(project) == before
     finally:

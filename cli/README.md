@@ -540,8 +540,10 @@ of `status` as an observation, followed by manual replay of the unchanged projec
 source/batch, action, reason and key. SCREEN/RELEASE replay also requires every
 member to retain its original post-state, locked context and unassigned custody;
 later Task changes or revoked authority can prevent recovery with the same key.
-The aggregate migration and real 200/500-row journey/timing proofs remain pending
-in this draft implementation; no native bulk readiness is claimed.
+Import, SCREEN and RELEASE wait up to three minutes for their complete atomic
+response. Status and source operations retain the normal twelve-second deadline.
+These are request budgets; an interrupted or timed-out write can still require
+the same manual recovery above.
 
 Source writes never retry automatically, including after HTTP/2 GOAWAY. If a
 declaration outcome is unknown, manually replay only the unchanged project,

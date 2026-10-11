@@ -385,9 +385,11 @@ cannot be reused as post-submission review-gate evidence. See the
   The [PILOT-02C bulk/CLI candidate](../.commitrail/changes/pilot02-bulk-transitions-cli.md)
   implements caller-root canonical SCREEN/RELEASE composition and separate CLI
   source/import/status/screen/release commands with local CSV-to-JSON conversion.
-  Focused model/contract and controlled CLI HTTP proof do not establish native
-  aggregate readiness: sole-author DDL, public PostgreSQL/MinIO 200/500-member
-  journeys and complete review/CI remain pending. Issue 489 stays open.
+  Installed sole-author DDL proves public PostgreSQL/MinIO 200/500-member
+  import-screen-release journeys and fresh replay in the recorded candidate.
+  Qualified native negative controls cover rollback, native waits, revocation
+  and immutable custody. Complete final-head proof, native CLI composition and
+  required review/CI remain pending. Issue 489 stays open.
   [CLI manager task browsing](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-04.md)
   adds one-page task discovery and exact task detail through existing manager
   reads, with server-owned live authority and opaque continuation.
