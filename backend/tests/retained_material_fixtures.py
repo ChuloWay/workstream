@@ -16,6 +16,7 @@ from zipfile import ZipFile
 from sqlalchemy import select
 
 from app.adapters.artifacts import CheckerPhaseService
+from app.adapters.tasks import task_submission_context_port
 from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import (
     ArtifactObjectHead, ArtifactPutObservation, ArtifactPutResult, artifact_provider_object_ref,
@@ -35,7 +36,6 @@ from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
 from app.modules.projects.models import EffectiveProjectSubmissionArtifactPolicy
-from app.modules.tasks.repository import TaskRepository
 from tests.checkers.execution.support import forbidden_post_submission
 from tests.pre_submit_test_helpers import evidence_workflow
 from tests.test_artifact_admission import _AllowArtifactAuthority, _context, _settings
@@ -116,7 +116,8 @@ async def retained_admission(factory, task, assignment, link, packet, predecesso
         try:
             async with factory() as session:
                 authority = PreparedSubmissionBundlePreparationAuthorization(session, context)
-                tasks, projects = TaskRepository(session), ProjectLockedPolicyRepository(session)
+                tasks = task_submission_context_port(session)
+                projects = ProjectLockedPolicyRepository(session)
                 preparation = ArtifactPreparationService(manager)
                 inspector = SubmissionArchiveInspector(SubmissionArchiveLimits())
                 catalogue = build_pre_submission_checker_catalogue()
