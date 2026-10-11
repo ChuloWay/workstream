@@ -330,7 +330,9 @@ class PostSubmissionMaterializer:
                         execution=facts, materialization=materialization_facts,
                         media_type=selected.media_type,
                     ),
-                    reserved_bytes=manifest.total_expanded_bytes, maximum_entries=manifest.entry_count,
+                    reserved_bytes=manifest.total_expanded_bytes,
+                    # ART's external grant adds one owned mount around the tree.
+                    maximum_entries=manifest.entry_count + 1,
                 )
             finally:
                 if prepared is not None:

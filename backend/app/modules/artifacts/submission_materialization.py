@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import asdict, dataclass, replace
+from pathlib import Path
 from typing import Protocol, final
 from uuid import UUID
 
@@ -10,9 +12,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.hashing import canonical_json_hash
+from app.interfaces.external_checker_execution import (
+    ExternalCheckerMaterialGrant,
+)
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
 from app.modules.artifacts.schemas import ArtifactAuthorityDeniedError
-from app.modules.artifacts.preparation import ArtifactPreparationService
+from app.modules.artifacts.preparation import (
+    ArtifactPreparationService,
+    ExternalMaterialFile,
+    ExternalMaterialGrantRequest,
+)
 from app.modules.artifacts.sources import PreparedArtifact
 from app.modules.artifacts.pre_submit_evidence import (
     PreSubmitEvidenceInput,
@@ -44,6 +53,16 @@ from app.modules.checkers.api import (
     PreSubmissionInfrastructureUnavailableError,
     SubmissionPacketView,
 )
+from app.modules.checkers.api.default_checker import (
+    WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+    WorkstreamDefaultCheckerInput,
+)
+from app.modules.checkers.api.external import (
+    ExternalCheckerExecutionRequest,
+    PreSubmitExternalCheckerIdentity,
+    PreSubmitExternalCheckerMaterial,
+)
+from app.modules.checkers.api.external_policy import LockedExternalPreSubmitPolicy
 from app.modules.projects.api import ProjectLockedPolicyContextPort
 from app.modules.tasks.api import TaskSubmissionContextPort
 
@@ -63,6 +82,8 @@ class PreparedBundleMaterializationRequest:
     manifest: SubmissionManifest
     change_gate: SubmissionChangeGateResult
     packet: SubmissionPacketView
+    external_policy: LockedExternalPreSubmitPolicy | None = None
+    default_checker_input: WorkstreamDefaultCheckerInput | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +91,8 @@ class PreSubmitCheckerExecutionRequest:
     """Exact process-local input supplied to the composition CHECKER adapter."""
 
     plan: EffectivePreSubmissionExecutionPlan
+    task_id: UUID
+    assignment_id: UUID
     commitment: object
     inspection: SubmissionArchiveInspectionResult
     manifest: SubmissionManifest
@@ -77,6 +100,106 @@ class PreSubmitCheckerExecutionRequest:
     packet: SubmissionPacketView
     prepared_generation_id: UUID
     storage_scheme: str
+    external_policy: LockedExternalPreSubmitPolicy | None = None
+    default_checker_input: WorkstreamDefaultCheckerInput | None = None
+    attempt_id: UUID | None = None
+    attempt_request_digest: str | None = None
+    external_grants: "PreSubmitExternalGrantPort | None" = None
+
+
+class PreSubmitExternalGrantPort(Protocol):
+    """Issue one callback-scoped grant from genuine prepared ART custody."""
+
+    def issue(
+        self,
+        request: ExternalCheckerExecutionRequest,
+        workspace: Path,
+    ) -> AbstractContextManager[ExternalCheckerMaterialGrant]: ...
+
+
+class _PreSubmitExternalGrantIssuer:
+    """Keep private prepared-artifact authority behind a typed callback port."""
+
+    def __init__(
+        self,
+        *,
+        preparation: ArtifactPreparationService,
+        prepared: PreparedArtifact,
+        request: PreparedBundleMaterializationRequest,
+        claim: PreSubmitAttemptClaim,
+    ) -> None:
+        self._preparation = preparation
+        self._prepared = prepared
+        self._request = request
+        self._claim = claim
+
+    @contextmanager
+    def issue(
+        self,
+        request: ExternalCheckerExecutionRequest,
+        workspace: Path,
+    ):
+        """Bind the service grant to exact claim, manifest and prepared bytes."""
+        checked = ExternalCheckerExecutionRequest.model_validate(request)
+        identity = checked.identity
+        source = self._request
+        if (
+            not isinstance(identity, PreSubmitExternalCheckerIdentity)
+            or identity.project_id != source.effective_plan.lineage.project_id
+            or identity.task_id != source.task_id
+            or identity.assignment_id != source.assignment_id
+            or identity.prepared_generation_id != source.prepared_artifact.generation_id
+            or identity.attempt_id != self._claim.attempt_id
+            or identity.attempt_request_digest != self._claim.request_digest
+            or len(checked.materials) != 1
+            or not isinstance(checked.materials[0], PreSubmitExternalCheckerMaterial)
+        ):
+            raise PreSubmitEvidenceConflict("pre_submit_external_request_invalid")
+        material = checked.materials[0]
+        commitment = source.prepared_artifact.commitment
+        if (
+            material.prepared_generation_id != source.prepared_artifact.generation_id
+            or material.attempt_id != self._claim.attempt_id
+            or material.attempt_request_digest != self._claim.request_digest
+            or material.archive_sha256 != commitment.sha256
+            or material.archive_byte_count != commitment.byte_count
+            or material.semantic_manifest_sha256 != source.manifest.sha256
+            or material.media_type != commitment.media_type
+        ):
+            raise PreSubmitEvidenceConflict("pre_submit_external_material_invalid")
+        directories = tuple(
+            item.normalized_path
+            for item in source.manifest.entries
+            if item.entry_type.value == "directory"
+        )
+        files = tuple(
+            ExternalMaterialFile(
+                normalized_path=item.normalized_path,
+                byte_count=item.byte_count,
+                sha256=item.sha256 or "",
+                executable=bool(item.executable),
+            )
+            for item in source.manifest.entries
+            if item.entry_type.value == "file"
+        )
+        grant_request = ExternalMaterialGrantRequest(
+            request_digest=checked.request_digest,
+            prepared_generation_id=str(identity.prepared_generation_id),
+            attempt_id=str(identity.attempt_id),
+            attempt_request_digest=identity.attempt_request_digest,
+            archive_sha256=material.archive_sha256,
+            archive_byte_count=material.archive_byte_count,
+            semantic_manifest_sha256=material.semantic_manifest_sha256,
+            directories=directories,
+            files=files,
+        )
+        with self._preparation.external_material_grant(
+            self._prepared, workspace, grant_request
+        ) as grant:
+            yield ExternalCheckerMaterialGrant(
+                grant_id=grant.grant_id,
+                binding_digest=grant.binding_digest,
+            )
 
 
 class PreSubmissionEvaluationPort(Protocol):
@@ -261,6 +384,8 @@ class PreparedBundleMaterializationService:
         processor = self._checker_execution.build(
             PreSubmitCheckerExecutionRequest(
                 plan=request.effective_plan,
+                task_id=request.task_id,
+                assignment_id=request.assignment_id,
                 commitment=request.prepared_artifact.commitment,
                 inspection=request.inspection,
                 manifest=request.manifest,
@@ -268,6 +393,16 @@ class PreparedBundleMaterializationService:
                 packet=request.packet,
                 prepared_generation_id=request.prepared_artifact.generation_id,
                 storage_scheme=self._storage_scheme,
+                external_policy=request.external_policy,
+                default_checker_input=request.default_checker_input,
+                attempt_id=claim.attempt_id,
+                attempt_request_digest=claim.request_digest,
+                external_grants=_PreSubmitExternalGrantIssuer(
+                    preparation=self._preparation,
+                    prepared=request.prepared_artifact,
+                    request=request,
+                    claim=claim,
+                ),
             ),
         )
         # Intentional friend call: this is the sole authority-gated caller, and
@@ -276,7 +411,8 @@ class PreparedBundleMaterializationService:
             request.prepared_artifact,
             processor,
             reserved_bytes=request.manifest.total_expanded_bytes,
-            maximum_entries=request.manifest.entry_count,
+            # ART's external grant nests the verified tree below one owned mount.
+            maximum_entries=request.manifest.entry_count + 1,
         )
         execution = PreSubmitExecutionResult(
             custody=PreSubmitExecutionCustody(
@@ -344,6 +480,7 @@ class PreparedBundleMaterializationService:
             checker_policy_id=request.checker_policy_id,
             prepared_artifact=request.prepared_artifact,
             effective_plan=plan,
+            external_policy=request.external_policy,
         )
         if (
             request.manifest != request.change_gate.manifest
@@ -369,6 +506,7 @@ class PreparedBundleMaterializationService:
         checker_policy_id: UUID,
         prepared_artifact: PreparedArtifact,
         effective_plan: EffectivePreSubmissionExecutionPlan,
+        external_policy: LockedExternalPreSubmitPolicy | None = None,
     ) -> PreSubmitMaterializationPreparationFacts:
         """Build pre-inspection facts from locked lineage and byte commitment."""
         plan = effective_plan
@@ -379,11 +517,25 @@ class PreparedBundleMaterializationService:
         if (
             submission_artifact_policy_id != plan.lineage.effective_policy_id
             or checker_policy_id != plan.lineage.pre_submit_policy_id
-            or plan.catalogue_manifest_sha256
-            != self._checker_execution.catalogue_manifest_sha256
+            or (
+                external_policy is None
+                and plan.catalogue_manifest_sha256
+                != self._checker_execution.catalogue_manifest_sha256
+            )
         ):
             raise PreSubmissionInfrastructureUnavailableError(
                 "pre_submission_materialization_context_invalid"
+            )
+        if external_policy is not None and (
+            external_policy.policy_sha256
+            != canonical_json_hash(
+                external_policy.model_dump(mode="json", exclude={"policy_sha256"})
+            )
+            or external_policy.workstream_default.behavior_sha256
+            != WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
+        ):
+            raise PreSubmissionInfrastructureUnavailableError(
+                "external_pre_submit_policy_invalid"
             )
         commitment = prepared_artifact.commitment
         return PreSubmitMaterializationPreparationFacts(

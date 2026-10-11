@@ -169,6 +169,7 @@ class ProjectLockedPolicyContextFacts:
     activation_receipt: GuideActivationReceipt
     artifact_policy: CanonicalJsonObject
     compiled_post_submit_policy: CanonicalJsonObject
+    external_checker_policies: CanonicalJsonObject
     review_policy: CanonicalJsonObject
     review_semantics_format: ReviewSemanticsFormat
     revision_policy: CanonicalJsonObject
@@ -200,6 +201,7 @@ class ProjectLockedPolicyContextFacts:
                 self.compiled_pre_submit_bundle,
                 self.artifact_policy,
                 self.compiled_post_submit_policy,
+                self.external_checker_policies,
                 self.review_policy,
                 self.revision_policy,
             )
@@ -251,6 +253,8 @@ class ProjectLockedPolicyContextFacts:
             or self.compiled_pre_submit_bundle.sha256 != self.pre_submit_policy_bundle_hash
             or self.artifact_policy.sha256 != target.artifact_policy_hash
             or self.compiled_post_submit_policy.sha256 != receipt.command.target.policy_hash
+            or self.external_checker_policies.sha256
+            != receipt.command.target.upstream.effective_pre_submit_plan_hash
         ):
             raise ValueError("project locked policy facts differ from activation")
         require_complete_policy(

@@ -43,6 +43,12 @@ from app.modules.checkers.api.pre_submit import (
     SubmissionPacketView,
     validate_pre_submission_execution_facts,
 )
+from app.modules.checkers.api.selected_pre_submit import (
+    ExternalPreSubmitIsolationFacts,
+    ExternalPreSubmitMemberFacts,
+    SelectedPreSubmitExecutionFacts,
+    SelectedPreSubmitInfrastructureUnavailable,
+)
 
 __all__ = (
     "ALLOWED_PRE_SUBMIT_STORAGE_SCHEMES",
@@ -58,6 +64,10 @@ __all__ = (
     "PRE_SUBMISSION_RESULT_METADATA_KEYS",
     "SubmissionPacketView",
     "validate_pre_submission_execution_facts",
+    "ExternalPreSubmitIsolationFacts",
+    "ExternalPreSubmitMemberFacts",
+    "SelectedPreSubmitExecutionFacts",
+    "SelectedPreSubmitInfrastructureUnavailable",
 )
 
 from app.modules.checkers.api.post_submit_catalogue import (

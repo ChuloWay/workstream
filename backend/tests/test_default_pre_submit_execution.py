@@ -137,7 +137,13 @@ async def test_evidence_workflow_requires_transaction_free_session() -> None:
         )
 
 
-def _archive(path: str = "task.toml", *, extra_path: str | None = None, evidence_path="evidence/results") -> bytes:
+def _archive(
+    path: str = "task.toml",
+    *,
+    primary_bytes: bytes = b"[task]\nname='proof'\n",
+    extra_path: str | None = None,
+    evidence_path="evidence/results",
+) -> bytes:
     output = BytesIO()
     with zipfile.ZipFile(output, "w") as archive:
 
@@ -145,7 +151,7 @@ def _archive(path: str = "task.toml", *, extra_path: str | None = None, evidence
             entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             archive.writestr(entry, value)
 
-        write(path, b"[task]\nname='proof'\n")
+        write(path, primary_bytes)
         if extra_path is not None:
             write(extra_path, b"blocked\n")
         if path != evidence_path:
@@ -257,6 +263,7 @@ async def _request(
     tmp_path: Path,
     *,
     path: str = "task.toml",
+    primary_bytes: bytes = b"[task]\nname='proof'\n",
     extra_path: str | None = None,
     catalogue=None,
     plan=None,
@@ -264,7 +271,12 @@ async def _request(
 ):
     selected_catalogue = catalogue or build_pre_submission_checker_catalogue()
     plan = _plan(selected_catalogue) if plan is None else plan
-    data = _archive(path, extra_path=extra_path, evidence_path=evidence_path)
+    data = _archive(
+        path,
+        primary_bytes=primary_bytes,
+        extra_path=extra_path,
+        evidence_path=evidence_path,
+    )
     inspector = SubmissionArchiveInspector(SubmissionArchiveLimits())
     manager = ArtifactScratchManager(root=tmp_path / "scratch", limits=_limits())
     preparation = ArtifactPreparationService(manager)

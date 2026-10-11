@@ -42,6 +42,11 @@ from app.modules.checkers.pre_submit_execution import (
     DefaultPreSubmissionExecutionInput,
     EffectivePreSubmissionProcessor,
 )
+from app.modules.checkers.api.external import (
+    PreSubmitExternalCheckerIdentity,
+    PreSubmitExternalCheckerMaterial,
+)
+from app.modules.checkers.selected_pre_submit_execution import SelectedPreSubmitProcessor
 
 
 def external_checker_execution_factory(
@@ -74,6 +79,17 @@ def configured_external_checker_execution_factory(settings):
     )
 
 
+def selected_pre_submit_checker_execution(*, settings, archive_inspector):
+    """Compose the sole selected PRE runtime from the configured Rust service."""
+    execution = configured_external_checker_execution_factory(settings).create(
+        EXTERNAL_CHECKER_PROVIDER_KEY
+    )
+    return SelectedPreSubmitCheckerExecutionAdapter(
+        archive_inspector=archive_inspector,
+        external_execution=execution,
+    )
+
+
 def external_checker_registry_reader(session):
     """Resolve immutable metadata for trusted approval and execution owners."""
     from app.modules.checkers.external_registry import ExternalCheckerRegistryReader
@@ -83,6 +99,8 @@ def external_checker_registry_reader(session):
 
 class _ExecutionRequest(Protocol):
     plan: Any
+    task_id: Any
+    assignment_id: Any
     commitment: Any
     inspection: Any
     manifest: Any
@@ -136,6 +154,61 @@ class PreSubmitCheckerExecutionAdapter:
                     storage_scheme=request.storage_scheme,
                 ),
             )
+        )
+
+
+class SelectedPreSubmitCheckerExecutionAdapter:
+    """Build the selected default-plus-external PRE processor from exact ART facts."""
+
+    def __init__(self, *, archive_inspector, external_execution) -> None:
+        self._archive_inspector = archive_inspector
+        self._external_execution = external_execution
+
+    def build(self, request: _ExecutionRequest) -> SelectedPreSubmitProcessor:
+        """Reject any incomplete pre-admission identity before projecting bytes."""
+        policy = getattr(request, "external_policy", None)
+        default_input = getattr(request, "default_checker_input", None)
+        attempt_id = getattr(request, "attempt_id", None)
+        attempt_request_digest = getattr(request, "attempt_request_digest", None)
+        grants = getattr(request, "external_grants", None)
+        if (
+            policy is None
+            or default_input is None
+            or attempt_id is None
+            or attempt_request_digest is None
+            or grants is None
+        ):
+            raise PreSubmissionInfrastructureUnavailableError(
+                "external_pre_submit_context_unavailable"
+            )
+        identity = PreSubmitExternalCheckerIdentity(
+            project_id=request.plan.lineage.project_id,
+            task_id=request.task_id,
+            assignment_id=request.assignment_id,
+            prepared_generation_id=request.prepared_generation_id,
+            attempt_id=attempt_id,
+            attempt_request_digest=attempt_request_digest,
+            effective_plan_sha256=policy.policy_sha256,
+        )
+        material = PreSubmitExternalCheckerMaterial(
+            role="submission_archive",
+            prepared_generation_id=request.prepared_generation_id,
+            attempt_id=attempt_id,
+            attempt_request_digest=attempt_request_digest,
+            archive_sha256=request.commitment.sha256,
+            archive_byte_count=request.commitment.byte_count,
+            semantic_manifest_sha256=request.manifest.sha256,
+            media_type="application/zip",
+        )
+        return SelectedPreSubmitProcessor(
+            archive_inspector=self._archive_inspector,
+            inspection=request.inspection,
+            policy=policy,
+            default_input=default_input,
+            identity=identity,
+            material=material,
+            grants=grants,
+            execution=self._external_execution,
         )
 
 
