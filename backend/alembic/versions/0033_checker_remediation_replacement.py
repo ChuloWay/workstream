@@ -44,7 +44,7 @@ def upgrade() -> None:
             source_schema="public", referent_schema="public", ondelete="RESTRICT",
         )
     op.create_check_constraint(
-        op.f("ck_pre_submit_evidence_remediation_shape"), "pre_submit_evidence_sets",
+        op.f("ck_pre_submit_evidence_sets_remediation_shape"), "pre_submit_evidence_sets",
         "(predecessor_submission_id is null) = (checker_remediation_manifest_id is null)",
         schema="public",
     )
