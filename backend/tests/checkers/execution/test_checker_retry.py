@@ -6,8 +6,9 @@ import json
 import os
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.checkers import checker_retry_service, evaluation_coordinator
 from app.adapters.outbox import outbox_append
@@ -107,6 +108,59 @@ async def test_retry_sql_rejects_unreceipted_terminal_supersession(
             assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
             assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+
+
+async def test_retry_sql_rejects_crossed_receipt_with_real_authority_participants(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with _failed_source(tmp_path, isolated_database_env, monkeypatch) as (h, _delivery):
+        operator = await _operator_for(h)
+        command = _command(h, operator)
+        captured = []
+        original_add = AsyncSession.add
+
+        def omit_only_receipt(session, value):
+            if isinstance(value, CheckerRetryReceipt):
+                captured.append(value)
+                return
+            return original_add(session, value)
+
+        substitutions = (
+            ("reason", "crossed Operator reason"),
+            ("request_key", str(new_record_id())),
+            ("source_result_id", str(new_record_id())),
+            ("successor_run_id", str(command.source_run_id)),
+            ("event_id", h.created.evaluation_event_id),
+            ("authorization_decision_id", None),
+        )
+        with monkeypatch.context() as patch:
+            patch.setattr(AsyncSession, "add", omit_only_receipt)
+            for field, crossed in substitutions:
+                captured.clear()
+                with pytest.raises(IntegrityError, match="checker retry receipt closure invalid|terminal checker infrastructure retry requires Operator receipt"):
+                    async with h.factory.begin() as session:
+                        created = await checker_retry_service(session, operator).retry(command)
+                        assert len(captured) == 1
+                        receipt = captured[0]
+                        values = {
+                            column.name: getattr(receipt, column.name)
+                            for column in CheckerRetryReceipt.__table__.columns
+                            if column.name != "created_at"
+                        }
+                        values[field] = (
+                            str(created.source.source_finalize_evidence_id)
+                            if field == "authorization_decision_id" else crossed
+                        )
+                        await session.execute(insert(CheckerRetryReceipt).values(**values))
+        async with h.factory() as session:
+            fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+            assert fence.current_run_id == str(command.source_run_id)
+            assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+            assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+            assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+        async with h.factory.begin() as session:
+            valid = await checker_retry_service(session, operator).retry(command)
+        assert valid.successor.generation == 2
 
 
 async def test_retry_without_operator_grant_denies_without_effects(
