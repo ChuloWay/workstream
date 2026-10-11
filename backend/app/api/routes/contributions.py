@@ -17,13 +17,14 @@ _ERRORS = {status: {"model": ApiErrorResponse} for status in (404, 422, 503)}
 _CSV = {"200": {"content": {"text/csv": {"schema": {"type": "string"}}}}}
 
 
-def _selected(context, audience, project_id, output_format, contribution_type, recorded_from, recorded_before):
+def _selected(context, audience, project_id, output_format, contribution_type, recorded_from, recorded_before,
+              page_size, cursor):
     """Bind self actor on the server and reject inverted/naive recorded-time filters."""
     try:
         return ContributionReadRequest(
             audience=audience, actor_profile_id=context.actor_profile_id, project_id=project_id,
             output_format=output_format, contribution_type=contribution_type,
-            recorded_from=recorded_from, recorded_before=recorded_before,
+            recorded_from=recorded_from, recorded_before=recorded_before, page_size=page_size, cursor=cursor,
         )
     except ValidationError as exc:
         raise StructuredHTTPException(status_code=422, detail="contribution_export_invalid",
@@ -38,10 +39,11 @@ async def read_own_contributions(
     project_id: UUID | None = None, format: Literal["json", "csv"] = "json",
     contribution_type: Literal["accepted_submission", "completed_review"] | None = None,
     recorded_from: AwareDatetime | None = None, recorded_before: AwareDatetime | None = None,
+    page_size: int = 100, cursor: str | None = None,
 ):
-    """Return all selected own records, refusing over 1000 instead of truncating."""
+    """Return one authorized page of a fixed own-contribution selection."""
     return await contribution_export_response(context, _selected(
-        context, "self", project_id, format, contribution_type, recorded_from, recorded_before,
+        context, "self", project_id, format, contribution_type, recorded_from, recorded_before, page_size, cursor,
     ))
 
 
@@ -53,8 +55,9 @@ async def export_project_contributions(
     format: Literal["json", "csv"] = "json",
     contribution_type: Literal["accepted_submission", "completed_review"] | None = None,
     recorded_from: AwareDatetime | None = None, recorded_before: AwareDatetime | None = None,
+    page_size: int = 100, cursor: str | None = None,
 ):
     """Export one project for covering PM or exact-project Finance authority."""
     return await contribution_export_response(context, _selected(
-        context, "project", project_id, format, contribution_type, recorded_from, recorded_before,
+        context, "project", project_id, format, contribution_type, recorded_from, recorded_before, page_size, cursor,
     ))
