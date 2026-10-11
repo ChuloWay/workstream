@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import replace
 from io import BytesIO
 import json
-import hashlib
 from types import SimpleNamespace
 from uuid import UUID
 from zipfile import ZipFile
@@ -16,10 +16,12 @@ from sqlalchemy.exc import IntegrityError
 from starlette.requests import Request
 
 from app.api.deps.authorization import compose_hidden_submission_creation_command
+from app.adapters.checkers import evaluation_coordinator
 from app.adapters.artifacts import get_submission_bundle_preparation_command
 from app.adapters.tasks import task_post_submit_outcome
 from app.adapters.artifacts.local import LocalStorageAdapter
 from app.core.identifiers import new_record_id
+from app.core.hashing import canonical_json_hash
 from app.modules.actors.api.service_identities import ServiceIdentity
 from app.modules.artifacts.api import (
     SubmissionBundlePreparationCheckFailed,
@@ -42,6 +44,7 @@ from app.modules.artifacts.submission_manifest import (
     SubmissionChangeRejectedError,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
+from app.modules.checkers.api.execution import CheckerExecutionUnavailable
 from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.api.submission_context import (
@@ -50,7 +53,9 @@ from app.modules.tasks.api.submission_context import (
 )
 from app.modules.tasks.models import SubmissionDispatch
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
+from app.modules.tasks.submission_context import TaskSubmissionContextService
 from app.adapters.tasks import task_submission_context_port
+from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.artifact_store_helpers import artifact_byte_stream
 from tests.checkers.execution.support import reserve
 from tests.checkers.execution.completion_fixture import completed_evidence
@@ -568,6 +573,15 @@ async def test_sql_evidence_insert_rejects_superseded_checker_cause(
             assert admission.status == "ready"
             assert admission.checker_remediation_manifest_id == str(source_id)
             donor_id = admission.pre_submit_evidence_set_id
+            donor = (await session.execute(text(
+                "SELECT attempt_id,attempt_request_digest FROM public.pre_submit_evidence_sets "
+                "WHERE id=:id"
+            ), {"id": donor_id})).one()
+            result_ids = list((await session.execute(text(
+                "SELECT id FROM public.pre_submit_evidence_results "
+                "WHERE evidence_set_id=:id ORDER BY result_order"
+            ), {"id": donor_id})).scalars())
+            assert result_ids
 
         await reserve(h, await next_request(h))
         before = await _snapshot(h)
@@ -581,28 +595,168 @@ async def test_sql_evidence_insert_rejects_superseded_checker_cause(
                 "WHERE id=:id"
             ), {"id": source_id})
             assert current_run_id != routed_run_id
-        duplicate_id = new_record_id()
-        distinct_operation = "sha256:" + hashlib.sha256(str(duplicate_id).encode()).hexdigest()
+        attempt_id, evidence_id = new_record_id(), new_record_id()
+        operation = canonical_json_hash({"test_clone_evidence_id": str(evidence_id)})
         with pytest.raises(
             IntegrityError, match="pre-submit remediation evaluation is not current",
         ):
             async with h.factory() as session, session.begin():
                 await session.execute(text("""
+                    INSERT INTO public.pre_submit_execution_attempts
+                    SELECT (pg_catalog.jsonb_populate_record(
+                      NULL::public.pre_submit_execution_attempts,
+                      pg_catalog.to_jsonb(a) || pg_catalog.jsonb_build_object(
+                        'id', CAST(:attempt_id AS text),
+                        'idempotency_key', CAST(:idempotency_key AS text),
+                        'claim_nonce', CAST(:claim_nonce AS text),
+                        'status', 'reserved', 'evidence_set_id', NULL,
+                        'created_at', transaction_timestamp()
+                      ))).*
+                    FROM public.pre_submit_execution_attempts a WHERE a.id=:donor_attempt
+                """), {
+                    "attempt_id": str(attempt_id), "idempotency_key": str(new_record_id()),
+                    "claim_nonce": str(new_record_id()), "donor_attempt": donor.attempt_id,
+                })
+                await session.execute(text("""
                     INSERT INTO public.pre_submit_evidence_sets
                     SELECT (pg_catalog.jsonb_populate_record(
                       NULL::public.pre_submit_evidence_sets,
                       pg_catalog.to_jsonb(e) || pg_catalog.jsonb_build_object(
-                        'id', CAST(:new_id AS text),
-                        'operation_identity', CAST(:operation_identity AS text),
+                        'id', CAST(:evidence_id AS text),
+                        'operation_identity', CAST(:operation AS text),
+                        'attempt_id', CAST(:attempt_id AS text),
                         'created_at', transaction_timestamp()
                       ))).*
                     FROM public.pre_submit_evidence_sets e WHERE e.id=:donor_id
                 """), {
-                    "new_id": str(duplicate_id),
-                    "operation_identity": distinct_operation,
-                    "donor_id": donor_id,
+                    "evidence_id": str(evidence_id), "operation": operation,
+                    "attempt_id": str(attempt_id), "donor_id": donor_id,
                 })
+                for result_id in result_ids:
+                    await session.execute(text("""
+                        INSERT INTO public.pre_submit_evidence_results
+                        SELECT (pg_catalog.jsonb_populate_record(
+                          NULL::public.pre_submit_evidence_results,
+                          pg_catalog.to_jsonb(r) || pg_catalog.jsonb_build_object(
+                            'id', CAST(:new_id AS text),
+                            'evidence_set_id', CAST(:evidence_id AS text),
+                            'created_at', transaction_timestamp()
+                          ))).*
+                        FROM public.pre_submit_evidence_results r WHERE r.id=:donor_id
+                    """), {
+                        "new_id": str(new_record_id()),
+                        "evidence_id": str(evidence_id), "donor_id": result_id,
+                    })
+                await session.execute(text("""
+                    UPDATE public.pre_submit_execution_attempts
+                    SET status='completed',evidence_set_id=:evidence_id WHERE id=:attempt_id
+                """), {"evidence_id": evidence_id, "attempt_id": attempt_id})
         assert await _snapshot(h) == before
+
+
+async def test_sql_attempt_reconstruction_rejects_foreign_routed_cause(
+    tmp_path, isolated_database_env,
+):
+    async with remediation_source(tmp_path / "local", isolated_database_env) as local:
+        async with remediation_source(
+            tmp_path / "foreign", isolated_database_env, provision_services=False,
+            storage_settings=local.settings,
+        ) as foreign:
+            local_source = await _fixture_revision_context(local)
+            foreign_source = await _fixture_revision_context(foreign)
+            admission_id = await _verified_admission(
+                local.factory, local.store, local.namespace, local.settings,
+                local.actor_context,
+                _replacement_request(
+                    local, revision_archive(local.data),
+                    predecessor_id=local.created.submission_id,
+                    idempotency_key=new_record_id(),
+                ),
+            )
+            async with local.factory() as session:
+                admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+                assert admission.status == "ready"
+                assert admission.checker_remediation_manifest_id == str(local_source)
+                donor_id = admission.pre_submit_evidence_set_id
+                donor = (await session.execute(text("""
+                    SELECT e.attempt_id, a.request_json::jsonb AS request_body
+                    FROM public.pre_submit_evidence_sets e
+                    JOIN public.pre_submit_execution_attempts a ON a.id=e.attempt_id
+                    WHERE e.id=:id
+                """), {"id": donor_id})).mappings().one()
+                result_ids = list((await session.execute(text(
+                    "SELECT id FROM public.pre_submit_evidence_results "
+                    "WHERE evidence_set_id=:id ORDER BY result_order"
+                ), {"id": donor_id})).scalars())
+            assert result_ids
+            request_body = dict(donor["request_body"])
+            assert request_body["checker_remediation_manifest_id"] == str(local_source)
+            request_body["checker_remediation_manifest_id"] = str(foreign_source)
+            request_digest = canonical_json_hash(request_body)
+            attempt_id, evidence_id = new_record_id(), new_record_id()
+            operation = canonical_json_hash({"test_clone_evidence_id": str(evidence_id)})
+            before = await _snapshot(local)
+            with pytest.raises(IntegrityError, match="pre-submit evidence resource mismatch"):
+                async with local.factory.begin() as session:
+                    await session.execute(text("""
+                        INSERT INTO public.pre_submit_execution_attempts
+                        SELECT (pg_catalog.jsonb_populate_record(
+                          NULL::public.pre_submit_execution_attempts,
+                          pg_catalog.to_jsonb(a) || pg_catalog.jsonb_build_object(
+                            'id', CAST(:attempt_id AS text),
+                            'idempotency_key', CAST(:idempotency_key AS text),
+                            'claim_nonce', CAST(:claim_nonce AS text),
+                            'request_json', CAST(:request_body AS jsonb),
+                            'request_digest', CAST(:request_digest AS text),
+                            'status', 'reserved', 'evidence_set_id', NULL,
+                            'created_at', transaction_timestamp()
+                          ))).*
+                        FROM public.pre_submit_execution_attempts a WHERE a.id=:donor_attempt
+                    """), {
+                        "attempt_id": str(attempt_id),
+                        "idempotency_key": str(new_record_id()),
+                        "claim_nonce": str(new_record_id()),
+                        "request_body": json.dumps(request_body),
+                        "request_digest": request_digest,
+                        "donor_attempt": donor["attempt_id"],
+                    })
+                    await session.execute(text("""
+                        INSERT INTO public.pre_submit_evidence_sets
+                        SELECT (pg_catalog.jsonb_populate_record(
+                          NULL::public.pre_submit_evidence_sets,
+                          pg_catalog.to_jsonb(e) || pg_catalog.jsonb_build_object(
+                            'id', CAST(:evidence_id AS text),
+                            'operation_identity', CAST(:operation AS text),
+                            'attempt_id', CAST(:attempt_id AS text),
+                            'attempt_request_digest', CAST(:request_digest AS text),
+                            'created_at', transaction_timestamp()
+                          ))).*
+                        FROM public.pre_submit_evidence_sets e WHERE e.id=:donor_id
+                    """), {
+                        "evidence_id": str(evidence_id), "operation": operation,
+                        "attempt_id": str(attempt_id), "request_digest": request_digest,
+                        "donor_id": donor_id,
+                    })
+                    for result_id in result_ids:
+                        await session.execute(text("""
+                            INSERT INTO public.pre_submit_evidence_results
+                            SELECT (pg_catalog.jsonb_populate_record(
+                              NULL::public.pre_submit_evidence_results,
+                              pg_catalog.to_jsonb(r) || pg_catalog.jsonb_build_object(
+                                'id', CAST(:new_id AS text),
+                                'evidence_set_id', CAST(:evidence_id AS text),
+                                'created_at', transaction_timestamp()
+                              ))).*
+                            FROM public.pre_submit_evidence_results r WHERE r.id=:donor_id
+                        """), {
+                            "new_id": str(new_record_id()),
+                            "evidence_id": str(evidence_id), "donor_id": result_id,
+                        })
+                    await session.execute(text("""
+                        UPDATE public.pre_submit_execution_attempts
+                        SET status='completed',evidence_set_id=:evidence_id WHERE id=:attempt_id
+                    """), {"evidence_id": evidence_id, "attempt_id": attempt_id})
+            assert await _snapshot(local) == before
 
 
 @pytest.mark.parametrize("advance_fence", [False, True])
@@ -862,3 +1016,122 @@ async def test_source_superseded_during_zip_read_stops_before_art_effects(
                 await task_submission_context_port(session).lock_submission_context(
                     _context_request(h)
                 )
+
+
+async def test_replacement_holds_task_custody_against_successor_generation(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        source_id = await _fixture_revision_context(h)
+        request = _replacement_request(
+            h, revision_archive(h.data), predecessor_id=h.created.submission_id,
+            idempotency_key=new_record_id(),
+        )
+        admission_id = await _verified_admission(
+            h.factory, h.store, h.namespace, h.settings, h.actor_context, request,
+        )
+        creation = SubmissionCreationRequest(
+            task_id=h.request.task_id, assignment_id=h.request.assignment_id,
+            contributor_id=h.actor_context.actor_profile_id,
+            predecessor_submission_id=h.created.submission_id,
+            admission_id=admission_id, summary=request.summary,
+            contributor_attestation=request.contributor_attestation,
+        )
+        successor = await next_request(h)
+        async with h.factory() as session:
+            prior = (await session.execute(text("""
+                SELECT f.current_run_id,
+                  (SELECT count(*) FROM public.checker_runs WHERE submission_id=:prior),
+                  (SELECT to_jsonb(m) FROM public.task_post_submit_routing_manifests m
+                   WHERE m.id=:source)
+                FROM public.checker_submission_fences f WHERE f.submission_id=:prior
+            """), {"prior": h.created.submission_id, "source": source_id})).one()
+
+        held, release = asyncio.Event(), asyncio.Event()
+        creator_pid: list[int] = []
+        original = TaskSubmissionContextService.lock_submission_context
+
+        async def pause_after_real_context(service, selected):
+            facts = await original(service, selected)
+            if service._session.info.get("replacement_race"):
+                assert facts.checker_remediation_manifest_id == source_id
+                creator_pid.append(await service._session.scalar(text("SELECT pg_backend_pid()")))
+                held.set()
+                await asyncio.wait_for(release.wait(), 30)
+            return facts
+
+        async def create_replacement():
+            async with h.factory() as session:
+                session.info["replacement_race"] = True
+                return await compose_hidden_submission_creation_command(
+                    session, h.actor_context, request_id=new_record_id(),
+                    correlation_id=new_record_id(),
+                ).create(creation)
+
+        waiter_name = "replacement-successor-" + new_record_id().hex
+
+        async def reserve_successor():
+            async with h.factory() as session, session.begin():
+                await session.execute(text(
+                    "SELECT set_config('application_name',:name,true)"
+                ), {"name": waiter_name})
+                return await evaluation_coordinator(session).reserve_current_evaluation(successor)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(TaskSubmissionContextService, "lock_submission_context", pause_after_real_context)
+            creator = asyncio.create_task(create_replacement())
+            waiter = None
+            try:
+                await asyncio.wait_for(held.wait(), 30)
+                waiter = asyncio.create_task(reserve_successor())
+                await asyncio.wait_for(wait_for_named_database_lock(
+                    isolated_database_env, waiter_name, expected_blocker_pid=creator_pid[0],
+                ), 15)
+                async with h.factory() as observer:
+                    waiting_query = await observer.scalar(text(
+                        "SELECT query FROM pg_stat_activity "
+                        "WHERE application_name=:name AND wait_event_type='Lock'"
+                    ), {"name": waiter_name})
+                assert waiting_query is not None and "workstream_tasks" in waiting_query
+                assert not waiter.done()
+                release.set()
+                created = await asyncio.wait_for(creator, 60)
+                with pytest.raises(
+                    CheckerExecutionUnavailable, match="checker_reservation_scope_unavailable",
+                ):
+                    await asyncio.wait_for(waiter, 30)
+            finally:
+                release.set()
+                for pending in (creator, waiter):
+                    if pending is not None and not pending.done():
+                        pending.cancel()
+                await asyncio.gather(
+                    *(pending for pending in (creator, waiter) if pending is not None),
+                    return_exceptions=True,
+                )
+
+        assert created.submission_version == 2
+        async with h.factory() as session:
+            after = (await session.execute(text("""
+                SELECT f.current_run_id,
+                  (SELECT count(*) FROM public.checker_runs WHERE submission_id=:prior),
+                  (SELECT to_jsonb(m) FROM public.task_post_submit_routing_manifests m
+                   WHERE m.id=:source)
+                FROM public.checker_submission_fences f WHERE f.submission_id=:prior
+            """), {"prior": h.created.submission_id, "source": source_id})).one()
+            assert after == prior
+            assert await session.scalar(text(
+                "SELECT count(*) FROM public.submissions WHERE task_id=:task"
+            ), {"task": h.request.task_id}) == 2
+            assert await session.scalar(text(
+                "SELECT count(*) FROM public.submission_dispatches WHERE task_id=:task"
+            ), {"task": h.request.task_id}) == 2
+            assert await session.scalar(text(
+                "SELECT public.submission_dispatch_valid(d) "
+                "FROM public.submission_dispatches d WHERE d.submission_id=:id"
+            ), {"id": created.submission_id}) is True
+            admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+            assert admission.status == "consumed"
+            assert await session.scalar(text(
+                "SELECT status FROM public.workstream_tasks WHERE id=:task"
+            ), {"task": h.request.task_id}) == "evaluation_pending"

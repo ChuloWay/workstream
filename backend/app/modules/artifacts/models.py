@@ -177,7 +177,7 @@ class PreSubmitEvidenceSet(Base):
         ),
         CheckConstraint(
             "(predecessor_submission_id is null) = (checker_remediation_manifest_id is null)",
-            name="ck_pre_submit_evidence_remediation_shape",
+            name="remediation_shape",
         ),
         ForeignKeyConstraint(
             ["task_id", "effective_policy_id", "locked_artifact_policy_sha256"],
