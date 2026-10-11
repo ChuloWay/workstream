@@ -21,6 +21,12 @@ This is one hidden recovery command and its exact delivery through the existing 
 - Focused tests under `backend/tests/checkers/execution/`, `backend/tests/tasks/evaluation_delivery/`, `backend/tests/authorization/`, and `backend/tests/migrations/`.
 - Current documentation: `README.md`, `docs/roadmap_status.md`, `docs/spec_authorization_service.md`, `docs/spec_chunk_4_task_queue_assignment.md`, `docs/spec_artifact_storage_service.md`, `.commitrail/INDEX.md`, this record, `.commitrail/initiatives/WS-ARCH-001/OVERVIEW.md`, `.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md`, `.commitrail/initiatives/WS-ARCH-001/planning/CHUNK_MAP.md`, `.commitrail/initiatives/WS-AUTH-001/OVERVIEW.md`, `.commitrail/initiatives/WS-AUTH-001/planning/PLAN.md`, `.commitrail/initiatives/WS-AUTH-001/planning/CHUNK_MAP.md`, `.commitrail/initiatives/WS-ART-001/OVERVIEW.md`, `.commitrail/initiatives/WS-POL-003/OVERVIEW.md`, `.commitrail/initiatives/WS-CON-001/OVERVIEW.md`, and `.commitrail/initiatives/WS-REV-001/OVERVIEW.md`. Reconcile the roadmap against the intended merged hidden capability.
 
+Lead-owned integration also includes `backend/scripts/behavior_ownership.py`,
+`.ci/behavior-ownership/partition.v1.json`, `backend/tests/test_behavior_ownership.py`,
+`backend/scripts/test_lane_catalogue.py` and `backend/tests/test_ci_lane_catalogue.py`.
+Register the exact new retry/AUTH owners and focused proof modules, preserve
+all existing registrations and reject any parallel checker runner.
+
 ### Not allowed
 
 No public route or production handler registration, replacement ZIP writer, contributor remediation from infrastructure/setup failures, setup policy mutation, Review, FinalAcceptance, contribution, award, payment, generic retry framework, compatibility dispatch path, or broad alteration of coordinator generation semantics. No direct retry of a `completed` result. No mutation of a terminal run or its result/member/receipt evidence.
