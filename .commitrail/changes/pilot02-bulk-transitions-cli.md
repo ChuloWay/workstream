@@ -73,6 +73,16 @@ Their current root transaction prevents composition across a complete batch.
   `test_task_batch_commands_http.py`; the existing HTTP fixture receives one
   PUT handler delegating to its unchanged exact-body POST capture. No retained
   GET/PATCH/POST expectations or test guards are removed.
+- Actual socket proof is `cli/tests/integration/test_task_batch_public_api.py`:
+  reuse the canonical migrated database/source fixture with explicit asyncio
+  registration, real app lifespan and a 200-row CSV→verified JSON source→DRAFT
+  import→SCREEN→RELEASE journey. Use actual retained rows for assertions,
+  unchanged-key replay and canonical grant revocation. Hidden active-guide
+  prerequisites and the canonical development identity verifier are qualified;
+  no route, authority or provider override is introduced. Its subprocess budget
+  is scoped to the three-minute writes; the shared twenty-second HTTP fixture
+  stays unchanged. Workflow registration is coordinated separately with the
+  lead before final freeze; no native test is skipped or silently omitted.
 - Native participant lifetime/composition proof is owned in
   `backend/tests/authorization/task_authority/test_management_participants.py`;
   it extends the existing management proof using actual PostgreSQL and AUTH.
