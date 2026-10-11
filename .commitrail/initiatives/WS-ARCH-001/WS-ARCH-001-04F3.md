@@ -191,6 +191,10 @@ setup fault never becomes contributor remediation.
 
 ## Acceptance criteria
 
+- AUTH creation resources reject mismatched kind, task status, version,
+  predecessor pair or cause; binding resources require the exact successor
+  version. Valid initial/remediation resources reach the real parser. Restoring
+  the pre-repair validators must fail the malformed-shape assertions.
 - From a real routed 04F2 `needs_revision` result, the same submitter's changed
   full ZIP passes pre-submit checks, reaches a verified ready ART admission,
   and creates exactly one version-2 Submission, binding, creation/binding
