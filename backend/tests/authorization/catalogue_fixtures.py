@@ -445,6 +445,8 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "contribution.read_self",
+    "contribution.read_project",
     "task.post_submit.route",
     "checker.registry.register",
     "review.lifecycle.activation.manage",
