@@ -221,7 +221,7 @@ rejects unrepresentable evaluation content before durable admission.
 commits each new Submission, verified ART binding, exact creation/binding AUTH
 receipts, generation-one reservation and shared outbox request together.
 Fresh-authorized replay verifies retained owners without creating missing rows.
-B7 delivers the hidden request handler with exact invocation fencing. 04E2-B delivers the hidden authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff. Replacement intake and recovery remain.
+B7 delivers the hidden request handler with exact invocation fencing. 04E2-B delivers the hidden authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff; 04F3 supplies exact-cause replacement intake. Infrastructure retry, manager-visible setup-fault holds and production readiness remain.
 
 ## Pre-Submission And Post-Submission Checking
 
