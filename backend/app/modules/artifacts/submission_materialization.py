@@ -452,6 +452,7 @@ class PreparedBundleMaterializationService:
         prepared_artifact: PreparedArtifact,
         effective_plan: EffectivePreSubmissionExecutionPlan,
         idempotency_key: UUID,
+        external_policy: LockedExternalPreSubmitPolicy | None = None,
     ) -> object:
         """Deny unavailable service authority before inspecting the ZIP."""
         facts = self._preparation_facts(
@@ -461,6 +462,7 @@ class PreparedBundleMaterializationService:
             checker_policy_id=checker_policy_id,
             prepared_artifact=prepared_artifact,
             effective_plan=effective_plan,
+            external_policy=external_policy,
         )
         return await self._authorization.prepare(
             facts=facts,
@@ -665,6 +667,7 @@ class PreparedBundlePreSubmitEvidenceService:
                 prepared_artifact=request.prepared_artifact,
                 effective_plan=request.effective_plan,
                 idempotency_key=preparation_request.idempotency_key,
+                external_policy=request.external_policy,
             )
             authorized_request = replace(request, prepared_authorization=handle)
             await self._materialization.authorize_prepared_bundle(

@@ -367,9 +367,13 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
     )
     claim._session = session
     execution = _Execution("passed")
+    authority = SimpleNamespace(
+        prepare=AsyncMock(return_value=object()),
+        consume=AsyncMock(),
+    )
     service = PreparedBundleMaterializationService(
         session=session,
-        authorization=SimpleNamespace(consume=AsyncMock()),
+        authorization=authority,
         preparation=preparation,
         checker_execution=SelectedPreSubmitCheckerExecutionAdapter(
             archive_inspector=inspector,
@@ -378,6 +382,17 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
         storage_scheme="s3",
     )
     try:
+        await service.prepare_authorization(
+            task_id=request.task_id,
+            assignment_id=request.assignment_id,
+            submission_artifact_policy_id=request.submission_artifact_policy_id,
+            checker_policy_id=request.checker_policy_id,
+            prepared_artifact=request.prepared_artifact,
+            effective_plan=request.effective_plan,
+            idempotency_key=new_record_id(),
+            external_policy=policy,
+        )
+        assert authority.prepare.await_count == 1
         await service.authorize_prepared_bundle(request, claim=claim)
         transaction = False
         result = await service.materialize_prepared_bundle(
