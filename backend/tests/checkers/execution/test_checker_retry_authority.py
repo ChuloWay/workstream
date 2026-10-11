@@ -1,6 +1,7 @@
 """PostgreSQL proofs for checker-retry authority ordering and revocation."""
 
 import asyncio
+from uuid import UUID
 
 import pytest
 from sqlalchemy import func, select, text
@@ -30,8 +31,8 @@ from app.modules.checkers.api.execution import CheckerExecutionUnavailable
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import AuditEvent, TaskCommandReceipt
+from app.modules.tasks.api import TaskAuthorityDenied
 from app.modules.tasks.repository import TaskRepository
-from app.modules.tasks.service import TaskTransitionBlocked
 from auth_concurrency_support import wait_for_named_database_lock
 from tests.checkers.execution.test_checker_retry import _command, _failed_source, _operator_for
 from tests.test_artifact_admission import _context
@@ -111,8 +112,8 @@ async def _revocation_setup(h, operator):
         revoker_link_id = revoker_link.id
     key = new_record_id()
     revoker = _context(
-        actor_profile_id=revoker_actor_id,
-        identity_link_id=revoker_link_id,
+        actor_profile_id=UUID(revoker_actor_id),
+        identity_link_id=UUID(revoker_link_id),
     ).model_copy(update={"request_id": key, "correlation_id": key})
     return grant_id, revoker
 
@@ -260,7 +261,9 @@ async def test_retry_and_start_override_keep_task_before_authority(
                         task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
         assert sum(not isinstance(result, BaseException) for result in results) == 1
-        assert sum(isinstance(result, TaskTransitionBlocked) for result in results) == 1
+        assert sum(isinstance(result, TaskAuthorityDenied) for result in results) == 1, [
+            type(result).__name__ for result in results
+        ]
         assert (await _retry_facts(h))[:4] == (2, 1, 2, 1)
         async with h.factory() as session:
             assert await session.scalar(
@@ -321,9 +324,24 @@ async def test_retry_and_operator_revocation_commit_one_authorized_order(
                 else:
                     calls.append(asyncio.create_task(_named_retry(h, operator, retry_name)))
                     waiter_name = retry_name
-                await asyncio.wait_for(
-                    wait_for_named_database_lock(isolated_database_env, waiter_name), 30
+                observer = asyncio.create_task(
+                    wait_for_named_database_lock(isolated_database_env, waiter_name)
                 )
+                try:
+                    done, _ = await asyncio.wait(
+                        {observer, calls[-1]}, timeout=30,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if observer in done:
+                        await observer
+                    elif calls[-1] in done:
+                        result = await asyncio.gather(calls[-1], return_exceptions=True)
+                        pytest.fail(f"contender finished before named lock: {result[0]!r}")
+                    else:
+                        pytest.fail("contender did not reach the named lock")
+                finally:
+                    observer.cancel()
+                    await asyncio.gather(observer, return_exceptions=True)
                 release.set()
                 results = await asyncio.wait_for(
                     asyncio.gather(*calls, return_exceptions=True), 90
