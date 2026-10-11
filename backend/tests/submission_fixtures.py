@@ -135,7 +135,7 @@ async def route_retained_checker_remediation(submission_id: str, *, generation: 
         factory=factory,
         service=None,
         request=request,
-        source={"completion_event_id": UUID(run.completion_event_id)},
+        source={"completion_event_id": run.completion_event_id},
     )
     envelope = await invoked_completion(source)
     assert await evaluation_completion_handler(sessions=factory)(envelope) is HandlerOutcome.ACKNOWLEDGE
