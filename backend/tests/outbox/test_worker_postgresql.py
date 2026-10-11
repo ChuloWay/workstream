@@ -187,13 +187,17 @@ async def test_worker_scan_continues_after_failed_publication(worker, monkeypatc
     assert attempts == [(str(cursor), str(selectors[0].project_id)), (str(cursor),)]
 
 
-async def test_production_registry_claims_only_registered_invalidation(delivery_harness):
+async def test_production_registry_claims_only_registered_features(delivery_harness):
     from app.adapters.outbox import production_outbox_delivery
+    from app.modules.checkers.api.execution import REQUEST_EVENT
 
     h = delivery_harness
     event = await h.append()
     production = production_outbox_delivery(h.factory)
-    assert production._registry.keys == (("TaskAssignmentAuthorityInvalidationRequested", 1),)
+    assert production._registry.keys == (
+        ("TaskAssignmentAuthorityInvalidationRequested", 1),
+        (REQUEST_EVENT, 1),
+    )
     assert (await production.candidates()).items == ()
     assert await production.deliver(event.event_id, h.project, "worker") is None
     async with h.factory() as session:

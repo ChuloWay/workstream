@@ -84,6 +84,13 @@ def configured_external_checker_execution_factory(settings):
     )
 
 
+def configured_external_checker_execution(settings):
+    """Create the sole configured Rust-service adapter for selected execution."""
+    return configured_external_checker_execution_factory(settings).create(
+        EXTERNAL_CHECKER_PROVIDER_KEY
+    )
+
+
 def selected_pre_submit_checker_execution(*, settings, archive_inspector):
     """Compose the sole selected PRE runtime from the configured Rust service."""
     execution = configured_external_checker_execution_factory(settings).create(
@@ -100,6 +107,19 @@ def external_checker_registry_reader(session):
     from app.modules.checkers.external_registry import ExternalCheckerRegistryReader
 
     return ExternalCheckerRegistryReader(session)
+
+
+def selected_pre_submit_coordinator(session):
+    """Compose selected PRE custody through CHECKERS' public adapter root."""
+    from app.adapters.tasks import selected_pre_submit_task_guard
+    from app.modules.checkers.selected_pre_submit_coordination import (
+        SelectedPreSubmitCoordinator,
+    )
+
+    return SelectedPreSubmitCoordinator(
+        session,
+        tasks=selected_pre_submit_task_guard(session),
+    )
 
 
 class _ExecutionRequest(Protocol):
@@ -394,7 +414,9 @@ def selected_submission_evaluation_content(
     )
 
 
-def delivery_bound_post_submission_executor(*, sessions, materialization, envelope, request):
+def delivery_bound_post_submission_executor(
+    *, sessions, materialization, envelope, request, selected_execution=None
+):
     """Add invocation custody to the existing executor without registering delivery."""
     from app.adapters.auth import post_submit_execution_authority
     from app.adapters.outbox import outbox_append, outbox_invocation_fence
@@ -411,5 +433,6 @@ def delivery_bound_post_submission_executor(*, sessions, materialization, envelo
 
     return PostSubmissionExecutor(
         sessions=sessions, execute_authority=authority, finalize_authority=authority,
-        materialization=materialization, registry=default_checker_registry(), outbox=outbox_append,
+        materialization=materialization, registry=default_checker_registry(),
+        selected_execution=selected_execution, outbox=outbox_append,
     )

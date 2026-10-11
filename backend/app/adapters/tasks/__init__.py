@@ -303,13 +303,30 @@ def validate_submission_policy_context(task_context: TaskSubmissionContextFacts,
 
 def evaluation_request_handler(*, sessions, materialization):
     """Compose one hidden TASK request handler; production registration is separate."""
-    from app.adapters.checkers import evaluation_coordinator, delivery_bound_post_submission_executor
+    from app.adapters.checkers import (
+        configured_external_checker_execution,
+        delivery_bound_post_submission_executor,
+        evaluation_coordinator,
+    )
     from app.adapters.outbox import committed_invocation_reader
+    from app.core.config import get_settings
+    from app.modules.checkers.api.selected_post_submit import (
+        SelectedPostSubmissionEvaluationRequest,
+    )
     from app.modules.tasks.evaluation_delivery import EvaluationRequestHandler
 
     def executor(envelope, request):
+        selected_execution = (
+            configured_external_checker_execution(get_settings())
+            if isinstance(request, SelectedPostSubmissionEvaluationRequest)
+            else None
+        )
         return delivery_bound_post_submission_executor(
-            sessions=sessions, materialization=materialization, envelope=envelope, request=request,
+            sessions=sessions,
+            materialization=materialization,
+            envelope=envelope,
+            request=request,
+            selected_execution=selected_execution,
         )
 
     return EvaluationRequestHandler(

@@ -32,19 +32,42 @@ def outbox_delivery(
 
 
 def production_outbox_delivery(session_factory):
-    """Install the exact assignment handler with separate dispatcher and feature authority."""
+    """Install exact assignment and selected evaluation handlers."""
+    from app.adapters.artifacts import worker_post_submission_materialization
     from app.adapters.auth import outbox_dispatch_authorization, assignment_invalidation_authorization
-    from app.adapters.tasks import TransactionalAssignmentInvalidationHandler
+    from app.adapters.tasks import (
+        TransactionalAssignmentInvalidationHandler,
+        evaluation_request_handler,
+    )
+    from app.modules.checkers.api.execution import REQUEST_EVENT
     from app.modules.tasks.api.assignment_invalidation import ASSIGNMENT_INVALIDATION_EVENT
 
     return outbox_delivery(
         session_factory, authorization_factory=outbox_dispatch_authorization,
-        registry=HandlerRegistry([(ASSIGNMENT_INVALIDATION_EVENT, 1,
-            TransactionalAssignmentInvalidationHandler(
-                session_factory, observer=CommittedInvocationReader(session_factory),
-                authorization_factory=assignment_invalidation_authorization,
-            ),
-        )]), options=DeliveryOptions(),
+        registry=HandlerRegistry(
+            [
+                (
+                    ASSIGNMENT_INVALIDATION_EVENT,
+                    1,
+                    TransactionalAssignmentInvalidationHandler(
+                        session_factory,
+                        observer=CommittedInvocationReader(session_factory),
+                        authorization_factory=assignment_invalidation_authorization,
+                    ),
+                ),
+                (
+                    REQUEST_EVENT,
+                    1,
+                    evaluation_request_handler(
+                        sessions=session_factory,
+                        materialization=worker_post_submission_materialization(
+                            sessions=session_factory
+                        ),
+                    ),
+                ),
+            ]
+        ),
+        options=DeliveryOptions(),
     )
 
 

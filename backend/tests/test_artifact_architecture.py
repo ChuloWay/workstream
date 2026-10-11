@@ -27,6 +27,7 @@ CHECKER_OUTPUT_CUSTODY_API = (
 CHECKER_MATERIALIZATION_API = (
     APP_ROOT / "modules" / "checkers" / "api" / "materialization.py"
 )
+CHECKER_MATERIAL_API = APP_ROOT / "modules" / "checkers" / "api" / "material.py"
 RETIRED_ARTIFACT_MATERIALIZATION_API = (
     APP_ROOT / "modules" / "artifacts" / "api" / "submission_materialization.py"
 )
@@ -616,12 +617,18 @@ def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> 
         "MaterializationFacts", "PreparedMaterialization", "MaterializationAuthorityPort",
         "PostSubmissionMaterializationUnavailable",
         "PostSubmissionMaterializationFailure",
-        "SubmissionMaterialEntry",
+        "ExternalCheckerGrantReference",
         "SubmissionMaterialView",
         "PostSubmissionMaterialConsumer",
         "PostSubmissionMaterializationResult",
         "PostSubmissionMaterializationPort",
     }
+    material_classes = {
+        node.name: node
+        for node in _tree(CHECKER_MATERIAL_API).body
+        if isinstance(node, ast.ClassDef)
+    }
+    assert set(material_classes) == {"SubmissionMaterialEntry"}
     assert {
         node.name
         for node in classes["PostSubmissionMaterializationPort"].body
@@ -646,13 +653,14 @@ def test_checker_custody_ports_have_exact_owner_and_art_consumers() -> None:
         "app.modules.checkers.api.materialization": {
             "app/modules/authorization/domain/post_submit.py",
             "app/modules/authorization/post_submit_authorization.py",
-            "app/adapters/artifacts/__init__.py",
-            "app/modules/artifacts/post_submit_materialization.py",
-            "app/modules/artifacts/post_submit_selection.py",
-            "app/modules/checkers/api/default_checker.py",
-            "app/modules/checkers/default_checker.py",
-            "app/modules/checkers/execution.py",
-        },
+                "app/adapters/artifacts/__init__.py",
+                "app/modules/artifacts/post_submit_materialization.py",
+                "app/modules/artifacts/post_submit_selection.py",
+                "app/modules/artifacts/selected_pre_submit_admission.py",
+                "app/modules/checkers/default_checker.py",
+                "app/modules/checkers/execution.py",
+                "app/modules/checkers/selected_pre_submit_execution.py",
+            },
     }
     actual = {module: set() for module in expected}
     for path in _python_files(APP_ROOT):

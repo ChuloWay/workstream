@@ -424,13 +424,10 @@ def get_submission_bundle_preparation_command(
             inspector = SubmissionArchiveInspector(submission_archive_limits(settings))
             from app.adapters.auth import selected_pre_submit_authority
             from app.adapters.checkers import selected_pre_submit_checker_execution
-            from app.adapters.tasks import selected_pre_submit_task_guard
             from app.modules.artifacts.selected_pre_submit_execution import (
                 SelectedPreSubmitExecutionService,
             )
-            from app.modules.checkers.selected_pre_submit_coordination import (
-                SelectedPreSubmitCoordinator,
-            )
+            from app.adapters.checkers import selected_pre_submit_coordinator
 
             checker_execution = selected_pre_submit_checker_execution(
                 settings=settings,
@@ -456,10 +453,7 @@ def get_submission_bundle_preparation_command(
                 settings,
                 internal_authority,
             )
-            selected_coordinator = SelectedPreSubmitCoordinator(
-                session,
-                tasks=selected_pre_submit_task_guard(session),
-            )
+            selected_coordinator = selected_pre_submit_coordinator(session)
 
             yield SubmissionBundlePreparationRuntime(
                 preparation=preparation,
