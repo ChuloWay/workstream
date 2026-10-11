@@ -376,3 +376,21 @@ def current_post_submit_catalogue() -> PostSubmitCatalogue:
         "definitions": [item.model_dump(mode="json") for item in definitions],
     }
     return PostSubmitCatalogue(**body, manifest_sha256=canonical_json_hash(body))
+
+
+def parse_locked_post_submit_policy(
+    body: object,
+    *,
+    project_id: str,
+    guide_version: str,
+    policy_hash: str,
+) -> CompiledPostSubmitPolicy:
+    """Decode immutable pre-cutover policy evidence without restoring eligibility."""
+    if not isinstance(body, dict):
+        raise ValueError("locked post-submit checker policy body is missing")
+    policy = CompiledPostSubmitPolicy.model_validate_json(json.dumps(body))
+    if str(policy.project_id) != project_id or policy.guide_version != guide_version:
+        raise ValueError("locked post-submit checker policy guide context mismatch")
+    if policy.policy_hash != policy_hash:
+        raise ValueError("locked post-submit checker policy hash is invalid")
+    return policy

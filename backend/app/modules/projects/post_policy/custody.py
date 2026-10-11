@@ -6,7 +6,10 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.core.hashing import canonical_json_hash
-from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
+from app.modules.checkers.api.historical_post_submit import (
+    CompiledPostSubmitPolicy,
+    parse_locked_post_submit_policy,
+)
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
 from app.modules.authorization.api import ActorKind
 from app.modules.authorization.api.post_policy import PostPolicyAuthorityReceipt
@@ -17,7 +20,6 @@ from app.modules.projects.api.post_policy import (
     post_policy_derive_authorization_selector,
     post_policy_human_authorization_selector,
 )
-from app.modules.projects.post_submit_policy import parse_locked_post_submit_checker_policy_body
 
 from .models import PostPolicyOperation
 
@@ -136,7 +138,7 @@ async def load_post_policy_custody(session, policy) -> PostPolicyCustody:
         ):
             raise GuideProposalError("proposal_unavailable")
     else:
-        compiled = parse_locked_post_submit_checker_policy_body(
+        compiled = parse_locked_post_submit_policy(
             policy.policy_body,
             project_id=policy.project_id,
             guide_version=policy.guide_version,
@@ -304,7 +306,7 @@ def validate_activation_post_policy(
             ):
                 raise ValueError("selected post policy sidecars differ")
         else:
-            parsed = parse_locked_post_submit_checker_policy_body(
+            parsed = parse_locked_post_submit_policy(
                 post_submit_checker_policy.policy_body,
                 project_id=post_submit_checker_policy.project_id,
                 guide_version=post_submit_checker_policy.guide_version,
