@@ -266,6 +266,8 @@ new_permissions = frozenset(
 )
 
 expected = {
+    "contribution.read_self": ("contribution.read_self", "PILOT-10"),
+    "contribution.read_project": ("contribution.read_project", "PILOT-10"),
     "task.post_submit.route": ("task.post_submit.route", "WS-ARCH-001-04E2"),
     "checker.post_submit.execute": ("checker.post_submit.execute", "WS-ARCH-001-04D2"),
     "checker.post_submit.finalize": ("checker.post_submit.finalize", "WS-ARCH-001-04D2"),
@@ -443,6 +445,8 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "contribution.read_self",
+    "contribution.read_project",
     "task.post_submit.route",
     "checker.registry.register",
     "review.lifecycle.activation.manage",

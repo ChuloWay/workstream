@@ -289,3 +289,11 @@ def evaluation_completion_handler(*, sessions):
         sessions, observer=committed_invocation_reader(sessions),
         outcomes=lambda session: task_post_submit_outcome(session, sessions),
     )
+
+
+def contribution_task_evidence_port(session):
+    """Read exact selected source labels without claims, activation or task mutation."""
+    from app.modules.tasks.contribution_evidence import ContributionTaskEvidenceRepository
+    from app.adapters.tasks.contribution_reads import ContributionTaskSourceReadAdapter
+
+    return ContributionTaskSourceReadAdapter(ContributionTaskEvidenceRepository(session))

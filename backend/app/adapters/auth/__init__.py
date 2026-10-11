@@ -109,6 +109,15 @@ def contribution_policy_authorization(
     return ContributionPolicyAuthorization(ContributionPolicyAuthorizationAdapter(kernel, prepared))
 
 
+def contribution_read_authorization(session: AsyncSession, context: AuthorizationContext):
+    """Compose fresh contribution evidence authority in the export transaction."""
+    from app.modules.authorization.contribution_read import ContributionReadAuthorization
+
+    return ContributionReadAuthorization(AuthorizationService(
+        session, context, admin_repository=AdminAuthorizationRepository(session),
+    ))
+
+
 __all__ = (
     "assignment_invalidation_publication",
     "task_authorization",

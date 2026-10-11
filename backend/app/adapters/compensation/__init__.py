@@ -16,3 +16,10 @@ def compensation_award_participant(session):
     from app.modules.compensation.awards.participant import CompensationAwardParticipant
 
     return CompensationAwardParticipant(session)
+
+
+def contribution_award_read_port(session):
+    """Read selected immutable awards without bindings, fulfillment or a second session."""
+    from app.modules.compensation.awards.read_repository import ContributionAwardReadRepository
+
+    return ContributionAwardReadRepository(session)
