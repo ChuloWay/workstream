@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -9,9 +10,11 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
 from app.core.identifiers import new_record_id
+from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitExecuteFacts,
+    SelectedPreSubmitAdmissionLineage,
     SelectedPreSubmitFinalizeFacts,
     SelectedPreSubmitLeaseFacts,
     SelectedPreSubmitReservationFacts,
@@ -161,3 +164,41 @@ def test_selected_pre_authority_digests_bind_lease_and_infrastructure_outcome() 
             execution=None,
             infrastructure_failure_code=None,
         )
+
+
+def test_selected_pre_request_binds_complete_later_admission_lineage() -> None:
+    manifest = {"schema_version": "submission_manifest.v1", "entries": []}
+    digest = canonical_json_hash(manifest)
+    lineage = SelectedPreSubmitAdmissionLineage(
+        predecessor_submission_id=None,
+        predecessor_submission_version=None,
+        guide_id=new_record_id(),
+        guide_version="locked-v1",
+        source_snapshot_id=new_record_id(),
+        source_snapshot_sha256=SHA,
+        locked_guide_sha256=SHA,
+        effective_policy_id=new_record_id(),
+        effective_policy_sha256=SHA,
+        pre_submit_policy_id=new_record_id(),
+        pre_submit_policy_sha256=SHA,
+        effective_plan_sha256="sha256:" + "1" * 64,
+        locked_policy_context_hash=SHA,
+        semantic_manifest_id=new_record_id(),
+        semantic_manifest_body=manifest,
+        packet_sha256=SHA,
+        storage_scheme="s3",
+    )
+    reservation = replace(
+        _reservation(),
+        policy_sha256=lineage.effective_plan_sha256,
+        semantic_manifest_sha256=digest,
+        admission_lineage=lineage,
+    )
+
+    assert reservation.canonical_body()["admission_lineage"] == lineage.canonical_body()
+    assert reservation.request_digest != replace(
+        reservation,
+        admission_lineage=replace(lineage, packet_sha256="sha256:" + "9" * 64),
+    ).request_digest
+    with pytest.raises(ValueError, match="reservation"):
+        replace(reservation, semantic_manifest_sha256=SHA)

@@ -15,6 +15,99 @@ from app.modules.checkers.api.external import ExternalCheckerExecutionResult
 
 
 @dataclass(frozen=True, slots=True)
+class SelectedPreSubmitAdmissionLineage:
+    """Immutable TASK, PROJECT, packet and manifest facts needed after verification."""
+
+    predecessor_submission_id: UUID | None
+    predecessor_submission_version: int | None
+    guide_id: UUID
+    guide_version: str
+    source_snapshot_id: UUID
+    source_snapshot_sha256: str
+    locked_guide_sha256: str
+    effective_policy_id: UUID
+    effective_policy_sha256: str
+    pre_submit_policy_id: UUID
+    pre_submit_policy_sha256: str
+    effective_plan_sha256: str
+    locked_policy_context_hash: str
+    semantic_manifest_id: UUID
+    semantic_manifest_body: dict[str, object]
+    packet_sha256: str
+    storage_scheme: str
+
+    def __post_init__(self) -> None:
+        identifiers = (
+            self.guide_id,
+            self.source_snapshot_id,
+            self.effective_policy_id,
+            self.pre_submit_policy_id,
+            self.semantic_manifest_id,
+        )
+        digests = (
+            self.source_snapshot_sha256,
+            self.locked_guide_sha256,
+            self.effective_policy_sha256,
+            self.pre_submit_policy_sha256,
+            self.effective_plan_sha256,
+            self.locked_policy_context_hash,
+            self.packet_sha256,
+        )
+        if (
+            any(type(value) is not UUID for value in identifiers)
+            or (self.predecessor_submission_id is None)
+            != (self.predecessor_submission_version is None)
+            or (
+                self.predecessor_submission_id is not None
+                and type(self.predecessor_submission_id) is not UUID
+            )
+            or (
+                self.predecessor_submission_version is not None
+                and (
+                    type(self.predecessor_submission_version) is not int
+                    or self.predecessor_submission_version < 1
+                )
+            )
+            or not self.guide_version.strip()
+            or any(
+                type(value) is not str
+                or len(value) != 71
+                or not value.startswith("sha256:")
+                for value in digests
+            )
+            or type(self.semantic_manifest_body) is not dict
+            or self.storage_scheme not in {"local", "s3"}
+        ):
+            raise ValueError("selected PRE admission lineage is invalid")
+
+    def canonical_body(self) -> dict[str, object]:
+        """Return every fact later copied into verified admission custody."""
+        return {
+            "predecessor_submission_id": (
+                str(self.predecessor_submission_id)
+                if self.predecessor_submission_id is not None
+                else None
+            ),
+            "predecessor_submission_version": self.predecessor_submission_version,
+            "guide_id": str(self.guide_id),
+            "guide_version": self.guide_version,
+            "source_snapshot_id": str(self.source_snapshot_id),
+            "source_snapshot_sha256": self.source_snapshot_sha256,
+            "locked_guide_sha256": self.locked_guide_sha256,
+            "effective_policy_id": str(self.effective_policy_id),
+            "effective_policy_sha256": self.effective_policy_sha256,
+            "pre_submit_policy_id": str(self.pre_submit_policy_id),
+            "pre_submit_policy_sha256": self.pre_submit_policy_sha256,
+            "effective_plan_sha256": self.effective_plan_sha256,
+            "locked_policy_context_hash": self.locked_policy_context_hash,
+            "semantic_manifest_id": str(self.semantic_manifest_id),
+            "semantic_manifest_body": self.semantic_manifest_body,
+            "packet_sha256": self.packet_sha256,
+            "storage_scheme": self.storage_scheme,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class ExternalPreSubmitIsolationFacts:
     """Observed sandbox identity detached from the trusted service response."""
 
@@ -138,6 +231,7 @@ class SelectedPreSubmitReservationFacts:
     archive_byte_count: int
     semantic_manifest_sha256: str
     execution_budget_ms: int
+    admission_lineage: SelectedPreSubmitAdmissionLineage | None = None
 
     def __post_init__(self) -> None:
         """Reject partial authority, material, policy or default-input custody."""
@@ -171,6 +265,22 @@ class SelectedPreSubmitReservationFacts:
             or self.archive_byte_count < 0
             or type(self.execution_budget_ms) is not int
             or not 100 <= self.execution_budget_ms <= 14_400_000
+            or (
+                self.admission_lineage is not None
+                and type(self.admission_lineage)
+                is not SelectedPreSubmitAdmissionLineage
+            )
+            or (
+                self.admission_lineage is not None
+                and (
+                    canonical_json_hash(
+                        self.admission_lineage.semantic_manifest_body
+                    )
+                    != self.semantic_manifest_sha256
+                    or self.admission_lineage.effective_plan_sha256
+                    != self.policy_sha256
+                )
+            )
         ):
             raise ValueError("selected PRE reservation facts are invalid")
 
@@ -193,6 +303,11 @@ class SelectedPreSubmitReservationFacts:
             "archive_byte_count": self.archive_byte_count,
             "semantic_manifest_sha256": self.semantic_manifest_sha256,
             "execution_budget_ms": self.execution_budget_ms,
+            "admission_lineage": (
+                self.admission_lineage.canonical_body()
+                if self.admission_lineage is not None
+                else None
+            ),
         }
 
     @property
