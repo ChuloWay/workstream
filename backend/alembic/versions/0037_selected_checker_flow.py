@@ -450,30 +450,37 @@ begin
     or value->>'schema_version'<>'external_checker_policies.v1'
     or value->>'policies_sha256'<>expected_hash
     or public.guide_proposal_hash(value-'policies_sha256')<>expected_hash then
-  return false;
+  raise exception 'external checker policy envelope mismatch' using errcode='23514';
  end if;
  if jsonb_typeof(value->'pre_submit')<>'object'
-    or jsonb_typeof(value->'post_submit')<>'object' then return false; end if;
+    or jsonb_typeof(value->'post_submit')<>'object' then
+  raise exception 'external checker phase policy is missing' using errcode='23514';
+ end if;
  foreach phase_name in array array['pre_submit','post_submit'] loop
   policy:=value->phase_name;
   if jsonb_object_length(policy)<>(case when phase_name='pre_submit' then 4 else 3 end)
      or policy->>'schema_version'<>'external_'||phase_name||'_policy.v1'
      or public.guide_proposal_hash(policy-'policy_sha256')<>policy->>'policy_sha256'
-     or jsonb_typeof(policy->'entries')<>'array' then return false; end if;
+     or jsonb_typeof(policy->'entries')<>'array' then
+   raise exception 'external checker phase policy mismatch' using errcode='23514';
+  end if;
   if phase_name='pre_submit' and policy->'workstream_default' is distinct from
      jsonb_build_object('checker_id','workstream.default','checker_version','v1',
        'behavior_sha256','sha256:af2c604f792c4456d3b222036c772161b1503eace65ff90c3d3a23d9d348c28f')
-  then return false; end if;
+  then raise exception 'Workstream default checker identity mismatch' using errcode='23514';
+  end if;
   prior_requirement:=null; prior_capability:=null; prior_version:=null;
   for binding in select item from jsonb_array_elements(policy->'entries') item loop
    if jsonb_typeof(binding)<>'object' or jsonb_object_length(binding)<>5
       or binding->>'stage'<>phase_name
       or jsonb_typeof(binding->'configuration')<>'object'
       or public.external_checker_registry_digest(binding->'configuration')
-         <>binding->>'configuration_sha256' then return false; end if;
+         <>binding->>'configuration_sha256' then
+    raise exception 'external checker policy binding mismatch' using errcode='23514';
+   end if;
    registry:=binding->'registry';
    if jsonb_typeof(registry)<>'object' or jsonb_object_length(registry)<>14 then
-    return false;
+    raise exception 'external checker registry value mismatch' using errcode='23514';
    end if;
    select * into registry_row from public.external_checker_registry_entries
     where id=(registry->>'registry_entry_id')::uuid
@@ -508,18 +515,23 @@ begin
         'memory_bytes',registry_row.memory_bytes,
         'deadline_ms',registry_row.deadline_ms,
         'maximum_output_bytes',registry_row.maximum_output_bytes)
-      or (prior_requirement,prior_capability,prior_version) is not null
+   then raise exception 'external checker registry custody mismatch' using errcode='23514';
+   end if;
+   if (prior_requirement,prior_capability,prior_version) is not null
          and row(binding->>'requirement_id',registry_row.capability_id,
                  registry_row.capability_version)
              <= row(prior_requirement,prior_capability,prior_version)
-   then return false; end if;
+   then raise exception 'external checker policy order mismatch' using errcode='23514';
+   end if;
    prior_requirement:=binding->>'requirement_id';
    prior_capability:=registry_row.capability_id;
    prior_version:=registry_row.capability_version;
   end loop;
  end loop;
  return true;
-exception when others then return false;
+exception when sqlstate '23514' then raise;
+ when others then
+  raise exception 'external checker policy value is invalid' using errcode='23514';
 end $$
 """)
     definition = op.get_bind().execute(sa.text(
