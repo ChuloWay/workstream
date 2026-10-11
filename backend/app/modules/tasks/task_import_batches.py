@@ -15,22 +15,16 @@ from app.modules.tasks.api.task_import import (
     TaskImportBatchAction, TaskImportBatchAuthorityFacts, TaskImportBatchAuthorizationPort,
     TaskImportRow, parse_task_import,
 )
+from app.modules.tasks.api.task_import_membership import TaskImportBatchError
+from app.modules.tasks.task_import_membership import TaskImportMembership
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands, TaskCreationPreparation
 from app.modules.tasks.command_replay import TaskReplayConflict
 from app.modules.tasks.models import (
-    TaskCommandReceipt, TaskImportBatch, TaskImportBatchCommandReceipt, TaskImportBatchMember, WorkstreamTask,
+    TaskImportBatch, TaskImportBatchCommandReceipt, TaskImportBatchMember, WorkstreamTask,
 )
 from app.modules.tasks.schemas import (
     ImportedTaskCreate, TaskImportBatchResponse, TaskImportBatchCurrentTask, TaskImportBatchStatus,
 )
-
-
-class TaskImportBatchError(RuntimeError):
-    """A controlled batch outcome with bounded document-row diagnostics."""
-
-    def __init__(self, code: str, status_code: int, row_indexes: tuple[int, ...] = ()):
-        self.code, self.status_code, self.row_indexes = code, status_code, row_indexes
-        super().__init__(code)
 
 
 def imported_task_payload(row: TaskImportRow, source: TaskImportSourceCommitment, batch_id: UUID) -> ImportedTaskCreate:
@@ -197,37 +191,8 @@ class TaskImportBatchCommands:
         return selected
 
     async def _original_response(self, batch: TaskImportBatch) -> TaskImportBatchResponse:
-        """Recover immutable creation facts; mutable Task state is not replay input."""
-        response = TaskImportBatchResponse.model_validate(batch.response)
-        if (str(response.batch_id), str(response.project_id), str(response.source_id), response.sha256,
-                response.byte_count, response.row_count, response.schema_version, response.mapping_version) != (
-            batch.id, batch.project_id, batch.source_id, batch.sha256, batch.byte_count, batch.row_count,
-            batch.schema_version, batch.mapping_version,
-        ):
-            raise TaskImportBatchError("task_import_batch_custody_invalid", 409)
-        rows = (await self._session.execute(select(TaskImportBatchMember, TaskCommandReceipt).join(
-            TaskCommandReceipt, TaskCommandReceipt.id == TaskImportBatchMember.task_command_receipt_id,
-        ).where(TaskImportBatchMember.batch_id == batch.id).order_by(TaskImportBatchMember.row_index))).all()
-        if len(rows) != batch.row_count:
-            raise TaskImportBatchError("task_import_batch_custody_invalid", 409)
-        manifest = {"schema_version": response.schema_version, "metadata": {"label": response.label},
-                    "tasks": [{field: getattr(task, field) for field in TaskImportRow.model_fields} for task in response.tasks]}
-        if response.label != batch.metadata_label or canonical_json_hash(manifest) != batch.manifest_digest:
-            raise TaskImportBatchError("task_import_batch_custody_invalid", 409)
-        for index, (member, receipt) in enumerate(rows):
-            original = response.tasks[index]
-            instructions = {field: getattr(original, field) for field in TaskImportRow.model_fields}
-            if (member.row_index != index or member.project_id != batch.project_id or member.task_id != original.id
-                    or member.external_task_id != original.external_task_id
-                    or member.row_digest != canonical_json_hash(instructions)
-                    or member.response != original.model_dump(mode="json")
-                    or receipt.response != member.response or receipt.status != "committed"
-                    or receipt.action_id != "project.task.create" or receipt.task_id != member.task_id
-                    or receipt.actor_profile_id != batch.actor_profile_id
-                    or receipt.idempotency_key != member.create_idempotency_key
-                    or original.created_by != batch.actor_profile_id):
-                raise TaskImportBatchError("task_import_batch_custody_invalid", 409)
-        return response
+        """Recover immutable creation facts through the one native membership owner."""
+        return (await TaskImportMembership(self._session).validate(batch)).creation
 
     async def _stage_rows(
         self, batch: TaskImportBatch, parsed: ParsedTaskImport,

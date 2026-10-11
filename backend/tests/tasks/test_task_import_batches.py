@@ -356,7 +356,7 @@ async def test_distinct_covered_actors_with_reversed_ids_wait_then_roll_back_one
     from app.core.config import get_settings
     from app.modules.authorization.task_authorization import PreparedTaskAuthorization
     from app.modules.tasks.schemas import TaskImportBatchResponse
-    from app.modules.tasks.task_import_batches import TaskImportBatchError
+    from app.modules.tasks.api.task_import_membership import TaskImportBatchError
     from tests.authorization.task_authority.test_concurrency import actor_context
     from tests.project_create_fixtures import grant_system_project_manager
 

@@ -71,6 +71,21 @@ class TaskCreationPreparation:
     transaction: AsyncSessionTransaction
 
 
+@dataclass(frozen=True, slots=True)
+class TaskTransitionPreparation:
+    """TASK/assignment custody and exact current facts retained in one caller root."""
+
+    task: WorkstreamTask
+    assignment: TaskAssignment | None
+    operation: TaskAuthorityOperation
+    reason: str | None
+    receipt: TaskCommandReceipt
+    request_digest: str
+    reserved: bool
+    facts: TaskAuthorityFacts
+    transaction: AsyncSessionTransaction
+
+
 class AuthorizedTaskCommands:
     """TASK owns state and assignment; AUTH owns permission and current grants."""
 
@@ -144,10 +159,13 @@ class AuthorizedTaskCommands:
         if request_digest is not None:
             facts = replace(facts, request_digest=request_digest,
                             replay_command_id=self._replay.manager_replay(receipt, operation, task_id, self._actor_id, idempotency_key) if receipt else None)
+        decision = await self._authorize_facts(facts)
+        return task, assignment, decision
+
+    async def _authorize_facts(self, facts: TaskAuthorityFacts) -> TaskAuthorityDecision:
         handle = await self._authorization.prepare(facts)
         try:
-            decision_id = await self._authorization.consume(handle, facts)
-            return task, assignment, decision_id
+            return await self._authorization.consume(handle, facts)
         finally:
             self._authorization.close(handle)
 
@@ -238,35 +256,91 @@ class AuthorizedTaskCommands:
         self, task_id: UUID, operation: TaskAuthorityOperation, reason: str | None, key: UUID,
     ) -> TaskResponse:
         async with self._session.begin():
-            receipt, digest, reserved = await self._replay.reserve(self._actor_id, operation, key, task_id, reason)
-            task, assignment, decision_id = await self._locked_task(
-                task_id, operation, reason, idempotency_key=key, receipt=receipt, request_digest=digest,
-            )
-            replayed = self._replay.recover(receipt, digest, self._facts(task, assignment, operation, reason),
-                                           task, assignment, reserved=reserved)
-            if replayed is not None:
-                return replayed
-            before = task.status
-            target = "screening" if operation is TaskAuthorityOperation.SCREEN else "ready"
-            self._contexts._ensure_transition_allowed(before, target)
-            if operation is TaskAuthorityOperation.SCREEN:
-                context = await self._contexts._load_active_policy_context(task.project_id)
-                self._contexts._validate_task_contract_fields(task)
-                self._contexts._stamp_locked_context(task, context)
-            else:
-                if not reason or not reason.strip():
-                    raise TaskValidationError("release decision reason is required")
-                self._contexts._ensure_locked_context(task)
-                context = await self._contexts._load_locked_task_context(task)
-                self._contexts._validate_installed_plans(context.facts)
-            task.status = target
-            await self._session.flush()
-            await self._record_management(task, operation, decision_id, before, reason)
-            await self._session.flush()
-            await self._session.refresh(task)
-            response = self._contexts.task_response_for_authority(task, can_manage=True)
-            self._replay.complete(receipt, None, self._facts(task, None, operation, reason), response)
-            await self._session.flush()
+            prepared = await self.prepare_transition(task_id, operation, reason, idempotency_key=key)
+            decision = await self.authorize_transition(prepared)
+            response = await self.stage_transition(prepared, decision)
+        return response
+
+    async def prepare_transition(
+        self, task_id: UUID, operation: TaskAuthorityOperation, reason: str | None,
+        *, idempotency_key: UUID, project_id: UUID | None = None,
+    ) -> TaskTransitionPreparation:
+        """Reserve canonical retry custody and lock TASK before the caller takes AUTH."""
+        if operation not in {TaskAuthorityOperation.SCREEN, TaskAuthorityOperation.RELEASE}:
+            raise ValueError("task transition participant supports SCREEN/RELEASE only")
+        transaction = self._session.get_transaction()
+        if transaction is None or not transaction.is_active:
+            raise RuntimeError("task transition preparation requires the caller transaction")
+        receipt, digest, reserved = await self._replay.reserve(
+            self._actor_id, operation, idempotency_key, task_id, reason,
+        )
+        task = (await self._repo.lock_project_task(project_id, task_id) if project_id is not None
+                else await self._repo.get_task(str(task_id), for_update=True))
+        if task is None:
+            raise TaskNotFound("task not found")
+        assignment = await self._repo.get_active_assignment(task.id, for_update=True)
+        facts = replace(
+            self._facts(task, assignment, operation, reason, idempotency_key), request_digest=digest,
+            replay_command_id=self._replay.manager_replay(receipt, operation, task_id, self._actor_id, idempotency_key),
+        )
+        return TaskTransitionPreparation(task, assignment, operation, reason, receipt, digest,
+                                         reserved, facts, transaction)
+
+    def _validate_transition_preparation(self, prepared: TaskTransitionPreparation) -> None:
+        if (self._session.get_transaction() is not prepared.transaction or not prepared.transaction.is_active
+                or prepared.facts.actor_profile_id != self._actor_id):
+            raise RuntimeError("task transition requires its original caller transaction")
+        current = replace(
+            self._facts(prepared.task, prepared.assignment, prepared.operation, prepared.reason,
+                        prepared.facts.idempotency_key), request_digest=prepared.request_digest,
+            replay_command_id=self._replay.manager_replay(
+                prepared.receipt, prepared.operation, UUID(prepared.task.id), self._actor_id,
+                prepared.facts.idempotency_key,
+            ),
+        )
+        if (current != prepared.facts
+                or prepared.request_digest != canonical_json_hash({"task_id": prepared.task.id, "reason": prepared.reason})):
+            raise TaskValidationError("task transition preparation changed")
+
+    async def authorize_transition(self, prepared: TaskTransitionPreparation) -> TaskAuthorityDecision:
+        """Consume fresh exact per-Task authority after all caller preparation locks."""
+        self._validate_transition_preparation(prepared)
+        return await self._authorize_facts(prepared.facts)
+
+    async def stage_transition(
+        self, prepared: TaskTransitionPreparation, decision: TaskAuthorityDecision,
+    ) -> TaskResponse:
+        """Flush the normal transition, guide locks, audit and receipt in the caller root."""
+        self._validate_transition_preparation(prepared)
+        task, assignment, operation, reason = (prepared.task, prepared.assignment,
+                                               prepared.operation, prepared.reason)
+        replayed = self._replay.recover(
+            prepared.receipt, prepared.request_digest, self._facts(task, assignment, operation, reason),
+            task, assignment, reserved=prepared.reserved,
+        )
+        if replayed is not None:
+            return replayed
+        before = task.status
+        target = "screening" if operation is TaskAuthorityOperation.SCREEN else "ready"
+        self._contexts._ensure_transition_allowed(before, target)
+        if operation is TaskAuthorityOperation.SCREEN:
+            context = await self._contexts._load_active_policy_context(task.project_id)
+            self._contexts._validate_task_contract_fields(task)
+            self._contexts._stamp_locked_context(task, context)
+        else:
+            if not reason or not reason.strip():
+                raise TaskValidationError("release decision reason is required")
+            self._contexts._ensure_locked_context(task)
+            context = await self._contexts._load_locked_task_context(task)
+            self._contexts._validate_installed_plans(context.facts)
+        task.status = target
+        await self._session.flush()
+        await self._record_management(task, operation, decision, before, reason)
+        await self._session.flush()
+        await self._session.refresh(task)
+        response = self._contexts.task_response_for_authority(task, can_manage=True)
+        self._replay.complete(prepared.receipt, None, self._facts(task, None, operation, reason), response)
+        await self._session.flush()
         return response
 
     async def _record_management(

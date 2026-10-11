@@ -27,7 +27,8 @@ from app.modules.tasks.schemas import (
     TaskWithAssignmentResponse,
 )
 from app.modules.tasks.service import TaskProjectNotReady, TaskServiceError, TaskNotFound
-from app.modules.tasks.task_import_batches import TaskImportBatchCommands, TaskImportBatchError
+from app.modules.tasks.task_import_batches import TaskImportBatchCommands
+from app.modules.tasks.api.task_import_membership import TaskImportBatchError
 from app.modules.tasks.api.task_import import TaskImportBatchAction
 from app.modules.tasks.schemas import TaskImportBatchRequest, TaskImportBatchResponse, TaskImportBatchStatus
 from app.interfaces.artifacts import ArtifactStoreError
