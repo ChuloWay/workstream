@@ -11,7 +11,7 @@ from app.modules.actors.api.contribution_labels import ContributionActorLabel
 from app.modules.compensation.api.awards import CompensationAwardFacts
 from app.modules.compensation.api.instruments import CompensationInstrumentType
 from app.modules.contributions.api.records import (
-    ContributionExportTooLarge, ContributionExportUnavailable, ContributionReadRequest,
+    ContributionExportTooLarge, ContributionExportUnavailable, ContributionReadRequest, InvalidContributionCursor,
 )
 from app.modules.contributions.records.read_facts import ContributionReadFacts, ContributionReadPage, FrozenContributionAward
 from app.modules.contributions.records.read_service import ContributionReadService
@@ -254,3 +254,18 @@ async def test_page_size_refusal_precedes_loading_other_owners():
 
     with pytest.raises(ContributionExportUnavailable):
         await service(FaultyPage(value)).read(request(value).model_copy(update={"page_size": 1}))
+
+
+async def test_invalid_cursor_refusal_reaches_public_boundary_without_owner_projections():
+    value = facts()
+
+    class InvalidCursor(Ports):
+        async def read(self, request):
+            assert self.authorized
+            raise InvalidContributionCursor("Invalid contribution export cursor")
+
+        async def read_contribution_awards(self, selected):
+            pytest.fail("invalid cursor loaded award evidence")
+
+    with pytest.raises(InvalidContributionCursor):
+        await service(InvalidCursor(value)).read(request(value))

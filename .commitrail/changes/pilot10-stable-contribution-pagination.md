@@ -97,7 +97,12 @@ Prepared public regression now includes direct installed-guard checks for sealed
 append, header/member mutation, premature deletion, deferred unsealed commit,
 and public cleanup of a nonempty expired private selection.
 These collect successfully but are not runtime proof until the native migration
-is installed. Implementation still requires installed-schema proof.
+is installed. First composed native run at 97e8b1cd installed 0036 and passed direct guard
+assertions, then reproduced invalid-cursor reclassification (503 instead of 422).
+Database, role and MinIO cleanup all passed. Preserve InvalidContributionCursor
+through the projection service; an owner-port regression checks propagation
+without loading award evidence. Full native rerun remains required.
+Implementation still requires installed-schema proof.
 
 ## Reconciliation
 

@@ -9,7 +9,7 @@ from app.modules.compensation.api.award_reads import ContributionAwardReadPort
 from app.modules.compensation.api.awards import CompensationAwardFacts
 from app.modules.contributions.api.records import (
     ContributionAwardView, ContributionExportResponse, ContributionExportTooLarge,
-    ContributionExportUnavailable,
+    ContributionExportUnavailable, InvalidContributionCursor,
     ContributionReadAuthorizationPort,
     ContributionReadRequest, ContributionRecordView,
 )
@@ -94,7 +94,7 @@ class ContributionReadService:
                 acceptances.get((record.project_id, record.source_final_acceptance_id)),
             ) for record in records)
             return ContributionExportResponse(exported_at=page.exported_at, items=items, next_cursor=page.next_cursor)
-        except ContributionExportTooLarge:
+        except (ContributionExportTooLarge, InvalidContributionCursor):
             raise
         except (ValidationError, ValueError, TypeError) as exc:
             raise ContributionExportUnavailable("Contribution evidence unavailable") from exc
