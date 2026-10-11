@@ -183,6 +183,13 @@ and native discriminating proofs before any concurrency PASS:
    retry identity. Acquire existing Task/member custody needed by replay in
    deterministic order before the first AUTH lock. Proposed new batch/row tuples
    must not introduce foreign owner locks through premature FK writes.
+   The existing TaskCommandReceipt defers both actor and Task FKs until commit;
+   new pre-AUTH reservation rows must follow that owner pattern for actor,
+   project, source and not-yet-inserted Task references. An immediate actor FK
+   would let two same-actor imports retain KEY SHARE and deadlock while upgrading
+   to AUTH's actor FOR UPDATE. An immediate source FK before remaining TASK
+   reservations would silently invert TASK-before-ART custody. Native controls
+   must distinguish both implicit-FK hazards without weakening final custody.
 3. Validate actual ART source/verification custody through its typed participant
    after TASK custody and before fresh AUTH consumption. Read immutable tuples
    with the weakest required lock; do not lock a mutable put attempt merely to
