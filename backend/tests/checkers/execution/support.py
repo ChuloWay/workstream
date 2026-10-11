@@ -52,7 +52,7 @@ async def provision_post_submit_service(factory, identity=ServiceIdentity.CHECKE
         return actor_id
 
 
-def live_executor(h, *, outbox=None):
+def live_executor(h, *, outbox=None, selected_execution=None):
     from app.adapters.auth import post_submit_execution_authority
     from app.adapters.outbox import outbox_append
     from app.modules.checkers.execution import PostSubmissionExecutor
@@ -62,6 +62,7 @@ def live_executor(h, *, outbox=None):
         materialization=h.service,
         execute_authority=post_submit_execution_authority,
         finalize_authority=post_submit_execution_authority,
+        selected_execution=selected_execution,
         outbox=outbox if outbox is not None else outbox_append,
     )
 

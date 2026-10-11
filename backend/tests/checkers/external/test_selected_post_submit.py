@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -28,6 +29,7 @@ from app.modules.checkers.api.external_policy import (
 from app.modules.checkers.api.evaluation_contract import (
     validate_execution_request,
     validate_execution_result,
+    validate_stored_execution_result,
 )
 from app.modules.checkers.api.execution import EvaluationReservation, ExecutionLease
 from app.modules.checkers.api.materialization import SubmissionMaterialEntry
@@ -46,6 +48,8 @@ from tests.checkers.external.support import (
     execution_material,
     registry_entry,
 )
+from tests.checkers.execution.support import live_executor, reserve
+from tests.post_submit_materialization_helpers import material_fixture
 
 
 def _policy() -> LockedExternalPostSubmitPolicy:
@@ -216,6 +220,23 @@ async def test_selected_post_separates_infrastructure_from_work_findings() -> No
         ).evaluate(object(), _MaterialView(execution_material(identity)))
 
 
+@pytest.mark.postgres_schema_contract
+async def test_selected_post_materializes_actual_submission_and_replays(
+    tmp_path, isolated_database_env,
+) -> None:
+    """Exercise selected POST through native Submission, ART, AUTH and storage."""
+    async with material_fixture(tmp_path, isolated_database_env) as h:
+        reservation = await reserve(h)
+        executor = live_executor(h, selected_execution=_Execution())
+        result = await executor.evaluate_post_submission(h.request)
+        assert result.outcome == "completed"
+        assert result.attempt_id == reservation.attempt_id
+        assert result.execution is not None
+        assert result.execution.external_members == ()
+        assert await executor.evaluate_post_submission(h.request) == result
+        assert len(h.store.opens) == 1
+
+
 @pytest.mark.asyncio
 async def test_selected_post_request_and_result_bind_exact_locked_policy() -> None:
     identity = execution_identity("post_submit")
@@ -294,6 +315,8 @@ async def test_selected_scheduler_consumer_derives_exact_envelope(outcome, expec
     result.validate_request(request)
     assert type(validate_execution_request(request.model_dump())) is type(request)
     assert type(validate_execution_result(result.model_dump())) is type(result)
+    stored = json.loads(result.model_dump_json())
+    assert type(validate_stored_execution_result(json.dumps(stored))) is type(result)
 
 
 def test_selected_post_content_uses_selected_digest_not_catalogue_hash() -> None:

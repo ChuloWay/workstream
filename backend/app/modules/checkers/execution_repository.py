@@ -16,8 +16,8 @@ from app.modules.checkers.api.execution import (
 from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionRequest,
     PostSubmissionExecutionResult,
-    validate_execution_result,
     validate_stored_execution_request,
+    validate_stored_execution_result,
 )
 from app.modules.checkers.api.selected_post_submit import (
     SelectedPostSubmissionEvaluationResult,
@@ -63,7 +63,9 @@ def stored_result(run: CheckerRun) -> PostSubmissionExecutionResult:
         raise CheckerExecutionUnavailable("checker_result_unavailable")
     body = json.loads(run.result_json)
     body["result_digest"] = run.result_digest
-    result = validate_execution_result(body)
+    result = validate_stored_execution_result(
+        json.dumps(body, separators=(",", ":"), sort_keys=True)
+    )
     result.validate_request(stored_request(run))
     if (str(result.attempt_id), str(result.result_id)) != (run.id, run.result_id):
         raise CheckerExecutionUnavailable("checker_result_unavailable")

@@ -740,6 +740,119 @@ $$;
 """)
 
 
+def _replace_checker_input_authority_digest() -> None:
+    definition = op.get_bind().execute(sa.text(
+        "select pg_get_functiondef("
+        "'public.checker_input_authority_digest(public.checker_runs)'::regprocedure)"
+    )).scalar_one()
+    old_evidence = "'evidence_id', a.pre_submit_evidence_set_id::text"
+    if old_evidence not in definition:
+        old_evidence = "'evidence_id',a.pre_submit_evidence_set_id::text"
+    new_evidence = (
+        "'evidence_id', coalesce(a.pre_submit_evidence_set_id, "
+        "a.selected_pre_submit_run_id)::text"
+    )
+    if definition.count(old_evidence) != 1:
+        raise RuntimeError("checker input evidence identity shape changed")
+    op.execute(definition.replace(old_evidence, new_evidence))
+
+
+def _replace_checker_result_custody() -> None:
+    definition = op.get_bind().execute(sa.text(
+        "select pg_get_functiondef('public.protect_checker_result_custody()'::regprocedure)"
+    )).scalar_one()
+    anchor = (
+        "      entry := parent.request_json::jsonb #> "
+        "ARRAY['policy','entries',NEW.member_order::text];"
+    )
+    selected = r"""
+      IF parent.request_json::jsonb->>'schema_version'=
+        'workstream.selected_post_submit_request.v1' THEN
+        IF entry->>'requirement_id' IS DISTINCT FROM NEW.checker_name
+          OR entry#>>'{registry,entry_digest}' IS DISTINCT FROM NEW.implementation_version
+          OR NEW.definition_version IS DISTINCT FROM 'external_checker_result.v1'
+          OR NEW.status NOT IN ('passed','failed')
+          OR NEW.failure_category IS DISTINCT FROM
+            CASE WHEN NEW.status='passed' THEN 'none' ELSE 'submission_structure' END
+          OR NEW.severity IS DISTINCT FROM
+            CASE WHEN NEW.status='passed' THEN 'info' ELSE 'error' END
+          OR (NEW.status='passed' AND NEW.code IS DISTINCT FROM 'passed')
+          OR jsonb_typeof(NEW.counters::jsonb) IS DISTINCT FROM 'array'
+          OR jsonb_array_length(NEW.counters::jsonb)<>0 THEN
+          RAISE EXCEPTION 'checker member differs from selected definition'
+            USING ERRCODE='23514';
+        END IF;
+        RETURN NEW;
+      END IF;"""
+    if definition.count(anchor) != 1:
+        raise RuntimeError("checker result selected definition anchor changed")
+    op.execute(definition.replace(anchor, anchor + selected))
+
+
+def _replace_checker_terminal_custody() -> None:
+    definition = op.get_bind().execute(sa.text(
+        "select pg_get_functiondef('public.validate_checker_terminal_custody()'::regprocedure)"
+    )).scalar_one()
+    declaration = (
+        "      passed integer; warning integer; failed integer; blocking integer; "
+        "setup integer; envelope jsonb;"
+    )
+    if declaration not in definition:
+        declaration = (
+            "    passed integer; warning integer; failed integer; blocking integer; "
+            "setup integer; envelope jsonb;"
+        )
+    if definition.count(declaration) != 1:
+        raise RuntimeError("checker terminal declaration shape changed")
+    definition = definition.replace(
+        declaration,
+        declaration.replace("envelope jsonb;", "envelope jsonb; expected_members jsonb;"),
+    )
+    mismatch = """      IF result->'member_results' IS DISTINCT FROM members OR current_run.passed_count IS DISTINCT FROM passed
+        OR current_run.warning_count IS DISTINCT FROM warning OR current_run.failed_count IS DISTINCT FROM failed
+        OR current_run.blocking_count IS DISTINCT FROM blocking THEN"""
+    if mismatch not in definition:
+        mismatch = mismatch.replace("      IF", "    IF").replace("        OR", "      OR")
+    selected_check = r"""
+      IF result->>'schema_version'='workstream.selected_post_submit_result.v1'
+        AND result->>'outcome'='completed' THEN
+        SELECT coalesce(jsonb_agg(jsonb_build_object(
+          'schema_version','post_submit_structural_result',
+          'checker_id',item->>'requirement_id',
+          'definition_version',item#>>'{result,schema_version}',
+          'implementation_version',item->>'registry_entry_digest',
+          'status',item#>>'{result,verdict}',
+          'code',CASE WHEN item#>>'{result,verdict}'='passed' THEN 'passed'
+            ELSE coalesce(item#>>'{result,findings,0,code}','invalid_output') END,
+          'failure_category',CASE WHEN item#>>'{result,verdict}'='passed'
+            THEN 'none' ELSE 'submission_structure' END,
+          'severity',CASE WHEN item#>>'{result,verdict}'='passed'
+            THEN 'info' ELSE 'error' END,
+          'counters','[]'::jsonb
+        ) ORDER BY (item->>'order')::integer),'[]'::jsonb)
+        INTO expected_members
+        FROM jsonb_array_elements(result#>'{execution,external_members}') item;
+        blocking := failed;
+        setup := 0;
+        IF members IS DISTINCT FROM expected_members
+          OR current_run.passed_count IS DISTINCT FROM passed
+          OR current_run.warning_count IS DISTINCT FROM warning
+          OR current_run.failed_count IS DISTINCT FROM failed
+          OR current_run.blocking_count IS DISTINCT FROM blocking THEN
+          RAISE EXCEPTION 'checker terminal members differ' USING ERRCODE='23514';
+        END IF;
+      END IF;
+"""
+    replacement = selected_check + mismatch.replace(
+        "IF result->'member_results'",
+        "IF result->>'schema_version'<>'workstream.selected_post_submit_result.v1'\n"
+        "        AND result->'member_results'",
+    )
+    if definition.count(mismatch) != 1:
+        raise RuntimeError("checker terminal member comparison shape changed")
+    op.execute(definition.replace(mismatch, replacement))
+
+
 def _replace_submission_packet_custody() -> None:
     definition = op.get_bind().execute(sa.text(
         "select pg_get_functiondef('public.validate_submission_packet_custody()'::regprocedure)"
@@ -774,6 +887,9 @@ def upgrade() -> None:
     _replace_submission_binding_resource()
     _replace_submission_dispatch_custody()
     _replace_submission_packet_custody()
+    _replace_checker_input_authority_digest()
+    _replace_checker_result_custody()
+    _replace_checker_terminal_custody()
 
 
 def downgrade() -> None:

@@ -18,7 +18,12 @@ from app.modules.artifacts.service import (
 )
 from app.modules.artifacts.sources import ArtifactCommitment
 from app.modules.artifacts.submission_bindings import SubmissionAdmissionConsumptionService
-from app.modules.checkers.api import PostSubmissionEvaluationRequest
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+)
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmissionEvaluationRequest,
+)
 from app.modules.tasks.api.submitted_bundle import (
     SubmittedBundleFacts, SubmittedBundlePort, SubmittedBundleRequest,
 )
@@ -47,21 +52,58 @@ class PostSubmissionMaterialSelection:
 
 async def select_post_submission_material(
     session: AsyncSession, *, tasks: SubmittedBundlePort,
-    request: PostSubmissionEvaluationRequest, namespace: ArtifactStorageNamespaceSpec,
+    request: PostSubmissionExecutionRequest, namespace: ArtifactStorageNamespaceSpec,
     store: ArtifactStore,
 ) -> PostSubmissionMaterialSelection:
     """Read fresh exact owner facts in one short caller-owned transaction."""
     facts = await tasks.read(SubmittedBundleRequest(
         project_id=request.project_id, task_id=request.task_id, submission_id=request.submission_id,
     ))
+    selected_request = isinstance(request, SelectedPostSubmissionEvaluationRequest)
+    context = facts.context
+    context_matches = (
+        (
+            context.guide_version == request.expected_context.guide_version
+            and context.source_id == request.expected_context.source_id
+            and context.source_hash == request.expected_context.source_hash
+            and context.effective_policy_id
+            == request.expected_context.effective_policy_id
+            and context.effective_policy_hash
+            == request.expected_context.effective_policy_hash
+            and context.pre_policy_id == request.expected_context.pre_policy_id
+            and context.pre_policy_hash == request.expected_context.pre_policy_hash
+            and context.post_policy_id
+            == request.expected_context.retained_catalogue_policy_id
+            and context.post_policy_version
+            == request.expected_context.retained_catalogue_policy_version
+            and context.post_policy_hash
+            == request.expected_context.retained_catalogue_policy_hash
+            and context.selected_post_policy_hash
+            == request.expected_context.selected_post_policy_hash
+            and context.selected_post_policy_body == request.policy.model_dump(mode="json")
+            and context.review_policy_id == request.expected_context.review_policy_id
+            and context.review_generation == request.expected_context.review_generation
+            and context.review_hash == request.expected_context.review_hash
+            and context.revision_policy_id == request.expected_context.revision_policy_id
+            and context.revision_generation
+            == request.expected_context.revision_generation
+            and context.revision_hash == request.expected_context.revision_hash
+        )
+        if selected_request
+        else asdict(context) == request.expected_context.model_dump()
+    )
     if (
         facts.status != "submitted"
         or (facts.project_id, facts.task_id, facts.assignment_id, facts.submission_id,
             facts.submission_version, facts.binding_id, facts.content_id) != (
                 request.project_id, request.task_id, request.assignment_id, request.submission_id,
                 request.submission_version, request.binding_id, request.content_id)
-        or asdict(facts.context) != request.expected_context.model_dump()
-        or asdict(facts.context) != request.structural_input.observed_context.model_dump()
+        or not context_matches
+        or (
+            not selected_request
+            and asdict(facts.context)
+            != request.structural_input.observed_context.model_dump()
+        )
     ):
         raise PostSubmissionMaterializationUnavailable("post_submit_material_identity_mismatch")
     row = (await session.execute(
@@ -69,7 +111,7 @@ async def select_post_submission_material(
                ArtifactContent, ArtifactReplica, ArtifactVerificationReceipt,
                ArtifactVerificationJob, ArtifactStorageNamespace)
         .select_from(SubmissionBundleAdmission)
-        .join(PreSubmitEvidenceSet, PreSubmitEvidenceSet.id == SubmissionBundleAdmission.pre_submit_evidence_set_id)
+        .outerjoin(PreSubmitEvidenceSet, PreSubmitEvidenceSet.id == SubmissionBundleAdmission.pre_submit_evidence_set_id)
         .join(ArtifactBinding, ArtifactBinding.id == str(facts.binding_id))
         .join(ArtifactContent, ArtifactContent.id == SubmissionBundleAdmission.artifact_content_id)
         .join(ArtifactReplica, ArtifactReplica.id == SubmissionBundleAdmission.verified_replica_id)
@@ -84,7 +126,15 @@ async def select_post_submission_material(
     if row is None:
         raise PostSubmissionMaterializationUnavailable("post_submit_material_unavailable")
     admission, evidence, binding, content, replica, receipt, job, persisted = row
-    context = facts.context
+    selected_lineage = (
+        evidence is None
+        and admission.selected_pre_submit_run_id is not None
+        and admission.pre_submit_evidence_set_id is None
+        and admission.selected_post_submit_policy_sha256
+        == request.policy.policy_sha256
+        and admission.selected_post_submit_policy_body
+        == request.policy.model_dump(mode="json")
+    ) if selected_request else evidence is not None
     if not (
         SubmissionAdmissionConsumptionService._art_lineage_is_intact(admission, evidence, content)
         and admission.status == "consumed"
@@ -100,16 +150,27 @@ async def select_post_submission_material(
         and binding.logical_role == "submission_bundle_original"
         and binding.scope_version == 1
         and binding.content_id == content.id == str(facts.content_id)
+        and selected_lineage
         and content.media_type == "application/zip"
-        and content.sha256 == request.content_sha256 == request.structural_input.package_hash
+        and content.sha256 == request.content_sha256
+        and (
+            selected_request
+            or content.sha256 == request.structural_input.package_hash
+        )
         and content.byte_count == request.byte_count
-        and evidence.guide_version == context.guide_version
-        and evidence.source_snapshot_id == str(context.source_id)
-        and evidence.source_snapshot_sha256 == context.source_hash
-        and evidence.effective_policy_id == str(context.effective_policy_id)
-        and evidence.locked_artifact_policy_sha256 == context.effective_policy_hash
-        and evidence.pre_submit_policy_id == str(context.pre_policy_id)
-        and evidence.locked_checker_policy_sha256 == context.pre_policy_hash
+        and (
+            selected_request
+            or (
+                evidence.guide_version == context.guide_version
+                and evidence.source_snapshot_id == str(context.source_id)
+                and evidence.source_snapshot_sha256 == context.source_hash
+                and evidence.effective_policy_id == str(context.effective_policy_id)
+                and evidence.locked_artifact_policy_sha256
+                == context.effective_policy_hash
+                and evidence.pre_submit_policy_id == str(context.pre_policy_id)
+                and evidence.locked_checker_policy_sha256 == context.pre_policy_hash
+            )
+        )
         and replica.content_id == content.id
         and (replica.verification_state, replica.availability_state, replica.integrity_state)
         == ("verified", "available", "valid")
@@ -127,7 +188,11 @@ async def select_post_submission_material(
     if replica.provider_object_ref != artifact_provider_object_ref(commitment):
         raise PostSubmissionMaterializationUnavailable("post_submit_material_identity_mismatch")
     return PostSubmissionMaterialSelection(
-        submission=facts, evidence_id=UUID(evidence.id), replica_id=UUID(replica.id),
+        submission=facts,
+        evidence_id=UUID(
+            evidence.id if evidence is not None else admission.selected_pre_submit_run_id
+        ),
+        replica_id=UUID(replica.id),
         verification_receipt_id=UUID(receipt.id), verification_job_id=UUID(job.id),
         verification_generation=receipt.execution_generation,
         namespace_fingerprint=persisted.namespace_fingerprint, adapter=replica.adapter,
