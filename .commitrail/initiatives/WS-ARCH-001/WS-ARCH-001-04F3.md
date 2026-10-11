@@ -143,7 +143,11 @@ replacement writer or route would fork the atomic creation operation.
   `backend/tests/test_approved_guide_intake.py`,
   `backend/tests/retained_material_fixtures.py`,
   `backend/tests/pre_submit_test_helpers.py`, and
-  `backend/tests/test_blocked_pre_submit_feedback_postgresql.py`. The shared
+  `backend/tests/test_blocked_pre_submit_feedback_postgresql.py`,
+  `backend/tests/test_artifact_bindings.py`,
+  `backend/tests/test_submission_bundle_preparation_recovery.py`,
+  `backend/tests/test_pre_submit_attempt_schema.py`, and
+  `backend/tests/reviews/decision/support.py`. The shared
   retained-material and pre-submit fixtures must also compose the canonical
   context port. Existing routing successor fixtures must publish the real
   checker-remediation outcome before intake; historical migration fixtures must
