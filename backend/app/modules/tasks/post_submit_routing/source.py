@@ -47,7 +47,12 @@ class TaskRoutingSourcePreparer:
 
     async def _prepare(self, event_id, completion):
         task = await self._tasks.lock_project_task(completion.project_id, completion.task_id)
-        if task is None or task.status not in {"evaluation_pending", "review_pending", "accepted"}:
+        if task is None or task.status not in {
+            "evaluation_pending",
+            "review_pending",
+            "needs_revision",
+            "accepted",
+        }:
             raise TaskRoutingRequestUnavailable("routing_source_unavailable")
         retained = await self._session.scalar(
             select(TaskPostSubmitRoutingManifest).where(
