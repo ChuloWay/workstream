@@ -108,8 +108,9 @@ valid false-policy fixtures establish the hidden operation, not public readiness
 ARCH-04E1B-B1 supplies TASK-before-CHECKERS custody for reservation, current
 reads and admission. B6 atomically creates the Submission and initial dispatch;
 04E2-B owns the later authorized outcome. B8 consumes that outcome and commits
-before acknowledgment. 04F2 supplies the hidden remediation handoff; replacement
-intake and recovery remain. Both request and completion handlers
+before acknowledgment. 04F2 supplies the hidden remediation handoff and 04F3
+supplies exact-cause replacement intake. Authorized infrastructure retry and
+manager-visible setup-fault holds remain. Both request and completion handlers
 remain absent from production registration.
 
 ## Current dependency contract

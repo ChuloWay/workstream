@@ -858,7 +858,9 @@ Delivered foundations (not a claim of full public integration)
 
 Remaining integration
   PILOT-02 separately scoped atomic DRAFT import -> explicit batch screen/release
-  authorized manager-visible setup-fault hold and Operator retry proof (including submitted-task disposition)
+  Operator retry of known terminal infrastructure failures
+  + manager-visible setup-fault hold: retain Submission/locked rules, no contributor penalty
+    (changing submitted-task rules remains deferred)
   -> 04E3 live composition and false-policy readiness
   -> public initial/checker-remediation intake and immutable admitted Submission cutover
   -> automatically consume the durable current result
@@ -916,9 +918,11 @@ v0.1 is not ready until all of the following are true:
   `needs_revision` under either locked policy mode with the assignment active and
   no Review, acceptance, contribution or award. The contributor can submit a
   full replacement ZIP through the canonical admission writer with its exact
-  current authorized cause, while setup
-  faults and infrastructure failures follow authorized recovery instead of
-  becoming contributor blame.
+  current authorized cause. Remaining recovery distinguishes known terminal
+  infrastructure failures, which require Operator retry, from valid setup
+  faults, which retain the Submission and locked rules in a manager-visible
+  hold without contributor penalty. Changing submitted-task rules remains
+  deferred.
 - ARCH-04E2-B hardens the existing TASK source table with mandatory exact
   routing and owner-receipt custody and rejects retained pre-authority rows;
   no parallel manifest or permissive backfill is introduced.
