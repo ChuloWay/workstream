@@ -3,10 +3,82 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Literal, Self
 from uuid import UUID
+
+from pydantic import model_validator
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.external import ExternalCheckerExecutionResult
+from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
+from app.modules.checkers.api.post_submit import ExpectedPostSubmitContext
+from app.modules.checkers.api.post_submit_catalogue import (
+    ByteCount,
+    PostSubmitValue,
+    ResourceId,
+    Sha256,
+    VersionNumber,
+)
+
+
+class SelectedPostSubmissionContent(PostSubmitValue):
+    """Approved POST image policy plus the exact locked TASK context."""
+
+    project_id: ResourceId
+    expected_context: ExpectedPostSubmitContext
+    policy: LockedExternalPostSubmitPolicy
+
+    @model_validator(mode="after")
+    def validate_content(self) -> Self:
+        """Require the exact approved policy digest stamped on the Submission."""
+        if self.expected_context.post_policy_hash != self.policy.policy_sha256:
+            raise ValueError("selected POST locked policy mismatch")
+        return self
+
+
+class SelectedPostSubmissionEvaluationRequest(SelectedPostSubmissionContent):
+    """Hash-bound selected POST request reserved with one immutable Submission."""
+
+    schema_version: Literal["workstream.selected_post_submit_request.v1"] = (
+        "workstream.selected_post_submit_request.v1"
+    )
+    evaluation_request_id: ResourceId
+    evaluation_generation: VersionNumber
+    task_id: ResourceId
+    assignment_id: ResourceId
+    submission_id: ResourceId
+    submission_version: VersionNumber
+    content_id: ResourceId
+    binding_id: ResourceId
+    content_sha256: Sha256
+    byte_count: ByteCount
+    request_sha256: Sha256
+
+    @model_validator(mode="after")
+    def validate_request(self) -> Self:
+        """Bind the entire selected policy and native Submission identity."""
+        expected = canonical_json_hash(
+            self.model_dump(mode="json", exclude={"request_sha256"})
+        )
+        if self.request_sha256 != expected:
+            raise ValueError("selected POST request digest mismatch")
+        return self
+
+
+def make_selected_post_submit_request(
+    **fields: object,
+) -> SelectedPostSubmissionEvaluationRequest:
+    """Derive the selected request identity before strict validation."""
+    if "request_sha256" in fields:
+        raise ValueError("selected POST request identity is derived")
+    candidate = SelectedPostSubmissionEvaluationRequest.model_construct(
+        **fields,
+        request_sha256="sha256:" + "0" * 64,
+    )
+    fields["request_sha256"] = canonical_json_hash(
+        candidate.model_dump(mode="json", exclude={"request_sha256"})
+    )
+    return SelectedPostSubmissionEvaluationRequest.model_validate(fields)
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +172,82 @@ class SelectedPostSubmitExecutionFacts:
         return canonical_json_hash(self.canonical_body())
 
 
+class SelectedPostSubmissionEvaluationResult(PostSubmitValue):
+    """Durable selected POST evidence envelope with no acceptance authority."""
+
+    schema_version: Literal["workstream.selected_post_submit_result.v1"] = (
+        "workstream.selected_post_submit_result.v1"
+    )
+    request_id: ResourceId
+    request_digest: Sha256
+    attempt_id: ResourceId
+    evaluation_generation: VersionNumber
+    result_id: ResourceId
+    result_digest: Sha256
+    outcome: Literal["completed", "infrastructure_failed"]
+    execution: SelectedPostSubmitExecutionFacts | None
+    infrastructure_failure_code: (
+        Literal[
+            "capacity_exceeded",
+            "deadline_exceeded",
+            "material_unavailable",
+            "implementation_unavailable",
+            "invalid_output",
+        ]
+        | None
+    ) = None
+
+    @model_validator(mode="after")
+    def validate_result(self) -> Self:
+        """Separate complete external evidence from recoverable infrastructure."""
+        if self.outcome == "completed":
+            if self.execution is None or self.infrastructure_failure_code is not None:
+                raise ValueError("selected POST completed result is invalid")
+        elif self.execution is not None or self.infrastructure_failure_code is None:
+            raise ValueError("selected POST infrastructure result is invalid")
+        if self.result_digest != canonical_json_hash(
+            self.model_dump(mode="json", exclude={"result_digest"})
+        ):
+            raise ValueError("selected POST result digest mismatch")
+        return self
+
+    def validate_request(
+        self, request: SelectedPostSubmissionEvaluationRequest
+    ) -> None:
+        """Bind result identity and selected policy without claiming currentness."""
+        result = SelectedPostSubmissionEvaluationResult.model_validate(self)
+        request = SelectedPostSubmissionEvaluationRequest.model_validate(request)
+        if (
+            result.request_id,
+            result.request_digest,
+            result.evaluation_generation,
+        ) != (
+            request.evaluation_request_id,
+            request.request_sha256,
+            request.evaluation_generation,
+        ) or (
+            result.execution is not None
+            and result.execution.policy_sha256 != request.policy.policy_sha256
+        ):
+            raise ValueError("selected POST result request mismatch")
+
+
+def make_selected_post_submit_result(
+    **fields: object,
+) -> SelectedPostSubmissionEvaluationResult:
+    """Derive the selected result identity before strict validation."""
+    if "result_digest" in fields:
+        raise ValueError("selected POST result identity is derived")
+    candidate = SelectedPostSubmissionEvaluationResult.model_construct(
+        **fields,
+        result_digest="sha256:" + "0" * 64,
+    )
+    fields["result_digest"] = canonical_json_hash(
+        candidate.model_dump(mode="json", exclude={"result_digest"})
+    )
+    return SelectedPostSubmissionEvaluationResult.model_validate(fields)
+
+
 class SelectedPostSubmitInfrastructureUnavailable(RuntimeError):
     """Retain a recoverable POST infrastructure category, never a work verdict."""
 
@@ -121,4 +269,9 @@ __all__ = (
     "ExternalPostSubmitMemberFacts",
     "SelectedPostSubmitExecutionFacts",
     "SelectedPostSubmitInfrastructureUnavailable",
+    "SelectedPostSubmissionContent",
+    "SelectedPostSubmissionEvaluationRequest",
+    "SelectedPostSubmissionEvaluationResult",
+    "make_selected_post_submit_request",
+    "make_selected_post_submit_result",
 )

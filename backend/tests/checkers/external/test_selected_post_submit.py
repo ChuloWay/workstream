@@ -27,6 +27,12 @@ from app.modules.checkers.api.materialization import SubmissionMaterialEntry
 from app.modules.checkers.selected_post_submit_execution import (
     SelectedPostSubmitProcessor,
 )
+from app.modules.checkers.api.post_submit import ExpectedPostSubmitContext
+from app.modules.checkers.api.selected_post_submit import (
+    make_selected_post_submit_request,
+    make_selected_post_submit_result,
+)
+from app.core.identifiers import new_record_id
 from tests.checkers.external.support import (
     SHA,
     execution_identity,
@@ -164,3 +170,80 @@ async def test_selected_post_separates_infrastructure_from_work_findings() -> No
             identity=identity,
             execution=_Execution(outcome="infrastructure_failed"),
         ).evaluate(object(), _MaterialView(execution_material(identity)))
+
+
+@pytest.mark.asyncio
+async def test_selected_post_request_and_result_bind_exact_locked_policy() -> None:
+    identity = execution_identity("post_submit")
+    policy = _policy()
+    context = ExpectedPostSubmitContext(
+        guide_version="guide-v1",
+        source_id=new_record_id(),
+        source_hash=SHA,
+        effective_policy_id=new_record_id(),
+        effective_policy_hash=SHA,
+        pre_policy_id=new_record_id(),
+        pre_policy_hash=SHA,
+        post_policy_id=new_record_id(),
+        post_policy_version="guide-v1",
+        post_policy_hash=policy.policy_sha256,
+        review_policy_id=new_record_id(),
+        review_generation=1,
+        review_hash=SHA,
+        revision_policy_id=new_record_id(),
+        revision_generation=1,
+        revision_hash=SHA,
+    )
+    request = make_selected_post_submit_request(
+        project_id=identity.project_id,
+        expected_context=context,
+        policy=policy,
+        evaluation_request_id=identity.evaluation_request_id,
+        evaluation_generation=identity.evaluation_generation,
+        task_id=identity.task_id,
+        assignment_id=identity.assignment_id,
+        submission_id=identity.submission_id,
+        submission_version=identity.submission_version,
+        content_id=new_record_id(),
+        binding_id=new_record_id(),
+        content_sha256=SHA,
+        byte_count=42,
+    )
+    execution = await SelectedPostSubmitProcessor(
+        policy=policy,
+        identity=identity,
+        execution=_Execution(),
+    ).evaluate(request, _MaterialView(execution_material(identity)))
+    result = make_selected_post_submit_result(
+        request_id=request.evaluation_request_id,
+        request_digest=request.request_sha256,
+        attempt_id=identity.attempt_id,
+        evaluation_generation=request.evaluation_generation,
+        result_id=identity.result_id,
+        outcome="completed",
+        execution=execution,
+        infrastructure_failure_code=None,
+    )
+
+    result.validate_request(request)
+    empty_policy = LockedExternalPostSubmitPolicy(
+        entries=(),
+        policy_sha256=canonical_json_hash(
+            {
+                "schema_version": "external_post_submit_policy.v1",
+                "entries": [],
+            }
+        ),
+    )
+    with pytest.raises(ValueError, match="request mismatch"):
+        result.validate_request(
+            make_selected_post_submit_request(
+                **request.model_dump(
+                    exclude={"request_sha256", "policy", "expected_context"},
+                ),
+                policy=empty_policy,
+                expected_context=context.model_copy(
+                    update={"post_policy_hash": empty_policy.policy_sha256}
+                ),
+            )
+        )
