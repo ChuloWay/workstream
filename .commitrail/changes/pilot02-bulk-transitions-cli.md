@@ -496,6 +496,21 @@ groups. These partitions retain the original 167 tests exactly once; no test,
 deadline, fixture or product owner changes. Their measured results are required
 before a final workflow claim.
 
+The final native selections passed at exact clean
+`43ff2ae51e7342a90b83ac574318ff88e5161c28`: eight guide callers in 184.81 seconds
+and the self-service caller in 79.38 seconds, each under the unchanged
+240-second isolated-run cap with complete database and role cleanup. Neither
+group provisions MinIO or claims its byte custody. Combined with the recorded
+58 guide HTTP, 98 task/local HTTP and two real-MinIO bulk native cases, all 167
+CLI cases are selected exactly once. Actual collection proves the five sets are
+pairwise disjoint and their union equals the whole integration directory. Every
+completed partition has zero skipped, failed or errored cases. The five pytest
+durations total 688.63 seconds; isolated provisioning, build, installation and
+provider startup add job time. The unchanged fifteen-minute hosted job budget
+still requires an actual hosted result; this local proof does not claim hosted
+CI success. Workflow repairs and this evidence update do not change the Go,
+backend product or native bulk test bytes used by the recorded proofs.
+
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch
 is reconciled onto the unmerged atomic candidate `91183adafec37e7ad7eda624ad3556d89dc54ce6`;
@@ -633,4 +648,5 @@ that stronger observation and the larger journeys before any readiness claim.
   recorded native 200/500, rollback, concurrency and direct-SQL proof. The atomic
   owner must consume the sole-authored 0034 correction before its human merge;
   bulk must not edit an already deployed predecessor migration. Required final
-  independent reviews, bounded CLI partition proof and complete hosted CI remain.
+  independent reviews and complete hosted CI remain. Local bounded CLI
+  partitions pass; hosted job-level timing remains unproved.
