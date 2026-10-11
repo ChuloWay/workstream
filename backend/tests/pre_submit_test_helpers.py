@@ -32,14 +32,19 @@ async def materialize_member_fixture(service, request):
     claim._request = replace(request, prepared_authorization=None)
     claim._started, claim._execution = False, None
     claim._session = service._session
-    service._session.in_transaction = lambda: True
+    in_transaction = True
+    service._session.in_transaction = lambda: in_transaction
     service._session.in_nested_transaction = lambda: False
     service._session.scalar = AsyncMock(return_value=SimpleNamespace(
         status="reserved", evidence_set_id=None, claim_nonce=str(claim._nonce),
         request_digest=claim.request_digest,
         prepared_generation_id=str(request.prepared_artifact.generation_id),
     ))
-    return await service.materialize_prepared_bundle(request, claim=claim)
+    await service.authorize_prepared_bundle(request, claim=claim)
+    in_transaction = False
+    return await service.materialize_prepared_bundle(
+        replace(request, prepared_authorization=None), claim=claim
+    )
 
 
 async def execute_evidence_workflow(workflow, request, *, preparation_request):

@@ -167,10 +167,66 @@ async def test_invalid_attempt_claim_never_builds_processor_or_opens_workspace(
     }[claim_kind]
     try:
         with pytest.raises(PreSubmitEvidenceConflict, match="pre_submit_attempt_claim_invalid"):
-            await service.materialize_prepared_bundle(request, claim=claim)
+            await service.authorize_prepared_bundle(request, claim=claim)
         processor_build.assert_not_called()
         preparation._process_prepared_submission.assert_not_awaited()
         assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
+    finally:
+        await request.prepared_artifact.close()
+        manager.close()
+
+
+@pytest.mark.asyncio
+async def test_checker_processor_starts_only_after_authority_transaction_commits(
+    tmp_path,
+) -> None:
+    request, _inspector, manager, _preparation, catalogue = await _request(tmp_path)
+    transaction = True
+    reservation = SimpleNamespace(
+        status="reserved",
+        evidence_set_id=None,
+        claim_nonce=None,
+        request_digest="sha256:" + "1" * 64,
+        prepared_generation_id=str(request.prepared_artifact.generation_id),
+    )
+    session = SimpleNamespace(
+        in_transaction=lambda: transaction,
+        in_nested_transaction=lambda: False,
+        scalar=AsyncMock(return_value=reservation),
+    )
+    claim = _claim(request, session)
+    reservation.claim_nonce = str(claim._nonce)
+    processor_build = Mock(
+        side_effect=RuntimeError("processor reached after authority transaction")
+    )
+    service = PreparedBundleMaterializationService(
+        session=session,
+        authorization=SimpleNamespace(consume=AsyncMock()),
+        preparation=SimpleNamespace(_process_prepared_submission=AsyncMock()),
+        checker_execution=SimpleNamespace(
+            catalogue_manifest_sha256=catalogue.manifest_sha256,
+            build=processor_build,
+        ),
+        storage_scheme="s3",
+    )
+    try:
+        await service.authorize_prepared_bundle(request, claim=claim)
+        with pytest.raises(
+            PreSubmitEvidenceConflict, match="pre_submit_attempt_claim_invalid"
+        ):
+            await service.materialize_prepared_bundle(
+                replace(request, prepared_authorization=None), claim=claim
+            )
+        processor_build.assert_not_called()
+
+        transaction = False
+        with pytest.raises(
+            RuntimeError, match="processor reached after authority transaction"
+        ):
+            await service.materialize_prepared_bundle(
+                replace(request, prepared_authorization=None), claim=claim
+            )
+        processor_build.assert_called_once()
     finally:
         await request.prepared_artifact.close()
         manager.close()

@@ -232,13 +232,13 @@ class PreparedBundleMaterializationService:
             raise ValueError("pre-submit materializer storage scheme is invalid")
         self._storage_scheme = storage_scheme
 
-    async def materialize_prepared_bundle(
+    async def authorize_prepared_bundle(
         self,
         request: PreparedBundleMaterializationRequest,
         *,
         claim: PreSubmitAttemptClaim,
-    ) -> PreSubmitExecutionResult:
-        """Consume fixed-service authority before any byte or workspace access."""
+    ) -> None:
+        """Consume fixed-service authority and the durable claim in its short root."""
         if type(claim) is not PreSubmitAttemptClaim:
             raise PreSubmitEvidenceConflict("pre_submit_attempt_claim_invalid")
         facts = self._authority_facts(request)
@@ -247,6 +247,17 @@ class PreparedBundleMaterializationService:
             facts=facts,
         )
         await claim.consume(self._session, request)
+
+    async def materialize_prepared_bundle(
+        self,
+        request: PreparedBundleMaterializationRequest,
+        *,
+        claim: PreSubmitAttemptClaim,
+    ) -> PreSubmitExecutionResult:
+        """Execute only after the authority root commits; no external work holds DB locks."""
+        if type(claim) is not PreSubmitAttemptClaim:
+            raise PreSubmitEvidenceConflict("pre_submit_attempt_claim_invalid")
+        claim.require_execution(self._session, request)
         processor = self._checker_execution.build(
             PreSubmitCheckerExecutionRequest(
                 plan=request.effective_plan,
@@ -492,6 +503,7 @@ class PreparedBundlePreSubmitEvidenceService:
         if self._session.in_transaction():
             raise RuntimeError("pre-submit execution requires a transaction-free session")
         claim = await self._attempts.committed_claim(reservation)
+        authorized_request = None
         async with self._session.begin():
             await self._lock_authorized_context(request, preparation_request)
             handle = await self._materialization.prepare_authorization(
@@ -502,9 +514,14 @@ class PreparedBundlePreSubmitEvidenceService:
                 effective_plan=request.effective_plan,
                 idempotency_key=preparation_request.idempotency_key,
             )
-            execution = await self._materialization.materialize_prepared_bundle(
-                replace(request, prepared_authorization=handle), claim=claim,
+            authorized_request = replace(request, prepared_authorization=handle)
+            await self._materialization.authorize_prepared_bundle(
+                authorized_request, claim=claim,
             )
+        assert authorized_request is not None
+        execution = await self._materialization.materialize_prepared_bundle(
+            replace(authorized_request, prepared_authorization=None), claim=claim,
+        )
         async with self._session.begin():
             await self._session.execute(text("set transaction isolation level read committed"))
             values = self._input(request, preparation_request)

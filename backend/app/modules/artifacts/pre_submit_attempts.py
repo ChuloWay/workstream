@@ -142,6 +142,21 @@ class PreSubmitAttemptClaim:
         self._started = True
         await self._reserved(session)
 
+    def require_execution(
+        self,
+        session: AsyncSession,
+        request: PreparedBundleMaterializationRequest,
+    ) -> None:
+        """Require the committed claim outside a database transaction."""
+        if (
+            session is not self._session
+            or session.in_transaction()
+            or not self._started
+            or self._execution is not None
+            or replace(request, prepared_authorization=None) != self._request
+        ):
+            raise PreSubmitEvidenceConflict("pre_submit_attempt_claim_invalid")
+
     def finish(self, execution: PreSubmitExecutionResult) -> None:
         """Retain the exact owner-issued result object for final persistence."""
         if not self._started or self._execution is not None:
