@@ -630,6 +630,64 @@ def _replace_post_policy_custody() -> None:
     op.execute(definition.replace(old_policy, new_policy))
 
 
+def _replace_checker_run_custody() -> None:
+    definition = op.get_bind().execute(sa.text(
+        "select pg_get_functiondef('public.protect_checker_run_custody()'::regprocedure)"
+    )).scalar_one()
+    declaration = "    DECLARE body jsonb; source submissions; mutable text[];"
+    if definition.count(declaration) != 1:
+        raise RuntimeError("checker run custody declaration shape changed")
+    definition = definition.replace(
+        declaration,
+        "    DECLARE body jsonb; source submissions; mutable text[]; selected boolean;",
+    )
+    body_anchor = "      body := NEW.request_json::jsonb;"
+    if definition.count(body_anchor) != 1:
+        raise RuntimeError("checker run request body shape changed")
+    definition = definition.replace(
+        body_anchor,
+        body_anchor + "\n      selected := body->>'schema_version'="
+        "'workstream.selected_post_submit_request.v1';",
+    )
+    old_policy = """          OR source.locked_post_submit_checker_policy_body::jsonb IS DISTINCT FROM body->'policy'
+          OR body->>'project_id' IS DISTINCT FROM NEW.project_id::text"""
+    new_policy = """          OR (NOT selected AND (
+            source.locked_post_submit_checker_policy_body::jsonb IS DISTINCT FROM body->'policy'
+            OR NEW.selected_post_submit_policy_sha256 IS NOT NULL
+            OR NEW.selected_post_submit_policy_body IS NOT NULL))
+          OR (selected AND (
+            source.selected_post_submit_policy_body::jsonb IS DISTINCT FROM body->'policy'
+            OR source.selected_post_submit_policy_sha256 IS DISTINCT FROM
+              body#>>'{expected_context,selected_post_policy_hash}'
+            OR NEW.selected_post_submit_policy_body::jsonb IS DISTINCT FROM body->'policy'
+            OR NEW.selected_post_submit_policy_sha256 IS DISTINCT FROM
+              body#>>'{expected_context,selected_post_policy_hash}'))
+          OR body->>'project_id' IS DISTINCT FROM NEW.project_id::text"""
+    if definition.count(old_policy) != 1:
+        raise RuntimeError("checker run policy body shape changed")
+    definition = definition.replace(old_policy, new_policy)
+    old_context = """          OR body#>>'{expected_context,post_policy_id}' IS DISTINCT FROM NEW.locked_post_submit_checker_policy_id::text
+          OR body#>>'{expected_context,post_policy_version}' IS DISTINCT FROM NEW.locked_post_submit_checker_policy_version
+          OR body#>>'{expected_context,post_policy_hash}' IS DISTINCT FROM NEW.locked_post_submit_checker_policy_hash"""
+    new_context = """          OR (NOT selected AND (
+            body#>>'{expected_context,post_policy_id}' IS DISTINCT FROM
+              NEW.locked_post_submit_checker_policy_id::text
+            OR body#>>'{expected_context,post_policy_version}' IS DISTINCT FROM
+              NEW.locked_post_submit_checker_policy_version
+            OR body#>>'{expected_context,post_policy_hash}' IS DISTINCT FROM
+              NEW.locked_post_submit_checker_policy_hash))
+          OR (selected AND (
+            body#>>'{expected_context,retained_catalogue_policy_id}' IS DISTINCT FROM
+              NEW.locked_post_submit_checker_policy_id::text
+            OR body#>>'{expected_context,retained_catalogue_policy_version}' IS DISTINCT FROM
+              NEW.locked_post_submit_checker_policy_version
+            OR body#>>'{expected_context,retained_catalogue_policy_hash}' IS DISTINCT FROM
+              NEW.locked_post_submit_checker_policy_hash))"""
+    if definition.count(old_context) != 1:
+        raise RuntimeError("checker run locked context shape changed")
+    op.execute(definition.replace(old_context, new_context))
+
+
 def upgrade() -> None:
     op.execute("set local search_path=pg_catalog,public,pg_temp")
     op.execute("lock table public.actor_profiles, public.actor_identity_links, public.audit_events, public.submissions, public.checker_runs, public.submission_bundle_durable_intents, public.submission_bundle_admissions in access exclusive mode")
@@ -640,6 +698,7 @@ def upgrade() -> None:
     _selected_run_guards()
     _replace_guide_approval_custody()
     _replace_post_policy_custody()
+    _replace_checker_run_custody()
 
 
 def downgrade() -> None:
