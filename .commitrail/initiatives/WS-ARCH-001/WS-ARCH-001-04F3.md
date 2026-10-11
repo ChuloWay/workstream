@@ -10,7 +10,7 @@
   `0032_checker_remediation`. This record is group 1 of the first complete
   contributor milestone in the [current plan](planning/PLAN.md).
 
-## Intent and observed gap
+## Intent
 
 The current TASK context accepts `needs_revision` with only the latest
 Submission ID/version and labels every such predecessor `revision`. ART retains
@@ -66,7 +66,7 @@ synthetic or human-review `needs_revision` state could reach ART; copying
 findings/result JSON into ART would duplicate CHECKERS evidence; a separate
 replacement writer or route would fork the atomic creation operation.
 
-## Bounded implementation plan
+## Bounded change
 
 1. TASK context: extend `TaskSubmissionContextFacts`. The repository only
    locks TASK rows and selects an owner-qualified 04F2 manifest. A tightly
@@ -185,7 +185,7 @@ terminal retry/setup-fault scope. Do not change existing committed Submission,
 checker result, AUTH decision, outbox event or ART bytes. An infrastructure or
 setup fault never becomes contributor remediation.
 
-## Acceptance and proof
+## Acceptance criteria
 
 - From a real routed 04F2 `needs_revision` result, the same submitter's changed
   full ZIP passes pre-submit checks, reaches a verified ready ART admission,
@@ -255,6 +255,8 @@ controls; replace only synthetic-status fixtures that would bypass the new
 causality rule. Each negative must first demonstrate its adjacent valid path,
 then fail at the named boundary rather than fixture setup.
 
+## Evidence
+
 Run focused pure contract tests, then bounded isolated PostgreSQL/Local and
 MinIO tests through the repository's test runner, migration upgrade/replay,
 the current boundary/inventory/docs/link checks and the required hosted suite.
@@ -262,10 +264,15 @@ Discriminating probes must remove the cause/currentness guard and show the
 specific negative assertion fails after a valid control passes. Do not claim
 runtime proof from this inspected plan.
 
-## Risk, review and human focus
+## Risk and review routing
 
 - Risk class: L1: contributor authorization, immutable evidence and atomic
   ART/TASK/AUTH/SQL lineage cross owner boundaries.
+- Size exception: one cause reference must travel through the existing TASK
+  context, ART evidence/admission, AUTH receipts and atomic dispatch together.
+  Their migration and affected callers cannot be split into independently
+  usable changes. Current navigation and focused storage proofs add files but
+  no second product outcome; terminal infrastructure retry stays in 04F4.
 - Plan review before implementation: architecture, security and QA, including
   a reachable positive control and each negative's earliest expected denial.
 - Frozen implementation review: architecture, security, QA, test delta,
