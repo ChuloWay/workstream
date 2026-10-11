@@ -1187,10 +1187,22 @@ class ProjectService:
         )
         if not isinstance(pre_submit_checker_policy.compiled_bundle, dict):
             raise GuideActivationBlocked("pre-submit checker compiled bundle must be an object")
-        if (
-            self._hash_canonical_json(pre_submit_checker_policy.compiled_bundle)
-            != pre_submit_checker_policy.compiled_bundle_hash
+        if pre_submit_checker_policy.compiled_bundle.get("schema_version") == (
+            "external_pre_submit_policy.v1"
         ):
+            from app.modules.checkers.api.external_policy import (
+                LockedExternalPreSubmitPolicy,
+            )
+
+            compiled_pre = LockedExternalPreSubmitPolicy.model_validate(
+                pre_submit_checker_policy.compiled_bundle
+            )
+            compiled_pre_hash = compiled_pre.policy_sha256
+        else:
+            compiled_pre_hash = self._hash_canonical_json(
+                pre_submit_checker_policy.compiled_bundle
+            )
+        if compiled_pre_hash != pre_submit_checker_policy.compiled_bundle_hash:
             raise GuideActivationBlocked("pre-submit checker compiled bundle hash mismatch")
         from .post_policy.custody import validate_activation_post_policy
         try:
