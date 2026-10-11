@@ -878,9 +878,11 @@ bar.
 
 Workstream is built as durable operational infrastructure. Project rules live
 in versioned guides and policies rather than chat memory. Each active attempt
-keeps its locked governing context; `needs_revision` preparation rebases a
-complete valid context for the next attempt rather than silently mixing old and
-new rules.
+keeps its locked governing context. Hidden checker remediation keeps those
+rules and reruns full intake for a changed ZIP; it creates no Review or finding
+responses. Future human-Review revision preparation may rebase a complete valid
+context for the next attempt without silently mixing old and new rules.
+Changing or re-screening rules for already submitted work remains deferred.
 
 Lifecycle state is a ledger, not a loose label. Submitted artifacts remain
 immutable and hash-bound to their checks; findings, responses, resolutions,

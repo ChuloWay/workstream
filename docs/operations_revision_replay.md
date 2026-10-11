@@ -2,9 +2,10 @@
 
 ## Status And Purpose
 
-This is the planned v0.1 operating contract. Revision behavior remains
-unavailable until its owning REV chunks, exact AUTH activation, and REV-13C joint
-release complete.
+This is the planned v0.1 human revision operating contract. Human revision
+remains unavailable until its owning REV chunks, exact AUTH activation, and
+REV-13C joint release complete. Hidden checker-remediation replacement uses the
+existing intake and writer under locked rules; its public route remains pending.
 
 Revision replay preserves an immutable answer to three questions: what the
 reviewer required, how the submitter responded, and how a later reviewer
@@ -113,10 +114,12 @@ blocking finding has one response, the exact preparation is still current,
 Submission lineage is immediate and same-task, evidence bindings are finalized,
 and the new `allow_review` CheckerRun is current for that Submission.
 
-A checker-remediation submission cannot enter human review unless it binds the
-exact final needs-revision CheckerRun that caused remediation through immutable
-`remediation_source_checker_run_id`, preserves the Task's existing locked
-context, has immediate same-task Submission lineage, and has a new current
-`allow_review` CheckerRun. The source relation is server-derived, unique, and
-cannot be rewritten by a later retry. It has no preparation or ReviewFinding
-response requirement.
+A checker-remediation replacement uses the exact authorized needs-revision
+routing manifest for the immediate predecessor's current completed CheckerRun.
+ART evidence and admission, TASK dispatch and final AUTH resources retain the
+server-selected `checker_remediation_manifest_id`; the new Submission links its
+predecessor and admission without a duplicate cause field. It keeps the Task's
+locked context, reruns full pre-submit intake, and has no Review preparation or
+ReviewFinding response requirement. A later current `allow_review` result can
+enter the ordinary review route only under its locked ReviewPolicy. A later
+retry cannot rewrite the committed cause.

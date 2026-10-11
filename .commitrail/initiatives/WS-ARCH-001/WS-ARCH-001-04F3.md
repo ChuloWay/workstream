@@ -1,7 +1,7 @@
 # ARCH-04F3 — Exact-cause checker-remediation replacement intake
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: one hidden contributor replacement ZIP passes the
   canonical pre-submit intake again and creates a new immutable Submission and
   generation-one evaluation request only when its immediate predecessor has the
@@ -12,7 +12,7 @@
 
 ## Intent
 
-The current TASK context accepts `needs_revision` with only the latest
+Before F3, the TASK context accepted `needs_revision` with only the latest
 Submission ID/version and labels every such predecessor `revision`. ART retains
 that predecessor across preparation, passing pre-submit evidence, verified
 admission and binding. The canonical TASK writer creates version 2 and its
@@ -143,7 +143,11 @@ replacement writer or route would fork the atomic creation operation.
   `backend/tests/test_approved_guide_intake.py`,
   `backend/tests/retained_material_fixtures.py`,
   `backend/tests/pre_submit_test_helpers.py`, and
-  `backend/tests/test_blocked_pre_submit_feedback_postgresql.py`. The shared
+  `backend/tests/test_blocked_pre_submit_feedback_postgresql.py`,
+  `backend/tests/test_artifact_bindings.py`,
+  `backend/tests/test_submission_bundle_preparation_recovery.py`,
+  `backend/tests/test_pre_submit_attempt_schema.py`, and
+  `backend/tests/reviews/decision/support.py`. The shared
   retained-material and pre-submit fixtures must also compose the canonical
   context port. Existing routing successor fixtures must publish the real
   checker-remediation outcome before intake; historical migration fixtures must
@@ -164,6 +168,15 @@ replacement writer or route would fork the atomic creation operation.
   `docs/spec_authorization_service.md`, `README.md`, ARCH plan/chunk map/overview
   and `.commitrail/INDEX.md` only where the merged outcome changes a claim.
   Verify exact documentation filenames and links before editing.
+- Canonical F3 lineage and branch corrections in
+  `docs/architecture_data_model.md`,
+  `docs/architecture_lifecycle_state_machine.md`,
+  `docs/spec_review_lifecycle.md`,
+  `docs/operations_revision_replay.md`, and
+  `docs/operations_queue_policy.md`: replace the nonexistent Submission cause
+  column and distinguish delivered checker remediation from planned human
+  Review preparation, finding responses and rebase. `README.md` receives the
+  same locked-rule distinction in its current operating summary.
 - Adjacent current navigation: ART, AUTH, POL, CON and REV initiative
   `OVERVIEW.md` files, plus AUTH and POL `planning/PLAN.md` and
   `planning/CHUNK_MAP.md`. These currently assign replacement intake as the next
@@ -236,23 +249,19 @@ setup fault never becomes contributor remediation.
   makes the upgrade refuse with the 0032 schema and all rows unchanged. Function
   search paths and FKs do not trust caller text.
 
-The valid integration control starts from
-`tests.tasks.post_submit_routing.remediation_support.remediation_source`,
-which uses `completed_evidence` for real initial ART admission/Submission and
-CHECKERS finalization, then produces an invoked completion. **Before yielding
-replacement input**, call the real outcome operation or completion handler and
-commit it; assert TASK `needs_revision`, active original assignment, exact
-`TaskPostSubmitRoutingManifest`/AUTH receipt and zero REV/CON/economic effects.
-Without that commit, TASK is still `evaluation_pending` and the positive test
-cannot reach the cause guard. Use
-`revision_archive(h.data)` from the existing ART replacement test to create a
-changed governed ZIP, then `_verified_admission` and
-`compose_hidden_submission_creation_command` for the sole writer. The current
-`test_submission_predecessor_custody.py` fixture merely updates TASK status;
-replace it with the routed control before claiming exact-cause proof. Keep
-initial-submission and existing success-path regressions as controls.
+The valid integration control uses
+`tests.tasks.post_submit_routing.remediation_support.remediation_source`. It
+starts with real ART admission/Submission and CHECKERS finalization, then commits
+the authorized outcome before replacement intake. The control checks TASK
+`needs_revision`, the active original assignment, exact routing manifest/AUTH
+receipt and zero REV/CON/economic effects. A changed `revision_archive(h.data)`
+then goes through `_verified_admission` and the sole
+`compose_hidden_submission_creation_command` writer.
+`test_submission_predecessor_custody.py` uses this routed source rather than a
+synthetic TASK status update. Initial-submission and success-path regressions
+remain control requirements.
 
-| Future test node | Earliest intended guard / assertion | Reachable valid control |
+| Implemented proof boundary | Guard / assertion | Valid control |
 | --- | --- | --- |
 | Both locked ReviewPolicy modes, changed ZIP | TASK exact completed source; ART full pre-check; atomic TASK dispatch | Commit the real 04F2 outcome under each policy, then prepare `revision_archive(h.data)` and create through the canonical writer |
 | No routed cause, setup fault, or success | TASK context before `byte_source` iteration | Completed failure before outcome, real setup-fault completion, or real success result; pair with committed remediation of the same initial fixture |
@@ -271,14 +280,14 @@ controls; replace only synthetic-status fixtures that would bypass the new
 causality rule. Each negative must first demonstrate its adjacent valid path,
 then fail at the named boundary rather than fixture setup.
 
-## Evidence
+## Required verification
 
-Run focused pure contract tests, then bounded isolated PostgreSQL/Local and
-MinIO tests through the repository's test runner, migration upgrade/replay,
-the current boundary/inventory/docs/link checks and the required hosted suite.
-Discriminating probes must remove the cause/currentness guard and show the
-specific negative assertion fails after a valid control passes. Do not claim
-runtime proof from this inspected plan.
+The implementation PR carries actual command, CI and reviewer evidence; this
+record defines the required proof, not an executed-test attestation. Verify
+focused contracts, bounded isolated PostgreSQL/Local and MinIO behavior,
+migration upgrade/replay, boundary/inventory/docs/link checks and the hosted
+suite. Discriminating probes must remove the cause/currentness guard and show
+the specific negative assertion fails after a valid control passes.
 
 ## Risk and review routing
 
