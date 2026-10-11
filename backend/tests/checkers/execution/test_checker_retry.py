@@ -14,12 +14,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.checkers import checker_retry_service, evaluation_coordinator
 from app.adapters.outbox import outbox_append
+from app.adapters.tasks import task_post_submit_outcome
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import ArtifactObjectMissingError
 from app.modules.authorization.catalogue import ActionId
+from app.modules.audit.schemas import (
+    LifecycleAuditEntityType, LifecycleAuditEventInput, LifecycleAuditEventType,
+    LifecycleAuditReason, LifecycleAuditReferenceKind,
+)
 from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable, CheckerRequestConflict, CheckerRetryCommand,
+    CheckerRetryPreparation, CheckerRetrySource,
 )
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence
 from app.modules.outbox.api import (
@@ -27,7 +33,7 @@ from app.modules.outbox.api import (
     OutboxAppendResult, OutboxIdempotencyConflict,
 )
 from app.modules.outbox.models import OutboxEvent
-from app.modules.tasks.models import AuditEvent
+from app.modules.tasks.models import AuditEvent, TaskAssignment, WorkstreamTask
 from app.modules.tasks.evaluation_delivery import EvaluationDeliveryRequestReader, EvaluationDeliveryUnavailable
 from app.modules.tasks.post_submit_routing.evaluation_guard import TaskEvaluationGuard
 from app.modules.tasks.repository import TaskRepository
@@ -38,11 +44,16 @@ from tests.checkers.execution.support import live_executor, reserve
 from tests.project_create_fixtures import grant_fixture_admin_role
 from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome, state
 from tests.tasks.evaluation_delivery.test_worker_materialization import _worker_port
+from tests.tasks.post_submit_routing.support import source_values
+from tests.tasks.post_submit_routing.outcome_support import invoked_completion
+from tests.authorization.post_submit_routing.support import provision_router
 from tests.test_artifact_admission import _context, _seed_human_actor
 
 
 @asynccontextmanager
-async def _failed_source(tmp_path, isolated_database_env, monkeypatch, provider="local"):
+async def _failed_source(
+    tmp_path, isolated_database_env, monkeypatch, provider="local", **material_options,
+):
     """Build one real terminal missing-object result through the durable worker."""
     from app.adapters.artifacts.local import LocalStorageAdapter
     from app.adapters.artifacts.s3_compatible import S3CompatibleArtifactStore
@@ -54,7 +65,9 @@ async def _failed_source(tmp_path, isolated_database_env, monkeypatch, provider=
         monkeypatch.setattr(
             test_s3_artifact_store, "MINIO_BUCKET", os.environ["WORKSTREAM_TEST_MINIO_BUCKET"]
         )
-    async with material_fixture(tmp_path, isolated_database_env, provider=provider) as h:
+    async with material_fixture(
+        tmp_path, isolated_database_env, provider=provider, **material_options,
+    ) as h:
         port = _worker_port(h, monkeypatch)
 
         def missing(_store, _reference):
@@ -97,6 +110,55 @@ def _command(h, operator):
         request_key=operator.request_id,
         reason="Verified artifact storage has been restored",
     )
+
+
+def test_retry_reason_rejects_ascii_del_at_all_typed_boundaries():
+    source = CheckerRetrySource(
+        project_id=new_record_id(), task_id=new_record_id(),
+        assignment_id=new_record_id(), submission_id=new_record_id(),
+        submission_version=1, source_run_id=new_record_id(),
+        source_request_id=new_record_id(), source_request_digest="sha256:" + "0" * 64,
+        source_result_id=new_record_id(), source_result_digest="sha256:" + "1" * 64,
+        source_finalize_evidence_id=new_record_id(), source_generation=1,
+        failure_code="material_unavailable",
+    )
+    actor_id, key = new_record_id(), new_record_id()
+    valid = "Restore verified checker infrastructure"
+    assert CheckerRetryCommand(
+        source_run_id=source.source_run_id, request_key=key, reason=valid,
+    ).reason == valid
+    assert CheckerRetryPreparation(
+        actor_profile_id=actor_id, request_key=key, reason=valid, source=source,
+    ).reason == valid
+    with pytest.raises(ValueError, match="checker retry reason is invalid"):
+        CheckerRetryCommand(source_run_id=source.source_run_id, request_key=key, reason=valid + "\x7f")
+    with pytest.raises(ValueError, match="checker retry reason is invalid"):
+        CheckerRetryPreparation(
+            actor_profile_id=actor_id, request_key=key, reason=valid + "\x7f", source=source,
+        )
+    run_id = new_record_id()
+    audit = {
+        "event_id": new_record_id(),
+        "entity_type": LifecycleAuditEntityType.CHECKER_RUN,
+        "entity_id": run_id,
+        "event_type": LifecycleAuditEventType.CHECKER_RETRY_REQUESTED,
+        "actor_id": actor_id,
+        "reason": LifecycleAuditReason.FACT_RECORDED,
+        "authorization_resource_digest": "sha256:" + "2" * 64,
+        "references": {
+            LifecycleAuditReferenceKind.PROJECT: source.project_id,
+            LifecycleAuditReferenceKind.TASK: source.task_id,
+            LifecycleAuditReferenceKind.ASSIGNMENT: source.assignment_id,
+            LifecycleAuditReferenceKind.SUBMISSION: source.submission_id,
+            LifecycleAuditReferenceKind.CHECKER_RUN: run_id,
+            LifecycleAuditReferenceKind.SOURCE_CHECKER_RUN: source.source_run_id,
+            LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: new_record_id(),
+            LifecycleAuditReferenceKind.OUTBOX_EVENT: new_record_id(),
+        },
+    }
+    assert LifecycleAuditEventInput(**audit, operator_reason=valid).operator_reason == valid
+    with pytest.raises(ValueError, match="invalid Operator reason"):
+        LifecycleAuditEventInput(**audit, operator_reason=valid + "\x7f")
 
 
 def _copied_audit_event(event, **changes):
@@ -500,9 +562,35 @@ async def test_retry_response_loss_and_later_generation_replay(
             later = await evaluation_coordinator(session).reserve_current_evaluation(later_request)
         assert later.evaluation_generation == 3
         assert later.attempt_id != created.successor.run_id
+
+        async def retained_effects():
+            async with h.factory() as session:
+                fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+                runs = tuple((await session.scalars(select(CheckerRun.id).order_by(CheckerRun.id))).all())
+                receipts = tuple((await session.scalars(
+                    select(CheckerRetryReceipt.id).order_by(CheckerRetryReceipt.id)
+                )).all())
+                events = tuple((await session.scalars(
+                    select(OutboxEvent.event_id).order_by(OutboxEvent.event_id)
+                )).all())
+                decisions = tuple((await session.scalars(select(AuditEvent.id).where(
+                    AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value,
+                ))).all())
+                initiations = tuple((await session.scalars(select(AuditEvent.id).where(
+                    AuditEvent.event_type == "CheckerRetryRequested",
+                ))).all())
+                return fence.current_run_id, runs, receipts, events, decisions, initiations
+
+        before = await retained_effects()
+        assert before[0] == str(later.attempt_id)
+        assert set(before[1]) == {
+            str(command.source_run_id), str(created.successor.run_id), str(later.attempt_id),
+        }
+        assert tuple(map(len, before[2:])) == (1, 3, 1, 1)
         async with h.factory.begin() as session:
             historical_replay = await checker_retry_service(session, operator).retry(command)
         assert historical_replay == created
+        assert await retained_effects() == before
         async with h.factory() as session:
             source = await session.get(CheckerRun, str(command.source_run_id))
             successor = await session.get(CheckerRun, str(created.successor.run_id))
@@ -511,6 +599,83 @@ async def test_retry_response_loss_and_later_generation_replay(
             assert await session.get(CheckerRun, str(later.attempt_id)) is not None
             assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 1
             assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 3
+
+
+async def test_retry_replays_after_real_auto_acceptance_but_new_key_denies(
+    tmp_path, isolated_database_env, monkeypatch, live_acceptance_lifecycle,
+):
+    async with _failed_source(
+        tmp_path, isolated_database_env, monkeypatch, human_review_required=False,
+    ) as (h, delivery):
+        operator = await _operator_for(h)
+        command = _command(h, operator)
+        async with h.factory.begin() as session:
+            created = await checker_retry_service(session, operator).retry(command)
+        delivered = await delivery.delivery.deliver(
+            created.successor.event_id, h.request.project_id, "accepted-retry-successor",
+        )
+        assert outcome(delivered)["delivery_state"] == "acknowledged"
+        async with h.factory.begin() as session:
+            accepted = await session.execute(text(
+                "UPDATE public.task_assignments SET accepted_at=clock_timestamp() "
+                "WHERE id=:id AND accepted_at IS NULL"
+            ), {"id": str(h.request.assignment_id)})
+            assert accepted.rowcount == 1
+        h.source = {}
+        h.source = await source_values(h, run_id=created.successor.run_id)
+        await provision_router(h.factory)
+        completion = await invoked_completion(h)
+        async with h.factory() as session, session.begin():
+            routed = await task_post_submit_outcome(session, h.factory).apply(
+                completion, current_generation=2,
+            )
+            assert routed.final_acceptance_id is not None
+
+        async def durable_state():
+            async with h.factory() as session:
+                task = await session.get(WorkstreamTask, str(h.request.task_id))
+                assignment = await session.get(TaskAssignment, str(h.request.assignment_id))
+                fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+                return (
+                    task.status, assignment.status, fence.current_run_id,
+                    await session.scalar(select(func.count()).select_from(CheckerRun)),
+                    await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)),
+                    await session.scalar(select(func.count()).select_from(OutboxEvent)),
+                    await session.scalar(select(func.count()).select_from(AuditEvent).where(
+                        AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value,
+                    )),
+                )
+
+        before = await durable_state()
+        assert before[:5] == (
+            "accepted", "completed", str(created.successor.run_id), 2, 1,
+        )
+        opens = len(h.store.opens)
+        async with h.factory.begin() as session:
+            replay = await checker_retry_service(session, operator).retry(command)
+        assert replay == created
+
+        another_key = new_record_id()
+        another_operator = operator.model_copy(update={
+            "request_id": another_key, "correlation_id": another_key,
+        })
+        reached = False
+        original = TaskEvaluationGuard.lock_terminal_retry_scope
+
+        async def observed(guard, request):
+            nonlocal reached
+            reached = True
+            return await original(guard, request)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(TaskEvaluationGuard, "lock_terminal_retry_scope", observed)
+            with pytest.raises(CheckerExecutionUnavailable, match="checker_retry_scope_unavailable"):
+                async with h.factory.begin() as session:
+                    await checker_retry_service(session, another_operator).retry(
+                        command.model_copy(update={"request_key": another_key})
+                    )
+        assert reached and len(h.store.opens) == opens
+        assert await durable_state() == before
 
 
 async def test_retry_handler_rejects_crossed_event_and_payload_before_execution(
@@ -556,8 +721,9 @@ async def test_retry_handler_rejects_crossed_event_and_payload_before_execution(
         assert await state(h) == before and len(h.store.opens) == opens
 
 
-async def test_same_key_independent_sessions_wait_for_task_then_replay_one_retry(
-    tmp_path, isolated_database_env, monkeypatch,
+@pytest.mark.parametrize("same_key", [True, False])
+async def test_independent_sessions_wait_for_task_and_commit_one_retry(
+    tmp_path, isolated_database_env, monkeypatch, same_key,
 ):
     from app.adapters.artifacts.local import LocalStorageAdapter
     from app.adapters.artifacts import internal_workers
@@ -590,6 +756,11 @@ async def test_same_key_independent_sessions_wait_for_task_then_replay_one_retry
                 source_run_id=h.created.evaluation_attempt_id,
                 request_key=key, reason="Restore verified checker infrastructure",
             )
+            other_key = key if same_key else new_record_id()
+            other_operator = operator.model_copy(update={
+                "request_id": other_key, "correlation_id": other_key,
+            })
+            other_command = command.model_copy(update={"request_key": other_key})
 
             arrivals: set[int] = set()
             both_arrived = asyncio.Event()
@@ -608,9 +779,9 @@ async def test_same_key_independent_sessions_wait_for_task_then_replay_one_retry
             async def new_gate(guard, request):
                 return await mark_then(original_new, guard, request)
 
-            async def invoke():
+            async def invoke(context, request):
                 async with h.factory.begin() as session:
-                    return await checker_retry_service(session, operator).retry(command)
+                    return await checker_retry_service(session, context).retry(request)
 
             with monkeypatch.context() as patch:
                 patch.setattr(TaskEvaluationGuard, "lock_retry_replay_scope", replay_gate)
@@ -619,7 +790,10 @@ async def test_same_key_independent_sessions_wait_for_task_then_replay_one_retry
                     assert await TaskRepository(holder).lock_project_task(
                         h.request.project_id, h.request.task_id,
                     ) is not None
-                    calls = [asyncio.create_task(invoke()) for _ in range(2)]
+                    calls = [
+                        asyncio.create_task(invoke(operator, command)),
+                        asyncio.create_task(invoke(other_operator, other_command)),
+                    ]
                     try:
                         await asyncio.wait_for(both_arrived.wait(), 30)
                         assert all(not call.done() for call in calls)
@@ -635,11 +809,19 @@ async def test_same_key_independent_sessions_wait_for_task_then_replay_one_retry
                             call.cancel()
                         await asyncio.gather(*calls, return_exceptions=True)
                         raise
-                first, second = await asyncio.gather(*calls)
-            assert first == second
+                first, second = await asyncio.gather(*calls, return_exceptions=True)
+            if same_key:
+                assert first == second and not isinstance(first, BaseException)
+            else:
+                outcomes = (first, second)
+                assert sum(not isinstance(result, BaseException) for result in outcomes) == 1
+                assert sum(isinstance(result, CheckerExecutionUnavailable) for result in outcomes) == 1
             async with h.factory() as session:
                 assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 1
                 assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 2
+                assert await session.scalar(select(func.count()).select_from(AuditEvent).where(
+                    AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value,
+                )) == 1
         finally:
             internal_workers.shutdown_artifact_internal_runtime()
 

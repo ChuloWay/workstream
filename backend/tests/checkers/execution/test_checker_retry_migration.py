@@ -203,7 +203,9 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
             _seed_with_historical_writer, tmp_path, isolated_database_env
         )
         submission_id = UUID(seed["submission_id"])
-        request = PostSubmissionEvaluationRequest.model_validate(seed["request"])
+        request = PostSubmissionEvaluationRequest.model_validate_json(
+            json.dumps(seed["request"])
+        )
         assert request.submission_id == submission_id
         connection = await _connection(isolated_database_env)
         try:

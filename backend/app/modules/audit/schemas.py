@@ -430,7 +430,7 @@ class LifecycleAuditEventInput(BaseModel):
             raise ValueError("checker retry requires one Operator reason")
         if self.operator_reason is not None and (
             not self.operator_reason.strip()
-            or any(ord(character) < 32 for character in self.operator_reason)
+            or any(ord(character) < 32 or ord(character) == 127 for character in self.operator_reason)
         ):
             raise ValueError("invalid Operator reason")
         if (self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.assignment_invalidation_facts is not None):

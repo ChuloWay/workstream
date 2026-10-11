@@ -46,7 +46,7 @@ class CheckerRetryCommand(PostSubmitValue):
     @field_validator("reason")
     @classmethod
     def nonblank_reason(cls, value: str) -> str:
-        if not value.strip() or any(ord(character) < 32 for character in value):
+        if not value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
             raise ValueError("checker retry reason is invalid")
         return value
 
@@ -76,6 +76,13 @@ class CheckerRetryPreparation(PostSubmitValue):
     request_key: ResourceId
     reason: str = Field(min_length=1, max_length=500)
     source: CheckerRetrySource
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_reason(cls, value: str) -> str:
+        if not value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
+            raise ValueError("checker retry reason is invalid")
+        return value
 
 
 class CheckerRetrySuccessor(PostSubmitValue):
