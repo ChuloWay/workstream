@@ -168,7 +168,7 @@ match the committed canonical event to the actual captured decision ID and
 resource-context digest, retaining AUTH's bounded audit projection rather than
 requiring raw private resource selectors.
 
-- Current-source reconciliation: main `20b0beb8023c53e7c101c325aaceb3d38fb2a215` includes the merged lifecycle transitions, CLI guide/post-policy inspection and pre-submit proposal approval, PILOT-04 external checker contract/registry, and complete hidden authorized routing outcomes. Source actions coexist with the incoming routing action activation and the complete lifecycle/registry resource and role classifications. Native UUID mappings retain each owner's string or UUID representation. The roadmap retains main's delivered routing statements and only this source prerequisite's additions; existing selected MCP operations remain unchanged. The earlier `94fe55c3a171deb619debb2310d323703b71c666` reconciliation preceded the denial-owner repair and was source-equivalent to the `c5f5a1` native proof. The subsequent exact `a3ef23fe46ec6687ba749b714b46e7e99b768a0e` denial proof remains historical evidence for its tested tree; it is not relabeled as proof of this newer integration.
+- Earlier source reconciliation: main `20b0beb8023c53e7c101c325aaceb3d38fb2a215` includes the merged lifecycle transitions, CLI guide/post-policy inspection and pre-submit proposal approval, PILOT-04 external checker contract/registry, and complete hidden authorized routing outcomes. Source actions coexist with the incoming routing action activation and the complete lifecycle/registry resource and role classifications. Native UUID mappings retain each owner's string or UUID representation. The roadmap retains main's delivered routing statements and only this source prerequisite's additions; existing selected MCP operations remain unchanged. The earlier `94fe55c3a171deb619debb2310d323703b71c666` reconciliation preceded the denial-owner repair and was source-equivalent to the `c5f5a1` native proof. The subsequent exact `a3ef23fe46ec6687ba749b714b46e7e99b768a0e` denial proof remains historical evidence for its tested tree; it is not relabeled as proof of this newer integration.
 - Next usable boundary: atomic DRAFT TASK import from verified source, then explicit batch screen/release and CLI conversion in separately authorized bounded changes.
 - Remaining risks: source retention has no deletion scheduler; Issue #489 remains open.
 - Schema handoff: main owns `0028_lifecycle_transitions`,
@@ -271,3 +271,20 @@ Revision `0031_task_import_source` still follows `0030_routing_outcomes`;
 no migration body, fingerprint or model change accompanies this reconciliation.
 The earlier 8,935-case hosted proof remains bound to its actual merge into
 `20b0beb8`, not this integration. Fresh hosted CI is required for the new tree.
+
+
+Current-source reconciliation integrates main
+`251bc29bc5661934b2b70cde4ceecd52dbfa9687`, including exact CLI proposal
+approval, hidden ART worker materialization, completed-failure evidence and
+same-request pre-submit feedback. Their production owners, documentation,
+initiative navigation and complete test assignments remain intact alongside
+this source prerequisite. CI533 supplies four project lanes and ten total lanes,
+with the existing native settings, complete evidence contract and 1,200-second
+cap. The latest preceding source run timed out in project C with 92 unfinished
+nodes and owned-resource cleanup; it is not a full PASS receipt. Historical
+local and hosted proofs remain bound to their tested heads. This integrated
+source candidate requires fresh complete hosted execution under the merged
+capacity repair. Revision `0031_task_import_source` still follows
+`0030_routing_outcomes`; its authored DDL and measured fingerprint are unchanged.
+Atomic DRAFT import, batch screen/release and CLI conversion remain separate
+work, and Issue #489 remains open.

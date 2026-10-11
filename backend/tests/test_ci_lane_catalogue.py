@@ -24,7 +24,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     runner.validate_lane_inventory(discovered)
 
     assigned = [module for lane in LANES for module in lane.modules]
-    assert len(LANES) == 9
+    assert len(LANES) == 10
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(
@@ -263,6 +263,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         }
     )
     assert modules_by_lane["project_lifecycle_b"] == partitioned_project_modules
+    assert modules_by_lane["project_lifecycle_d"] == partitioned_project_modules
     project_ac_modules = partitioned_project_modules | set(catalogue.PROJECT_AC_PARTITION_MODULES)
     assert modules_by_lane["project_lifecycle_a"] == project_ac_modules
     assert modules_by_lane["project_lifecycle_c"] == project_ac_modules
@@ -271,6 +272,9 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         == modules_by_lane["task_lifecycle_b"]
         == modules_by_lane["task_lifecycle_c"]
         == {
+            "tests/checkers/execution/test_completion_evidence.py",
+            "tests/checkers/execution/test_completion_contract.py",
+            "tests/tasks/post_submit_routing/test_failure_completion.py",
             "tests/tasks/evaluation_delivery/test_completion.py",
             "tests/tasks/evaluation_delivery/test_completion_contracts.py",
             "tests/tasks/evaluation_delivery/test_completion_custody.py",
@@ -340,6 +344,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/checkers/post_submit/test_requirement_dispositions.py",
             "tests/checkers/post_submit/test_result_contract.py",
             "tests/checkers/test_effective_intake_rules.py",
+            "tests/test_blocked_pre_submit_feedback_postgresql.py",
             "tests/test_checker_catalogue.py",
             "tests/test_checkers.py",
             "tests/test_default_pre_submit_execution.py",
@@ -361,6 +366,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     shared_a = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[0]]
     shared_b = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[1]]
     assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
+    assert "tests/tasks/evaluation_delivery/test_worker_materialization.py" in shared_a
     assert "tests/artifacts/test_review_packet_contract.py" in shared_a
     assert {
         "tests/test_task_import_sources.py",
@@ -718,8 +724,8 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
     assert '--expected-head "${GITHUB_SHA}"' in source
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
-    assert 'test "${#coverage_files[@]}" -eq 9' in source
-    assert "len(lanes) != 9" in source
+    assert 'test "${#coverage_files[@]}" -eq 10' in source
+    assert "len(lanes) != 10" in source
     assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
     assert 'timing_path = bundle / "job-start-epoch.txt"' in source
     assert (

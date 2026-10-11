@@ -110,11 +110,17 @@ def test_merge_bundles_emits_complete_run_summary(tmp_path: Path) -> None:
     assert len(list((tmp_path / "merged").glob(".coverage.*"))) == len(LANES)
 
 
-def test_merge_bundles_rejects_missing_or_foreign_lane(tmp_path: Path) -> None:
+@pytest.mark.parametrize("lane_name", ["shared_foundations_a", "project_lifecycle_d"])
+@pytest.mark.parametrize("damage", ["missing", "foreign"])
+def test_merge_bundles_rejects_missing_or_foreign_lane(tmp_path: Path, lane_name: str, damage: str) -> None:
     source = tmp_path / "source"
     source.mkdir()
     _bundles(source)
-    _bundle(source, LANES[0].name).rename(source / "foreign")
+    path = _bundle(source, lane_name)
+    if damage == "missing":
+        shutil.rmtree(path)
+    else:
+        path.rename(source / "foreign")
 
     with pytest.raises(LaneError, match="invalid_lane_bundle_set"):
         _merge(source, tmp_path / "merged", tmp_path / "summary.json")
@@ -211,10 +217,11 @@ def test_partial_retry_selects_numeric_latest_before_validation(tmp_path: Path) 
     ("coverage", "invalid_lane_bundle_file"),
     ("head", "invalid_lane_bundle_summary"),
 ])
-def test_latest_invalid_attempt_never_falls_back(tmp_path: Path, damage: str, error: str) -> None:
+@pytest.mark.parametrize("lane_name", ["shared_foundations_a", "project_lifecycle_d"])
+def test_latest_invalid_attempt_never_falls_back(tmp_path: Path, damage: str, error: str, lane_name: str) -> None:
     source = tmp_path / "source"
     _bundles(source)
-    lane = LANES[0].name
+    lane = lane_name
     latest = _bundle(source, lane, 2)
     shutil.copytree(_bundle(source, lane), latest)
     summary_file = latest / "summary.json"
