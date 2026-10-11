@@ -35,6 +35,9 @@ one clean cutover. The merged external runtime is intentionally unselected.
   material-read capability.
 - Focused tests under `backend/tests/checkers/default/` for every positive,
   negative, infrastructure and warning boundary.
+- The existing checker custody-consumer inventory in
+  `backend/tests/test_artifact_architecture.py` for the two new same-owner
+  materialization-contract consumers.
 - The minimum test-lane and behavior-owner metadata needed to run the new tests
   and assign the two new modules exactly once.
 - `docs/architecture_checker_framework.md` and the exact PILOT-04 checker rows
@@ -124,6 +127,7 @@ introduced here.
 | Default behavior and actual ART callback | `pytest -q tests/checkers/default/test_contract.py tests/checkers/default/test_execution.py` | 25 passed | Component remains deliberately unselected |
 | Test-lane ownership and focused behavior | `pytest -q tests/checkers/default/test_contract.py tests/checkers/default/test_execution.py tests/test_ci_lane_catalogue.py` | 71 passed | Hosted full-suite evidence follows in the draft PR |
 | Public module boundary | `pytest -q tests/architecture/test_module_boundaries.py::test_repository_matches_the_protected_module_boundary tests/architecture/test_module_boundaries.py::test_art_implements_checker_consumer_ports_without_a_public_cycle` | 2 passed | Existing catalogues retain their recorded debt until cutover |
+| Closed materialization consumer inventory | `pytest -q tests/test_artifact_architecture.py::test_checker_custody_ports_have_exact_owner_and_art_consumers` | Passed | The inventory still rejects every unregistered owner or ART consumer |
 | Behavior-owner partition | `python -m scripts.behavior_ownership validate` | Passed | Hosted evidence still validates the exact merge tree |
 
 ## Reconciliation

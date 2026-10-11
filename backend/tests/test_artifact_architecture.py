@@ -649,6 +649,8 @@ def test_checker_custody_ports_have_exact_owner_and_art_consumers() -> None:
             "app/adapters/artifacts/__init__.py",
             "app/modules/artifacts/post_submit_materialization.py",
             "app/modules/artifacts/post_submit_selection.py",
+            "app/modules/checkers/api/default_checker.py",
+            "app/modules/checkers/default_checker.py",
             "app/modules/checkers/execution.py",
         },
     }
