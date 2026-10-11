@@ -1638,6 +1638,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_context.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/submission_dispatch.py"
     },
     {
@@ -1805,7 +1809,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "93906ccf711fb56664d96d5ad646991ab2877131a2c83e09643a84180e547c27",
+  "authority_digest": "409bbf63047bd28214fd5e997e7bd7f75be188e762619d8c3a24be43e6c1c4ea",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
