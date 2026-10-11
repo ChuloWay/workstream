@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from contextlib import AbstractAsyncContextManager
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from typing import Literal, Protocol
 from uuid import UUID
 
@@ -13,6 +13,10 @@ from app.modules.checkers.api.post_submit_catalogue import PostSubmitValue, Reso
 from app.modules.checkers.api.post_submit import (
     PostSubmissionEvaluationRequest,
     PostSubmissionEvaluationResult,
+)
+from app.modules.checkers.api.external import (
+    ExternalCheckerExecutionRequest,
+    PostSubmitExternalCheckerMaterial,
 )
 
 
@@ -103,6 +107,22 @@ class SubmissionMaterialView(Protocol):
 
     def read_file(self, normalized_path: str, *, maximum_bytes: int) -> bytes:
         """Read one bounded verified file without filesystem authority."""
+
+    def external_checker_grant(
+        self, request: ExternalCheckerExecutionRequest
+    ) -> AbstractContextManager["ExternalCheckerGrantReference"]:
+        """Issue one request-bound opaque grant for this callback lifetime only."""
+
+    @property
+    def external_checker_material(self) -> PostSubmitExternalCheckerMaterial:
+        """Return detached exact POST custody without provider or path coordinates."""
+
+
+class ExternalCheckerGrantReference(Protocol):
+    """Opaque ART grant identity accepted by the trusted service adapter."""
+
+    grant_id: str
+    binding_digest: str
 
 
 class PostSubmissionMaterialConsumer(Protocol):
