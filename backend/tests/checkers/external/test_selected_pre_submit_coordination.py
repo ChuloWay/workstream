@@ -28,6 +28,7 @@ from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitLeaseFacts,
     SelectedPreSubmitReservationFacts,
     SelectedPreSubmitRequestConflict,
+    SelectedPreSubmitUnavailable,
 )
 from app.adapters.tasks import selected_pre_submit_task_guard
 from app.modules.tasks.repository import TaskRepository
@@ -36,7 +37,6 @@ from app.modules.checkers.selected_pre_submit_coordination import (
     SelectedPreSubmitAdmissionCapability,
     SelectedPreSubmitExecutionCapability,
     SelectedPreSubmitCoordinator,
-    SelectedPreSubmitUnavailable,
 )
 from tests.checkers.external.support import SHA
 
