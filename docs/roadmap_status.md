@@ -130,8 +130,10 @@ separate exact-authorized locked-context reads. ARCH-03C7 adds bounded public
 Audit Authority history access. PILOT-02A provides project-bound canonical JSON
 source declaration, upload, status and verified download using ART custody and
 current PM authority, with public-route PostgreSQL/MinIO custody, replay,
-rollback and recovery proof. Source storage creates no Tasks; atomic DRAFT import,
-explicit batch screen/release and CLI conversion follow in later PILOT-02 work.
+rollback and recovery proof. PILOT-02B adds public atomic JSON-to-DRAFT import
+and native batch status, with immutable membership, fresh-authority exact-file
+replay and a real 200-row PostgreSQL/MinIO proof. Explicit batch screen/release
+and CLI conversion remain separate PILOT-02 work.
 ARCH-03D connects hidden intake through durable intent to the activated historical
 guide using canonical owner ports. ARCH-04B adds hidden verified Submission input
 with scoped async access. ARCH-04B2 adds hidden typed checker-output storage,
@@ -193,6 +195,10 @@ returning one saved unified successor without dispatch or activation.
 Exact proposal correction and explicit saved-successor dispatch are also
 available: dispatch preserves backend diagnostic status, including enqueue
 failure, rather than claiming processing completion or activation.
+Separate exact guide activation is available through the public manager POST,
+with caller-selected approved policies, contribution-policy binding and immutable
+receipt validation. The backend retains readiness and supersession authority;
+this does not enable the still-unavailable false-review activation branch.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -266,7 +272,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | Public intake cutover after evaluation/remediation prerequisites |
 | Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors; immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | Public intake cutover after evaluation/remediation prerequisites |
 | Task readiness and claim | **Foundation with grant-backed manager and contributor commands** | Task records, assignments and locked work context; guide-bound ContributionPolicyVersion locked before `READY` and copied to TaskAssignment; detached project/guide display; public project-scoped ready, management and operational queues with distinct current grant authority and signed bounded live pagination; public contributor/management detail with exact project and assignment authority; separate current live work-context projections with exact receipt-selected review/revision/ContributionPolicy identities and no obsolete economic fields; explicit management/operational/audit locked-context projections using one historical resolver, with separate public manager, system-Operator and Audit Authority access; immutable contributor/management requirements using one historical translator, with public exact Contributor and Manager authority; bounded public Audit Authority lifecycle evidence with atomic project/task scoping and exact transition references; public manager create/screen/release use exact covered Project Manager authority, atomic audit and replay; claim/start/contributor context use exact-project Submitter grants; assigned context lists documents only and distinct `task.guide.read` verifies locked originals before delivery; separate manager context and system-Operator start; durable claim/start retry receipts with fresh authority and exact assignment checks; hidden exact-assignment invalidation with committed cause verification, delivery fencing, exact fixed-service authority and decision-bound immutable release evidence; atomic authority-loss publication and registered prefork delivery; PILOT-14 exposes both locked contribution types in ready rows and Contributor detail for active exact-project Submitters or Reviewers as unpaid or exact instrument/unit/quantity awards, without Finance binding facts; claim/start remain Submitter-only | Public intake cutover follows evaluation/remediation prerequisites |
-| Bulk task source custody | **Public backend source foundation delivered** | PILOT-02A provides covered-PM project-bound declaration, canonical 1..500-row JSON upload with exact SHA/count, fresh-authority replay, source status and independently verified download using existing ART custody; linear migration and public-route PostgreSQL/MinIO custody, rollback, concurrency and recovery tests pass | Atomic DRAFT import, separate explicit batch screen/release and CLI conversion; issue 489 remains open |
+| Bulk task import | **Public backend atomic DRAFT import** | PILOT-02A supplies exact source custody; PILOT-02B imports 1..500 verified JSON rows under one immutable native batch, retains per-Task AUTH/TaskCreated facts, recovers exact original IDs with fresh authority and exposes batch status; actual 200-row, rollback, concurrent-wait and SQL-custody controls pass on PostgreSQL/MinIO | Explicit batch screen/release and CLI conversion; issue 489 remains open |
 | Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; shared evaluation-content capacity and exact locked-policy checks before attempts or durable intent; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission; hidden final handoff validates the exact activated historical guide through owner ports | Complete the later public admission-only cutover |
 | Pre-submission intake checking | **Hidden with approved-guide lineage and same-request feedback; external contract and unselected runtime mechanism delivered** | Separate versioned pre-submission catalogue, locked effective-plan compilation, platform/project checks during continuous preparation, and one internal phase command covering execution/replay with the JSON precheck removed; the mounted authorized hidden route returns exact ordered bounded feedback for blocking findings before Submission creation while remaining absent from OpenAPI. ARCH-03D connects approved-guide lineage through the final durable handoff. PILOT-04 publishes the strict normalized external pre-submit identity, immutable authorized digest-pinned registry, unselected Rust service/SDK and ART callback grant for verified read-only material without routing a product request | Implement one Workstream default checker containing exactly the four approved blocking behaviors; bind and route every required digest-pinned project pre-image only after verified ZIP identity/manifest; require all prechecks to pass before the caller-owned atomic Submission/`evaluation_pending`/initial-dispatch transaction. Work findings create no Submission and leave the task `in_progress`; infrastructure failures remain recoverable. Bind approved policies, prove F-020 recovery and public intake integration, then remove both legacy catalogues without a parallel path |
 | Immutable Submission creation | **Hidden foundation; public packet creation retired** | Contributor preparation authority; durable pre-submit reservation and exact completed-evidence recovery without rerunning checks; atomic admission consumption; TASK-owned admission-backed creation with exact assignment ContributionPolicyVersion, locked policy lineage and service/database checked-packet custody; fixed-service artifact binding; replay/concurrency/rollback proof | Finish downstream evaluation and the canonical public integration. The retained submission-list GET is not a usable creation POST |
@@ -380,8 +386,11 @@ cannot be reused as post-submission review-gate evidence. See the
   provides public covered-PM declaration, exact JSON upload, status and verified
   download with immutable failed/abandoned-source retention and existing ART
   automatic recovery, proven through public routes on PostgreSQL and MinIO.
-  It creates no Tasks; issue 489 retains atomic DRAFT
-  import, explicit batch screen/release and CLI conversion as future boundaries.
+  [PILOT-02B atomic JSON import](../.commitrail/changes/pilot02-atomic-json-draft-import.md)
+  adds public atomic DRAFT creation and native batch status with exact-file replay,
+  verified source ancestry and per-row canonical AUTH/TaskCreated evidence. Its
+  actual 200-row, rollback, lock-wait and immutable SQL controls pass on PostgreSQL
+  and MinIO. Issue 489 retains explicit batch screen/release and CLI conversion.
   The [PILOT-02C bulk/CLI candidate](../.commitrail/changes/pilot02-bulk-transitions-cli.md)
   implements caller-root canonical SCREEN/RELEASE composition and separate CLI
   source/import/status/screen/release commands with local CSV-to-JSON conversion.
@@ -450,7 +459,12 @@ cannot be reused as post-submission review-gate evidence. See the
   saves feedback for an exact finalized proposal and explicitly dispatches the
   saved unified successor. Complete response identity and manual-only recovery
   protect the journey; dispatch diagnostics are not completion or activation.
-  Activation remains future CLI work; backend owners retain all authority.
+  [CLI guide activation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-18.md)
+  sends caller-prepared, separately approved selections once to the public
+  manager activation operation and validates its complete immutable receipt.
+  Readiness, contribution-policy publication, fresh replay authority and
+  supersession remain backend-owned. This command does not enable false-review
+  guide activation or expose hidden submission work.
   [PILOT-13 assigned-guide access](../.commitrail/changes/pilot13-assigned-task-guide-documents.md)
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads
@@ -680,9 +694,10 @@ The broader v0.1 sequence below retains later scope:
    history access. AUTH-18 exposes manager activation context and the canonical
    guide activation POST. PILOT-02A delivers canonical JSON import-source custody
    with its linear migration and public-route PostgreSQL/MinIO proof;
-   atomic DRAFT import and explicit batch screen/release remain required for
-   bulk task intake. The source prerequisite does not change guide locks or
-   create Tasks. Guide activation requires exact
+   PILOT-02B adds atomic DRAFT import and native batch status under current PM
+   authority. Explicit batch screen/release and CLI conversion remain required
+   for the full bulk-intake journey. Source/import does not acquire screen/release
+   guide locks. Guide activation requires exact
    current compilation, sufficiency, separate pre/post approvals, review/revision
    inputs and an explicitly selected published ContributionPolicyVersion.
    Registered checker implementations and configuration are checked without a
@@ -861,6 +876,7 @@ Delivered foundations (not a claim of full public integration)
   ARCH-04E1B-B7 hidden request delivery (unregistered)
   REV-12A4A scoped Operator transitions + immutable AUTH/history custody + current-generation gates
   PILOT-02A public canonical JSON source custody + authorized replay + PostgreSQL/MinIO recovery proof
+  PILOT-02B public atomic JSON-to-DRAFT import + immutable native batch status + exact-file recovery
 
   ARCH-04E2-B hidden complete authorized outcomes + actual receipts + DB closure
     true: TASK review_pending handoff, no REV/CON prerequisite
@@ -876,7 +892,7 @@ Delivered foundations (not a claim of full public integration)
     no recognition writer or fulfillment dependency; CLI/pagination remain
 
 Remaining integration
-  PILOT-02 separately scoped atomic DRAFT import -> explicit batch screen/release
+  PILOT-02 explicit native batch screen/release + CLI import/status/CSV conversion
   04F exact-cause replacement intake + setup-fault/Operator recovery proof
   -> 04E3 live composition and false-policy readiness
   -> public initial/checker-remediation intake and immutable admitted Submission cutover

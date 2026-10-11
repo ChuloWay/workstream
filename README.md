@@ -122,8 +122,11 @@ v0.1 remains manual-first. PILOT-02A provides Project Manager declaration, uploa
 inspection and verified download of canonical JSON task-import sources through the
 [public ART contract](docs/spec_artifact_storage_service.md#task-import-source-custody).
 Its public routes are covered by PostgreSQL/MinIO custody, authority, replay and
-recovery tests. Source custody creates no Tasks; atomic DRAFT import, explicit
-batch screening and release, and CLI conversion remain planned. A client-converted CSV retains
+recovery tests. PILOT-02B imports one verified JSON source into immutable native
+batch membership and 1..500 DRAFT Tasks atomically, with fresh-authority exact-file
+replay and batch status through the public TASK contract. Its actual 200-row and
+rollback/custody controls pass on PostgreSQL and MinIO. Explicit batch screening
+and release and CLI conversion remain separate work. A client-converted CSV retains
 its received JSON rather than claiming original CSV custody.
 External origin onboarding, external task-routing systems, and execution workspaces remain
 later adapters. Revision and reassignment belong to the governed lifecycle;
@@ -395,6 +398,11 @@ COMPILATION_ID --input FILE` explicitly dispatches the successor identified by
 that saved correction receipt (or the `correction` member from `correct-post`).
 It reports the backend's diagnostic status, not completed processing or activation;
 uncertain writes are never automatically retried.
+`workstream project guide activate PROJECT_ID GUIDE_ID --input FILE
+--idempotency-key UUID` separately activates exactly selected, approved policies
+through the public manager API. It validates the immutable activation receipt;
+Workstream retains readiness, contribution-policy binding and supersession
+authority. It does not approve policies or enable false-review guide activation.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.

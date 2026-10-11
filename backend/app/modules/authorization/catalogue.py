@@ -914,8 +914,7 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         for definition in definitions
         if definition.availability is ActionAvailability.ACTIVE
     } != active_actions | CONTRIBUTION_READ_ACTIONS | {
-        ActionId.TASK_CLAIM, ActionId.TASK_START, ActionId.TASK_WORK_CONTEXT_READ,
-        ActionId.TASK_GUIDE_READ,
+        ActionId.TASK_CLAIM, ActionId.TASK_START, ActionId.TASK_WORK_CONTEXT_READ, ActionId.TASK_GUIDE_READ,
         ActionId.PROJECT_TASK_WORK_CONTEXT_READ, ActionId.OPERATIONS_TASK_START_OVERRIDE,
         ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,
         ActionId.PROJECT_TASK_IMPORT, ActionId.PROJECT_TASK_IMPORT_BATCH_READ,

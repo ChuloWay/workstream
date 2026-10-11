@@ -243,8 +243,7 @@ func validateActivationContext(raw json.RawMessage, value *GuideActivationContex
 	}
 	for i, selection := range []*GuidePolicySelection{value.Review, value.Revision} {
 		if selection != nil {
-			_, err := contextObject(fields[[]string{"review", "revision"}[i]], selection, []string{"policy_id", "generation", "policy_hash"}, nil)
-			if err != nil || !validUUID(selection.PolicyID) || selection.Generation.Sign() <= 0 || !contextPolicyDigest.MatchString(selection.PolicyHash) {
+			if validateGuidePolicySelection(fields[[]string{"review", "revision"}[i]], selection) != nil {
 				return errors.New("invalid policy selection")
 			}
 		}
@@ -254,6 +253,14 @@ func validateActivationContext(raw json.RawMessage, value *GuideActivationContex
 		if err != nil || !validUUID(value.Contribution.PolicyID) || !validUUID(value.Contribution.PolicyVersionID) {
 			return errors.New("invalid contribution selection")
 		}
+	}
+	return nil
+}
+
+func validateGuidePolicySelection(raw json.RawMessage, value *GuidePolicySelection) error {
+	_, err := contextObject(raw, value, []string{"policy_id", "generation", "policy_hash"}, nil)
+	if err != nil || !validUUID(value.PolicyID) || value.Generation.Sign() <= 0 || !contextPolicyDigest.MatchString(value.PolicyHash) {
+		return errors.New("invalid policy selection")
 	}
 	return nil
 }

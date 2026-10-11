@@ -42,6 +42,7 @@ func addGuideCreate(project *cobra.Command, client func() (*api.Client, error), 
 	addGuidePostApproval(guide, client, output, stdout)
 	addGuidePostCorrection(guide, client, output, stdout)
 	addGuideCorrection(guide, client, output, stdout)
+	addGuideActivation(guide, client, output, stdout)
 	guide.AddCommand(&cobra.Command{
 		Use: "setup PROJECT_ID GUIDE_ID", Short: "Inspect latest guide setup (does not approve or activate)", Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
