@@ -84,7 +84,7 @@ CLI is a separate bounded PR.
 | Current implementation | Inspect canonical CON read and AUTH keyset owner | Existing read extended; peer selected expiring native membership | Installed native implementation pending |
 | Membership/authority | Real PostgreSQL installed-schema public reads, delayed commit and revocation controls | Planned | No native runtime claim yet |
 | Cursor/projection validation | Focused cursor, exact projection, CSV and canonical-only model discovery | 68 pass; independent scope/expiry mutants fail intended assertions | No native membership claim |
-| Required repository checks | Focused checks plus required hosted CI and independent review | Planned | No readiness claim |
+| Required repository checks | CI lane catalogue and behavior ownership tests; Ruff; changed Markdown links | 203 pass after additive registration repair; lint and links pass | Full hosted/native proof pending; no readiness claim |
 
 ## Review findings
 
