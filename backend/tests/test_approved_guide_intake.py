@@ -193,7 +193,7 @@ async def test_command_holds_authorized_context_before_final_handoff(tmp_path, i
     )
     from tests.checkers.execution.support import forbidden_post_submission
     from tests.authorization.test_pre_submit_attempt_authority import _seed_materializer
-    from tests.test_default_pre_submit_execution import _archive, _bytes
+    from tests.archive_fixtures import byte_source as _bytes, submission_archive as _archive
 
     harness = await _harness(tmp_path, isolated_database_env)
     try:

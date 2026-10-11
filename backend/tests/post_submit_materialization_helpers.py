@@ -29,7 +29,7 @@ from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.tasks.submission_lineage_support import _seed_services, _verified_admission
 from tests.test_artifact_admission import _settings, _context, _seed_human_actor
 from tests.test_checker_materialization import _limits
-from tests.test_default_pre_submit_execution import _archive, _bytes
+from tests.archive_fixtures import byte_source as _bytes, submission_archive as _archive
 
 
 class CountedStore:

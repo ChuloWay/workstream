@@ -26,7 +26,7 @@ from tests.post_submit_materialization_helpers import material_fixture
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.tasks.submission_lineage_support import _verified_admission
 from tests.test_artifact_admission import _context
-from tests.test_default_pre_submit_execution import _bytes
+from tests.archive_fixtures import byte_source as _bytes
 
 
 SOURCE_COLUMNS = (

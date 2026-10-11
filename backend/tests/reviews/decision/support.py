@@ -32,7 +32,7 @@ from tests.reviews.packet.support import packet_source, prepare_packet
 from tests.tasks.post_submit_routing.support import source_values
 from tests.tasks.submission_lineage_support import _verified_admission
 from tests.test_artifact_admission import _context
-from tests.test_default_pre_submit_execution import _bytes
+from tests.archive_fixtures import byte_source as _bytes
 
 
 @asynccontextmanager

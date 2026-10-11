@@ -31,7 +31,7 @@ from app.modules.tasks.repository import TaskRepository
 from tests.submission_capacity_fixtures import capacity_fixture
 from tests.pre_submit_test_helpers import approved_pre_submit_fixture
 from tests.tasks.submission_lineage_support import _verified_admission
-from tests.test_default_pre_submit_execution import _archive, _bytes
+from tests.archive_fixtures import byte_source as _bytes, submission_archive as _archive
 from tests.checkers.post_submit.support import request as evaluation_request
 
 

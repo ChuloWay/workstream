@@ -229,7 +229,7 @@ async def test_async_exit_and_concurrent_drift_never_return_stale_material(tmp_p
 
 
 async def test_wrong_provider_bytes_or_manifest_never_reach_consumer(tmp_path, isolated_database_env):
-    from tests.test_default_pre_submit_execution import _bytes
+    from tests.archive_fixtures import byte_source as _bytes
     async with material_fixture(tmp_path, isolated_database_env) as h:
         execution = await material_execution(h)
         consumer = Consumer(h.files)

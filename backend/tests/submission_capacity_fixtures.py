@@ -13,7 +13,7 @@ from tests.submission_preparation_auth_helpers import install_submitter_grant
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.tasks.submission_lineage_support import _seed_services
 from tests.test_artifact_admission import _settings, _namespace, _local_store, _context, _seed_human_actor
-from tests.test_default_pre_submit_execution import _archive, _bytes
+from tests.archive_fixtures import byte_source as _bytes, submission_archive as _archive
 
 
 @asynccontextmanager

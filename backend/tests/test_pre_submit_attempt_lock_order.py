@@ -33,7 +33,7 @@ from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.authorization.test_pre_submit_attempt_authority import _seed_materializer
 from tests.pre_submit_test_helpers import submission_preparation_request
 from tests.submission_preparation_auth_helpers import install_submitter_grant
-from tests.test_default_pre_submit_execution import _archive, _bytes
+from tests.archive_fixtures import byte_source as _bytes, submission_archive as _archive
 from tests.test_pre_submit_attempt_authority_integration import _reserve_with_real_materializer
 from tests.test_pre_submit_attempt_recovery import _harness
 
@@ -246,7 +246,7 @@ async def test_same_project_reservation_and_execution_complete_without_auth_proj
 ) -> None:
     # The fixture's ordinary ten-second scratch deadline is too short for an
     # intentional database barrier; only this test extends the temporary lease.
-    import tests.test_default_pre_submit_execution as default_tests
+    import tests.archive_fixtures as default_tests
 
     original_limits = default_tests._limits
     monkeypatch.setattr(default_tests, "_limits", lambda: replace(

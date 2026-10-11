@@ -270,7 +270,7 @@ class _ObservedBeforeProject(_PauseBeforeProject):
 async def test_dual_finance_submitter_profile_precedes_policy_project_lock(
     tmp_path: Path, isolated_database_env: str, monkeypatch,
 ) -> None:
-    import tests.test_default_pre_submit_execution as default_tests
+    import tests.archive_fixtures as default_tests
 
     original_limits = default_tests._limits
     monkeypatch.setattr(default_tests, "_limits", lambda: replace(

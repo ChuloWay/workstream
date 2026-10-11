@@ -33,7 +33,7 @@ from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRep
 from app.modules.tasks.repository import TaskRepository
 from tests.authorization.test_pre_submit_attempt_authority import _seed_materializer
 from tests.checkers.execution.support import forbidden_post_submission
-from tests.test_default_pre_submit_execution import _archive, _bytes
+from tests.archive_fixtures import byte_source as _bytes, submission_archive as _archive
 from tests.test_pre_submit_attempt_recovery import _harness
 
 

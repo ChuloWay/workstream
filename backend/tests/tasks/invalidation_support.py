@@ -299,7 +299,7 @@ async def prepare_submission(s, settings):
     from app.modules.tasks.api import SubmissionCreationRequest
     from tests.tasks.submission_lineage_support import _seed_services, _verified_admission
     from tests.test_artifact_admission import _namespace, _local_store, _context
-    from tests.test_default_pre_submit_execution import _archive, _bytes
+    from tests.archive_fixtures import byte_source as _bytes, submission_archive as _archive
     from tests.test_tasks import complete_submission_payload
 
     context = _context(
