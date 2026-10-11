@@ -12,3 +12,12 @@ fails its own result if the expected verified file differs, effective
 capabilities are nonzero, a Docker socket exists, the root is writable, or a
 network connection succeeds. This small Linux fixture does not establish
 hosted gVisor readiness, representative checker sizing, or product routing.
+
+`run_selected_post_probe.py` composes the same service with the selected POST
+owner against an already migrated isolated PostgreSQL database. It registers
+the supplied platform-manifest digest, builds a real locked policy, creates an
+immutable Submission through the existing TASK/ART path, mounts the verified
+archive through the callback-scoped POST grant, and requires the normalized
+result, isolation receipt, database finalization, and workspace cleanup. The
+database must be disposable and independently cleaned by the caller; the probe
+does not create or drop it.

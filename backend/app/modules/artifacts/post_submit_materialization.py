@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Callable
+from contextlib import contextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -10,6 +11,7 @@ from app.interfaces.artifacts import (
     ArtifactStore, ArtifactObjectMissingError, ArtifactInputMismatchError,
     ArtifactIntegrityError, ArtifactLimitExceededError, ArtifactStoreUnavailableError,
 )
+from app.interfaces.external_checker_execution import ExternalCheckerMaterialGrant
 from app.modules.checkers.api.materialization import (
     PostSubmissionMaterialConsumer, PostSubmissionMaterializationResult,
     PostSubmissionMaterializationUnavailable, PostSubmissionMaterializationFailure,
@@ -82,6 +84,7 @@ class _MaterialView:
         self._require_open()
         return self._tree.read_file(normalized_path, maximum_bytes=maximum_bytes)
 
+    @contextmanager
     def external_checker_grant(self, request: ExternalCheckerExecutionRequest):
         """Bind a POST service grant to actual current execution and ART ancestry."""
         self._require_open()
@@ -156,9 +159,13 @@ class _MaterialView:
             semantic_manifest_sha256=material.semantic_manifest_sha256,
             directories=directories, files=files,
         )
-        return self._preparation.external_material_grant(
+        with self._preparation.external_material_grant(
             self._prepared, self._workspace, grant_request
-        )
+        ) as grant:
+            yield ExternalCheckerMaterialGrant(
+                grant_id=grant.grant_id,
+                binding_digest=grant.binding_digest,
+            )
 
     @property
     def external_checker_material(self) -> PostSubmitExternalCheckerMaterial:

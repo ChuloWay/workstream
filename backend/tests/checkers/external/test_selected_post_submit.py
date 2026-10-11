@@ -168,6 +168,7 @@ class _Execution:
         self.requests = []
 
     async def execute(self, request, _grant):
+        assert type(_grant) is ExternalCheckerMaterialGrant
         self.requests.append(request)
         infrastructure = self.outcome == "infrastructure_failed"
         findings = () if self.verdict == "passed" or infrastructure else ({

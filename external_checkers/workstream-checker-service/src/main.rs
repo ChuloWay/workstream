@@ -77,7 +77,6 @@ struct GrantReference {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 struct GrantManifest {
     protocol_version: String,
     grant_id: String,
@@ -1869,6 +1868,12 @@ mod tests {
             unreachable!()
         };
         *semantic_manifest_sha256 = semantic.clone();
+        let encoded = serde_json::to_vec(&manifest).unwrap();
+        let decoded: GrantManifest = serde_json::from_slice(&encoded).unwrap();
+        assert!(matches!(decoded.identity, GrantIdentity::PostSubmit { .. }));
+        let mut substituted = serde_json::to_value(&manifest).unwrap();
+        substituted["unexpected"] = Value::Bool(true);
+        assert!(serde_json::from_value::<GrantManifest>(substituted).is_err());
         let mut material = material;
         material["semantic_manifest_sha256"] = Value::String(semantic);
         let request = ValidatedRequest {
