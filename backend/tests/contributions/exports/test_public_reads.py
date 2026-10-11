@@ -1,11 +1,14 @@
 """Public signed read/export proof against real canonical source and retained AUTH."""
 
 import csv
+import json
 from io import StringIO
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 
+from app.core.identifiers import new_record_id
 from app.db.session import get_session_factory
 from app.modules.actors.models import ActorIdentityLink
 from app.modules.actors.api import ServiceIdentity
@@ -149,3 +152,59 @@ async def test_provisioned_service_cannot_read_project_contribution_facts(
         event, = await export_audits(h.factory)
         assert event["after_facts"]["allowed"] is False
         assert event["target_ref_id"] is event["project_id"] is None
+
+
+async def test_export_audit_sql_requires_each_exact_allow_and_deny_pair(
+    tmp_path, auth_database_env, signed_access, live_acceptance_lifecycle,
+):
+    """Bypass schema validation with real decision templates; roll all probes back."""
+    async with authorized_submitter_source(tmp_path, auth_database_env) as h:
+        own = await source_actor(signed_access, h)
+        other = await signed_access.actor("export-audit-sql-ungranted-human")
+        allowed = await signed_access.client.get("/api/v1/actors/me/contributions", headers=own.headers)
+        denied = await signed_access.client.get(export_path(h.submitter_record.project_id), headers=other.headers)
+        assert allowed.status_code == 200, allowed.text
+        assert denied.status_code == 404, denied.text
+        before = await export_audits(h.factory)
+        assert len(before) == 2
+        statement = text("""
+            INSERT INTO public.audit_events
+            SELECT (jsonb_populate_record(NULL::public.audit_events,
+                to_jsonb(a) || CAST(:changes AS jsonb))).*
+            FROM public.audit_events a WHERE a.id=:source
+        """)
+        async with h.factory() as session:
+            await session.begin()
+            templates = (await session.execute(text("""
+                SELECT id,event_type FROM public.audit_events
+                WHERE action_id IN ('contribution.read_self','contribution.read_project')
+                ORDER BY created_at,id
+            """))).all()
+            assert {row.event_type for row in templates} == {
+                "SensitiveAuthorizationAllowed", "SensitiveAuthorizationDenied",
+            }
+            for template in templates:
+                for action in ("contribution.read_self", "contribution.read_project"):
+                    identity = new_record_id()
+                    changes = {"id": str(identity), "entity_id": str(identity),
+                               "action_id": action, "permission_id": action}
+                    # These staged clones prove only SQL pair vocabulary, not runtime authority.
+                    await session.execute(statement, {"source": template.id, "changes": json.dumps(changes)})
+                    assert await session.scalar(text(
+                        "SELECT count(*) FROM public.audit_events WHERE id=:id AND action_id=:action AND permission_id=:action"
+                    ), {"id": identity, "action": action}) == 1
+                    crossed = "contribution.read_project" if action.endswith("self") else "contribution.read_self"
+                    for permission in (crossed, "project.read"):
+                        refused_id = new_record_id()
+                        changed = changes | {"id": str(refused_id), "entity_id": str(refused_id),
+                                             "permission_id": permission}
+                        with pytest.raises(DBAPIError, match="ck_audit_events_authorization_action_evidence"):
+                            async with session.begin_nested():
+                                await session.execute(statement, {
+                                    "source": template.id, "changes": json.dumps(changed),
+                                })
+                        assert await session.scalar(text(
+                            "SELECT count(*) FROM public.audit_events WHERE id=:id"
+                        ), {"id": refused_id}) == 0
+            await session.rollback()
+        assert await export_audits(h.factory) == before
