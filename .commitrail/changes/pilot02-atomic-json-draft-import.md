@@ -14,8 +14,8 @@ Issue #489 remains open after this chunk; batch transitions and CLI remain.
 
 ## Current behavior
 
-The inspected integration is `7a3551e7caf2c07af51701db06d011207b44e106`,
-based on main `a51cf06ccb5ab85f2c41528855f537d4362ec26b`. PR520 remains
+The inspected integration is `aa784c9c31490c018d35f4a3cc306fa7c16c630a`,
+based on main `251bc29bc5661934b2b70cde4ceecd52dbfa9687`. PR520 remains
 the separate source prerequisite. Its parser in `tasks/api/task_import.py`
 accepts one strict UTF-8 JSON document with 1..500 rows, required case-sensitive
 external IDs, indexed duplicate errors and an 8 MiB ceiling. ART's
@@ -171,35 +171,39 @@ batch closure and all row effects use one root; denial restaging follows the
 specific AUTH instance that captured the original decision. Late-row failure
 must remove every earlier successful creation effect in that root.
 
-The proposed lock graph requires affected review before code or DDL:
+The lead approved common AUTH-before-uniqueness ordering with sorted writes;
+no additional global advisory fence or custody table is introduced. The exact
+owner preparation and implicit-FK schedule still require affected schema review
+and native discriminating proofs before any concurrency PASS:
 
 1. Finish bounded ART provider verification and JSON parsing before the TASK
    write root. Source read evidence belongs to that earlier read operation;
    no provider stream, scratch cleanup or I/O occurs while TASK write locks wait.
-2. Within the root, reserve TASK batch/file and retry identities. Acquire a
-   TASK-owned external-ID creation fence shared by normal create and imports,
-   then existing Task/member custody where replay needs it, in deterministic
-   order. Actor and ART source foreign keys on reservations must not implicitly
-   take conflicting owner locks before their proper phase.
+2. Within the root, reserve the batch/file retry identity and every per-row TASK
+   retry identity. Acquire existing Task/member custody needed by replay in
+   deterministic order before the first AUTH lock. Proposed new batch/row tuples
+   must not introduce foreign owner locks through premature FK writes.
 3. Validate actual ART source/verification custody through its typed participant
    after TASK custody and before fresh AUTH consumption. Read immutable tuples
    with the weakest required lock; do not lock a mutable put attempt merely to
-   trust an application DTO. Preserve the existing TASK-before-CHECKERS/ART order.
-4. Consume fresh current batch/source authority, then the exact per-row CREATE
-   authority through the shared owner. Stage Tasks, immutable memberships and
-   evidence; close the batch and flush once before the caller commits.
+   trust an application DTO. Preserve existing TASK-before-CHECKERS/ART order.
+4. Consume fresh current batch/source authority and exact per-row CREATE
+   authority through the shared TASK owner. After AUTH, insert external-ID-bearing
+   Tasks in deterministic project/UTF-8 external-ID order. Retain document row
+   indexes and immutable responses independently from insertion order. Stage
+   membership and evidence, close the batch and flush within the caller root.
+   No per-row TASK reservation or additional ART custody acquisition follows AUTH.
 
-One concrete lock hazard still needs a reviewed choice: the current normal
-create inserts its Task after AUTH. Adding a unique external-ID reservation
-before AUTH only for imports can deadlock with a normal create that holds AUTH
-and waits on that reservation. Both entry points must share the same pre-AUTH
-creation fence; an import-only lock does not solve this. Candidate fences are a
-single project-scoped transaction advisory lock, or sorted project/external-ID
-transaction advisory locks. Native uniqueness remains the correctness boundary
-for direct SQL; the fence controls owner lock order and is not authority.
-Review must freeze the chosen key/order and native intermediate-wait regression,
-including normal create versus overlapping import and revoked-authority races.
-No fence, source participant, model or migration is implemented by this record.
+Normal create already consumes fresh AUTH before inserting its Task. An import
+that wrote the unique external key before AUTH could hold that key while a
+normal create held the same actor's AUTH lock: the normal create would wait on
+uniqueness while the import waited on AUTH. Shared AUTH-before-write ordering
+prevents that inversion. Distinct actors retain independent AUTH custody;
+deterministic multi-row writes prevent crossed-key index waits. Native controls
+must observe intermediate waits for same-actor create/import and distinct-actor
+imports whose documents list overlapping external IDs in reverse order, alongside
+revocation and late-failure rollback. Native uniqueness also protects direct SQL;
+AUTH custody and file replay do not depend on an invented global creation fence.
 
 Field mapping has one confirmed native-parity decision:
 `TaskImportRow.difficulty` publishes an 80-character limit, whereas the current
@@ -213,29 +217,6 @@ discriminate the chosen boundary. No alteration is authored by this record.
 The batch retains the actual `workstream.task_import.v1` document identity and
 an explicit row-mapping/parser commitment, alongside verified bytes, so replay
 never silently reinterprets retained rows under a later mapping.
-
-Further owner tracing identifies a smaller proposed lock solution for review:
-the current normal create already consumes fresh AUTH before inserting its Task
-(`authorized_commands.py` lines 152..165). The PM kernel locks the current
-actor/profile/link and effective PM grant (`kernel.py` lines 499..527); it does
-not acquire a shared project-global creation lock. Imports can reserve their
-TASK batch/row retry identities first, validate ART custody, consume fresh AUTH,
-then insert external-ID-bearing Tasks in deterministic project/UTF-8 external-ID
-order. They must reserve every per-row identity before the first AUTH lock and
-retain document row indexes independently from the insertion order.
-
-The bad schedule is an import's pre-AUTH external-ID write, a normal create's
-actor lock, the normal create waiting on that external-ID write, then the import
-waiting on the actor. With both entries consuming AUTH before uniqueness writes,
-the same actor's contender waits on AUTH before owning that external key.
-Different actors keep independent AUTH locks, so overlapping multi-row imports
-must insert external IDs in the same order to avoid crossed-key index waits;
-normal create has only one such key. This proposed common ordering avoids a new
-advisory fence or custody table. Native intermediate-wait controls must include
-same-actor create/import and different-actor reversed-document-order imports.
-Review must settle this ordering and all implicit FK locks before replacing the
-earlier fence proposal or authoring implementation/DDL. No concurrency PASS is
-claimed from this source analysis.
 
 ## Acceptance criteria
 
@@ -283,9 +264,14 @@ per-command transaction and unbound string provenance as explicit handoff issues
 
 ## Reconciliation
 
-- Current-source reconciliation: source PR520 stays frozen at `7a3551e7`;
-  this separate preparation branch includes main's delivered hidden B8 owners.
-- Next usable boundary: explicit atomic batch screen/release, then the CLI's
-  project/source/batch commands and client CSV conversion against public contracts.
+- Current-source reconciliation: this preparation branch incorporates source
+  prerequisite `aa784c9c31490c018d35f4a3cc306fa7c16c630a` and main `251bc29b`,
+  retaining its ten-lane CI, hidden materialization/completion/failure/feedback
+  owners and CLI approval contracts. Only this planning record differs from the
+  source candidate; no atomic-import product code, test or DDL is authored.
+- Next usable boundary: review the exact batch/membership/receipt schema and
+  owner preparation/replay graph, then coordinate the sole-author migration and
+  implement atomic JSON-to-DRAFT import. Explicit batch screen/release and CLI
+  project/source/batch commands with client CSV conversion remain later chunks.
 - Remaining risks: source prerequisite and current required CI/actual external
   review remain separate; no deployed import capability or whole Issue 489 claim.
