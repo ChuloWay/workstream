@@ -446,7 +446,7 @@ declare phase_name text; policy jsonb; binding jsonb; registry jsonb;
         registry_row public.external_checker_registry_entries%rowtype;
         prior_requirement text; prior_capability text; prior_version text;
 begin
- if jsonb_typeof(value)<>'object' or jsonb_object_length(value)<>4
+ if jsonb_typeof(value)<>'object' or (select count(*) from jsonb_object_keys(value))<>4
     or value->>'schema_version'<>'external_checker_policies.v1'
     or value->>'policies_sha256'<>expected_hash
     or public.guide_proposal_hash(value-'policies_sha256')<>expected_hash then
@@ -458,7 +458,7 @@ begin
  end if;
  foreach phase_name in array array['pre_submit','post_submit'] loop
   policy:=value->phase_name;
-  if jsonb_object_length(policy)<>(case when phase_name='pre_submit' then 4 else 3 end)
+  if (select count(*) from jsonb_object_keys(policy))<>(case when phase_name='pre_submit' then 4 else 3 end)
      or policy->>'schema_version'<>'external_'||phase_name||'_policy.v1'
      or public.guide_proposal_hash(policy-'policy_sha256')<>policy->>'policy_sha256'
      or jsonb_typeof(policy->'entries')<>'array' then
@@ -471,7 +471,7 @@ begin
   end if;
   prior_requirement:=null; prior_capability:=null; prior_version:=null;
   for binding in select item from jsonb_array_elements(policy->'entries') item loop
-   if jsonb_typeof(binding)<>'object' or jsonb_object_length(binding)<>5
+   if jsonb_typeof(binding)<>'object' or (select count(*) from jsonb_object_keys(binding))<>5
       or binding->>'stage'<>phase_name
       or jsonb_typeof(binding->'configuration')<>'object'
       or public.external_checker_registry_digest(binding->'configuration')
@@ -479,7 +479,7 @@ begin
     raise exception 'external checker policy binding mismatch' using errcode='23514';
    end if;
    registry:=binding->'registry';
-   if jsonb_typeof(registry)<>'object' or jsonb_object_length(registry)<>14 then
+   if jsonb_typeof(registry)<>'object' or (select count(*) from jsonb_object_keys(registry))<>14 then
     raise exception 'external checker registry value mismatch' using errcode='23514';
    end if;
    select * into registry_row from public.external_checker_registry_entries
@@ -531,7 +531,7 @@ begin
  return true;
 exception when sqlstate '23514' then raise;
  when others then
-  raise exception 'external checker policy value is invalid: %',sqlerrm using errcode='23514';
+  raise exception 'external checker policy value is invalid' using errcode='23514';
 end $$
 """)
     definition = op.get_bind().execute(sa.text(
