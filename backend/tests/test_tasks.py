@@ -66,6 +66,7 @@ from app.modules.tasks.models import (
     AuditEvent,
     EvidenceItem,
     Submission,
+    SubmissionDispatch,
     TaskAssignment,
     WorkstreamTask,
 )
@@ -2482,7 +2483,7 @@ async def test_retained_submission_versions_are_readable_without_exposing_packet
     assert persisted_v1.package_hash == "sha256:package-v1"
     assert persisted_v1.artifact_hash_manifest[0]["hash"] == "sha256:answer-v1"
     async with db_session.get_session_factory()() as session:
-        dispatch = await session.get(db_models.SubmissionDispatch, v2_id)
+        dispatch = await session.get(SubmissionDispatch, v2_id)
     assert dispatch is not None
     assert str(dispatch.checker_remediation_manifest_id) == remediation_id
 
