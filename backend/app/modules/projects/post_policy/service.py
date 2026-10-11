@@ -115,7 +115,7 @@ class PostPolicyService:
                     upstream_output_digest=upstream.output_digest,
                     policy_id=new_record_id(),
                     projection_operation_id=operation_id,
-                    policy_hash=compiled.policy_hash,
+                    policy_hash=compiled.policy_sha256,
                     predecessor_policy_id=UUID(previous.id) if previous else None,
                 )
                 receipt = PostPolicyReceipt(operation_id=operation_id, kind="derive", target=target)
@@ -160,7 +160,7 @@ class PostPolicyService:
                         locked.view.approval_custody.operation.effective_pre_submit_plan
                     ),
                 )
-                if compiled.policy_hash != target.policy_hash:
+                if compiled.policy_sha256 != target.policy_hash:
                     raise GuideProposalError("approval_blocked")
                 operation_id = new_record_id()
                 receipt = PostPolicyReceipt(
