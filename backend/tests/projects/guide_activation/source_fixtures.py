@@ -43,6 +43,7 @@ async def create_compiled_guide(
     *,
     version="v1",
     artifact_proposal=None,
+    pre_submit_registry_entry=None,
     post_submit_registry_entry=None,
 ):
     """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
@@ -95,10 +96,15 @@ async def create_compiled_guide(
         "setup_1": manifest.setup_run_id,
     }
     checker_capabilities = None
-    if post_submit_registry_entry is not None:
+    registry_entries = tuple(
+        entry
+        for entry in (pre_submit_registry_entry, post_submit_registry_entry)
+        if entry is not None
+    )
+    if registry_entries:
         from tests.checkers.external.support import capability_projection
 
-        checker_capabilities = capability_projection(post_submit_registry_entry)
+        checker_capabilities = capability_projection(*registry_entries)
     compilation_context = context(
         values,
         guide_version=version,
@@ -120,31 +126,56 @@ async def create_compiled_guide(
     outcome = outcome.model_copy(
         update={"findings": (outcome.findings[0].model_copy(update={"evidence_refs": refs}),)}
     )
-    if post_submit_registry_entry is not None:
+    if registry_entries:
         from app.interfaces.project_agents import (
             AtomicGuideRequirement,
+            PreSubmissionBindingProposal,
             PostSubmissionBindingProposal,
         )
 
+        requirements = []
+        pre_bindings = []
+        post_bindings = []
+        if pre_submit_registry_entry is not None:
+            requirements.append(
+                AtomicGuideRequirement(
+                    requirement_id="project.archive_rules",
+                    statement="Validate the submitted project archive rules.",
+                    disposition="supported_pre_submit",
+                    evidence_refs=refs,
+                )
+            )
+            pre_bindings.append(
+                PreSubmissionBindingProposal(
+                    requirement_id="project.archive_rules",
+                    capability_id=pre_submit_registry_entry.capability_id,
+                    capability_version=pre_submit_registry_entry.capability_version,
+                    stage="pre_submit",
+                )
+            )
+        if post_submit_registry_entry is not None:
+            requirements.append(
+                AtomicGuideRequirement(
+                    requirement_id="project.post_evidence",
+                    statement="Evaluate the submitted evidence package.",
+                    disposition="supported_post_submit",
+                    evidence_refs=refs,
+                )
+            )
+            post_bindings.append(
+                PostSubmissionBindingProposal(
+                    requirement_id="project.post_evidence",
+                    capability_id=post_submit_registry_entry.capability_id,
+                    capability_version=post_submit_registry_entry.capability_version,
+                    stage="post_submit",
+                    parameters=(),
+                )
+            )
         outcome = outcome.model_copy(
             update={
-                "requirements": (
-                    AtomicGuideRequirement(
-                        requirement_id="project.post_evidence",
-                        statement="Evaluate the submitted evidence package.",
-                        disposition="supported_post_submit",
-                        evidence_refs=refs,
-                    ),
-                ),
-                "post_submit_bindings": (
-                    PostSubmissionBindingProposal(
-                        requirement_id="project.post_evidence",
-                        capability_id=post_submit_registry_entry.capability_id,
-                        capability_version=post_submit_registry_entry.capability_version,
-                        stage="post_submit",
-                        parameters=(),
-                    ),
-                ),
+                "requirements": tuple(requirements),
+                "pre_submit_bindings": tuple(pre_bindings),
+                "post_submit_bindings": tuple(post_bindings),
             }
         )
     url = factory.kw["bind"].url.render_as_string(hide_password=False)
@@ -166,6 +197,7 @@ async def source_case(
     namespace=None,
     guide_version="v1",
     artifact_proposal=None,
+    pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
 ):
     """An authorized draft Project plus a genuinely created complete guide source."""
@@ -204,10 +236,13 @@ async def source_case(
             ).one()
             values.update(actor=UUID(service_id), link=UUID(link_id))
         actor, grant = await seed_review_actor(factory, values["project"])
-        registry_entry = (
+        pre_registry_entry = (
+            await _register_external_checker_fixture(factory, pre_submit_registry_spec)
+            if pre_submit_registry_spec is not None else None
+        )
+        post_registry_entry = (
             await _register_external_checker_fixture(factory, post_submit_registry_spec)
-            if post_submit_registry_spec is not None
-            else None
+            if post_submit_registry_spec is not None else None
         )
         async with current_art_attempt_seed_schema(url):
             values, finalization = await create_compiled_guide(
@@ -216,7 +251,8 @@ async def source_case(
                 actor,
                 version=guide_version,
                 artifact_proposal=artifact_proposal,
-                post_submit_registry_entry=registry_entry,
+                pre_submit_registry_entry=pre_registry_entry,
+                post_submit_registry_entry=post_registry_entry,
             )
         yield values, factory, finalization, actor, grant
     finally:

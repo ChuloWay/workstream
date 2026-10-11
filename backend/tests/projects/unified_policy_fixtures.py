@@ -166,6 +166,7 @@ async def create_standalone_unified_policy(
     artifact_proposal=None,
     contribution_awards=(),
     human_review_required=True,
+    pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
 ):
     """Arrange complete activated context before a downstream artifact transaction."""
@@ -184,6 +185,7 @@ async def create_standalone_unified_policy(
         namespace=namespace,
         guide_version=guide_version,
         artifact_proposal=artifact_proposal,
+        pre_submit_registry_spec=pre_submit_registry_spec,
         post_submit_registry_spec=post_submit_registry_spec,
     ) as (values, _, command, actor, grant):
         await seed_selected_review_revision_inputs(

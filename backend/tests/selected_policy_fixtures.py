@@ -13,6 +13,7 @@ async def approved_selected_policy_fixture(
     guide_version,
     contribution_awards=(),
     human_review_required=True,
+    pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
 ):
     """Build an activated guide backed only by immutable external policy custody."""
@@ -33,6 +34,7 @@ async def approved_selected_policy_fixture(
             required_evidence=("results",),
             attestation_terms=("rights_confirmed",),
         ),
+        pre_submit_registry_spec=pre_submit_registry_spec,
         post_submit_registry_spec=post_submit_registry_spec,
     )
     async with factory() as session:
