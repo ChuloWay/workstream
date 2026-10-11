@@ -30,7 +30,20 @@ async def test_remediation_outcome_substitution_rolls_back(tmp_path, isolated_da
 
 
 @pytest.mark.parametrize("target", ["audit_events", "outbox_events"])
-async def test_remediation_partial_effects_roll_back(tmp_path, isolated_database_env, target):
+async def test_remediation_partial_effects_roll_back(tmp_path, isolated_database_env, target, monkeypatch):
+    from app.modules.outbox.repository import OutboxRepository
+
+    actual_failures = []
+    original_reserve = OutboxRepository.reserve
+
+    async def observed_reserve(owner, *args, **kwargs):
+        try:
+            return await original_reserve(owner, *args, **kwargs)
+        except DBAPIError as error:
+            actual_failures.append("controlled routing insert failure" in str(error))
+            raise
+
+    monkeypatch.setattr(OutboxRepository, "reserve", observed_reserve)
     async with remediation_source(tmp_path, isolated_database_env) as h:
         async with h.factory() as session:
             before = await outcome_snapshot(session)
@@ -38,7 +51,7 @@ async def test_remediation_partial_effects_roll_back(tmp_path, isolated_database
             with pytest.raises(
                 DBAPIError if target == "audit_events" else OutboxPersistenceError,
                 match="controlled routing insert failure" if target == "audit_events" else "outbox_persistence_failed",
-            ) as caught:
+            ):
                 async with session.begin():
                     # Fail the actual owner INSERT, not an unrelated mock write.
                     # DDL and all staged effects disappear with this transaction.
@@ -57,8 +70,9 @@ async def test_remediation_partial_effects_roll_back(tmp_path, isolated_database
                     ))
                     await apply_outcome(session, h, None)
             if target == "outbox_events":
-                assert isinstance(caught.value.__context__, DBAPIError)
-                assert "controlled routing insert failure" in str(caught.value.__context__)
+                # The owner intentionally discards database exception context.
+                # Observe its real repository call, without manufacturing failure.
+                assert actual_failures == [True]
         async with h.factory() as session:
             assert await outcome_snapshot(session) == before
             await no_economic_effects(session)
