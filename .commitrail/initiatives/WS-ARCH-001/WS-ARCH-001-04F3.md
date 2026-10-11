@@ -24,9 +24,14 @@ the contributor is allowed to replace this particular failed evaluation.
 
 The target is a hidden, usable replacement path through the existing ART
 preparation/verifier, TASK context and single `TaskSubmissionCreationService`.
-TASK selects the immutable `TaskPostSubmitRoutingManifest` for the latest
-Submission under its task/assignment locks and checks the current CHECKERS
-result through the existing public evaluation port. The source must be
+The TASK repository locks its own task/assignment/latest Submission rows and
+selects an owner-qualified immutable `TaskPostSubmitRoutingManifest`. One TASK
+composite implementing the **existing** `TaskSubmissionContextPort` then
+checks CHECKERS currentness through the existing public evaluation port. All
+production context callers, including ART before byte access and TASK creation,
+use that composite through the existing adapter binding. No generic TASK
+repository method gains a CHECKERS dependency or remains as a weaker parallel
+port. The source must be
 `needs_revision`, exact for that task, assignment, contributor, Submission,
 run and result, and have its completed AUTH-backed routing consequence. The
 context exposes one server-selected `checker_remediation_manifest_id`; no
@@ -48,12 +53,13 @@ extra cause columns on those rows would repeat an existing exact link.
 
 The existing `revision` kind currently conflates checker remediation with
 human revision. The new TASK context and committed creation kind will name
-`checker_remediation` explicitly for new replacement creation. Historical
-immutable creation evidence is retained; new human-review revision admission
-remains unavailable until its own exact Review cause exists. This is not a
-generic revision permission or a compatibility route. Review of the migration
-must confirm retained initial/old rows remain valid without accepting an
-unproven new revision.
+`checker_remediation` explicitly for new replacement creation. New uncaused
+`revision` SQL inserts are denied; no historical revision alias or invented
+source is added to runtime/replay. The migration checks retained revision rows
+before changing the schema. If their exact cause and authority receipts cannot
+be proven, upgrade refuses transactionally with the rows and 0032 schema
+unchanged. Retained initial rows migrate unchanged. New human-review revision
+admission remains unavailable until its own exact Review cause exists.
 
 Alternatives considered: predecessor-only checks are insufficient because a
 synthetic or human-review `needs_revision` state could reach ART; copying
@@ -62,13 +68,16 @@ replacement writer or route would fork the atomic creation operation.
 
 ## Bounded implementation plan
 
-1. TASK context: extend `TaskSubmissionContextFacts` and its repository owner
-   to resolve one exact current 04F2 manifest after locking TASK, assignment
-   and latest Submission. Use the existing `EvaluationCoordinationPort` for
-   CHECKERS currentness, injected at the existing adapter/composition root;
-   do not import CHECKERS storage models into TASK. Revalidate the same source
-   at each TASK context relock. Initial intake keeps no cause. A missing,
-   foreign, stale, setup-fault or non-remediation manifest denies.
+1. TASK context: extend `TaskSubmissionContextFacts`. The repository only
+   locks TASK rows and selects an owner-qualified 04F2 manifest. A tightly
+   scoped TASK composite in `submission_composition.py` or its own TASK file
+   implements the existing port and uses `EvaluationCoordinationPort` to read
+   the manifest's full stored request and exact current result/recommendation.
+   It also requires the existing SQL complete-outcome predicate. Inject that
+   port at `task_submission_context_port` and the existing creation composition;
+   trace every ART pre-byte, post-byte, evidence and put relock to this binding.
+   Initial intake keeps no cause. A missing, foreign, stale, setup-fault or
+   non-remediation manifest denies. No private CHECKERS model import in TASK.
 2. ART intake: compare the source selected before ZIP reading with each later
    relock. Include its ID in the existing passing evidence operation identity,
    passing capability, durable final preparation resource, verified admission,
@@ -82,16 +91,21 @@ replacement writer or route would fork the atomic creation operation.
    by the same admission key and does not require the old run still be current.
 4. A linear migration after `0032_checker_remediation` adds the minimal cause
    columns/checks/FKs and replaces the existing admission, AUTH-resource and
-   dispatch SQL closure as necessary. Preserve retained evidence and deny SQL
-   substitution of cause, predecessor, recommendation or receipt. The migration
-   must not add a sibling Alembic head.
+   dispatch SQL closure as necessary. Retained initial evidence and its exact
+   receipts remain valid. If retained `revision` dispatches cannot prove the
+   new exact source and receipts, fail before applying DDL; keep their rows and
+   0032 revision unchanged. Do not backfill a guessed cause or preserve an
+   uncaused runtime/replay branch. Deny SQL substitution of cause, predecessor,
+   recommendation or receipt. No sibling Alembic head.
 
 ### Allowed files
 
 - TASK: `backend/app/modules/tasks/api/submission_context.py`,
   `api/submission_command.py`, `api/__init__.py`, `repository.py`, `submission_composition.py`,
   `submission_replay.py`, `submission_dispatch.py`, `submission_participants.py`,
-  `models.py`, and `backend/app/adapters/tasks/__init__.py`.
+  `models.py`, and `backend/app/adapters/tasks/__init__.py`. A narrowly scoped
+  new `backend/app/modules/tasks/submission_context.py` is allowed only if the
+  existing composition file cannot keep the owner small.
 - ART: `backend/app/modules/artifacts/api/submission_preparation.py`,
   `pre_submit_evidence.py`, `submission_materialization.py`,
   `submission_admission.py`, `submission_bindings.py`, `schemas.py`,
@@ -167,19 +181,45 @@ setup fault never becomes contributor remediation.
   insertion failure leave no partial replacement effects.
 - Direct PostgreSQL probes reject evidence/admission/dispatch cause
   substitution and mismatched final AUTH contexts. Upgrade from 0032 preserves
-  previously committed initial and remediation rows and validates their
-  original receipts. Function search paths and FKs do not trust caller text.
+  committed initial Submission and remediation outcome rows and validates their
+  original receipts. A separately seeded retained uncaused `revision` dispatch
+  makes the upgrade refuse with the 0032 schema and all rows unchanged. Function
+  search paths and FKs do not trust caller text.
 
 The valid integration control starts from
 `tests.tasks.post_submit_routing.remediation_support.remediation_source`,
-which uses `completed_evidence` for real initial ART admission/Submission,
-CHECKERS finalization and a routed AUTH outcome. Use
+which uses `completed_evidence` for real initial ART admission/Submission and
+CHECKERS finalization, then produces an invoked completion. **Before yielding
+replacement input**, call the real outcome operation or completion handler and
+commit it; assert TASK `needs_revision`, active original assignment, exact
+`TaskPostSubmitRoutingManifest`/AUTH receipt and zero REV/CON/economic effects.
+Without that commit, TASK is still `evaluation_pending` and the positive test
+cannot reach the cause guard. Use
 `revision_archive(h.data)` from the existing ART replacement test to create a
 changed governed ZIP, then `_verified_admission` and
 `compose_hidden_submission_creation_command` for the sole writer. The current
 `test_submission_predecessor_custody.py` fixture merely updates TASK status;
 replace it with the routed control before claiming exact-cause proof. Keep
 initial-submission and existing success-path regressions as controls.
+
+| Future test node | Earliest intended guard / assertion | Reachable valid control |
+| --- | --- | --- |
+| Both locked ReviewPolicy modes, changed ZIP | TASK exact completed source; ART full pre-check; atomic TASK dispatch | Commit the real 04F2 outcome under each policy, then prepare `revision_archive(h.data)` and create through the canonical writer |
+| No routed cause, setup fault, or success | TASK context before `byte_source` iteration | Completed failure before outcome, real setup-fault completion, or real success result; pair with committed remediation of the same initial fixture |
+| Foreign task, assignment, contributor, predecessor or source | TASK owner-qualified lock/source selection before bytes | Two independently committed remediation fixtures; same fixture with its own exact selectors succeeds |
+| Current run superseded after remediation | Composite CHECKERS current-result check before bytes | Original routed source first passes; reserve a real successor generation under TASK lock, then retry the old cause |
+| Source changes after first lock or ZIP read | Second TASK composite relock before pre-submit evidence | Start from committed source and valid changed ZIP; reserve a successor at the controlled interphase seam |
+| Source changes after checked evidence or verifier publication | Evidence/put relock or ART admission consumption before TASK creation | Same passing ZIP and ready verified admission before the competing generation; unchanged cause continues successfully |
+| Unchanged archive, same semantic manifest, blocked new pre-check | Existing ART change gate or pre-submit check before provider put/Submission | Same committed remediation source with `revision_archive(h.data)` as passing changed-content control |
+| Competing replacements and response-loss replay | TASK lock, unique admission/dispatch and fresh AUTH replay | Two valid ready admissions for one cause; winning committed request replays exact receipt after later task state |
+| Late participant failure | Root transaction's real binding/evaluation/outbox insertion | Valid preparation/admission and authority reach the chosen failing insertion; no partial rows persist |
+| Direct SQL cause or receipt substitution | ART/TASK FK, immutable row and deferred dispatch/AUTH closure | A complete committed replacement first passes SQL predicates; alter one cause or receipt in an isolated transaction |
+| 0032 to 0033 upgrade | Migration retained-row precheck and revised SQL closure | Retained initial Submission and 04F2 remediation source survive; separately seeded uncaused revision refuses unchanged |
+
+Preserve existing initial, success, archive/semantic-change and foreign-predecessor
+controls; replace only synthetic-status fixtures that would bypass the new
+causality rule. Each negative must first demonstrate its adjacent valid path,
+then fail at the named boundary rather than fixture setup.
 
 Run focused pure contract tests, then bounded isolated PostgreSQL/Local and
 MinIO tests through the repository's test runner, migration upgrade/replay,
