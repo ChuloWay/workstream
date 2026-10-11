@@ -59,7 +59,7 @@ class TaskPostSubmitSourceProposal(BaseModel):
     binding_id: UUID
     content_id: UUID
     locked_policy: TaskPolicyLineage
-    routing_recommendation: Literal["allow_review"]
+    routing_recommendation: Literal["allow_review", "needs_revision"]
 
     @model_validator(mode="after")
     def validate_detached_lineage(self) -> Self:
@@ -136,7 +136,7 @@ class TaskRoutingSelection(BaseModel):
     result_id: UUID
     result_digest: _Sha256
     completion_event_id: UUID
-    routing_recommendation: Literal["allow_review"]
+    routing_recommendation: Literal["allow_review", "needs_revision"]
 
 
 def task_routing_request_digest(selection: TaskRoutingSelection) -> str:

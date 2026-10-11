@@ -595,11 +595,14 @@ envelope; duplicate top-level code/details fields are removed.
 ### Internal post-submit routing request reservation
 
 ARCH-04E1B-A provides caller-owned request preparation for an exact current
-completed `allow_review` evaluation. TASK locks the project-qualified Task and
-its latest submitted Submission before CHECKERS locks its fence and run. The
+completed routable evaluation. TASK locks the project-qualified Task and its
+latest submitted Submission before CHECKERS locks its fence and run. The
 CHECKERS public coordination port verifies the supplied completion against
 retained result, event, phase receipts and material, returning closed verified
-completion facts with the stored Submission version and material custody. Neither completion values nor request facts grant authority.
+completion facts with the stored Submission version and material custody.
+ARCH-04F2 admits the closed `needs_revision` recommendation alongside
+`allow_review`; no other recommendation is routable. Neither completion values
+nor request facts grant authority.
 
 `task_post_submit_routing_requests` reserves distinct generated routing-operation
 and future manifest UUIDv7 identities. Its canonical digest binds the exact owner,
@@ -610,9 +613,10 @@ stamps creation time and forbids request update, deletion and truncation.
 
 This is preparation only: no source manifest, current routing pointer, outbox
 publication, TASK transition, Review, FinalAcceptance or ContributionRecord is
-created by that preparation alone. ARCH-04E2-B now commits exact AUTH custody
-and complete governed outcomes through the hidden operation. Production delivery
-remains unavailable. Atomic publication binds the
+created by that preparation alone. ARCH-04E2-B commits exact AUTH custody and
+complete governed success outcomes through the hidden operation; ARCH-04F2
+extends that same operation with the exact contributor-remediation consequence.
+Production delivery remains unavailable. Atomic publication binds the
 manifest to the reserved identity and verifies genuine immutable AUTH evidence.
 
 
@@ -662,8 +666,10 @@ Terminal replay validates retained execute/finalize receipts without reopening
 bytes. Uncertain execution does not renew an expired lease or request a retry;
 shared UNKNOWN handling preserves it for later authorized recovery.
 
-The handler is unregistered. Completion routing, governed outcomes, remediation
-and public intake remain separate boundaries; this adds no Review or acceptance.
+The handler is unregistered. Completion routing, governed outcomes and public
+intake remain separate boundaries; this adds no Review or acceptance. B8 and
+04F2 now supply the hidden success/remediation completion operation described
+below.
 
 
 ### Hidden completion delivery
@@ -678,5 +684,21 @@ invocations reject before owner entry; uncertain owner/commit failures remain
 shared OUTBOX UNKNOWN, never an automatic uncertain-effect retry. A still-current
 unfinalized invocation can replay the exact outcome with fresh authority.
 The true branch never observes REV generation or enters CON. Both request and
-completion handlers remain absent from production registration. Remediation and
-connected production readiness precede public intake.
+completion handlers remain absent from production registration. Connected
+production readiness and the remaining remediation intake/recovery boundaries
+precede public intake.
+
+ARCH-04F2 extends this handler and the existing root outcome transaction for an
+exact current `needs_revision` checker recommendation. The manifest retains the
+recommendation and actual `task.post_submit.route` decision; the only lifecycle
+effect is `evaluation_pending -> needs_revision` with the assignment still
+active. This branch is identical for locked `human_review_required=true` and
+`false`: it does not observe a REV generation, enter CON, or create a Review,
+FinalAcceptance, ContributionRecord or CompensationAward. Replay revalidates the
+stored source, receipt and complete outcome and returns their identities without
+repeating effects. Existing acceptance consumers admit only `allow_review`.
+
+The operation adds no route or contributor response schema. Contributors use the
+existing bounded Submission/checker-history reads above. Exact-cause replacement
+Submission intake, setup-fault and Operator recovery, production handler
+registration, public intake and the first end-to-end drill remain separate work.

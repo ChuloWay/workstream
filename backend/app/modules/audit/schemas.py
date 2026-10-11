@@ -435,7 +435,7 @@ class LifecycleAuditEventInput(BaseModel):
             if self.event_type is LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED:
                 expected = (
                     ("evaluation_pending", self.to_status)
-                    if self.to_status in {"review_pending", "accepted"}
+                    if self.to_status in {"review_pending", "accepted", "needs_revision"}
                     else None
                 )
             if self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:

@@ -80,10 +80,20 @@ async def test_stale_completion_cannot_reserve(tmp_path, isolated_database_env):
             assert await session.scalar(select(func.count()).select_from(TaskRoutingRequest)) == 0
 
 
-@pytest.mark.parametrize("recommendation", ["needs_revision", "task_setup_blocked"])
-async def test_non_allow_completion_cannot_reserve(tmp_path, isolated_database_env, recommendation):
+async def test_forged_remediation_recommendation_cannot_reserve(tmp_path, isolated_database_env):
     async with completed_source(tmp_path, isolated_database_env) as h:
-        incoming = completion_for(h).model_copy(update={"routing_recommendation": recommendation})
+        completion = completion_for(h)
+        assert completion.routing_recommendation == "allow_review"
+        incoming = completion.model_copy(update={"routing_recommendation": "needs_revision"})
+        async with h.factory() as session, session.begin():
+            with pytest.raises(CheckerExecutionUnavailable, match="^checker_current_completion_unavailable$"):
+                await stage(session, h, incoming)
+            assert await session.scalar(select(func.count()).select_from(TaskRoutingRequest)) == 0
+
+
+async def test_setup_fault_completion_cannot_reserve(tmp_path, isolated_database_env):
+    async with completed_source(tmp_path, isolated_database_env) as h:
+        incoming = completion_for(h).model_copy(update={"routing_recommendation": "task_setup_blocked"})
         async with h.factory() as session, session.begin():
             with pytest.raises(TaskRoutingRequestUnavailable, match="routing_request_unavailable"):
                 await stage(session, h, incoming)

@@ -37,6 +37,10 @@ class TaskPostSubmitRoutingManifest(Base):
         CheckConstraint("evaluation_generation > 0", name="evaluation_generation_positive"),
         CheckConstraint("byte_count >= 0", name="byte_count_nonnegative"),
         CheckConstraint(
+            "routing_recommendation in ('allow_review', 'needs_revision')",
+            name="recommendations",
+        ),
+        CheckConstraint(
             "request_digest ~ '^sha256:[0-9a-f]{64}$' and "
             "result_digest ~ '^sha256:[0-9a-f]{64}$' and "
             "content_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
@@ -157,6 +161,7 @@ class TaskPostSubmitRoutingManifest(Base):
         unique=True,
     )
     human_review_required: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    routing_recommendation: Mapped[str] = mapped_column(String(32), nullable=False)
     replica_id: Mapped[str] = mapped_column(
         Uuid(as_uuid=False),
         ForeignKey(
@@ -193,7 +198,10 @@ class TaskRoutingRequest(Base):
             name="distinct_request_ids",
         ),
         CheckConstraint("submission_version > 0 and evaluation_generation > 0", name="positive_versions"),
-        CheckConstraint("routing_recommendation = 'allow_review'", name="allow_review_only"),
+        CheckConstraint(
+            "routing_recommendation in ('allow_review', 'needs_revision')",
+            name="recommendations",
+        ),
         CheckConstraint(
             "evaluation_request_digest ~ '^sha256:[0-9a-f]{64}$' and "
             "result_digest ~ '^sha256:[0-9a-f]{64}$' and "
