@@ -45,8 +45,7 @@ def _entry(capability_id: str, phase: str) -> ExternalCheckerRegistryEntry:
 class _Registry:
     def __init__(self, entries):
         self.entries = {
-            (entry.capability_id, entry.capability_version, entry.phase): entry
-            for entry in entries
+            (entry.capability_id, entry.capability_version, entry.phase): entry for entry in entries
         }
         self.calls = []
 
@@ -102,17 +101,21 @@ def _proposal():
 
 @pytest.mark.asyncio
 async def test_compilation_locks_exact_phase_registry_entries_and_default():
-    entries = (_entry("acme.safe_archive", "pre_submit"),
-               _entry("acme.quality_review", "post_submit"))
+    entries = (
+        _entry("acme.safe_archive", "pre_submit"),
+        _entry("acme.quality_review", "post_submit"),
+    )
     registry = _Registry(entries)
 
     pre, post = await compile_external_checker_policies(_proposal(), registry)
 
     assert pre.workstream_default.checker_id == "workstream.default"
-    assert [(item.requirement_id, item.registry.registry_entry_id)
-            for item in pre.entries] == [("safe_archive", entries[0].registry_entry_id)]
-    assert [(item.requirement_id, item.registry.registry_entry_id)
-            for item in post.entries] == [("quality_review", entries[1].registry_entry_id)]
+    assert [(item.requirement_id, item.registry.registry_entry_id) for item in pre.entries] == [
+        ("safe_archive", entries[0].registry_entry_id)
+    ]
+    assert [(item.requirement_id, item.registry.registry_entry_id) for item in post.entries] == [
+        ("quality_review", entries[1].registry_entry_id)
+    ]
     assert pre.entries[0].configuration == {}
     assert post.entries[0].configuration == {}
     assert [call["phase"] for call in registry.calls] == ["pre_submit", "post_submit"]
@@ -134,6 +137,30 @@ async def test_compilation_refuses_missing_or_wrong_phase_registry_identity():
 
     with pytest.raises(ExternalCheckerPolicyError, match="identity"):
         await compile_external_checker_policies(proposal, _SubstitutedRegistry())
+
+
+@pytest.mark.asyncio
+async def test_compilation_refuses_requirement_and_registry_digest_substitution():
+    proposal = _proposal()
+    wrong_requirement = proposal.model_copy(
+        update={
+            "pre_submit_bindings": (
+                proposal.pre_submit_bindings[0].model_copy(
+                    update={"requirement_id": "quality_review"}
+                ),
+            )
+        }
+    )
+    with pytest.raises(ExternalCheckerPolicyError, match="does not cover"):
+        await compile_external_checker_policies(
+            wrong_requirement,
+            _Registry((_entry("acme.safe_archive", "pre_submit"),)),
+        )
+
+    entry = _entry("acme.safe_archive", "pre_submit")
+    corrupt = entry.model_copy(update={"entry_digest": "sha256:" + "f" * 64})
+    with pytest.raises(ValueError, match="entry digest"):
+        await compile_external_checker_policies(proposal, _Registry((corrupt,)))
 
 
 @pytest.mark.asyncio
@@ -165,10 +192,6 @@ async def test_selected_pre_budget_binds_ordered_deadlines_to_art_custody():
             )
         ),
     )
-    assert selected_pre_submit_execution_budget_ms(
-        pre, artifact_deadline_ms=150_000
-    ) == 150_000
+    assert selected_pre_submit_execution_budget_ms(pre, artifact_deadline_ms=150_000) == 150_000
     with pytest.raises(ExternalCheckerPolicyError, match="exceeds ART"):
-        selected_pre_submit_execution_budget_ms(
-            pre, artifact_deadline_ms=149_999
-        )
+        selected_pre_submit_execution_budget_ms(pre, artifact_deadline_ms=149_999)

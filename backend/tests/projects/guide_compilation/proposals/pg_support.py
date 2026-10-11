@@ -227,7 +227,7 @@ async def read_package(factory, command, actor, grant_id):
         raise exc from exc.__context__
 
 
-async def request_corrected_attempt(factory, actor, correction):
+async def request_corrected_attempt(factory, actor, correction, *, capabilities=None):
     """Enter the existing production human request port; no provider is invoked."""
     from app.adapters.artifacts import guide_document_manifest_port
     from app.modules.authorization.guide_compilation import (
@@ -264,7 +264,7 @@ async def request_corrected_attempt(factory, actor, correction):
             ProjectGuideCompilationAuthorizationAdapter(kernel, prepared),
             request_inputs=CompilationRequestInputs(
                 guide_document_manifest_port(session),
-                capability_projection(),
+                capabilities or capability_projection(),
                 runtime_configuration(),
             ),
         )
@@ -273,7 +273,7 @@ async def request_corrected_attempt(factory, actor, correction):
         )
 
 
-async def finalize_corrected_attempt(factory, values, actor, correction):
+async def finalize_corrected_attempt(factory, values, actor, correction, *, outcome=None):
     """Run a scripted result through actual execution, projections and finalization."""
     from app.adapters.artifacts import guide_document_manifest_port
     from app.adapters.auth import (
@@ -294,12 +294,14 @@ async def finalize_corrected_attempt(factory, values, actor, correction):
         document_access,
     )
 
-    await request_corrected_attempt(factory, actor, correction)
+    async with factory() as session, session.begin():
+        capabilities = await external_checker_capability_projection(session)
+    await request_corrected_attempt(factory, actor, correction, capabilities=capabilities)
     async with factory() as session:
         setup = await session.get(ProjectSetupRun, str(correction.successor_setup_run_id))
     runtime = ScriptedGuideRuntime()
-    async with factory() as session:
-        capabilities = await external_checker_capability_projection(session)
+    if outcome is not None:
+        runtime.outcome = outcome
     coordinator = project_guide_compilation_delivery_port(
         factory,
         material_factory=guide_document_manifest_port,

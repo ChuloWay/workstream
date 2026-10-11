@@ -45,6 +45,7 @@ async def create_compiled_guide(
     artifact_proposal=None,
     pre_submit_registry_entry=None,
     post_submit_registry_entry=None,
+    compilation_outcome=None,
 ):
     """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
     async with factory() as session, session.begin():
@@ -109,10 +110,8 @@ async def create_compiled_guide(
         values,
         guide_version=version,
         checker_capabilities=checker_capabilities,
-    ).model_copy(
-        update={"material": manifest}
-    )
-    outcome = result()
+    ).model_copy(update={"material": manifest})
+    outcome = compilation_outcome or result()
     if artifact_proposal is not None:
         outcome = outcome.model_copy(update={"submission_artifact_policy": artifact_proposal})
     refs = tuple(
@@ -124,7 +123,12 @@ async def create_compiled_guide(
         for item in manifest.documents
     )
     outcome = outcome.model_copy(
-        update={"findings": (outcome.findings[0].model_copy(update={"evidence_refs": refs}),)}
+        update={
+            field: tuple(
+                item.model_copy(update={"evidence_refs": refs}) for item in getattr(outcome, field)
+            )
+            for field in ("findings", "requirements", "capability_suggestions")
+        }
     )
     if registry_entries:
         from app.interfaces.project_agents import (
@@ -199,6 +203,7 @@ async def source_case(
     artifact_proposal=None,
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
+    compilation_outcome=None,
 ):
     """An authorized draft Project plus a genuinely created complete guide source."""
     engine = create_async_engine(url)
@@ -206,15 +211,20 @@ async def source_case(
     try:
         if namespace is not None:
             from app.modules.artifacts.models import ArtifactStorageNamespace
+
             async with factory() as session, session.begin():
                 existing = await session.get(ArtifactStorageNamespace, "primary")
                 if existing is None:
-                    session.add(ArtifactStorageNamespace(
-                        id="primary", backend=namespace.backend, adapter=namespace.adapter,
-                        provider_profile=namespace.provider_profile,
-                        namespace_descriptor=namespace.namespace_descriptor,
-                        namespace_fingerprint=namespace.namespace_fingerprint,
-                    ))
+                    session.add(
+                        ArtifactStorageNamespace(
+                            id="primary",
+                            backend=namespace.backend,
+                            adapter=namespace.adapter,
+                            provider_profile=namespace.provider_profile,
+                            namespace_descriptor=namespace.namespace_descriptor,
+                            namespace_fingerprint=namespace.namespace_fingerprint,
+                        )
+                    )
                 else:
                     assert existing.namespace_fingerprint == namespace.namespace_fingerprint
         values = ids()
@@ -238,11 +248,13 @@ async def source_case(
         actor, grant = await seed_review_actor(factory, values["project"])
         pre_registry_entry = (
             await _register_external_checker_fixture(factory, pre_submit_registry_spec)
-            if pre_submit_registry_spec is not None else None
+            if pre_submit_registry_spec is not None
+            else None
         )
         post_registry_entry = (
             await _register_external_checker_fixture(factory, post_submit_registry_spec)
-            if post_submit_registry_spec is not None else None
+            if post_submit_registry_spec is not None
+            else None
         )
         async with current_art_attempt_seed_schema(url):
             values, finalization = await create_compiled_guide(
@@ -253,6 +265,7 @@ async def source_case(
                 artifact_proposal=artifact_proposal,
                 pre_submit_registry_entry=pre_registry_entry,
                 post_submit_registry_entry=post_registry_entry,
+                compilation_outcome=compilation_outcome,
             )
         yield values, factory, finalization, actor, grant
     finally:

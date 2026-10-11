@@ -63,8 +63,10 @@ it; retained legacy envelopes remain read-only decoding inputs. Admission,
 routing completion and remediation fixtures now exercise the selected PRE/POST
 owners. Both obsolete executable catalogues and their isolated callers and
 tests have been removed; retained immutable evidence has only its bounded
-historical decoder. F-020 recovery and the combined public/native journey remain
-unfinished.
+historical decoder. F-020 recovery now proves that registration alone cannot
+activate the retained warning-bearing generation and that only an exact
+registered binding in a corrected, linked approval can activate. The combined
+public/native journey remains unfinished.
 
 ## Bounded change
 
@@ -167,12 +169,12 @@ intermediate-wait regression.
 
 ## Acceptance criteria
 
-- [ ] Approval binds the default behavior digest and every project binding to
+- [x] Approval binds the default behavior digest and every project binding to
   an exact immutable registry row, phase, image, schemas, configuration and
   limits; substitutions and stale approvals fail closed.
-- [ ] Activation enforces exact F-020 requirement/stage/generation coverage and
+- [x] Activation enforces exact F-020 requirement/stage/generation coverage and
   retains false-policy and warning-acknowledgment guards.
-- [ ] F-020 recovery is proven by register -> recompile -> approve -> activate
+- [x] F-020 recovery is proven by register -> recompile -> approve -> activate
   in one current generation; registration alone and wrong generation, stage,
   requirement, registry digest or stale approval remain blocked.
 - [ ] ART verifies server receipt identity and a bounded safe manifest before
@@ -234,6 +236,7 @@ intermediate-wait regression.
 | Production delivery registration and owner boundaries | `pytest -q backend/tests/architecture/test_module_boundaries.py backend/tests/test_artifact_architecture.py backend/tests/outbox/test_contracts.py`; focused Ruff and a direct registry construction probe | 116 passed; the existing production outbox registry exposes assignment invalidation and evaluation request handlers, selected Rust configuration is lazy, and PRE coordination stays behind CHECKERS' public adapter root | Database-backed legacy/selected delivery and worker restart proofs remain pending |
 | New Submission selected-only boundary | `pytest -q backend/tests/test_submission_bundle_admission.py backend/tests/checkers/external/test_selected_post_submit.py backend/tests/test_artifact_architecture.py::test_checker_custody_ports_have_exact_owner_and_art_consumers`; focused Ruff | 59 passed; retained legacy and selected admission projections are mutually exclusive, and the TASK writer accepts only selected POST custody for a new immutable Submission | Native rollback proof for a retained unresolved legacy admission remains pending |
 | Obsolete catalogue removal | Focused lane/architecture/ownership suite; recursive collection of every modified surviving test module; Ruff, module-boundary inventory and stale-import scan | 84 focused tests passed and 94 surviving tests collected. Ten obsolete executable catalogue/runner targets, their private-edge debt and tests are absent; exact ownership metadata admits only the selected owners and those retirements. | The stacked branch still has separately tracked structural-debt growth from earlier P02/P10/P04 source, so the repository-wide structural-debt gate is not claimed by this deletion checkpoint. |
+| F-020 recovery | `python3 /tmp/p04_selected_runner.py <repo> /tmp/pilot04-f020-native6 600 tests/projects/guide_activation/test_postgresql.py::test_checker_registration_requires_corrected_approval_before_activation`; focused external-policy tests and Ruff | PostgreSQL 16 PASS 1 with schema 0037 and database/role/MinIO cleanup complete, plus 6 pure compiler tests. A real Operator registration does not clear the existing warning generation; correction observes the current registry projection, a linked successor approval binds the exact row/digest, the successor activates, and the old generation remains refused. Wrong stage, requirement, identity and registry digest substitutions fail closed. | This proves the activation recovery gate, not the combined intake-to-POST journey. |
 | Retained admission migration shape | `pytest -q backend/tests/test_submission_bundle_admission.py backend/tests/checkers/external/test_selected_pre_submit_coordination.py backend/tests/checkers/external/test_selected_preparation_command.py backend/tests/test_artifact_architecture.py::test_checker_materialization_contract_has_one_canonical_consumer_owner`; focused Ruff | 62 passed; selected rows require complete new custody while every new column stays null on retained legacy rows, avoiding fabricated backfill or historical hash rewrites | Successor SQL and direct retained/selected row controls remain pending |
 | Owner/caller trace | PROJECT approval/activation, ART preparation/admission, TASK composition and CHECKERS dispatch | Selected PRE uses durable reserve/lease/finalize roots around the genuine ART callback; a pass is consumed only by TASK's existing atomic Submission/evaluation reservation/outbox composition, while POST uses immutable Submission/ART custody | Final F-020 recovery, retained-history transition and combined native journey remain pending |
 | End-to-end replacement | Real PostgreSQL/MinIO/Rust public and worker journey | Not run | Implementation incomplete |
