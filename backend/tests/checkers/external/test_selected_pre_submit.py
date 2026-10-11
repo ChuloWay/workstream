@@ -49,6 +49,7 @@ from app.adapters.checkers import SelectedPreSubmitCheckerExecutionAdapter
 from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim
 from app.modules.artifacts.selected_pre_submit_admission import (
     bind_selected_pre_submit_admission,
+    build_selected_pre_submit_reservation,
 )
 from app.modules.artifacts.submission_manifest import SubmissionCanonicalPredecessor
 from app.modules.artifacts.submission_materialization import (
@@ -400,7 +401,27 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
     request, _inspector, manager, _preparation, _catalogue = await _request(tmp_path)
     policies = _policies()
     project_id = request.effective_plan.lineage.project_id
+    actor_profile_id = new_record_id()
+    identity_link_id = new_record_id()
+    assignment_id = new_record_id()
+    guide_id = new_record_id()
+    source_snapshot_id = new_record_id()
+    effective_policy_id = new_record_id()
+    pre_submit_policy_id = new_record_id()
+    predecessor = SubmissionCanonicalPredecessor(
+        submission_id=new_record_id(),
+        submission_version=1,
+        archive_sha256=request.prepared_artifact.commitment.sha256,
+        semantic_manifest_sha256=request.manifest.sha256,
+    )
     task = SimpleNamespace(
+        contributor_id=actor_profile_id,
+        task_id=request.task_id,
+        assignment_id=assignment_id,
+        predecessor=SimpleNamespace(
+            submission_id=predecessor.submission_id,
+            version=predecessor.submission_version,
+        ),
         locked_project_context=SimpleNamespace(project_id=project_id),
         locked_policy=SimpleNamespace(
             model_dump=lambda **_kwargs: {
@@ -411,6 +432,14 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
     )
     project = SimpleNamespace(
         project_id=project_id,
+        guide_id=guide_id,
+        guide_version="v1",
+        source_snapshot_id=source_snapshot_id,
+        source_snapshot_hash=SHA,
+        effective_policy_id=effective_policy_id,
+        effective_policy_hash=SHA,
+        pre_submit_policy_id=pre_submit_policy_id,
+        pre_submit_policy_bundle_hash=SHA,
         external_checker_policies=SimpleNamespace(
             value=json.dumps(
                 policies.model_dump(mode="json"),
@@ -418,12 +447,6 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
                 separators=(",", ":"),
             )
         ),
-    )
-    predecessor = SubmissionCanonicalPredecessor(
-        submission_id=new_record_id(),
-        submission_version=1,
-        archive_sha256=request.prepared_artifact.commitment.sha256,
-        semantic_manifest_sha256=request.manifest.sha256,
     )
     try:
         bound = bind_selected_pre_submit_admission(
@@ -441,6 +464,29 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
         assert bound.default_input.predecessor_rules_sha256 == "sha256:" + "d" * 64
         assert bound.default_input.current_rules_sha256 == bound.rules_sha256
         assert bound.policy.policy_sha256 == policies.pre_submit.policy_sha256
+        reservation = build_selected_pre_submit_reservation(
+            actor_profile_id=actor_profile_id,
+            identity_link_id=identity_link_id,
+            task=task,
+            project=project,
+            prepared_generation_id=request.prepared_artifact.generation_id,
+            attempt_id=new_record_id(),
+            attempt_request_digest=SHA,
+            commitment=request.prepared_artifact.commitment,
+            manifest=request.manifest,
+            packet=request.packet,
+            selected=bound,
+            storage_scheme="s3",
+            execution_budget_ms=120_000,
+        )
+        assert reservation.admission_lineage is not None
+        assert reservation.admission_lineage.semantic_manifest_body == (
+            request.manifest.as_dict()
+        )
+        assert reservation.admission_lineage.packet_sha256 == request.packet.sha256
+        assert reservation.admission_lineage.predecessor_submission_id == (
+            predecessor.submission_id
+        )
     finally:
         await request.prepared_artifact.close()
         manager.close()

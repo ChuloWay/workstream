@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.sources import ArtifactCommitment
+from app.modules.artifacts.pre_submit_evidence import semantic_manifest_identity
 from app.modules.artifacts.submission_manifest import (
     SubmissionCanonicalPredecessor,
     SubmissionChangeGateResult,
@@ -13,8 +15,10 @@ from app.modules.artifacts.submission_manifest import (
     bind_submission_change,
 )
 from app.modules.checkers.api.default_checker import (
+    WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
     WorkstreamDefaultCheckerInput,
     WorkstreamDefaultPredecessor,
+    workstream_default_input_body,
 )
 from app.modules.checkers.api.external_policy import (
     LockedExternalCheckerPolicies,
@@ -22,6 +26,10 @@ from app.modules.checkers.api.external_policy import (
 )
 from app.modules.checkers.api.materialization import SubmissionMaterialEntry
 from app.modules.checkers.api.pre_submit import SubmissionPacketView
+from app.modules.checkers.api.selected_pre_submit import (
+    SelectedPreSubmitAdmissionLineage,
+    SelectedPreSubmitReservationFacts,
+)
 from app.modules.projects.api import ProjectLockedPolicyContextFacts
 from app.modules.tasks.api import TaskSubmissionContextFacts
 
@@ -34,6 +42,102 @@ class SelectedPreSubmitAdmissionContext:
     default_input: WorkstreamDefaultCheckerInput
     change_gate: SubmissionChangeGateResult
     rules_sha256: str
+
+
+def build_selected_pre_submit_reservation(
+    *,
+    actor_profile_id: UUID,
+    identity_link_id: UUID,
+    task: TaskSubmissionContextFacts,
+    project: ProjectLockedPolicyContextFacts,
+    prepared_generation_id: UUID,
+    attempt_id: UUID,
+    attempt_request_digest: str,
+    commitment: ArtifactCommitment,
+    manifest: SubmissionManifest,
+    packet: SubmissionPacketView,
+    selected: SelectedPreSubmitAdmissionContext,
+    storage_scheme: str,
+    execution_budget_ms: int,
+) -> SelectedPreSubmitReservationFacts:
+    """Bind all later ART-admission facts into the selected durable request."""
+    if (
+        task.contributor_id != actor_profile_id
+        or task.locked_project_context.project_id != project.project_id
+        or selected.policy.policy_sha256
+        != canonical_json_hash(
+            selected.policy.model_dump(mode="json", exclude={"policy_sha256"})
+        )
+    ):
+        raise ValueError("selected PRE reservation context differs")
+    predecessor = task.predecessor
+    locked_guide_sha256 = canonical_json_hash(
+        {
+            "domain": "workstream.locked_task_guide.v1",
+            "project_id": str(project.project_id),
+            "guide_id": str(project.guide_id),
+            "guide_version": project.guide_version,
+            "source_snapshot_id": str(project.source_snapshot_id),
+            "source_snapshot_sha256": project.source_snapshot_hash,
+        }
+    )
+    locked_policy_context_hash = canonical_json_hash(
+        {
+            "guide_id": str(project.guide_id),
+            "guide_version": project.guide_version,
+            "source_snapshot_id": str(project.source_snapshot_id),
+            "source_snapshot_sha256": project.source_snapshot_hash,
+            "locked_guide_sha256": locked_guide_sha256,
+            "effective_policy_id": str(project.effective_policy_id),
+            "locked_artifact_policy_sha256": project.effective_policy_hash,
+            "pre_submit_policy_id": str(project.pre_submit_policy_id),
+            "locked_checker_policy_sha256": project.pre_submit_policy_bundle_hash,
+            "effective_plan_sha256": selected.policy.policy_sha256,
+        }
+    )
+    lineage = SelectedPreSubmitAdmissionLineage(
+        predecessor_submission_id=(
+            predecessor.submission_id if predecessor is not None else None
+        ),
+        predecessor_submission_version=(
+            predecessor.version if predecessor is not None else None
+        ),
+        guide_id=project.guide_id,
+        guide_version=project.guide_version,
+        source_snapshot_id=project.source_snapshot_id,
+        source_snapshot_sha256=project.source_snapshot_hash,
+        locked_guide_sha256=locked_guide_sha256,
+        effective_policy_id=project.effective_policy_id,
+        effective_policy_sha256=project.effective_policy_hash,
+        pre_submit_policy_id=project.pre_submit_policy_id,
+        pre_submit_policy_sha256=project.pre_submit_policy_bundle_hash,
+        effective_plan_sha256=selected.policy.policy_sha256,
+        locked_policy_context_hash=locked_policy_context_hash,
+        semantic_manifest_id=semantic_manifest_identity(manifest.sha256),
+        semantic_manifest_body=manifest.as_dict(),
+        packet_sha256=packet.sha256,
+        storage_scheme=storage_scheme,
+    )
+    return SelectedPreSubmitReservationFacts(
+        actor_profile_id=actor_profile_id,
+        identity_link_id=identity_link_id,
+        project_id=project.project_id,
+        task_id=task.task_id,
+        assignment_id=task.assignment_id,
+        attempt_id=attempt_id,
+        attempt_request_digest=attempt_request_digest,
+        prepared_generation_id=prepared_generation_id,
+        policy_sha256=selected.policy.policy_sha256,
+        default_behavior_sha256=WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+        default_input_sha256=canonical_json_hash(
+            workstream_default_input_body(selected.default_input)
+        ),
+        archive_sha256=commitment.sha256,
+        archive_byte_count=commitment.byte_count,
+        semantic_manifest_sha256=manifest.sha256,
+        execution_budget_ms=execution_budget_ms,
+        admission_lineage=lineage,
+    )
 
 
 def bind_selected_pre_submit_admission(
@@ -109,4 +213,8 @@ def bind_selected_pre_submit_admission(
     )
 
 
-__all__ = ("SelectedPreSubmitAdmissionContext", "bind_selected_pre_submit_admission")
+__all__ = (
+    "SelectedPreSubmitAdmissionContext",
+    "bind_selected_pre_submit_admission",
+    "build_selected_pre_submit_reservation",
+)
