@@ -27,6 +27,7 @@ LANES = (
     "project_lifecycle_a",
     "project_lifecycle_b",
     "project_lifecycle_c",
+    "project_lifecycle_d",
     "task_lifecycle_a",
     "task_lifecycle_b",
     "task_lifecycle_c",
@@ -193,6 +194,10 @@ def test_rejects_wrong_head_and_noncanonical_manifest(tmp_path: Path) -> None:
         ),
         (lambda evidence: evidence["completed_nodes"].clear(), "partial_or_duplicate_completion"),
         (
+            lambda evidence: evidence["completed_nodes"].append(evidence["completed_nodes"][0]),
+            "partial_or_duplicate_completion",
+        ),
+        (
             lambda evidence: evidence["skipped_nodes"].append(evidence["collected_nodes"][0]),
             "unexpected_skipped",
         ),
@@ -202,9 +207,10 @@ def test_rejects_wrong_head_and_noncanonical_manifest(tmp_path: Path) -> None:
         ),
     ],
 )
-def test_rejects_node_custody_failures(tmp_path: Path, mutation, message: str) -> None:
+@pytest.mark.parametrize("lane_name", ["shared_foundations_a", "project_lifecycle_d"])
+def test_rejects_node_custody_failures(tmp_path: Path, mutation, message: str, lane_name: str) -> None:
     metadata, summary_path, summary = _bundle(tmp_path)
-    lane = summary["lanes"][0]
+    lane = next(row for row in summary["lanes"] if row["name"] == lane_name)
     evidence_path = metadata / lane["evidence_file"]
     evidence = json.loads(evidence_path.read_text())
     mutation(evidence)
@@ -226,11 +232,12 @@ def test_rejects_node_custody_failures(tmp_path: Path, mutation, message: str) -
         ("interrupted", True, "lane_interrupted"),
     ],
 )
+@pytest.mark.parametrize("lane_name", ["shared_foundations_a", "project_lifecycle_d"])
 def test_rejects_failed_or_partial_lane(
-    tmp_path: Path, field: str, value: object, message: str
+    tmp_path: Path, field: str, value: object, message: str, lane_name: str
 ) -> None:
     metadata, summary_path, summary = _bundle(tmp_path)
-    summary["lanes"][0][field] = value
+    next(row for row in summary["lanes"] if row["name"] == lane_name)[field] = value
     _write(summary_path, summary)
     with pytest.raises(validator.EvidenceError, match=message):
         validator.validate_evidence(metadata, summary_path, tmp_path)
@@ -253,7 +260,7 @@ def test_rejects_digest_tampering_and_unsafe_paths(tmp_path: Path) -> None:
 
 def test_rejects_wrong_lane_count_zero_nodes_and_unknown_keys(tmp_path: Path) -> None:
     metadata, summary_path, summary = _bundle(tmp_path)
-    summary["lanes"].pop()
+    summary["lanes"] = [row for row in summary["lanes"] if row["name"] != "project_lifecycle_d"]
     _write(summary_path, summary)
     with pytest.raises(validator.EvidenceError, match="invalid_lane_count"):
         validator.validate_evidence(metadata, summary_path, tmp_path)

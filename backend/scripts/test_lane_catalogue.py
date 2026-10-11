@@ -9,6 +9,7 @@ PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_a",
     "project_lifecycle_b",
     "project_lifecycle_c",
+    "project_lifecycle_d",
 )
 PARTITIONED_PROJECT_AC_LANES = ("project_lifecycle_a", "project_lifecycle_c")
 PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b", "task_lifecycle_c")
@@ -72,6 +73,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_artifact_internal_authorization.py",
     "tests/test_artifact_cleanup_wiring.py",
     "tests/test_checker_materialization.py",
+    "tests/tasks/evaluation_delivery/test_worker_materialization.py",
     "tests/test_artifact_preparation.py",
     "tests/test_artifact_store_conformance.py",
     "tests/test_artifact_verification.py",
@@ -502,6 +504,7 @@ TASK_MODULES = (
     "tests/test_checker_catalogue.py",
     "tests/test_checkers.py",
     "tests/checkers/test_effective_intake_rules.py",
+    "tests/test_blocked_pre_submit_feedback_postgresql.py",
     "tests/test_default_pre_submit_execution.py",
     "tests/test_approved_guide_intake.py",
     "tests/test_pre_submit_attempt_recovery.py",
