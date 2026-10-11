@@ -22,7 +22,7 @@ from app.modules.authorization.domain.audit import (
 from app.modules.authorization.domain.contribution_policies import ContributionPolicyReadResourceContext, ContributionPolicyMutationResourceContext
 from app.modules.authorization.domain.adapter_bindings import AdapterBindingMutationResourceContext, AdapterBindingReadResourceContext
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
-from app.modules.authorization.domain import checker_registry, task_authority, task_queues, submission_history
+from app.modules.authorization.domain import checker_registry, task_authority, task_queues, submission_history, contribution_reads
 from app.modules.authorization.domain.guide_mutations import (
     ProjectGuideMutationResourceContext, ProjectGuideMutationPrepareDenialResourceContext,
     ProjectGuideSourceSnapshotMutationResourceContext, validate_policy_mutation_identity,
@@ -1143,7 +1143,7 @@ class PreSubmitCheckerInputResourceContext(PreSubmitCheckerInputPreparationConte
 
 
 AuthorizationResourceContext = (
-    ReviewLifecycleActivationContract |
+    ReviewLifecycleActivationContract | contribution_reads.ContributionSelfReadResourceContext | contribution_reads.ContributionProjectReadResourceContext |
     submission_history.HistoryReadResourceContext | task_queues.QueueReadResourceContext | task_authority.TaskAuthorityResourceContext | ActorSelfResourceContext
     | ProjectReadResourceContext | ProjectDiagnosticReadResourceContext
     | ProjectPolicyReadResourceContext

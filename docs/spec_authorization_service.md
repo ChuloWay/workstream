@@ -100,11 +100,25 @@ Legacy typed workflow-profile IDs are unrelated and never promoted.
 | `access_administrator` | system | Actor, identity-link, and administrative-grant administration. It does not edit the closed permission/action catalog or action availability. |
 | `operator` | system | Runtime inspection and explicit recovery operations against canonically resolved resources. |
 | `project_manager` | system or exact covered project | Project, task, guide/setup, submission/checker, review, and revision configuration plus contributor grants. It cannot mutate contribution policy or compensation-adapter bindings. System scope covers all projects but remains resource- and lifecycle-guarded; exact-project scope covers only that project. |
-| `finance_authority` | system or exact covered project | Contribution policy, compensation-adapter binding, and fulfillment observation owned by WS-CON. |
+| `finance_authority` | system or exact covered project | Contribution policy, compensation-adapter binding, and fulfillment observation owned by WS-CON. Contribution evidence export separately requires an exact-project grant; system-only Finance authority does not qualify. |
 | `audit_authority` | system or exact covered project | Read-only evidence access and authorized export. |
 
 Administrative grants do not imply contributor capability. An administrator
 cannot submit or review by administrative role alone.
+
+PILOT-10 activates the exact `contribution.read_self` and
+`contribution.read_project` actions against their existing same-named
+permissions. Self reads require the freshly locked active human and exact own
+actor resource. Project reads permit a covering Project Manager grant (system
+or exact project), or an exact-project Finance Authority grant. Operator,
+Audit Authority, Access Administrator and services do not obtain project
+contribution disclosure through other permission candidates. The kernel locks
+actor, matching grant and selected Project in that order; response composition
+keeps those locks through complete serialization and audit commit. Both actions
+retain a digest of the exact caller/project/filters/format, without exported
+facts or labels in audit. Missing or ungranted Project selectors are absent
+from audit target evidence. See the
+[bounded CON read contract](spec_contribution_compensation.md#bounded-contribution-evidence-reads).
 
 ### Project Contributor Grants
 
