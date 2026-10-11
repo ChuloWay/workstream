@@ -374,9 +374,33 @@ The additive ownership union preserves all 480 targets and the original
 protected base. Only the selected MCP authorization-context capture is updated
 to this exact source; all nine retained selected contract fragments are checked.
 These predecessor/schema controls do not prove the public bulk transaction.
-The retained 14-case bulk suite, including actual 200/500-member journeys,
-rollback, fresh-authority replay, observed PostgreSQL waits and direct-SQL
-refusals, is the next installed-schema proof and remains unexecuted here.
+The composed `370edbd87` native attempt failed before bulk admission: all 14
+cases reached source upload's genuine scratch free-space floor. The isolated
+database, role and MinIO namespace were cleaned up. A separate initial MinIO
+storage-floor refusal is also retained. The owned replacement MinIO uses bounded
+tmpfs; pytest scratch now lives in owned `/dev/shm` with sufficient physical free
+space. ART's 512MiB reservation and 512MiB minimum floor remain unchanged.
+
+The two-row discriminator then proved actual late second-stage rollback, but
+legitimate SCREEN failed at commit. Its original SQL exception was the 0035
+custody check: the validator equated SCREEN's consumed pre-write context hash
+with its post-write receipt hash. The sole migration author supplied `f6b53ea1`,
+preserving RELEASE equality and exact pre-state binding. Its protected setup
+refusal measured fingerprint `b280e4e561f83740799a4fe29c43ba73145262d05d663d4bf7e7439cbdf7189a`;
+sole-author `fc1794b8` records that measurement. All these runs cleaned up their
+database, role and MinIO namespaces.
+
+Further source review found that digest-shape plus event/decision equality did
+not cryptographically bind the actual lifecycle manager facts in SQL. Sole-author
+`af2bdc2d` adds the exact canonical hash of the null-stripped manager resource
+context against the consumed decision. Its changed function body requires a new
+measured schema fingerprint. The existing native incomplete-custody control now
+also alters a digest-shaped initial lifecycle pre-write hash while retaining the
+genuine decision and event digest. It must refuse commit and roll back all staged
+effects. This is an additive test-only admission control; no production or gate
+owner changes. The 15-case suite retains the actual 200/500 journeys, currentness,
+fresh authority, observed PostgreSQL waits and immutable SQL controls. Native
+public bulk success, those timings and readiness remain pending.
 
 - Current-source reconciliation: Preserve the atomic owner's import/status and
   source custody; shared-file regions require handoff before edits.

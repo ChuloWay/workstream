@@ -303,7 +303,7 @@ async def test_sql_cannot_attach_old_standalone_successes_to_a_new_aggregate(imp
     assert await _success_facts(project) == before
 
 
-@pytest.mark.parametrize("corruption", ["missing_member", "pending_root"])
+@pytest.mark.parametrize("corruption", ["missing_member", "pending_root", "authority_facts_digest"])
 async def test_native_commit_refuses_incomplete_aggregate_after_real_canonical_stages(
     import_source_client, corruption,
 ):
@@ -324,13 +324,27 @@ async def test_native_commit_refuses_incomplete_aggregate_after_real_canonical_s
                     # mask missing complete-member commit closure.
                     session.expunge(row)
                     changed = True
-        else:
+        elif corruption == "pending_root":
             for row in list(session.dirty):
                 if isinstance(row, TaskBatchTransitionReceipt) and row.status == "committed":
                     # Preserve the valid pending declaration without writing an
                     # invalid state shape. Deferred closure must reject commit.
                     session.expire(row)
                     changed = True
+        else:
+            for row in list(session.new):
+                if isinstance(row, AuditEvent) and row.event_type == "TaskScreened":
+                    # A digest-shaped altered pre-write fact must not borrow the
+                    # genuine consumed decision's unchanged resource digest.
+                    payload = dict(row.event_payload)
+                    facts = dict(payload["manager_authority_facts"])
+                    original_hash = facts["locked_context_hash"]
+                    facts["locked_context_hash"] = "sha256:" + "0" * 64
+                    assert facts["locked_context_hash"] != original_hash
+                    payload["manager_authority_facts"] = facts
+                    row.event_payload = payload
+                    changed = True
+                    break
 
     event.listen(Session, "before_flush", corrupt_before_flush)
     try:
