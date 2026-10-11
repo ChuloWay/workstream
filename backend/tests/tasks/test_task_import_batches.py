@@ -239,8 +239,9 @@ async def test_matching_metadata_label_never_adds_native_membership(import_sourc
     assert await _counts(project) == (1, 1, 1, 2, 2, 2)
 
 
-async def test_ungranted_actor_cannot_replay_or_read_committed_batch(import_source_client, monkeypatch):
-    """A role claim never grants current source or immutable batch authority."""
+@pytest.mark.parametrize("authority", ["ungranted_actor", "revoked_original"])
+async def test_missing_current_authority_cannot_replay_or_read_committed_batch(import_source_client, monkeypatch, authority):
+    """Original receipts and claimed roles cannot replace current covered authority."""
     client = import_source_client
     project = await _project(client)
     source = await _verified_source(client, project, document())
@@ -248,7 +249,22 @@ async def test_ungranted_actor_cannot_replay_or_read_committed_batch(import_sour
     imported = await client.post(_batch_path(project), headers=headers, json={"source_id": source["source_id"]})
     assert imported.status_code == 201, imported.text
     before = await _counts(project)
-    set_dev_actor(monkeypatch, roles="project_manager", subject="ungranted-batch-manager")
+    if authority == "ungranted_actor":
+        set_dev_actor(monkeypatch, roles="project_manager", subject="ungranted-batch-manager")
+    else:
+        from app.modules.authorization.models import AdminRoleGrant
+        from tests.authorization.guide_activation.pg_support import revoke_manager_grant
+        from tests.authorization.task_authority.test_concurrency import actor_context
+        async with db_session.get_session_factory()() as session:
+            parent = await session.get(ArtifactTaskImportSource, source["source_id"])
+            grant = (await session.scalars(select(AdminRoleGrant).where(
+                AdminRoleGrant.target_actor_profile_id == parent.actor_profile_id,
+                AdminRoleGrant.role == "project_manager", AdminRoleGrant.status == "active",
+            ))).one()
+            grant_id, administrator_id = grant.id, grant.granted_by_actor_profile_id
+        administrator = await actor_context(administrator_id)
+        async with db_session.get_session_factory()() as session, session.begin():
+            await revoke_manager_grant(session, administrator, grant_id)
     captured = []
     restage = PreparedTaskImportSourceAuthorization.restage_denial
 
@@ -329,6 +345,235 @@ async def test_two_import_roots_wait_on_actual_file_custody_then_recover_one_bat
             if pending is not None and not pending.done():
                 pending.cancel()
         await asyncio.gather(*(pending for pending in (first, second) if pending is not None), return_exceptions=True)
+
+
+async def test_distinct_covered_actors_with_reversed_ids_wait_then_roll_back_one_import(import_source_client, monkeypatch):
+    """Sorted unique-key writes avoid crossed waits between independently covered actors."""
+    from uuid import UUID
+    from app.adapters.artifacts import task_import_source_commands
+    from app.adapters.audit import task_transition_audit
+    from app.adapters.tasks import task_import_batch_commands
+    from app.core.config import get_settings
+    from app.modules.authorization.task_authorization import PreparedTaskAuthorization
+    from app.modules.tasks.schemas import TaskImportBatchResponse
+    from app.modules.tasks.task_import_batches import TaskImportBatchError
+    from tests.authorization.task_authority.test_concurrency import actor_context
+    from tests.project_create_fixtures import grant_system_project_manager
+
+    client = import_source_client
+    project = await _project(client)
+    value = document(2)
+    source = await _verified_source(client, project, value)
+    async with db_session.get_session_factory()() as session:
+        original_source = await session.get(ArtifactTaskImportSource, source["source_id"])
+        first_context = await actor_context(original_source.actor_profile_id)
+    set_dev_actor(monkeypatch, roles="project_manager", subject="second-covered-importer")
+    admitted = await client.get("/api/v1/actors/me", headers=auth_headers())
+    assert admitted.status_code == 200, admitted.text
+    async with db_session.get_session_factory()() as session, session.begin():
+        link, _ = await grant_system_project_manager(session, issuer="flow-test", subject="second-covered-importer")
+        second_actor = link.actor_profile_id
+    second_context = await actor_context(second_actor)
+    value["tasks"].reverse()
+    alternate = await _verified_source(client, project, value)
+    first_written, second_entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    pids, first_calls, second_calls = {}, 0, 0
+    original = AuthorizedTaskCommands.stage_creation
+
+    async def gate(commands, *args, **kwargs):
+        nonlocal first_calls, second_calls
+        actor = commands._actor_id
+        if actor == first_context.actor_profile_id:
+            first_calls += 1
+            if first_calls == 1:
+                pids["first"] = await commands._session.scalar(select(func.pg_backend_pid()))
+        else:
+            second_calls += 1
+            if second_calls == 1:
+                pids["second"] = await commands._session.scalar(select(func.pg_backend_pid()))
+                second_entered.set()
+        result = await original(commands, *args, **kwargs)
+        if actor == first_context.actor_profile_id and first_calls == 1:
+            first_written.set()
+            await asyncio.wait_for(release.wait(), timeout=30)
+        return result
+
+    async def run(context, selected_source):
+        async with db_session.get_session_factory()() as session:
+            commands = task_import_batch_commands(
+                session, authorization=PreparedTaskAuthorization(session, context), audit=task_transition_audit(session),
+                actor_profile_id=context.actor_profile_id, identity_link_id=context.identity_link_id, settings=get_settings(),
+                source=task_import_source_commands(session, settings=get_settings(), context=context),
+            )
+            return await commands.import_source(UUID(project), UUID(selected_source), idempotency_key=uuid4())
+
+    monkeypatch.setattr(AuthorizedTaskCommands, "stage_creation", gate)
+    first = asyncio.create_task(run(first_context, source["source_id"]))
+    second = None
+    try:
+        await asyncio.wait_for(first_written.wait(), timeout=30)
+        second = asyncio.create_task(run(second_context, alternate["source_id"]))
+        await asyncio.wait_for(second_entered.wait(), timeout=30)
+        deadline = asyncio.get_running_loop().time() + 10
+        async with db_session.get_session_factory()() as observer:
+            while True:
+                blocked = await observer.scalar(text("select :holder = any(pg_blocking_pids(:waiter))"),
+                                                {"holder": pids["first"], "waiter": pids["second"]})
+                if blocked:
+                    break
+                assert asyncio.get_running_loop().time() < deadline, "competing sorted uniqueness write never waited"
+                await asyncio.sleep(0.05)
+        release.set()
+        outcomes = await asyncio.wait_for(asyncio.gather(first, second, return_exceptions=True), timeout=30)
+        assert isinstance(outcomes[0], TaskImportBatchResponse), outcomes
+        assert isinstance(outcomes[1], TaskImportBatchError) and outcomes[1].code == "task_import_external_id_conflict", outcomes
+        assert await _counts(project) == (1, 2, 1, 2, 2, 2)
+    finally:
+        release.set()
+        for pending in (first, second):
+            if pending is not None and not pending.done():
+                pending.cancel()
+        await asyncio.gather(*(pending for pending in (first, second) if pending is not None), return_exceptions=True)
+
+
+async def test_normal_create_takes_common_authority_before_competing_external_id(import_source_client, monkeypatch):
+    """Normal create waits on the import's AUTH custody before touching uniqueness."""
+    from uuid import UUID
+    from app.adapters.audit import task_transition_audit
+    from app.adapters.tasks import task_commands
+    from app.core.config import get_settings
+    from app.modules.authorization.task_authorization import PreparedTaskAuthorization
+    from app.modules.tasks.command_replay import TaskReplayConflict
+    from app.modules.tasks.schemas import TaskCreate
+    from tests.authorization.task_authority.test_concurrency import actor_context
+
+    client = import_source_client
+    project = await _project(client)
+    source = await _verified_source(client, project, document(2))
+    async with db_session.get_session_factory()() as session:
+        parent = await session.get(ArtifactTaskImportSource, source["source_id"])
+        context = await actor_context(parent.actor_profile_id)
+    held, entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    pids = {}
+    stage, authorize = TaskImportBatchCommands._stage_rows, AuthorizedTaskCommands.authorize_creation
+
+    async def hold_import(commands, *args, **kwargs):
+        result = await stage(commands, *args, **kwargs)
+        pids["holder"] = await commands._session.scalar(select(func.pg_backend_pid()))
+        held.set()
+        await asyncio.wait_for(release.wait(), timeout=30)
+        return result
+
+    async def observe_manual(commands, prepared):
+        if json.loads(prepared.payload_json)["source_type"] == "manual":
+            pids["waiter"] = await commands._session.scalar(select(func.pg_backend_pid()))
+            entered.set()
+        return await authorize(commands, prepared)
+
+    async def manual_create():
+        async with db_session.get_session_factory()() as session:
+            commands = task_commands(session, authorization=PreparedTaskAuthorization(session, context),
+                                     audit=task_transition_audit(session), actor_profile_id=context.actor_profile_id,
+                                     settings=get_settings())
+            return await commands.create_task(UUID(project), TaskCreate(**(complete_task_payload() | {
+                "external_task_id": "source-0",
+            })), idempotency_key=uuid4())
+
+    monkeypatch.setattr(TaskImportBatchCommands, "_stage_rows", hold_import)
+    monkeypatch.setattr(AuthorizedTaskCommands, "authorize_creation", observe_manual)
+    first = asyncio.create_task(client.post(_batch_path(project), headers=auth_headers(), json={"source_id": source["source_id"]}))
+    second = None
+    try:
+        await asyncio.wait_for(held.wait(), timeout=30)
+        second = asyncio.create_task(manual_create())
+        await asyncio.wait_for(entered.wait(), timeout=30)
+        deadline = asyncio.get_running_loop().time() + 10
+        async with db_session.get_session_factory()() as observer:
+            while True:
+                blocked = await observer.scalar(text("select :holder = any(pg_blocking_pids(:waiter))"), pids)
+                if blocked:
+                    break
+                assert asyncio.get_running_loop().time() < deadline, "normal CREATE never waited on the import authority holder"
+                await asyncio.sleep(0.05)
+        release.set()
+        outcomes = await asyncio.wait_for(asyncio.gather(first, second, return_exceptions=True), timeout=30)
+        assert outcomes[0].status_code == 201, outcomes[0].text
+        assert isinstance(outcomes[1], TaskReplayConflict) and outcomes[1].code == "external_task_id_conflict", outcomes
+        assert await _counts(project) == (1, 2, 1, 2, 2, 2)
+    finally:
+        release.set()
+        for pending in (first, second):
+            if pending is not None and not pending.done():
+                pending.cancel()
+        await asyncio.gather(*(pending for pending in (first, second) if pending is not None), return_exceptions=True)
+
+
+@pytest.mark.parametrize("substitution", ["foreign_verification", "foreign_task", "pending_header"])
+async def test_native_commit_refuses_partial_or_foreign_custody(import_source_client, monkeypatch, substitution):
+    """Native closure rejects corruption after genuine ART and CREATE validation."""
+    client = import_source_client
+    project = await _project(client)
+    value = document(2)
+    source = await _verified_source(client, project, value)
+    foreign_receipt, foreign_task = None, None
+    if substitution == "foreign_verification":
+        alternate = await _verified_source(client, project, value)
+        from app.modules.artifacts.models import ArtifactPutAttempt, ArtifactVerificationJob, ArtifactVerificationReceipt
+        async with db_session.get_session_factory()() as session:
+            foreign_receipt = await session.scalar(select(ArtifactVerificationReceipt.id).join(
+                ArtifactVerificationJob, ArtifactVerificationJob.id == ArtifactVerificationReceipt.verification_job_id,
+            ).join(ArtifactPutAttempt, ArtifactPutAttempt.id == ArtifactVerificationJob.originating_put_attempt_id).where(
+                ArtifactPutAttempt.task_import_source_id == alternate["source_id"],
+            ).order_by(ArtifactVerificationReceipt.created_at.desc()).limit(1))
+        assert foreign_receipt is not None
+    elif substitution == "foreign_task":
+        created = await client.post(f"/api/v1/projects/{project}/tasks", headers=auth_headers(), json=complete_task_payload())
+        assert created.status_code == 201, created.text
+        foreign_task = created.json()["id"]
+    before = await _counts(project)
+    original = TaskImportBatchCommands._stage_rows
+
+    async def corrupt(commands, batch, parsed, prepared):
+        result = await original(commands, batch, parsed, prepared)
+        if substitution == "foreign_task":
+            # Corrupt the final, not-yet-flushed member INSERT so an existing
+            # append-only UPDATE guard cannot mask a missing initial binding.
+            members = [row for row in commands._session.new if isinstance(row, TaskImportBatchMember)]
+            assert len(members) == 1
+            members[0].task_id = foreign_task
+        return result
+
+    monkeypatch.setattr(TaskImportBatchCommands, "_stage_rows", corrupt)
+    if substitution == "foreign_verification":
+        from app.modules.tasks import task_import_batches as owner
+        stage_binding = owner._stage_binding
+
+        def corrupt_header(row, binding):
+            stage_binding(row, binding)
+            if isinstance(row, TaskImportBatch):
+                row.verification_receipt_id = str(foreign_receipt)
+
+        monkeypatch.setattr(owner, "_stage_binding", corrupt_header)
+    elif substitution == "pending_header":
+        from sqlalchemy import event
+        from sqlalchemy.orm import Session
+
+        def retain_pending(session, flush_context, instances):
+            for row in list(session.dirty):
+                if isinstance(row, TaskImportBatch):
+                    # Discard completion entirely. No invalid header UPDATE or
+                    # CHECK can mask the missing deferred reservation closure.
+                    session.expire(row)
+
+        event.listen(Session, "before_flush", retain_pending)
+    try:
+        rejected = await client.post(_batch_path(project), headers=auth_headers(), json={"source_id": source["source_id"]})
+        assert rejected.status_code == 503, rejected.text
+        assert rejected.json()["error"]["retryable"] is True
+        assert await _counts(project) == before
+    finally:
+        if substitution == "pending_header":
+            event.remove(Session, "before_flush", retain_pending)
 
 
 @pytest.mark.parametrize("table", ["task_import_batches", "task_import_batch_members", "task_import_batch_command_receipts"])
