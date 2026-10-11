@@ -89,6 +89,16 @@ Their current root transaction prevents composition across a complete batch.
   is scoped to the three-minute writes; the shared twenty-second HTTP fixture
   stays unchanged. Workflow registration is coordinated separately with the
   lead before final freeze; no native test is skipped or silently omitted.
+- Exact workflow hunks are `.github/workflows/cli.yml` and the CLI caller in
+  `.github/workflows/backend.yml`: require the existing source-pinned MinIO
+  producer artifact through its job output, bind its SHA/attempt name, verify its
+  checksum and start/clean up one actual provider. Add Go tests to existing
+  verify/build commands. Retain the old 240-second integration run while moving
+  only `test_task_batch_public_api.py` into a separate 240-second isolated run.
+  Every test stays selected once, the fifteen-minute job cap and aggregate
+  required CLI result remain unchanged, and no skips or fallback providers are
+  introduced. Preserve the separate PILOT-10 export-native partition at union.
+  CI integrity review remains required before readiness.
 - Native participant lifetime/composition proof is owned in
   `backend/tests/authorization/task_authority/test_management_participants.py`;
   it extends the existing management proof using actual PostgreSQL and AUTH.
@@ -388,6 +398,15 @@ verified source and DRAFT import succeed in a bare project, but SCREEN must fail
 with the canonical prerequisite error and no successful Task, aggregate, receipt,
 lifecycle or authorization effects. The added equivalent-source and prerequisite
 controls are written but not yet executed at this repair checkpoint.
+
+Exact clean `56b15ba0b5d7666247e35f05981eb16a5a2ea47f` passed Go test/build/vet
+and nine affected controlled HTTP cases in 6.53 seconds. Actual socket recovery
+passed in 23.83 seconds: two distinct verified sources with equal bytes recover
+the original batch/source/ordered rows under a new key, while the original key
+with a changed source conflicts without duplicated effects. The genuine missing
+active-guide SCREEN refusal passed in 16.37 seconds with zero success effects.
+Both isolated native runs used installed 0035 and completed database, role and
+MinIO cleanup. These focused proofs do not claim final full-suite or hosted CI.
 
 Inspection at atomic checkpoint `4a6d00fc8` identifies the reusable canonical
 SCREEN/RELEASE root and the native `TaskImportBatchMember` custody. This branch

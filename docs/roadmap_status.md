@@ -388,8 +388,10 @@ cannot be reused as post-submission review-gate evidence. See the
   Installed sole-author DDL proves public PostgreSQL/MinIO 200/500-member
   import-screen-release journeys and fresh replay in the recorded candidate.
   Qualified native negative controls cover rollback, native waits, revocation
-  and immutable custody. Complete final-head proof, native CLI composition and
-  required review/CI remain pending. Issue 489 stays open.
+  and immutable custody. The recorded built-CLI 200-row socket journey and
+  equivalent verified-source recovery also pass against actual PostgreSQL and
+  MinIO. Complete final-head proof and required review/CI remain pending.
+  Issue 489 stays open.
   [CLI manager task browsing](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-04.md)
   adds one-page task discovery and exact task detail through existing manager
   reads, with server-owned live authority and opaque continuation.
