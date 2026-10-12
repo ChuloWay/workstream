@@ -1258,3 +1258,21 @@ lead/independent test-delta review, focused pure registry controls and canonical
 isolated native retry/takeover, byte-failure, storage and later-Submission replay
 cases with exact heads and complete DB/role/MinIO cleanup. No current failure
 boundary, assertion, cap or test selection is removed to obtain a pass.
+
+### Hosted PROJECT fixture reconciliation
+
+Allowed scope is limited to current external-policy PROJECT test fixtures and
+their assertions: `tests/projects/guide_compilation/test_capability_growth.py`,
+`test_capability_growth_postgresql.py`, `test_compilation_storage_limit.py`,
+`test_live_worker.py`, `test_context_builder.py`,
+`proposals/test_postgresql.py`, the active-guide read fixtures and activation
+tests, and the matching assertions in `tests/test_projects.py`. The batch may
+update current registered capability projections, strict worker error fakes,
+current proposal fields and current compiler identifiers. It must not restore a
+built-in checker catalogue, legacy decoder, execution fallback, migration or
+product compatibility path. The bounded production repair may update only
+`app/modules/projects/authorization_reads.py`, `service.py`,
+`guide_compilation/approval_custody.py`, and `api/locked_policy.py` to require
+the sole current external pre/post policy schemas and their self-excluding
+digests. It removes generic canonical-hash and old-plan fallbacks without
+rewriting retained rows.

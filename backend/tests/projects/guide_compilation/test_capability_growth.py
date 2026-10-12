@@ -97,7 +97,7 @@ def growth_report(*, gaps=True):
             "findings": (
                 CompilationFinding(
                     severity="warning" if gaps else "info",
-                    code="catalogue.coverage",
+                    code="external_checker.coverage",
                     message="Required automation is unavailable."
                     if gaps
                     else "All checks are supported.",
@@ -199,17 +199,10 @@ def test_non_automated_requirements_need_no_suggestion(disposition):
 @pytest.mark.parametrize(
     "fault", ["missing", "duplicate", "unknown", "stale", "stage", "configuration"]
 )
-def test_blocked_matches_still_require_exact_catalogue_validation(stage, fault):
+def test_blocked_matches_still_require_exact_external_capability_validation(stage, fault):
     report = growth_report()
     field = f"{stage}_bindings"
     binding = getattr(report, field)[0]
-    if fault == "configuration" and stage == "pre_submit":
-        payload = binding.model_dump(mode="json") | {
-            "parameters": [{"name": "invented", "value": 1}]
-        }
-        with pytest.raises(ValidationError, match="parameters"):
-            PreSubmissionBindingProposal.model_validate(payload)
-        return
     updates = {
         "unknown": {"capability_id": "invented"},
         "stale": {"capability_version": "absent"},

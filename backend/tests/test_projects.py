@@ -4004,7 +4004,7 @@ async def test_submission_artifact_policy_approval_persists_effective_policy_has
     assert pre_submit_checker_policy is not None
     assert pre_submit_checker_policy.lifecycle_status == "compiled"
     assert pre_submit_checker_policy.effective_policy_hash == effective["effective_policy_hash"]
-    assert pre_submit_checker_policy.compiler_version == "workstream-pre-submit-compiler-v0.1"
+    assert pre_submit_checker_policy.compiler_version == "external_checker_policy.v1"
     assert pre_submit_checker_policy.compiled_bundle_hash is not None
     assert (
         pre_submit_checker_policy.compiled_bundle["effective_policy_hash"]

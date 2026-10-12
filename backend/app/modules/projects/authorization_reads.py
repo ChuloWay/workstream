@@ -37,6 +37,7 @@ from app.modules.projects.service import (
     ProjectService,
     ProjectServiceError,
 )
+from app.modules.checkers.api.external_policy import validate_stored_external_pre_policy
 
 DiagnosticRecord: TypeAlias = ProjectSetupRun | GuideSufficiencyReport | SubmissionArtifactPolicy
 DiagnosticResult: TypeAlias = (
@@ -78,9 +79,8 @@ def _effective_policy_chain_is_consistent(
             )
         )
         if not common_matches or checker is None:
-            return common_matches
-        if not isinstance(checker.compiled_bundle, dict):
             return False
+        compiled = validate_stored_external_pre_policy(checker.compiled_bundle)
         return all(
             (
                 checker.project_id == project_id,
@@ -91,7 +91,7 @@ def _effective_policy_chain_is_consistent(
                 checker.effective_policy_id == effective.id,
                 checker.effective_policy_hash == effective.effective_policy_hash,
                 checker.lifecycle_status == "compiled",
-                canonical_json_hash(checker.compiled_bundle) == checker.compiled_bundle_hash,
+                compiled.policy_sha256 == checker.compiled_bundle_hash,
             )
         )
     except (AttributeError, TypeError, ValueError):
@@ -149,7 +149,6 @@ async def authorize_project_policy_read(
             effective is not None
             and effective.guide_id == guide_id
             and effective.source_snapshot_hash == snapshot.bundle_hash
-            and action_id is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
         ):
             checker = await repository.lock_compiled_pre_submit_checker_policy(effective.id)
     except ProjectRepositoryIntegrityError:
@@ -236,9 +235,27 @@ async def authorize_project_policy_read(
             effective_policy_id=UUID(effective.id) if target_exists else None,
             effective_policy_hash=effective.effective_policy_hash if target_exists else None,
             effective_policy_status=effective.lifecycle_status if target_exists else None,
-            checker_policy_id=UUID(checker.id) if checker is not None and target_exists else None,
-            checker_policy_status=(checker.lifecycle_status if checker is not None and target_exists else None),
-            checker_bundle_hash=(checker.compiled_bundle_hash if checker is not None and target_exists else None),
+            checker_policy_id=(
+                UUID(checker.id)
+                if checker is not None
+                and target_exists
+                and action_id is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
+                else None
+            ),
+            checker_policy_status=(
+                checker.lifecycle_status
+                if checker is not None
+                and target_exists
+                and action_id is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
+                else None
+            ),
+            checker_bundle_hash=(
+                checker.compiled_bundle_hash
+                if checker is not None
+                and target_exists
+                and action_id is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
+                else None
+            ),
             target_binding_digest=binding_digest,
         ),
     )

@@ -1,4 +1,4 @@
-"""Persist blocked catalogue handoffs and terminalize oversized output without inference replay."""
+"""Persist external-capability gap handoffs and terminalize oversized output."""
 import json
 
 import pytest
@@ -26,6 +26,13 @@ async def test_handoff_persistence_and_terminal_replay(automatic_source, monkeyp
     from app.workers import project_setup as worker
 
     factory, actor, setup_id, snapshot = automatic_source
+    from tests.checkers.external.support import registry_spec
+    from tests.projects.guide_activation.source_fixtures import (
+        _register_external_checker_fixture,
+    )
+
+    await _register_external_checker_fixture(factory, registry_spec("pre_submit"))
+    await _register_external_checker_fixture(factory, registry_spec("post_submit"))
     await create_committed_document_fixture(snapshot["id"])
     delivery = await _delivery(factory, setup_id)
     runtime = ScriptedGuideRuntime()

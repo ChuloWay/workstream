@@ -86,9 +86,9 @@ async def test_context_drift_fails_before_dispatch(
             )
         async with factory() as session:
             state = await load_compilation_execution_state(session, request.attempt_id)
-        drifted_capabilities = context(values).checker_capabilities.model_copy(
-            update={"manifest_sha256": "sha256:" + "f" * 64}
-        )
+        from tests.checkers.external.support import capability_projection, registry_entry
+
+        drifted_capabilities = capability_projection(registry_entry("pre_submit"))
         async with factory() as session:
             with pytest.raises(GuideCompilationIntegrityError, match="identity mismatch"):
                 await build_project_guide_compilation_context(

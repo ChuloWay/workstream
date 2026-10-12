@@ -222,34 +222,25 @@ class ProjectLockedPolicyContextFacts:
         ):
             raise ValueError("project display facts differ from locked context")
         target, upstream = receipt.command.target.proposal, receipt.command.target.upstream
-        external_body = json.loads(self.external_checker_policies.value)
-        if external_body.get("schema_version") == "external_checker_policies.v1":
-            from app.modules.checkers.api.external_policy import (
-                validate_stored_external_checker_policies,
-            )
+        from app.modules.checkers.api.external_policy import (
+            validate_stored_external_checker_policies,
+        )
 
-            external_policies = validate_stored_external_checker_policies(external_body)
-            pre_body = json.loads(self.compiled_pre_submit_bundle.value)
-            post_body = json.loads(self.compiled_post_submit_policy.value)
-            external_hashes_match = (
-                external_policies.policies_sha256
-                == receipt.command.target.upstream.effective_pre_submit_plan_hash
-                and external_policies.pre_submit.model_dump(mode="json") == pre_body
-                and external_policies.pre_submit.policy_sha256
-                == self.pre_submit_policy_bundle_hash
-                and external_policies.post_submit.model_dump(mode="json") == post_body
-                and external_policies.post_submit.policy_sha256
-                == receipt.command.target.policy_hash
-            )
-        else:
-            external_hashes_match = (
-                self.compiled_pre_submit_bundle.sha256
-                == self.pre_submit_policy_bundle_hash
-                and self.compiled_post_submit_policy.sha256
-                == receipt.command.target.policy_hash
-                and self.external_checker_policies.sha256
-                == receipt.command.target.upstream.effective_pre_submit_plan_hash
-            )
+        external_policies = validate_stored_external_checker_policies(
+            json.loads(self.external_checker_policies.value)
+        )
+        pre_body = json.loads(self.compiled_pre_submit_bundle.value)
+        post_body = json.loads(self.compiled_post_submit_policy.value)
+        external_hashes_match = (
+            external_policies.policies_sha256
+            == receipt.command.target.upstream.effective_pre_submit_plan_hash
+            and external_policies.pre_submit.model_dump(mode="json") == pre_body
+            and external_policies.pre_submit.policy_sha256
+            == self.pre_submit_policy_bundle_hash
+            and external_policies.post_submit.model_dump(mode="json") == post_body
+            and external_policies.post_submit.policy_sha256
+            == receipt.command.target.policy_hash
+        )
         if (
             (
                 self.project_id,

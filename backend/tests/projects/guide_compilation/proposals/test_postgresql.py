@@ -82,13 +82,7 @@ async def test_review_package_is_exact_complete_and_redacted(clean_postgres_data
             dict(
                 requirement_id="packet",
                 statement="Limit artifact file size.",
-                disposition="supported_pre_submit",
-                evidence_refs=evidence,
-            ),
-            dict(
-                requirement_id="coverage",
-                statement="Check acceptance criteria coverage.",
-                disposition="supported_post_submit",
+                disposition="pre_submit_capability_gap",
                 evidence_refs=evidence,
             ),
             dict(
@@ -98,31 +92,23 @@ async def test_review_package_is_exact_complete_and_redacted(clean_postgres_data
                 evidence_refs=evidence,
             ),
         ],
-        pre_submit_bindings=[
+        pre_submit_bindings=[],
+        post_submit_bindings=[],
+        capability_suggestions=[
             dict(
                 requirement_id="packet",
-                capability_id="policy.file_size.limit",
-                capability_version="v1",
                 stage="pre_submit",
-            )
-        ],
-        post_submit_bindings=[
-            dict(
-                requirement_id="coverage",
-                capability_id="check_acceptance_criteria_present",
-                capability_version="v0.1",
-                stage="post_submit",
-                parameters=[],
-            )
-        ],
-        capability_suggestions=[
+                title="Artifact size checker",
+                rationale="Register a checker for the exact package size requirement.",
+                evidence_refs=evidence,
+            ),
             dict(
                 requirement_id="semantic",
                 stage="post_submit",
                 title="Specialist correctness evaluator",
-                rationale="The catalogue lacks this evaluation.",
+                rationale="No registered external checker covers this evaluation.",
                 evidence_refs=evidence,
-            )
+            ),
         ],
         setup_notes=["A project manager must review the specialist evaluation gap."],
     )
@@ -903,7 +889,9 @@ async def test_approval_preserves_opaque_guide_version(clean_postgres_database, 
         assert await approve(factory, command, actor, grant, payload) == receipt
         async with factory() as session:
             operation = await session.get(ProjectGuideProposalApproval, receipt.operation_id)
-            assert operation.effective_pre_submit_plan["lineage"]["guide_version"] == guide_version
+            assert operation.effective_pre_submit_plan["schema_version"] == (
+                "external_checker_policies.v1"
+            )
             assert operation.target_json["guide_version"] == guide_version
         await finalize(factory, values, command)
 
@@ -1093,6 +1081,11 @@ async def test_database_approval_requires_guide_to_remain_draft(
         )
         with expected:
             async with factory() as session, session.begin():
+                from app.adapters.checkers import (
+                    external_checker_capability_projection,
+                    external_checker_registry_reader,
+                )
+
                 if activate_before_commit:
                     # Transaction rollback restores these unrelated activation prerequisites.
                     for trigger in (
@@ -1101,10 +1094,6 @@ async def test_database_approval_requires_guide_to_remain_draft(
                     ):
                         await session.execute(
                             text(f"ALTER TABLE project_guides DISABLE TRIGGER {trigger}")
-                        )
-                        from app.adapters.checkers import (
-                            external_checker_capability_projection,
-                            external_checker_registry_reader,
                         )
                 await GuideProposalService(
                     session,
