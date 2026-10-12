@@ -19,7 +19,7 @@ from app.modules.tasks.models import Submission
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.submission_composition import build_submission
 from tests.post_submit_materialization_helpers import _material_fixture, _archive_facts
-from tests.migration_fixtures import current_art_attempt_seed_schema
+from tests.migration_fixtures import current_owner_seed_schema
 
 
 async def write_historical_submission(factory, context, request):
@@ -102,7 +102,7 @@ async def _historical_request(session, facts, created, data):
 @asynccontextmanager
 async def historical_material_fixture(tmp_path, database_url, **options):
     async with AsyncExitStack() as stack:
-        async with current_art_attempt_seed_schema(database_url):
+        async with current_owner_seed_schema(database_url):
             material = await stack.enter_async_context(_material_fixture(
                 tmp_path, database_url, write_submission=write_historical_submission,
                 read_request=_historical_request, **options,

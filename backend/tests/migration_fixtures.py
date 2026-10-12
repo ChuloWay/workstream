@@ -19,33 +19,38 @@ def current_schema_revision():
 
 
 @asynccontextmanager
-async def current_art_attempt_seed_schema(database_url):
-    """Restore a predecessor's attempt shape before the migration under test."""
+async def current_owner_seed_schema(database_url):
+    """Restore exact predecessor ART/TASK rows before the migration under test."""
     import asyncpg
     connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
-    owned = False
+    owned = []
     try:
-        columns = await connection.fetch("SELECT column_name FROM information_schema.columns "
-            "WHERE table_schema='public' AND table_name='artifact_put_attempts' ORDER BY ordinal_position")
-        names = tuple(row[0] for row in columns)
-        if "task_import_source_id" not in names:
-            revision = await connection.fetchval("SELECT version_num FROM public.alembic_version")
-            assert int(revision[:4]) < 31 and names, "only a populated predecessor may need seeding columns"
-            await connection.execute("ALTER TABLE public.artifact_put_attempts ADD COLUMN task_import_source_id uuid")
-            owned = True
+        revision = await connection.fetchval("SELECT version_num FROM public.alembic_version")
+        for table, column, introduced in (
+            ("artifact_put_attempts", "task_import_source_id", 31),
+            ("task_command_receipts", "batch_transition_receipt_id", 35),
+        ):
+            columns = await connection.fetch("SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position", table)
+            names = tuple(row[0] for row in columns)
+            if column not in names:
+                assert int(revision[:4]) < introduced and names, "only a predecessor may need seeding columns"
+                await connection.execute(f"ALTER TABLE public.{table} ADD COLUMN {column} uuid")
+                owned.append((table, column, names))
         yield
     finally:
         try:
-            if owned:
-                assert await connection.fetchval("SELECT count(*) FROM public.artifact_put_attempts "
-                    "WHERE task_import_source_id IS NOT NULL") == 0
-                before = await connection.fetch("SELECT (to_jsonb(r) - 'task_import_source_id')::text AS value "
-                    "FROM public.artifact_put_attempts r ORDER BY id")
-                await connection.execute("ALTER TABLE public.artifact_put_attempts DROP COLUMN task_import_source_id")
+            for table, column, names in reversed(owned):
+                assert await connection.fetchval(f"SELECT count(*) FROM public.{table} "
+                    f"WHERE {column} IS NOT NULL") == 0
+                before = await connection.fetch(f"SELECT (to_jsonb(r) - '{column}')::text AS value "
+                    f"FROM public.{table} r ORDER BY id")
+                await connection.execute(f"ALTER TABLE public.{table} DROP COLUMN {column}")
                 restored = await connection.fetch("SELECT column_name FROM information_schema.columns "
-                    "WHERE table_schema='public' AND table_name='artifact_put_attempts' ORDER BY ordinal_position")
+                    "WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position", table)
                 assert tuple(row[0] for row in restored) == names
-                assert await connection.fetch("SELECT to_jsonb(r)::text AS value FROM public.artifact_put_attempts r ORDER BY id") == before
+                assert await connection.fetch(f"SELECT to_jsonb(r)::text AS value "
+                    f"FROM public.{table} r ORDER BY id") == before
         finally:
             await connection.close()
 

@@ -199,6 +199,7 @@
     "scripts/api_contract_e2e.py|activate_guide_for_e2e|Expr:65e72b067eb91496|0": "uuid4:call:transport_token",
     "scripts/api_contract_e2e.py|activate_guide_for_e2e|Expr:8ef328046b881a1c|0": "uuid4:call:transport_token",
     "scripts/api_contract_e2e.py|activate_guide_for_e2e|Assign:71aef60013930cda|0": "uuid4:call:transport_token",
-    "scripts/api_contract_e2e.py|exercise_api_contract|Expr:2866edfb74707b74|0": "uuid4:call:transport_token"
+    "scripts/api_contract_e2e.py|exercise_api_contract|Expr:2866edfb74707b74|0": "uuid4:call:transport_token",
+    "app/modules/tasks/task_batch_transitions.py|TaskBatchTransitionCommands._prepare|Assign:b01b4c43bfe447dd|0": "uuid4:call:transport_token"
   }
 }

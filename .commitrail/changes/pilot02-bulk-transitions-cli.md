@@ -17,6 +17,27 @@ Their current root transaction prevents composition across a complete batch.
 
 ### Allowed
 
+- Diagnosed hosted-CI repairs extend the existing predecessor seeding seam in
+  `backend/tests/migration_fixtures.py` to the two exact nullable ART/TASK
+  columns. Rename its context to `current_owner_seed_schema` and update only
+  actual imports in `historical_submission_fixtures.py`,
+  `projects/guide_activation/source_fixtures.py` and
+  `tasks/test_submission_lineage.py`. Prove null future links, original column
+  order and complete retained row equality after removal, before the migration
+  under test. No production compatibility path or migration changes.
+- The existing receipt SQL negative in `tasks/test_command_replay.py` may use
+  TRUNCATE CASCADE to reach its owner guard despite the new native FK, with
+  retained receipt equality after every refused statement. The contribution
+  audit migration test pins its exact 0033 upgrade, so its downgrade refusal
+  exercises that migration rather than a later generic no-downgrade guard.
+- `scripts/test_lightweight_agent_gates.py` validates the actual reusable CLI
+  job block, its MinIO dependency and exact source-pinned artifact input.
+  `backend/scripts/identifier_generation_classifications.json` receives only
+  the exact bulk per-row idempotency-key transport-token classification; preserve
+  the atomic owner's separate classification on reconciliation. No scanner,
+  category, threshold, skip, deadline or required-result weakening. Lane
+  rebalancing needs a separate exact lead-coordinated module/runtime handoff.
+
 - New TASK batch-transition owner and typed API contracts under
   `backend/app/modules/tasks/task_batch_transitions.py` and
   `backend/app/modules/tasks/api/task_batch_transition.py`; native membership

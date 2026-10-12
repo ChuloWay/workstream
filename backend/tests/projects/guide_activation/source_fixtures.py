@@ -26,7 +26,7 @@ from tests.committed_guide_fixtures import (
     seed_setup_service_for_compiled_fixture,
 )
 from tests.project_create_fixtures import seed_authorized_project
-from tests.migration_fixtures import current_art_attempt_seed_schema
+from tests.migration_fixtures import current_owner_seed_schema
 from tests.projects.guide_compilation.helpers import ids, context, result
 from tests.projects.guide_compilation.finalization.pg_prerequisites import (
     compilation_and_projections,
@@ -152,7 +152,7 @@ async def source_case(url, *, namespace=None, guide_version="v1", artifact_propo
             ).one()
             values.update(actor=UUID(service_id), link=UUID(link_id))
         actor, grant = await seed_review_actor(factory, values["project"])
-        async with current_art_attempt_seed_schema(url):
+        async with current_owner_seed_schema(url):
             values, finalization = await create_compiled_guide(factory, values, actor, version=guide_version,
                                                                artifact_proposal=artifact_proposal)
         yield values, factory, finalization, actor, grant

@@ -195,9 +195,10 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("Require preflight, every semantic lane and CLI public contract", workflow)
-        self.assertIn(
-            "  cli-public-contract:\n    uses: ./.github/workflows/cli.yml", workflow
-        )
+        cli_job = workflow.split("\n  cli-public-contract:\n", 1)[1].split("\n  test:\n", 1)[0]
+        self.assertIn("    uses: ./.github/workflows/cli.yml\n", cli_job)
+        self.assertIn("    needs: minio-image\n", cli_job)
+        self.assertIn("      minio_artifact: ${{ needs.minio-image.outputs.artifact }}\n", cli_job)
         self.assertIn("python -m scripts.merge_test_lane_evidence", workflow)
         self.assertIn("scripts/validate_test_lane_evidence.py", workflow)
         self.assertIn(

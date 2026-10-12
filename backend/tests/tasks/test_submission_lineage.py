@@ -247,7 +247,7 @@ async def test_packet_custody_upgrade_preserves_retained_submission(
     import asyncpg
     from alembic import command
     from app.db import session as db_session
-    from tests.migration_fixtures import _config, current_art_attempt_seed_schema
+    from tests.migration_fixtures import _config, current_owner_seed_schema
 
     with migration_lock():
         await db_session.dispose_engine()
@@ -258,7 +258,7 @@ async def test_packet_custody_upgrade_preserves_retained_submission(
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0021_submission_manifest")
         async with AsyncExitStack() as stack:
-            async with current_art_attempt_seed_schema(isolated_database_env):
+            async with current_owner_seed_schema(isolated_database_env):
                 h = await stack.enter_async_context(_prepared_packet(isolated_database_env, tmp_path))
                 from tests.historical_submission_fixtures import write_historical_submission
                 created = await write_historical_submission(h.factory, h.context, h.creation)
