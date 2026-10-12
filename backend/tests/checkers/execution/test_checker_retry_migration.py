@@ -13,13 +13,12 @@ from uuid import UUID
 import asyncpg
 import pytest
 from alembic import command
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from app.adapters.checkers import evaluation_coordinator
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
-from app.modules.checkers.api.post_submit import PostSubmissionEvaluationRequest
-from tests.checkers.post_submit.support import change_request
 from tests.migration_fixtures import _config
 
 
@@ -167,7 +166,7 @@ async def _retained_rows(connection):
 async def _source_custody(connection, submission_id):
     return await connection.fetchrow(
         """
-        SELECT r.status, r.failure_code, r.result_digest,
+        SELECT r.id AS run_id, r.status, r.failure_code, r.result_digest,
           r.finalize_evidence_id IS NOT NULL AS finalized,
           fin.action_id='checker.post_submit.finalize' AS finalize_authority_valid,
           fin.event_type='SensitiveAuthorizationAllowed' AS finalize_allowed,
@@ -231,10 +230,8 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
             _seed_with_historical_writer, tmp_path, isolated_database_env
         )
         submission_id = UUID(seed["submission_id"])
-        request = PostSubmissionEvaluationRequest.model_validate_json(
-            json.dumps(seed["request"])
-        )
-        assert request.submission_id == submission_id
+        request = seed["request"]
+        assert UUID(request["submission_id"]) == submission_id
         connection = await _connection(isolated_database_env)
         try:
             before, source = await _predecessor_evidence(connection, submission_id)
@@ -274,17 +271,39 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
         finally:
             await connection.close()
 
-        successor = change_request(
-            request,
-            evaluation_request_id=new_record_id(),
-            evaluation_generation=2,
-        )
+        # This is a raw predecessor SQL invariant, not a current runtime request.
+        successor_request = {key: value for key, value in request.items() if key != "request_sha256"}
+        successor_request.update(evaluation_request_id=str(new_record_id()), evaluation_generation=2)
+        successor_id = new_record_id()
+        request_json = json.dumps(successor_request, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        successor_row = {
+            "id": str(successor_id), "evaluation_request_id": successor_request["evaluation_request_id"],
+            "evaluation_generation": 2, "request_json": request_json,
+            "request_digest": canonical_json_hash(successor_request), "result_id": str(new_record_id()),
+            "supersedes_checker_run_id": str(source["run_id"]),
+            "status": "queued", "outcome_source": "none", "routing_recommendation": "not_evaluated",
+            "worker_lease_id": None, "worker_lease_generation": 0, "worker_lease_expires_at": None,
+            "execute_evidence_id": None, "finalize_evidence_id": None,
+            "result_json": None, "result_digest": None, "material_custody": None,
+            "input_materialization_evidence_id": None, "completion_event_id": None,
+            "started_at": None, "completed_at": None, "failure_code": None,
+            "passed_count": 0, "warning_count": 0, "failed_count": 0, "blocking_count": 0,
+        }
         with pytest.raises(
             IntegrityError,
             match="terminal checker infrastructure retry requires Operator receipt",
         ):
             async with db_session.get_session_factory().begin() as session:
-                await evaluation_coordinator(session).reserve_current_evaluation(successor)
+                await session.execute(text("""
+                    INSERT INTO public.checker_runs
+                    SELECT (jsonb_populate_record(NULL::public.checker_runs,
+                      to_jsonb(r) || CAST(:changes AS jsonb))).*
+                    FROM public.checker_runs r WHERE id=:source
+                """), {"changes": json.dumps(successor_row), "source": source["run_id"]})
+                await session.execute(text("""
+                    UPDATE public.checker_submission_fences SET current_run_id=:successor
+                    WHERE submission_id=:submission
+                """), {"successor": successor_id, "submission": submission_id})
         connection = await _connection(isolated_database_env)
         try:
             assert await _retained_rows(connection) == before

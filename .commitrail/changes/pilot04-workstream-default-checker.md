@@ -802,3 +802,21 @@ exact counterfeit, simulating a faulty application. This prevents a mismatched
 valid AUTH digest from masking the locked-policy completeness guard. The normal
 request validator remains active for every other result; the final positive
 control uses the original complete result. No product checks are weakened.
+
+### Selected-only migration-test caller reconciliation
+
+Explicit lead/peer ownership permits test-only edits to
+`backend/tests/checkers/execution/test_material_migration.py`,
+`backend/tests/checkers/execution/test_checker_retry_migration.py`,
+`backend/tests/tasks/post_submit_routing/test_requests.py` and removal of
+`backend/tests/historical_checker_metadata.py` after its only caller is converted
+by the raw predecessor-fixture owner. Preserve retained-row equality, failed
+preflight rollback, observed migration/writer exclusion and the Operator-receipt
+supersession guard. Archived JSON is updated and hashed as raw facts; current
+product decoders never accept it. The live completion-denial fixture uses the
+sole selected current-reference API. No production, migration, fingerprint,
+workflow, cap or skip changes are allowed. Acceptance requires fresh full
+collection after the peer raw producer checkpoint, focused current contracts,
+and isolated native migration/SQL controls where the claim depends on Postgres.
+This is author test reconciliation, requiring lead/QA review in the complete
+candidate; it does not establish hosted readiness.

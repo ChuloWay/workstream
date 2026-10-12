@@ -8,15 +8,14 @@ from alembic import command
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
-from tests.historical_submission_fixtures import historical_material_fixture
+from tests.historical_submission_fixtures import _raw, historical_material_fixture
 from types import SimpleNamespace
 
-from app.modules.checkers.post_submit_contracts import make_post_submit_result
-from tests.checkers.post_submit.support import change_request
 from .historical_execution import (
     historical_reserve,
     historical_lease,
@@ -77,14 +76,18 @@ async def test_retained_material_upgrade(
                 # Preserve superseded completed/failed history and a current
                 # failure that never received material, plus later replica loss.
                 successor = SimpleNamespace(**vars(h))
-                successor.request = change_request(h.request, evaluation_generation=2,
-                                                   evaluation_request_id=new_record_id())
+                request_body = h.request.model_dump(exclude={"request_sha256"})
+                request_body.update(evaluation_generation=2, evaluation_request_id=str(new_record_id()))
+                successor.request = _raw(request_body | {"request_sha256": canonical_json_hash(request_body)})
                 await historical_reserve(successor)
                 next_lease = await historical_lease(successor)
                 empty = historical_terminal_facts(successor, next_lease, "infrastructure_failed")
                 body = empty.result.model_dump(exclude={"result_digest"})
                 body["infrastructure_failure_code"] = "material_unavailable"
-                empty = empty.model_copy(update={"result": make_post_submit_result(**body), "material": None})
+                empty = empty.model_copy(update={
+                    "result": _raw(body | {"result_digest": canonical_json_hash(body)}),
+                    "material": None,
+                })
                 async with h.factory() as session, session.begin():
                     await historical_write_terminal(session, empty, None)
                     await session.execute(text(
