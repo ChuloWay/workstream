@@ -20,6 +20,10 @@ from app.modules.checkers.api.historical_post_submit import (
     PostSubmitPolicyEntry,
 )
 from app.modules.checkers.api.post_submit import make_post_submit_request
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmissionEvaluationRequest,
+    make_selected_post_submit_request,
+)
 from tests.historical_checker_metadata import historical_post_submit_catalogue
 
 HASH = "sha256:" + "a" * 64
@@ -126,4 +130,6 @@ def request(*, snapshot=None, project_id=PROJECT):
 def change_request(source, **changes):
     fields = source.model_dump(exclude={"request_sha256"})
     fields.update(changes)
+    if type(source) is SelectedPostSubmissionEvaluationRequest:
+        return make_selected_post_submit_request(**fields)
     return make_post_submit_request(**fields)

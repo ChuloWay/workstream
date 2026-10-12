@@ -385,3 +385,12 @@ passed replacement replay, unknown registration and automatic acceptance; its
 two cause guards stopped at a native UUID fixture boundary. Normalize that
 fixture identifier only, preserving the strict production registry reader.
 Database, role and MinIO cleanup completed; cause-guard rerun remains pending.
+
+The selected cause-guard rerun reached the intended SQL immutability denial
+(SQLSTATE 55000) but exposed two superseded test assumptions: successor requests
+were rebuilt with the historical DTO, and mutation refusal was caught as an
+integrity violation instead of DBAPIError. Use the exact selected constructor
+for selected fixtures and retain the exact 55000 assertion. No production guard
+or database constraint changes are part of this test repair. Reconcile roadmap
+claims to selected hidden delivery, keeping public intake and hosted isolation
+proof explicitly outside the delivered surface. Final guard rerun is required.

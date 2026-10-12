@@ -12,7 +12,7 @@ from zipfile import ZipFile
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from starlette.requests import Request
 
 from app.api.deps.authorization import compose_hidden_submission_creation_command
@@ -651,7 +651,7 @@ async def test_sql_selected_pre_reservation_and_admission_reject_foreign_routed_
             assert denied.value.orig.sqlstate == "23514"
             assert await _snapshot(local) == before
             with pytest.raises(
-                IntegrityError, match="selected PRE request custody is immutable"
+                DBAPIError, match="selected PRE request custody is immutable"
             ) as immutable:
                 async with local.factory.begin() as session:
                     await session.execute(
