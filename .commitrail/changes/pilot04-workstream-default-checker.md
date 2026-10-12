@@ -1585,3 +1585,30 @@ proof remain separate earlier-head evidence. Fresh full hosted CI on the
 published repair candidate and authenticated completed-node evidence verification
 are still required before merge readiness. No deployment or merge is authorized
 by these local results.
+
+### Exact identifier classifications after obsolete-owner removal
+
+Lead-authorized metadata-only scope: this existing record and
+`backend/scripts/identifier_generation_classifications.json`. Published `62b661bd`
+hosted schema evidence reports exactly three unclassified generation sites and
+four stale classifications. The semantic-manifest UUIDv5 owner moved from deleted
+`pre_submit_evidence.py` to `submission_manifest.py` without changing its digest
+identity expression. The deleted `PreSubmitAttemptStore.reserve` UUIDv4 nonce has
+no current generation site. Two `OutboxDelivery._finalize` UUIDv4 calls remain
+AUTH request/correlation transport tokens; reviewed expiry checks changed the
+exact enclosing AsyncWith fingerprints.
+
+Remove only those four stale keys and register the three observed exact keys.
+Keep the manifest's `uuid5:call:content_identity` and both outbox calls'
+`uuid4:call:transport_token` meanings. Verify the manifest remains a canonical
+content identity supplied to current selected ART admission, while the outbox
+values are passed only as request/correlation IDs to the current authority port.
+Do not add a category, generic owner wildcard, suppressed generation site,
+scanner/policy change, production/test/DDL edit, skip or weakened UUID assertion.
+
+Risk: incorrectly classifying a row surrogate as a token or hiding future code
+movement. Acceptance requires all 24 unchanged identifier-inventory pure tests,
+zero current unresolved/string-UUID references, exact missing-current and
+stale-key mutation refusals, and unchanged unrelated classification entries.
+Lead CI/test-delta review checks exact owner/key/category fidelity. No native
+runtime or full hosted-suite claim is made by this metadata reconciliation.
