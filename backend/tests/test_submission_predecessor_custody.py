@@ -34,7 +34,6 @@ from app.modules.artifacts.authorization import (
 )
 from app.modules.checkers.models import SelectedPreSubmitRun
 from app.modules.artifacts.models import (
-    PreSubmitEvidenceSet,
     SubmissionBundleAdmission,
 )
 from app.modules.artifacts.submission_admission import (
@@ -45,6 +44,16 @@ from app.modules.artifacts.submission_manifest import (
     SubmissionChangeRejectedError,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
+from app.modules.checkers.api.execution import CheckerExecutionUnavailable
+from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.api.submission_context import (
+    TaskSubmissionContextRequest, TaskSubmissionContextUnavailable,
+)
+from app.modules.tasks.models import SubmissionDispatch
+from app.modules.tasks.submission_composition import TaskSubmissionCreationService
+from app.modules.tasks.submission_context import TaskSubmissionContextService
+from app.adapters.tasks import task_submission_context_port
+from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.artifact_store_helpers import artifact_byte_stream
 from tests.checkers.execution.support import reserve
 from tests.checkers.execution.completion_fixture import completed_evidence
