@@ -7,6 +7,12 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
+from project_role_read_journey import (
+    inspect_role_history,
+    deny_role_history,
+    inspect_revoked_history,
+)
+
 
 async def exercise_project_role_decisions(
     direct,
@@ -199,6 +205,21 @@ async def exercise_project_role_decisions(
         system,
     )
     before = await stored()
+    read_cursor, read_snapshot = await inspect_role_history(
+        direct,
+        cli,
+        origin,
+        scoped,
+        project,
+        foreign_project,
+        first,
+        reviewer,
+        self_grant,
+        foreign,
+        tokens["cli-outsider"],
+        qualification,
+    )
+    assert await stored() == before
     grants, snapshots, events = before
     row = next(row for row in grants if str(row["id"]) == first["id"])
     snapshot = next(
@@ -278,6 +299,7 @@ async def exercise_project_role_decisions(
     # unlike the separately owned task mutation routes.
     invoke("issue", body, key=issue_key, status=404)
     invoke("revoke", {"reason": "Suspended manager"}, grant=first["id"], status=404)
+    deny_role_history(cli, origin, scoped, project, first["id"], read_cursor)
     await post(
         f"/api/v1/actors/{manager_id}/reactivate",
         {"reason": "Independent scoped revocation"},
@@ -289,6 +311,7 @@ async def exercise_project_role_decisions(
     )
     invoke("issue", body, key=issue_key, status=404)
     invoke("revoke", {"reason": "Revoked manager"}, grant=first["id"], status=404)
+    deny_role_history(cli, origin, scoped, project, first["id"], read_cursor)
     assert await stored() == before
     covering = await manager_grant()
 
@@ -332,6 +355,17 @@ async def exercise_project_role_decisions(
             "ProjectRoleGrantRevoked",
             "ProjectRoleQualificationSnapshotCaptured",
         ]
+        await inspect_revoked_history(
+            direct,
+            cli,
+            origin,
+            scoped,
+            project,
+            first,
+            read_snapshot,
+            payload["reason"],
+        )
+        assert await stored() == (grants_after, snapshots_after, events_after)
         # Cleanup only this helper's extra management authority; contributor
         # state and the existing claim/start denial assertions remain independent.
         await post(
@@ -339,5 +373,6 @@ async def exercise_project_role_decisions(
             {"reason": "Role CLI proof complete"},
         )
         invoke("revoke", payload, grant=first["id"], key=revoke_key, status=404)
+        deny_role_history(cli, origin, scoped, project, first["id"], read_cursor)
 
     return revoke_first

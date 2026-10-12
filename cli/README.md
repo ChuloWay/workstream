@@ -31,6 +31,8 @@ context/intake requirements:
 | `workstream project task release PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT` | `POST /api/v1/tasks/TASK_ID/release` |
 | `workstream project role-grant issue PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/role-grants` |
 | `workstream project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID/revoke` |
+| `workstream project role-grant list PROJECT_ID [--status active\|revoked] [--role submitter\|reviewer]` | `GET /api/v1/projects/PROJECT_ID/role-grants` |
+| `workstream project role-grant show PROJECT_ID GRANT_ID` | `GET /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
@@ -89,7 +91,7 @@ and preserving the successful API JSON.
 Exit status is `0` for success, `1` for API/network/response failure, and `2`
 for invalid arguments or configuration. JSON requests time out after 12 seconds;
 JSON responses default to a 64 KiB bound (guide declaration and document-bearing
-work context use 2 MiB wire bounds; exact guide proposals use 8 MiB). Original downloads stream to private files,
+work context and grant history use 2 MiB wire bounds; exact guide proposals use 8 MiB). Original downloads stream to private files,
 bounded by the advertised byte count and ART's 512 MiB hard ceiling. Downloads
 and original uploads allow up to two minutes for response headers and ten minutes overall,
 including transfer; connection/TLS timeouts and redirect/proxy refusal remain.
@@ -174,8 +176,31 @@ JSON preserves the exact valid response; text escapes terminal controls. Missing
 malformed, substituted or credential-reflecting success is `outcome_unknown`
 with empty stdout. Retry only manually with unchanged selectors, file contents
 and key. A read is observation, not rollback proof; an old issue replay after
-revocation is denied by the backend's retained-state check. No grant browsing,
-actor discovery, automatic role assignment or AdminRole mutation is added.
+revocation is denied by the backend's retained-state check. No actor discovery,
+automatic role assignment or AdminRole mutation is added.
+
+### Inspect retained contributor grants
+
+```sh
+workstream project role-grant list PROJECT_ID --status active --role submitter --limit 50 -o json
+workstream project role-grant show PROJECT_ID GRANT_ID -o json
+```
+
+List returns exactly one count-free page: `items` and nullable `next_cursor`.
+Continue explicitly with `--cursor` and the same project, status, role and limit.
+Omit status/role to include both supported values; `all` is not a filter token.
+These are live keyset pages, not a fixed-membership export. The CLI never follows
+a cursor automatically or interprets/signs it; the backend rejects invalid or
+query-mismatched cursors and rechecks current authority for each request.
+
+Show reads the exact grant under its project. Both commands retain the complete
+public qualification snapshot, grant provenance/reason and nullable revocation
+facts, with no count, private contact data or identity-provider subjects. JSON
+preserves the authorized response; text escapes terminal controls. Malformed or
+substituted responses, normalized duplicate grant IDs, filter contradictions
+and credential reflection fail with empty stdout. These reads require the
+backend's covered Project Manager or Audit Authority, not a contributor grant.
+They do not cache permission, authorize a later write, or establish rollback.
 
 ## Declare a guide and its setup inputs
 
