@@ -234,10 +234,16 @@ async def test_checker_registration_requires_corrected_approval_before_activatio
         await seed_selected_review_revision_inputs(factory, initial, actor)
         stale = await _activation_inputs(factory, initial, first, actor, grant, values, policy)
         async with factory() as session, session.begin():
-            with pytest.raises(GuideProposalError, match="approval_blocked"):
+            with pytest.raises(GuideProposalError, match="approval_blocked") as refusal:
                 await activation_service(session, actor, stale, grant).activate(
                     stale, actor=actor, request_id=uuid4()
                 )
+            assert [item.model_dump(mode="json") for item in refusal.value.missing_capabilities] == [
+                dict(requirement_id=item.requirement_id, stage=item.stage, title=item.title)
+                for item in gap.capability_suggestions
+            ]
+            guide = await session.get(ProjectGuide, str(stale.target.proposal.guide_id))
+            assert guide.status == "draft" and guide.activation_operation_id is None
 
         correction = await correct(
             factory,

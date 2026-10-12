@@ -242,6 +242,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
         code=code,
         message=message,
         retryable=retryable,
+        details=exc.error_details if isinstance(exc, StructuredHTTPException) else None,
         compatibility={"detail": exc.detail},
         headers=exc.headers,
     )

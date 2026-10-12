@@ -18,7 +18,7 @@ from app.modules.projects.api.guide_activation import (
     GuideContributionPolicyFacts,
     PreparedGuideActivation,
 )
-from app.modules.projects.api.guide_proposals import GuideProposalError
+from app.modules.projects.api.guide_proposals import GuideProposalError, MissingCheckerCapability
 from app.modules.projects.api.post_policy import PostPolicySelection
 from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 from app.modules.projects.guide_mutation_repository import GuideMutationRepository
@@ -242,7 +242,17 @@ class GuideActivationService:
             if current != binding.registry:
                 raise GuideProposalError("approval_blocked")
         if locked.result.capability_suggestions:
-            raise GuideProposalError("approval_blocked")
+            raise GuideProposalError(
+                "approval_blocked",
+                missing_capabilities=tuple(
+                    MissingCheckerCapability(
+                        requirement_id=item.requirement_id,
+                        stage=item.stage,
+                        title=item.title,
+                    )
+                    for item in locked.result.capability_suggestions
+                ),
+            )
         ProjectService(self.session).validate_activation_ready(
             locked.view.guide,
             locked.view.snapshot,

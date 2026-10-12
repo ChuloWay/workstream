@@ -1041,7 +1041,10 @@ with a typed Unix-socket adapter and request-bound ART grant, and one versioned
 Workstream default checker with exactly four blocking outcomes. Both executable
 catalogues are removed. Verified ZIP/default checks precede approved external PRE
 images; only a complete pass permits immutable Submission creation and durable
-POST dispatch. Production completion routes true-policy success to review_pending
+POST dispatch. Unresolved required capabilities block guide activation with bounded,
+manager-authorized requirement IDs, stages and titles; registration alone does
+not clear an approved compilation's gap. Corrected compilation and approval
+must bind the registered image. Production completion routes true-policy success to review_pending
 and false-policy success through shared atomic acceptance. Default failures prevent
 Submission creation; infrastructure failures retain recoverable outcomes. Local
 Rust/MinIO integration evidence uses runc/docker-dev, not gVisor, and the contributor

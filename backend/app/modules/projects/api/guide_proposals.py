@@ -183,6 +183,15 @@ class GuideProposalCorrectionReceipt(BaseModel):
         return self
 
 
+class MissingCheckerCapability(BaseModel):
+    """Bounded manager feedback from the approved compilation's missing checks."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, revalidate_instances="always")
+    requirement_id: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,99}$", strict=True)
+    stage: Literal["pre_submit", "post_submit"]
+    title: str = Field(min_length=1, max_length=1000, strict=True)
+
+
 class GuideProposalError(RuntimeError):
     """Bounded failure; the caller must roll back its root transaction."""
 
@@ -196,7 +205,18 @@ class GuideProposalError(RuntimeError):
             "operation_conflict",
             "storage_unavailable",
         ],
+        *,
+        missing_capabilities: tuple[MissingCheckerCapability, ...] = (),
     ) -> None:
+        if (
+            type(missing_capabilities) is not tuple
+            or len(missing_capabilities) > 200
+            or (missing_capabilities and code != "approval_blocked")
+        ):
+            raise ValueError("invalid missing capability refusal")
+        self.missing_capabilities = tuple(
+            MissingCheckerCapability.model_validate(item) for item in missing_capabilities
+        )
         self.code = code
         super().__init__(code)
 

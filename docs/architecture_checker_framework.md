@@ -204,6 +204,13 @@ External image execution never occurs inside that database transaction. A
 valid locked policy with no project pre-submit bindings is distinct from an
 unavailable required image and may proceed after the default checker passes.
 
+Guide activation refuses an approved compilation with unresolved required
+checker capabilities. After current manager authority and policy custody checks,
+the canonical HTTP `error.details.missing_capabilities` lists only each
+requirement ID, pre-submit or post-submit stage, and title. It contains no
+rationale, evidence paths or provider coordinates. Registration alone cannot
+clear a gap: a corrected compilation and approved binding are required.
+
 The target launcher and checker integration use the agreed Rust service and
 SDK. Registered OCI images are not thereby required to be written in Rust;
 their execution identity is the approved digest, schemas and resource limits.

@@ -9,6 +9,22 @@
 
 ## Intent
 
+Required activation feedback repair permits PROJECTS
+`api/guide_proposals.py`, `guide_activation/service.py`, the shared
+`api/deps/guide_proposal_http.py`, canonical error primitives in
+`core/api_controls.py` and `main.py`, current activation contract/PostgreSQL
+tests, `tests/test_api_controls.py`, the checker architecture/roadmap and this
+record. Expose only bounded requirement ID, stage and title from the exact
+approved compilation when missing capabilities block activation. Populate the
+existing canonical `error.details`, after current PM authority and custody
+checks; preserve concealed failures and refusal before activation writes.
+No new route, approval/activation behavior, legacy error decoder, provider
+coordinates, rationale/evidence exposure, DDL, skips or cap changes. Risk L1:
+pure envelope/bounds/concealment regressions and the real PostgreSQL
+gap-to-corrected-binding journey, including refusal rollback, precede full CI
+and independent authority review. Human review focuses on exact approved
+generation and absence of cross-project disclosure.
+
 Final predecessor cleanup permits `backend/app/modules/artifacts/submission_admission.py`,
 `backend/tests/artifacts/test_selected_predecessor_rules.py`, its explicit module
 registration in `backend/scripts/test_lane_catalogue.py`, and this record.
