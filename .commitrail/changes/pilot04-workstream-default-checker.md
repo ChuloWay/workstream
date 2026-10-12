@@ -554,3 +554,25 @@ PostgreSQL with absent service settings, zero persisted external members and
 complete database/role cleanup (`/tmp/pilot04-optional-runtime-post.log` and
 `.json`). Strict partial-setting validation and the sole fixed provider remain
 unchanged. Full final-head hosted CI remains required.
+
+At clean `769d117a7230af053ac7ff63c52f6b35b674c21b`, the entire existing MCP
+package selection passed 367 tests in 47.56 seconds using the existing local
+MCP 2.2.0 environment. Its two baseline environment-gated skips remain exactly
+the fresh backend OpenAPI comparison and clean-wheel independence proof; each
+has a separate required hosted invocation. Declarative schemas, exact GET wire,
+projection, invalid response and post-revocation controls execute in this suite.
+The old invalid-total negative is unchanged; the representative positive fixture
+alone now matches the backend's exact 80. Raw output is
+`/tmp/pilot04-permission-pg-mcp-package.log`. This is not hosted SDK 2.3 wire or
+container/build proof.
+
+Existing lightweight workflow controls passed all 20 tests in 2.309 seconds
+(`/tmp/pilot04-permission-pg-lightweight.log`). Independently fetched official
+Docker Hub PostgreSQL 16 OCI index bytes are 10,237 bytes and hash exactly to
+`33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20`
+(`/tmp/pilot04-postgres-33f923-dockerhub-manifest.json`). Reversing only the four
+provider-prefix replacements yields byte-identical original workflow text:
+backend two services, CLI one and MCP one. All version/digest, health, PostgreSQL
+configuration, resource bounds, job dependencies and required checks are retained.
+No container or image layers were provisioned for this source repair. Actual
+new-source hosted service startup, SDK/wire, build and full CI remain required.
