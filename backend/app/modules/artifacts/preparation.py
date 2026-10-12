@@ -1205,27 +1205,6 @@ class ArtifactScratchManager:
         return _ROOT_MARKER_PREFIX + hashlib.sha256(canonical).hexdigest().encode("ascii") + b"\n"
 
 
-    def _legacy_marker_content(limits: ArtifactPreparationLimits) -> bytes:
-        """Reconstruct the pre-04B2 marker for one safe-empty local upgrade."""
-        payload = {
-            "aggregate_reserved_bytes": limits.aggregate_reserved_bytes,
-            "cleanup_margin_seconds": float(limits.cleanup_margin_seconds),
-            "maximum_concurrency": limits.maximum_concurrency,
-            "maximum_files": limits.maximum_files,
-            "maximum_source_bytes": limits.maximum_source_bytes,
-            "minimum_free_bytes": limits.minimum_free_bytes,
-            "reservation_ttl_seconds": float(limits.reservation_ttl_seconds),
-            "stream_buffer_bytes": limits.stream_buffer_bytes,
-            "total_deadline_seconds": float(limits.total_deadline_seconds),
-        }
-        canonical = json.dumps(
-            payload,
-            allow_nan=False,
-            separators=(",", ":"),
-            sort_keys=True,
-        ).encode("utf-8")
-        return _ROOT_MARKER_PREFIX + hashlib.sha256(canonical).hexdigest().encode("ascii") + b"\n"
-
     @staticmethod
     def _validate_layout_entries(
         entries: set[str],
