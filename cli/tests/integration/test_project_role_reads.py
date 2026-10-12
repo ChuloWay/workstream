@@ -111,6 +111,14 @@ def test_grant_reads_exact_projection_filters_cursor_and_uuid_spellings(cli):
             result = invoke(cli, origin, "list")
             assert result.returncode == 0 and json.loads(result.stdout) == value
             assert parse_qs(urlsplit(requests[-1][1]).query) == {"limit": ["50"]}
+            text = invoke(cli, origin, "list", output="text")
+            assert text.returncode == 0 and text.stderr == ""
+            fields = dict(line.split(": ", 1) for line in text.stdout.splitlines())
+            assert {key: json.loads(item) for key, item in fields.items()} == {
+                "Project": PROJECT,
+                "Grant history (not authority)": value["items"],
+                "Next cursor": value["next_cursor"],
+            }
         for revoked in (False, True):
             value = grant(revoked=revoked)
             response["body"] = json.dumps(value).encode()
