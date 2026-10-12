@@ -1612,3 +1612,23 @@ zero current unresolved/string-UUID references, exact missing-current and
 stale-key mutation refusals, and unchanged unrelated classification entries.
 Lead CI/test-delta review checks exact owner/key/category fidelity. No native
 runtime or full hosted-suite claim is made by this metadata reconciliation.
+
+
+At clean `33c47d683`, all 24 unchanged identifier-inventory tests passed in
+34.05 seconds (52.789 seconds including process lifetime), exit zero and identical
+clean start/end heads. The independent actual-scanner discriminator copied both
+affected owner files byte-for-byte: original metadata reproduced exactly three
+unclassified and four stale sites; corrected metadata had no errors; deleting
+each of the three current keys or restoring each of the four stale keys produced
+its intended error. Those focused copies are qualified separately from the full
+repository checks in the existing 24-test module. Independent source/metadata
+review passed and confirms untouched scanner, categories, unrelated entries,
+tests, production, policy and waivers.
+
+The complete hosted run at `62b661bd8` (identical tested merge tree `de7cafd43`)
+finished nine backend lanes successfully. Schema execution completed in 748.049
+seconds within the unchanged 1200-second cap, with 571 ordinary tests passing and
+only this stale UUID-inventory test failing. This is not a full-suite pass. A fresh
+required hosted run on the published metadata-repair candidate remains required
+for merge readiness. Earlier native/image proofs remain explicitly tied to their
+recorded heads; this metadata-only correction requires no new runtime proof.
