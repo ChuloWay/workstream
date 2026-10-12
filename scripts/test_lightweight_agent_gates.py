@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
 import tempfile
 import textwrap
@@ -21,6 +22,40 @@ from scripts.check_stale_workstream_wording import forbidden_path_failures
 
 class LightweightAgentGateTests(unittest.TestCase):
     """Keep the retained checks executable and cover their core parsing rules."""
+
+    def test_cli_full_contract_preserves_failure_and_timeout_exits(self) -> None:
+        workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")
+        step = workflow.split(
+            "      - name: Exercise built CLI against HTTP boundaries and real public API\n",
+            1,
+        )[1]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        self.assertEqual(
+            shlex.split(script.replace("\\\n", ""), comments=True),
+            [
+                "set", "-euo", "pipefail", "python", "scripts/run_isolated_tests.py",
+                "--metadata-json", "${RUNNER_TEMP}/workstream-cli-isolation.json",
+                "--timeout-seconds", "300", "--", "python", "-m", "pytest", "-q",
+                "../cli/tests/integration",
+            ],
+        )
+        self.assertNotIn("continue-on-error", workflow)
+        self.assertNotIn("|| true", script)
+        for exit_code in (0, 1, 124):
+            with self.subTest(exit_code=exit_code):
+                result = subprocess.run(
+                    [
+                        "bash",
+                        "-e",
+                        "-c",
+                        f"python() {{ return {exit_code}; }}\n" + script,
+                    ],
+                    env=os.environ | {"RUNNER_TEMP": tempfile.gettempdir()},
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, exit_code, result.stderr)
 
     def test_backend_redis_services_use_the_exact_official_image(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")

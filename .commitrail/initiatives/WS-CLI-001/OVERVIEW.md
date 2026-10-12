@@ -24,6 +24,7 @@
   [WS-CLI-001-17](WS-CLI-001-17.md), exact guide-proposal correction and explicit saved-successor dispatch;
   [WS-CLI-001-18](WS-CLI-001-18.md), separate exact complete-guide activation and immutable receipt replay;
   [WS-CLI-001-19](WS-CLI-001-19.md), separate manager draft creation, screening and release;
+  [WS-CLI-001-20](WS-CLI-001-20.md), explicit exact-project Submitter/Reviewer issuance and revocation;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download.
 
 ## Current boundary
@@ -100,6 +101,11 @@ and `project task release PROJECT_ID TASK_ID --idempotency-key UUID --reason TEX
 prepare individual work through three deliberate public writes. Workstream owns
 active-guide locking, readiness, lifecycle and fresh-authority replay; management
 receipts do not enlarge contributor disclosure.
+`project role-grant issue PROJECT_ID --input FILE --idempotency-key UUID` and
+`project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID`
+submit caller-prepared contributor-role decisions to public AUTH. Qualification
+capture, exact-project manager authority and fresh-authorized replay stay backend
+owned; no role cache, automatic grant or AdminRole command is added.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -186,11 +192,14 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 19. **WS-CLI-001-19:** Prepare individual tasks through separate manager draft
     create, screen and release calls. Validate full management receipts and
     explicit replay; do not import, automatically release or choose policies.
-20. **Later governed-work commands:** Add further project setup, submission,
+20. **WS-CLI-001-20:** Explicit Submitter/Reviewer issuance and revocation with
+    supplied qualifications/reasons, full receipt binding and fresh-authorized
+    replay. No grant discovery or automatic eligibility.
+21. **Later governed-work commands:** Add further project setup, submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-21. **Optional TUI:** Add a focused public queue/evidence view after its API
+22. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof
