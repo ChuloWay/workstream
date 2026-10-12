@@ -172,7 +172,20 @@ def test_completion_handler_is_registered_in_production_registry():
     assert delivery._options_for(COMPLETION_EVENT, 1) == DeliveryOptions()
 
 
-def test_production_request_transport_covers_maximum_selected_execution():
+def test_production_request_transport_covers_maximum_selected_execution(monkeypatch):
+    from app.core.config import get_settings
+
+    # This checks the actual task declaration without publishing to a broker.
+    monkeypatch.setenv("WORKSTREAM_CELERY_BROKER_URL", "memory://")
+    monkeypatch.setenv("WORKSTREAM_ARTIFACT_STORE_BACKEND", "disabled")
+    get_settings.cache_clear()
+    try:
+        _assert_production_request_transport_budget()
+    finally:
+        get_settings.cache_clear()
+
+
+def _assert_production_request_transport_budget():
     from app.workers.outbox import deliver_event
     from app.workers.outbox_topology import OUTBOX_PROCESS_SHUTDOWN_MARGIN_SECONDS
 

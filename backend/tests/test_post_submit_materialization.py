@@ -91,7 +91,7 @@ class ExternalGrantConsumer(Consumer):
         await super().evaluate(request, view)
         external_request = self.external_request(view.external_checker_material)
         with view.external_checker_grant(external_request) as grant:
-            self.grant_path = view._workspace.parent / grant.grant_id
+            self.grant_path = view._preparation._root / "workspaces" / grant.grant_id
             self.manifest = json.loads(
                 (self.grant_path / ".external-checker-grant.json").read_text()
             )
@@ -428,7 +428,6 @@ async def test_consumption_retains_inspected_manifest_and_replays_without_provid
         ]
         async with h.factory() as session:
             body = await session.scalar(text(
-                "select e.semantic_manifest_body from pre_submit_evidence_sets e "
-                "join submission_bundle_admissions a on a.pre_submit_evidence_set_id=e.id where a.id=:id"
+                "select semantic_manifest_body from submission_bundle_admissions where id=:id"
             ), {"id": str(h.created.admission_id)})
         assert body == h.manifest.as_dict()

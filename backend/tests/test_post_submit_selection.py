@@ -63,6 +63,8 @@ async def test_task_projection_is_owner_qualified_and_exact(tmp_path, isolated_d
             "review_generation": "locked_review_policy_generation", "review_hash": "locked_review_policy_hash",
             "revision_policy_id": "locked_revision_policy_id", "revision_generation": "locked_revision_policy_generation",
             "revision_hash": "locked_revision_policy_hash",
+            "selected_post_policy_hash": "selected_post_submit_policy_sha256",
+            "selected_post_policy_body": "selected_post_submit_policy_body",
         }
         assert {key: str(value) for key, value in asdict(facts.context).items()} == {
             key: str(row[column]) for key, column in mapping.items()

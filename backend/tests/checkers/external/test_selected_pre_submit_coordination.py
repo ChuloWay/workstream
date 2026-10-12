@@ -438,7 +438,7 @@ def test_submission_artifact_request_selects_exactly_one_pre_lineage() -> None:
         replace(request, selected_terminal_digest=None)
 
 
-def test_selected_ready_admission_no_longer_requires_legacy_evidence() -> None:
+def test_selected_ready_admission_binds_selected_run() -> None:
     run_id = new_record_id()
     admission = SimpleNamespace(
         id=str(new_record_id()),
@@ -480,7 +480,7 @@ def test_selected_ready_admission_no_longer_requires_legacy_evidence() -> None:
         submission_version=1,
     )
 
-    assert SubmissionAdmissionConsumptionService._art_lineage_is_intact(admission, None, content)
+    assert SubmissionAdmissionConsumptionService._art_lineage_is_intact(admission, content)
     facts = SubmissionAdmissionConsumptionService._authority_facts(admission, request)
     assert facts.evidence_set_id is None
     assert facts.selected_pre_submit_run_id == run_id

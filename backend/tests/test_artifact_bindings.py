@@ -7,6 +7,8 @@ from submission_context_fixtures import submission_context_facts
 from datetime import UTC, datetime
 from dataclasses import replace
 from app.modules.checkers.api import SubmissionPacketView
+from app.core.hashing import canonical_json_hash
+from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import UUID
@@ -65,7 +67,10 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
     refs = context.locked_project_context
     manifest = _manifest(_archive([("answer.txt", b"verified")]))
     content_id = str(new_record_id())
-    evidence_id = str(new_record_id())
+    policy_body = {"schema_version": "external_post_submit_policy.v1", "entries": []}
+    policy = LockedExternalPostSubmitPolicy.model_validate({
+        **policy_body, "policy_sha256": canonical_json_hash(policy_body),
+    })
     admission = SimpleNamespace(
         id=str(request.admission_id),
         status="ready",
@@ -76,12 +81,19 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
         predecessor_submission_id=None,
         predecessor_submission_version=None,
         checker_remediation_manifest_id=None,
-        pre_submit_evidence_set_id=evidence_id,
+        pre_submit_evidence_set_id=None,
+        selected_pre_submit_run_id=str(new_record_id()),
         identity_link_id=str(new_record_id()),
         artifact_content_id=content_id,
         locked_policy_context_hash=_sha("5"),
         semantic_manifest_id=str(new_record_id()),
         semantic_manifest_sha256=manifest.sha256,
+        semantic_manifest_body=manifest.as_dict(),
+        packet_sha256=request.packet_sha256,
+        effective_plan_sha256=_sha("6"),
+        selected_rules_sha256=_sha("7"),
+        selected_post_submit_policy_body=policy.model_dump(mode="json"),
+        selected_post_submit_policy_sha256=policy.policy_sha256,
         archive_sha256=_sha("4"),
         archive_byte_count=9,
         consumed_at=None,
@@ -89,41 +101,21 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
         consumed_by_submission_version=None,
         stale_at=None,
         stale_reason=None,
-    )
-    evidence = SimpleNamespace(
-        packet_sha256=request.packet_sha256,
-        id=evidence_id,
-        actor_profile_id=admission.actor_profile_id,
-        identity_link_id=admission.identity_link_id,
-        project_id=admission.project_id,
-        task_id=admission.task_id,
-        assignment_id=admission.assignment_id,
-        predecessor_submission_id=admission.predecessor_submission_id,
-        predecessor_submission_version=admission.predecessor_submission_version,
-        checker_remediation_manifest_id=None,
         guide_version=refs.guide_version,
         source_snapshot_id=str(refs.source_snapshot_id),
         source_snapshot_sha256=refs.source_snapshot_hash,
         effective_policy_id=str(refs.effective_policy_id),
-        locked_artifact_policy_sha256=refs.effective_policy_hash,
+        effective_policy_sha256=refs.effective_policy_hash,
         pre_submit_policy_id=str(refs.pre_submit_policy_id),
-        locked_checker_policy_sha256=refs.pre_submit_policy_bundle_hash,
-        locked_policy_context_hash=admission.locked_policy_context_hash,
-        semantic_manifest_id=admission.semantic_manifest_id,
-        semantic_manifest_sha256=admission.semantic_manifest_sha256,
-        semantic_manifest_body=manifest.as_dict(),
-        archive_sha256=admission.archive_sha256,
-        archive_byte_count=admission.archive_byte_count,
+        pre_submit_policy_sha256=refs.pre_submit_policy_bundle_hash,
         guide_id=str(new_record_id()),
-        terminal_status="passed",
-        eligible=True,
     )
     content = SimpleNamespace(
         id=content_id,
         sha256=admission.archive_sha256,
         byte_count=admission.archive_byte_count,
     )
-    return admission, evidence, content
+    return admission, content
 
 
 class _Allow:
@@ -174,9 +166,9 @@ async def test_explicit_denial_precedes_admission_disclosure() -> None:
 @pytest.mark.asyncio
 async def test_ready_admission_creates_exact_binding_and_consumes_once() -> None:
     request = _request()
-    admission, evidence, content = _lineage(request)
+    admission, content = _lineage(request)
     now = datetime.now(UTC)
-    session = _session(admission, evidence, content, None, now)
+    session = _session(admission, content, None, now)
 
     authority = _Allow()
     result = await SubmissionAdmissionConsumptionService(session, authority).consume(request)
@@ -195,7 +187,8 @@ async def test_ready_admission_creates_exact_binding_and_consumes_once() -> None
     assert admission.consumed_at == now
     facts = authority.consume.await_args.args[0]
     assert facts.admission_id == request.admission_id
-    assert facts.evidence_set_id.hex == evidence.id.replace("-", "")
+    assert facts.evidence_set_id is None
+    assert facts.selected_pre_submit_run_id == UUID(admission.selected_pre_submit_run_id)
     assert facts.actor_profile_id == request.task_context.contributor_id
     assert facts.identity_link_id.hex == admission.identity_link_id.replace("-", "")
     assert facts.project_id == request.task_context.locked_project_context.project_id
@@ -205,17 +198,17 @@ async def test_ready_admission_creates_exact_binding_and_consumes_once() -> None
     assert facts.predecessor_submission_version is None
     assert facts.submission_id == request.submission_id
     assert facts.submission_version == request.submission_version
-    assert facts.guide_id.hex == evidence.guide_id.replace("-", "")
-    assert facts.guide_version == evidence.guide_version
-    assert facts.source_snapshot_id.hex == evidence.source_snapshot_id.replace("-", "")
-    assert facts.source_snapshot_sha256 == evidence.source_snapshot_sha256
-    assert facts.effective_policy_id.hex == evidence.effective_policy_id.replace("-", "")
-    assert facts.effective_policy_sha256 == evidence.locked_artifact_policy_sha256
-    assert facts.pre_submit_policy_id.hex == evidence.pre_submit_policy_id.replace("-", "")
-    assert facts.pre_submit_policy_sha256 == evidence.locked_checker_policy_sha256
-    assert facts.locked_policy_context_hash == evidence.locked_policy_context_hash
-    assert facts.semantic_manifest_id.hex == evidence.semantic_manifest_id.replace("-", "")
-    assert facts.semantic_manifest_sha256 == evidence.semantic_manifest_sha256
+    assert facts.guide_id.hex == admission.guide_id.replace("-", "")
+    assert facts.guide_version == admission.guide_version
+    assert facts.source_snapshot_id.hex == admission.source_snapshot_id.replace("-", "")
+    assert facts.source_snapshot_sha256 == admission.source_snapshot_sha256
+    assert facts.effective_policy_id.hex == admission.effective_policy_id.replace("-", "")
+    assert facts.effective_policy_sha256 == admission.effective_policy_sha256
+    assert facts.pre_submit_policy_id.hex == admission.pre_submit_policy_id.replace("-", "")
+    assert facts.pre_submit_policy_sha256 == admission.pre_submit_policy_sha256
+    assert facts.locked_policy_context_hash == admission.locked_policy_context_hash
+    assert facts.semantic_manifest_id.hex == admission.semantic_manifest_id.replace("-", "")
+    assert facts.semantic_manifest_sha256 == admission.semantic_manifest_sha256
     assert facts.content_id == result.content_id
     assert facts.sha256 == admission.archive_sha256
     assert facts.byte_count == admission.archive_byte_count
@@ -231,9 +224,9 @@ async def test_ready_admission_creates_exact_binding_and_consumes_once() -> None
 @pytest.mark.asyncio
 async def test_final_authority_denial_leaves_ready_admission_unchanged() -> None:
     request = _request()
-    admission, evidence, content = _lineage(request)
+    admission, content = _lineage(request)
     authority = _DenyFinal()
-    session = _session(admission, evidence, content, None)
+    session = _session(admission, content, None)
 
     with pytest.raises(
         SubmissionAdmissionConsumptionError,
@@ -251,10 +244,10 @@ async def test_final_authority_denial_leaves_ready_admission_unchanged() -> None
 @pytest.mark.asyncio
 async def test_proven_task_lineage_change_marks_ready_admission_stale() -> None:
     request = _request()
-    admission, evidence, content = _lineage(request)
-    evidence.source_snapshot_sha256 = _sha("9")
+    admission, content = _lineage(request)
+    admission.source_snapshot_sha256 = _sha("9")
     now = datetime.now(UTC)
-    session = _session(admission, evidence, content, now)
+    session = _session(admission, content, now)
 
     authority = _Allow()
     result = await SubmissionAdmissionConsumptionService(session, authority).consume(request)
@@ -271,9 +264,9 @@ async def test_proven_task_lineage_change_marks_ready_admission_stale() -> None:
 @pytest.mark.asyncio
 async def test_broken_art_lineage_denies_without_staling_admission() -> None:
     request = _request()
-    admission, evidence, content = _lineage(request)
+    admission, content = _lineage(request)
     content.sha256 = _sha("9")
-    session = _session(admission, evidence, content)
+    session = _session(admission, content)
 
     authority = _Allow()
     with pytest.raises(
@@ -292,13 +285,13 @@ async def test_broken_art_lineage_denies_without_staling_admission() -> None:
 @pytest.mark.asyncio
 async def test_matching_consumed_admission_replays_exact_binding() -> None:
     request = _request()
-    admission, evidence, content = _lineage(request)
+    admission, content = _lineage(request)
     admission.status = "consumed"
     decision_id = new_record_id()
     admission.consumed_by_submission_id = str(request.submission_id)
     admission.consumed_by_submission_version = request.submission_version
     binding = SimpleNamespace(id=str(new_record_id()), content_id=admission.artifact_content_id)
-    session = _session(admission, evidence, content, binding)
+    session = _session(admission, content, binding)
     session.get.return_value = SimpleNamespace(binding_id=binding.id, decision_id=str(decision_id))
 
     authority = _Allow()
@@ -317,7 +310,7 @@ async def test_matching_consumed_admission_replays_exact_binding() -> None:
 @pytest.mark.asyncio
 async def test_consumed_admission_rejects_different_submission() -> None:
     request = _request()
-    admission, _, _ = _lineage(request)
+    admission, _ = _lineage(request)
     admission.status = "consumed"
     admission.consumed_by_submission_id = str(new_record_id())
     admission.consumed_by_submission_version = request.submission_version
@@ -343,11 +336,11 @@ async def test_consumed_admission_rejects_wrong_submission_version() -> None:
         submission_version=2,
         task_context=original.task_context,
     )
-    admission, evidence, content = _lineage(original)
+    admission, content = _lineage(original)
     admission.status = "consumed"
     admission.consumed_by_submission_id = str(original.submission_id)
     admission.consumed_by_submission_version = original.submission_version
-    session = _session(admission, evidence, content, None)
+    session = _session(admission, content, None)
 
     with pytest.raises(
         SubmissionAdmissionConsumptionError,
@@ -359,7 +352,7 @@ async def test_consumed_admission_rejects_wrong_submission_version() -> None:
 @pytest.mark.asyncio
 async def test_stale_admission_is_terminal_without_art_mutation() -> None:
     request = _request()
-    admission, _, _ = _lineage(request)
+    admission, _ = _lineage(request)
     admission.status = "stale"
     admission.stale_at = datetime.now(UTC)
     admission.stale_reason = "locked_submission_context_changed"
@@ -394,14 +387,14 @@ async def test_consumption_requires_caller_owned_root_transaction() -> None:
 @pytest.mark.parametrize("corruption", ["absent", "file_hash", "foreign_body"])
 async def test_consumption_rejects_invalid_manifest_before_binding(corruption):
     request = _request()
-    admission, evidence, content = _lineage(request)
+    admission, content = _lineage(request)
     if corruption == "absent":
-        evidence.semantic_manifest_body = None
+        admission.semantic_manifest_body = None
     elif corruption == "file_hash":
-        evidence.semantic_manifest_body["entries"][0]["sha256"] = "sha256:" + "f" * 64
+        admission.semantic_manifest_body["entries"][0]["sha256"] = "sha256:" + "f" * 64
     else:
-        evidence.semantic_manifest_body = _manifest(_archive([("foreign.txt", b"other")])).as_dict()
-    session = _session(admission, evidence, content)
+        admission.semantic_manifest_body = _manifest(_archive([("foreign.txt", b"other")])).as_dict()
+    session = _session(admission, content)
     authority = _Allow()
     with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
         await SubmissionAdmissionConsumptionService(session, authority).consume(request)
@@ -415,7 +408,7 @@ async def test_consumption_rejects_invalid_manifest_before_binding(corruption):
 @pytest.mark.parametrize("field", ["summary", "contributor_attestation"])
 async def test_changed_packet_denies_before_binding_or_consumed_replay(status, field):
     original = _request()
-    admission, evidence, content = _lineage(original)
+    admission, content = _lineage(original)
     admission.status = status
     if status == "consumed":
         admission.consumed_by_submission_id = str(original.submission_id)
@@ -425,7 +418,7 @@ async def test_changed_packet_denies_before_binding_or_consumed_replay(status, f
     request = replace(original, packet_sha256=changed.sha256)
     binding = SimpleNamespace(id=str(new_record_id()), content_id=admission.artifact_content_id)
     continuation = (binding,) if status == "consumed" else (None, datetime.now(UTC))
-    session = _session(admission, evidence, content, *continuation)
+    session = _session(admission, content, *continuation)
     session.get.return_value = SimpleNamespace(binding_id=UUID(binding.id), decision_id=new_record_id())
     authority = _Allow()
     expected = "submission_bundle_admission_unavailable" if status == "ready" else "submission_bundle_admission_context_changed"

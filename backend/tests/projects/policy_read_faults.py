@@ -52,9 +52,7 @@ async def corrupt_locked_policy_reads(monkeypatch, task_id, mutation):
             "package_required": "yes", "allowed_package_formats": "zip",
         }
     elif mutation == "bundle":
-        pre.compiled_bundle["rules"] = [
-            rule for rule in pre.compiled_bundle["rules"] if rule["primitive"] != "require_file"
-        ]
+        pre.compiled_bundle["workstream_default"]["checker_version"] = "unsupported-default"
     elif mutation == "stale_effective":
         effective.effective_policy["required_evidence"] = []
     elif mutation == "stale_bundle":

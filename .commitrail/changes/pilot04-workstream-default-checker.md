@@ -59,6 +59,40 @@ cleanup.
 
 ### Allowed
 
+- Current selected-custody fixture closure also permits
+  `backend/tests/checkers/external/test_selected_pre_submit_coordination.py`,
+  `backend/tests/test_post_submit_selection.py`,
+  `backend/tests/test_post_submit_materialization.py`,
+  `backend/tests/projects/policy_read_faults.py` and
+  `backend/tests/tasks/test_payment_policy_migration.py`.
+  Remove obsolete call signatures/evidence-set joins and use the current
+  selected manifest, grant location and full context hash. Replace the old
+  catalogue-rule corruption with a hash-consistent invalid default identity.
+  Migration assertions must preserve every original value while explicitly
+  checking the exact additive current columns; no wildcard tolerance or row
+  rewrite. Keep all authority, immutable evidence and recovery assertions.
+
+- Hosted ART-binding fixture reconciliation permits
+  `backend/tests/test_artifact_bindings.py`,
+  `backend/tests/test_artifact_bindings_db.py`,
+  `backend/tests/test_submission_composition.py` and
+  `backend/tests/test_submission_preparation_adapter.py`, plus this record.
+  Replace superseded evidence-set fixtures with complete current selected-run
+  admission facts and exact authority inputs. Retain denial, immutable packet,
+  stale lineage, concurrent single consumption, rollback and fresh replay
+  proofs. Diagnose any database lock failure before changing cleanup; never
+  hide it with retry, disabling guards or adding a second admission path.
+  No production/schema changes are authorized by this fixture repair. Focused
+  pure tests and real PostgreSQL controls precede independent review/full CI.
+
+- The hosted transport-budget test repair permits
+  `backend/tests/tasks/evaluation_delivery/test_completion.py` and this record.
+  Configure an explicit test-owned in-memory broker before importing the actual
+  Celery task and clear settings custody after the check. Preserve every timeout,
+  lease and actual task hard-limit assertion; no production setting, worker
+  topology, CI cap or execution behavior changes. Acceptance is the isolated
+  no-broker test and existing worker topology controls, followed by full CI.
+
 - Final dead-contract removal permits the obsolete CHECKERS modules
   `api/pre_submit.py`, `api/post_submit.py`, `api/historical_post_submit.py`,
   `api/policy_compilation.py` and `post_submit_contracts.py`, their unused exports

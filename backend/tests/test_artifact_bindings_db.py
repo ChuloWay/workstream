@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
-    PreSubmitEvidenceSet,
     SubmissionBundleAdmission, SubmissionBindingReceipt,
 )
 from app.modules.artifacts.submission_bindings import (
@@ -33,7 +32,6 @@ from test_artifact_bindings import _Allow, _lineage, _request, _replay_request
 
 _TABLES = (
     ArtifactContent.__table__,
-    PreSubmitEvidenceSet.__table__,
     SubmissionBundleAdmission.__table__,
     ArtifactBinding.__table__,
     Submission.__table__,
@@ -113,7 +111,7 @@ async def _set_schema(session, schema: str) -> None:
 
 
 async def _seed(session, schema: str, request) -> None:
-    admission, evidence, content = _lineage(request)
+    admission, content = _lineage(request)
     await _set_schema(session, schema)
     await session.execute(
         ArtifactContent.__table__.insert().values(
@@ -121,9 +119,6 @@ async def _seed(session, schema: str, request) -> None:
             sha256=content.sha256,
             byte_count=content.byte_count,
         )
-    )
-    await session.execute(
-        PreSubmitEvidenceSet.__table__.insert().values(**vars(evidence))
     )
     await session.execute(
         SubmissionBundleAdmission.__table__.insert().values(
@@ -248,7 +243,12 @@ async def test_postgresql_consumption_is_concurrent_and_rollback_safe(
                         assert exc.code == "submission_bundle_admission_already_consumed"
                         return None
 
-        outcomes = await asyncio.gather(consume_once(), consume_once())
+        contenders = [asyncio.create_task(consume_once()) for _ in range(2)]
+        try:
+            outcomes = await asyncio.gather(*contenders)
+        finally:
+            # Join both transactions before schema teardown even if one fails.
+            await asyncio.gather(*contenders, return_exceptions=True)
         assert sum(result is not None for result in outcomes) == 1
         original = next(result for result in outcomes if result is not None)
         async with factory.begin() as session:

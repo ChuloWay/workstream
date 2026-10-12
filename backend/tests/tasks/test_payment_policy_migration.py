@@ -128,6 +128,15 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
                         f"SELECT to_jsonb(t) FROM public.{table} t ORDER BY to_jsonb(t)::text")))
                     removed = FIELDS if table == "workstream_tasks" else (FIELDS[-1],) if table == "submissions" else ()
                     expected = [{k: v for k, v in row.items() if k not in removed} for row in before[0][table]]
+                    if table == "submissions":
+                        added = {"selected_post_submit_policy_sha256", "selected_post_submit_policy_body"}
+                        actual.sort(key=lambda row: row["id"])
+                        expected.sort(key=lambda row: row["id"])
+                        assert len(actual) == len(expected)
+                        for upgraded, retained in zip(actual, expected, strict=True):
+                            assert set(upgraded) == set(retained) | added
+                            for column in added:
+                                assert upgraded.pop(column) is None
                     assert actual == expected, table
                 assert (
                     await connection.scalar(text("SELECT version_num FROM public.alembic_version"))
