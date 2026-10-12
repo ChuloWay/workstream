@@ -111,6 +111,25 @@ def test_grant_reads_exact_projection_filters_cursor_and_uuid_spellings(cli):
             result = invoke(cli, origin, "list")
             assert result.returncode == 0 and json.loads(result.stdout) == value
             assert parse_qs(urlsplit(requests[-1][1]).query) == {"limit": ["50"]}
+        for revoked in (False, True):
+            value = grant(revoked=revoked)
+            response["body"] = json.dumps(value).encode()
+            text = invoke(cli, origin, "show", output="text")
+            assert text.returncode == 0 and text.stderr == ""
+            assert (
+                json.loads(text.stdout.removeprefix("Grant history (not authority): "))
+                == value
+            )
+            page = {"items": [value], "next_cursor": "opaque-next"}
+            response["body"] = json.dumps(page).encode()
+            text = invoke(cli, origin, "list", output="text")
+            assert text.returncode == 0 and text.stderr == ""
+            fields = dict(line.split(": ", 1) for line in text.stdout.splitlines())
+            assert {key: json.loads(value) for key, value in fields.items()} == {
+                "Project": PROJECT,
+                "Grant history (not authority)": page["items"],
+                "Next cursor": page["next_cursor"],
+            }
         # Qualification-heavy pages legitimately exceed the default 64 KiB.
         value = grant()
         for name in ("skills_snapshot", "reputation_snapshot"):
@@ -137,6 +156,31 @@ def test_grant_reads_exact_projection_filters_cursor_and_uuid_spellings(cli):
         assert "\u202e" not in text.stdout and "\u001b" not in text.stdout
         response["body"] = json.dumps(grant()).encode()
         assert invoke(cli, origin, "show", output="text").returncode == 0
+
+
+def test_grant_denial_never_discloses_uuid_bearer_alias_in_either_header(cli):
+    with http_fixture() as (origin, response, requests):
+        response.update(status=403, body=json.dumps(canonical_error()).encode())
+        for action in ("list", "show"):
+            for headers, expected in (
+                ({"X-Correlation-ID": KEY}, KEY),
+                ({"X-Correlation-ID": ACTOR, "X-Request-ID": KEY}, KEY),
+                ({"X-Correlation-ID": "invalid", "X-Request-ID": ACTOR}, None),
+                ({"X-Correlation-ID": ACTOR.upper(), "X-Request-ID": ACTOR}, None),
+            ):
+                response["headers"] = {"Content-Type": "application/json"} | headers
+                before = len(requests)
+                result = invoke(cli, origin, action, token=ACTOR.replace("-", ""))
+                assert_failure(result, "authorization_denied")
+                assert ACTOR.lower() not in result.stderr.lower()
+                error = json.loads(result.stderr)["error"]
+                assert error.get("correlation_id") == expected
+                assert "outcome_unknown" not in error and len(requests) == before + 1
+                text = invoke(
+                    cli, origin, action, token=ACTOR.replace("-", ""), output="text"
+                )
+                assert text.returncode == 1 and text.stdout == ""
+                assert ACTOR.lower() not in text.stderr.lower()
 
 
 def test_grant_read_invalid_selectors_filters_and_wire_cursors_do_not_send(cli):

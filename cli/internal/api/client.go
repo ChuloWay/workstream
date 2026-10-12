@@ -413,9 +413,9 @@ func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client
 
 func (c *Client) responseCorrelation(response *http.Response) string {
 	correlation := response.Header.Get("X-Correlation-ID")
-	if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
+	if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) || sameUUID(correlation, c.token) {
 		correlation = response.Header.Get("X-Request-ID")
-		if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) {
+		if !safeCorrelation.MatchString(correlation) || !c.safeMetadata(correlation) || sameUUID(correlation, c.token) {
 			correlation = ""
 		}
 	}

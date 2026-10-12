@@ -192,7 +192,16 @@ async def exercise_project_role_decisions(
                     )
                 ).all()
             )
-            return grants, snapshots, events
+            all_role_events = list(
+                (
+                    await session.execute(
+                        text(
+                            "SELECT id,event_type,entity_id FROM audit_events WHERE event_type IN ('ProjectRoleGrantIssued','ProjectRoleGrantRevoked','ProjectRoleQualificationSnapshotCaptured') ORDER BY id"
+                        )
+                    )
+                ).all()
+            )
+            return grants, snapshots, events, all_role_events
 
     foreign = await post(
         f"/api/v1/projects/{foreign_project}/role-grants",
@@ -220,7 +229,7 @@ async def exercise_project_role_decisions(
         qualification,
     )
     assert await stored() == before
-    grants, snapshots, events = before
+    grants, snapshots, events, _all_role_events = before
     row = next(row for row in grants if str(row["id"]) == first["id"])
     snapshot = next(
         row for row in snapshots if str(row["id"]) == first["qualification_snapshot_id"]
@@ -334,7 +343,7 @@ async def exercise_project_role_decisions(
             invoke("issue", body, key=issue_key, status=409)["code"]
             == "project_role_grant_replay_state_changed"
         )
-        grants_after, snapshots_after, events_after = await stored()
+        grants_after, snapshots_after, events_after, all_events_after = await stored()
         # The retained journey has legitimately issued other roles meanwhile.
         # Every original immutable snapshot must remain unchanged.
         after_by_id = {str(row["id"]): row for row in snapshots_after}
@@ -365,7 +374,12 @@ async def exercise_project_role_decisions(
             read_snapshot,
             payload["reason"],
         )
-        assert await stored() == (grants_after, snapshots_after, events_after)
+        assert await stored() == (
+            grants_after,
+            snapshots_after,
+            events_after,
+            all_events_after,
+        )
         # Cleanup only this helper's extra management authority; contributor
         # state and the existing claim/start denial assertions remain independent.
         await post(
