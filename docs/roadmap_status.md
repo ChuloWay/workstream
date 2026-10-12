@@ -1107,9 +1107,10 @@ remaining trace sequence is:
   use the same verified ART ownership rather than a structural catalogue.
   AUTH-OUTBOX-02 delivers shared live authority, phase audit custody and Celery
   delivery/recovery scans over CON-02B. Delivery termination is bounded by a
-  per-event hard limit under prefork: selected POST requests reserve bounded
-  execution and finalization time within the one-hour lease; other events keep
-  their existing shorter limit.
+  fixed 3,660-second prefork process hard limit. Selected POST requests have
+  a 3,520-second handler timeout and 3,600-second lease; completion/invalidation
+  retain their 240-second handler timeout and 300-second lease. Exact task and
+  message bounds prevent either truncating approved work or extending shutdown.
   ARCH-03C2 enforces a dedicated non-eager prefork delivery queue.
   ARCH-04E1A proves source storage and detached contracts only; its false scalar
   proof does not make false activation available. PILOT-04 separately installs

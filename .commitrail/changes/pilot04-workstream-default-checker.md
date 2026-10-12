@@ -427,3 +427,17 @@ contracts are retained provenance, not executable catalogue fallback. Source
 inspection confirms output-file storage/binding is deny-only while selected
 images produce closed JSON results. This editorial repair adds no runtime
 proof; the lead owns final-head native cause guards, worker timing and hosted CI.
+
+Final repaired native evidence: cause-substitution and intermediate TASK-lock
+wait controls passed 3 tests in 186.12s at 11bd7bda0. Real prefork kill/reap,
+UNKNOWN persistence and independent hard-limit checks passed 2 tests in 25.81s
+at 2d111d8c7; topology and transport controls passed 24 tests in 3.65s. Owned
+database, role and MinIO cleanup completed for both native runs. The selected
+Rust/MinIO probe at 89df6a34a passed actual default and external PRE rejection
+without a new Submission, passing PRE-to-Submission/dispatch-to-POST/completion
+to review_pending, fresh completion restart/replay, and unavailable-service
+recovery through fresh verified bytes. Image platform manifest is
+sha256:c2d957341116c2324299461598330bf93937786c30658a4b71ef9392e9b78278.
+Its runtime is local runc/docker-dev, not hosted gVisor. Database, role, object
+store and scratch cleanup passed. Later documentation commits change no product
+code from that tested head. Full final-head hosted CI remains required.
