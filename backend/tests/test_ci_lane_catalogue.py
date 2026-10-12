@@ -25,9 +25,6 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
 
     assigned = [module for lane in LANES for module in lane.modules]
     assert len(LANES) == 10
-    assert set(catalogue.PARTITION_HASH_SEEDS) == {
-        names for names, _modules in catalogue.PARTITION_GROUPS
-    }
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(

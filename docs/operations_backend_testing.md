@@ -140,11 +140,10 @@ The `project_lifecycle_a`, `project_lifecycle_b`, `project_lifecycle_c`, and
 `project_lifecycle_d` lanes
 partition PROJECT nodes, checker execution, materialization, evaluation capacity,
 output custody and routing AUTH preparation beside initial dispatch/delivery.
-All use the exact-node hash across four lanes. Each existing lane family has a
-fixed, checked-in hash seed selected from complete hosted phase timings.
-Collection hashes `seed:nodeid`; it never reads timing artifacts to select tests.
-The [measurement record](../.commitrail/changes/backend-ci-measured-lane-balance.md)
-binds the seed choices, rounding limits and hosted validation requirements. A retained three-lane
+All use the existing exact-node hash across four lanes. The
+[measurement record](../.commitrail/changes/backend-ci-measured-lane-balance.md)
+records the rejected seed-rebalance experiment: two hosted runs did not establish
+a repeatable speedup, so allocation remains unchanged. A retained three-lane
 run exhausted project C's 1,200-second cap with 92 nodes unfinished; prior passing
 runs had little remaining headroom. The fourth project lane increases execution
 capacity without changing the cap or canonical test union. Placing the entire
@@ -152,7 +151,7 @@ checker delivery group exclusively on project A previously exhausted its cap.
 Two measured broad owners, `tests/test_projects.py` and
 `tests/test_guide_document_intake.py`, instead partition their nodes only across
 project C and D. The lane logs retain all setup/call/teardown phase durations,
-including phases below five milliseconds, for measured allocation. This output
+including phases below five milliseconds, for performance diagnosis. This output
 is bounded by the selected test inventory and remains diagnostic only: it cannot
 select tests or override completeness, cleanup or the unchanged execution deadline.
 Measure final-report overhead alongside test execution when comparing allocations.

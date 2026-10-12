@@ -579,14 +579,6 @@ PARTITION_GROUPS = (
     (PARTITIONED_PROJECT_INTAKE_LANES, PROJECT_INTAKE_MODULES),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
-# Measured constants; timing artifacts never participate in runtime selection.
-# See .commitrail/changes/backend-ci-measured-lane-balance.md for provenance.
-PARTITION_HASH_SEEDS = {
-    PARTITIONED_SHARED_LANES: 41,
-    PARTITIONED_PROJECT_LANES: 114,
-    PARTITIONED_PROJECT_INTAKE_LANES: 178,
-    PARTITIONED_TASK_LANES: 181,
-}
 PARTITION_LANES_BY_MODULE = {
     module: names for names, modules in PARTITION_GROUPS for module in modules
 }
