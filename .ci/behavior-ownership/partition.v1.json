@@ -402,6 +402,14 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/artifacts/selected_pre_submit_admission.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/artifacts/selected_pre_submit_execution.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/artifacts/service.py"
     },
     {
@@ -662,6 +670,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/pre_submit.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/prepared_adapter_bindings.py"
     },
     {
@@ -779,6 +791,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/post_submit_routing_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/pre_submit_authorization.py"
     },
     {
       "group": "auth",
@@ -902,6 +918,10 @@
     },
     {
       "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/evaluation_contract.py"
+    },
+    {
+      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/execution.py"
     },
     {
@@ -919,6 +939,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/api/history.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/api/material.py"
     },
     {
       "group": "artifacts",
@@ -954,11 +978,11 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/default_checker.py"
+      "target": "backend/app/modules/checkers/checker_retry.py"
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/checker_retry.py"
+      "target": "backend/app/modules/checkers/default_checker.py"
     },
     {
       "group": "artifacts",
@@ -1909,7 +1933,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "4c48eb383f3d00de9e709bf3d4364958477ec93d228dda91fa0f39a26cd5ced7",
+  "authority_digest": "34e9996548e3d2cb0e45ce520c93c2e3382b9854aab9271cd3732898b48b34a5",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
