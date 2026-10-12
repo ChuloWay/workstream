@@ -87,29 +87,16 @@ async def load_approval_custody(session, policy_id: str | None) -> ApprovalCusto
     return ApprovalCustody(operation, reservation, effective, pre, successor)
 
 
-def approved_projection_digest(view) -> str:
-    """Return the original digest only after proving the exact approved transition."""
-    custody = view.approval_custody
-    policy = view.policy
-    if custody is None or policy is None:
-        raise ValueError("approval custody is unavailable")
+def _approval_projection_matches(
+    view, custody, target, receipt, policy, external_plan_hash, external_pre_hash
+) -> bool:
+    """Compare every immutable target, receipt, reservation and policy fact."""
     operation, reservation, effective, pre = (
         custody.operation,
         custody.reservation,
         custody.effective,
         custody.pre,
     )
-    target = GuideProposalTarget.model_validate(operation.target_json)
-    receipt = GuideProposalApprovalReceipt.model_validate(operation.receipt_json)
-    external_plan_hash = external_pre_hash = None
-    if operation.effective_pre_submit_plan.get("schema_version") == (
-        "external_checker_policies.v1"
-    ):
-        external_policies = validate_stored_external_checker_policies(
-            operation.effective_pre_submit_plan
-        )
-        external_plan_hash = external_policies.policies_sha256
-        external_pre_hash = external_policies.pre_submit.policy_sha256
     if (
         target.digest != operation.target_digest
         or target.compilation_id != view.compilation.id
@@ -167,6 +154,35 @@ def approved_projection_digest(view) -> str:
             else canonical_json_hash(operation.effective_pre_submit_plan)
         )
         != receipt.effective_pre_submit_plan_hash
+    ):
+        return False
+    return True
+
+
+def approved_projection_digest(view) -> str:
+    """Return the original digest only after proving the exact approved transition."""
+    custody = view.approval_custody
+    policy = view.policy
+    if custody is None or policy is None:
+        raise ValueError("approval custody is unavailable")
+    operation, effective, pre = (
+        custody.operation,
+        custody.effective,
+        custody.pre,
+    )
+    target = GuideProposalTarget.model_validate(operation.target_json)
+    receipt = GuideProposalApprovalReceipt.model_validate(operation.receipt_json)
+    external_plan_hash = external_pre_hash = None
+    if operation.effective_pre_submit_plan.get("schema_version") == (
+        "external_checker_policies.v1"
+    ):
+        external_policies = validate_stored_external_checker_policies(
+            operation.effective_pre_submit_plan
+        )
+        external_plan_hash = external_policies.policies_sha256
+        external_pre_hash = external_policies.pre_submit.policy_sha256
+    if not _approval_projection_matches(
+        view, custody, target, receipt, policy, external_plan_hash, external_pre_hash
     ):
         raise ValueError("approved proposal custody mismatch")
     lifecycle = (policy.lifecycle_status, effective.lifecycle_status, pre.lifecycle_status)

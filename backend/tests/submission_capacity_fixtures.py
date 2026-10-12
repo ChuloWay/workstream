@@ -20,10 +20,9 @@ from tests.archive_fixtures import byte_source as _bytes, submission_archive as 
 async def capacity_fixture(database_url, tmp_path):
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    settings = _settings(
-        tmp_path,
-        maximum_bytes=1024 * 1024,
-        external_checker=True,
+    settings = _settings(tmp_path, maximum_bytes=1024 * 1024).model_copy(
+        update={"external_checker_service_socket": tmp_path / "checker.sock",
+                "external_checker_material_root": tmp_path / "scratch"}
     )
     namespace = _namespace(settings)
     bootstrap, store = _local_store(settings, namespace)

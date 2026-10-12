@@ -36,18 +36,7 @@ from tests.projects.guide_compilation.finalization.pg_support import finalize
 from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor
 
 
-async def create_compiled_guide(
-    factory,
-    values,
-    actor,
-    *,
-    version="v1",
-    artifact_proposal=None,
-    pre_submit_registry_entry=None,
-    post_submit_registry_entry=None,
-    compilation_outcome=None,
-):
-    """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
+async def _create_guide_source(factory, values, actor, version):
     async with factory() as session, session.begin():
         resolved = ResolvedActor(
             await session.get(ActorProfile, str(actor.actor_profile_id)),
@@ -81,7 +70,76 @@ async def create_compiled_guide(
             ),
         )
         setup = await session.get(ProjectSetupRun, str(created.response.setup.id))
-        snapshot_id = setup.source_snapshot_id
+        return setup.source_snapshot_id
+
+
+def _external_compilation_outcome(outcome, registry_entries, pre_entry, post_entry, refs):
+    if not registry_entries:
+        return outcome
+    from app.interfaces.project_agents import (
+        AtomicGuideRequirement,
+        PostSubmissionBindingProposal,
+        PreSubmissionBindingProposal,
+    )
+
+    requirements, pre_bindings, post_bindings = [], [], []
+    if pre_entry is not None:
+        requirements.append(
+            AtomicGuideRequirement(
+                requirement_id="project.archive_rules",
+                statement="Validate the submitted project archive rules.",
+                disposition="supported_pre_submit",
+                evidence_refs=refs,
+            )
+        )
+        pre_bindings.append(
+            PreSubmissionBindingProposal(
+                requirement_id="project.archive_rules",
+                capability_id=pre_entry.capability_id,
+                capability_version=pre_entry.capability_version,
+                stage="pre_submit",
+            )
+        )
+    if post_entry is not None:
+        requirements.append(
+            AtomicGuideRequirement(
+                requirement_id="project.post_evidence",
+                statement="Evaluate the submitted evidence package.",
+                disposition="supported_post_submit",
+                evidence_refs=refs,
+            )
+        )
+        post_bindings.append(
+            PostSubmissionBindingProposal(
+                requirement_id="project.post_evidence",
+                capability_id=post_entry.capability_id,
+                capability_version=post_entry.capability_version,
+                stage="post_submit",
+                parameters=(),
+            )
+        )
+    return outcome.model_copy(
+        update={
+            "requirements": tuple(requirements),
+            "pre_submit_bindings": tuple(pre_bindings),
+            "post_submit_bindings": tuple(post_bindings),
+        }
+    )
+
+
+async def create_compiled_guide(
+    factory,
+    values,
+    actor,
+    *,
+    version="v1",
+    artifact_proposal=None,
+    pre_submit_registry_entry=None,
+    post_submit_registry_entry=None,
+    compilation_outcome=None,
+):
+    """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
+    snapshot_id = await _create_guide_source(factory, values, actor, version)
     manifest = await create_committed_document_fixture(str(snapshot_id), sessions=factory)
     # Arrange the completed durable dispatch prerequisite; no broker is exercised here.
     async with factory() as session, session.begin():
@@ -130,58 +188,13 @@ async def create_compiled_guide(
             for field in ("findings", "requirements", "capability_suggestions")
         }
     )
-    if registry_entries:
-        from app.interfaces.project_agents import (
-            AtomicGuideRequirement,
-            PreSubmissionBindingProposal,
-            PostSubmissionBindingProposal,
-        )
-
-        requirements = []
-        pre_bindings = []
-        post_bindings = []
-        if pre_submit_registry_entry is not None:
-            requirements.append(
-                AtomicGuideRequirement(
-                    requirement_id="project.archive_rules",
-                    statement="Validate the submitted project archive rules.",
-                    disposition="supported_pre_submit",
-                    evidence_refs=refs,
-                )
-            )
-            pre_bindings.append(
-                PreSubmissionBindingProposal(
-                    requirement_id="project.archive_rules",
-                    capability_id=pre_submit_registry_entry.capability_id,
-                    capability_version=pre_submit_registry_entry.capability_version,
-                    stage="pre_submit",
-                )
-            )
-        if post_submit_registry_entry is not None:
-            requirements.append(
-                AtomicGuideRequirement(
-                    requirement_id="project.post_evidence",
-                    statement="Evaluate the submitted evidence package.",
-                    disposition="supported_post_submit",
-                    evidence_refs=refs,
-                )
-            )
-            post_bindings.append(
-                PostSubmissionBindingProposal(
-                    requirement_id="project.post_evidence",
-                    capability_id=post_submit_registry_entry.capability_id,
-                    capability_version=post_submit_registry_entry.capability_version,
-                    stage="post_submit",
-                    parameters=(),
-                )
-            )
-        outcome = outcome.model_copy(
-            update={
-                "requirements": tuple(requirements),
-                "pre_submit_bindings": tuple(pre_bindings),
-                "post_submit_bindings": tuple(post_bindings),
-            }
-        )
+    outcome = _external_compilation_outcome(
+        outcome,
+        registry_entries,
+        pre_submit_registry_entry,
+        post_submit_registry_entry,
+        refs,
+    )
     url = factory.kw["bind"].url.render_as_string(hide_password=False)
     finalization = await compilation_and_projections(
         url,

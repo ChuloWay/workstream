@@ -43,10 +43,9 @@ from tests.tasks.submission_lineage_support import _seed_services, _verified_adm
 async def _prepared_packet(isolated_database_env, tmp_path):
     engine = create_async_engine(isolated_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    settings = _settings(
-        tmp_path,
-        maximum_bytes=1024 * 1024,
-        external_checker=True,
+    settings = _settings(tmp_path, maximum_bytes=1024 * 1024).model_copy(
+        update={"external_checker_service_socket": tmp_path / "checker.sock",
+                "external_checker_material_root": tmp_path / "scratch"}
     )
     namespace = _namespace(settings)
     bootstrap, store = _local_store(settings, namespace)

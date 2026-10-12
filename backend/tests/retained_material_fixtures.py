@@ -20,7 +20,10 @@ from app.adapters.checkers import (
 )
 from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import (
-    ArtifactObjectHead, ArtifactPutObservation, ArtifactPutResult, artifact_provider_object_ref,
+    ArtifactObjectHead,
+    ArtifactPutObservation,
+    ArtifactPutResult,
+    artifact_provider_object_ref,
 )
 from app.interfaces.external_services import ExternalServiceAdapterIdentity
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
@@ -28,15 +31,27 @@ from app.modules.artifacts.authorization import (
     PreparedPreSubmitMaterializationAuthorization,
     PreparedSubmissionBundlePreparationAuthorization,
 )
-from app.modules.artifacts.models import ArtifactStorageNamespace, ArtifactVerificationJob, SubmissionBundleAdmission
+from app.modules.artifacts.models import (
+    ArtifactStorageNamespace,
+    ArtifactVerificationJob,
+    SubmissionBundleAdmission,
+)
 from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactScratchManager
-from app.modules.artifacts.service import ArtifactAdmissionService, ArtifactStorageNamespaceSpec, ArtifactStorageOrchestrator
+from app.modules.artifacts.service import (
+    ArtifactAdmissionService,
+    ArtifactStorageNamespaceSpec,
+    ArtifactStorageOrchestrator,
+)
 from app.modules.artifacts.submission_admission import (
-    PreparedSubmissionBundlePreparationCommand, SubmissionBundleDurablePutService,
+    PreparedSubmissionBundlePreparationCommand,
+    SubmissionBundleDurablePutService,
     SubmissionBundlePreparationRuntime,
 )
 from app.modules.artifacts.selected_pre_submit_execution import SelectedPreSubmitExecutionService
-from app.modules.artifacts.submission_archive import SubmissionArchiveInspector, SubmissionArchiveLimits
+from app.modules.artifacts.submission_archive import (
+    SubmissionArchiveInspector,
+    SubmissionArchiveLimits,
+)
 from app.modules.artifacts.submission_materialization import PreparedBundleMaterializationService
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.actors.api import ServiceIdentity
@@ -81,12 +96,110 @@ class MemoryStore:
         data = self.objects[ref]
         if byte_range is not None:
             end = None if byte_range.length is None else byte_range.offset + byte_range.length
-            data = data[byte_range.offset:end]
+            data = data[byte_range.offset : end]
         yield data
 
     async def head(self, ref):
         data = self.objects.get(ref)
         return ArtifactObjectHead(ref, data is not None, len(data) if data is not None else None)
+
+
+def _submission_request(task, assignment, link, packet, predecessor_id, policy):
+    content = BytesIO()
+    paths = {entry["path"] for entry in policy["required_artifacts"] if entry.get("required", True)}
+    paths.update(
+        entry.get("path") or "evidence/" + entry["key"]
+        for entry in policy["required_evidence"]
+        if entry.get("required", True)
+    )
+    with ZipFile(content, "w") as archive:
+        for path in sorted(paths):
+            archive.writestr(path, f"{task.id}:{predecessor_id}:{packet.summary}\n")
+    context = _context(actor_profile_id=UUID(task.assigned_to), identity_link_id=UUID(link.id))
+    request = SubmissionBundlePreparationRequest(
+        actor=ActorIdentityFacts(
+            context.actor_profile_id, context.identity_link_id, ActorKind.HUMAN
+        ),
+        request_id=context.request_id,
+        correlation_id=context.correlation_id,
+        task_id=UUID(task.id),
+        assignment_id=UUID(assignment.id),
+        predecessor_submission_id=UUID(predecessor_id) if predecessor_id else None,
+        idempotency_key=new_record_id(),
+        summary=packet.summary,
+        contributor_attestation=packet.worker_attestation,
+        media_type="application/zip",
+        byte_source=_bytes(content.getvalue()),
+    )
+    return context, request
+
+
+def _runtime_factory(
+    *,
+    session,
+    settings,
+    namespace,
+    authority,
+    materialization_authority,
+    preparation,
+    inspector,
+    materialization,
+    storage,
+    tasks,
+    projects,
+    coordinator,
+):
+    @asynccontextmanager
+    async def runtime():
+        try:
+            yield SubmissionBundlePreparationRuntime(
+                preparation=preparation,
+                inspector=inspector,
+                materialization=materialization,
+                durable_put=SubmissionBundleDurablePutService(
+                    session=session,
+                    admission=ArtifactAdmissionService(session, settings, namespace),
+                    storage=storage,
+                    authorization=authority,
+                    task_contexts=tasks,
+                    project_contexts=projects,
+                ),
+                selected_coordinator=coordinator,
+                selected_execution=SelectedPreSubmitExecutionService(
+                    session=session,
+                    coordinator=coordinator,
+                    authority=selected_pre_submit_authority(session),
+                    materialization=materialization,
+                ),
+                storage_scheme="s3",
+                artifact_deadline_ms=180_000,
+            )
+        finally:
+            materialization_authority.close()
+
+    return runtime
+
+
+async def _verify_admission(factory, store, namespace, settings, result):
+    async with factory() as session:
+        job_id = await session.scalar(
+            select(ArtifactVerificationJob.id).where(
+                ArtifactVerificationJob.originating_put_attempt_id == str(result.put_attempt_id),
+            )
+        )
+        assert job_id is not None, result
+        await session.rollback()
+        orchestrator = ArtifactStorageOrchestrator(
+            session, store, namespace, settings, _AllowArtifactAuthority()
+        )
+        assert await orchestrator.verify_object(UUID(job_id)) == "verified"
+        admission = await session.scalar(
+            select(SubmissionBundleAdmission).where(
+                SubmissionBundleAdmission.put_attempt_id == str(result.put_attempt_id),
+            )
+        )
+        assert admission.status == "ready"
+        return admission.id
 
 
 async def retained_admission(
@@ -105,31 +218,20 @@ async def retained_admission(
     async with factory() as session:
         persisted = await session.get(ArtifactStorageNamespace, "primary")
         namespace = ArtifactStorageNamespaceSpec(
-            persisted.backend, persisted.adapter, persisted.provider_profile,
-            persisted.namespace_descriptor, persisted.namespace_fingerprint,
+            persisted.backend,
+            persisted.adapter,
+            persisted.provider_profile,
+            persisted.namespace_descriptor,
+            persisted.namespace_fingerprint,
         )
-        policy = (await session.get(
-            EffectiveProjectSubmissionArtifactPolicy,
-            task.locked_effective_project_submission_artifact_policy_id,
-        )).effective_policy
-    content = BytesIO()
-    paths = {entry["path"] for entry in policy["required_artifacts"] if entry.get("required", True)}
-    paths.update(entry.get("path") or "evidence/" + entry["key"]
-                 for entry in policy["required_evidence"] if entry.get("required", True))
-    with ZipFile(content, "w") as archive:
-        for path in sorted(paths):
-            archive.writestr(path, f"{task.id}:{predecessor_id}:{packet.summary}\n")
+        policy = (
+            await session.get(
+                EffectiveProjectSubmissionArtifactPolicy,
+                task.locked_effective_project_submission_artifact_policy_id,
+            )
+        ).effective_policy
+    context, request = _submission_request(task, assignment, link, packet, predecessor_id, policy)
     store = MemoryStore(namespace)
-    context = _context(actor_profile_id=UUID(task.assigned_to), identity_link_id=UUID(link.id))
-    request = SubmissionBundlePreparationRequest(
-        actor=ActorIdentityFacts(context.actor_profile_id, context.identity_link_id, ActorKind.HUMAN),
-        request_id=context.request_id, correlation_id=context.correlation_id,
-        task_id=UUID(task.id), assignment_id=UUID(assignment.id),
-        predecessor_submission_id=UUID(predecessor_id) if predecessor_id else None,
-        idempotency_key=new_record_id(), summary=packet.summary,
-        contributor_attestation=packet.worker_attestation,
-        media_type="application/zip", byte_source=_bytes(content.getvalue()),
-    )
     with TemporaryDirectory(prefix="retained-material-") as directory:
         settings = _settings(Path(directory), maximum_bytes=1024 * 1024)
         # This fixture traverses multiple real database transactions. Its scratch
@@ -155,59 +257,35 @@ async def retained_admission(
                     preparation=preparation,
                     checker_execution=SelectedPreSubmitCheckerExecutionAdapter(
                         archive_inspector=inspector,
-                        external_execution=external_execution
-                        or _ForbiddenExternalExecution(),
+                        external_execution=external_execution or _ForbiddenExternalExecution(),
                     ),
                     storage_scheme="s3",
                 )
-                storage = ArtifactStorageOrchestrator(session, store, namespace, settings, _AllowArtifactAuthority())
+                storage = ArtifactStorageOrchestrator(
+                    session, store, namespace, settings, _AllowArtifactAuthority()
+                )
                 coordinator = selected_pre_submit_coordinator(session)
 
-                @asynccontextmanager
-                async def runtime():
-                    try:
-                        yield SubmissionBundlePreparationRuntime(
-                            preparation=preparation,
-                            inspector=inspector,
-                            materialization=materialization,
-                            durable_put=SubmissionBundleDurablePutService(
-                                session=session,
-                                admission=ArtifactAdmissionService(session, settings, namespace),
-                                storage=storage,
-                                authorization=authority,
-                                task_contexts=tasks,
-                                project_contexts=projects,
-                            ),
-                            selected_coordinator=coordinator,
-                            selected_execution=SelectedPreSubmitExecutionService(
-                                session=session,
-                                coordinator=coordinator,
-                                authority=selected_pre_submit_authority(session),
-                                materialization=materialization,
-                            ),
-                            storage_scheme="s3",
-                            artifact_deadline_ms=180_000,
-                        )
-                    finally:
-                        materialization_authority.close()
-
                 result = await PreparedSubmissionBundlePreparationCommand(
-                    session=session, authority=authority, task_contexts=tasks,
-                    project_contexts=projects, runtime_factory=runtime,
+                    session=session,
+                    authority=authority,
+                    task_contexts=tasks,
+                    project_contexts=projects,
+                    runtime_factory=_runtime_factory(
+                        session=session,
+                        settings=settings,
+                        namespace=namespace,
+                        authority=authority,
+                        materialization_authority=materialization_authority,
+                        preparation=preparation,
+                        inspector=inspector,
+                        materialization=materialization,
+                        storage=storage,
+                        tasks=tasks,
+                        projects=projects,
+                        coordinator=coordinator,
+                    ),
                 ).prepare(request)
-            async with factory() as session:
-                job_id = await session.scalar(select(ArtifactVerificationJob.id).where(
-                    ArtifactVerificationJob.originating_put_attempt_id == str(result.put_attempt_id),
-                ))
-                assert job_id is not None, result
-                await session.rollback()
-                assert await ArtifactStorageOrchestrator(
-                    session, store, namespace, settings, _AllowArtifactAuthority(),
-                ).verify_object(UUID(job_id)) == "verified"
-                admission = await session.scalar(select(SubmissionBundleAdmission).where(
-                    SubmissionBundleAdmission.put_attempt_id == str(result.put_attempt_id),
-                ))
-                assert admission.status == "ready"
-                return admission.id
+            return await _verify_admission(factory, store, namespace, settings, result)
         finally:
             manager.close()

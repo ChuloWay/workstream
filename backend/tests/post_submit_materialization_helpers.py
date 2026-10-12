@@ -118,6 +118,105 @@ async def material_fixture(tmp_path, database_url, **options):
         yield material
 
 
+def _material_storage(tmp_path, provider, storage_settings, scratch_limits, post_scratch_root):
+    if storage_settings is not None:
+        settings = storage_settings
+    elif provider == "minio":
+        from tests.test_s3_artifact_store import minio_settings
+
+        settings = minio_settings(private_prefix=f"material/{new_record_id()}").model_copy(
+            update={
+                **artifact_admission_limit_settings(1024 * 1024),
+                "artifact_scratch_root": tmp_path / "intake-scratch",
+                "artifact_scratch_minimum_free_bytes": 0,
+            }
+        )
+    else:
+        settings = _settings(tmp_path, maximum_bytes=1024 * 1024).model_copy(
+            update={
+                "external_checker_service_socket": tmp_path / "checker.sock",
+                "external_checker_material_root": tmp_path / "scratch",
+            }
+        )
+    bootstrap = create_artifact_store_bootstrap(settings)
+    namespace = artifact_storage_namespace_spec(settings, bootstrap)
+    store = bootstrap.initialize_after_namespace_claim(
+        ArtifactStoreNamespaceClaim(
+            bootstrap.identity,
+            bootstrap.namespace_identity,
+            namespace.namespace_fingerprint,
+        )
+    )
+    scratch = post_scratch_root or tmp_path / "post-scratch"
+    manager = ArtifactScratchManager(
+        root=scratch,
+        limits=scratch_limits if scratch_limits is not None else _limits(),
+    )
+    return settings, bootstrap, namespace, store, scratch, manager
+
+
+async def _create_material_submission(
+    factory,
+    engine,
+    plan,
+    policy,
+    store,
+    namespace,
+    settings,
+    write_submission,
+    *,
+    provision_services,
+    provision_checker,
+):
+    context = _context()
+    await provision_material_services(
+        factory, artifacts=provision_services, checker=provision_checker
+    )
+    task_id, assignment_id = new_record_id(), new_record_id()
+    async with factory.begin() as session:
+        await _seed_human_actor(session, context)
+    params = dict(
+        task=str(task_id),
+        assignment=str(assignment_id),
+        project=str(plan.lineage.project_id),
+        actor=str(context.actor_profile_id),
+    )
+    async with engine.begin() as connection:
+        await seed_started_task_for_artifact_test(connection, params)
+        await install_submitter_grant(connection, params)
+    data = archive_with_modes(policy["evidence_path"], plan.lineage.project_id)
+    preparation_request = SubmissionBundlePreparationRequest(
+        actor=ActorIdentityFacts(
+            context.actor_profile_id, context.identity_link_id, ActorKind.HUMAN
+        ),
+        request_id=context.request_id,
+        correlation_id=context.correlation_id,
+        task_id=task_id,
+        assignment_id=assignment_id,
+        predecessor_submission_id=None,
+        idempotency_key=new_record_id(),
+        summary="Completed the required project work and included evidence.",
+        contributor_attestation="I confirm no confidential client data, credentials, or copied source material is included in this submission; rights_confirmed. "
+        + " ".join(policy["attestation_terms"]),
+        media_type="application/zip",
+        byte_source=_bytes(data),
+    )
+    admission_id = await _verified_admission(
+        factory, store, namespace, settings, context, preparation_request
+    )
+    creation_request = SubmissionCreationRequest(
+        task_id=task_id,
+        assignment_id=assignment_id,
+        contributor_id=context.actor_profile_id,
+        predecessor_submission_id=None,
+        admission_id=admission_id,
+        summary=preparation_request.summary,
+        contributor_attestation=preparation_request.contributor_attestation,
+    )
+    created = await write_submission(factory, context, creation_request)
+    return context, task_id, data, admission_id, creation_request, created
+
+
 @asynccontextmanager
 async def _material_fixture(
     tmp_path,
@@ -138,37 +237,8 @@ async def _material_fixture(
 ):
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    if storage_settings is not None:
-        settings = storage_settings
-    elif provider == "minio":
-        from tests.test_s3_artifact_store import minio_settings
-
-        settings = minio_settings(private_prefix=f"material/{new_record_id()}").model_copy(
-            update={
-                **artifact_admission_limit_settings(1024 * 1024),
-                "artifact_scratch_root": tmp_path / "intake-scratch",
-                "artifact_scratch_minimum_free_bytes": 0,
-            }
-        )
-    else:
-        settings = _settings(
-            tmp_path,
-            maximum_bytes=1024 * 1024,
-            external_checker=True,
-        )
-    bootstrap = create_artifact_store_bootstrap(settings)
-    namespace = artifact_storage_namespace_spec(settings, bootstrap)
-    store = bootstrap.initialize_after_namespace_claim(
-        ArtifactStoreNamespaceClaim(
-            bootstrap.identity,
-            bootstrap.namespace_identity,
-            namespace.namespace_fingerprint,
-        )
-    )
-    scratch = post_scratch_root or tmp_path / "post-scratch"
-    manager = ArtifactScratchManager(
-        root=scratch,
-        limits=scratch_limits if scratch_limits is not None else _limits(),
+    settings, bootstrap, namespace, store, scratch, manager = _material_storage(
+        tmp_path, provider, storage_settings, scratch_limits, post_scratch_root
     )
     try:
         plan, policy = await approved_selected_policy_fixture(
@@ -180,52 +250,25 @@ async def _material_fixture(
             pre_submit_registry_spec=pre_submit_registry_spec,
             post_submit_registry_spec=post_submit_registry_spec,
         )
-        context = _context()
-        await provision_material_services(
-            factory, artifacts=provision_services, checker=provision_checker
+        (
+            context,
+            task_id,
+            data,
+            admission_id,
+            creation_request,
+            created,
+        ) = await _create_material_submission(
+            factory,
+            engine,
+            plan,
+            policy,
+            store,
+            namespace,
+            settings,
+            write_submission,
+            provision_services=provision_services,
+            provision_checker=provision_checker,
         )
-        task_id, assignment_id = new_record_id(), new_record_id()
-        async with factory.begin() as session:
-            await _seed_human_actor(session, context)
-        async with engine.begin() as connection:
-            params = dict(
-                task=str(task_id),
-                assignment=str(assignment_id),
-                project=str(plan.lineage.project_id),
-                actor=str(context.actor_profile_id),
-            )
-            await seed_started_task_for_artifact_test(connection, params)
-            await install_submitter_grant(connection, params)
-        data = archive_with_modes(policy["evidence_path"], plan.lineage.project_id)
-        preparation_request = SubmissionBundlePreparationRequest(
-            actor=ActorIdentityFacts(
-                context.actor_profile_id, context.identity_link_id, ActorKind.HUMAN
-            ),
-            request_id=context.request_id,
-            correlation_id=context.correlation_id,
-            task_id=task_id,
-            assignment_id=assignment_id,
-            predecessor_submission_id=None,
-            idempotency_key=new_record_id(),
-            summary="Completed the required project work and included evidence.",
-            contributor_attestation="I confirm no confidential client data, credentials, or copied source material is included in this submission; rights_confirmed. "
-            + " ".join(policy["attestation_terms"]),
-            media_type="application/zip",
-            byte_source=_bytes(data),
-        )
-        admission_id = await _verified_admission(
-            factory, store, namespace, settings, context, preparation_request
-        )
-        creation_request = SubmissionCreationRequest(
-            task_id=task_id,
-            assignment_id=assignment_id,
-            contributor_id=context.actor_profile_id,
-            predecessor_submission_id=None,
-            admission_id=admission_id,
-            summary=preparation_request.summary,
-            contributor_attestation=preparation_request.contributor_attestation,
-        )
-        created = await write_submission(factory, context, creation_request)
         async with factory() as session:
             facts = await submitted_bundle_port(session).read(
                 SubmittedBundleRequest(

@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 import zipfile
 import pytest
 
@@ -44,6 +44,7 @@ from app.modules.checkers.api.external_policy import (
 )
 from app.modules.checkers.api.materialization import SubmissionMaterialEntry
 from app.modules.checkers.api.selected_pre_submit import (
+    SelectedPreSubmitAdmissionLineage,
     SelectedPreSubmitLeaseFacts,
     SelectedPreSubmitReservationFacts,
     SelectedPreSubmitTerminalFacts,
@@ -61,6 +62,7 @@ from app.modules.artifacts.selected_pre_submit_admission import (
     bind_selected_pre_submit_admission,
     build_selected_pre_submit_reservation,
 )
+from app.modules.artifacts.submission_admission import SubmissionBundleAdmissionPublisher
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspector,
     SubmissionArchiveLimits,
@@ -97,6 +99,133 @@ def _archive(primary_bytes: bytes) -> bytes:
             entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
             archive.writestr(entry, value)
     return output.getvalue()
+
+
+def _hex_sha(character: str) -> str:
+    return "sha256:" + character * 64
+
+
+def _selected_admission_reservation():
+    manifest = {"schema_version": "submission_manifest.v1", "entries": []}
+    post_policy = {"schema_version": "external_post_submit_policy.v1", "entries": []}
+    post_policy_sha256 = canonical_json_hash(post_policy)
+    post_policy["policy_sha256"] = post_policy_sha256
+    lineage = SelectedPreSubmitAdmissionLineage(
+        predecessor_submission_id=None,
+        predecessor_submission_version=None,
+        guide_id=new_record_id(),
+        guide_version="v2",
+        source_snapshot_id=new_record_id(),
+        source_snapshot_sha256=_hex_sha("1"),
+        locked_guide_sha256=_hex_sha("2"),
+        effective_policy_id=new_record_id(),
+        effective_policy_sha256=_hex_sha("3"),
+        pre_submit_policy_id=new_record_id(),
+        pre_submit_policy_sha256=_hex_sha("4"),
+        effective_plan_sha256=_hex_sha("5"),
+        rules_sha256=_hex_sha("8"),
+        external_checker_policies_sha256=_hex_sha("9"),
+        post_submit_policy_sha256=post_policy_sha256,
+        post_submit_policy_body=post_policy,
+        locked_policy_context_hash=_hex_sha("6"),
+        semantic_manifest_id=new_record_id(),
+        semantic_manifest_body=manifest,
+        packet_sha256=_hex_sha("7"),
+        storage_scheme="s3",
+    )
+    selected = SelectedPreSubmitReservationFacts(
+        actor_profile_id=new_record_id(),
+        identity_link_id=new_record_id(),
+        project_id=new_record_id(),
+        task_id=new_record_id(),
+        assignment_id=new_record_id(),
+        attempt_id=new_record_id(),
+        idempotency_key=new_record_id(),
+        attempt_request_digest=_hex_sha("8"),
+        prepared_generation_id=new_record_id(),
+        policy_sha256=lineage.effective_plan_sha256,
+        default_behavior_sha256=WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+        default_input_sha256=_hex_sha("9"),
+        archive_sha256=_hex_sha("a"),
+        archive_byte_count=25,
+        semantic_manifest_sha256=canonical_json_hash(manifest),
+        execution_budget_ms=120_000,
+        admission_lineage=lineage,
+    )
+    return manifest, post_policy, selected
+
+
+def _selected_admission_publisher_fixture(selected):
+    terminal = {
+        "request_digest": selected.request_digest,
+        "outcome": "completed",
+        "execution": {"eligible": True},
+    }
+    attempt = SimpleNamespace(
+        id=str(new_record_id()),
+        producer_request_type="submission_bundle",
+        producer_ref=str(selected.actor_profile_id),
+        project_id=str(selected.project_id),
+        task_id=str(selected.task_id),
+        sha256=selected.archive_sha256,
+        byte_count=selected.archive_byte_count,
+        media_type="application/zip",
+        replica_id=str(new_record_id()),
+        receipt_id=str(new_record_id()),
+    )
+    job = SimpleNamespace(
+        id=str(new_record_id()),
+        originating_put_attempt_id=attempt.id,
+        replica_id=attempt.replica_id,
+        execution_generation=2,
+    )
+    intent = SimpleNamespace(
+        id=str(new_record_id()),
+        pre_submit_evidence_set_id=None,
+        selected_pre_submit_run_id=str(selected.attempt_id),
+        selected_request_json=selected.canonical_body(),
+        selected_request_digest=selected.request_digest,
+        selected_terminal_json=terminal,
+        selected_terminal_digest=canonical_json_hash(terminal),
+    )
+    replica = SimpleNamespace(
+        id=attempt.replica_id,
+        content_id=str(new_record_id()),
+        verification_state="verified",
+        availability_state="available",
+        integrity_state="valid",
+    )
+    content = SimpleNamespace(
+        id=replica.content_id,
+        sha256=attempt.sha256,
+        byte_count=attempt.byte_count,
+    )
+    verification = SimpleNamespace(
+        id=str(new_record_id()),
+        verification_job_id=job.id,
+        execution_generation=job.execution_generation,
+        outcome="verified",
+        observed_sha256=attempt.sha256,
+        observed_byte_count=attempt.byte_count,
+    )
+    session = SimpleNamespace(
+        scalar=AsyncMock(
+            side_effect=[
+                job,
+                attempt,
+                intent,
+                None,
+                replica,
+                verification,
+                content,
+                SimpleNamespace(id=attempt.receipt_id),
+                datetime.now(UTC),
+            ]
+        ),
+        add=Mock(),
+        flush=AsyncMock(),
+    )
+    return session, job, verification
 
 
 def _limits() -> ArtifactPreparationLimits:
@@ -295,9 +424,7 @@ class _Execution:
             isolation=ExternalCheckerIsolationReceipt(
                 repository="registry.example/workstream/checker",
                 platform_manifest_digest=request.registry.image_digest,
-                platform_manifest_media_type=(
-                    "application/vnd.oci.image.manifest.v1+json"
-                ),
+                platform_manifest_media_type=("application/vnd.oci.image.manifest.v1+json"),
                 platform_manifest_byte_count=1024,
                 operating_system="linux",
                 architecture="amd64",
@@ -308,6 +435,51 @@ class _Execution:
                 sandbox_gid=65532,
             ),
         )
+
+
+def _assert_terminal_round_trip(identity, policy, default_input, material, result) -> None:
+    now = datetime.now(UTC)
+    reservation = SelectedPreSubmitReservationFacts(
+        actor_profile_id=new_record_id(),
+        identity_link_id=new_record_id(),
+        project_id=identity.project_id,
+        task_id=identity.task_id,
+        assignment_id=identity.assignment_id,
+        attempt_id=identity.attempt_id,
+        idempotency_key=new_record_id(),
+        attempt_request_digest=identity.attempt_request_digest,
+        prepared_generation_id=identity.prepared_generation_id,
+        policy_sha256=policy.policy_sha256,
+        default_behavior_sha256=WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
+        default_input_sha256=workstream_default_input_sha256(default_input),
+        archive_sha256=material.archive_sha256,
+        archive_byte_count=material.archive_byte_count,
+        semantic_manifest_sha256=material.semantic_manifest_sha256,
+        execution_budget_ms=120_000,
+    )
+    lease = SelectedPreSubmitLeaseFacts(
+        reservation=reservation,
+        lease_id=new_record_id(),
+        lease_generation=1,
+        lease_expires_at=now + timedelta(minutes=2),
+    )
+    terminal = SelectedPreSubmitTerminalFacts(
+        lease=lease,
+        outcome="completed",
+        execution=result,
+        infrastructure_failure_code=None,
+        queued_at=now,
+        started_at=now + timedelta(milliseconds=25),
+        completed_at=now + timedelta(milliseconds=75),
+    )
+    assert terminal.canonical_body()["queue_latency_ms"] == 25
+    assert terminal.canonical_body()["execution_latency_ms"] == 50
+    assert terminal.canonical_body()["request_digest"] == reservation.request_digest
+    assert terminal.terminal_digest == canonical_json_hash(terminal.canonical_body())
+    assert SelectedPreSubmitTerminalFacts.from_canonical_body(terminal.canonical_body()) == terminal
+    changed_terminal = terminal.canonical_body() | {"queue_latency_ms": 26}
+    with pytest.raises(ValueError, match="terminal facts"):
+        SelectedPreSubmitTerminalFacts.from_canonical_body(changed_terminal)
 
 
 @pytest.mark.asyncio
@@ -388,53 +560,31 @@ async def test_selected_pre_runs_default_then_locked_external_image(
         assert len(grants.requests) == len(execution.requests) == 1
         assert grants.requests[0].request_digest == execution.requests[0].request_digest
         assert result.result_digest == canonical_json_hash(result.canonical_body())
-        now = datetime.now(UTC)
-        reservation = SelectedPreSubmitReservationFacts(
-            actor_profile_id=new_record_id(),
-            identity_link_id=new_record_id(),
-            project_id=identity.project_id,
-            task_id=identity.task_id,
-            assignment_id=identity.assignment_id,
-            attempt_id=identity.attempt_id,
-            idempotency_key=new_record_id(),
-            attempt_request_digest=identity.attempt_request_digest,
-            prepared_generation_id=identity.prepared_generation_id,
-            policy_sha256=policy.policy_sha256,
-            default_behavior_sha256=WORKSTREAM_DEFAULT_BEHAVIOR_SHA256,
-            default_input_sha256=workstream_default_input_sha256(default_input),
-            archive_sha256=material.archive_sha256,
-            archive_byte_count=material.archive_byte_count,
-            semantic_manifest_sha256=material.semantic_manifest_sha256,
-            execution_budget_ms=120_000,
-        )
-        lease = SelectedPreSubmitLeaseFacts(
-            reservation=reservation,
-            lease_id=new_record_id(),
-            lease_generation=1,
-            lease_expires_at=now + timedelta(minutes=2),
-        )
-        terminal = SelectedPreSubmitTerminalFacts(
-            lease=lease,
-            outcome="completed",
-            execution=result,
-            infrastructure_failure_code=None,
-            queued_at=now,
-            started_at=now + timedelta(milliseconds=25),
-            completed_at=now + timedelta(milliseconds=75),
-        )
-        assert terminal.canonical_body()["queue_latency_ms"] == 25
-        assert terminal.canonical_body()["execution_latency_ms"] == 50
-        assert terminal.canonical_body()["request_digest"] == reservation.request_digest
-        assert terminal.terminal_digest == canonical_json_hash(terminal.canonical_body())
-        assert SelectedPreSubmitTerminalFacts.from_canonical_body(
-            terminal.canonical_body()
-        ) == terminal
-        changed_terminal = terminal.canonical_body() | {"queue_latency_ms": 26}
-        with pytest.raises(ValueError, match="terminal facts"):
-            SelectedPreSubmitTerminalFacts.from_canonical_body(changed_terminal)
+        _assert_terminal_round_trip(identity, policy, default_input, material, result)
     finally:
         await request.prepared_artifact.close()
         manager.close()
+
+
+@pytest.mark.asyncio
+async def test_selected_pre_terminal_publishes_self_contained_ready_admission() -> None:
+    manifest, post_policy, selected = _selected_admission_reservation()
+    session, job, verification = _selected_admission_publisher_fixture(selected)
+
+    admission = await SubmissionBundleAdmissionPublisher(session).publish_verified(
+        verification_job_id=job.id,
+        verification_receipt_id=verification.id,
+    )
+
+    assert admission.pre_submit_evidence_set_id is None
+    assert admission.selected_pre_submit_run_id == str(selected.attempt_id)
+    assert admission.packet_sha256 == selected.admission_lineage.packet_sha256
+    assert admission.semantic_manifest_body == manifest
+    assert (
+        admission.selected_post_submit_policy_sha256
+        == selected.admission_lineage.post_submit_policy_sha256
+    )
+    assert admission.selected_post_submit_policy_body == post_policy
 
 
 @pytest.mark.asyncio
@@ -605,9 +755,7 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
             execution_budget_ms=120_000,
         )
         assert reservation.admission_lineage is not None
-        assert reservation.admission_lineage.semantic_manifest_body == (
-            request.manifest.as_dict()
-        )
+        assert reservation.admission_lineage.semantic_manifest_body == (request.manifest.as_dict())
         assert reservation.admission_lineage.packet_sha256 == request.packet.sha256
         assert reservation.admission_lineage.predecessor_submission_id == (
             predecessor.submission_id
