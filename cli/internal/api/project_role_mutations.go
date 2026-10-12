@@ -72,7 +72,15 @@ func validRoleReferences(refs []string) bool {
 
 func decodeRoleQualification(raw json.RawMessage, value *roleQualification) error {
 	fields, err := contextObject(raw, value, []string{"skills_snapshot", "reputation_snapshot", "prior_project_work_refs", "external_expertise_refs"}, []string{"prior_project_work_refs", "external_expertise_refs"})
-	if err != nil || value.PriorProjectWorkRefs == nil || len(value.PriorProjectWorkRefs) > 20 || !validRoleReferences(value.ExternalExpertiseRefs) {
+	if err != nil {
+		return err
+	}
+	return validateRoleQualification(fields, value)
+}
+
+// Read snapshots add provenance to these same qualification facts.
+func validateRoleQualification(fields map[string]json.RawMessage, value *roleQualification) error {
+	if value.PriorProjectWorkRefs == nil || len(value.PriorProjectWorkRefs) > 20 || !validRoleReferences(value.ExternalExpertiseRefs) {
 		return errors.New("invalid qualification structure")
 	}
 	for _, id := range value.PriorProjectWorkRefs {

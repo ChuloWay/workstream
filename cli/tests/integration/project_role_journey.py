@@ -7,6 +7,12 @@ from uuid import uuid4
 
 from sqlalchemy import text
 
+from project_role_read_journey import (
+    inspect_role_history,
+    deny_role_history,
+    inspect_revoked_history,
+)
+
 
 async def exercise_project_role_decisions(
     direct,
@@ -186,7 +192,16 @@ async def exercise_project_role_decisions(
                     )
                 ).all()
             )
-            return grants, snapshots, events
+            all_role_events = list(
+                (
+                    await session.execute(
+                        text(
+                            "SELECT id,event_type,entity_id FROM audit_events WHERE event_type IN ('ProjectRoleGrantIssued','ProjectRoleGrantRevoked','ProjectRoleQualificationSnapshotCaptured') ORDER BY id"
+                        )
+                    )
+                ).all()
+            )
+            return grants, snapshots, events, all_role_events
 
     foreign = await post(
         f"/api/v1/projects/{foreign_project}/role-grants",
@@ -199,7 +214,22 @@ async def exercise_project_role_decisions(
         system,
     )
     before = await stored()
-    grants, snapshots, events = before
+    read_cursor, read_snapshot = await inspect_role_history(
+        direct,
+        cli,
+        origin,
+        scoped,
+        project,
+        foreign_project,
+        first,
+        reviewer,
+        self_grant,
+        foreign,
+        tokens["cli-outsider"],
+        qualification,
+    )
+    assert await stored() == before
+    grants, snapshots, events, _all_role_events = before
     row = next(row for row in grants if str(row["id"]) == first["id"])
     snapshot = next(
         row for row in snapshots if str(row["id"]) == first["qualification_snapshot_id"]
@@ -278,6 +308,7 @@ async def exercise_project_role_decisions(
     # unlike the separately owned task mutation routes.
     invoke("issue", body, key=issue_key, status=404)
     invoke("revoke", {"reason": "Suspended manager"}, grant=first["id"], status=404)
+    deny_role_history(cli, origin, scoped, project, first["id"], read_cursor)
     await post(
         f"/api/v1/actors/{manager_id}/reactivate",
         {"reason": "Independent scoped revocation"},
@@ -289,6 +320,7 @@ async def exercise_project_role_decisions(
     )
     invoke("issue", body, key=issue_key, status=404)
     invoke("revoke", {"reason": "Revoked manager"}, grant=first["id"], status=404)
+    deny_role_history(cli, origin, scoped, project, first["id"], read_cursor)
     assert await stored() == before
     covering = await manager_grant()
 
@@ -311,7 +343,7 @@ async def exercise_project_role_decisions(
             invoke("issue", body, key=issue_key, status=409)["code"]
             == "project_role_grant_replay_state_changed"
         )
-        grants_after, snapshots_after, events_after = await stored()
+        grants_after, snapshots_after, events_after, all_events_after = await stored()
         # The retained journey has legitimately issued other roles meanwhile.
         # Every original immutable snapshot must remain unchanged.
         after_by_id = {str(row["id"]): row for row in snapshots_after}
@@ -332,6 +364,22 @@ async def exercise_project_role_decisions(
             "ProjectRoleGrantRevoked",
             "ProjectRoleQualificationSnapshotCaptured",
         ]
+        await inspect_revoked_history(
+            direct,
+            cli,
+            origin,
+            scoped,
+            project,
+            first,
+            read_snapshot,
+            payload["reason"],
+        )
+        assert await stored() == (
+            grants_after,
+            snapshots_after,
+            events_after,
+            all_events_after,
+        )
         # Cleanup only this helper's extra management authority; contributor
         # state and the existing claim/start denial assertions remain independent.
         await post(
@@ -339,5 +387,6 @@ async def exercise_project_role_decisions(
             {"reason": "Role CLI proof complete"},
         )
         invoke("revoke", payload, grant=first["id"], key=revoke_key, status=404)
+        deny_role_history(cli, origin, scoped, project, first["id"], read_cursor)
 
     return revoke_first
