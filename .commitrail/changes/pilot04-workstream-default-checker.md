@@ -1279,3 +1279,29 @@ product compatibility path. The bounded production repair may update only
 the sole current external pre/post policy schemas and their self-excluding
 digests. It removes generic canonical-hash and old-plan fallbacks without
 rewriting retained rows.
+
+### Complete-source custody inventory performance
+
+Lead-authorized bounded test-only performance scope: this existing record and
+`backend/tests/test_artifact_architecture.py`. The schema lane timed out before
+finishing its exact sorted execution plan; the first remaining node was a custody
+import-spelling negative. A single unchanged node passed locally in 41.82 seconds.
+No per-node hosted duration was captured, so this identifies avoidable repeated
+source parsing rather than proving the sole timeout cause.
+
+Freeze a complete actual APP Python-source import inventory once per test module,
+using immutable module-name sets. The positive still validates every discovered
+source path and exact custody consumer set plus composition annotations. Each of
+the ten spelling negatives rebuilds the real `app/main.py` import inventory with
+its injected import and replaces only that path in a copied complete inventory;
+no shared AST or fixture may be mutated. Require a valid unmodified inventory
+before each injected negative so an unrelated baseline error cannot satisfy it.
+
+Prohibited: production files, workflow/runner/schema caps, selectors, skips,
+whitelists, reduced discovery, mutable cached ASTs, or synthetic inventories that
+bypass actual source. Risk is lost structural enforcement. Acceptance requires
+all existing complete-module tests and ten spelling negatives, same-source
+before/after complete-module timings, and discriminating rejection of an actual
+extra custody consumer with unchanged exact expected consumer sets. Lead and QA
+review the immutable inventory and negative non-vacuity; human review focuses on
+complete discovery, spelling coverage and isolation between parameter cases.
