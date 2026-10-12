@@ -29,6 +29,8 @@ context/intake requirements:
 | `workstream project task create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task screen PROJECT_ID TASK_ID --idempotency-key UUID [--reason TEXT]` | `POST /api/v1/tasks/TASK_ID/screen` |
 | `workstream project task release PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT` | `POST /api/v1/tasks/TASK_ID/release` |
+| `workstream project role-grant issue PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/role-grants` |
+| `workstream project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID/revoke` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
@@ -114,6 +116,66 @@ invalid timestamps or mismatched identity. JSON output preserves that API
 object; text escapes terminal controls. Foreign or revoked authority remains
 a server denial with empty stdout, not an empty successful project.
 This command does not list projects, edit setup, activate guides or claim tasks.
+
+## Explicit contributor-role decisions
+
+```sh
+workstream project role-grant issue PROJECT_ID --input issue.json --idempotency-key ISSUE_UUID -o json
+workstream project role-grant revoke PROJECT_ID GRANT_ID --input revoke.json --idempotency-key REVOKE_UUID -o json
+```
+
+Issuance requires the exact public decision, including qualification evidence:
+
+```json
+{
+  "target_actor_profile_id": "019f79b0-1111-7000-8000-000000000001",
+  "role": "submitter",
+  "qualification": {
+    "skills_snapshot": {
+      "availability": "available",
+      "reference_ids": ["skill:analysis"],
+      "unavailable_reason": null
+    },
+    "reputation_snapshot": {
+      "availability": "unavailable",
+      "reference_ids": [],
+      "unavailable_reason": "no_record"
+    },
+    "prior_project_work_refs": [],
+    "external_expertise_refs": []
+  },
+  "reason": "Approved project contribution"
+}
+```
+
+Use `reviewer` for an independent Reviewer grant. The caller supplies real
+evidence, including unavailable reasons; the CLI does not collect, score or
+default it. Both availability objects require `unavailable_reason`, even when
+null. Available evidence requires references and null reason; unavailable evidence
+requires an empty reference list and `not_collected`, `source_unavailable` or
+`no_record`. Reference lists are bounded to 20; prior-work references are UUIDs,
+other references are the public bounded tokens, not URLs. Revocation accepts
+only `{"reason":"Project participation ended"}`. Reasons are nonempty, at most
+500 UTF-8 bytes, with no edge whitespace or control characters. Input is a
+regular UTF-8 JSON file bounded to 1 MiB; unknown/duplicate members and malformed
+required fields fail before sending. Original JSON is forwarded unchanged.
+
+Each invocation sends one POST, not a preflight or a retry loop. AUTH verifies
+current admission, exact-project manager authority, eligible targets and
+self-protection, including on replay; the CLI never derives permission from a
+receipt. Project Manager is an AdminRole, not a contributor role. Issuing a
+Reviewer grant alone does not authorize claim/start or activate human review.
+
+The complete seven-field receipt identifies the grant, qualification snapshot,
+project, actor, role, status and version. Issue expects HTTP 201 with active/1
+and binds project/target/role; revoke expects HTTP 200 with revoked/2 and binds
+project/grant. No earlier read is used to infer the revoked grant's actor or role.
+JSON preserves the exact valid response; text escapes terminal controls. Missing,
+malformed, substituted or credential-reflecting success is `outcome_unknown`
+with empty stdout. Retry only manually with unchanged selectors, file contents
+and key. A read is observation, not rollback proof; an old issue replay after
+revocation is denied by the backend's retained-state check. No grant browsing,
+actor discovery, automatic role assignment or AdminRole mutation is added.
 
 ## Declare a guide and its setup inputs
 
