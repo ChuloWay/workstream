@@ -301,3 +301,20 @@ admission has no historical evidence row, but merged replacement dispatch SQL
 still used an inner join to that row. Preserve the replacement cause predicates
 and adapt that join for the explicit selected lineage. All owned database, role
 and MinIO resources were cleaned. No passing full-flow claim is made for that run.
+
+Full-cutover cleanup after the user's clarification: remove the unused production
+historical catalogue factory and historical Submission-content adapter. Move
+only the frozen metadata needed to seed actual predecessor schemas into
+`tests/historical_checker_metadata.py` and the migration-only Submission fixture.
+No product adapter constructs the removed catalogue. New Operator retries only
+construct selected external requests; immutable receipt replay is preserved.
+
+Real local selected Rust/MinIO run at fbb397a passed default/PRE/Submission/POST
+and production completion to review_pending, default-secret rejection without a
+Submission, and unavailable-PRE recovery through fresh verified bytes. All owned
+DB/role/MinIO/scratch cleanup passed. The runtime was runc/docker-dev, not gVisor.
+The same-head native run passed the real production automatic acceptance case
+(with exact contribution and both awards); replacement failed at strict UUID
+lineage construction. Normalize the native PostgreSQL remediation UUID to the
+TASK public port's Python UUID representation rather than weakening validation.
+Replacement proof and runtime-budget alignment remain pending.

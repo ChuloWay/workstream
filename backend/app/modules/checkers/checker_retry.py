@@ -18,7 +18,6 @@ from app.modules.checkers.api.execution import (
     CheckerRetrySuccessor, EvaluationTaskGuard,
 )
 from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
-from app.modules.checkers.api.post_submit import make_post_submit_request
 from app.modules.checkers.api.selected_post_submit import (
     SelectedPostSubmissionEvaluationRequest,
     make_selected_post_submit_request,
@@ -165,6 +164,8 @@ class CheckerRetryService:
             raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
         if existing is not None:
             return await self._replay(command, existing, source)
+        if not isinstance(source_request, SelectedPostSubmissionEvaluationRequest):
+            raise CheckerExecutionUnavailable("checker_retry_policy_unavailable")
         preparation = CheckerRetryPreparation(
             actor_profile_id=self._actor_profile_id,
             request_key=command.request_key, reason=command.reason, source=source,
@@ -178,11 +179,7 @@ class CheckerRetryService:
                 "evaluation_request_id": new_record_id(),
                 "evaluation_generation": source.source_generation + 1,
             }
-            next_request = (
-                make_selected_post_submit_request(**request_fields)
-                if isinstance(source_request, SelectedPostSubmissionEvaluationRequest)
-                else make_post_submit_request(**request_fields)
-            )
+            next_request = make_selected_post_submit_request(**request_fields)
             reserved = await self._evaluations._reserve_after_task_lock(
                 next_request, terminal_source_id=source.source_run_id,
             )

@@ -800,7 +800,9 @@ class TaskRepository:
                 locked_policy=locked_policy,
                 acceptance_criteria=task.acceptance_criteria,
                 submitter_contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
-                checker_remediation_manifest_id=remediation.id if remediation is not None else None,
+                checker_remediation_manifest_id=(
+                    UUID(str(remediation.id)) if remediation is not None else None
+                ),
             )
             return facts, remediation
         except (TypeError, ValueError) as exc:

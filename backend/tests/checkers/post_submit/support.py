@@ -18,9 +18,9 @@ from app.modules.checkers.api.historical_post_submit import (
     PostSubmitCatalogue,
     PostSubmitDefinition,
     PostSubmitPolicyEntry,
-    current_post_submit_catalogue,
 )
 from app.modules.checkers.api.post_submit import make_post_submit_request
+from tests.historical_checker_metadata import historical_post_submit_catalogue
 
 HASH = "sha256:" + "a" * 64
 OTHER_HASH = "sha256:" + "b" * 64
@@ -29,7 +29,7 @@ PROJECT = UUID("11111111-1111-4111-8111-111111111111")
 
 def catalogue():
     """Return the frozen retained-history decoder, never an executable registry."""
-    return current_post_submit_catalogue()
+    return historical_post_submit_catalogue()
 
 
 def _policy(*, project_id: UUID, snapshot: PostSubmitCatalogue) -> CompiledPostSubmitPolicy:

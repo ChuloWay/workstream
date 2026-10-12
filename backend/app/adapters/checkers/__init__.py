@@ -1,27 +1,13 @@
 """CHECKER-owned composition adapters."""
 
-import json
 from app.adapters.checkers.external_service import (
     EXTERNAL_CHECKER_CAPABILITY_KEY,
     EXTERNAL_CHECKER_PROVIDER_KEY,
     UnixSocketExternalCheckerAdapter,
 )
 from app.interfaces.external_services import ExternalServiceAdapterFactory
-from app.modules.artifacts.api import SubmissionBundleFile
 from app.modules.tasks.api import TaskSubmissionContextFacts
-from app.modules.projects.api import ProjectLockedPolicyContextFacts
-from app.modules.checkers.api import SubmissionPacketView
-from app.modules.checkers.api.artifact_paths import required_evidence_path
-from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
-from app.modules.checkers.api.post_submit import (
-    ExpectedPostSubmitContext,
-    ObservedPostSubmitContext,
-    PostSubmissionEvaluationContent,
-    PostSubmissionStructuralInput,
-    PostSubmitEvidenceEntry,
-    PostSubmitManifestEntry,
-    PostSubmitPolicyInputs,
-)
+
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
 from app.modules.checkers.api.selected_post_submit import (
     SelectedPostSubmissionContent,
@@ -287,114 +273,6 @@ def current_post_submit_execution(session):
     from app.modules.checkers.execution_coordination import CurrentExecution
 
     return CurrentExecution(session)
-
-
-def _historical_post_submit_catalogue():
-    """Resolve the frozen pre-cutover catalogue for retained fixture decoding only."""
-    from app.modules.checkers.api.historical_post_submit import (
-        current_post_submit_catalogue,
-    )
-
-    return current_post_submit_catalogue()
-
-
-def submission_evaluation_content(
-    task_context: TaskSubmissionContextFacts,
-    project_context: ProjectLockedPolicyContextFacts,
-    packet: SubmissionPacketView,
-    files: tuple[SubmissionBundleFile, ...],
-    archive_sha256: str,
-) -> PostSubmissionEvaluationContent:
-    """Project immutable pre-cutover evidence for retained historical fixtures.
-
-    New admission and execution callers use selected checker policies. This
-    compatibility projection exists only so historical Submission fixtures can
-    continue proving retained evidence without restoring catalogue eligibility.
-    """
-    from app.adapters.tasks import validate_submission_policy_context
-
-    validate_submission_policy_context(task_context, project_context)
-    stamps = task_context.locked_policy
-    expected = ExpectedPostSubmitContext(
-        guide_version=stamps.locked_guide_version,
-        source_id=stamps.locked_guide_source_snapshot_id,
-        source_hash=stamps.locked_guide_source_snapshot_hash,
-        effective_policy_id=(
-            stamps.locked_effective_project_submission_artifact_policy_id
-        ),
-        effective_policy_hash=(
-            stamps.locked_effective_project_submission_artifact_policy_hash
-        ),
-        pre_policy_id=stamps.locked_pre_submit_checker_policy_id,
-        pre_policy_hash=stamps.locked_pre_submit_checker_bundle_hash,
-        post_policy_id=stamps.locked_post_submit_checker_policy_id,
-        post_policy_version=stamps.locked_post_submit_checker_policy_version,
-        post_policy_hash=stamps.locked_post_submit_checker_policy_hash,
-        review_policy_id=stamps.locked_review_policy_id,
-        review_generation=stamps.locked_review_policy_generation,
-        review_hash=stamps.locked_review_policy_hash,
-        revision_policy_id=stamps.locked_revision_policy_id,
-        revision_generation=stamps.locked_revision_policy_generation,
-        revision_hash=stamps.locked_revision_policy_hash,
-    )
-    effective = json.loads(project_context.effective_policy.value)
-    policy_inputs = PostSubmitPolicyInputs(
-        required_evidence_keys=tuple(
-            item["key"]
-            for item in effective.get("required_evidence", [])
-            if item.get("required", True)
-        ),
-        required_artifact_paths=tuple(
-            item["path"]
-            for item in effective.get("required_artifacts", [])
-            if item.get("required", True)
-        ),
-        forbidden_artifact_patterns=tuple(
-            item["pattern"]
-            for item in effective.get("forbidden_artifacts", [])
-            if item.get("pattern")
-        ),
-        required_attestation_terms=tuple(
-            term for term in effective.get("attestation_terms", []) if term
-        ),
-    )
-    by_path = {item.normalized_path: item for item in files}
-    return PostSubmissionEvaluationContent(
-        project_id=project_context.project_id,
-        expected_context=expected,
-        catalogue=_historical_post_submit_catalogue(),
-        policy=CompiledPostSubmitPolicy.model_validate_json(
-            project_context.compiled_post_submit_policy.value
-        ),
-        structural_input=PostSubmissionStructuralInput(
-            summary=packet.summary,
-            worker_attestation=packet.contributor_attestation,
-            package_hash=archive_sha256,
-            criteria=task_context.acceptance_criteria or "",
-            manifest=tuple(
-                PostSubmitManifestEntry(
-                    artifact=item.normalized_path,
-                    hash=item.sha256,
-                    size_bytes=item.byte_count,
-                )
-                for item in files
-            ),
-            evidence=tuple(
-                PostSubmitEvidenceEntry(
-                    label=key,
-                    type="file",
-                    key=key,
-                    uri=item.normalized_path,
-                    hash=item.sha256,
-                )
-                for key in policy_inputs.required_evidence_keys
-                for item in (by_path.get(required_evidence_path(key)),)
-                if item is not None
-            ),
-            policy_inputs=policy_inputs,
-            observed_context=ObservedPostSubmitContext(**expected.model_dump()),
-        ),
-    )
 
 
 def selected_submission_evaluation_content(
