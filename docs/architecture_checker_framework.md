@@ -246,8 +246,6 @@ locked false-policy success through shared acceptance. Public false-guide
 activation remains PILOT-08 work; public intake remains PILOT-12 work. Local
 Rust/MinIO proof uses runc/docker-dev and makes no deployed or gVisor claim.
 
-## Current Required Core Checkers Pending Removal
-
 ## Gate Mapping
 
 - Project activation validates approved source/policy identities and exact
@@ -256,6 +254,9 @@ Rust/MinIO proof uses runc/docker-dev and makes no deployed or gVisor claim.
   guards; registry publication alone grants no Task transition authority.
 - Selected PRE runs the four Workstream defaults and all required project images
   before caller-owned immutable Submission creation.
+- Valid empty image bindings require no external-service configuration. The
+  fixed Unix provider is resolved only when an image executes; missing required
+  runtime configuration yields recoverable `implementation_unavailable` evidence.
 - Selected POST consumes committed Submission custody and produces durable
   evidence. TASK's authorized completion operation alone changes lifecycle state
   or invokes shared acceptance.

@@ -187,6 +187,10 @@ unified setup agent. Accepted originals are PDF, DOCX, PPTX and byte-preserved
 UTF-8 Markdown (`.md`); HTML and documentation sites are not guide inputs. Guide
 metadata in PostgreSQL also holds at least one required task example; the agent
 assesses the examples with the uploaded guide documents.
+
+Default-only projects need no external-service configuration. The fixed Rust
+provider is resolved only when a required project image executes; missing
+configuration for that image produces recoverable infrastructure evidence.
 Findings and policy proposals retain document-access evidence.
 
 [ART-07A1](.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) provides strict

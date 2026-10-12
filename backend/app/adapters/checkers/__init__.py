@@ -47,7 +47,7 @@ from app.modules.checkers.selected_pre_submit_execution import SelectedPreSubmit
 def external_checker_execution_factory(
     *, socket_path: Path, timeout_seconds: float
 ) -> ExternalServiceAdapterFactory[UnixSocketExternalCheckerAdapter]:
-    """Compose the unselected instance-local external checker adapter factory."""
+    """Compose the sole instance-local external checker adapter factory."""
     factory = ExternalServiceAdapterFactory[UnixSocketExternalCheckerAdapter](
         EXTERNAL_CHECKER_CAPABILITY_KEY
     )
@@ -62,7 +62,7 @@ def external_checker_execution_factory(
 
 
 def configured_external_checker_execution_factory(settings):
-    """Map validated settings into the unselected explicit adapter factory."""
+    """Map configured image-execution settings into the sole adapter factory."""
     if (
         settings.external_checker_service_socket is None
         or settings.external_checker_material_root is None
@@ -119,7 +119,7 @@ def configured_external_checker_execution(settings) -> ExternalCheckerExecutionA
 
 
 def selected_pre_submit_checker_execution(*, settings, archive_inspector):
-    """Compose the sole selected PRE runtime from the configured Rust service."""
+    """Compose default/PRE checking with deferred project-image transport."""
     return SelectedPreSubmitCheckerExecutionAdapter(
         archive_inspector=archive_inspector,
         external_execution=configured_external_checker_execution(settings),
