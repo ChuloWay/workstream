@@ -19,7 +19,7 @@ pytestmark = pytest.mark.postgres_schema_contract
 async def _snapshot(connection, h):
     identifiers = {
         "submission": h.request["submission_id"],
-        "run": h.result.attempt_id,
+        "run": h.result["attempt_id"],
         "execute": h.source["execute_evidence_id"],
         "finalize": h.source["finalize_evidence_id"],
         "completion": h.source["completion_event_id"],

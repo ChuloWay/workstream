@@ -972,3 +972,18 @@ identity, corrupted-read refusal, zero effects, privacy, parent isolation, stabl
 successor display and current generation guards. Current registered capabilities
 replace old catalogue labels in summaries. No source, migration, CI, cap or skip
 changes are authorized. Native verification follows combined QA producer freeze.
+
+### Remaining raw migration callers
+
+Lead authorizes four final caller paths: `backend/tests/tasks/test_payment_policy_migration.py`,
+`backend/tests/tasks/test_submission_lineage.py`, `backend/tests/checkers/execution/test_migration.py`
+and `backend/tests/tasks/post_submit_routing/test_migration.py`. Replace attribute
+access over archived request/result facts with dictionary indexing. The packet
+custody upgrade uses the literal revision-0021 Submission snapshot supplied by
+the backend owner, never the current preparation callback on a predecessor
+schema. Preserve every retained-row, preflight, immutability and negative
+assertion; no production, producer, migration, compatibility helper, test cap or
+selection changes. Collection and native predecessor proof follow the frozen
+literal-base handoff. Both strengthened identity controls passed at exact
+clean `e947161412b1a7dcc85ffcb0a7bac75922c4cab8` in 34.94 seconds with the exact
+guard message and SQLSTATE `23514`, installed schema 0036 and complete cleanup.

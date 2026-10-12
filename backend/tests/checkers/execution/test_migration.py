@@ -35,7 +35,7 @@ async def test_migration_refuses_retained_history(tmp_path, isolated_database_en
             async with h.factory() as session, session.begin():
                 source = await session.scalar(
                     text("select to_jsonb(s) from submissions s where id=:id"),
-                    {"id": str(h.request.submission_id)},
+                    {"id": h.request["submission_id"]},
                 )
                 values = {
                     key: value
@@ -72,7 +72,7 @@ async def test_migration_refuses_retained_history(tmp_path, isolated_database_en
                     trigger_auth_source="test",
                     attempt_number=1,
                     is_current_for_submission=True,
-                    package_hash=h.request.content_sha256,
+                    package_hash=h.request["content_sha256"],
                     artifact_hash_manifest=source["artifact_hash_manifest"],
                     artifact_manifest_hash=h.manifest.sha256,
                     passed_count=0,
