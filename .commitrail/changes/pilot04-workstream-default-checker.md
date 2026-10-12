@@ -820,3 +820,32 @@ collection after the peer raw producer checkpoint, focused current contracts,
 and isolated native migration/SQL controls where the claim depends on Postgres.
 This is author test reconciliation, requiring lead/QA review in the complete
 candidate; it does not establish hosted readiness.
+
+### Deleted-test inventory reconciliation
+
+Lead authorizes `backend/scripts/test_lane_catalogue.py` and
+`backend/tests/test_ci_lane_catalogue.py` solely to remove the five modules
+deleted above: the old phase-service test and built-in POST configuration, input,
+request and result tests. Remove the matching four POST exact-set entries. All
+remaining modules, exhaustive discovery, ten lanes, partition algorithm, markers,
+execution caps and required CI controls remain unchanged. Canonical collection
+and exact inventory tests must pass; CI/test-delta reviewers inspect the deleted
+module basis in the complete candidate. No current selected/default or custody
+test is omitted.
+
+The exact composed source `e8b5ae1d6f31c414f962e5bff1646788eed536fc` passed
+the native locked-one-image/self-consistent-zero-member SQL control in 22.93
+seconds on installed `0036`. Fresh AUTH binds the same counterfeit, SQL refuses
+completed custody, all run/member/completion writes roll back, and the restored
+complete result finalizes. DB, role and MinIO cleanup all passed. This closes the
+focused policy-completeness proof; broader native/full hosted checks remain
+required. Raw evidence: `/tmp/pilot04-selected-e8b-zero-native.log` and `.json`.
+The earlier installed-function syntax failure remains a failed prerequisite
+attempt, not a counterfeit-result proof.
+
+Fresh full discovery on the raw-producer composition collected 8,731 tests with
+one import error: the current default-checker test still imported its packet
+from the deleted PRE DTO module. The current-consumer test scope therefore
+includes `backend/tests/checkers/default/test_execution.py` for the exact neutral
+`api.submission_packet.SubmissionPacketView` import correction only. All four
+default checks and their controls remain required; no deleted DTO is restored.

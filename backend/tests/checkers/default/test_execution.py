@@ -29,7 +29,7 @@ from app.modules.checkers.default_checker import (
     evaluate_rejected_archive,
     evaluate_verified_archive,
 )
-from app.modules.checkers.api.pre_submit import SubmissionPacketView
+from app.modules.checkers.api.submission_packet import SubmissionPacketView
 
 
 RULES_A = "sha256:" + "a" * 64
