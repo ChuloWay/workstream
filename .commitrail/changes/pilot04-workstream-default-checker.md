@@ -765,3 +765,10 @@ API checkpoint; raw /tmp/pilot04-selected-test-pure-current.log. The wider calle
 collection failure from module-level old output fixture imports is retained at
 /tmp/pilot04-selected-test-pure-first.log. Full composed collection/native proof
 remains required after peer source/shared fixture cleanup; this is not green CI.
+
+The TASK-to-ART selected-source query now requires the exact immutable
+selected_post_submit_policy_body. Its privacy test asserts that field is present,
+while exact raw guide/review/revision policy bodies, package URI, summary and
+attestation remain absent. The previous blanket policy_body substring assertion
+rejected the required selected policy projection; exact project selectors and
+no FOR UPDATE read contract remain unchanged.

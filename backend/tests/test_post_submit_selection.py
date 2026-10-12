@@ -33,7 +33,12 @@ async def test_task_projection_is_owner_qualified_and_exact(tmp_path, isolated_d
                 assert "workstream_tasks.project_id =" in statement
                 assert "submissions.task_id =" in statement and "submissions.id =" in statement
                 assert "FOR UPDATE" not in statement
-                assert "package_uri" not in statement and "policy_body" not in statement
+                assert "package_uri" not in statement
+                assert "selected_post_submit_policy_body" in statement
+                assert not any(field in statement for field in (
+                    "locked_post_submit_checker_policy_body", "locked_review_policy_body",
+                    "locked_revision_policy_body",
+                ))
                 assert "worker_attestation" not in statement and "summary" not in statement
         finally:
             event.remove(h.engine.sync_engine, "before_cursor_execute", observe)
