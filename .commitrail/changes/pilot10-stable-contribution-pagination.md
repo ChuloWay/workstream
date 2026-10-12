@@ -109,3 +109,12 @@ Implementation still requires installed-schema proof.
 - Current-source reconciliation: started from main d47ee1e; reconciled main e31e1777 after PR #539 merged.
 - Next usable boundary: separate CLI export PR and the pilot closing drill.
 - Remaining risks: native membership mechanism and restore binding not yet frozen.
+
+## Pagination regression structure repair
+
+The native fixed-membership regression now delegates sealed-membership guards,
+cursor custody and expiry/CSV checks to three same-module helpers. All 31
+assertions are AST-identical to the previously proven test, and operation order
+is preserved. The test and each helper are below the 120-line structural limit.
+Ruff, compilation and diff checks pass. This is a test-structure repair; the
+previous native proof remains attributed to its exact composed head.
