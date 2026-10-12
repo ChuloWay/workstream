@@ -343,7 +343,7 @@ class CurrentExecution:
 
 
 class CheckerOutputReservations:
-    """Current structural handlers have exactly zero output slots."""
+    """Selected evidence-only checker executions have no artifact output slots."""
 
     def __init__(self, session: AsyncSession):
         """Resolve output custody within the supplied CHECKERS session."""

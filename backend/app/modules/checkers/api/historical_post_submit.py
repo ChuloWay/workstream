@@ -34,7 +34,7 @@ class PostSubmitValue(BaseModel):
 
 
 class EmptyPostSubmitConfiguration(PostSubmitValue):
-    """The current registered structural implementations accept no parameters."""
+    """The stored pre-cutover structural configuration had no parameters."""
 
 
 class PostSubmitResourceLimits(PostSubmitValue):

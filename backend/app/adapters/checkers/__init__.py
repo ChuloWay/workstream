@@ -262,7 +262,7 @@ def post_submission_executor(*, sessions, materialization):
 
 
 def checker_output_reservations(session):
-    """Resolve exact active run/lease custody; current catalogue has zero slots."""
+    """Resolve exact active run/lease custody for artifact output reservations."""
     from app.modules.checkers.execution_coordination import CheckerOutputReservations
 
     return CheckerOutputReservations(session)

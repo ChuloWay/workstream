@@ -109,7 +109,7 @@ class ExpectedPostSubmitContext(ObservedPostSubmitContext):
 
 
 class PostSubmissionStructuralInput(PostSubmitValue):
-    """Immutable detached values consumed by the actual structural handlers."""
+    """Immutable detached structural facts retained in pre-cutover request records."""
 
     schema_version: Literal["post_submit_structural_input"] = "post_submit_structural_input"
     summary: Text

@@ -19,7 +19,7 @@ class CompiledPreSubmitCheckerPolicy:
 
 
 class PreSubmissionPolicyCompilationPort(EffectivePreSubmissionPlanningPort, Protocol):
-    """The canonical catalogue supplies both compilation steps to approval."""
+    """The CHECKERS owner supplies the exact default and external policy compilation."""
 
     def compile_policy_bundle(
         self, *, effective_policy: Mapping[str, object], effective_policy_hash: str,
