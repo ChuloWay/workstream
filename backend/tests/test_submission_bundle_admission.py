@@ -386,7 +386,7 @@ async def test_authority_denial_preserves_task_actor_project_grant_order(denied_
         ("consumed", "conflict"),
     ),
 )
-async def test_existing_durable_preparation_projects_current_admission_state(
+async def test_selected_replay_projects_current_admission_state(
     admission_status,
     expected_status,
 ) -> None:
@@ -408,7 +408,10 @@ async def test_existing_durable_preparation_projects_current_admission_state(
         runtime_factory=Mock(),
     )
 
-    result = await command._existing_durable_result(new_record_id())
+    result = await command._selected_replay_result(SimpleNamespace(
+        run_id=new_record_id(), status="completed",
+        terminal=SimpleNamespace(outcome="completed", execution=SimpleNamespace(eligible=True)),
+    ))
 
     assert result == SubmissionBundlePreparationResult(
         put_attempt_id=attempt_id,
