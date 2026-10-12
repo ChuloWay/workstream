@@ -31,7 +31,7 @@ from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitUnavailable,
 )
 from app.adapters.tasks import selected_pre_submit_task_guard
-from app.modules.tasks.repository import TaskRepository
+from app.modules.tasks.submission_context import TaskSubmissionContextService
 from app.modules.checkers.models import SelectedPreSubmitRun
 from app.modules.checkers.selected_pre_submit_coordination import (
     SelectedPreSubmitAdmissionCapability,
@@ -217,7 +217,7 @@ async def test_selected_pre_task_guard_rechecks_exact_locked_lineage(monkeypatch
         assert request.task_id == reservation.task_id
         return context
 
-    monkeypatch.setattr(TaskRepository, "lock_submission_context", lock)
+    monkeypatch.setattr(TaskSubmissionContextService, "lock_submission_context", lock)
     guard = selected_pre_submit_task_guard(SimpleNamespace())
     await guard.lock_selected_pre_submit_scope(reservation)
 

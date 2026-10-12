@@ -280,3 +280,11 @@ The reconciled AUTH composition exceeded its existing 1,200-line boundary. Move
 its exact artifact-binding matcher to the existing materialization binding owner,
 with explicit context/digest inputs and unchanged predicates; do not alter the
 structural debt ledger or its limit.
+
+The first reconciled Rust probe exposed a branch-reconstruction error: TASK's
+repository reverted the merged `select_submission_context` operation while its
+service still called it. Restore the merged repository operation, retaining
+selected-policy decoding, and make selected PRE locking use the same canonical
+TASK context service as all intake callers. This also retains CHECKERS currentness
+validation for replacement attempts. The failed probe's owned database was
+cleaned; rerun the real service proof after the repaired candidate is frozen.

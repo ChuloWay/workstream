@@ -651,17 +651,18 @@ class TaskRepository:
             )
         )
 
-    async def lock_submission_context(
+    async def select_submission_context(
         self,
         request: TaskSubmissionContextRequest,
-    ) -> TaskSubmissionContextFacts:
-        """Lock and project exact TASK-owned Submission lifecycle facts.
+    ) -> tuple[TaskSubmissionContextFacts, TaskPostSubmitRoutingManifest | None]:
+        """Lock TASK rows and select one owner-qualified remediation source.
 
         Args:
             request: Exact task, assignment, contributor, and predecessor selectors.
 
         Returns:
-            Immutable TASK-owned context facts from the locked rows.
+            Provisional TASK facts and selected immutable routing source. The
+            caller must verify current CHECKERS custody before exposing facts.
 
         Raises:
             TaskSubmissionContextUnavailable: When the context is invalid or the
@@ -685,8 +686,7 @@ class TaskRepository:
             or assignment is None
             or assignment.project_id != task.project_id
             or assignment.submitter_contribution_policy_version_id is None
-            or assignment.submitter_contribution_policy_version_id
-            != task.locked_contribution_policy_version_id
+            or assignment.submitter_contribution_policy_version_id != task.locked_contribution_policy_version_id
             or assignment.task_id != str(request.task_id)
             or assignment.contributor_id != contributor_id
             or assignment.status != "active"
@@ -707,10 +707,29 @@ class TaskRepository:
             (task.status == "in_progress" and latest_submission is not None)
             or (task.status == "needs_revision" and latest_submission is None)
             or (
-                latest_submission is not None and latest_submission.contributor_id != contributor_id
+                latest_submission is not None
+                and latest_submission.contributor_id != contributor_id
             )
         ):
             raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
+
+        remediation = None
+        if latest_submission is not None:
+            candidates = (await self._session.scalars(
+                select(TaskPostSubmitRoutingManifest).where(
+                    TaskPostSubmitRoutingManifest.project_id == task.project_id,
+                    TaskPostSubmitRoutingManifest.task_id == task.id,
+                    TaskPostSubmitRoutingManifest.assignment_id == assignment.id,
+                    TaskPostSubmitRoutingManifest.contributor_id == contributor_id,
+                    TaskPostSubmitRoutingManifest.submission_id == latest_submission.id,
+                    TaskPostSubmitRoutingManifest.submission_version == latest_submission.version,
+                    TaskPostSubmitRoutingManifest.routing_recommendation == "needs_revision",
+                ).order_by(TaskPostSubmitRoutingManifest.evaluation_generation.desc()).limit(2)
+            )).all()
+            if (not candidates or len(candidates) == 2 and
+                    candidates[0].evaluation_generation == candidates[1].evaluation_generation):
+                raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
+            remediation = candidates[0]
 
         locked_values = (
             task.project_id,
@@ -725,15 +744,11 @@ class TaskRepository:
         if any(value is None for value in locked_values):
             raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
         try:
-            locked_policy = TaskPolicyLineage.model_validate_json(
-                json.dumps(
-                    {
-                        key: str(value) if isinstance(value, UUID) else value
-                        for key in TaskPolicyLineage.model_fields
-                        for value in (getattr(task, key),)
-                    }
-                )
-            )
+            locked_policy = TaskPolicyLineage.model_validate_json(json.dumps({
+                key: str(value) if isinstance(value, UUID) else value
+                for key in TaskPolicyLineage.model_fields
+                for value in (getattr(task, key),)
+            }))
             post_body = task.locked_post_submit_checker_policy_body
             if post_body.get("schema_version") == "external_post_submit_policy.v1":
                 selected_post = validate_stored_external_post_policy(post_body)
@@ -774,20 +789,25 @@ class TaskRepository:
                 if latest_submission is not None
                 else None
             )
-            return TaskSubmissionContextFacts(
+            facts = TaskSubmissionContextFacts(
                 task_id=request.task_id,
                 assignment_id=request.assignment_id,
                 contributor_id=request.contributor_id,
                 status=task.status,
-                kind="revision" if predecessor is not None else "initial",
+                kind="checker_remediation" if predecessor is not None else "initial",
                 predecessor=predecessor,
                 locked_project_context=locked_project_context,
                 locked_policy=locked_policy,
                 acceptance_criteria=task.acceptance_criteria,
                 submitter_contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
+                checker_remediation_manifest_id=remediation.id if remediation is not None else None,
             )
+            return facts, remediation
         except (TypeError, ValueError) as exc:
-            raise TaskSubmissionContextUnavailable("task_submission_context_invalid") from exc
+            raise TaskSubmissionContextUnavailable(
+                "task_submission_context_invalid"
+            ) from exc
+
 
     async def add_submission(self, submission: Submission) -> Submission:
         """Persist a submission packet and its evidence items.

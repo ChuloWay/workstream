@@ -49,7 +49,7 @@ class _SelectedPreSubmitTaskGuard:
     """Project selected PRE custody through TASK's canonical submission lock."""
 
     def __init__(self, session: AsyncSession) -> None:
-        self._contexts = TaskRepository(session)
+        self._contexts = task_submission_context_port(session)
 
     async def lock_selected_pre_submit_scope(
         self, reservation: SelectedPreSubmitReservationFacts
