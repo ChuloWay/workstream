@@ -1095,7 +1095,7 @@ remaining trace sequence is:
   plus the REV-04C hidden FinalAcceptance/TASK/CON participant, support the
   additional false-path acceptance-source AUTH custody and activation prerequisites. Both branches have delivered request reservation `04E1B-A` and AUTH preparation `04E2-A`,
   followed by delivered authorized success outcomes `04E2-B` and hidden completion
-  delivery `04E1B-B8`. PILOT-04 supplies selected production registration and worker
+  delivery `04E1B-B8`. PILOT-04 supplies selected production registration and Celery
   composition; true
   routing proceeds after its own prerequisites without shared acceptance. 04F1
   supplies verified failure evidence, 04F2 supplies the hidden remediation

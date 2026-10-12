@@ -107,6 +107,9 @@ cleanup.
 - The existing OUTBOX prefork topology and its delivery task hard bound, with
   topology and real process-containment regressions, to honor the selected
   request budget without changing event-specific owner deadlines or selectors.
+- The backend CI Redis service source and its exact structural regression,
+  preserving the official image digest, service count, ports and health checks
+  while repairing a reproduced registry quota failure before test checkout.
 - CHECKERS policy contracts, registry reads, default/external execution,
   durable attempt/result custody, post routing and composition roots.
 - ART preparation, verified-material callback, evidence, admission and
@@ -441,3 +444,12 @@ sha256:c2d957341116c2324299461598330bf93937786c30658a4b71ef9392e9b78278.
 Its runtime is local runc/docker-dev, not hosted gVisor. Database, role, object
 store and scratch cleanup passed. Later documentation commits change no product
 code from that tested head. Full final-head hosted CI remains required.
+
+Fresh hosted CI at c0ffb0f47 found one current-roadmap vocabulary violation
+(corrected to Celery composition) and two lanes failed before checkout on an
+anonymous public-ECR Redis Data limit exceeded response. Use the identical
+official Redis OCI index from Docker Hub instead: independently fetched bytes
+hash to the same pinned 520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7.
+Only the two registry prefixes and exact structural expectation change; all
+services, digest, health checks, test selection and caps remain unchanged.
+New-source CI verification is required; those failed lanes ran no tests.
