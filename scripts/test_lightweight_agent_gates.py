@@ -70,18 +70,12 @@ class LightweightAgentGateTests(unittest.TestCase):
 
     def test_exact_pre_cutover_records_are_not_rewritten_for_old_links(self) -> None:
         self.assertFalse(
-            should_check_links(
-                Path(".commitrail/initiatives/WS-AUTH-001/pre-cutover/STATUS.md")
-            )
+            should_check_links(Path(".commitrail/initiatives/WS-AUTH-001/pre-cutover/STATUS.md"))
         )
-        self.assertTrue(
-            should_check_links(Path(".commitrail/initiatives/WS-AUTH-001/OVERVIEW.md"))
-        )
+        self.assertTrue(should_check_links(Path(".commitrail/initiatives/WS-AUTH-001/OVERVIEW.md")))
 
     def test_tool_specific_agent_paths_are_rejected(self) -> None:
-        failures = forbidden_path_failures(
-            [Path(".claude/settings.json"), Path("docs/guide.md")]
-        )
+        failures = forbidden_path_failures([Path(".claude/settings.json"), Path("docs/guide.md")])
         self.assertEqual(len(failures), 1)
         self.assertIn(".claude/settings.json", failures[0])
 
@@ -110,9 +104,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         )
         for command in commands:
             with self.subTest(command=command):
-                self.assertEqual(
-                    scan_authorization_text("docs/new-guide.md", command), []
-                )
+                self.assertEqual(scan_authorization_text("docs/new-guide.md", command), [])
 
     def test_stale_authorization_rejects_human_worker_vocabulary(self) -> None:
         examples = (
@@ -200,9 +192,7 @@ class LightweightAgentGateTests(unittest.TestCase):
 
     def test_backend_uses_distributed_semantic_lanes_and_stable_fan_in(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
-        agent_gates = Path(".github/workflows/agent-gates.yml").read_text(
-            encoding="utf-8"
-        )
+        agent_gates = Path(".github/workflows/agent-gates.yml").read_text(encoding="utf-8")
         gate_requirements = Path(".github/requirements/agent-gates.txt").read_text(
             encoding="utf-8"
         )
@@ -232,9 +222,7 @@ class LightweightAgentGateTests(unittest.TestCase):
             "lanes, minio-image, cli-public-contract]",
             workflow,
         )
-        self.assertIn(
-            "Require preflight, every semantic lane and CLI public contract", workflow
-        )
+        self.assertIn("Require preflight, every semantic lane and CLI public contract", workflow)
         self.assertIn(
             "  cli-public-contract:\n    uses: ./.github/workflows/cli.yml", workflow
         )
@@ -252,9 +240,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertNotIn("pull-requests:", agent_gates)
         self.assertNotIn("types: [opened, synchronize, reopened, edited]", agent_gates)
         self.assertIn("types: [opened, synchronize, reopened]", agent_gates)
-        self.assertIn(
-            "group: agent-gates-${{ github.event.pull_request.number }}", agent_gates
-        )
+        self.assertIn("group: agent-gates-${{ github.event.pull_request.number }}", agent_gates)
         self.assertIn("cancel-in-progress: true", agent_gates)
         self.assertIn("ref: ${{ github.event.pull_request.head.sha }}", agent_gates)
         self.assertNotIn("check_guide_extractor_dependencies.py", agent_gates)
@@ -262,10 +248,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertNotIn("python3 scripts/check_chunk_state_sync.py", agent_gates)
         self.assertIn("scripts.test_commitrail_contracts", agent_gates)
         self.assertIn("scripts.test_commitrail_contribution_paths", agent_gates)
-        self.assertIn(
-            "WORKSTREAM_BASE_SHA: ${{ github.event.pull_request.base.sha }}",
-            agent_gates,
-        )
+        self.assertIn('WORKSTREAM_BASE_SHA: ${{ github.event.pull_request.base.sha }}', agent_gates)
         self.assertNotIn("scripts.test_chunk_state_sync", agent_gates)
         self.assertIn("--require-hashes", agent_gates)
         self.assertIn("-r .github/requirements/agent-gates.txt", agent_gates)
@@ -283,21 +266,13 @@ class LightweightAgentGateTests(unittest.TestCase):
                     rf"(?m)^{package}==[^ ]+ \\\n    --hash=sha256:[0-9a-f]{{64}}$",
                 )
 
-    def test_minio_source_image_is_built_once_and_shared_without_bypassing_lanes(
-        self,
-    ) -> None:
+    def test_minio_source_image_is_built_once_and_shared_without_bypassing_lanes(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
-        image_job = workflow.split("\n  minio-image:\n", 1)[1].split(
-            "\n  auth-boundary-preflight:\n", 1
-        )[0]
-        self.assertEqual(
-            workflow.count('docker build --tag "${MINIO_IMAGE}" docker/minio'), 1
-        )
+        image_job = workflow.split("\n  minio-image:\n", 1)[1].split("\n  auth-boundary-preflight:\n", 1)[0]
+        self.assertEqual(workflow.count('docker build --tag "${MINIO_IMAGE}" docker/minio'), 1)
         self.assertNotIn("quay.io/minio", workflow)
         self.assertEqual(
-            image_job.count(
-                "hashFiles('docker/minio/**', '.github/workflows/backend.yml')"
-            ),
+            image_job.count("hashFiles('docker/minio/**', '.github/workflows/backend.yml')"),
             2,
         )
         self.assertIn(
@@ -326,12 +301,8 @@ class LightweightAgentGateTests(unittest.TestCase):
             save_step,
         )
         self.assertLess(
-            image_job.index(
-                "      - name: Verify the cached or freshly built provider"
-            ),
-            image_job.index(
-                "      - name: Save verified source image to trusted cache"
-            ),
+            image_job.index("      - name: Verify the cached or freshly built provider"),
+            image_job.index("      - name: Save verified source image to trusted cache"),
         )
         self.assertIn("minio-source-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}", image_job)
         self.assertIn("artifact: ${{ steps.identity.outputs.artifact }}", image_job)
@@ -345,9 +316,7 @@ class LightweightAgentGateTests(unittest.TestCase):
                 job = job.split(f"\n  {end}:\n", 1)[0]
             self.assertIn("name: ${{ needs.minio-image.outputs.artifact }}", job)
             self.assertIn("sha256sum --check minio.tar.sha256", job)
-            self.assertIn(
-                'docker load --input "${RUNNER_TEMP}/minio-image/minio.tar"', job
-            )
+            self.assertIn('docker load --input "${RUNNER_TEMP}/minio-image/minio.tar"', job)
             self.assertIn('"${MINIO_IMAGE}" server /data --address :9000', job)
 
     def test_backend_python_cache_keeps_fresh_installs_and_exact_inputs(self) -> None:
@@ -357,9 +326,7 @@ class LightweightAgentGateTests(unittest.TestCase):
             "backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-"
             "${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}"
         )
-        self.assertEqual(
-            workflow.count("Restore exact backend pip downloads from trusted cache"), 3
-        )
+        self.assertEqual(workflow.count("Restore exact backend pip downloads from trusted cache"), 3)
         self.assertEqual(workflow.count(f"key: {key}"), 4)
         self.assertEqual(
             workflow.count(
@@ -368,33 +335,21 @@ class LightweightAgentGateTests(unittest.TestCase):
             4,
         )
         self.assertEqual(
-            workflow.count(
-                "uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830"
-            ),
+            workflow.count("uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830"),
             2,
         )
         install = 'python -m pip install -e ".[dev,agents]"'
-        cache_env = (
-            'echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"'
-        )
+        cache_env = 'echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"'
         job_blocks = (
-            workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split(
-                "\n  lanes:\n", 1
-            )[0],
-            workflow.split("\n  lanes:\n", 1)[1].split("\n  cli-public-contract:\n", 1)[
-                0
-            ],
+            workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split("\n  lanes:\n", 1)[0],
+            workflow.split("\n  lanes:\n", 1)[1].split("\n  cli-public-contract:\n", 1)[0],
             workflow.split("\n  test:\n", 1)[1],
         )
         for job in job_blocks:
-            self.assertEqual(
-                job.count("Restore exact backend pip downloads from trusted cache"), 1
-            )
+            self.assertEqual(job.count("Restore exact backend pip downloads from trusted cache"), 1)
             self.assertEqual(job.count(install), 1)
             self.assertEqual(job.count(cache_env), 1)
-            self.assertLess(
-                job.index("Restore exact backend pip downloads"), job.index(cache_env)
-            )
+            self.assertLess(job.index("Restore exact backend pip downloads"), job.index(cache_env))
             self.assertLess(job.index(cache_env), job.index(install))
         self.assertEqual(workflow.count(install), 3)
         self.assertEqual(workflow.count(cache_env), 3)
@@ -413,9 +368,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         )[0]
         self.assertLess(
             preflight.index("      - name: Validate module, AUTH, and test boundaries"),
-            preflight.index(
-                "      - name: Save verified backend pip downloads to trusted cache"
-            ),
+            preflight.index("      - name: Save verified backend pip downloads to trusted cache"),
         )
         self.assertNotIn("restore-keys:", workflow)
         self.assertNotIn(".venv", workflow)
@@ -426,13 +379,10 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertRegex(lanes, r"(?m)^    needs: minio-image$")
         self.assertNotIn("needs: auth-boundary-preflight", lanes)
         step = workflow.split(
-            "      - name: Require preflight, every semantic lane and CLI public contract\n",
-            1,
+            "      - name: Require preflight, every semantic lane and CLI public contract\n", 1
         )[1].split("\n      - name:", 1)[0]
         self.assertIn("if: ${{ always() }}", step)
-        self.assertIn(
-            "PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}", step
-        )
+        self.assertIn("PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}", step)
         self.assertIn(
             "EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}",
             step,
@@ -442,14 +392,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         guard = re.search(r"(?m)^        run: (.+)$", step)
         self.assertIsNotNone(guard)
         for preflight in ("success", "failure", "cancelled", "skipped", "", "unknown"):
-            for lanes_result in (
-                "success",
-                "failure",
-                "cancelled",
-                "skipped",
-                "",
-                "unknown",
-            ):
+            for lanes_result in ("success", "failure", "cancelled", "skipped", "", "unknown"):
                 with self.subTest(preflight=preflight, lanes=lanes_result):
                     result = subprocess.run(
                         ["bash", "-e", "-c", guard[1]],
@@ -504,9 +447,7 @@ class LightweightAgentGateTests(unittest.TestCase):
     def test_postgres_storage_is_bounded_and_disk_contracts_remain(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
         lane_service = workflow.split("\n  lanes:\n", 1)[1].split("\n    steps:", 1)[0]
-        aggregate_service = workflow.split("\n  test:\n", 1)[1].split(
-            "\n    steps:", 1
-        )[0]
+        aggregate_service = workflow.split("\n  test:\n", 1)[1].split("\n    steps:", 1)[0]
         self.assertIn(
             "${{ matrix.lane != 'schema_contracts' && "
             "'--tmpfs /var/lib/postgresql/data:rw,nosuid,nodev,noexec,size=2147483648' || '' }}",
@@ -518,9 +459,7 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow.index("- name: Execute semantic lane"),
         )
 
-    def test_postgres_storage_guard_rejects_wrong_mounts_and_write_settings(
-        self,
-    ) -> None:
+    def test_postgres_storage_guard_rejects_wrong_mounts_and_write_settings(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
         step = workflow.split(
             "      - name: Verify PostgreSQL CI storage and write settings\n", 1
@@ -561,9 +500,7 @@ class LightweightAgentGateTests(unittest.TestCase):
             )
             docker.chmod(0o755)
             for mode, stat, configuration, status, allowed in cases:
-                with self.subTest(
-                    mode=mode, stat=stat, configuration=configuration, status=status
-                ):
+                with self.subTest(mode=mode, stat=stat, configuration=configuration, status=status):
                     result = subprocess.run(
                         ["bash", "-e", "-c", guard],
                         env={
@@ -577,16 +514,13 @@ class LightweightAgentGateTests(unittest.TestCase):
                         capture_output=True,
                         check=False,
                     )
-                    self.assertEqual(
-                        result.returncode == 0, allowed, result.stderr.decode()
-                    )
+                    self.assertEqual(result.returncode == 0, allowed, result.stderr.decode())
 
     def test_retired_behavior_mutation_gate_stays_out_of_required_ci(self) -> None:
         backend = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
 
         self.assertFalse(Path(".github/workflows/mutation-pilot.yml").exists())
         self.assertNotIn("mutation-pilot", backend)
-
 
 if __name__ == "__main__":
     unittest.main()
