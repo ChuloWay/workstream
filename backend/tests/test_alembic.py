@@ -291,6 +291,15 @@ def test_current_head_installs_selected_only_checker_custody(
     assert "external_post_submit_policy.v1" in definitions[
         "require_post_policy_operation"
     ]
+    assert "checker terminal selected policy differs" in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "result_registry_entry_id" in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "platform_manifest_digest" in definitions[
+        "validate_checker_terminal_custody"
+    ]
     assert "is distinct from 'external_checker_policies.v1'" in definitions[
         "external_checker_locked_policies_valid"
     ].lower()

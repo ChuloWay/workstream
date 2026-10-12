@@ -992,7 +992,11 @@ def _replace_checker_terminal_custody() -> None:
         raise RuntimeError("checker terminal declaration shape changed")
     definition = definition.replace(
         declaration,
-        declaration.replace("envelope jsonb;", "envelope jsonb; expected_members jsonb;"),
+        declaration.replace(
+            "envelope jsonb;",
+            "envelope jsonb; expected_members jsonb; "
+            "expected_execution_members jsonb; actual_execution_members jsonb;",
+        ),
     )
     mismatch = """      IF result->'member_results' IS DISTINCT FROM members OR current_run.passed_count IS DISTINCT FROM passed
         OR current_run.warning_count IS DISTINCT FROM warning OR current_run.failed_count IS DISTINCT FROM failed
@@ -1005,6 +1009,44 @@ def _replace_checker_terminal_custody() -> None:
       IF result->>'schema_version' IS NOT DISTINCT FROM
         'workstream.selected_post_submit_result.v1'
         AND result->>'outcome'='completed' THEN
+        SELECT coalesce(jsonb_agg(jsonb_build_object(
+          'position',(entry.ordinality-1)::integer,
+          'order',(entry.ordinality-1)::integer,
+          'requirement_id',entry.item->>'requirement_id',
+          'registry_entry_id',entry.item#>>'{registry,registry_entry_id}',
+          'registry_entry_digest',entry.item#>>'{registry,entry_digest}',
+          'result_registry_entry_id',entry.item#>>'{registry,registry_entry_id}',
+          'result_registry_entry_digest',entry.item#>>'{registry,entry_digest}',
+          'result_phase','post_submit',
+          'platform_manifest_digest',entry.item#>>'{registry,image_digest}'
+        ) ORDER BY entry.ordinality),'[]'::jsonb)
+        INTO expected_execution_members
+        FROM jsonb_array_elements(current_run.request_json::jsonb#>'{policy,entries}')
+          WITH ORDINALITY entry(item,ordinality);
+        SELECT coalesce(jsonb_agg(jsonb_build_object(
+          'position',(actual.ordinality-1)::integer,
+          'order',(actual.item->>'order')::integer,
+          'requirement_id',actual.item->>'requirement_id',
+          'registry_entry_id',actual.item->>'registry_entry_id',
+          'registry_entry_digest',actual.item->>'registry_entry_digest',
+          'result_registry_entry_id',actual.item#>>'{result,registry_entry_id}',
+          'result_registry_entry_digest',actual.item#>>'{result,registry_entry_digest}',
+          'result_phase',actual.item#>>'{result,phase}',
+          'platform_manifest_digest',actual.item#>>'{isolation,platform_manifest_digest}'
+        ) ORDER BY actual.ordinality),'[]'::jsonb)
+        INTO actual_execution_members
+        FROM jsonb_array_elements(result#>'{execution,external_members}')
+          WITH ORDINALITY actual(item,ordinality);
+        IF result#>>'{execution,schema_version}' IS DISTINCT FROM
+             'workstream.selected_post_submit_execution.v1'
+          OR result#>>'{execution,policy_sha256}' IS DISTINCT FROM
+             current_run.request_json::jsonb#>>'{policy,policy_sha256}'
+          OR (result#>>'{execution,required_external_count}')::integer IS DISTINCT FROM
+             jsonb_array_length(current_run.request_json::jsonb#>'{policy,entries}')
+          OR actual_execution_members IS DISTINCT FROM expected_execution_members THEN
+          RAISE EXCEPTION 'checker terminal selected policy differs'
+            USING ERRCODE='23514';
+        END IF;
         SELECT coalesce(jsonb_agg(jsonb_build_object(
           'schema_version','post_submit_structural_result',
           'checker_id',item->>'requirement_id',
