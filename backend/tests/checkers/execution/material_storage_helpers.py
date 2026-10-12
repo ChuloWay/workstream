@@ -10,8 +10,8 @@ from sqlalchemy import func, insert, update
 from app.adapters.outbox import outbox_append
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import COMPLETION_EVENT, EvaluationCompletion
-from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
-from app.modules.checkers.api.historical_post_submit import canonical_post_submit_bytes
+from app.modules.checkers.api.selected_post_submit import SelectedPostSubmitCurrentResultReference
+from app.modules.checkers.api.canonical_values import canonical_checker_bytes
 from app.modules.checkers.execution_results import classify_result
 from app.modules.checkers.models import CheckerResult, CheckerRun
 from app.modules.outbox.api import OutboxAppendInput
@@ -56,8 +56,8 @@ async def stage_terminal(session, facts, material, evidence_id):
         ))
     event_id = None
     if result.outcome == "completed":
-        reference = PostSubmitCurrentResultReference(**result.model_dump(
-            include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"},
+        reference = SelectedPostSubmitCurrentResultReference(**result.model_dump(
+            include=set(SelectedPostSubmitCurrentResultReference.model_fields) - {"schema_version"},
         ))
         event = EvaluationCompletion(
             project_id=request.project_id, task_id=request.task_id, submission_id=request.submission_id,
@@ -77,7 +77,7 @@ async def stage_terminal(session, facts, material, evidence_id):
         .where(CheckerRun.id == run.id)
         .values(
             status=result.outcome,
-            result_json=canonical_post_submit_bytes(result, exclude={"result_digest"}).decode(),
+            result_json=canonical_checker_bytes(result, exclude={"result_digest"}).decode(),
             result_digest=result.result_digest,
             material_custody=material,
             finalize_evidence_id=str(evidence_id),

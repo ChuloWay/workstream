@@ -78,13 +78,12 @@ async def source_rows(session) -> list[dict]:
     )
 
 
-async def next_request(h, *, structural_input=None):
+async def next_request(h):
     """Build a genuine later generation for the same immutable Submission."""
     request = change_request(
         h.request,
         evaluation_request_id=new_record_id(),
         evaluation_generation=h.request.evaluation_generation + 1,
-        **({"structural_input": structural_input} if structural_input is not None else {}),
     )
     h.request = request
     return request
@@ -438,13 +437,13 @@ async def activate_successor_guide(h):
 def completion_for(h):
     """Build the actual completed publication from retained fixture facts."""
     from app.modules.checkers.api.execution import EvaluationCompletion
-    from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
+    from app.modules.checkers.api.selected_post_submit import SelectedPostSubmitCurrentResultReference
 
     return EvaluationCompletion(
         project_id=h.request.project_id, task_id=h.request.task_id,
         submission_id=h.request.submission_id,
-        reference=PostSubmitCurrentResultReference(
-            **h.result.model_dump(include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"})
+        reference=SelectedPostSubmitCurrentResultReference(
+            **h.result.model_dump(include=set(SelectedPostSubmitCurrentResultReference.model_fields) - {"schema_version"})
         ),
         routing_recommendation="allow_review", output_binding_ids=(),
         execute_evidence_id=h.source["execute_evidence_id"],

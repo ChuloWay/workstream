@@ -274,7 +274,10 @@ async def test_member_insertion_waits_for_terminal_parent(
     from app.modules.checkers.execution_repository import ExecutionRepository
     from tests.auth_concurrency_support import wait_for_named_database_lock
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    from tests.checkers.external.support import post_registry_spec
+
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
@@ -290,7 +293,7 @@ async def test_member_insertion_waits_for_terminal_parent(
             return await original(repo, run, result)
 
         monkeypatch.setattr(ExecutionRepository, "write_members", paused)
-        first = facts.result.member_results[0]
+        first = facts.result.execution.external_members[0]
         waiter = "checker-member-race-" + new_record_id().hex
 
         async def insert_member():
@@ -305,13 +308,13 @@ async def test_member_insertion_waits_for_terminal_parent(
                         task_id=str(h.request.task_id),
                         submission_id=str(h.request.submission_id),
                         member_order=0,
-                        checker_name=first.checker_id,
-                        definition_version=first.definition_version,
-                        implementation_version=first.implementation_version,
-                        status=first.status,
-                        code=first.code,
-                        failure_category=first.failure_category,
-                        severity=first.severity,
+                        checker_name=first.requirement_id,
+                        definition_version=first.result.schema_version,
+                        implementation_version=first.registry_entry_digest,
+                        status=first.result.verdict,
+                        code="passed",
+                        failure_category="none",
+                        severity="info",
                         counters=[],
                     )
                 )
@@ -345,7 +348,7 @@ async def test_member_insertion_waits_for_terminal_parent(
             await asyncio.gather(*pending, return_exceptions=True)
         async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(CheckerResult)) == len(
-                facts.result.member_results
+                facts.result.execution.external_members
             )
             assert (
                 await session.get(CheckerRun, str(facts.result.attempt_id))
