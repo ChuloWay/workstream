@@ -59,6 +59,24 @@ cleanup.
 
 ### Allowed
 
+- The bounded permission-fixture/PostgreSQL CI provider repair permits only
+  `mcp_server/tests/test_access_reads.py`'s representative permission response
+  total (78 to the current exact 80), four exact PostgreSQL image source
+  prefixes in `.github/workflows/backend.yml` (two),
+  `.github/workflows/cli.yml` (one) and `.github/workflows/mcp.yml` (one),
+  and this record. Preserve every assertion, negative/schema constant, SDK
+  lock, fixture identity, test selector, service count, PostgreSQL 16 version,
+  OCI digest, health check, resource bound, job dependency and required check.
+  No backend product, migration or CLI product/test source may change. The
+  previous invalid-total negative remains invalid; no dynamic total fallback
+  or schema broadening is allowed. Independently fetched Docker Hub OCI index
+  bytes must match pinned `33f923b05f64ca54ac4401c01126a6b92afe839a0aa0a52bc5aeb5cc958e5f20`.
+  Acceptance is the complete existing MCP package selection, retaining and
+  identifying its two baseline environment-gated skips, including declarative
+  schema/wire and authority-revocation cases; existing lightweight workflow
+  controls and exact provider-only structural comparison must pass. Local
+  MCP 2.2 evidence is separate from hosted SDK/wire proof.
+
 - The bounded CI collection/selected-contract repair permits only additive
   package markers `backend/tests/authorization/pre_submit/__init__.py` and
   `backend/tests/authorization/post_submit_routing/__init__.py`, plus the exact

@@ -52,7 +52,7 @@ def _arguments(name: str) -> dict[str, Any]:
 def _response(name: str) -> dict[str, Any]:
     # Representative entries use the backend's frozen catalogue totals.
     if name == "workstream_permissions_list":
-        return {"items": [{"permission_id": "actor.profile.read_any"}], "total": 78}
+        return {"items": [{"permission_id": "actor.profile.read_any"}], "total": 80}
     if name == "workstream_admin_roles_list":
         return {
             "items": [
