@@ -33,7 +33,6 @@ from project_create_fixtures import (
 from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
-from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
 from app.modules.checkers.api.external_policy import validate_stored_external_pre_policy
 from app.db import session as db_session
 from app.db.base import Base
@@ -4003,18 +4002,13 @@ async def test_submission_artifact_policy_approval_persists_effective_policy_has
         ref.startswith("guide-document:") and "#sha256:" in ref
         for ref in persisted_policy.source_material_refs
     )
-    assert pre_submit_checker_policy is not None
     assert pre_submit_checker_policy.lifecycle_status == "compiled"
     assert pre_submit_checker_policy.effective_policy_hash == effective["effective_policy_hash"]
     assert pre_submit_checker_policy.compiler_version == "external_checker_policy.v1"
-    assert pre_submit_checker_policy.compiled_bundle_hash is not None
     locked_pre_policy = validate_stored_external_pre_policy(
         pre_submit_checker_policy.compiled_bundle
     )
     assert locked_pre_policy.policy_sha256 == pre_submit_checker_policy.compiled_bundle_hash
-    assert locked_pre_policy.workstream_default.behavior_sha256 == (
-        WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
-    )
     assert locked_pre_policy.entries == ()
 
 

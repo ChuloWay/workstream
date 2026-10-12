@@ -1384,3 +1384,35 @@ it makes no database, native lifecycle or exhaustive hosted-suite claim. Raw
 before/after and mutant evidence remains available to the lead. Independent QA
 source review covered the complete discovery and custody extraction; composition
 addendum review remains necessary for the final union. Ruff and diff checks pass.
+
+### Protected AUTH structure shrink after reviewed fixture updates
+
+Lead-authorized scope: `backend/tests/test_projects.py`,
+`backend/tests/authorization/setup_finalization/test_catalogue.py`,
+`.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`, and this existing record only.
+At clean `94687d444`, canonical observed debt differs from the existing ledger:
+the exact active-action comparison reaches 121 lines against its 120-line hard
+limit, and the already oversized PROJECT test file grows from 5821 to 5826 lines.
+Protected main is `51c7e2eed53b4fd45b3ae201ef3b30445c233a09`. Updating the ledger
+would improperly admit new debt and growth, independently refused by the trusted
+transition validator. The two obsolete PRE debt deletions already in the ledger
+are legitimate and remain unchanged.
+
+Extract the exact expected action literals into one module-level immutable
+frozenset; retain actual ACTIVE enumeration and equality in the existing test.
+Confirm exact before/after member identity and rejection of missing and extra
+actions. In the PROJECT fixture, strict stored-policy validation already enforces
+the code-owned default behavior digest, so remove the duplicate comparison and
+unused import. Remove only the two redundant None checks: retained compiled-row
+attribute assertions still require the row, and equality with the strict validated
+SHA string requires the stored bundle hash. Preserve compiler/version, current
+policy hash, empty entries and every DB lineage assertion. The file must shrink
+below its protected-main size without formatting or whitespace manipulation.
+
+Risk: loss of exact action/compiled-policy proof. Lead and CI/test-delta review
+must verify unchanged inventory and negative discriminators plus strict default
+validation reachability. Prohibited: production, policy/limits, test skips, new
+debt, ledger exceptions, suppressed guards or any unrelated test/assertion edit.
+Acceptance requires exact canonical observed-ledger parity, protected-base
+shrink-only transition and retained new-debt/growth refusal controls. No native
+lifecycle proof or full hosted-suite claim is added by this metadata repair.
