@@ -461,8 +461,8 @@ runtime body and hash. Setup agents may propose registered checker names and
 routing classifications, but they do not produce executable runtime code and
 they do not decide submission outcomes at runtime.
 
-Retained pre-cutover bodies preserve their original ordered structural entries,
-classification lists and hashes for exact historical decoding.
+Stored pre-cutover bodies preserve their original ordered entries and hashes
+as immutable provenance, without a runtime decoder or replay executor.
 
 Those bodies are retained provenance only. New POST bodies contain the exact
 approved external entries and `policy_sha256`; an empty approved POST binding
@@ -495,9 +495,9 @@ The flow below is not a claim that the complete journey is live in production.
 ```text
 Draft packet
 -> load locked task context
--> load locked EffectiveProjectSubmissionArtifactPolicy hash
--> load locked PreSubmitCheckerPolicy compiled bundle hash
--> run pre-submit intake checks
+-> safely inspect ZIP in bounded private ART scratch
+-> run the four Workstream default checks with server-verified digest/manifest
+-> execute every approved external PRE image against verified read-only files
 -> create Submission only when blocking pre-submit checks pass
 -> automatically lock submission
 -> queue automatic pre-review CheckerRun
@@ -767,24 +767,18 @@ No manual execution endpoint accompanies these reads. See the
 
 ### Shared evaluation content capacity
 
-The retained ARCH-04E1B-B5 contract provided `PostSubmissionEvaluationContent`
-for pre-cutover preparation and later identified requests. Its retained value type validates the original catalogue/policy
-consistency and structural field limits, plus 1 MiB minus a 1,024-byte reserve
-for the finite request identity envelope. The full request retains its 1 MiB
-limit and canonical digest. Catalogue and policy identities are unchanged.
+ART checks the canonical selected POST content against the request capacity
+before durable admission. The content binds the exact approved external policy,
+verified artifact/manifest, and checked packet; the removed catalogue content
+type and preparation adapter are not retained as executable alternatives.
+See [the ART admission boundary](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission).
 
-The removed preparation adapter projected every verified file and only required evidence with
-matching verified `evidence/{key}` files. Missing criteria remain empty text for
-the existing post-submit checker. This check does not execute evaluators or
-supply authority. See [the ART admission boundary](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission)
-for historical timing and cleanup. ARCH-04E1B-B6 used that projection with actual record
-identities and reserves generation one through the required TASK guard in the
-Submission transaction. The same commit retains exact creation/binding AUTH
-receipts and a bounded `PostSubmissionEvaluationRequested` outbox event.
-Select-only creation replay checks the original request and event without
-changing the current-generation fence. PILOT-04 replaces that preparation projection with selected external policy
-content and registers selected request/completion handlers. Stored intent alone
-still confers no execution or acceptance authority.
+The existing Submission transaction reserves generation one through the TASK
+guard and retains exact creation/binding AUTH receipts and a bounded
+`PostSubmissionEvaluationRequested` outbox event. Exact creation replay checks
+the original request and event without changing the current-generation fence.
+The selected request/completion handlers consume those facts. Stored intent
+alone confers no execution or acceptance authority.
 Preparation has no stored Submission to observe and never replaces the TASK
 evaluation guard.
 
