@@ -26,6 +26,9 @@ context/intake requirements:
 | `workstream project guide activate PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/activate` |
 | `workstream project tasks PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
+| `workstream project task create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/tasks` |
+| `workstream project task screen PROJECT_ID TASK_ID --idempotency-key UUID [--reason TEXT]` | `POST /api/v1/tasks/TASK_ID/screen` |
+| `workstream project task release PROJECT_ID TASK_ID --idempotency-key UUID --reason TEXT` | `POST /api/v1/tasks/TASK_ID/release` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
@@ -566,6 +569,57 @@ executes the real derivation task explicitly, approves and publishes through
 public APIs, then proves activation/replay against SQL and denial after grant
 revocation or suspension. It is not live setup inference, broker-delivery or
 deployment certification.
+
+## Prepare tasks as a project manager
+
+```sh
+workstream project task create PROJECT_ID --input task.json --idempotency-key CREATE_KEY --output json
+workstream project task screen PROJECT_ID TASK_ID --idempotency-key SCREEN_KEY --reason "Guide requirements inspected" --output json
+workstream project task release PROJECT_ID TASK_ID --idempotency-key RELEASE_KEY --reason "Ready for contribution" --output json
+```
+
+The input is the public `TaskCreate` JSON, for example:
+
+```json
+{
+  "title": "Assess the supplied evidence",
+  "description": "Produce the deliverables specified by the project guide.",
+  "task_type": "evaluation",
+  "skill_tags": ["analysis"],
+  "acceptance_criteria": "Complete, attributable evidence for every conclusion."
+}
+```
+
+All public declaration fields are supported; omitted/null values retain their
+API semantics. Creation requires a canonical hyphenated project UUID, as does
+the backend create route. Inputs are bounded to 1MiB; management responses to
+2MiB. Transition selectors accept supported UUID spellings without changing the
+supplied task selector on the wire. The project selector binds the returned
+project, not a client-side grant check or an additional backend request.
+
+Creation returns a draft. Screening locks the backend-selected active guide and
+policies; release checks those locks and installed plans and requires an explicit
+nonblank decision reason. These are three independent calls, never automatic
+steps. Only Workstream decides authority, readiness and lifecycle transitions.
+Text and JSON output retain the complete authorized management receipt, not
+the narrower contributor projection. Supply deadlines as RFC3339 timestamps;
+creation binds the returned instant, allowing timezone normalization and the
+backend's microsecond precision. Import-batch identifiers are nullable text,
+not Workstream record UUIDs.
+
+Keep each key with its unchanged request. Immediate replay returns the original
+receipt only while current authority, lifecycle and locked context permit it;
+for example, a draft-create key cannot replay after screening changes its locks.
+Malformed success or transport uncertainty exits 1 with empty stdout. Text errors
+include deliberate unchanged-input/key recovery; JSON sets `outcome_unknown`.
+Do not substitute a new key because a task read appears unchanged.
+
+Built-process tests cover exact bodies/keys, complete response binding, malformed
+lineage, credential/terminal safety and no automatic replay. The existing real
+socket/Flow/PREP/PostgreSQL journey prepares a task using these commands, verifies
+stored locks and single command/audit facts, tests foreign-project, suspension and
+revocation denials, then exercises contributor discovery/claim/start. Canonical
+guide setup fixtures are not live inference or deployed-service certification.
 
 ## Browse tasks as a project manager
 

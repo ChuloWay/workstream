@@ -309,6 +309,31 @@ func (c *Client) safeMetadata(value string) bool {
 	return !strings.Contains(strings.ToLower(value), strings.ToLower(c.token))
 }
 
+func (c *Client) safeMutationResponse(raw json.RawMessage) bool {
+	// Decode escaped strings and preserve integer text before checking reflection.
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return true
+		}
+		if err != nil {
+			return false
+		}
+		switch value := token.(type) {
+		case string:
+			if !c.safeMetadata(value) || sameUUID(value, c.token) {
+				return false
+			}
+		case json.Number:
+			if !c.safeMetadata(value.String()) {
+				return false
+			}
+		}
+	}
+}
+
 func (c *Client) request(ctx context.Context, method, path, query string, body []byte) (json.RawMessage, error) {
 	return c.requestWithKey(ctx, method, path, query, body, "", http.StatusOK)
 }

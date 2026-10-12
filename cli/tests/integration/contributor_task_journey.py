@@ -6,11 +6,14 @@ grant and lifecycle operations exercise the real API with no route overrides.
 
 from contextlib import AsyncExitStack
 import json
+from pathlib import Path
+import tempfile
 from uuid import uuid4
 
 from api_contract_e2e import flow_settings, issue_flow_token
 from tests.projects.guide_activation.pg_support import activation_case
 from tests.authorization.guide_activation.pg_support import activate
+from manager_task_journey import exercise_manager_task_preparation
 
 
 async def exercise_contributor_task_reads(
@@ -138,10 +141,29 @@ async def exercise_contributor_task_reads(
             )
             await activate(factory, actor, command)
             projects.append(str(command.target.proposal.project_id))
+            if len(projects) == 1:
+                preparation_factory = factory
         project, foreign_project = projects
         ready_ids = []
         for selected_project, count in ((project, 3), (foreign_project, 1)):
             for index in range(count):
+                if selected_project == project and index == 0:
+                    with tempfile.TemporaryDirectory(
+                        prefix="ws-cli-manager-input-"
+                    ) as directory:
+                        task_id = await exercise_manager_task_preparation(
+                            direct,
+                            cli,
+                            origin,
+                            tokens,
+                            profiles,
+                            preparation_factory,
+                            project,
+                            foreign_project,
+                            Path(directory) / "task.json",
+                        )
+                    ready_ids.append(task_id)
+                    continue
                 created = await post(
                     f"/api/v1/projects/{selected_project}/tasks",
                     {
@@ -182,6 +204,32 @@ async def exercise_contributor_task_reads(
         read(("show", ready_ids[0]), status=404)
         await context_reads(ready_ids[0], denied=True)
         first_grant = await grant(project, actor_id)
+        # An active Submitter grant never substitutes for manager authority.
+        with tempfile.TemporaryDirectory(prefix="ws-cli-submit-only-") as directory:
+            task_input = Path(directory) / "task.json"
+            task_input.write_text(
+                json.dumps({"title": "Denied", "description": "Must not be created"})
+            )
+            for action in ("create", "screen", "release"):
+                args = (
+                    (project, "--input", str(task_input))
+                    if action == "create"
+                    else (project, ready_ids[0], "--reason", "Must not transition")
+                )
+                denied = cli(
+                    origin,
+                    token,
+                    "project",
+                    "task",
+                    action,
+                    *args,
+                    "--idempotency-key",
+                    str(uuid4()),
+                    "-o",
+                    "json",
+                )
+                assert denied.returncode == 1 and denied.stdout == ""
+                assert json.loads(denied.stderr)["error"]["status"] == 403
         await grant(project, peer_profiles["cli-task-peer"])
         await grant(project, peer_profiles["cli-task-reviewer"], role="reviewer")
         reviewer_ready = read(("ready", project), peer_tokens["cli-task-reviewer"])

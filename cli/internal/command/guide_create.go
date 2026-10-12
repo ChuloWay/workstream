@@ -18,7 +18,7 @@ func addGuideCreate(project *cobra.Command, client func() (*api.Client, error), 
 			if err != nil {
 				return err
 			}
-			body, err := readGuideInput(input)
+			body, err := readJSONInput(input)
 			if err != nil {
 				return err
 			}
@@ -63,7 +63,7 @@ func addGuideCreate(project *cobra.Command, client func() (*api.Client, error), 
 	project.AddCommand(guide)
 }
 
-func readGuideInput(path string) ([]byte, error) {
+func readJSONInput(path string) ([]byte, error) {
 	bad := commandError{"invalid_arguments", "--input must be a readable regular JSON file of at most 1MiB"}
 	info, err := os.Stat(path)
 	if err != nil || !info.Mode().IsRegular() || info.Size() > api.MaxGuideInputBytes {

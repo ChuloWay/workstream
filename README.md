@@ -409,6 +409,11 @@ uncertain writes are never automatically retried.
 through the public manager API. It validates the immutable activation receipt;
 Workstream retains readiness, contribution-policy binding and supersession
 authority. It does not approve policies or enable false-review guide activation.
+`workstream project task create PROJECT_ID --input FILE --idempotency-key UUID`
+creates a draft; separate `project task screen PROJECT_ID TASK_ID` and
+`project task release PROJECT_ID TASK_ID --reason TEXT` commands each require
+their own retry key. Workstream owns guide/policy locking and readiness; no
+command automatically prepares or releases work after another command.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
