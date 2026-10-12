@@ -181,6 +181,14 @@ async def test_production_registry_delivers_request_then_completion_exactly_once
         human_review_required=human,
         contribution_awards=awards,
     ) as h:
+        # The shared ART fixture arranges an in-progress assignment without
+        # proving contributor start authority; routing requires accepted custody.
+        async with h.factory() as session, session.begin():
+            accepted = await session.execute(text(
+                "UPDATE public.task_assignments SET accepted_at=clock_timestamp() "
+                "WHERE id=:id AND accepted_at IS NULL"
+            ), {"id": str(h.request.assignment_id)})
+            assert accepted.rowcount == 1
         await provision_router(h.factory)
         await delivery_fixture(h)
         # This fixture has no external POST bindings; use the real configured
@@ -218,7 +226,7 @@ async def test_production_registry_delivers_request_then_completion_exactly_once
             h.request.project_id,
             "production-completion",
         )
-        assert outcome(completion_receipt)["delivery_state"] == "acknowledged"
+        assert outcome(completion_receipt)["delivery_state"] == "acknowledged", outcome(completion_receipt)
         await assert_committed(h, human=human, award_count=len(awards))
         async with h.factory() as session:
             snapshot = await outcome_snapshot(session)

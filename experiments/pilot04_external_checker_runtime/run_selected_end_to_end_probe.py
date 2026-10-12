@@ -17,7 +17,7 @@ from zipfile import ZipFile, ZipInfo
 
 from aiobotocore.config import AioConfig
 from aiobotocore.session import AioSession
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from starlette.requests import Request
 
 from app.adapters.artifacts import (
@@ -426,6 +426,15 @@ async def _prove_infrastructure_recovery(
 
 async def _production_post_delivery(fixture, settings):
     """Use production handlers and a fresh worker runtime, then replay delivery."""
+    # The ART arrangement is not a contributor-start authority proof. Supply
+    # its exact accepted-assignment prerequisite before testing routing owners.
+    async with fixture.factory() as session, session.begin():
+        accepted = await session.execute(text(
+            "UPDATE public.task_assignments SET accepted_at=clock_timestamp() "
+            "WHERE id=:id AND accepted_at IS NULL"
+        ), {"id": str(fixture.request.assignment_id)})
+        if accepted.rowcount != 1:
+            raise RuntimeError("fixture assignment acceptance was not established")
     await provision_router(fixture.factory)
     await delivery_fixture(fixture)
     # Supply only this isolated run's configuration. Every provider, grant,
