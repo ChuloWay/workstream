@@ -354,6 +354,19 @@ management projections without raw image messages; the regression must fail on
 the prior reader. Independent authority/architecture review checks the caller
 repair. Risk remains L1; no public route or stored-data rewrite is added.
 
+At clean `c4d590c7b706bacf926c324f587dffdaef0f4924`, the native SQL identity
+substitution controls, empty-policy production request/completion acceptance,
+and failed selected-result history regression passed (4 cases, 106.13 seconds).
+These tests use controlled normalized image results with real PostgreSQL,
+ART material and AUTH custody; they do not replace the real Rust image journey.
+Restoring only the previous history reader and message table in a temporary
+checkout makes the exact history regression fail with `KeyError` (42.98 seconds).
+Both runs confirmed database, role and MinIO cleanup. Raw evidence is
+`/tmp/pilot04-root-current-history-identity21.{log,json}` and
+`/tmp/pilot04-root-history-prior-reader-mutant21.{log,json}`; the temporary
+counterfactual checkout is removed. Public history schema controls passed two
+cases separately. Later changes require affected evidence reconciliation.
+
 Final cleanup also permits `backend/scripts/behavior_ownership.py`, its existing
 PILOT-04 partition transition test and `.ci/behavior-ownership/partition.v1.json`.
 Retire exactly the five removed checker contracts and two removed ART PRE
