@@ -41,7 +41,8 @@ async def seed_packet_ancestors(h):
         revision = await session.scalar(text("SELECT version_num FROM public.alembic_version"))
         assert 11 <= int(revision[:4]) <= 28
         submission = (await session.execute(text(
-            "SELECT * FROM public.submissions WHERE id=:id"
+            "SELECT s.*,t.project_id FROM public.submissions s "
+            "JOIN public.workstream_tasks t ON t.id=s.task_id WHERE s.id=:id"
         ), {"id": UUID(h.request["submission_id"])})).mappings().one()
         guide = (await session.execute(text(
             "SELECT * FROM public.project_guides WHERE project_id=:project AND version=:version"

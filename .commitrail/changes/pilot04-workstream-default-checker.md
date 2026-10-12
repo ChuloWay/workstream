@@ -1055,6 +1055,16 @@ all retained rows/values, counts, authority and no-dispatch assertions remain
 exact. No automatic/dynamic column exclusion, backfill, schema change, relaxed
 selection or skip. Rerun the failed node and independently review the delta.
 
+### Archived project ownership query
+
+The native paid-0018 discriminator at clean `70424eedb` passed archive and checker
+source preparation but stopped on a fixture assumption that Submission stores a
+project ID. The raw ancestor query now joins its stored TASK for that field,
+matching the schema owner without a request fallback or invented column. Every
+remaining Submission field used by this helper is checked against the canonical
+model. All migration assertions and actual SQL guards remain unchanged; only the
+same paid discriminator is rerun after this repair.
+
 ### Retired PRE database write refusal
 
 The current-schema cutover now refuses every new write through the retained PRE
