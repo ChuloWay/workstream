@@ -30,6 +30,7 @@ from app.modules.checkers.api.external_policy import (
 from app.modules.checkers.api.evaluation_contract import (
     validate_execution_request,
     validate_execution_result,
+    validate_stored_execution_request,
     validate_stored_execution_result,
 )
 from app.modules.checkers.api.execution import EvaluationReservation, ExecutionLease
@@ -351,6 +352,18 @@ async def test_selected_scheduler_consumer_derives_exact_envelope(outcome, expec
     assert type(validate_execution_result(result.model_dump())) is type(result)
     stored = json.loads(result.model_dump_json())
     assert type(validate_stored_execution_result(json.dumps(stored))) is type(result)
+
+
+def test_execution_boundary_rejects_removed_catalogue_request_schema() -> None:
+    """Retained catalogue-shaped facts cannot enter the active scheduler."""
+    removed = {
+        "schema_version": "post_submit_evaluation_request",
+        "evaluation_request_id": str(new_record_id()),
+    }
+    with pytest.raises(ValueError):
+        validate_execution_request(removed)
+    with pytest.raises(ValueError):
+        validate_stored_execution_request(json.dumps(removed))
 
 
 def test_selected_post_content_uses_selected_digest_not_catalogue_hash() -> None:

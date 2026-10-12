@@ -18,6 +18,7 @@ from app.adapters.checkers import (
     SelectedPreSubmitCheckerExecutionAdapter,
     selected_pre_submit_coordinator,
 )
+from app.adapters.tasks import task_submission_context_port
 from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import (
     ArtifactObjectHead,
@@ -57,7 +58,6 @@ from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.actors.api import ServiceIdentity
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
 from app.modules.projects.models import EffectiveProjectSubmissionArtifactPolicy
-from app.modules.tasks.repository import TaskRepository
 from tests.test_artifact_admission import _AllowArtifactAuthority, _context, _settings
 from tests.test_checker_materialization import _limits
 from tests.checkers.execution.support import provision_post_submit_service
@@ -248,7 +248,8 @@ async def retained_admission(
                     request_id=request.request_id,
                     correlation_id=request.correlation_id,
                 )
-                tasks, projects = TaskRepository(session), ProjectLockedPolicyRepository(session)
+                tasks = task_submission_context_port(session)
+                projects = ProjectLockedPolicyRepository(session)
                 preparation = ArtifactPreparationService(manager)
                 inspector = SubmissionArchiveInspector(SubmissionArchiveLimits())
                 materialization = PreparedBundleMaterializationService(

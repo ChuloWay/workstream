@@ -2,17 +2,9 @@
 
 from dataclasses import dataclass
 
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
-)
 from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionRequest,
     PostSubmissionExecutionResult,
-)
-from app.modules.checkers.api.selected_post_submit import (
-    SelectedPostSubmissionEvaluationRequest,
-    SelectedPostSubmissionEvaluationResult,
 )
 
 
@@ -34,40 +26,14 @@ def classify_result(
     result.validate_request(request)
     if result.outcome == "infrastructure_failed":
         return ResultClassification("not_evaluated", 0, 0, 0, 0)
-    if isinstance(request, SelectedPostSubmissionEvaluationRequest) and isinstance(
-        result, SelectedPostSubmissionEvaluationResult
-    ):
-        members = result.execution.external_members if result.execution else ()
-        failed = sum(member.result.verdict == "failed" for member in members)
-        return ResultClassification(
-            "needs_revision" if failed else "allow_review",
-            sum(member.result.verdict == "passed" for member in members),
-            0,
-            failed,
-            failed,
-        )
-    if not isinstance(request, PostSubmissionEvaluationRequest) or not isinstance(
-        result, PostSubmissionEvaluationResult
-    ):
-        raise ValueError("post-submit request and result schemas differ")
-    members = result.member_results
-    blocking = tuple(
-        m
-        for m in members
-        if m.status != "passed" and m.severity in request.policy.blocking_severities
-    )
-    if any(m.failure_category == "task_configuration" for m in blocking):
-        routing = "task_setup_blocked"
-    elif blocking:
-        routing = "needs_revision"
-    else:
-        routing = "allow_review"
+    members = result.execution.external_members if result.execution else ()
+    failed = sum(member.result.verdict == "failed" for member in members)
     return ResultClassification(
-        routing,
-        sum(m.status == "passed" for m in members),
-        sum(m.status == "warning" for m in members),
-        sum(m.status == "failed" for m in members),
-        len(blocking),
+        "needs_revision" if failed else "allow_review",
+        sum(member.result.verdict == "passed" for member in members),
+        0,
+        failed,
+        failed,
     )
 
 

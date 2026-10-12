@@ -27,7 +27,6 @@ from app.modules.checkers.api.execution import (
     PreparedFinalization,
     VerifiedMaterialFacts,
 )
-from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
 from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionRequest,
     PostSubmissionExecutionResult,
@@ -39,6 +38,7 @@ from app.modules.checkers.api.external_policy import (
     selected_post_submit_execution_budget_ms,
 )
 from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmitCurrentResultReference,
     SelectedPostSubmissionEvaluationRequest,
     SelectedPostSubmitInfrastructureUnavailable,
     make_selected_post_submit_result,
@@ -47,7 +47,7 @@ from app.modules.checkers.selected_post_submit_execution import (
     SelectedPostSubmitProcessor,
 )
 from app.interfaces.external_checker_execution import ExternalCheckerExecutionAdapter
-from app.modules.checkers.api.historical_post_submit import canonical_post_submit_bytes
+from app.modules.checkers.api.canonical_values import canonical_checker_bytes
 from app.modules.checkers.execution_repository import (
     ExecutionRepository,
     reservation,
@@ -160,16 +160,12 @@ class PostSubmissionExecutor:
 
     @staticmethod
     def _execution_budget_seconds(request: PostSubmissionExecutionRequest) -> int:
-        if isinstance(request, SelectedPostSubmissionEvaluationRequest):
-            return math.ceil(selected_post_submit_execution_budget_ms(request.policy) / 1000)
-        return EXECUTION_TIMEOUT_SECONDS
+        return math.ceil(selected_post_submit_execution_budget_ms(request.policy) / 1000)
 
     def _consumer(self, request, lease):
-        if isinstance(request, SelectedPostSubmissionEvaluationRequest):
-            if self._selected_execution is None:
-                raise CheckerExecutionUnavailable("checker_external_execution_unavailable")
-            return _SelectedExternalConsumer(self._selected_execution, lease)
-        raise CheckerExecutionUnavailable("checker_legacy_execution_retired")
+        if self._selected_execution is None:
+            raise CheckerExecutionUnavailable("checker_external_execution_unavailable")
+        return _SelectedExternalConsumer(self._selected_execution, lease)
 
     async def _claim(self, request):
         """Authorize replay or acquire the next database-timed lease atomically."""
@@ -200,16 +196,12 @@ class PostSubmissionExecutor:
                         ),
                         output_binding_ids=(),
                     )
-                if not isinstance(request, SelectedPostSubmissionEvaluationRequest):
-                    raise CheckerExecutionUnavailable("checker_legacy_execution_retired")
                 now = await repo.now()
                 if run.status == "running" and run.worker_lease_expires_at > now:
                     raise CheckerExecutionUnavailable("checker_execution_lease_unavailable")
                 execution_seconds = self._execution_budget_seconds(request)
-                lease_seconds = (
-                    execution_seconds + math.ceil(SELECTED_POST_FINALIZATION_MARGIN_MS / 1000)
-                    if isinstance(request, SelectedPostSubmissionEvaluationRequest)
-                    else LEASE_SECONDS
+                lease_seconds = execution_seconds + math.ceil(
+                    SELECTED_POST_FINALIZATION_MARGIN_MS / 1000
                 )
                 lease = ExecutionLease(
                     reservation=reservation(run),
@@ -236,8 +228,6 @@ class PostSubmissionExecutor:
         lease, replay = await self._claim(request)
         if replay is not None:
             return await self.finalize(replay)
-        if not isinstance(request, SelectedPostSubmissionEvaluationRequest):
-            raise CheckerExecutionUnavailable("checker_legacy_execution_retired")
         material = None
         input_materialization_evidence_id = None
         try:
@@ -349,9 +339,9 @@ class PostSubmissionExecutor:
                 completed_at = await repo.now()
                 await repo.write_members(run, result)
                 if result.outcome == "completed":
-                    reference = PostSubmitCurrentResultReference(
+                    reference = SelectedPostSubmitCurrentResultReference(
                         **result.model_dump(
-                            include=set(PostSubmitCurrentResultReference.model_fields)
+                            include=set(SelectedPostSubmitCurrentResultReference.model_fields)
                             - {"schema_version"}
                         )
                     )
@@ -379,7 +369,7 @@ class PostSubmissionExecutor:
                         )
                     )
                     run.completion_event_id = appended.event_id
-                run.result_json = canonical_post_submit_bytes(
+                run.result_json = canonical_checker_bytes(
                     result, exclude={"result_digest"}
                 ).decode("utf-8")
                 run.result_digest = result.result_digest

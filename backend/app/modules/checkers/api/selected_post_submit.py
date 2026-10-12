@@ -11,16 +11,16 @@ from pydantic import Field, model_validator
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.external import ExternalCheckerExecutionResult
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
-from app.modules.checkers.api.historical_post_submit import (
+from app.modules.checkers.api.canonical_values import (
     ByteCount,
-    PostSubmitValue,
+    CheckerValue,
     ResourceId,
     Sha256,
     VersionNumber,
 )
 
 
-class SelectedPostSubmitLockedContext(PostSubmitValue):
+class SelectedPostSubmitLockedContext(CheckerValue):
     """Exact TASK and selected-policy lineage carried by a new Submission."""
 
     guide_version: str = Field(min_length=1, max_length=50)
@@ -42,7 +42,7 @@ class SelectedPostSubmitLockedContext(PostSubmitValue):
     revision_hash: Sha256
 
 
-class SelectedPostSubmissionContent(PostSubmitValue):
+class SelectedPostSubmissionContent(CheckerValue):
     """Approved POST image policy plus the exact locked TASK context."""
 
     project_id: ResourceId
@@ -196,7 +196,7 @@ class SelectedPostSubmitExecutionFacts:
         return canonical_json_hash(self.canonical_body())
 
 
-class SelectedPostSubmissionEvaluationResult(PostSubmitValue):
+class SelectedPostSubmissionEvaluationResult(CheckerValue):
     """Durable selected POST evidence envelope with no acceptance authority."""
 
     schema_version: Literal["workstream.selected_post_submit_result.v1"] = (
@@ -256,6 +256,33 @@ class SelectedPostSubmissionEvaluationResult(PostSubmitValue):
             raise ValueError("selected POST result request mismatch")
 
 
+class SelectedPostSubmitCurrentResultReference(CheckerValue):
+    """Owner-issued reference to one completed selected POST result."""
+
+    schema_version: Literal["workstream.selected_post_submit_current_result.v1"] = (
+        "workstream.selected_post_submit_current_result.v1"
+    )
+    request_id: ResourceId
+    request_digest: Sha256
+    attempt_id: ResourceId
+    evaluation_generation: VersionNumber
+    result_id: ResourceId
+    result_digest: Sha256
+
+    def validate_result(self, result: object) -> None:
+        """Match exact completed selected result identity."""
+        reference = SelectedPostSubmitCurrentResultReference.model_validate(self)
+        selected = SelectedPostSubmissionEvaluationResult.model_validate(result)
+        names = (
+            "request_id", "request_digest", "attempt_id",
+            "evaluation_generation", "result_id", "result_digest",
+        )
+        if selected.outcome != "completed" or any(
+            getattr(reference, key) != getattr(selected, key) for key in names
+        ):
+            raise ValueError("selected POST current reference result mismatch")
+
+
 def make_selected_post_submit_result(
     **fields: object,
 ) -> SelectedPostSubmissionEvaluationResult:
@@ -292,6 +319,7 @@ __all__ = (
     "ExternalPostSubmitIsolationFacts",
     "ExternalPostSubmitMemberFacts",
     "SelectedPostSubmitExecutionFacts",
+    "SelectedPostSubmitCurrentResultReference",
     "SelectedPostSubmitInfrastructureUnavailable",
     "SelectedPostSubmitLockedContext",
     "SelectedPostSubmissionContent",

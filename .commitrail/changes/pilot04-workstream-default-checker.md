@@ -203,6 +203,27 @@ cleanup.
   `external_post_submit_policy.v1` response; preserve selectors, fresh read
   authority, raw output, denial handling and transport failure semantics. No
   legacy-response fallback or command-surface change is allowed.
+- Bounded hosted-suite reconciliation may update
+  `backend/tests/retained_material_fixtures.py`,
+  `backend/tests/projects/guide_compilation/test_capability_growth_postgresql.py`,
+  `backend/tests/projects/guide_compilation/test_live_cutover_postgresql.py`,
+  `backend/tests/projects/guide_activation/test_admission.py`, and the existing
+  Retained-material callers
+  must use the current typed TASK submission-context port; worker tests must
+  await the current async composition helper; activation admission tests use
+  the current constructor. Historical migration fixtures may preserve raw rows
+  and predecessor shapes, but cannot reconstruct an executable catalogue DTO
+  or feed retained rows into the current scheduler.
+- The selected-only contract cleanup may update CHECKERS public API value types,
+  execution, result classification, repository, coordination and retry owners,
+  plus `backend/app/modules/tasks/post_submit_routing/evaluation_guard.py` and
+  focused selected-flow tests. The current boundary accepts only the selected
+  external request/result schemas. Stored historical rows remain immutable and
+  readable as raw history, but cannot acquire a lease, execute, retry, finalize
+  or publish a completion. Selected replay compares the same exact TASK owner
+  projection and full locked selected-policy body as initial reservation.
+  TASK, assignment and Submission lock order, terminal eligibility, denial
+  semantics and persisted historical facts remain unchanged.
 
 ### Not allowed
 

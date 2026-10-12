@@ -19,10 +19,7 @@ from app.modules.checkers.api.evaluation_contract import (
     validate_stored_execution_request,
     validate_stored_execution_result,
 )
-from app.modules.checkers.api.selected_post_submit import (
-    SelectedPostSubmissionEvaluationResult,
-)
-from app.modules.checkers.api.historical_post_submit import canonical_post_submit_bytes
+from app.modules.checkers.api.canonical_values import canonical_checker_bytes
 from app.modules.checkers.models import CheckerResult, CheckerRun, CheckerSubmissionFence
 
 
@@ -34,7 +31,7 @@ def require_transaction(session: AsyncSession) -> None:
 
 def request_text(request: PostSubmissionExecutionRequest) -> str:
     """Serialize canonical request facts without the separately stored digest."""
-    return canonical_post_submit_bytes(request, exclude={"request_sha256"}).decode("utf-8")
+    return canonical_checker_bytes(request, exclude={"request_sha256"}).decode("utf-8")
 
 
 def reservation(run: CheckerRun) -> EvaluationReservation:
@@ -147,55 +144,30 @@ class ExecutionRepository:
 
     async def write_members(self, run: CheckerRun, result: PostSubmissionExecutionResult) -> None:
         """Flush ordered closed results under the locked running parent."""
-        if isinstance(result, SelectedPostSubmissionEvaluationResult):
-            for member in result.execution.external_members if result.execution else ():
-                self.session.add(
-                    CheckerResult(
-                        id=str(new_record_id()),
-                        checker_run_id=run.id,
-                        task_id=run.task_id,
-                        submission_id=run.submission_id,
-                        member_order=member.order,
-                        checker_name=member.requirement_id,
-                        definition_version=member.result.schema_version,
-                        implementation_version=member.registry_entry_digest,
-                        status=member.result.verdict or "infrastructure_failed",
-                        code=(
-                            "passed"
-                            if member.result.verdict == "passed"
-                            else member.result.findings[0].code
-                            if member.result.findings
-                            else "invalid_output"
-                        ),
-                        failure_category=(
-                            "none" if member.result.verdict == "passed" else "submission_structure"
-                        ),
-                        severity=(
-                            "info"
-                            if member.result.verdict == "passed"
-                            else "error"
-                        ),
-                        counters=[],
-                    )
-                )
-            await self.session.flush()
-            return
-        for order, member in enumerate(result.member_results):
+        for member in result.execution.external_members if result.execution else ():
             self.session.add(
                 CheckerResult(
                     id=str(new_record_id()),
                     checker_run_id=run.id,
                     task_id=run.task_id,
                     submission_id=run.submission_id,
-                    member_order=order,
-                    checker_name=member.checker_id,
-                    definition_version=member.definition_version,
-                    implementation_version=member.implementation_version,
-                    status=member.status,
-                    code=member.code,
-                    failure_category=member.failure_category,
-                    severity=member.severity,
-                    counters=[item.model_dump(mode="json") for item in member.counters],
+                    member_order=member.order,
+                    checker_name=member.requirement_id,
+                    definition_version=member.result.schema_version,
+                    implementation_version=member.registry_entry_digest,
+                    status=member.result.verdict or "infrastructure_failed",
+                    code=(
+                        "passed"
+                        if member.result.verdict == "passed"
+                        else member.result.findings[0].code
+                        if member.result.findings
+                        else "invalid_output"
+                    ),
+                    failure_category=(
+                        "none" if member.result.verdict == "passed" else "submission_structure"
+                    ),
+                    severity=("info" if member.result.verdict == "passed" else "error"),
+                    counters=[],
                 )
             )
         await self.session.flush()

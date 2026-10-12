@@ -8,9 +8,9 @@ from uuid import UUID
 from pydantic import Field, StrictInt, model_validator
 
 from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
-from app.modules.checkers.api.historical_post_submit import (
+from app.modules.checkers.api.canonical_values import (
+    CheckerValue,
     Identifier,
-    PostSubmitValue,
     ResourceId,
     VersionNumber,
 )
@@ -20,7 +20,7 @@ class CheckerOutputUnavailable(RuntimeError):
     """Conceal missing, stale or unauthorized checker output custody."""
 
 
-class CheckerOutputSelector(PostSubmitValue):
+class CheckerOutputSelector(CheckerValue):
     """Select exact immutable evaluation and the caller's claimed execution lease."""
 
     evaluation: PostSubmissionExecutionRequest
@@ -30,7 +30,7 @@ class CheckerOutputSelector(PostSubmitValue):
     slot_key: Identifier
 
 
-class CheckerOutputSlot(PostSubmitValue):
+class CheckerOutputSlot(CheckerValue):
     """One globally unique run slot issued by CHECKERS, not by a contributor."""
 
     key: Identifier
@@ -38,7 +38,7 @@ class CheckerOutputSlot(PostSubmitValue):
     maximum_bytes: Annotated[StrictInt, Field(ge=1, le=536_870_912)]
 
 
-class CheckerOutputReservation(PostSubmitValue):
+class CheckerOutputReservation(CheckerValue):
     """Detached owner facts, never a substitute for fresh action authority."""
 
     evaluation: PostSubmissionExecutionRequest

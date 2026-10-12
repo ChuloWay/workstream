@@ -24,9 +24,8 @@ from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionRequest,
     validate_execution_request,
 )
-from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
 from app.modules.checkers.api.selected_post_submit import (
-    SelectedPostSubmissionEvaluationRequest,
+    SelectedPostSubmitCurrentResultReference,
 )
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
@@ -112,7 +111,6 @@ class EvaluationCoordinator:
         if request.evaluation_generation != expected:
             raise CheckerRequestConflict("checker_generation_conflict")
         context = request.expected_context
-        selected = isinstance(request, SelectedPostSubmissionEvaluationRequest)
         run = CheckerRun(
             id=str(new_record_id()),
             project_id=str(request.project_id),
@@ -132,31 +130,13 @@ class EvaluationCoordinator:
             worker_lease_generation=0,
             supersedes_checker_run_id=prior.id if prior else None,
             locked_guide_version=context.guide_version,
-            locked_post_submit_checker_policy_id=str(
-                context.retained_catalogue_policy_id
-                if selected
-                else context.post_policy_id
-            ),
+            locked_post_submit_checker_policy_id=str(context.retained_catalogue_policy_id),
             locked_post_submit_checker_policy_version=(
                 context.retained_catalogue_policy_version
-                if selected
-                else context.post_policy_version
             ),
-            locked_post_submit_checker_policy_hash=(
-                context.retained_catalogue_policy_hash
-                if selected
-                else context.post_policy_hash
-            ),
-            selected_post_submit_policy_sha256=(
-                request.policy.policy_sha256
-                if selected
-                else None
-            ),
-            selected_post_submit_policy_body=(
-                request.policy.model_dump(mode="json")
-                if selected
-                else None
-            ),
+            locked_post_submit_checker_policy_hash=context.retained_catalogue_policy_hash,
+            selected_post_submit_policy_sha256=request.policy.policy_sha256,
+            selected_post_submit_policy_body=request.policy.model_dump(mode="json"),
             locked_review_policy_id=str(context.review_policy_id),
             locked_review_policy_generation=context.review_generation,
             locked_review_policy_hash=context.review_hash,
@@ -256,9 +236,9 @@ class EvaluationCoordinator:
         if run.status != "completed":
             raise CheckerExecutionUnavailable("checker_current_result_unavailable")
         result = stored_result(run)
-        reference = PostSubmitCurrentResultReference(
+        reference = SelectedPostSubmitCurrentResultReference(
             **result.model_dump(
-                include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"}
+                include=set(SelectedPostSubmitCurrentResultReference.model_fields) - {"schema_version"}
             )
         )
         reference.validate_result(result)

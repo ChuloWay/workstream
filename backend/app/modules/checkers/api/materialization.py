@@ -9,7 +9,7 @@ from uuid import UUID
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.execution import ExecuteFacts, execution_authority_digest, VerifiedMaterialFacts
 from app.modules.checkers.api.material import SubmissionMaterialEntry
-from app.modules.checkers.api.historical_post_submit import PostSubmitValue, ResourceId, Sha256, VersionNumber
+from app.modules.checkers.api.canonical_values import CheckerValue, ResourceId, Sha256, VersionNumber
 
 from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionRequest,
@@ -29,7 +29,7 @@ class PostSubmissionMaterializationFailure(RuntimeError):
     """Retain a known post-authorization material failure after successful cleanup."""
 
 
-class MaterializationFacts(PostSubmitValue):
+class MaterializationFacts(CheckerValue):
     """Exact selected ancestry without provider coordinates or scratch authority."""
 
     execution: ExecuteFacts

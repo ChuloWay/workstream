@@ -52,7 +52,7 @@ async def test_handoff_persistence_and_terminal_replay(automatic_source, monkeyp
         runtime.outcome = growth_report()
     monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
     monkeypatch.setattr(worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration())
-    first = await worker._coordinator(factory).run(delivery)
+    first = await (await worker._coordinator(factory)).run(delivery)
     assert first["status"] == ("compilation_invalid_terminal" if oversized else "sufficiency_blocked")
     if oversized:
         assert first["error_code"] == "schema_invalid"
@@ -86,7 +86,7 @@ async def test_handoff_persistence_and_terminal_replay(automatic_source, monkeyp
 
     monkeypatch.setattr(worker, "create_project_guide_runtime", forbidden)
     monkeypatch.setattr(worker, "project_guide_runtime_configuration", forbidden)
-    assert await worker._coordinator(factory).run(delivery) == first
+    assert await (await worker._coordinator(factory)).run(delivery) == first
     assert runtime.calls == 1
     async with factory() as session:
         assert await session.scalar(text("select count(*) from audit_events")) == before
