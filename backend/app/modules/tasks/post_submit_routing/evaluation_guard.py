@@ -23,17 +23,17 @@ def _context_matches(request: PostSubmissionExecutionRequest, context: object) -
         "effective_policy_hash": observed["effective_policy_hash"],
         "pre_policy_id": observed["pre_policy_id"],
         "pre_policy_hash": observed["pre_policy_hash"],
-        "retained_catalogue_policy_id": observed["post_policy_id"],
-        "retained_catalogue_policy_version": observed["post_policy_version"],
-        "retained_catalogue_policy_hash": observed["post_policy_hash"],
-        "selected_post_policy_hash": observed["selected_post_policy_hash"],
+        "post_policy_id": observed["post_policy_id"],
+        "post_policy_version": observed["post_policy_version"],
+        "post_policy_hash": observed["post_policy_hash"],
         "review_policy_id": observed["review_policy_id"],
         "review_generation": observed["review_generation"],
         "review_hash": observed["review_hash"],
         "revision_policy_id": observed["revision_policy_id"],
         "revision_generation": observed["revision_generation"],
         "revision_hash": observed["revision_hash"],
-    } and observed["selected_post_policy_body"] == request.policy.model_dump(mode="json")
+    } and observed["selected_post_policy_hash"] == request.expected_context.post_policy_hash \
+      and observed["selected_post_policy_body"] == request.policy.model_dump(mode="json")
 
 
 class TaskEvaluationGuard:

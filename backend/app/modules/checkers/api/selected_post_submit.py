@@ -30,10 +30,9 @@ class SelectedPostSubmitLockedContext(CheckerValue):
     effective_policy_hash: Sha256
     pre_policy_id: ResourceId
     pre_policy_hash: Sha256
-    retained_catalogue_policy_id: ResourceId
-    retained_catalogue_policy_version: str = Field(min_length=1, max_length=50)
-    retained_catalogue_policy_hash: Sha256
-    selected_post_policy_hash: Sha256
+    post_policy_id: ResourceId
+    post_policy_version: str = Field(min_length=1, max_length=50)
+    post_policy_hash: Sha256
     review_policy_id: ResourceId
     review_generation: VersionNumber
     review_hash: Sha256
@@ -53,8 +52,7 @@ class SelectedPostSubmissionContent(CheckerValue):
     def validate_content(self) -> Self:
         """Require the exact approved policy digest stamped on the Submission."""
         if (
-            self.expected_context.selected_post_policy_hash
-            != self.policy.policy_sha256
+            self.expected_context.post_policy_hash != self.policy.policy_sha256
         ):
             raise ValueError("selected POST locked policy mismatch")
         return self

@@ -110,10 +110,9 @@ def _request(identity, policy):
         effective_policy_hash=SHA,
         pre_policy_id=new_record_id(),
         pre_policy_hash=SHA,
-        retained_catalogue_policy_id=new_record_id(),
-        retained_catalogue_policy_version="guide-v1",
-        retained_catalogue_policy_hash=SHA,
-        selected_post_policy_hash=policy.policy_sha256,
+        post_policy_id=new_record_id(),
+        post_policy_version="guide-v1",
+        post_policy_hash=policy.policy_sha256,
         review_policy_id=new_record_id(),
         review_generation=1,
         review_hash=SHA,
@@ -312,7 +311,7 @@ async def test_selected_post_request_and_result_bind_exact_locked_policy() -> No
                 policy=empty_policy,
                 expected_context=request.expected_context.model_copy(
                     update={
-                        "selected_post_policy_hash": empty_policy.policy_sha256
+                        "post_policy_hash": empty_policy.policy_sha256
                     }
                 ),
             )
@@ -366,7 +365,7 @@ def test_execution_boundary_rejects_removed_catalogue_request_schema() -> None:
         validate_stored_execution_request(json.dumps(removed))
 
 
-def test_selected_post_content_uses_selected_digest_not_catalogue_hash() -> None:
+def test_selected_post_content_uses_exact_locked_external_policy() -> None:
     policy = _policy()
     locked = SimpleNamespace(
         locked_guide_version="guide-v1",
@@ -376,7 +375,7 @@ def test_selected_post_content_uses_selected_digest_not_catalogue_hash() -> None
         locked_effective_project_submission_artifact_policy_hash=SHA,
         locked_pre_submit_checker_policy_id=new_record_id(),
         locked_pre_submit_checker_bundle_hash=SHA,
-        locked_post_submit_checker_policy_hash="sha256:" + "1" * 64,
+        locked_post_submit_checker_policy_hash=policy.policy_sha256,
         locked_post_submit_checker_policy_id=new_record_id(),
         locked_post_submit_checker_policy_version="guide-v1",
         locked_review_policy_id=new_record_id(),
@@ -393,8 +392,5 @@ def test_selected_post_content_uses_selected_digest_not_catalogue_hash() -> None
 
     content = selected_submission_evaluation_content(task, policy)
 
-    assert content.expected_context.selected_post_policy_hash == policy.policy_sha256
-    assert (
-        content.expected_context.selected_post_policy_hash
-        != locked.locked_post_submit_checker_policy_hash
-    )
+    assert content.expected_context.post_policy_hash == policy.policy_sha256
+    assert content.expected_context.post_policy_hash == locked.locked_post_submit_checker_policy_hash

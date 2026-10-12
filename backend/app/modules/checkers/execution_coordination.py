@@ -130,11 +130,11 @@ class EvaluationCoordinator:
             worker_lease_generation=0,
             supersedes_checker_run_id=prior.id if prior else None,
             locked_guide_version=context.guide_version,
-            locked_post_submit_checker_policy_id=str(context.retained_catalogue_policy_id),
+            locked_post_submit_checker_policy_id=str(context.post_policy_id),
             locked_post_submit_checker_policy_version=(
-                context.retained_catalogue_policy_version
+                context.post_policy_version
             ),
-            locked_post_submit_checker_policy_hash=context.retained_catalogue_policy_hash,
+            locked_post_submit_checker_policy_hash=context.post_policy_hash,
             selected_post_submit_policy_sha256=request.policy.policy_sha256,
             selected_post_submit_policy_body=request.policy.model_dump(mode="json"),
             locked_review_policy_id=str(context.review_policy_id),
