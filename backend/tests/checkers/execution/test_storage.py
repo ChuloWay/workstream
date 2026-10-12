@@ -259,6 +259,79 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
         assert await executor.finalize(valid) == valid.result
 
 
+@pytest.mark.parametrize("substitution", ["registry_entry_id", "image_digest"])
+async def test_same_count_result_cannot_substitute_locked_image_identity(
+    tmp_path, isolated_database_env, monkeypatch, substitution
+):
+    from app.modules.checkers.api.external import make_external_checker_execution_result
+    from app.modules.checkers.api.selected_post_submit import (
+        SelectedPostSubmissionEvaluationResult,
+        make_selected_post_submit_result,
+    )
+    from sqlalchemy import func, text
+    from . import material_storage_helpers
+
+    async with material_fixture(
+        tmp_path, isolated_database_env, post_submit_registry_spec=post_registry_spec()
+    ) as h:
+        await reserve(h)
+        executor = live_executor(h)
+        lease, _ = await executor._claim(h.request)
+        valid = await final_facts(h, lease)
+        member, = valid.result.execution.external_members
+        if substitution == "registry_entry_id":
+            foreign_id = new_record_id()
+            normalized_body = member.result.model_dump(exclude={"result_digest"})
+            normalized_body["registry_entry_id"] = foreign_id
+            changed = replace(
+                member, registry_entry_id=foreign_id,
+                result=make_external_checker_execution_result(**normalized_body),
+            )
+        else:
+            foreign_image = "sha256:" + (
+                "c" if member.isolation.platform_manifest_digest != "sha256:" + "c" * 64 else "d"
+            ) * 64
+            changed = replace(member, isolation=replace(
+                member.isolation, platform_manifest_digest=foreign_image,
+            ))
+        body = valid.result.model_dump(exclude={"result_digest"})
+        body["execution"] = replace(valid.result.execution, external_members=(changed,))
+        counterfeit = make_selected_post_submit_result(**body)
+        assert counterfeit.execution.required_external_count == 1
+        assert counterfeit.execution.policy_sha256 == h.request.policy.policy_sha256
+        with pytest.raises(ValueError, match="selected POST result request mismatch"):
+            counterfeit.validate_request(h.request)
+        facts = valid.model_copy(update={"result": counterfeit})
+        canonical = SelectedPostSubmissionEvaluationResult.validate_request
+
+        def faulty_validator(result, request):
+            if result == counterfeit and request == h.request:
+                return None
+            return canonical(result, request)
+
+        monkeypatch.setattr(SelectedPostSubmissionEvaluationResult, "validate_request", faulty_validator)
+        async with h.factory() as session:
+            before_audits = await session.scalar(text("SELECT count(*) FROM public.audit_events"))
+            await material_storage_helpers.write_terminal(
+                session, facts, facts.material.model_dump(mode="json"),
+            )
+            with pytest.raises(IntegrityError):
+                await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+            await session.rollback()
+        async with h.factory() as session:
+            run = await session.get(CheckerRun, str(lease.reservation.attempt_id))
+            assert run.status == "running" and run.result_json is None
+            assert run.finalize_evidence_id is None and run.completion_event_id is None
+            assert await session.scalar(select(func.count()).select_from(CheckerResult)) == 0
+            assert await session.scalar(text("SELECT count(*) FROM public.audit_events")) == before_audits
+            assert await session.scalar(text(
+                "SELECT count(*) FROM public.outbox_events "
+                "WHERE event_type='PostSubmissionEvaluationCompleted'"
+            )) == 0
+        monkeypatch.setattr(SelectedPostSubmissionEvaluationResult, "validate_request", canonical)
+        assert await executor.finalize(valid) == valid.result
+
+
 async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isolated_database_env):
     import json
     from sqlalchemy import update, func, text

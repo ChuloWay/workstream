@@ -849,3 +849,17 @@ from the deleted PRE DTO module. The current-consumer test scope therefore
 includes `backend/tests/checkers/default/test_execution.py` for the exact neutral
 `api.pre_submit_material.SubmissionPacketView` import correction only. All four
 default checks and their controls remain required; no deleted DTO is restored.
+
+### Same-count selected-result SQL identity controls
+
+Lead authorizes two additional native controls in the already-owned
+`backend/tests/checkers/execution/test_storage.py`: a self-consistent foreign
+registry UUID (outer and normalized member agree) and a substituted observed
+platform image digest under the unchanged locked one-image policy. Each must
+first fail the real current request validator, then simulate a faulty validator
+only for that exact counterfeit. Fresh final AUTH binds the same counterfeit;
+forcing all deferred constraints must refuse the write, preserve run/member/
+completion/audit facts on rollback, and permit the restored valid result. These
+controls test SQL custody independently of the application guard. No product or
+DDL edits, mismatched earlier AUTH evidence, fixture bypass, or weakened checks
+are permitted; the sole migration author owns any reproduced SQL repair.
