@@ -6,10 +6,6 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.core.hashing import canonical_json_hash
-from app.modules.checkers.api.historical_post_submit import (
-    CompiledPostSubmitPolicy,
-    parse_locked_post_submit_policy,
-)
 from app.modules.checkers.api.external_policy import (
     LockedExternalPostSubmitPolicy,
     validate_stored_external_post_policy,
@@ -32,7 +28,7 @@ class PostPolicyCustody:
     """One policy and its exact immutable receipts; no current-successor substitution."""
 
     target: PostPolicyTarget
-    compiled: CompiledPostSubmitPolicy | LockedExternalPostSubmitPolicy
+    compiled: LockedExternalPostSubmitPolicy
     projection: PostPolicyOperation
     approval: PostPolicyOperation | None
     correction: PostPolicyOperation | None
@@ -130,40 +126,14 @@ async def load_post_policy_custody(session, policy) -> PostPolicyCustody:
     if projection is None or policy.projection_operation_id != projection.operation_id:
         raise GuideProposalError("proposal_unavailable")
     target = operation_receipt(projection).target
-    if policy.policy_body.get("schema_version") == "external_post_submit_policy.v1":
-        compiled = validate_stored_external_post_policy(policy.policy_body)
-        if (
-            compiled.policy_sha256 != policy.policy_hash
-            or policy.required_checkers
-            != [item.registry.capability_id for item in compiled.entries]
-            or policy.warning_checkers != []
-            or policy.blocking_severities != ["critical", "high"]
-        ):
-            raise GuideProposalError("proposal_unavailable")
-    else:
-        compiled = parse_locked_post_submit_policy(
-            policy.policy_body,
-            project_id=policy.project_id,
-            guide_version=policy.guide_version,
-            policy_hash=policy.policy_hash or "",
-        )
-        if (
-            compiled.catalogue_id,
-            compiled.catalogue_source_version,
-            compiled.catalogue_schema_version,
-            compiled.catalogue_manifest_sha256,
-        ) != (
-            target.proposal.post_catalogue_id,
-            target.proposal.post_catalogue_version,
-            target.proposal.post_catalogue_schema_version,
-            target.proposal.post_catalogue_manifest_hash,
-        ):
-            raise GuideProposalError("proposal_unavailable")
-        compiled.validate_sidecars(
-            required_checkers=policy.required_checkers,
-            warning_checkers=policy.warning_checkers,
-            blocking_severities=policy.blocking_severities,
-        )
+    compiled = validate_stored_external_post_policy(policy.policy_body)
+    if (
+        compiled.policy_sha256 != policy.policy_hash
+        or policy.required_checkers != [item.registry.capability_id for item in compiled.entries]
+        or policy.warning_checkers != []
+        or policy.blocking_severities != ["critical", "high"]
+    ):
+        raise GuideProposalError("proposal_unavailable")
     expected = {
         "project_id": str(target.proposal.project_id),
         "guide_id": str(target.proposal.guide_id),
@@ -293,32 +263,14 @@ def validate_activation_post_policy(
     ):
         raise ValueError("post-submit checker approval custody is required")
     try:
+        parsed = validate_stored_external_post_policy(post_submit_checker_policy.policy_body)
         if (
-            post_submit_checker_policy.policy_body.get("schema_version")
-            == "external_post_submit_policy.v1"
+            parsed.policy_sha256 != post_submit_checker_policy.policy_hash
+            or post_submit_checker_policy.required_checkers
+            != [item.registry.capability_id for item in parsed.entries]
+            or post_submit_checker_policy.warning_checkers != []
+            or post_submit_checker_policy.blocking_severities != ["critical", "high"]
         ):
-            parsed = validate_stored_external_post_policy(
-                post_submit_checker_policy.policy_body
-            )
-            if (
-                parsed.policy_sha256 != post_submit_checker_policy.policy_hash
-                or post_submit_checker_policy.required_checkers
-                != [item.registry.capability_id for item in parsed.entries]
-                or post_submit_checker_policy.warning_checkers != []
-                or post_submit_checker_policy.blocking_severities != ["critical", "high"]
-            ):
-                raise ValueError("selected post policy sidecars differ")
-        else:
-            parsed = parse_locked_post_submit_policy(
-                post_submit_checker_policy.policy_body,
-                project_id=post_submit_checker_policy.project_id,
-                guide_version=post_submit_checker_policy.guide_version,
-                policy_hash=post_submit_checker_policy.policy_hash or "",
-            )
-            parsed.validate_sidecars(
-                required_checkers=post_submit_checker_policy.required_checkers,
-                warning_checkers=post_submit_checker_policy.warning_checkers,
-                blocking_severities=post_submit_checker_policy.blocking_severities,
-            )
+            raise ValueError("external post policy sidecars differ")
     except ValueError as exc:
         raise ValueError("post-submit checker policy hash is invalid") from exc

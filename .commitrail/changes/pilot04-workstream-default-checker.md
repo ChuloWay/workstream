@@ -59,6 +59,18 @@ cleanup.
 
 ### Allowed
 
+- Project POST-policy custody accepts only the locked external-image policy.
+  This repair permits `backend/app/modules/projects/post_policy/custody.py`
+  and this record: remove the obsolete catalogue union, read fallback and
+  activation fallback while retaining exact operation receipts, sidecar hashes,
+  authority, lineage and caller-owned transactions. No stored row deletion,
+  migration, alternate decoder, deployment or merge is authorized by this
+  scope. Native current-policy public reads/approval/replay/revocation and
+  activation controls, Ruff and relevant owner checks verify the removal.
+  The lead independently inspects the final diff; affected architecture and
+  authority reviewers replay the combined candidate. Risk is L1 because
+  policy custody remains fail-closed and governs activation.
+
 - Administrative permission-read fixture reconciliation permits only
   `backend/tests/authorization/admin_access/test_admin_reads_postgresql.py`
   and this record. Replace the obsolete exact permission total 78 with 80,
