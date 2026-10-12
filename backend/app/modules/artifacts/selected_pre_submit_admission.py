@@ -139,6 +139,7 @@ def build_selected_pre_submit_reservation(
         predecessor_submission_version=(
             predecessor.version if predecessor is not None else None
         ),
+        checker_remediation_manifest_id=task.checker_remediation_manifest_id,
         guide_id=project.guide_id,
         guide_version=project.guide_version,
         source_snapshot_id=project.source_snapshot_id,

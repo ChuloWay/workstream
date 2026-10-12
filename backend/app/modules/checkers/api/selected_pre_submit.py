@@ -20,6 +20,7 @@ class SelectedPreSubmitAdmissionLineage:
 
     predecessor_submission_id: UUID | None
     predecessor_submission_version: int | None
+    checker_remediation_manifest_id: UUID | None
     guide_id: UUID
     guide_version: str
     source_snapshot_id: UUID
@@ -75,11 +76,15 @@ class SelectedPreSubmitAdmissionLineage:
                     or self.predecessor_submission_version < 1
                 )
             )
+            or (self.predecessor_submission_id is None)
+            != (self.checker_remediation_manifest_id is None)
+            or (
+                self.checker_remediation_manifest_id is not None
+                and type(self.checker_remediation_manifest_id) is not UUID
+            )
             or not self.guide_version.strip()
             or any(
-                type(value) is not str
-                or len(value) != 71
-                or not value.startswith("sha256:")
+                type(value) is not str or len(value) != 71 or not value.startswith("sha256:")
                 for value in digests
             )
             or type(self.semantic_manifest_body) is not dict
@@ -92,8 +97,7 @@ class SelectedPreSubmitAdmissionLineage:
                 }
             )
             != self.post_submit_policy_sha256
-            or self.post_submit_policy_body.get("policy_sha256")
-            != self.post_submit_policy_sha256
+            or self.post_submit_policy_body.get("policy_sha256") != self.post_submit_policy_sha256
             or self.storage_scheme not in {"local", "s3"}
         ):
             raise ValueError("selected PRE admission lineage is invalid")
@@ -107,6 +111,11 @@ class SelectedPreSubmitAdmissionLineage:
                 else None
             ),
             "predecessor_submission_version": self.predecessor_submission_version,
+            "checker_remediation_manifest_id": (
+                str(self.checker_remediation_manifest_id)
+                if self.checker_remediation_manifest_id is not None
+                else None
+            ),
             "guide_id": str(self.guide_id),
             "guide_version": self.guide_version,
             "source_snapshot_id": str(self.source_snapshot_id),
@@ -118,9 +127,7 @@ class SelectedPreSubmitAdmissionLineage:
             "pre_submit_policy_sha256": self.pre_submit_policy_sha256,
             "effective_plan_sha256": self.effective_plan_sha256,
             "rules_sha256": self.rules_sha256,
-            "external_checker_policies_sha256": (
-                self.external_checker_policies_sha256
-            ),
+            "external_checker_policies_sha256": (self.external_checker_policies_sha256),
             "post_submit_policy_sha256": self.post_submit_policy_sha256,
             "post_submit_policy_body": self.post_submit_policy_body,
             "locked_policy_context_hash": self.locked_policy_context_hash,
@@ -131,13 +138,12 @@ class SelectedPreSubmitAdmissionLineage:
         }
 
     @classmethod
-    def from_canonical_body(
-        cls, body: object
-    ) -> SelectedPreSubmitAdmissionLineage:
+    def from_canonical_body(cls, body: object) -> SelectedPreSubmitAdmissionLineage:
         """Parse the exact closed body copied into ART's durable intent."""
         if type(body) is not dict or set(body) != {
             "predecessor_submission_id",
             "predecessor_submission_version",
+            "checker_remediation_manifest_id",
             "guide_id",
             "guide_version",
             "source_snapshot_id",
@@ -161,10 +167,13 @@ class SelectedPreSubmitAdmissionLineage:
             raise ValueError("selected PRE admission lineage is invalid")
         predecessor = body["predecessor_submission_id"]
         return cls(
-            predecessor_submission_id=(
-                UUID(str(predecessor)) if predecessor is not None else None
-            ),
+            predecessor_submission_id=(UUID(str(predecessor)) if predecessor is not None else None),
             predecessor_submission_version=body["predecessor_submission_version"],
+            checker_remediation_manifest_id=(
+                UUID(str(body["checker_remediation_manifest_id"]))
+                if body["checker_remediation_manifest_id"] is not None
+                else None
+            ),
             guide_id=UUID(str(body["guide_id"])),
             guide_version=body["guide_version"],
             source_snapshot_id=UUID(str(body["source_snapshot_id"])),
@@ -176,9 +185,7 @@ class SelectedPreSubmitAdmissionLineage:
             pre_submit_policy_sha256=body["pre_submit_policy_sha256"],
             effective_plan_sha256=body["effective_plan_sha256"],
             rules_sha256=body["rules_sha256"],
-            external_checker_policies_sha256=body[
-                "external_checker_policies_sha256"
-            ],
+            external_checker_policies_sha256=body["external_checker_policies_sha256"],
             post_submit_policy_sha256=body["post_submit_policy_sha256"],
             post_submit_policy_body=body["post_submit_policy_body"],
             locked_policy_context_hash=body["locked_policy_context_hash"],
@@ -255,9 +262,7 @@ class SelectedPreSubmitExecutionFacts:
             raise ValueError("selected PRE execution facts are invalid")
         external_passed = all(item.result.verdict == "passed" for item in members)
         complete = len(members) == self.required_external_count
-        if self.eligible != (
-            self.workstream_default.eligible and complete and external_passed
-        ):
+        if self.eligible != (self.workstream_default.eligible and complete and external_passed):
             raise ValueError("selected PRE eligibility differs from required results")
         if (
             not self.workstream_default.eligible
@@ -289,18 +294,21 @@ class SelectedPreSubmitExecutionFacts:
         }
 
     @classmethod
-    def from_canonical_body(
-        cls, body: object
-    ) -> SelectedPreSubmitExecutionFacts:
+    def from_canonical_body(cls, body: object) -> SelectedPreSubmitExecutionFacts:
         """Parse the exact bounded result retained for idempotent work replay."""
-        if type(body) is not dict or set(body) != {
-            "schema_version",
-            "policy_sha256",
-            "workstream_default",
-            "required_external_count",
-            "external_members",
-            "eligible",
-        } or body["schema_version"] != "workstream.selected_pre_submit_execution.v1":
+        if (
+            type(body) is not dict
+            or set(body)
+            != {
+                "schema_version",
+                "policy_sha256",
+                "workstream_default",
+                "required_external_count",
+                "external_members",
+                "eligible",
+            }
+            or body["schema_version"] != "workstream.selected_pre_submit_execution.v1"
+        ):
             raise ValueError("selected PRE execution facts are invalid")
         members = body["external_members"]
         if type(members) is not list:
@@ -320,11 +328,7 @@ class SelectedPreSubmitExecutionFacts:
                     request_digest=item["request_digest"],
                     result=ExternalCheckerExecutionResult.model_validate(
                         item["result"]
-                        | {
-                            "registry_entry_id": UUID(
-                                str(item["result"]["registry_entry_id"])
-                            )
-                        }
+                        | {"registry_entry_id": UUID(str(item["result"]["registry_entry_id"]))}
                     ),
                     isolation=ExternalPreSubmitIsolationFacts(**item["isolation"]),
                 )
@@ -384,9 +388,7 @@ class SelectedPreSubmitReservationFacts:
         if (
             any(type(value) is not UUID for value in identifiers)
             or any(
-                type(value) is not str
-                or len(value) != 71
-                or not value.startswith("sha256:")
+                type(value) is not str or len(value) != 71 or not value.startswith("sha256:")
                 for value in digests
             )
             or self.default_behavior_sha256 != WORKSTREAM_DEFAULT_BEHAVIOR_SHA256
@@ -396,18 +398,14 @@ class SelectedPreSubmitReservationFacts:
             or not 100 <= self.execution_budget_ms <= 14_400_000
             or (
                 self.admission_lineage is not None
-                and type(self.admission_lineage)
-                is not SelectedPreSubmitAdmissionLineage
+                and type(self.admission_lineage) is not SelectedPreSubmitAdmissionLineage
             )
             or (
                 self.admission_lineage is not None
                 and (
-                    canonical_json_hash(
-                        self.admission_lineage.semantic_manifest_body
-                    )
+                    canonical_json_hash(self.admission_lineage.semantic_manifest_body)
                     != self.semantic_manifest_sha256
-                    or self.admission_lineage.effective_plan_sha256
-                    != self.policy_sha256
+                    or self.admission_lineage.effective_plan_sha256 != self.policy_sha256
                 )
             )
         ):
@@ -441,30 +439,33 @@ class SelectedPreSubmitReservationFacts:
         }
 
     @classmethod
-    def from_canonical_body(
-        cls, body: object
-    ) -> SelectedPreSubmitReservationFacts:
+    def from_canonical_body(cls, body: object) -> SelectedPreSubmitReservationFacts:
         """Recover and validate the durable request snapshot at ART publication."""
-        if type(body) is not dict or set(body) != {
-            "schema_version",
-            "actor_profile_id",
-            "identity_link_id",
-            "project_id",
-            "task_id",
-            "assignment_id",
-            "attempt_id",
-            "idempotency_key",
-            "attempt_request_digest",
-            "prepared_generation_id",
-            "policy_sha256",
-            "default_behavior_sha256",
-            "default_input_sha256",
-            "archive_sha256",
-            "archive_byte_count",
-            "semantic_manifest_sha256",
-            "execution_budget_ms",
-            "admission_lineage",
-        } or body["schema_version"] != "workstream.selected_pre_submit_reservation.v1":
+        if (
+            type(body) is not dict
+            or set(body)
+            != {
+                "schema_version",
+                "actor_profile_id",
+                "identity_link_id",
+                "project_id",
+                "task_id",
+                "assignment_id",
+                "attempt_id",
+                "idempotency_key",
+                "attempt_request_digest",
+                "prepared_generation_id",
+                "policy_sha256",
+                "default_behavior_sha256",
+                "default_input_sha256",
+                "archive_sha256",
+                "archive_byte_count",
+                "semantic_manifest_sha256",
+                "execution_budget_ms",
+                "admission_lineage",
+            }
+            or body["schema_version"] != "workstream.selected_pre_submit_reservation.v1"
+        ):
             raise ValueError("selected PRE reservation facts are invalid")
         lineage_body = body["admission_lineage"]
         return cls(
@@ -589,9 +590,7 @@ class SelectedPreSubmitFinalizeFacts:
             if self.execution.policy_sha256 != self.lease.reservation.policy_sha256:
                 raise ValueError("selected PRE finalize policy is invalid")
         else:
-            SelectedPreSubmitInfrastructureUnavailable(
-                self.infrastructure_failure_code or ""
-            )
+            SelectedPreSubmitInfrastructureUnavailable(self.infrastructure_failure_code or "")
 
     @property
     def facts_digest(self) -> str:
@@ -599,13 +598,9 @@ class SelectedPreSubmitFinalizeFacts:
         return canonical_json_hash(
             {
                 "schema_version": "workstream.selected_pre_submit_finalize.v1",
-                "execute_facts_digest": SelectedPreSubmitExecuteFacts(
-                    self.lease
-                ).facts_digest,
+                "execute_facts_digest": SelectedPreSubmitExecuteFacts(self.lease).facts_digest,
                 "execution": (
-                    self.execution.canonical_body()
-                    if self.execution is not None
-                    else None
+                    self.execution.canonical_body() if self.execution is not None else None
                 ),
                 "infrastructure_failure_code": self.infrastructure_failure_code,
             }
@@ -726,30 +721,29 @@ class SelectedPreSubmitTerminalFacts:
         """Keep work findings separate from recoverable infrastructure outcomes."""
         if type(self.lease) is not SelectedPreSubmitLeaseFacts:
             raise ValueError("selected PRE terminal lease is invalid")
-        if any(value.tzinfo is None for value in (
-            self.queued_at,
-            self.started_at,
-            self.completed_at,
-        )) or not (self.queued_at <= self.started_at <= self.completed_at):
+        if any(
+            value.tzinfo is None
+            for value in (
+                self.queued_at,
+                self.started_at,
+                self.completed_at,
+            )
+        ) or not (self.queued_at <= self.started_at <= self.completed_at):
             raise ValueError("selected PRE terminal timing is invalid")
         if self.outcome == "completed":
             if (
                 type(self.execution) is not SelectedPreSubmitExecutionFacts
                 or self.infrastructure_failure_code is not None
-                or self.execution.policy_sha256
-                != self.lease.reservation.policy_sha256
+                or self.execution.policy_sha256 != self.lease.reservation.policy_sha256
             ):
                 raise ValueError("selected PRE completed outcome is invalid")
-        elif (
-            self.execution is not None
-            or self.infrastructure_failure_code not in {
-                "capacity_exceeded",
-                "deadline_exceeded",
-                "material_unavailable",
-                "implementation_unavailable",
-                "invalid_output",
-            }
-        ):
+        elif self.execution is not None or self.infrastructure_failure_code not in {
+            "capacity_exceeded",
+            "deadline_exceeded",
+            "material_unavailable",
+            "implementation_unavailable",
+            "invalid_output",
+        }:
             raise ValueError("selected PRE infrastructure outcome is invalid")
 
     def canonical_body(self) -> dict[str, object]:
@@ -767,39 +761,38 @@ class SelectedPreSubmitTerminalFacts:
             "queued_at": self.queued_at.isoformat(),
             "started_at": self.started_at.isoformat(),
             "completed_at": self.completed_at.isoformat(),
-            "queue_latency_ms": int(
-                (self.started_at - self.queued_at).total_seconds() * 1000
-            ),
+            "queue_latency_ms": int((self.started_at - self.queued_at).total_seconds() * 1000),
             "execution_latency_ms": int(
                 (self.completed_at - self.started_at).total_seconds() * 1000
             ),
         }
 
     @classmethod
-    def from_canonical_body(
-        cls, body: object
-    ) -> SelectedPreSubmitTerminalFacts:
+    def from_canonical_body(cls, body: object) -> SelectedPreSubmitTerminalFacts:
         """Parse and revalidate every persisted lease, result and timing fact."""
-        if type(body) is not dict or set(body) != {
-            "schema_version",
-            "reservation",
-            "request_digest",
-            "lease_id",
-            "lease_generation",
-            "lease_expires_at",
-            "outcome",
-            "execution",
-            "infrastructure_failure_code",
-            "queued_at",
-            "started_at",
-            "completed_at",
-            "queue_latency_ms",
-            "execution_latency_ms",
-        } or body["schema_version"] != "workstream.selected_pre_submit_terminal.v1":
+        if (
+            type(body) is not dict
+            or set(body)
+            != {
+                "schema_version",
+                "reservation",
+                "request_digest",
+                "lease_id",
+                "lease_generation",
+                "lease_expires_at",
+                "outcome",
+                "execution",
+                "infrastructure_failure_code",
+                "queued_at",
+                "started_at",
+                "completed_at",
+                "queue_latency_ms",
+                "execution_latency_ms",
+            }
+            or body["schema_version"] != "workstream.selected_pre_submit_terminal.v1"
+        ):
             raise ValueError("selected PRE terminal facts are invalid")
-        reservation = SelectedPreSubmitReservationFacts.from_canonical_body(
-            body["reservation"]
-        )
+        reservation = SelectedPreSubmitReservationFacts.from_canonical_body(body["reservation"])
         if body["request_digest"] != reservation.request_digest:
             raise ValueError("selected PRE terminal request is invalid")
         execution_body = body["execution"]
@@ -841,14 +834,13 @@ class SelectedPreSubmitCurrentFacts:
     terminal: SelectedPreSubmitTerminalFacts | None
 
     def __post_init__(self) -> None:
-        terminal_status = (
-            self.terminal.outcome if self.terminal is not None else None
-        )
+        terminal_status = self.terminal.outcome if self.terminal is not None else None
         if (
             type(self.run_id) is not UUID
             or type(self.reservation) is not SelectedPreSubmitReservationFacts
             or self.run_id != self.reservation.attempt_id
-            or self.status not in {
+            or self.status
+            not in {
                 "queued",
                 "running",
                 "completed",

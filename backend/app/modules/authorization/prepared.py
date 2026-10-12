@@ -17,7 +17,6 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.hashing import canonical_json_hash
 from app.modules.actors.repository import ActorRepository
 from app.modules.actors.api import ServiceIdentity
 from app.modules.audit.schemas import ActorReferenceKind
@@ -138,7 +137,7 @@ from app.modules.authorization.domain.pre_submit import (
 from app.modules.authorization.prepared_submission_replay import validate_submission_replay
 from app.modules.authorization.prepared_post_submit_replay import validate_post_submit_replay
 from app.modules.authorization.pre_submit_materialization import (
-    parse_prepared_artifact_bindings,
+    parse_prepared_artifact_bindings, exact_artifact_binding_matches,
     parse_project_create_binding,
 )
 
@@ -394,25 +393,6 @@ def _submission_policy_binding_matches(
     return binding.submission_policy_context == resource.model_dump(
         mode="json"
     ) and binding.submission_policy_resource_digest == authorization_resource_digest(resource)
-
-
-def _exact_artifact_binding_matches(
-    binding: _PreparedAuthorizationBinding,
-    resource: PreSubmitCheckerInputResourceContext
-    | SubmissionBindingResourceContext
-    | SubmissionCreationResourceContext,
-) -> bool:
-    """Require every materialization fact to equal the prepared request."""
-    if isinstance(resource, PreSubmitCheckerInputResourceContext):
-        context = resource.model_dump(mode="json", exclude={"semantic_manifest_sha256"})
-        return binding.exact_artifact_context == context and (
-            binding.exact_artifact_resource_digest
-            == canonical_json_hash({"pre_submit_checker_input_preparation": context})
-        )
-    context = resource.model_dump(mode="json")
-    return binding.exact_artifact_context == context and (
-        binding.exact_artifact_resource_digest == authorization_resource_digest(resource)
-    )
 
 
 def _submission_preparation_binding_matches(
@@ -727,7 +707,10 @@ class PreparedAuthorizationService:
                 SubmissionCreationResourceContext,
                 TaskImportSourceResourceContext,
             ),
-        ) and not _exact_artifact_binding_matches(issuance.binding, final_resource_context):
+        ) and not exact_artifact_binding_matches(
+            issuance.binding.exact_artifact_context,
+            issuance.binding.exact_artifact_resource_digest, final_resource_context,
+        ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
         if isinstance(
             final_resource_context, SubmissionBundlePreparationResourceContext

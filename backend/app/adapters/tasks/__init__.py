@@ -75,6 +75,8 @@ class _SelectedPreSubmitTaskGuard:
             != lineage.predecessor_submission_id
             or (predecessor.version if predecessor is not None else None)
             != lineage.predecessor_submission_version
+            or context.checker_remediation_manifest_id
+            != lineage.checker_remediation_manifest_id
             or references.project_id != reservation.project_id
             or references.guide_version != lineage.guide_version
             or references.source_snapshot_id != lineage.source_snapshot_id

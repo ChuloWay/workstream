@@ -2757,6 +2757,8 @@ class ArtifactAdmissionService:
             != lineage.predecessor_submission_id
             or (predecessor.version if predecessor is not None else None)
             != lineage.predecessor_submission_version
+            or task.checker_remediation_manifest_id
+            != lineage.checker_remediation_manifest_id
             or locked.project_id != reservation.project_id
             or locked.guide_id != lineage.guide_id
             or locked.guide_version != lineage.guide_version
@@ -2786,6 +2788,7 @@ class ArtifactAdmissionService:
             assignment_id=reservation.assignment_id,
             predecessor_submission_id=lineage.predecessor_submission_id,
             predecessor_submission_version=lineage.predecessor_submission_version,
+            checker_remediation_manifest_id=lineage.checker_remediation_manifest_id,
             pre_submit_evidence_set_id=None,
             prepared_generation_id=reservation.prepared_generation_id,
             guide_id=lineage.guide_id,

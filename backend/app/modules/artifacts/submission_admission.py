@@ -471,7 +471,11 @@ class SubmissionBundleAdmissionPublisher:
                 else evidence.predecessor_submission_version
             ),
             checker_remediation_manifest_id=(
-                None if evidence is None else evidence.checker_remediation_manifest_id
+                str(selected_lineage.checker_remediation_manifest_id)
+                if selected_lineage is not None
+                and selected_lineage.checker_remediation_manifest_id is not None
+                else evidence.checker_remediation_manifest_id
+                if evidence is not None else None
             ),
             locked_policy_context_hash=(
                 selected_lineage.locked_policy_context_hash

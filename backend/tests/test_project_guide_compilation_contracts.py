@@ -963,16 +963,16 @@ def test_blocked_result_cannot_publish_policy_or_bindings() -> None:
 
 
 @pytest.mark.parametrize("parameters", [[], [{"name": "maximum_file_size_bytes", "value": 1000}]])
-def test_pre_submission_binding_rejects_duplicate_policy_configuration(parameters):
-    """The sole intake configuration is the artifact policy, never a second copy."""
-    with pytest.raises(ValidationError, match="Extra inputs"):
-        PreSubmissionBindingProposal(
-            requirement_id="requirement.size",
-            capability_id="policy.file_size.limit",
-            capability_version="v1",
-            stage="pre_submit",
-            parameters=parameters,
-        )
+def test_pre_submission_binding_accepts_explicit_checker_configuration(parameters):
+    """Approved PRE image configuration is distinct from platform intake limits."""
+    binding = PreSubmissionBindingProposal(
+        requirement_id="requirement.size",
+        capability_id="policy.file_size.limit",
+        capability_version="v1",
+        stage="pre_submit",
+        parameters=parameters,
+    )
+    assert [item.model_dump(mode="json") for item in binding.parameters] == parameters
 
 
 def test_context_rejects_instruction_version_separate_from_snapshot() -> None:

@@ -262,3 +262,21 @@ and approval. Configuration arrays are normalized to JSON arrays for both
 phases. Empty PRE parameters are excluded during serialization, preserving
 retained empty-binding hashes. Focused compiler regressions cover configured
 PRE success, required/type rejection, duplicate names and retained serialization.
+
+### Selected replacement cause repair
+
+After reconciling merged replacement intake and the operator-retry branch, source
+review found selected PRE lineage omitted the remediation manifest. The repair
+binds the exact cause through canonical reservation JSON, TASK revalidation,
+ART final authority and ready-admission facts. Initial attempts require no cause;
+replacement attempts require a UUID cause alongside the predecessor. Focused
+proof covers cause round trips, publication and substitution denial. The first
+contract run passed 120 tests; the expanded run passed 121 with one stale AUTH
+fixture missing required packet/manifest facts. That fixture is being corrected
+without changing authority guards. PostgreSQL currentness and full Rust/MinIO
+proof remain pending on the final reconciled migration.
+
+The reconciled AUTH composition exceeded its existing 1,200-line boundary. Move
+its exact artifact-binding matcher to the existing materialization binding owner,
+with explicit context/digest inputs and unchanged predicates; do not alter the
+structural debt ledger or its limit.

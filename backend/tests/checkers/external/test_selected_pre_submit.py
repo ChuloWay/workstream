@@ -113,6 +113,7 @@ def _selected_admission_reservation():
     lineage = SelectedPreSubmitAdmissionLineage(
         predecessor_submission_id=None,
         predecessor_submission_version=None,
+        checker_remediation_manifest_id=None,
         guide_id=new_record_id(),
         guide_version="v2",
         source_snapshot_id=new_record_id(),
@@ -288,6 +289,7 @@ async def _request(
         submission_artifact_policy_id=lineage.effective_policy_id,
         checker_policy_id=lineage.pre_submit_policy_id,
         predecessor_submission_version=None,
+        checker_remediation_manifest_id=None,
         prepared_artifact=prepared,
         effective_plan=plan,
         inspection=inspection,
@@ -567,8 +569,25 @@ async def test_selected_pre_runs_default_then_locked_external_image(
 
 
 @pytest.mark.asyncio
-async def test_selected_pre_terminal_publishes_self_contained_ready_admission() -> None:
+@pytest.mark.parametrize("replacement", [False, True])
+async def test_selected_pre_terminal_publishes_self_contained_ready_admission(
+    replacement: bool,
+) -> None:
     manifest, post_policy, selected = _selected_admission_reservation()
+    if replacement:
+        selected = replace(
+            selected,
+            admission_lineage=replace(
+                selected.admission_lineage,
+                predecessor_submission_id=new_record_id(),
+                predecessor_submission_version=1,
+                checker_remediation_manifest_id=new_record_id(),
+            ),
+        )
+    lineage = selected.admission_lineage
+    assert (
+        SelectedPreSubmitAdmissionLineage.from_canonical_body(lineage.canonical_body()) == lineage
+    )
     session, job, verification = _selected_admission_publisher_fixture(selected)
 
     admission = await SubmissionBundleAdmissionPublisher(session).publish_verified(
@@ -576,6 +595,9 @@ async def test_selected_pre_terminal_publishes_self_contained_ready_admission() 
         verification_receipt_id=verification.id,
     )
 
+    assert admission.checker_remediation_manifest_id == (
+        str(lineage.checker_remediation_manifest_id) if replacement else None
+    )
     assert admission.pre_submit_evidence_set_id is None
     assert admission.selected_pre_submit_run_id == str(selected.attempt_id)
     assert admission.packet_sha256 == selected.admission_lineage.packet_sha256
@@ -692,6 +714,7 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
         contributor_id=actor_profile_id,
         task_id=request.task_id,
         assignment_id=assignment_id,
+        checker_remediation_manifest_id=new_record_id(),
         predecessor=SimpleNamespace(
             submission_id=predecessor.submission_id,
             version=predecessor.submission_version,
@@ -757,6 +780,9 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
         assert reservation.admission_lineage is not None
         assert reservation.admission_lineage.semantic_manifest_body == (request.manifest.as_dict())
         assert reservation.admission_lineage.packet_sha256 == request.packet.sha256
+        assert reservation.admission_lineage.checker_remediation_manifest_id == (
+            task.checker_remediation_manifest_id
+        )
         assert reservation.admission_lineage.predecessor_submission_id == (
             predecessor.submission_id
         )
