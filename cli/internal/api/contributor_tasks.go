@@ -53,6 +53,12 @@ type ContributorTaskDetail struct {
 
 var exactQuantity = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)
 
+func validCompensationAward(award CompensationAward) bool {
+	return (award.Instrument == "money" || award.Instrument == "project_points") &&
+		award.Unit != "" && exactQuantity.MatchString(award.Quantity) &&
+		strings.ContainsAny(award.Quantity, "123456789")
+}
+
 func compensationAwards(raw json.RawMessage) ([]CompensationAward, bool) {
 	var unpaid string
 	if err := jsonv2.Unmarshal(raw, &unpaid); err == nil {
@@ -64,9 +70,7 @@ func compensationAwards(raw json.RawMessage) ([]CompensationAward, bool) {
 	}
 	seen := make(map[string]bool)
 	for _, award := range awards {
-		validInstrument := award.Instrument == "money" || award.Instrument == "project_points"
-		if !validInstrument || award.Unit == "" || !exactQuantity.MatchString(award.Quantity) ||
-			!strings.ContainsAny(award.Quantity, "123456789") || seen[award.Instrument] {
+		if !validCompensationAward(award) || seen[award.Instrument] {
 			return nil, false
 		}
 		seen[award.Instrument] = true
