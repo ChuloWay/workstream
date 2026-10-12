@@ -4,43 +4,41 @@ All predecessor database guards remain enabled. No current input receipt is
 fabricated: that evidence did not exist in these schema revisions.
 """
 
+import json
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from uuid import UUID
 
-from pydantic import BaseModel
 from sqlalchemy import insert, text
 
 from app.adapters.outbox import outbox_append
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import (
     EvaluationReservation,
     ExecutionLease,
-    EvaluationCompletion,
     VerifiedMaterialFacts,
     COMPLETION_EVENT,
 )
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
-    PostSubmitCurrentResultReference,
-)
-from app.modules.checkers.api.historical_post_submit import canonical_post_submit_bytes
-from app.modules.checkers.execution_repository import request_text
-from app.modules.checkers.execution_results import classify_result
 from app.modules.checkers.models import CheckerRun, CheckerResult
-from app.modules.checkers.post_submit_contracts import make_post_submit_result
 from app.modules.outbox.api import OutboxAppendInput
 from app.modules.tasks.models import AuditEvent
-from tests.checkers.post_submit.test_result_contract import result as value_result
-from tests.historical_submission_fixtures import historical_material_fixture
+from tests.historical_submission_fixtures import (
+    HistoricalRawValue,
+    _raw,
+    historical_material_fixture,
+)
 
 
-class HistoricalTerminalFacts(BaseModel):
-    request: PostSubmissionEvaluationRequest
-    lease: ExecutionLease
-    result: PostSubmissionEvaluationResult
-    material: VerifiedMaterialFacts | None
+def _canonical_text(value: HistoricalRawValue, *, exclude=frozenset()) -> str:
+    """Encode an archived predecessor object without invoking a product decoder."""
+    return json.dumps(
+        value.model_dump(exclude=exclude),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    )
 
 
 async def historical_revision(session):
@@ -75,7 +73,7 @@ async def historical_reserve(h):
                 evaluation_request_id=str(r.evaluation_request_id),
                 phase="post_submission",
                 evaluation_generation=r.evaluation_generation,
-                request_json=request_text(r),
+                request_json=_canonical_text(r, exclude={"request_sha256"}),
                 request_digest=r.request_sha256,
                 result_id=str(result_id),
                 trigger_source="coordinated_evaluation",
@@ -207,25 +205,45 @@ async def historical_lease(h):
 
 
 def historical_terminal_facts(h, lease, outcome="completed"):
-    result = value_result(
-        h.request, attempt_id=lease.reservation.attempt_id, result_id=lease.reservation.result_id
-    )
-    if outcome == "infrastructure_failed":
-        result = make_post_submit_result(
-            **(
-                result.model_dump(exclude={"result_digest"})
-                | {
-                    "outcome": outcome,
-                    "member_results": (),
-                    "infrastructure_failure_code": "implementation_unavailable",
-                }
-            )
+    """Build literal result rows from the archived request facts."""
+    members = tuple(
+        _raw(
+            {
+                "schema_version": "post_submit_structural_result",
+                "checker_id": entry.checker_id,
+                "definition_version": entry.definition_version,
+                "implementation_version": entry.implementation_version,
+                "status": "passed",
+                "code": "passed",
+                "failure_category": "none",
+                "severity": "info",
+                "counters": [],
+            }
         )
-    return HistoricalTerminalFacts(
-        request=h.request,
-        lease=lease,
-        result=result,
-        material=VerifiedMaterialFacts(
+        for entry in h.request.policy.entries
+    )
+    body = {
+        "schema_version": "post_submit_evaluation_result",
+        "request_id": h.request.evaluation_request_id,
+        "request_digest": h.request.request_sha256,
+        "attempt_id": lease.reservation.attempt_id,
+        "evaluation_generation": h.request.evaluation_generation,
+        "result_id": lease.reservation.result_id,
+        "outcome": outcome,
+        "member_results": members if outcome == "completed" else (),
+        "infrastructure_failure_code": (
+            None if outcome == "completed" else "implementation_unavailable"
+        ),
+    }
+    body["result_digest"] = canonical_json_hash(
+        _raw(body).model_dump()
+    )
+    return _raw(
+        {
+            "request": h.request,
+            "lease": lease,
+            "result": _raw(body),
+            "material": VerifiedMaterialFacts(
             submission_id=h.request.submission_id,
             submission_version=h.request.submission_version,
             admission_id=h.created.admission_id,
@@ -235,7 +253,8 @@ def historical_terminal_facts(h, lease, outcome="completed"):
             content_sha256=h.request.content_sha256,
             byte_count=h.request.byte_count,
             semantic_manifest_sha256=h.manifest.sha256,
-        ),
+            ),
+        }
     )
 
 
@@ -247,7 +266,28 @@ async def historical_write_terminal(session, facts, material):
         text("SELECT execute_evidence_id FROM public.checker_runs WHERE id=:id"), {"id": run_id}
     )
     final_id = new_record_id()
-    classification = classify_result(request, result)
+    members = result.member_results
+    passed = sum(item.status == "passed" for item in members)
+    warning = sum(item.status == "warning" for item in members)
+    failed = sum(item.status == "failed" for item in members)
+    blocking_severities = set(request.policy.blocking_severities)
+    blocking = sum(
+        item.status != "passed" and item.severity in blocking_severities
+        for item in members
+    )
+    setup = any(
+        item.status != "passed" and item.failure_category == "task_configuration"
+        for item in members
+    )
+    routing = (
+        "not_evaluated"
+        if result.outcome != "completed"
+        else "task_setup_blocked"
+        if setup
+        else "needs_revision"
+        if blocking
+        else "allow_review"
+    )
     for order, member in enumerate(result.member_results):
         await session.execute(
             insert(CheckerResult.__table__).values(
@@ -263,26 +303,30 @@ async def historical_write_terminal(session, facts, material):
                 severity=member.severity,
                 code=member.code,
                 failure_category=member.failure_category,
-                counters=[v.model_dump(mode="json") for v in member.counters],
+                counters=[value.model_dump() for value in member.counters],
             )
         )
     event_id = None
     if result.outcome == "completed":
-        reference = PostSubmitCurrentResultReference(
-            **result.model_dump(
-                include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"}
-            )
-        )
-        event = EvaluationCompletion(
-            project_id=request.project_id,
-            task_id=request.task_id,
-            submission_id=request.submission_id,
-            reference=reference,
-            routing_recommendation=classification.routing,
-            output_binding_ids=(),
-            execute_evidence_id=UUID(str(execute_id)),
-            finalize_evidence_id=final_id,
-        )
+        reference = {
+            "schema_version": "post_submit_current_result_reference",
+            "request_id": str(result.request_id),
+            "request_digest": result.request_digest,
+            "attempt_id": str(result.attempt_id),
+            "evaluation_generation": result.evaluation_generation,
+            "result_id": str(result.result_id),
+            "result_digest": result.result_digest,
+        }
+        event = {
+            "project_id": str(request.project_id),
+            "task_id": str(request.task_id),
+            "submission_id": str(request.submission_id),
+            "reference": reference,
+            "routing_recommendation": routing,
+            "output_binding_ids": [],
+            "execute_evidence_id": str(execute_id),
+            "finalize_evidence_id": str(final_id),
+        }
         appended = await outbox_append(session).append(
             OutboxAppendInput(
                 event_type=COMPLETION_EVENT,
@@ -292,11 +336,10 @@ async def historical_write_terminal(session, facts, material):
                 project_id=request.project_id,
                 correlation_id=str(request.evaluation_request_id),
                 idempotency_key="checker-completed:" + str(run_id),
-                payload=event.model_dump(mode="json"),
+                payload=event,
             )
         )
         event_id = appended.event_id
-    import json
 
     await session.execute(
         text("""UPDATE public.checker_runs SET status=:status,
@@ -307,16 +350,16 @@ async def historical_write_terminal(session, facts, material):
         dict(
             id=run_id,
             status=result.outcome,
-            body=canonical_post_submit_bytes(result, exclude={"result_digest"}).decode(),
+            body=_canonical_text(result, exclude={"result_digest"}),
             digest=result.result_digest,
             material=json.dumps(material) if material is not None else None,
             final=final_id,
-            routing=classification.routing,
+            routing=routing,
             failure=result.infrastructure_failure_code,
-            passed=classification.passed,
-            warning=classification.warning,
-            failed=classification.failed,
-            blocking=classification.blocking,
+            passed=passed,
+            warning=warning,
+            failed=failed,
+            blocking=blocking,
             event=event_id,
         ),
     )
