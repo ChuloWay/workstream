@@ -185,7 +185,13 @@ Project Manager approves the internal policy bundle
 before guide activation. Project owners do not approve Workstream's internal
 submission policy schema.
 
-`SubmissionArtifactPolicy` defines project-level intake rules. Workstream combines it with the non-bypassable Workstream default submission artifact policy to create `EffectiveProjectSubmissionArtifactPolicy`. Workstream then generates, persists, and locks project `PreSubmitCheckerPolicy` with a compiled bundle hash from that effective project submission artifact policy. Tasks lock the applicable guide snapshot, effective project submission artifact policy hash, and pre-submit checker bundle hash before entering the contributor pipeline.
+Tasks lock the approved guide and its exact PRE/POST image policies before
+entering the contributor pipeline. Workstream provides one versioned default
+checker: safe ZIP/resource bounds, server-verified digest and manifest,
+high-confidence secret rejection, and unchanged-work rejection unless locked
+rules changed. Missing summary or attestation produces warnings only. All
+project checks are approved, digest-pinned external images; there is no built-in
+project-rule catalogue or alternate checker runtime.
 
 Blocking pre-submit failures prevent submission creation. The mounted
 authorized hidden preparation route returns `pre_submission_checker_failed`
@@ -196,30 +202,26 @@ submission-created audit event. ART constructs a bounded audit-ready projection;
 publication as a task event named `pre_submission_check_failed` remains pending.
 That event must contain only this closed, path-redacted projection: actor-profile ID, project ID, task ID, preparation
 attempt ID, effective-plan hash, terminal status, pass/warning/failure counts,
-and a bounded ordered list of catalogue ID/version plus stable outcome code.
+and bounded ordered default or registered-image identities plus stable outcome codes.
 It excludes filenames, archive paths, scratch/provider references, credentials,
 raw checker output, evidence content, and free-form or unbounded messages. This
-is audit evidence, not a product review decision. POL-07B removes the independently invocable
-JSON precheck. The internal pre-submit phase command uses ART's existing
-execution or completed-evidence recovery after reservation commits. WS-ARCH-001-02I retains the
-broader Submission caller migration and its downstream prerequisites.
+is audit evidence, not a product review decision.
 
-Hidden ART-04B2 uses XINT-06A's two-stage fixed-materializer PREP. It locks the
-service/action and scalar lineage before ZIP inspection, then consumes the same
-process-local handle with the server-computed semantic-manifest identity before
-workspace reservation or checker execution. It reserves the complete expanded
-workspace budget, verifies one canonical sealed tree against the 04A identities,
-and runs only platform/default catalogue entries. The callback-scoped tree and
-all paths are destroyed before bounded results return. Hidden ART-04B3 extends
-that same plan and sealed-tree callback
-to the locked project-policy entries, then reloads the exact task context and
-persists one immutable platform-plus-project evidence set after scratch cleanup.
-It creates no provider object, admission, Submission, or lifecycle effect;
-AUTH activation remains XINT-06A. POL-07A commits an ART execution reservation
-before invoking checks, then obtains fresh materialization authority; a prepared
-AUTH handle never crosses that commit. Completed replay freshly authorizes the
-stored original generation and returns evidence without another checker run or
-pass capability.
+ART safely expands the ZIP in bounded private scratch and independently verifies
+the bytes and manifest. The default checker runs before any project PRE image.
+Each image receives verified files read-only through the Rust service and its
+callback-scoped grant. CHECKERS commits its execution lease before material work;
+TASK custody precedes CHECKERS locks, and no authority transaction stays open
+through image execution. Scratch is destroyed before finalization revalidates
+the exact assignment, locked policy, material and lease.
+
+Only a complete PRE pass permits the existing caller-owned atomic transaction to
+consume admission and commit an immutable Submission, `evaluation_pending`, and
+the initial POST dispatch together. Work failures return bounded findings,
+create no Submission, and leave the task `in_progress`. Infrastructure failures
+remain recoverable. POST images evaluate immutable Submission material and
+produce evidence for the existing governed routing operation. Exact replay
+requires fresh authority and returns original immutable facts.
 
 Tasks lock to the active guide version at creation or screening time before entering `READY`. Material guide changes require a new guide version.
 
@@ -317,19 +319,16 @@ metadata only. Decision and contribution creation perform no ART call.
 
 ### Pre-Submission Checker Boundary
 
-CHECKERS owns the single deterministic effective pre-submission plan. The 02C
-boundary exposes its public planning port and bounded result facts and migrates
-the touched TASK and ART admission call path away from the catalogue, compiler,
-and executor internals. ART retains exclusive ownership of byte custody,
-storage scheme, evidence persistence, pass capability, and admission attachment.
+CHECKERS owns the default-plus-external PRE contract, exact approved image
+bindings and durable run/lease/result custody. ART owns verified bytes, bounded
+scratch, immutable storage and admission attachment. Callers use typed public
+ports through application composition. Both executable catalogues and their
+old request/result decoders are removed.
 
-Public CHECKER results contain the plan identity, eligibility outcome, and
-bounded per-definition facts only. They never expose prepared-artifact custody,
-scratch state, provider details, or durable evidence identity. Concrete
-catalogue and executor implementations remain CHECKER-private and meet callers
-only through application composition. Existing ART materialization and evidence
-imports that have not yet migrated remain frozen private-edge debt; the next
-ART boundary chunk must move those exact consumers to this public surface.
+Contributor feedback contains bounded default/image findings and eligibility.
+It conceals scratch state, provider coordinates, credentials and raw checker
+output. The hidden preparation flow is implemented; public contributor
+upload/finalize and CLI submit/status remain PILOT-12 work.
 
 ### Contribution Records
 

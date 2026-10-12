@@ -49,15 +49,10 @@ immutable registry are consumed by selected hidden PRE/POST owners through an
 explicit Rust service adapter. Production request/completion handlers are
 registered; public contributor intake remains PILOT-12 work.
 
-The following catalogue envelope documents retained pre-cutover evidence only.
-Both executable catalogues and their runtime factories are removed. New requests
-use the selected default-plus-external PRE contract and selected external POST
-contract; retained business-version facts are not alternate execution paths.
-
-Retained predecessor rows preserve their original typed provenance and exact
-business-version digests. Historical decoders validate those stored facts; they
-do not reconstruct executable catalogue factories or dispatch new work. New
-external results use the normalized contracts above.
+Both executable catalogues, their runtime factories and their request/result
+decoders are removed. Requests use the default-plus-external PRE contract and
+external POST contract. Stored predecessor rows retain their original provenance
+and business-version digests; they do not supply an alternate execution path.
 
 ## External Checker Registry And Selected Policies
 
