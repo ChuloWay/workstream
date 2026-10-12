@@ -1221,8 +1221,12 @@ The one-time generator passed the original migration control in 173.92 seconds
 with complete database, role and object-store cleanup. The first current-loader
 replay passed in 110.52 seconds with the same complete cleanup; its metadata
 identifies the clean parent because the archive/test repair was not committed
-yet, so this is qualified working-tree evidence. A clean frozen-head replay and
-independent archive/test review remain required.
+yet, so this is qualified working-tree evidence. The first clean-head replay
+passed in 227.07 seconds with complete cleanup, then independent review required
+stronger non-vacuity assertions for the two policy branches. The final test
+therefore requires exactly `[true, false]`, two requests, one Final Acceptance,
+one ContributionRecord and exact automatic-manifest-to-acceptance-to-contribution
+lineage. A clean successor replay and final independent review remain required.
 
 ### Frozen cutover verification before publication
 

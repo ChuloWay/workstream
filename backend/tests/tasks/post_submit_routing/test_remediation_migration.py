@@ -1,6 +1,7 @@
 """0032 preserves genuine retained success outcomes and their exact evidence."""
 
 import asyncio
+import json
 
 import asyncpg
 import pytest
@@ -50,7 +51,7 @@ async def _routing_validity(connection) -> list[asyncpg.Record]:
     """Return exact receipt hashes and all success-closure predicates."""
     return await connection.fetch(
         """
-        SELECT m.id, m.human_review_required,
+        SELECT m.id, m.human_review_required, m.final_acceptance_id,
           m.authority_context->'source'->>'routing_recommendation' AS source_recommendation,
           public.task_routing_resource_digest(m) AS resource_digest,
           a.after_facts->>'resource_context_digest' AS receipt_digest,
@@ -99,6 +100,20 @@ async def test_routing_upgrade_preserves_success_evidence(
             before = await _snapshot(connection)
             before_validity = await _routing_validity(connection)
             assert len(before_validity) == 2
+            human, automatic = before_validity
+            assert [row["human_review_required"] for row in before_validity] == [True, False]
+            assert human["final_acceptance_id"] is None
+            assert automatic["final_acceptance_id"] is not None
+            assert len(before["requests"]) == 2
+            assert len(before["acceptances"]) == 1
+            assert len(before["contributions"]) == 1
+            acceptance = json.loads(before["acceptances"][0]["value"])
+            contribution = json.loads(before["contributions"][0]["value"])
+            assert acceptance["id"] == str(automatic["final_acceptance_id"])
+            assert acceptance["source_routing_manifest_id"] == str(automatic["id"])
+            assert contribution["source_final_acceptance_id"] == acceptance["id"]
+            assert contribution["submission_id"] == acceptance["submission_id"]
+            assert contribution["task_id"] == acceptance["task_id"]
             assert all(
                 row["source_recommendation"] == "allow_review"
                 and row["resource_digest"] == row["receipt_digest"]
