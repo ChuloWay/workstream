@@ -111,7 +111,7 @@ If provisioning fails, confirm the local PostgreSQL provisioning credential can 
 
 ## Hosted semantic-lane full-suite proof
 
-The required GitHub check remains `Backend / test`. Nine matrix jobs each own a
+The required GitHub check remains `Backend / test`. Ten matrix jobs each own a
 digest-pinned PostgreSQL service container, a pinned-source MinIO image,
 and exactly one dependency lane. A step-level curl health loop admits MinIO
 before collection. This is semantic fan-out, not arbitrary test-count sharding:
@@ -126,7 +126,7 @@ Assertion-map validation analyzes each exact historical revision/module once per
 invocation, then checks every referenced node and assertion against that analysis.
 It does not cache current source or reuse analysis across validation calls.
 
-The eight ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
+The nine ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
 to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
 data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
 before tests. Real SQL, transaction, lock, isolation, and full hosted behavior
@@ -140,7 +140,11 @@ The `project_lifecycle_a`, `project_lifecycle_b`, `project_lifecycle_c`, and
 `project_lifecycle_d` lanes
 partition PROJECT nodes, checker execution, materialization, evaluation capacity,
 output custody and routing AUTH preparation beside initial dispatch/delivery.
-All use the existing exact-node hash across four lanes. A retained three-lane
+All use the exact-node hash across four lanes. Each existing lane family has a
+fixed, checked-in hash seed selected from complete hosted phase timings.
+Collection hashes `seed:nodeid`; it never reads timing artifacts to select tests.
+The [measurement record](../.commitrail/changes/backend-ci-measured-lane-balance.md)
+binds the seed choices, rounding limits and hosted validation requirements. A retained three-lane
 run exhausted project C's 1,200-second cap with 92 nodes unfinished; prior passing
 runs had little remaining headroom. The fourth project lane increases execution
 capacity without changing the cap or canonical test union. Placing the entire

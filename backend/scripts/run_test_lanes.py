@@ -28,6 +28,7 @@ if __package__ in {None, ""}:
 from scripts.test_lane_catalogue import (  # noqa: E402
     ADMIN_RUNNER_MODULE,
     LANES,
+    PARTITION_HASH_SEEDS,
     PARTITION_LANES_BY_MODULE,
     TestLane,
 )
@@ -421,7 +422,8 @@ def build_manifest(tree_sha: str, nodes: list[str]) -> dict[str, Any]:
         if partition_lanes is not None:
             if tuple(candidates) != partition_lanes:
                 raise LaneError("invalid_partition_lanes")
-            digest = hashlib.sha256(node.encode("utf-8")).digest()
+            seed = PARTITION_HASH_SEEDS[partition_lanes]
+            digest = hashlib.sha256(f"{seed}:{node}".encode("utf-8")).digest()
             return candidates[digest[0] % len(candidates)]
         if len(candidates) != 1:
             raise LaneError("ambiguous_lane_module")

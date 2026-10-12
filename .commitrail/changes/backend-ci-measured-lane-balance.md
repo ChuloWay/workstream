@@ -1,7 +1,7 @@
 # Backend CI Measured Lane Balance
 
 - Initiative: `None`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: The existing ten backend lanes have measured execution
   headroom while retaining the full test inventory and all isolation/evidence gates.
 
@@ -15,9 +15,9 @@ Main runs `38220929859` and `38224762176` interrupted different TASK lanes at
 headroom problem. Installation and the short parallel workflows are not the
 dominant measured cost.
 
-Current logs retain only the 25 slowest pytest phases. They cannot support a
-complete cost model. Each family currently assigns nodes using the first byte
-of SHA-256 modulo its lane count; node counts do not represent execution cost.
+The previous logs retained only the 25 slowest pytest phases. They could not
+support a complete cost model. Before this change, each family assigned nodes using the first byte of
+SHA-256 modulo its lane count; node counts do not represent execution cost.
 
 ## Bounded change
 
@@ -115,3 +115,69 @@ The command regression rejects the original truncated duration flag before the
 runner change. The diagnostic-only implementation passes 117 focused command,
 catalogue and evidence tests. No allocation or runtime improvement is claimed
 from those checks; hosted timing measurements remain required.
+
+The first diagnostic run (`38271067999`, attempt 1) retained complete phase
+tables for nine lanes but timed out TASK A after 445 of 470 nodes at
+1,201 seconds. No assertion failure or cleanup failure was reported, and the
+process did not reach its final duration report. This failed attempt is
+headroom evidence, not a complete timing baseline or a performance success.
+The controlled same-head retry completed TASK A in 883.546 seconds. The final
+baseline uses nine successful attempt-1 bundles and TASK A from attempt 2.
+That substantial run-to-run variation is retained; a successful retry is not
+evidence that allocation alone caused or fixed the original timeout.
+
+### Measured allocation
+
+Hosted run `38271067999` at merge `55e4409b74fc4d873c57fa474d19f7214f52bc9f`
+has the same tree (`ebd4fbc9039117e637aefbfc0c6f2916a3cbf3be`) as diagnostic
+head `a95913ea2398d87f87ccae8040ba67323ad0bbca`. The existing independent
+validator accepted the selected bundles: 9,204 collected/completed nodes, no
+skips/deselections, successful isolation cleanup, and 27,612 distinct phase
+records (one setup/call/teardown per node).
+
+The retained manifest SHA-256 is
+`68db5c27e92abfbd832921d0016daf7bd72929dfa6fce2e574382eb1397b84c3`.
+The extracted per-node timing CSV SHA-256 is
+`0f6b0a62bf754dd79d41eade4671e99e89f3f63f690e7db461582018a1bae8d6`.
+Logs range from about 162 KB to 1.1 MB. They have no per-line timestamps, so
+final-report overhead cannot be isolated from other non-phase work; step end
+bounds report completion. The first timeout preceded report generation.
+
+For each existing family, replay seeds 0 through 255 using the first byte of
+`SHA256(f"{seed}:{nodeid}")` modulo its unchanged eligible lane count. Fit the
+four PROJECT lanes and C/D-only intake jointly; fit SHARED and TASK separately.
+Minimize the largest rounding-adjusted replay time, then squared replay times,
+then numeric seeds. The selected constants are:
+
+| Family | Seed |
+| --- | ---: |
+| SHARED A/B | 41 |
+| PROJECT A/B/C/D | 114 |
+| PROJECT intake C/D | 178 |
+| TASK A/B/C | 181 |
+
+Pytest prints phases to hundredths of a second. Replay each lane as observed
+elapsed time plus moved-in rounded cost minus moved-out rounded cost. Unchanged
+node rounding cancels. Add a conservative bound of 0.015 seconds per moved-node
+incidence plus 0.001 seconds for elapsed rounding. Select only a candidate whose
+largest upper bound is below the unchanged optimized-lane maximum. These are
+**rounding-only baseline-replay intervals**, not runtime confidence intervals;
+they do not bound hardware, ordering, residual overhead, or commit-seeded node
+identity variation.
+
+The optimized-lane baseline maximum is 1,109.281 seconds; the candidate's largest
+rounding-only upper bound is 1,035.537 seconds. SHARED nominal replay is about
+999 seconds, PROJECT at most 919 seconds, and TASK at most 948 seconds. The
+unchanged schema lane took 1,090.644 seconds; its concurrent ordinary/admin
+units are excluded from summed-phase elapsed prediction. This existing lane
+limits the expected full-run speedup and exceeds the advisory 1,000-second
+target. No new performance gate or guarantee is introduced. The final PR evidence
+must report two full same-candidate hosted executions, including variability;
+this baseline replay alone does not establish an actual speedup.
+
+Replaying the retained manifest through the implemented assignment preserves
+all 9,204 node/module/execution-kind identities exactly once, with 4,924
+reassignments inside existing eligible families. The same comparison rejects
+a deliberately dropped node, duplicate node and foreign-family assignment.
+The focused command/catalogue/evidence suite and required final reviewer/hosted
+results are recorded against the reviewable PR head.

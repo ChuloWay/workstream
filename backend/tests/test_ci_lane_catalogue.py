@@ -25,6 +25,9 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
 
     assigned = [module for lane in LANES for module in lane.modules]
     assert len(LANES) == 10
+    assert set(catalogue.PARTITION_HASH_SEEDS) == {
+        names for names, _modules in catalogue.PARTITION_GROUPS
+    }
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(
@@ -571,7 +574,7 @@ def test_owner_nodes_partition_deterministically(names, modules) -> None:
     nodes = [f"{module}::test_shared_{index}" for index in range(100)]
 
     first = runner.build_manifest("a" * 40, nodes)
-    second = runner.build_manifest("a" * 40, list(reversed(nodes)))
+    second = runner.build_manifest("b" * 40, list(reversed(nodes)))
     first_by_node = {row["nodeid"]: row["lane"] for row in first["nodes"]}
     second_by_node = {row["nodeid"]: row["lane"] for row in second["nodes"]}
 
