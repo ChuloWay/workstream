@@ -32,6 +32,7 @@ from app.modules.artifacts.authorization import (
     PreparedArtifactInternalAuthority,
     PreparedSubmissionBundlePreparationAuthorization,
 )
+from app.modules.checkers.models import SelectedPreSubmitRun
 from app.modules.artifacts.models import (
     PreSubmitEvidenceSet,
     SubmissionBundleAdmission,
@@ -247,15 +248,18 @@ async def test_real_replacement_compares_consumed_predecessor_and_replays_exactl
                 SubmissionBundleAdmission, str(h.creation_request.admission_id)
             )
             admission = await session.get(SubmissionBundleAdmission, str(admission_id))
-            evidence = await session.get(PreSubmitEvidenceSet, admission.pre_submit_evidence_set_id)
+            selected = await session.get(SelectedPreSubmitRun, admission.selected_pre_submit_run_id)
             assert predecessor_admission.status == "consumed"
             assert admission.status == "ready"
             assert admission.predecessor_submission_id == str(predecessor_id)
             assert admission.predecessor_submission_version == 1
             assert admission.checker_remediation_manifest_id == source_id
-            assert evidence.predecessor_submission_id == str(predecessor_id)
-            assert evidence.predecessor_submission_version == 1
-            assert evidence.checker_remediation_manifest_id == source_id
+            assert admission.pre_submit_evidence_set_id is None
+            assert selected is not None and selected.eligible
+            lineage = selected.request_json["admission_lineage"]
+            assert lineage["predecessor_submission_id"] == str(predecessor_id)
+            assert lineage["predecessor_submission_version"] == 1
+            assert lineage["checker_remediation_manifest_id"] == str(source_id)
             assert admission.archive_sha256 != predecessor_admission.archive_sha256
             assert (
                 admission.semantic_manifest_sha256 != predecessor_admission.semantic_manifest_sha256
