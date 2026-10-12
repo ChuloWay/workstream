@@ -282,7 +282,19 @@ def test_project_domain_does_not_query_artifact_persistence_models() -> None:
     assert violations == []
 
 
-def test_concrete_adapter_construction_has_one_composition_path() -> None:
+@pytest.fixture(scope="module")
+def adapter_composition_inventory() -> tuple[tuple[Path, frozenset[str], tuple[str, ...]], ...]:
+    """Freeze complete-source imports and ordered calls, preserving multiplicity."""
+    inventory = []
+    for path in _python_files(APP_ROOT):
+        imports, calls = imported_symbols_and_calls(_tree(path))
+        inventory.append((path, frozenset(imports), tuple(calls)))
+    return tuple(inventory)
+
+
+def _assert_concrete_adapter_composition(
+    inventory: tuple[tuple[Path, frozenset[str], tuple[str, ...]], ...],
+) -> None:
     factory_calls: list[Path] = []
     adapter_calls: list[Path] = []
     concrete_imports: list[Path] = []
@@ -290,8 +302,7 @@ def test_concrete_adapter_construction_has_one_composition_path() -> None:
     agent_calls: list[Path] = []
     observability_imports: list[Path] = []
     observability_calls: list[Path] = []
-    for path in _python_files(APP_ROOT):
-        imports, calls = imported_symbols_and_calls(_tree(path))
+    for path, imports, calls in inventory:
         if imports & CONCRETE_ADAPTER_MODULES:
             concrete_imports.append(path)
         if AGENT_ADAPTER_MODULE in imports:
@@ -330,6 +341,10 @@ def test_concrete_adapter_construction_has_one_composition_path() -> None:
     assert observability_calls == [OBSERVABILITY_COMPOSITION_ROOT] * 3
 
 
+def test_concrete_adapter_construction_has_one_composition_path(adapter_composition_inventory) -> None:
+    _assert_concrete_adapter_composition(adapter_composition_inventory)
+
+
 @pytest.mark.parametrize("source", [
     "from app.interfaces.external_services import ExternalServiceAdapterFactory as factory\nfactory[object]('extra')\n",
     "from app.interfaces.external_services import ExternalServiceAdapterFactory\nfactory: object = ExternalServiceAdapterFactory\nfactory[object]('extra')\n",
@@ -337,15 +352,16 @@ def test_concrete_adapter_construction_has_one_composition_path() -> None:
     "from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime as runtime\nruntime(configuration)\n",
     "import app.adapters.project_agents.openai_agent_sdk as sdk\nsdk.OpenAIAgentSdkProjectGuideRuntime(configuration)\n",
 ])
-def test_composition_proof_rejects_aliased_factories_and_concrete_runtimes(tmp_path, monkeypatch, source):
-    import sys
-
-    paths = _python_files(APP_ROOT)
+def test_composition_proof_rejects_aliased_factories_and_concrete_runtimes(
+    tmp_path, adapter_composition_inventory, source,
+):
+    _assert_concrete_adapter_composition(adapter_composition_inventory)
     injected = tmp_path / "extra.py"
     injected.write_text(source)
-    monkeypatch.setattr(sys.modules[__name__], "_python_files", lambda *_: (*paths, injected))
+    imports, calls = imported_symbols_and_calls(_tree(injected))
+    injected_inventory = (*adapter_composition_inventory, (injected, frozenset(imports), tuple(calls)))
     with pytest.raises(AssertionError):
-        test_concrete_adapter_construction_has_one_composition_path()
+        _assert_concrete_adapter_composition(injected_inventory)
 
 
 def test_s3_adapter_exposes_only_required_immutable_object_operations() -> None:

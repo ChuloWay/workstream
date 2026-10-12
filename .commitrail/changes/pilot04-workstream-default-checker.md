@@ -1305,3 +1305,15 @@ before/after complete-module timings, and discriminating rejection of an actual
 extra custody consumer with unchanged exact expected consumer sets. Lead and QA
 review the immutable inventory and negative non-vacuity; human review focuses on
 complete discovery, spelling coverage and isolation between parameter cases.
+
+The unchanged complete module passed all 35 cases at clean `95d410810`:
+767.93 seconds within pytest and 812.541 seconds including process lifetime.
+Its ten custody negatives consumed 243.92 seconds and five composition negatives
+198.39 seconds under host contention; these are local measurements, not inferred
+hosted timings. The same allowed module now also freezes actual complete-source
+composition imports and ordered call names once. Call multiplicity stays intact,
+including the three observability constructions. Each of the five existing alias
+negatives validates the actual baseline then appends only its freshly parsed
+injected file to an immutable inventory copy. All exact owner paths, construction
+counts, spelling variants and required assertions remain. Require the same 35-case
+module and discriminating composition/custody mutants before claiming this repair.
