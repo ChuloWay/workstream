@@ -426,6 +426,10 @@ and `project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-ke
 send deliberate Submitter/Reviewer decisions with explicit qualification evidence
 and reasons. AUTH retains exact-project manager authority, qualification capture
 and fresh-authorized replay; receipts are observations, not cached permission.
+`project role-grant list PROJECT_ID` reads one optionally filtered, count-free
+page; `project role-grant show PROJECT_ID GRANT_ID` inspects complete public
+qualification/provenance and revocation history. Pagination is explicit and
+fresh authority is backend-owned; a read never authorizes a later write.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
