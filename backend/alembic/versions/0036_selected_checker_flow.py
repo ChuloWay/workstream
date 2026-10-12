@@ -563,22 +563,24 @@ declare phase_name text; policy jsonb; binding jsonb; registry jsonb;
         registry_row public.external_checker_registry_entries%rowtype;
         prior_requirement text; prior_capability text; prior_version text;
 begin
- if jsonb_typeof(value)<>'object' or (select count(*) from jsonb_object_keys(value))<>4
-    or value->>'schema_version'<>'external_checker_policies.v1'
-    or value->>'policies_sha256'<>expected_hash
-    or public.guide_proposal_hash(value-'policies_sha256')<>expected_hash then
+ if jsonb_typeof(value) is distinct from 'object'
+    or (select count(*) from jsonb_object_keys(value))<>4
+    or value->>'schema_version' is distinct from 'external_checker_policies.v1'
+    or value->>'policies_sha256' is distinct from expected_hash
+    or public.guide_proposal_hash(value-'policies_sha256') is distinct from expected_hash then
   raise exception 'external checker policy envelope mismatch' using errcode='23514';
  end if;
- if jsonb_typeof(value->'pre_submit')<>'object'
-    or jsonb_typeof(value->'post_submit')<>'object' then
+ if jsonb_typeof(value->'pre_submit') is distinct from 'object'
+    or jsonb_typeof(value->'post_submit') is distinct from 'object' then
   raise exception 'external checker phase policy is missing' using errcode='23514';
  end if;
  foreach phase_name in array array['pre_submit','post_submit'] loop
   policy:=value->phase_name;
   if (select count(*) from jsonb_object_keys(policy))<>(case when phase_name='pre_submit' then 4 else 3 end)
-     or policy->>'schema_version'<>'external_'||phase_name||'_policy.v1'
-     or public.guide_proposal_hash(policy-'policy_sha256')<>policy->>'policy_sha256'
-     or jsonb_typeof(policy->'entries')<>'array' then
+     or policy->>'schema_version' is distinct from 'external_'||phase_name||'_policy.v1'
+     or public.guide_proposal_hash(policy-'policy_sha256') is distinct from
+       policy->>'policy_sha256'
+     or jsonb_typeof(policy->'entries') is distinct from 'array' then
    raise exception 'external checker phase policy mismatch' using errcode='23514';
   end if;
   if phase_name='pre_submit' and policy->'workstream_default' is distinct from
@@ -588,30 +590,36 @@ begin
   end if;
   prior_requirement:=null; prior_capability:=null; prior_version:=null;
   for binding in select item from jsonb_array_elements(policy->'entries') item loop
-   if jsonb_typeof(binding)<>'object' or (select count(*) from jsonb_object_keys(binding))<>5
-      or binding->>'stage'<>phase_name
-      or jsonb_typeof(binding->'configuration')<>'object'
+   if jsonb_typeof(binding) is distinct from 'object'
+      or (select count(*) from jsonb_object_keys(binding))<>5
+      or binding->>'requirement_id' is null
+      or binding->>'stage' is distinct from phase_name
+      or jsonb_typeof(binding->'configuration') is distinct from 'object'
       or public.external_checker_registry_digest(binding->'configuration')
-         <>binding->>'configuration_sha256' then
+         is distinct from binding->>'configuration_sha256' then
     raise exception 'external checker policy binding mismatch' using errcode='23514';
    end if;
    registry:=binding->'registry';
-   if jsonb_typeof(registry)<>'object' or (select count(*) from jsonb_object_keys(registry))<>14 then
+   if jsonb_typeof(registry) is distinct from 'object'
+      or (select count(*) from jsonb_object_keys(registry))<>14 then
     raise exception 'external checker registry value mismatch' using errcode='23514';
    end if;
    select * into registry_row from public.external_checker_registry_entries
     where id=(registry->>'registry_entry_id')::uuid
       and entry_digest=registry->>'entry_digest';
    if not found
-      or registry_row.capability_id<>registry->>'capability_id'
-      or registry_row.capability_version<>registry->>'capability_version'
-      or registry_row.phase<>registry->>'phase'
-      or registry_row.phase<>phase_name
-      or registry_row.image_digest<>registry->>'image_digest'
-      or registry_row.registration_operation_id<>(registry->>'registration_operation_id')::uuid
-      or registry_row.registered_by_actor_profile_id<>(registry->>'registered_by_actor_profile_id')::uuid
-      or registry_row.authorization_decision_event_id<>(registry->>'authorization_decision_event_id')::uuid
-      or registry_row.created_at<>(registry->>'created_at')::timestamptz
+      or registry_row.capability_id is distinct from registry->>'capability_id'
+      or registry_row.capability_version is distinct from registry->>'capability_version'
+      or registry_row.phase is distinct from registry->>'phase'
+      or registry_row.phase is distinct from phase_name
+      or registry_row.image_digest is distinct from registry->>'image_digest'
+      or registry_row.registration_operation_id is distinct from
+        (registry->>'registration_operation_id')::uuid
+      or registry_row.registered_by_actor_profile_id is distinct from
+        (registry->>'registered_by_actor_profile_id')::uuid
+      or registry_row.authorization_decision_event_id is distinct from
+        (registry->>'authorization_decision_event_id')::uuid
+      or registry_row.created_at is distinct from (registry->>'created_at')::timestamptz
       or registry->'configuration_schema' is distinct from jsonb_build_object(
         'schema_id',registry_row.configuration_schema_id,
         'schema_version',registry_row.configuration_schema_version,
@@ -657,9 +665,6 @@ end $$
     declaration = "        prior project_guide_proposal_approvals%rowtype;"
     if definition.count(declaration) != 1:
         raise RuntimeError("guide approval declaration shape changed")
-    definition = definition.replace(
-        declaration, declaration + "\n        external_plan boolean;"
-    )
     anchor = """        IF a.operation_id IS NULL THEN
           RAISE EXCEPTION 'immutable proposal approval operation missing' USING ERRCODE='23514';
         END IF;"""
@@ -668,8 +673,10 @@ end $$
     definition = definition.replace(
         anchor,
         anchor + """
-        external_plan:=a.effective_pre_submit_plan::jsonb->>'schema_version'
-          ='external_checker_policies.v1';""",
+        IF a.effective_pre_submit_plan::jsonb->>'schema_version' IS DISTINCT FROM
+             'external_checker_policies.v1' THEN
+          RAISE EXCEPTION 'external proposal policy schema unavailable' USING ERRCODE='23514';
+        END IF;""",
     )
     selected_pre = """        SELECT * INTO pre FROM pre_submit_checker_policies WHERE id=a.pre_submit_policy_id;"""
     if definition.count(selected_pre) != 1:
@@ -677,24 +684,21 @@ end $$
     definition = definition.replace(
         selected_pre,
         selected_pre + """
-        IF external_plan AND pre.compiled_bundle::jsonb IS DISTINCT FROM
+        IF pre.compiled_bundle::jsonb IS DISTINCT FROM
              a.effective_pre_submit_plan::jsonb->'pre_submit' THEN
           RAISE EXCEPTION 'external proposal PRE policy custody mismatch' USING ERRCODE='23514';
         END IF;
-        IF external_plan AND NOT public.external_checker_locked_policies_valid(
+        IF NOT public.external_checker_locked_policies_valid(
              a.effective_pre_submit_plan::jsonb,a.effective_pre_submit_plan_hash) THEN
           RAISE EXCEPTION 'external proposal policy custody mismatch' USING ERRCODE='23514';
         END IF;""",
     )
     old_hashes = """           OR guide_proposal_hash(pre.compiled_bundle::jsonb) IS DISTINCT FROM pre.compiled_bundle_hash
            OR guide_proposal_hash(a.effective_pre_submit_plan::jsonb) IS DISTINCT FROM a.effective_pre_submit_plan_hash"""
-    new_hashes = """           OR (NOT external_plan AND (
-             guide_proposal_hash(pre.compiled_bundle::jsonb) IS DISTINCT FROM pre.compiled_bundle_hash
-             OR guide_proposal_hash(a.effective_pre_submit_plan::jsonb) IS DISTINCT FROM a.effective_pre_submit_plan_hash))
-           OR (external_plan AND (
-             pre.compiled_bundle::jsonb IS DISTINCT FROM a.effective_pre_submit_plan::jsonb->'pre_submit'
-             OR NOT public.external_checker_locked_policies_valid(
-               a.effective_pre_submit_plan::jsonb,a.effective_pre_submit_plan_hash)))"""
+    new_hashes = """           OR pre.compiled_bundle::jsonb IS DISTINCT FROM
+             a.effective_pre_submit_plan::jsonb->'pre_submit'
+           OR NOT public.external_checker_locked_policies_valid(
+             a.effective_pre_submit_plan::jsonb,a.effective_pre_submit_plan_hash)"""
     if definition.count(old_hashes) != 1:
         raise RuntimeError("guide approval plan digest shape changed")
     definition = definition.replace(old_hashes, new_hashes)
@@ -709,18 +713,7 @@ end $$
              'id',a.target_json->>'pre_catalogue_id','version',a.target_json->>'pre_catalogue_version',
              'schema_version',a.target_json->>'pre_catalogue_schema_version',
              'manifest_sha256',a.target_json->>'pre_catalogue_manifest_hash')"""
-    new_plan = """           OR (NOT external_plan AND (
-             a.effective_pre_submit_plan::jsonb->'lineage' IS DISTINCT FROM jsonb_build_object(
-               'project_id',a.project_id,'guide_id',a.guide_id,
-               'guide_version',a.target_json->>'guide_version',
-               'source_snapshot_id',a.target_json->>'source_snapshot_id',
-               'source_snapshot_hash',a.target_json->>'source_snapshot_hash',
-               'effective_policy_id',e.id,'effective_policy_hash',e.effective_policy_hash,
-               'pre_submit_policy_id',pre.id,'pre_submit_policy_bundle_hash',pre.compiled_bundle_hash)
-             OR a.effective_pre_submit_plan::jsonb->'catalogue' IS DISTINCT FROM jsonb_build_object(
-               'id',a.target_json->>'pre_catalogue_id','version',a.target_json->>'pre_catalogue_version',
-               'schema_version',a.target_json->>'pre_catalogue_schema_version',
-               'manifest_sha256',a.target_json->>'pre_catalogue_manifest_hash')))"""
+    new_plan = """"""
     if definition.count(old_plan) != 1:
         raise RuntimeError("guide approval legacy plan binding shape changed")
     op.execute(definition.replace(old_plan, new_plan))
@@ -732,16 +725,13 @@ def _replace_post_policy_custody() -> None:
     )).scalar_one()
     old_policy = """         OR p.policy_hash IS DISTINCT FROM guide_proposal_hash(p.policy_body::jsonb)
          OR p.policy_body->>'catalogue_manifest_sha256' IS DISTINCT FROM t->'proposal'->>'post_catalogue_manifest_hash'"""
-    new_policy = """         OR (p.policy_body->>'schema_version'='external_post_submit_policy.v1' AND (
-           p.policy_hash IS DISTINCT FROM p.policy_body->>'policy_sha256'
-           OR p.policy_hash IS DISTINCT FROM guide_proposal_hash(
-             p.policy_body::jsonb-'policy_sha256')
-           OR p.policy_body::jsonb IS DISTINCT FROM
-             a.effective_pre_submit_plan::jsonb->'post_submit'))
-         OR (p.policy_body->>'schema_version'<>'external_post_submit_policy.v1' AND (
-           p.policy_hash IS DISTINCT FROM guide_proposal_hash(p.policy_body::jsonb)
-           OR p.policy_body->>'catalogue_manifest_sha256' IS DISTINCT FROM
-             t->'proposal'->>'post_catalogue_manifest_hash'))"""
+    new_policy = """         OR p.policy_body->>'schema_version' IS DISTINCT FROM
+             'external_post_submit_policy.v1'
+         OR p.policy_hash IS DISTINCT FROM p.policy_body->>'policy_sha256'
+         OR p.policy_hash IS DISTINCT FROM guide_proposal_hash(
+           p.policy_body::jsonb-'policy_sha256')
+         OR p.policy_body::jsonb IS DISTINCT FROM
+           a.effective_pre_submit_plan::jsonb->'post_submit'"""
     if definition.count(old_policy) != 1:
         raise RuntimeError("post policy custody shape changed")
     definition = definition.replace(old_policy, new_policy)
@@ -762,19 +752,12 @@ def _replace_post_policy_custody() -> None:
           jsonb_array_elements(c.canonical_result::jsonb->'post_submit_bindings') binding
         WHERE c.id=NEW.compilation_id AND NOT EXISTS(
           SELECT 1 FROM jsonb_array_elements(p.policy_body::jsonb->'entries') entry
-          WHERE CASE WHEN p.policy_body->>'schema_version'='external_post_submit_policy.v1'
-            THEN entry->>'requirement_id'=binding->>'requirement_id'
+          WHERE entry->>'requirement_id'=binding->>'requirement_id'
               AND entry->>'stage'='post_submit'
               AND entry->'registry'->>'capability_id'=binding->>'capability_id'
               AND entry->'registry'->>'capability_version'=binding->>'capability_version'
               AND entry->'configuration'=COALESCE((SELECT jsonb_object_agg(parameter->>'name',parameter->'value')
-                 FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb)
-            ELSE entry->>'checker_id'=binding->>'capability_id'
-              AND entry->>'definition_version'=binding->>'capability_version'
-              AND entry->>'classification'='project_required'
-              AND entry->'configuration'=COALESCE((SELECT jsonb_object_agg(parameter->>'name',parameter->'value')
-                 FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb)
-          END)) THEN
+                 FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb))) THEN
         RAISE EXCEPTION 'post-policy compiled required binding missing' USING ERRCODE='23514';
       END IF;"""
     old_extra = """      IF EXISTS(
@@ -793,25 +776,16 @@ def _replace_post_policy_custody() -> None:
       END IF;"""
     new_extra = """      IF EXISTS(
         SELECT 1 FROM jsonb_array_elements(p.policy_body::jsonb->'entries') entry
-        WHERE (p.policy_body->>'schema_version'='external_post_submit_policy.v1'
-               OR entry->>'classification' IS DISTINCT FROM 'platform_default')
-          AND NOT EXISTS(
+        WHERE NOT EXISTS(
             SELECT 1 FROM project_guide_compilations c,
               jsonb_array_elements(c.canonical_result::jsonb->'post_submit_bindings') binding
-            WHERE c.id=NEW.compilation_id AND CASE
-              WHEN p.policy_body->>'schema_version'='external_post_submit_policy.v1'
-              THEN entry->>'requirement_id'=binding->>'requirement_id'
+            WHERE c.id=NEW.compilation_id
+              AND entry->>'requirement_id'=binding->>'requirement_id'
                 AND entry->>'stage'='post_submit'
                 AND entry->'registry'->>'capability_id'=binding->>'capability_id'
                 AND entry->'registry'->>'capability_version'=binding->>'capability_version'
                 AND entry->'configuration'=COALESCE((SELECT jsonb_object_agg(parameter->>'name',parameter->'value')
-                   FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb)
-              ELSE entry->>'checker_id'=binding->>'capability_id'
-                AND entry->>'definition_version'=binding->>'capability_version'
-                AND entry->>'classification'='project_required'
-                AND entry->'configuration'=COALESCE((SELECT jsonb_object_agg(parameter->>'name',parameter->'value')
-                   FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb)
-            END)) THEN
+                   FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb)) THEN
         RAISE EXCEPTION 'post-policy compiled selection not requested' USING ERRCODE='23514';
       END IF;"""
     if definition.count(old_required) != 1 or definition.count(old_extra) != 1:

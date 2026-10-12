@@ -227,6 +227,9 @@ def test_current_head_installs_selected_only_checker_custody(
                     "protect_checker_result_custody",
                     "validate_checker_terminal_custody",
                     "submission_dispatch_valid",
+                    "external_checker_locked_policies_valid",
+                    "require_guide_proposal_approval",
+                    "require_post_policy_operation",
                 ],
             )
             return {row["proname"]: row["definition"] for row in rows}
@@ -239,6 +242,9 @@ def test_current_head_installs_selected_only_checker_custody(
         "protect_checker_result_custody",
         "validate_checker_terminal_custody",
         "submission_dispatch_valid",
+        "external_checker_locked_policies_valid",
+        "require_guide_proposal_approval",
+        "require_post_policy_operation",
     }
     for name in (
         "protect_checker_run_custody",
@@ -256,6 +262,15 @@ def test_current_head_installs_selected_only_checker_custody(
     assert "selected_pre_submit_run_id IS NOT NULL" in definitions[
         "submission_dispatch_valid"
     ]
+    assert "external_plan" not in definitions["require_guide_proposal_approval"]
+    assert "->'catalogue'" not in definitions["require_guide_proposal_approval"]
+    assert "catalogue_manifest_sha256" not in definitions["require_post_policy_operation"]
+    assert "external_post_submit_policy.v1" in definitions[
+        "require_post_policy_operation"
+    ]
+    assert "is distinct from 'external_checker_policies.v1'" in definitions[
+        "external_checker_locked_policies_valid"
+    ].lower()
 
 
 def test_current_head_installs_submission_lineage_contract(
