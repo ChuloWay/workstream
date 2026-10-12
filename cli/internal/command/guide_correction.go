@@ -16,7 +16,7 @@ func addGuideCorrection(guide *cobra.Command, client func() (*api.Client, error)
 			if err != nil {
 				return err
 			}
-			body, err := readGuideInput(input)
+			body, err := readJSONInput(input)
 			if err != nil {
 				return err
 			}
@@ -40,7 +40,7 @@ func addGuideCorrection(guide *cobra.Command, client func() (*api.Client, error)
 			if err != nil {
 				return err
 			}
-			receipt, err := readGuideInput(saved)
+			receipt, err := readJSONInput(saved)
 			if err != nil {
 				return err
 			}

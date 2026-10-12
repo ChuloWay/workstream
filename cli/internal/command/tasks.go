@@ -44,7 +44,7 @@ func addTaskReads(project *cobra.Command, client func() (*api.Client, error), ou
 	tasks.Flags().IntVar(&limit, "limit", 50, "Page size (1–100; keep unchanged when continuing)")
 	tasks.Flags().StringVar(&cursor, "cursor", "", "Opaque next cursor from the previous page")
 	project.AddCommand(tasks)
-	project.AddCommand(&cobra.Command{
+	task := &cobra.Command{
 		Use: "task PROJECT_ID TASK_ID", Short: "Inspect a task under project-manager authority", Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apiClient, err := client()
@@ -68,7 +68,9 @@ func addTaskReads(project *cobra.Command, client func() (*api.Client, error), ou
 				optional(t.SourceRef), optional(t.SourcePayloadHash), optional(t.ImportBatchID), optional(t.ExternalTaskID), safeText(t.CreatedBy), optional(t.AssignedTo))
 			return err
 		},
-	})
+	}
+	addManagerTaskWrites(task, client, output, stdout)
+	project.AddCommand(task)
 }
 
 func writeTaskSummary(w io.Writer, t api.TaskSummary) error {

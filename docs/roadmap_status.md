@@ -199,6 +199,10 @@ Separate exact guide activation is available through the public manager POST,
 with caller-selected approved policies, contribution-policy binding and immutable
 receipt validation. The backend retains readiness and supersession authority;
 this does not enable the still-unavailable false-review activation branch.
+Separate manager task create/screen/release commands now bridge an active guide
+to ready work through the public APIs, with explicit request keys and complete
+management receipts. Backend owners retain policy locking, readiness and fresh
+authority; there is no automatic create-and-release sequence or bulk import.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -452,6 +456,11 @@ cannot be reused as post-submission review-gate evidence. See the
   Readiness, contribution-policy publication, fresh replay authority and
   supersession remain backend-owned. This command does not enable false-review
   guide activation or expose hidden submission work.
+  [CLI manager preparation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-19.md)
+  adds separate public draft creation, policy-locking screening and deliberate
+  release with full management receipts and current-authority manual replay.
+  Bulk import and hidden submission remain separate; the retained contributor
+  journey proves the prepared ready task can be claimed and started.
   [PILOT-13 assigned-guide access](../.commitrail/changes/pilot13-assigned-task-guide-documents.md)
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads

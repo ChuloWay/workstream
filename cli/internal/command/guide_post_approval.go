@@ -16,7 +16,7 @@ func addGuidePostApproval(guide *cobra.Command, client func() (*api.Client, erro
 			if err != nil {
 				return err
 			}
-			body, err := readGuideInput(input)
+			body, err := readJSONInput(input)
 			if err != nil {
 				return err
 			}
