@@ -5,7 +5,17 @@ from app.adapters.checkers.external_service import (
     EXTERNAL_CHECKER_PROVIDER_KEY,
     UnixSocketExternalCheckerAdapter,
 )
-from app.interfaces.external_services import ExternalServiceAdapterFactory
+from app.interfaces.external_checker_execution import (
+    ExternalCheckerExecutionAdapter,
+    ExternalCheckerExecutionResponse,
+    ExternalCheckerMaterialGrant,
+    ExternalCheckerServiceHealth,
+)
+from app.interfaces.external_services import (
+    ExternalServiceAdapterFactory,
+    ExternalServiceAdapterIdentity,
+    ExternalServiceUnavailableError,
+)
 from app.modules.tasks.api import TaskSubmissionContextFacts
 
 from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
@@ -22,6 +32,7 @@ from app.modules.checkers.api import PreSubmissionInfrastructureUnavailableError
 from app.modules.checkers.api.external import (
     ExternalCheckerCapabilityDefinition,
     ExternalCheckerCapabilityProjection,
+    ExternalCheckerExecutionRequest,
     PreSubmitExternalCheckerIdentity,
     PreSubmitExternalCheckerMaterial,
     external_checker_json_hash,
@@ -63,21 +74,55 @@ def configured_external_checker_execution_factory(settings):
     )
 
 
-def configured_external_checker_execution(settings):
-    """Create the sole configured Rust-service adapter for selected execution."""
-    return configured_external_checker_execution_factory(settings).create(
-        EXTERNAL_CHECKER_PROVIDER_KEY
-    )
+class _ConfiguredExternalCheckerExecution:
+    """Resolve the fixed Rust provider only when a locked image is invoked."""
+
+    def __init__(self, settings) -> None:
+        self._settings = settings
+        self._identity = ExternalServiceAdapterIdentity(
+            EXTERNAL_CHECKER_CAPABILITY_KEY,
+            EXTERNAL_CHECKER_PROVIDER_KEY,
+        )
+
+    @property
+    def identity(self) -> ExternalServiceAdapterIdentity:
+        """Expose the sole provider identity without constructing its transport."""
+        return self._identity
+
+    def _resolve(self) -> ExternalCheckerExecutionAdapter:
+        """Create the fixed provider or report absent runtime configuration."""
+        if (
+            self._settings.external_checker_service_socket is None
+            and self._settings.external_checker_material_root is None
+        ):
+            raise ExternalServiceUnavailableError(self._identity)
+        return configured_external_checker_execution_factory(self._settings).create(
+            EXTERNAL_CHECKER_PROVIDER_KEY
+        )
+
+    async def execute(
+        self,
+        request: ExternalCheckerExecutionRequest,
+        grant: ExternalCheckerMaterialGrant,
+    ) -> ExternalCheckerExecutionResponse:
+        """Resolve and invoke the sole provider for one selected binding."""
+        return await self._resolve().execute(request, grant)
+
+    async def health(self) -> ExternalCheckerServiceHealth:
+        """Resolve the sole provider before checking runtime readiness."""
+        return await self._resolve().health()
+
+
+def configured_external_checker_execution(settings) -> ExternalCheckerExecutionAdapter:
+    """Create the lazy fixed-provider adapter for selected execution."""
+    return _ConfiguredExternalCheckerExecution(settings)
 
 
 def selected_pre_submit_checker_execution(*, settings, archive_inspector):
     """Compose the sole selected PRE runtime from the configured Rust service."""
-    execution = configured_external_checker_execution_factory(settings).create(
-        EXTERNAL_CHECKER_PROVIDER_KEY
-    )
     return SelectedPreSubmitCheckerExecutionAdapter(
         archive_inspector=archive_inspector,
-        external_execution=execution,
+        external_execution=configured_external_checker_execution(settings),
     )
 
 

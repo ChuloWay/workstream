@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, Mock
 import zipfile
 import pytest
 
+from app.adapters.checkers import configured_external_checker_execution
+from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.interfaces.external_checker_execution import (
@@ -46,6 +48,7 @@ from app.modules.checkers.api.materialization import SubmissionMaterialEntry
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitAdmissionLineage,
     SelectedPreSubmitLeaseFacts,
+    SelectedPreSubmitInfrastructureUnavailable,
     SelectedPreSubmitReservationFacts,
     SelectedPreSubmitTerminalFacts,
 )
@@ -358,6 +361,20 @@ def _policy() -> LockedExternalPreSubmitPolicy:
     )
 
 
+def _empty_policy() -> LockedExternalPreSubmitPolicy:
+    default = LockedWorkstreamDefault()
+    body = {
+        "schema_version": "external_pre_submit_policy.v1",
+        "workstream_default": default.model_dump(mode="json"),
+        "entries": [],
+    }
+    return LockedExternalPreSubmitPolicy(
+        workstream_default=default,
+        entries=(),
+        policy_sha256=canonical_json_hash(body),
+    )
+
+
 def _policies() -> LockedExternalCheckerPolicies:
     pre = _policy()
     post_body = {
@@ -439,6 +456,52 @@ class _Execution:
         )
 
 
+def _execution_context(request, policy):
+    identity = PreSubmitExternalCheckerIdentity(
+        project_id=request.effective_plan.lineage.project_id,
+        task_id=request.task_id,
+        assignment_id=request.assignment_id,
+        prepared_generation_id=request.prepared_artifact.generation_id,
+        attempt_id=new_record_id(),
+        attempt_request_digest=SHA,
+        effective_plan_sha256=policy.policy_sha256,
+    )
+    material = PreSubmitExternalCheckerMaterial(
+        role="submission_archive",
+        prepared_generation_id=identity.prepared_generation_id,
+        attempt_id=identity.attempt_id,
+        attempt_request_digest=identity.attempt_request_digest,
+        archive_sha256=request.prepared_artifact.commitment.sha256,
+        archive_byte_count=request.prepared_artifact.commitment.byte_count,
+        semantic_manifest_sha256=request.manifest.sha256,
+        media_type="application/zip",
+    )
+    entries = tuple(
+        SubmissionMaterialEntry(
+            item.normalized_path,
+            item.entry_type.value,
+            item.byte_count,
+            item.sha256,
+            item.executable,
+        )
+        for item in request.manifest.entries
+    )
+    default_input = WorkstreamDefaultCheckerInput(
+        archive_sha256=material.archive_sha256,
+        archive_byte_count=material.archive_byte_count,
+        archive_media_type=material.media_type,
+        semantic_manifest_sha256=material.semantic_manifest_sha256,
+        entries=entries,
+        predecessor=None,
+        predecessor_exists=False,
+        current_predecessor=None,
+        current_rules_sha256=request.effective_plan.lineage.pre_submit_policy_bundle_hash,
+        predecessor_rules_sha256=None,
+        packet=SubmissionPacketView(summary="", contributor_attestation=""),
+    )
+    return identity, material, default_input
+
+
 def _assert_terminal_round_trip(identity, policy, default_input, material, result) -> None:
     now = datetime.now(UTC)
     reservation = SelectedPreSubmitReservationFacts(
@@ -491,48 +554,7 @@ async def test_selected_pre_runs_default_then_locked_external_image(
 ) -> None:
     request, inspector, manager, preparation, _catalogue = await _request(tmp_path)
     policy = _policy()
-    identity = PreSubmitExternalCheckerIdentity(
-        project_id=request.effective_plan.lineage.project_id,
-        task_id=request.task_id,
-        assignment_id=request.assignment_id,
-        prepared_generation_id=request.prepared_artifact.generation_id,
-        attempt_id=new_record_id(),
-        attempt_request_digest=SHA,
-        effective_plan_sha256=policy.policy_sha256,
-    )
-    material = PreSubmitExternalCheckerMaterial(
-        role="submission_archive",
-        prepared_generation_id=identity.prepared_generation_id,
-        attempt_id=identity.attempt_id,
-        attempt_request_digest=identity.attempt_request_digest,
-        archive_sha256=request.prepared_artifact.commitment.sha256,
-        archive_byte_count=request.prepared_artifact.commitment.byte_count,
-        semantic_manifest_sha256=request.manifest.sha256,
-        media_type="application/zip",
-    )
-    entries = tuple(
-        SubmissionMaterialEntry(
-            item.normalized_path,
-            item.entry_type.value,
-            item.byte_count,
-            item.sha256,
-            item.executable,
-        )
-        for item in request.manifest.entries
-    )
-    default_input = WorkstreamDefaultCheckerInput(
-        archive_sha256=material.archive_sha256,
-        archive_byte_count=material.archive_byte_count,
-        archive_media_type=material.media_type,
-        semantic_manifest_sha256=material.semantic_manifest_sha256,
-        entries=entries,
-        predecessor=None,
-        predecessor_exists=False,
-        current_predecessor=None,
-        current_rules_sha256=request.effective_plan.lineage.pre_submit_policy_bundle_hash,
-        predecessor_rules_sha256=None,
-        packet=SubmissionPacketView(summary="", contributor_attestation=""),
-    )
+    identity, material, default_input = _execution_context(request, policy)
     grants, execution = _GrantIssuer(), _Execution(verdict)
     processor = SelectedPreSubmitProcessor(
         archive_inspector=inspector,
@@ -563,6 +585,52 @@ async def test_selected_pre_runs_default_then_locked_external_image(
         assert grants.requests[0].request_digest == execution.requests[0].request_digest
         assert result.result_digest == canonical_json_hash(result.canonical_body())
         _assert_terminal_round_trip(identity, policy, default_input, material, result)
+    finally:
+        await request.prepared_artifact.close()
+        manager.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("external", [False, True])
+async def test_selected_pre_only_requires_runtime_for_locked_external_images(
+    tmp_path, external: bool
+) -> None:
+    request, inspector, manager, preparation, _catalogue = await _request(tmp_path)
+    policy = _policy() if external else _empty_policy()
+    identity, material, default_input = _execution_context(request, policy)
+    grants = _GrantIssuer()
+    processor = SelectedPreSubmitProcessor(
+        archive_inspector=inspector,
+        inspection=request.inspection,
+        policy=policy,
+        default_input=default_input,
+        identity=identity,
+        material=material,
+        grants=grants,
+        execution=configured_external_checker_execution(Settings()),
+    )
+    try:
+        if external:
+            with pytest.raises(SelectedPreSubmitInfrastructureUnavailable) as failure:
+                await preparation._process_prepared_submission(
+                    request.prepared_artifact,
+                    processor,
+                    reserved_bytes=request.manifest.total_expanded_bytes,
+                    maximum_entries=request.manifest.entry_count,
+                )
+            assert failure.value.code == "implementation_unavailable"
+            assert len(grants.requests) == 1
+        else:
+            result = await preparation._process_prepared_submission(
+                request.prepared_artifact,
+                processor,
+                reserved_bytes=request.manifest.total_expanded_bytes,
+                maximum_entries=request.manifest.entry_count,
+            )
+            assert result.eligible is True
+            assert result.required_external_count == 0
+            assert result.external_members == ()
+            assert grants.requests == []
     finally:
         await request.prepared_artifact.close()
         manager.close()

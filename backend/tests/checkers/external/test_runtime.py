@@ -15,7 +15,14 @@ import zipfile
 import pytest
 from pydantic import ValidationError
 
-from app.adapters.checkers import external_checker_execution_factory
+from app.adapters.checkers import (
+    configured_external_checker_execution,
+    external_checker_execution_factory,
+)
+from app.adapters.checkers.external_service import (
+    EXTERNAL_CHECKER_CAPABILITY_KEY,
+    EXTERNAL_CHECKER_PROVIDER_KEY,
+)
 from app.core.config import Settings
 from app.interfaces.external_checker_execution import (
     ExternalCheckerIsolationReceipt,
@@ -137,6 +144,20 @@ def test_external_service_settings_share_the_art_scratch_root(tmp_path: Path):
             sandbox_uid=1000,
             sandbox_gid=1000,
         )
+
+
+@pytest.mark.asyncio
+async def test_configured_execution_defers_absent_fixed_provider_until_invocation():
+    adapter = configured_external_checker_execution(Settings())
+
+    assert adapter.identity.capability_key == EXTERNAL_CHECKER_CAPABILITY_KEY
+    assert adapter.identity.provider_key == EXTERNAL_CHECKER_PROVIDER_KEY
+    with pytest.raises(ExternalServiceUnavailableError) as invocation:
+        await adapter.execute(_request(), object())
+    assert invocation.value.identity == adapter.identity
+    with pytest.raises(ExternalServiceUnavailableError) as health:
+        await adapter.health()
+    assert health.value.identity == adapter.identity
 
 
 def test_service_runtime_files_stay_outside_art_scratch_custody(tmp_path: Path):

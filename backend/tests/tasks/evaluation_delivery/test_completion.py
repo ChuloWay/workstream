@@ -224,12 +224,12 @@ async def test_production_registry_delivers_request_then_completion_exactly_once
             assert accepted.rowcount == 1
         await provision_router(h.factory)
         await delivery_fixture(h)
-        # This fixture has no external POST bindings; use the real configured
-        # adapter without requiring an unused service to run. Actual image
-        # execution is covered by the production Rust/MinIO probe.
+        # An empty locked POST policy completes without constructing or
+        # contacting the external service. Actual image execution is covered
+        # by the production Rust/MinIO probe.
         settings = h.settings.model_copy(update={
-            "external_checker_service_socket": tmp_path / "checker.sock",
-            "external_checker_material_root": h.scratch,
+            "external_checker_service_socket": None,
+            "external_checker_material_root": None,
         })
         monkeypatch.setattr("app.core.config.get_settings", lambda: settings)
         monkeypatch.setattr(
@@ -251,6 +251,7 @@ async def test_production_registry_delivers_request_then_completion_exactly_once
         assert outcome(request_receipt)["delivery_state"] == "acknowledged", outcome(request_receipt)
         completed = await state(h)
         assert completed["run"]["status"] == "completed"
+        assert completed["members"] == 0
         completion_event_id = completed["run"]["completion_event_id"]
         assert completion_event_id is not None
 

@@ -151,6 +151,13 @@ cleanup.
   tests after replacement proof.
 - Focused contract, AUTH, custody, replay, concurrency, failure, service,
   public API, CLI, PostgreSQL and MinIO tests and their exact CI ownership.
+- The CHECKERS composition adapter and existing selected PRE/POST composition
+  tests may defer the fixed Unix provider until a locked external entry is
+  actually invoked. A default-only PRE policy and an empty POST policy require
+  no Rust-service configuration; a nonempty policy with absent configuration
+  must become the existing recoverable `implementation_unavailable` outcome
+  after durable reservation. Partial configuration remains invalid. No second
+  provider, fallback executor, alternate result or lifecycle path is allowed.
 - The existing CLI post-policy read DTO and its HTTP/public-socket contract
   tests. Replace the removed catalogue-policy decoder with the one closed
   `external_post_submit_policy.v1` response; preserve selectors, fresh read
@@ -518,3 +525,14 @@ MCP SDK for test conftest) are retained in raw logs and are not test results.
 Hosted e7 CLI checks found one formatting-only failure in the public policy
 regression. Apply the repository formatter; Python AST equality before/after
 confirms no test behavior change, preserving the native 8408 producer proof.
+
+The fixed Unix checker provider is now resolved only when a locked external
+entry executes. Nineteen focused runtime and selected-PRE tests pass: an empty
+PRE policy runs the actual verified-archive default with no grant or provider
+construction, while a nonempty policy with absent settings opens its ART grant
+and returns the existing recoverable `implementation_unavailable` category.
+The production empty-POST request/completion route also passes against real
+PostgreSQL with absent service settings, zero persisted external members and
+complete database/role cleanup (`/tmp/pilot04-optional-runtime-post.log` and
+`.json`). Strict partial-setting validation and the sole fixed provider remain
+unchanged. Full final-head hosted CI remains required.
