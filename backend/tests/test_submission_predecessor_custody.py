@@ -66,6 +66,7 @@ from tests.tasks.submission_lineage_support import _verified_admission
 
 
 _PREPARATION_TABLES = (
+    "selected_pre_submit_runs",
     "pre_submit_execution_attempts",
     "pre_submit_evidence_sets",
     "pre_submit_evidence_results",
@@ -122,8 +123,8 @@ def _replacement_request(h, data: bytes, *, predecessor_id: UUID, idempotency_ke
         assignment_id=h.request.assignment_id,
         predecessor_submission_id=predecessor_id,
         idempotency_key=idempotency_key,
-        summary=h.request.structural_input.summary,
-        contributor_attestation=h.request.structural_input.worker_attestation,
+        summary=h.creation_request.summary,
+        contributor_attestation=h.creation_request.contributor_attestation,
         media_type="application/zip",
         byte_source=artifact_byte_stream(data),
     )

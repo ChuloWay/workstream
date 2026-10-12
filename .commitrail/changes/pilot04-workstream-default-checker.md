@@ -288,3 +288,16 @@ selected-policy decoding, and make selected PRE locking use the same canonical
 TASK context service as all intake callers. This also retains CHECKERS currentness
 validation for replacement attempts. The failed probe's owned database was
 cleaned; rerun the real service proof after the repaired candidate is frozen.
+
+Configuration repair: PRE and POST machine configuration accepts bounded
+canonical relative paths/patterns through the existing CHECKERS syntax validator,
+while retaining command, credential and control-character guards. Actual model
+prose fields remain unchanged. The affected 127 contract/policy tests pass; an
+independent 18-control replay confirms the former valid-path rejection is fixed.
+
+The first reconciled native owner run failed four cases at deferred Submission
+dispatch custody, before completion/replacement assertions. The new selected
+admission has no historical evidence row, but merged replacement dispatch SQL
+still used an inner join to that row. Preserve the replacement cause predicates
+and adapt that join for the explicit selected lineage. All owned database, role
+and MinIO resources were cleaned. No passing full-flow claim is made for that run.

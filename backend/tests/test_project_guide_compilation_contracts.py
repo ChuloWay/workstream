@@ -980,3 +980,19 @@ def test_context_rejects_instruction_version_separate_from_snapshot() -> None:
     payload["instruction_version"] = "different"
     with pytest.raises(ValidationError, match="instruction configuration mismatch"):
         ProjectGuideCompilationContext.model_validate_json(json.dumps(payload))
+
+
+@pytest.mark.parametrize("value", ["outputs/answer.md", "src/main.py", "tests/**/*.py"])
+def test_checker_configuration_accepts_canonical_relative_paths(value: str) -> None:
+    parameter = CapabilityParameter(name="required_path", value=value)
+    assert parameter.value == value
+
+
+@pytest.mark.parametrize("value", [
+    "/etc/passwd", "../answer.md", "src/../answer.md", "https://example.invalid/x",
+    "file:///tmp/x", "src/answer.md\x00", "src/$(command)", "bash/run",
+    "token=secret", "Bearer opaque-token", "import subprocess", "src\\main.py",
+])
+def test_checker_configuration_rejects_unsafe_machine_values(value: str) -> None:
+    with pytest.raises(ValidationError):
+        CapabilityParameter(name="required_path", value=value)

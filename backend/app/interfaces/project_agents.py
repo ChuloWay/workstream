@@ -201,7 +201,14 @@ class CapabilityParameter(BaseModel):
             if type(item) not in {str, int, float, bool}:
                 raise ValueError("capability parameter scalar is invalid")
             if isinstance(item, str):
-                _validated_safe_model_text(item)
+                if "/" in item or "\\" in item:
+                    if not is_canonical_relative_pattern(item):
+                        raise ValueError("capability parameter path is invalid")
+                    # Machine paths belong to the image configuration. Keep
+                    # command/credential checks without treating '/' as prose.
+                    _validated_safe_model_text(item.replace("/", " "))
+                else:
+                    _validated_safe_model_text(item)
             elif isinstance(item, (int, float)):
                 if not math.isfinite(item) or abs(item) > 10**12:
                     raise ValueError("capability parameter number is out of range")
