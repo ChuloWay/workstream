@@ -1,318 +1,313 @@
-"""Explicit predecessor storage for migration proofs, never a current intake writer.
+"""Checksum-bound predecessor rows for migration tests only.
 
-Only migration tests call this seeder. It writes the pre-0025 row shape with all
-then-installed constraints enabled; it does not invent current AUTH or dispatch
-receipts. Preparation and verification still use real ART owners and ZIP bytes.
+The archive is a one-time database backup from the last pre-cutover writer. It
+contains data, not an executable checker implementation. Restore is confined
+to an isolated predecessor database and finishes with every trigger and foreign
+key setting restored before a migration test receives the fixture.
 """
 
-import json
-from contextlib import AsyncExitStack, asynccontextmanager
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
 from copy import deepcopy
+from functools import lru_cache
+import gzip
+import hashlib
+import json
+from pathlib import Path
 from types import SimpleNamespace
-from uuid import UUID
 
-from sqlalchemy import select, func
+import asyncpg
 
-from app.core.identifiers import new_record_id
 from app.core.hashing import canonical_json_hash
-from app.modules.artifacts.api import SubmissionBundleFile
-from app.modules.artifacts.models import ArtifactBinding, SubmissionBundleAdmission
-from app.modules.checkers.api.artifact_paths import required_evidence_path
-from app.modules.projects.api import ProjectLockedPolicyContextFacts
-from app.modules.tasks.api import TaskSubmissionContextRequest
-from app.modules.tasks.api import TaskSubmissionContextFacts
-from app.modules.tasks.models import Submission
-from app.modules.tasks.repository import TaskRepository
-from app.modules.tasks.submission_composition import build_submission
-from tests.migration_fixtures import current_art_attempt_seed_schema
-from tests.post_submit_materialization_helpers import _archive_facts, _material_fixture
+from app.db import session as db_session
+from conftest import _assert_owned_test_database
 
 
-class HistoricalRawValue(SimpleNamespace):
-    """Attribute access over literal predecessor JSON, never a product contract."""
-
-    def model_dump(self, *, exclude=frozenset(), **_options):
-        def dump(value):
-            if isinstance(value, HistoricalRawValue):
-                return {key: dump(item) for key, item in vars(value).items()}
-            if isinstance(value, tuple):
-                return [dump(item) for item in value]
-            if isinstance(value, UUID):
-                return str(value)
-            return deepcopy(value)
-
-        return {
-            key: dump(value)
-            for key, value in vars(self).items()
-            if key not in exclude
-        }
-
-    def model_copy(self, *, update):
-        values = vars(self) | update
-        return HistoricalRawValue(**values)
+_ARCHIVE = Path(__file__).with_name("fixtures") / "pilot04_predecessor_rows.json.gz"
+_ARCHIVE_SHA256 = "3dc2d3e4915697de5e0d9c2a7f6aa8d5672ec069f23cb065550413af26eeb174"
+_SCHEMA_VERSION = "workstream.pilot04_predecessor_rows.v1"
 
 
-def _raw(value):
-    if isinstance(value, dict):
-        return HistoricalRawValue(**{key: _raw(item) for key, item in value.items()})
-    if isinstance(value, list):
-        return tuple(_raw(item) for item in value)
-    return value
+def _asyncpg_url(database_url: str) -> str:
+    return "postgresql" + database_url.removeprefix("postgresql+asyncpg")
 
 
-_HISTORICAL_DEFINITIONS = (
-    ("check_submission_packet", "packet_presence", "packet_fields_missing", "submission_structure", "failed", "high", True),
-    ("check_policy_context_present", "policy_context_consistency", "policy_context_invalid", "task_configuration", "failed", "high", True),
-    ("check_evidence_present", "evidence_presence", "evidence_missing", "submission_structure", "failed", "high", True),
-    ("check_evidence_integrity", "evidence_structure", "evidence_structure_invalid", "submission_structure", "failed", "high", True),
-    ("check_required_files", "required_path_presence", "required_files_missing", "submission_structure", "failed", "high", True),
-    ("check_forbidden_files", "forbidden_path_detection", "forbidden_path_present", "submission_structure", "failed", "high", True),
-    ("check_confidentiality_attestation", "attestation_presence", "attestation_missing", "submission_structure", "failed", "high", True),
-    ("check_low_quality_generated_artifacts", "placeholder_signal_detection", "placeholder_signal", "submission_structure", "warning", "medium", True),
-    ("check_acceptance_criteria_present", "criteria_presence", "acceptance_criteria_missing", "task_configuration", "failed", "high", False),
-)
+def _identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
 
 
-def _historical_catalogue() -> dict[str, object]:
-    resources = {
-        "deadline_ms": 5000,
-        "maximum_evidence_items": 1024,
-        "maximum_generated_output_bytes": 0,
-        "maximum_input_bytes": 1_048_576,
-        "maximum_manifest_items": 1024,
-        "maximum_policy_items": 256,
-        "maximum_result_bytes": 4096,
-        "maximum_results": 1,
-        "maximum_text_characters": 65_536,
-        "phase_deadline_ms": 45_000,
-    }
-    definitions = []
-    for order, values in enumerate(_HISTORICAL_DEFINITIONS, 1):
-        capability, claim, code, category, status, severity, platform_default = values
-        definitions.append(
-            {
-                "capability_id": capability,
-                "capability_version": "v0.1",
-                "configuration_schema": "post_submit_empty_configuration",
-                "dependencies": [],
-                "disabled_behavior": "unavailable",
-                "execution_method": "deterministic",
-                "failure_category": category,
-                "failure_code": code,
-                "failure_severity": severity,
-                "failure_status": status,
-                "implementation_version": "workstream-structural",
-                "input_schema": "post_submit_structural_input",
-                "order": order,
-                "platform_default": platform_default,
-                "provider_recovery": "none",
-                "required_output_roles": [],
-                "resources": resources,
-                "result_schema": "post_submit_structural_result",
-                "selectable": not platform_default,
-                "stage": "post_submit",
-                "state": "enabled",
-                "supported_claim": claim,
-            }
-        )
-    return {
-        "catalogue_id": "workstream.post_submission_checkers",
-        "definitions": definitions,
-        "manifest_sha256": "sha256:87b454499eca2dbf10e86495e4f9b2a4440977a51d5ae5c4d3f6405672fa89a5",
-        "schema_version": "post_submission_checker_capability_projection",
-        "source_version": "v0.1",
-    }
-
-
-async def write_historical_submission(factory, context, request):
-    """Seed only an actual predecessor schema; never bypass current constraints."""
-    from sqlalchemy import text
-    async with factory() as session, session.begin():
-        revision = await session.scalar(text("SELECT version_num FROM public.alembic_version"))
-        assert revision in {
-            "0007_checker_output_custody", "0008_checker_execution", "0009_checker_material_lineage",
-            "0010_post_submit_authority", "0011_task_routing_source", "0012_review_packet",
-            "0013_review_source", "0014_final_acceptance", "0015_contribution_awards",
-            "0017_acceptance_source_contracts", "0018_task_routing_request",
-            "0020_review_admission_lock_order", "0021_submission_manifest",
-            "0022_submission_packet_custody", "0023_remove_task_payment_policy",
-            "0024_require_second_review_false",
-        }, "historical seeder cannot write the current schema"
-        repository = TaskRepository(session)
-        facts, source = await repository.select_submission_context(TaskSubmissionContextRequest(
-            request.task_id, request.assignment_id, request.contributor_id, request.predecessor_submission_id,
-        ))
-        assert source is None
-        task = await repository.get_task(str(request.task_id))
-        admission = await session.get(SubmissionBundleAdmission, str(request.admission_id))
-        assert admission.status == "ready" and admission.actor_profile_id == str(context.actor_profile_id)
-        version = 1 if facts.predecessor is None else facts.predecessor.version + 1
-        submission_id, binding_id = new_record_id(), new_record_id()
-        submission = build_submission(
-            submission_id=str(submission_id), task=task, contributor_id=str(request.contributor_id),
-            version=version, summary=request.summary, worker_attestation=request.contributor_attestation,
-            supersedes_submission_id=str(request.predecessor_submission_id) if request.predecessor_submission_id else None,
-            contribution_policy_version_id=facts.submitter_contribution_policy_version_id,
-            task_assignment_id=str(request.assignment_id),
-        )
-        session.add(submission)
-        await session.flush()
-        session.add(ArtifactBinding(
-            id=str(binding_id), content_id=admission.artifact_content_id, project_id=admission.project_id,
-            resource_type="submission", resource_id=str(submission_id), logical_role="submission_bundle_original",
-            scope_version=1, actor_id=admission.actor_profile_id, attribution_type="contributor",
-        ))
-        consumed_at = await session.scalar(select(func.now()))
-        admission.status = "consumed"
-        admission.consumed_at = consumed_at
-        admission.consumed_by_submission_id = str(submission_id)
-        admission.consumed_by_submission_version = version
-        submission.submission_bundle_admission_id = admission.id
-        submission.artifact_binding_id = str(binding_id)
-        submission.artifact_content_id = admission.artifact_content_id
-        task.status = "submitted"
-        await session.flush()
-        return SimpleNamespace(submission_id=submission_id, submission_version=version,
-            admission_id=request.admission_id, artifact_binding_id=binding_id,
-            artifact_content_id=UUID(admission.artifact_content_id), task_context=facts)
-
-
-def submission_evaluation_content(
-    task_context: TaskSubmissionContextFacts,
-    project_context: ProjectLockedPolicyContextFacts,
-    packet,
-    files: tuple[SubmissionBundleFile, ...],
-    archive_sha256: str,
-) -> HistoricalRawValue:
-    """Build the literal predecessor JSON retained by migration fixtures."""
-    from app.adapters.tasks import validate_submission_policy_context
-
-    validate_submission_policy_context(task_context, project_context)
-    stamps = task_context.locked_policy
-    expected = {
-        "guide_version": stamps.locked_guide_version,
-        "source_id": stamps.locked_guide_source_snapshot_id,
-        "source_hash": stamps.locked_guide_source_snapshot_hash,
-        "effective_policy_id": stamps.locked_effective_project_submission_artifact_policy_id,
-        "effective_policy_hash": stamps.locked_effective_project_submission_artifact_policy_hash,
-        "pre_policy_id": stamps.locked_pre_submit_checker_policy_id,
-        "pre_policy_hash": stamps.locked_pre_submit_checker_bundle_hash,
-        "post_policy_id": stamps.locked_post_submit_checker_policy_id,
-        "post_policy_version": stamps.locked_post_submit_checker_policy_version,
-        "post_policy_hash": stamps.locked_post_submit_checker_policy_hash,
-        "review_policy_id": stamps.locked_review_policy_id,
-        "review_generation": stamps.locked_review_policy_generation,
-        "review_hash": stamps.locked_review_policy_hash,
-        "revision_policy_id": stamps.locked_revision_policy_id,
-        "revision_generation": stamps.locked_revision_policy_generation,
-        "revision_hash": stamps.locked_revision_policy_hash,
-    }
-    effective = json.loads(project_context.effective_policy.value)
-    policy_inputs = {
-        "required_evidence_keys": [
-            item["key"] for item in effective.get("required_evidence", [])
-            if item.get("required", True)
-        ],
-        "required_artifact_paths": [
-            item["path"] for item in effective.get("required_artifacts", [])
-            if item.get("required", True)
-        ],
-        "forbidden_artifact_patterns": [
-            item["pattern"] for item in effective.get("forbidden_artifacts", [])
-            if item.get("pattern")
-        ],
-        "required_attestation_terms": [
-            term for term in effective.get("attestation_terms", []) if term
-        ],
-    }
-    by_path = {item.normalized_path: item for item in files}
-    body = {
-        "project_id": project_context.project_id,
-        "expected_context": expected,
-        "catalogue": _historical_catalogue(),
-        "policy": json.loads(project_context.compiled_post_submit_policy.value),
-        "structural_input": {
-            "schema_version": "post_submit_structural_input",
-            "summary": packet.summary,
-            "worker_attestation": packet.contributor_attestation,
-            "package_hash": archive_sha256,
-            "criteria": task_context.acceptance_criteria or "",
-            "manifest": [
-                {
-                    "artifact": item.normalized_path,
-                    "hash": item.sha256,
-                    "notes": None,
-                    "size_bytes": item.byte_count,
-                }
-                for item in files
-            ],
-            "evidence": [
-                {
-                    "label": key,
-                    "uri": item.normalized_path,
-                    "hash": item.sha256,
-                    "type": "file",
-                    "key": key,
-                    "policy_key": None,
-                    "evidence_key": None,
-                    "required_evidence_key": None,
-                }
-                for key in policy_inputs["required_evidence_keys"]
-                for item in (by_path.get(required_evidence_path(key)),)
-                if item is not None
-            ],
-            "policy_inputs": policy_inputs,
-            "observed_context": expected,
-        },
-    }
-    return _raw(body)
-
-
-async def _historical_request(session, facts, created, data):
-    """Project genuine historical inputs without creating a future reservation."""
-    from app.adapters.tasks import task_service
-    from app.core.config import get_settings
-    from app.modules.tasks.models import WorkstreamTask
-
-    submission = await session.get(Submission, str(created.submission_id))
-    task = await session.get(WorkstreamTask, submission.task_id)
-    project = await task_service(session, settings=get_settings())._load_locked_task_context(task)
-    _, manifest, _, digest = _archive_facts(data)
-    content = submission_evaluation_content(
-        created.task_context,
-        project.facts,
-        SimpleNamespace(
-            summary=submission.summary,
-            contributor_attestation=submission.worker_attestation,
-        ),
-        manifest.file_facts(),
-        digest,
+@lru_cache(maxsize=1)
+def _snapshots() -> dict[str, dict[str, object]]:
+    encoded = _ARCHIVE.read_bytes()
+    assert hashlib.sha256(encoded).hexdigest() == _ARCHIVE_SHA256, (
+        "PILOT-04 predecessor row archive checksum mismatch"
     )
-    body = content.model_dump() | {
-        "schema_version": "post_submit_evaluation_request",
-        "evaluation_request_id": new_record_id(),
-        "evaluation_generation": 1,
-        "task_id": facts.task_id,
-        "assignment_id": facts.assignment_id,
-        "submission_id": created.submission_id,
-        "submission_version": created.submission_version,
-        "content_id": created.artifact_content_id,
-        "binding_id": created.artifact_binding_id,
-        "content_sha256": digest,
-        "byte_count": len(data),
-    }
-    body["request_sha256"] = canonical_json_hash(
-        _raw(body).model_dump()
+    body = json.loads(gzip.decompress(encoded))
+    assert body["schema_version"] == _SCHEMA_VERSION
+    return body["snapshots"]
+
+
+async def _trigger_state(connection: asyncpg.Connection) -> tuple[tuple[object, ...], ...]:
+    rows = await connection.fetch("""
+        SELECT n.nspname, c.relname, t.tgname, t.tgenabled
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid=t.tgrelid
+        JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public'
+        ORDER BY c.relname,t.tgname
+    """)
+    return tuple(tuple(row) for row in rows)
+
+
+async def _assert_database_guards_enabled(connection: asyncpg.Connection) -> None:
+    assert await connection.fetchval("SHOW session_replication_role") == "origin"
+    assert await connection.fetchval("""
+        SELECT count(*) FROM pg_trigger t
+        JOIN pg_class c ON c.oid=t.tgrelid
+        JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND NOT t.tgisinternal
+          AND t.tgenabled NOT IN ('O','A')
+    """) == 0
+
+
+async def _foreign_keys(connection: asyncpg.Connection) -> tuple[asyncpg.Record, ...]:
+    return tuple(await connection.fetch("""
+        SELECT con.oid, con.conname, child.relname AS child_table,
+          parent.relname AS parent_table, con.condeferrable, con.condeferred,
+          con.confmatchtype,
+          array_agg(child_col.attname ORDER BY keys.ordinality) AS child_columns,
+          array_agg(parent_col.attname ORDER BY keys.ordinality) AS parent_columns
+        FROM pg_constraint con
+        JOIN pg_class child ON child.oid=con.conrelid
+        JOIN pg_class parent ON parent.oid=con.confrelid
+        JOIN pg_namespace n ON n.oid=con.connamespace
+        CROSS JOIN LATERAL unnest(con.conkey,con.confkey)
+          WITH ORDINALITY AS keys(child_num,parent_num,ordinality)
+        JOIN pg_attribute child_col
+          ON child_col.attrelid=con.conrelid AND child_col.attnum=keys.child_num
+        JOIN pg_attribute parent_col
+          ON parent_col.attrelid=con.confrelid AND parent_col.attnum=keys.parent_num
+        WHERE n.nspname='public' AND con.contype='f'
+        GROUP BY con.oid,con.conname,child.relname,parent.relname,
+          con.condeferrable,con.condeferred,con.confmatchtype
+        ORDER BY child.relname,con.conname
+    """))
+
+
+async def _validate_foreign_keys(
+    connection: asyncpg.Connection, foreign_keys: tuple[asyncpg.Record, ...]
+) -> None:
+    """Independently reject every orphan or partial MATCH FULL archived row."""
+    for constraint in foreign_keys:
+        child = _identifier(constraint["child_table"])
+        parent = _identifier(constraint["parent_table"])
+        child_columns = tuple(constraint["child_columns"])
+        parent_columns = tuple(constraint["parent_columns"])
+        all_present = " AND ".join(
+            f"c.{_identifier(column)} IS NOT NULL" for column in child_columns
+        )
+        any_present = " OR ".join(
+            f"c.{_identifier(column)} IS NOT NULL" for column in child_columns
+        )
+        any_missing = " OR ".join(
+            f"c.{_identifier(column)} IS NULL" for column in child_columns
+        )
+        equal = " AND ".join(
+            f"p.{_identifier(parent_column)} IS NOT DISTINCT FROM "
+            f"c.{_identifier(child_column)}"
+            for child_column, parent_column in zip(
+                child_columns, parent_columns, strict=True
+            )
+        )
+        invalid_full = (
+            f" OR (({any_present}) AND ({any_missing}))"
+            if constraint["confmatchtype"] == "f"
+            else ""
+        )
+        count = await connection.fetchval(
+            f"""SELECT count(*) FROM public.{child} c
+                WHERE (({all_present}) AND NOT EXISTS (
+                  SELECT 1 FROM public.{parent} p WHERE {equal}
+                )){invalid_full}"""
+        )
+        assert count == 0, f"archived rows violate {constraint['conname']}"
+
+
+async def _validate_material_custody(
+    connection: asyncpg.Connection, seed: dict[str, object]
+) -> None:
+    """Bind the archived request to the exact Submission and native ART rows."""
+    request = seed["request"]
+    created = seed["created"]
+    request_body = {key: value for key, value in request.items() if key != "request_sha256"}
+    assert canonical_json_hash(request_body) == request["request_sha256"]
+    row = await connection.fetchrow("""
+        SELECT s.id::text AS submission_id,s.version,s.task_id::text,s.task_assignment_id::text,
+          s.submission_bundle_admission_id::text AS admission_id,
+          s.artifact_binding_id::text AS binding_id,s.artifact_content_id::text AS content_id,
+          a.status,a.consumed_by_submission_id::text AS consumed_submission_id,
+          a.consumed_by_submission_version,b.resource_type,b.resource_id::text,
+          b.content_id::text AS binding_content_id,c.sha256,
+          r.content_id::text AS replica_content_id,t.status AS task_status
+        FROM public.submissions s
+        JOIN public.submission_bundle_admissions a ON a.id=s.submission_bundle_admission_id
+        JOIN public.artifact_bindings b ON b.id=s.artifact_binding_id
+        JOIN public.artifact_contents c ON c.id=s.artifact_content_id
+        JOIN public.artifact_replicas r ON r.id=$2::uuid
+        JOIN public.workstream_tasks t ON t.id=s.task_id
+        WHERE s.id=$1::uuid
+    """, created["submission_id"], seed["replica_id"])
+    assert row is not None
+    assert row["submission_id"] == request["submission_id"] == created["submission_id"]
+    assert row["version"] == request["submission_version"] == created["submission_version"]
+    assert row["task_id"] == request["task_id"]
+    assert row["task_assignment_id"] == request["assignment_id"]
+    assert row["admission_id"] == created["admission_id"]
+    assert row["binding_id"] == request["binding_id"] == created["artifact_binding_id"]
+    assert row["content_id"] == request["content_id"] == created["artifact_content_id"]
+    assert row["status"] == "consumed"
+    assert row["consumed_submission_id"] == created["submission_id"]
+    assert row["consumed_by_submission_version"] == created["submission_version"]
+    assert (row["resource_type"], row["resource_id"]) == (
+        "submission", created["submission_id"]
     )
-    return _raw(body)
+    assert row["binding_content_id"] == row["replica_content_id"] == request["content_id"]
+    assert row["sha256"] == request["content_sha256"]
+    assert row["task_status"] == "submitted"
+
+
+async def restore_archived_snapshot(
+    database_url: str, snapshot_name: str | None = None
+) -> dict[str, object]:
+    """Restore literal rows into their exact isolated predecessor revision."""
+    connection = await asyncpg.connect(_asyncpg_url(database_url))
+    try:
+        await _assert_owned_test_database(connection, database_url)
+        await _assert_database_guards_enabled(connection)
+        revision = await connection.fetchval("SELECT version_num FROM public.alembic_version")
+        key = snapshot_name or revision
+        snapshot = deepcopy(_snapshots()[key])
+        if snapshot_name is None:
+            assert key == revision
+        else:
+            assert snapshot["revision"] == revision
+        tables = tuple(sorted(snapshot["tables"]))
+        database_tables = tuple(row["tablename"] for row in await connection.fetch("""
+            SELECT tablename FROM pg_tables
+            WHERE schemaname='public' ORDER BY tablename
+        """))
+        assert set(tables).issubset(database_tables), "archived table inventory differs"
+        table_columns: dict[str, tuple[str, ...]] = {}
+        for table in tables:
+            columns = tuple(await connection.fetchval("""
+                SELECT array_agg(column_name ORDER BY ordinal_position)
+                FROM information_schema.columns
+                WHERE table_schema='public' AND table_name=$1
+            """, table))
+            table_columns[table] = columns
+            assert all(set(row) == set(columns) for row in snapshot["tables"][table]), (
+                f"archived columns differ for {table}"
+            )
+        original_triggers = await _trigger_state(connection)
+        original_foreign_keys = await _foreign_keys(connection)
+        original_fk_state = tuple(
+            (row["oid"], row["condeferrable"], row["condeferred"])
+            for row in original_foreign_keys
+        )
+        async with connection.transaction():
+            # A faithful backup restore is setup, not a current writer proof.
+            # User triggers resume before any migration assertion receives data.
+            for table in database_tables:
+                await connection.execute(
+                    f"ALTER TABLE public.{_identifier(table)} DISABLE TRIGGER USER"
+                )
+            changed_constraints: list[tuple[str, str]] = []
+            for constraint in original_foreign_keys:
+                if not constraint["condeferrable"]:
+                    table = _identifier(constraint["child_table"])
+                    name = _identifier(constraint["conname"])
+                    await connection.execute(
+                        f"ALTER TABLE public.{table} ALTER CONSTRAINT {name} "
+                        "DEFERRABLE INITIALLY DEFERRED"
+                    )
+                    changed_constraints.append(
+                        (constraint["child_table"], constraint["conname"])
+                    )
+            await connection.execute("SET CONSTRAINTS ALL DEFERRED")
+            for table in database_tables:
+                await connection.execute(f"DELETE FROM public.{_identifier(table)}")
+            for table in tables:
+                await connection.execute(
+                    f"INSERT INTO public.{_identifier(table)} "
+                    f"SELECT * FROM jsonb_populate_recordset("
+                    f"NULL::public.{_identifier(table)},$1::jsonb)",
+                    json.dumps(
+                        snapshot["tables"][table],
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                )
+            await connection.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            await _validate_foreign_keys(connection, await _foreign_keys(connection))
+            for table in database_tables:
+                await connection.execute(
+                    f"ALTER TABLE public.{_identifier(table)} ENABLE TRIGGER USER"
+                )
+            for table_name, constraint_name in changed_constraints:
+                await connection.execute(
+                    f"ALTER TABLE public.{_identifier(table_name)} "
+                    f"ALTER CONSTRAINT {_identifier(constraint_name)} NOT DEFERRABLE"
+                )
+            assert await _trigger_state(connection) == original_triggers
+            await _assert_database_guards_enabled(connection)
+            final_foreign_keys = await _foreign_keys(connection)
+            assert tuple(
+                (row["oid"], row["condeferrable"], row["condeferred"])
+                for row in final_foreign_keys
+            ) == original_fk_state
+            nonempty_tables: list[str] = []
+            for table in database_tables:
+                if await connection.fetchval(
+                    f"SELECT EXISTS(SELECT 1 FROM public.{_identifier(table)})"
+                ):
+                    nonempty_tables.append(table)
+            nonempty = tuple(nonempty_tables)
+            assert nonempty == tables, "archived nonempty table inventory differs"
+            for table in tables:
+                actual = sorted(
+                    (json.loads(row["value"]) for row in await connection.fetch(
+                        f"SELECT to_jsonb(r)::text AS value "
+                        f"FROM public.{_identifier(table)} r"
+                    )),
+                    key=lambda row: json.dumps(
+                        row, sort_keys=True, separators=(",", ":")
+                    ),
+                )
+                expected = sorted(
+                    snapshot["tables"][table],
+                    key=lambda row: json.dumps(row, sort_keys=True, separators=(",", ":")),
+                )
+                assert actual == expected, f"archived rows differ for {table}"
+            if "archived_material" in snapshot["seed"]:
+                await _validate_material_custody(connection, snapshot["seed"])
+        return deepcopy(snapshot["seed"])
+    finally:
+        await connection.close()
 
 
 @asynccontextmanager
-async def historical_material_fixture(tmp_path, database_url, **options):
-    async with AsyncExitStack() as stack:
-        async with current_art_attempt_seed_schema(database_url):
-            material = await stack.enter_async_context(_material_fixture(
-                tmp_path, database_url, write_submission=write_historical_submission,
-                read_request=_historical_request, **options,
-            ))
-        yield material
+async def historical_material_fixture(
+    _tmp_path, database_url, *, snapshot_name: str | None = None
+):
+    """Yield plain archived facts after the isolated predecessor restore closes."""
+    seed = await restore_archived_snapshot(database_url, snapshot_name)
+    yield SimpleNamespace(
+        factory=db_session.get_session_factory(),
+        request=seed["request"],
+        created=seed["created"],
+        replica_id=seed["replica_id"],
+        archived_members=tuple(seed["archived_members"]),
+        archived_counts=seed["archived_counts"],
+        archived_material=seed["archived_material"],
+    )

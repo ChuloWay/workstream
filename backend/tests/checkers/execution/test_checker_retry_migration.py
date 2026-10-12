@@ -1,13 +1,7 @@
 """0035 preserves retained checker custody and installs terminal retry closure."""
 
 import asyncio
-import io
 import json
-import os
-from pathlib import Path
-import subprocess
-import sys
-import tarfile
 from uuid import UUID
 
 import asyncpg
@@ -19,67 +13,13 @@ from sqlalchemy.exc import IntegrityError
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
+from tests.historical_submission_fixtures import restore_archived_snapshot
 from tests.migration_fixtures import _config
 
 
 pytestmark = pytest.mark.postgres_schema_contract
 PREDECESSOR = "0034_checker_replacement"
 SUCCESSOR = "0035_checker_retry"
-# Pin the last F3 writer: current F4 delivery reads the 0035 retry table.
-HISTORICAL_WRITER = "926b4ef118db3708e50d1869db5ee78a79e5b5de"
-HISTORICAL_SEED = """
-import asyncio
-import json
-import os
-from pathlib import Path
-import sys
-
-import pytest
-
-from app.adapters.artifacts import internal_workers
-from app.adapters.artifacts.local import LocalStorageAdapter
-from app.db import session as db_session
-from app.interfaces.artifacts import ArtifactObjectMissingError
-from tests.post_submit_materialization_helpers import material_fixture
-from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome, state
-from tests.tasks.evaluation_delivery.test_worker_materialization import _worker_port
-
-
-async def seed():
-    database_url = os.environ["WS_MIGRATION_DATABASE_URL"]
-    tmp_path = Path(sys.argv[1])
-    result_path = Path(sys.argv[2])
-
-    def missing(_store, _reference):
-        raise ArtifactObjectMissingError("controlled verified object loss")
-
-    try:
-        with pytest.MonkeyPatch.context() as monkeypatch:
-            async with material_fixture(tmp_path, database_url, provider="local") as h:
-                port = _worker_port(h, monkeypatch)
-                try:
-                    delivery = await delivery_fixture(h, materialization=port)
-                    with monkeypatch.context() as patch:
-                        patch.setattr(LocalStorageAdapter, "open", missing)
-                        initial = await delivery.delivery.deliver(
-                            h.created.evaluation_event_id, h.request.project_id, "retry-source",
-                        )
-                    assert outcome(initial)["delivery_state"] == "acknowledged"
-                    saved = await state(h)
-                    assert saved["run"]["status"] == "infrastructure_failed"
-                    assert json.loads(saved["run"]["result_json"])["infrastructure_failure_code"] == "material_unavailable"
-                    result_path.write_text(json.dumps({
-                        "submission_id": str(h.created.submission_id),
-                        "request": h.request.model_dump(mode="json"),
-                    }))
-                finally:
-                    internal_workers.shutdown_artifact_internal_runtime()
-    finally:
-        await db_session.dispose_engine()
-
-
-asyncio.run(seed())
-"""
 RETAINED_TABLES = (
     "submissions",
     "submission_dispatches",
@@ -119,36 +59,6 @@ async def _reset_to_predecessor(database_url):
     finally:
         await connection.close()
     await asyncio.to_thread(command.upgrade, _config(), PREDECESSOR)
-
-
-def _historical_backend(tmp_path):
-    root = Path(__file__).resolve().parents[4]
-    archived = subprocess.run(
-        ["git", "archive", "--format=tar", HISTORICAL_WRITER, "backend"],
-        cwd=root,
-        capture_output=True,
-        check=True,
-    )
-    source = tmp_path / "historical"
-    with tarfile.open(fileobj=io.BytesIO(archived.stdout), mode="r:") as archive:
-        archive.extractall(source, filter="data")
-    return source / "backend"
-
-
-def _seed_with_historical_writer(tmp_path, database_url):
-    backend = _historical_backend(tmp_path)
-    result_path = tmp_path / "historical-seed.json"
-    subprocess.run(
-        [sys.executable, "-c", HISTORICAL_SEED, str(tmp_path), str(result_path)],
-        cwd=backend,
-        env={
-            **os.environ,
-            "PYTHONPATH": os.pathsep.join((str(backend), str(backend / "tests"))),
-            "WS_MIGRATION_DATABASE_URL": database_url,
-        },
-        check=True,
-    )
-    return json.loads(result_path.read_text())
 
 
 async def _retained_rows(connection):
@@ -226,8 +136,8 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
 ):
     with migration_lock():
         await _reset_to_predecessor(isolated_database_env)
-        seed = await asyncio.to_thread(
-            _seed_with_historical_writer, tmp_path, isolated_database_env
+        seed = await restore_archived_snapshot(
+            isolated_database_env, "0034_checker_retry_source"
         )
         submission_id = UUID(seed["submission_id"])
         request = seed["request"]
