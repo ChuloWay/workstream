@@ -1308,7 +1308,7 @@ complete discovery, spelling coverage and isolation between parameter cases.
 
 The unchanged complete module passed all 35 cases at clean `95d410810`:
 767.93 seconds within pytest and 812.541 seconds including process lifetime.
-Its ten custody negatives consumed 243.92 seconds and five composition negatives
+Its ten custody negatives consumed 228.93 seconds and five composition negatives
 198.39 seconds under host contention; these are local measurements, not inferred
 hosted timings. The same allowed module now also freezes actual complete-source
 composition imports and ordered call names once. Call multiplicity stays intact,
