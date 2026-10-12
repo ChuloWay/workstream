@@ -173,6 +173,9 @@ def test_completion_handler_is_registered_in_production_registry():
 
 
 def test_production_request_transport_covers_maximum_selected_execution():
+    from app.workers.outbox import deliver_event
+    from app.workers.outbox_topology import OUTBOX_PROCESS_SHUTDOWN_MARGIN_SECONDS
+
     delivery = production_outbox_delivery(None)
     request = delivery._options_for(REQUEST_EVENT, 1)
 
@@ -186,6 +189,11 @@ def test_production_request_transport_covers_maximum_selected_execution():
     assert bounded_pipeline_ms <= request.handler_timeout_seconds * 1000
     assert request.handler_timeout_seconds < request.lease_seconds <= 3600
     assert bounded_pipeline_ms < request.lease_seconds * 1000
+    assert deliver_event.time_limit == (
+        request.lease_seconds + OUTBOX_PROCESS_SHUTDOWN_MARGIN_SECONDS
+    )
+    assert deliver_event.time_limit > request.handler_timeout_seconds
+    assert delivery._options_for(COMPLETION_EVENT, 1) == DeliveryOptions()
 
 
 @pytest.mark.parametrize("human", [True, False])

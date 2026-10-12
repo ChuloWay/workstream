@@ -89,6 +89,9 @@ cleanup.
   replay, commit rollback, revocation and HTTP admission tests remain selected.
 
 - This record and affected current PILOT-04 architecture, roadmap and owner docs.
+- The existing OUTBOX prefork topology and its delivery task hard bound, with
+  topology and real process-containment regressions, to honor the selected
+  request budget without changing event-specific owner deadlines or selectors.
 - CHECKERS policy contracts, registry reads, default/external execution,
   durable attempt/result custody, post routing and composition roots.
 - ART preparation, verified-material callback, evidence, admission and
@@ -394,3 +397,11 @@ for selected fixtures and retain the exact 55000 assertion. No production guard
 or database constraint changes are part of this test repair. Reconcile roadmap
 claims to selected hidden delivery, keeping public intake and hosted isolation
 proof explicitly outside the delivered surface. Final guard rerun is required.
+
+Real Celery transport must cover selected POST work, not just the asynchronous
+owner timeout. Its fixed prefork hard bound is now the maximum lease plus a
+60-second shutdown margin (3660 seconds), with exact task/message validation
+to reject shorter or longer overrides. Per-event bounds remain selected request
+3520/3600 and ordinary events 240/300. Preserve the existing scaled real-prefork
+kill/reap/UNKNOWN regression while scaling both the installed test bound and its
+entry guard; no production duration is shortened for verification.

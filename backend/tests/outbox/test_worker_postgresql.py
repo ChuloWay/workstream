@@ -244,6 +244,8 @@ async def test_prefork_bounds_cancellation_resistant_worker(
     # prefork task hanging until the independent test watchdog detects it.
     if task.time_limit is not None:
         monkeypatch.setattr(task, "time_limit", 5)
+        from app.workers import outbox_topology
+        monkeypatch.setattr(outbox_topology, "OUTBOX_HARD_LIMIT_SECONDS", 5)
     monkeypatch.setenv("WORKSTREAM_ARTIFACT_STORE_BACKEND", "disabled")
     get_settings.cache_clear()
     acked = Event()
@@ -319,7 +321,14 @@ def test_delivery_task_has_independent_hard_limit(worker):
     from app.modules.outbox.api import DeliveryOptions
 
     task = worker.deliver_event
-    assert task.time_limit == 300
+    from app.modules.checkers.api.external_policy import (
+        SELECTED_POST_DELIVERY_LEASE_SECONDS, SELECTED_POST_HANDLER_TIMEOUT_SECONDS,
+    )
+    from app.workers.outbox_topology import OUTBOX_PROCESS_SHUTDOWN_MARGIN_SECONDS
+    assert task.time_limit == (
+        SELECTED_POST_DELIVERY_LEASE_SECONDS + OUTBOX_PROCESS_SHUTDOWN_MARGIN_SECONDS
+    )
+    assert task.time_limit > SELECTED_POST_HANDLER_TIMEOUT_SECONDS
     assert task.time_limit > DeliveryOptions().handler_timeout_seconds
     assert task.acks_late and task.acks_on_failure_or_timeout
     assert task.reject_on_worker_lost is True

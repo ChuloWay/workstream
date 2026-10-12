@@ -6,8 +6,12 @@ from celery.concurrency import get_implementation
 from celery.concurrency.prefork import TaskPool
 from celery.exceptions import WorkerShutdown
 from celery.signals import worker_init
+from app.modules.checkers.api.external_policy import SELECTED_POST_DELIVERY_LEASE_SECONDS
 
-OUTBOX_HARD_LIMIT_SECONDS = 300
+OUTBOX_PROCESS_SHUTDOWN_MARGIN_SECONDS = 60
+OUTBOX_HARD_LIMIT_SECONDS = (
+    SELECTED_POST_DELIVERY_LEASE_SECONDS + OUTBOX_PROCESS_SHUTDOWN_MARGIN_SECONDS
+)
 OUTBOX_QUEUE = "workstream.outbox"
 OUTBOX_DELIVERY_TASK = "workstream.outbox.deliver_event"
 _validated_parent: int | None = None
@@ -36,6 +40,10 @@ def require_outbox_worker(task):
         or task.request.called_directly
     ):
         raise RuntimeError("OUTBOX delivery requires a validated prefork worker")
-    hard_limit = (task.request.timelimit or (None, None))[0] or task.time_limit
-    if type(hard_limit) not in (int, float) or not 0 < hard_limit <= OUTBOX_HARD_LIMIT_SECONDS:
+    message_limit = (task.request.timelimit or (None, None))[0]
+    if (
+        type(task.time_limit) is not int or task.time_limit != OUTBOX_HARD_LIMIT_SECONDS
+        or message_limit is not None
+        and (type(message_limit) is not int or message_limit != OUTBOX_HARD_LIMIT_SECONDS)
+    ):
         raise RuntimeError("OUTBOX delivery requires a bounded hard time limit")
