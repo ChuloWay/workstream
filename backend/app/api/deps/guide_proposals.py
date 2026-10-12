@@ -87,10 +87,11 @@ async def get_correction_dispatch(
 
     actor = await get_authorization_actor_identity(resolved)
     async with prepared_authorization_service(request, resolved, session) as prepared:
-        capabilities = await external_checker_capability_projection(session)
         # Capture the immutable AUTH context before rollback expires the ORM
         # identity rows; dispatch still owns a fresh product transaction.
         await session.rollback()
+        async with session.begin():
+            capabilities = await external_checker_capability_projection(session)
         yield CorrectionDispatchRequest(
             project_guide_correction_dispatch(
                 session,

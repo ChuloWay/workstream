@@ -597,3 +597,14 @@ passing atomic Submission/dispatch through POST and completion to review_pending
 restart/replay and unavailable-service recovery via fresh verified bytes. Both
 isolated runners record schema0036 and completed DB/role/MinIO cleanup; runtime
 remains local runc/docker-dev. Later README/roadmap reconciliation is prose-only.
+
+Correction dispatch loads the immutable checker projection in its own explicit
+root after capturing AUTH context and ending identity reads. Its product request
+still starts in a fresh transaction and rechecks current manager authority before
+committing or publishing. The former dependency assumed identity resolution had
+left a root open: a valid detached identity and fresh request session raised
+`ExternalCheckerRegistryUnavailable` before reaching either admission or denial.
+The existing public manager-handoff regression reproduces that failure at
+`2f1f46930` in 23.18 seconds with isolated schema `0036` and cleanup complete;
+the targeted trace locates the missing registry-read transaction. Final proof
+uses the normal public owner, with diagnostic exception capture removed.
