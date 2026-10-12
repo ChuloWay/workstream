@@ -1043,3 +1043,14 @@ guide fixture context remains unchanged; no shared live consumer is deleted.
 The first scratch-module run passed 93 current cases and exposed one remaining
 obsolete version-two normalization test. Remove that upgrade-only test as part
 of the same authorized cutover; rerun the complete current scratch module.
+
+### Retained dispatch upgrade assertion reconciliation
+
+The composed native batch passed three retry/replacement migration controls and
+exposed the dispatch test's outdated additive-column assertion after upgrading
+to current 0036. In `backend/tests/tasks/submission_dispatch/test_migration.py`,
+replace the single 0034-column allowlist with the exact 0034/0036 columns on
+Admissions, Submissions and CheckerRuns. Every added value must remain NULL;
+all retained rows/values, counts, authority and no-dispatch assertions remain
+exact. No automatic/dynamic column exclusion, backfill, schema change, relaxed
+selection or skip. Rerun the failed node and independently review the delta.

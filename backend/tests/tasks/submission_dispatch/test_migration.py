@@ -36,17 +36,31 @@ async def test_upgrade_preserves_retained_owners_without_backfill(tmp_path, isol
                 before = await snapshot()
                 await asyncio.to_thread(command.upgrade, _config(), current_schema_revision())
                 after = await snapshot()
-                before_admissions = json.loads(before.pop("submission_bundle_admissions"))
-                after_admissions = json.loads(after.pop("submission_bundle_admissions"))
-                assert len(after_admissions) == len(before_admissions)
-                for retained, upgraded in zip(
-                    before_admissions, after_admissions, strict=True
-                ):
-                    assert set(upgraded) == set(retained) | {
-                        "checker_remediation_manifest_id"
-                    }
-                    assert upgraded.pop("checker_remediation_manifest_id") is None
-                    assert upgraded == retained
+                added_columns = {
+                    "submissions": {
+                        "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
+                    },
+                    "checker_runs": {
+                        "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
+                    },
+                    "submission_bundle_admissions": {
+                        "checker_remediation_manifest_id", "selected_pre_submit_run_id",
+                        "guide_id", "guide_version", "source_snapshot_id", "source_snapshot_sha256",
+                        "effective_policy_id", "effective_policy_sha256", "pre_submit_policy_id",
+                        "pre_submit_policy_sha256", "effective_plan_sha256", "selected_rules_sha256",
+                        "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
+                        "packet_sha256", "semantic_manifest_body",
+                    },
+                }
+                for table, columns_added in added_columns.items():
+                    retained_rows = sorted(json.loads(before.pop(table)), key=lambda row: row["id"])
+                    upgraded_rows = sorted(json.loads(after.pop(table)), key=lambda row: row["id"])
+                    assert len(upgraded_rows) == len(retained_rows)
+                    for retained, upgraded in zip(retained_rows, upgraded_rows, strict=True):
+                        assert set(upgraded) == set(retained) | columns_added
+                        for column in columns_added:
+                            assert upgraded.pop(column) is None
+                        assert upgraded == retained
                 assert after == before
                 columns = await connection.fetch("""
                     SELECT table_name,data_type,is_nullable
