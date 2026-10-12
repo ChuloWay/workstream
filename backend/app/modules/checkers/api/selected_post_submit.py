@@ -239,6 +239,28 @@ class SelectedPostSubmissionEvaluationResult(CheckerValue):
         """Bind result identity and selected policy without claiming currentness."""
         result = SelectedPostSubmissionEvaluationResult.model_validate(self)
         request = SelectedPostSubmissionEvaluationRequest.model_validate(request)
+        expected_members = tuple(
+            (
+                order,
+                entry.requirement_id,
+                entry.registry.registry_entry_id,
+                entry.registry.entry_digest,
+            )
+            for order, entry in enumerate(request.policy.entries)
+        )
+        actual_members = (
+            tuple(
+                (
+                    member.order,
+                    member.requirement_id,
+                    member.registry_entry_id,
+                    member.registry_entry_digest,
+                )
+                for member in result.execution.external_members
+            )
+            if result.execution is not None
+            else ()
+        )
         if (
             result.request_id,
             result.request_digest,
@@ -249,7 +271,11 @@ class SelectedPostSubmissionEvaluationResult(CheckerValue):
             request.evaluation_generation,
         ) or (
             result.execution is not None
-            and result.execution.policy_sha256 != request.policy.policy_sha256
+            and (
+                result.execution.policy_sha256 != request.policy.policy_sha256
+                or result.execution.required_external_count != len(expected_members)
+                or actual_members != expected_members
+            )
         ):
             raise ValueError("selected POST result request mismatch")
 

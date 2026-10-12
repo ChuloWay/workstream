@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 import json
 from types import SimpleNamespace
 
@@ -39,6 +40,7 @@ from app.modules.checkers.selected_post_submit_execution import (
     SelectedPostSubmitProcessor,
 )
 from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmitExecutionFacts,
     SelectedPostSubmitLockedContext,
     make_selected_post_submit_request,
     make_selected_post_submit_result,
@@ -316,6 +318,101 @@ async def test_selected_post_request_and_result_bind_exact_locked_policy() -> No
                 ),
             )
         )
+
+    missing = SelectedPostSubmitExecutionFacts(
+        policy_sha256=policy.policy_sha256,
+        required_external_count=0,
+        external_members=(),
+    )
+    with pytest.raises(ValueError, match="request mismatch"):
+        make_selected_post_submit_result(
+            **result.model_dump(exclude={"result_digest", "execution"}),
+            execution=missing,
+        ).validate_request(request)
+
+    member = execution.external_members[0]
+    extra = SelectedPostSubmitExecutionFacts(
+        policy_sha256=policy.policy_sha256,
+        required_external_count=2,
+        external_members=(
+            member,
+            replace(member, order=1, requirement_id="project.unrequested"),
+        ),
+    )
+    with pytest.raises(ValueError, match="request mismatch"):
+        make_selected_post_submit_result(
+            **result.model_dump(exclude={"result_digest", "execution"}),
+            execution=extra,
+        ).validate_request(request)
+
+    second = policy.entries[0].model_copy(
+        update={"requirement_id": "project.post_evidence.secondary"}
+    )
+    two_policy_body = {
+        "schema_version": "external_post_submit_policy.v1",
+        "entries": [item.model_dump(mode="json") for item in (*policy.entries, second)],
+    }
+    two_policy = LockedExternalPostSubmitPolicy(
+        entries=(*policy.entries, second),
+        policy_sha256=canonical_json_hash(two_policy_body),
+    )
+    two_request = _request(identity, two_policy)
+    two_execution = await SelectedPostSubmitProcessor(
+        policy=two_policy,
+        identity=identity,
+        execution=_Execution(),
+    ).evaluate(two_request, _MaterialView(execution_material(identity)))
+    reordered = SelectedPostSubmitExecutionFacts(
+        policy_sha256=two_policy.policy_sha256,
+        required_external_count=2,
+        external_members=(
+            replace(two_execution.external_members[1], order=0),
+            replace(two_execution.external_members[0], order=1),
+        ),
+    )
+    with pytest.raises(ValueError, match="request mismatch"):
+        make_selected_post_submit_result(
+            request_id=two_request.evaluation_request_id,
+            request_digest=two_request.request_sha256,
+            attempt_id=identity.attempt_id,
+            evaluation_generation=two_request.evaluation_generation,
+            result_id=identity.result_id,
+            outcome="completed",
+            execution=reordered,
+            infrastructure_failure_code=None,
+        ).validate_request(two_request)
+
+    foreign_registry = two_policy.entries[0].registry.model_copy(
+        update={"registry_entry_id": new_record_id()}
+    )
+    foreign_entry = two_policy.entries[0].model_copy(update={"registry": foreign_registry})
+    foreign_policy_body = {
+        "schema_version": "external_post_submit_policy.v1",
+        "entries": [
+            item.model_dump(mode="json") for item in (foreign_entry, two_policy.entries[1])
+        ],
+    }
+    foreign_policy = LockedExternalPostSubmitPolicy(
+        entries=(foreign_entry, two_policy.entries[1]),
+        policy_sha256=canonical_json_hash(foreign_policy_body),
+    )
+    foreign_request = _request(identity, foreign_policy)
+    wrong_registry_execution = SelectedPostSubmitExecutionFacts(
+        policy_sha256=foreign_policy.policy_sha256,
+        required_external_count=2,
+        external_members=two_execution.external_members,
+    )
+    with pytest.raises(ValueError, match="request mismatch"):
+        make_selected_post_submit_result(
+            request_id=foreign_request.evaluation_request_id,
+            request_digest=foreign_request.request_sha256,
+            attempt_id=identity.attempt_id,
+            evaluation_generation=foreign_request.evaluation_generation,
+            result_id=identity.result_id,
+            outcome="completed",
+            execution=wrong_registry_execution,
+            infrastructure_failure_code=None,
+        ).validate_request(foreign_request)
 
 
 @pytest.mark.asyncio
