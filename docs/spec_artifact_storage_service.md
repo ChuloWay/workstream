@@ -883,8 +883,8 @@ The preparation settings use the standard `WORKSTREAM_` environment prefix:
 | `WORKSTREAM_ARTIFACT_SCRATCH_MAXIMUM_CONCURRENCY` | `4` | Maximum concurrent preparations; cannot exceed the file limit. |
 | `WORKSTREAM_ARTIFACT_SCRATCH_MAXIMUM_WORKSPACE_ENTRIES` | `2000` | Maximum entries removable from one private processing workspace; it must be at least the accepted submission-ZIP entry limit. |
 | `WORKSTREAM_ARTIFACT_SCRATCH_MINIMUM_FREE_BYTES` | `536870912` | Free-space floor retained in addition to the next full reservation. |
-| `WORKSTREAM_ARTIFACT_SCRATCH_RESERVATION_TTL_SECONDS` | `2400` | Database-independent wall-clock expiry for abandoned reservations. |
-| `WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS` | `1800` | Total first-pass and provider-consumption deadline. |
+| `WORKSTREAM_ARTIFACT_SCRATCH_RESERVATION_TTL_SECONDS` | `3900` | Database-independent wall-clock expiry for abandoned reservations. |
+| `WORKSTREAM_ARTIFACT_PREPARATION_TOTAL_DEADLINE_SECONDS` | `3400` | Total first-pass and provider-consumption deadline, aligned with the maximum selected POST execution budget. |
 | `WORKSTREAM_ARTIFACT_SCRATCH_CLEANUP_MARGIN_SECONDS` | `300` | Required margin between the total deadline and reservation TTL. |
 | `WORKSTREAM_ARTIFACT_SCRATCH_CLEANUP_INTERVAL_SECONDS` | `300` | Celery Beat cadence for the named stale-scratch cleanup task; accepted range is 1 through 86400 seconds. |
 | `WORKSTREAM_ARTIFACT_PENDING_WORK_SCAN_INTERVAL_SECONDS` | `60` | Celery Beat cadence for one authority-bound, database-cutoff pending-work page. |

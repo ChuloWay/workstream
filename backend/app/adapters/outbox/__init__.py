@@ -1,6 +1,6 @@
 """Explicit composition of the shared delivery owner; feature registration is separate."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.authorization.api.outbox_dispatch import OutboxDispatchAuthorizationPort
@@ -21,6 +21,7 @@ def outbox_delivery(
     authorization_factory: Callable[[AsyncSession], OutboxDispatchAuthorizationPort],
     registry: HandlerRegistry,
     options: DeliveryOptions,
+    event_options: Mapping[tuple[str, int], DeliveryOptions] | None = None,
 ) -> OutboxDelivery:
     """No default authority, installed handler, worker or runtime discovery."""
     return OutboxDelivery(
@@ -28,6 +29,7 @@ def outbox_delivery(
         authorization_factory=authorization_factory,
         registry=registry,
         options=options,
+        event_options=event_options,
     )
 
 
@@ -44,6 +46,10 @@ def production_outbox_delivery(session_factory):
         evaluation_request_handler,
     )
     from app.modules.checkers.api.execution import COMPLETION_EVENT, REQUEST_EVENT
+    from app.modules.checkers.api.external_policy import (
+        SELECTED_POST_DELIVERY_LEASE_SECONDS,
+        SELECTED_POST_HANDLER_TIMEOUT_SECONDS,
+    )
     from app.modules.tasks.api.assignment_invalidation import ASSIGNMENT_INVALIDATION_EVENT
 
     return outbox_delivery(
@@ -78,6 +84,12 @@ def production_outbox_delivery(session_factory):
             ]
         ),
         options=DeliveryOptions(),
+        event_options={
+            (REQUEST_EVENT, 1): DeliveryOptions(
+                lease_seconds=SELECTED_POST_DELIVERY_LEASE_SECONDS,
+                handler_timeout_seconds=SELECTED_POST_HANDLER_TIMEOUT_SECONDS,
+            )
+        },
     )
 
 

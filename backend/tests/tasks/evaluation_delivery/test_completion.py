@@ -9,6 +9,13 @@ from app.adapters.auth import outbox_dispatch_authorization
 from app.adapters.outbox import outbox_delivery, production_outbox_delivery
 from app.adapters.tasks import evaluation_completion_handler
 from app.modules.checkers.api.execution import COMPLETION_EVENT, REQUEST_EVENT
+from app.modules.checkers.api.external_policy import (
+    MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS,
+    SELECTED_POST_DELIVERY_LEASE_SECONDS,
+    SELECTED_POST_FINALIZATION_MARGIN_MS,
+    SELECTED_POST_HANDLER_PRELUDE_MARGIN_MS,
+    SELECTED_POST_HANDLER_TIMEOUT_SECONDS,
+)
 from app.modules.outbox.api import HandlerOutcome, FinalizationCause, DeliveryOptions
 from app.modules.outbox.registry import HandlerRegistry
 from app.modules.tasks.post_submit_routing.outcome import TaskPostSubmitOutcome
@@ -160,7 +167,25 @@ async def test_completion_handler_committed_replay_is_exact(
 
 
 def test_completion_handler_is_registered_in_production_registry():
-    assert (COMPLETION_EVENT, 1) in production_outbox_delivery(None)._registry.keys
+    delivery = production_outbox_delivery(None)
+    assert (COMPLETION_EVENT, 1) in delivery._registry.keys
+    assert delivery._options_for(COMPLETION_EVENT, 1) == DeliveryOptions()
+
+
+def test_production_request_transport_covers_maximum_selected_execution():
+    delivery = production_outbox_delivery(None)
+    request = delivery._options_for(REQUEST_EVENT, 1)
+
+    assert request.handler_timeout_seconds == SELECTED_POST_HANDLER_TIMEOUT_SECONDS
+    assert request.lease_seconds == SELECTED_POST_DELIVERY_LEASE_SECONDS
+    bounded_pipeline_ms = (
+        MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS
+        + SELECTED_POST_HANDLER_PRELUDE_MARGIN_MS
+        + SELECTED_POST_FINALIZATION_MARGIN_MS
+    )
+    assert bounded_pipeline_ms <= request.handler_timeout_seconds * 1000
+    assert request.handler_timeout_seconds < request.lease_seconds <= 3600
+    assert bounded_pipeline_ms < request.lease_seconds * 1000
 
 
 @pytest.mark.parametrize("human", [True, False])

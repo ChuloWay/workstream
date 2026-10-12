@@ -23,18 +23,33 @@ from app.modules.checkers.api.external import (
 from app.modules.checkers.api.external_policy import (
     ExternalCheckerPolicyError,
     LockedWorkstreamDefault,
+    MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS,
+    SELECTED_POST_MATERIALIZATION_BUDGET_MS,
     compile_external_checker_policies,
+    selected_post_submit_execution_budget_ms,
     selected_pre_submit_execution_budget_ms,
 )
+from app.modules.checkers.api.external import EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+from app.modules.artifacts.preparation import ArtifactPreparationLimits
 from tests.checkers.external.support import registry_spec
 from tests.projects.guide_compilation.helpers import result
 
 
-def _entry(capability_id: str, phase: str, configuration_schema=None) -> ExternalCheckerRegistryEntry:
+def _entry(
+    capability_id: str,
+    phase: str,
+    configuration_schema=None,
+    *,
+    deadline_ms: int | None = None,
+) -> ExternalCheckerRegistryEntry:
     changes = {"capability_id": capability_id}
     if configuration_schema is not None:
         changes["configuration_schema"] = configuration_schema
     spec = registry_spec(phase).model_copy(update=changes)
+    if deadline_ms is not None:
+        spec = spec.model_copy(
+            update={"resources": spec.resources.model_copy(update={"deadline_ms": deadline_ms})}
+        )
     # Revalidate after changing one digest-bound specification field.
     spec = type(spec).model_validate(spec.model_dump())
     return ExternalCheckerRegistryEntry(
@@ -201,6 +216,61 @@ async def test_selected_pre_budget_binds_ordered_deadlines_to_art_custody():
     assert selected_pre_submit_execution_budget_ms(pre, artifact_deadline_ms=150_000) == 150_000
     with pytest.raises(ExternalCheckerPolicyError, match="exceeds ART"):
         selected_pre_submit_execution_budget_ms(pre, artifact_deadline_ms=149_999)
+
+
+@pytest.mark.asyncio
+async def test_selected_post_maximum_fits_default_art_custody_and_rejects_overrun():
+    image_deadline = (
+        MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS
+        - SELECTED_POST_MATERIALIZATION_BUDGET_MS
+        - EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS
+    )
+    _, policy = await compile_external_checker_policies(
+        _proposal(),
+        _Registry(
+            (
+                _entry("acme.safe_archive", "pre_submit"),
+                _entry(
+                    "acme.quality_review",
+                    "post_submit",
+                    deadline_ms=image_deadline,
+                ),
+            )
+        ),
+    )
+    limits = ArtifactPreparationLimits()
+
+    assert selected_post_submit_execution_budget_ms(
+        policy,
+        artifact_deadline_ms=int(limits.total_deadline_seconds * 1000),
+    ) == MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS
+    assert (
+        limits.total_deadline_seconds + limits.cleanup_margin_seconds
+        < limits.reservation_ttl_seconds
+    )
+    with pytest.raises(ExternalCheckerPolicyError, match="ART custody"):
+        selected_post_submit_execution_budget_ms(
+            policy,
+            artifact_deadline_ms=MAXIMUM_SELECTED_POST_EXECUTION_BUDGET_MS - 1,
+        )
+
+    too_slow = policy.model_copy(
+        update={
+            "entries": (
+                policy.entries[0].model_copy(
+                    update={
+                        "registry": _entry(
+                            "acme.quality_review",
+                            "post_submit",
+                            deadline_ms=image_deadline + 1,
+                        )
+                    }
+                ),
+            )
+        }
+    )
+    with pytest.raises(ExternalCheckerPolicyError, match="durable worker"):
+        selected_post_submit_execution_budget_ms(too_slow)
 
 
 @pytest.mark.asyncio

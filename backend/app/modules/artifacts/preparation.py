@@ -297,8 +297,8 @@ class ArtifactPreparationLimits:
     maximum_files: int = 8
     maximum_concurrency: int = 4
     minimum_free_bytes: int = HARD_MAXIMUM_ARTIFACT_BYTES
-    reservation_ttl_seconds: float = 2400.0
-    total_deadline_seconds: float = 1800.0
+    reservation_ttl_seconds: float = 3900.0
+    total_deadline_seconds: float = 3400.0
     cleanup_margin_seconds: float = 300.0
     stream_buffer_bytes: int = 1024 * 1024
     maximum_source_bytes: int = HARD_MAXIMUM_ARTIFACT_BYTES

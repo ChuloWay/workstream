@@ -575,8 +575,30 @@ class _WorkerPostSubmissionMaterialization:
             initialize_artifact_internal_runtime,
         )
         from app.modules.artifacts.submission_archive import SubmissionArchiveInspector
+        from app.modules.checkers.api.external_policy import (
+            ExternalCheckerPolicyError,
+            selected_post_submit_execution_budget_ms,
+        )
+        from app.modules.checkers.api.materialization import (
+            PostSubmissionMaterializationFailure,
+        )
+        from app.modules.checkers.api.selected_post_submit import (
+            SelectedPostSubmissionEvaluationRequest,
+        )
 
         settings = get_settings()
+        if isinstance(facts.request, SelectedPostSubmissionEvaluationRequest):
+            try:
+                selected_post_submit_execution_budget_ms(
+                    facts.request.policy,
+                    artifact_deadline_ms=int(
+                        settings.artifact_preparation_total_deadline_seconds * 1000
+                    ),
+                )
+            except ExternalCheckerPolicyError:
+                raise PostSubmissionMaterializationFailure(
+                    "post_submit_material_deadline_unavailable"
+                ) from None
         await initialize_artifact_internal_runtime()
         with _artifact_internal_runtime() as (store, namespace):
             manager = create_artifact_scratch_manager(settings)
