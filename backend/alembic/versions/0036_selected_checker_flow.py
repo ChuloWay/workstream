@@ -828,29 +828,26 @@ def _replace_checker_run_custody() -> None:
         raise RuntimeError("checker run custody declaration shape changed")
     definition = definition.replace(
         declaration,
-        "    DECLARE body jsonb; source submissions; mutable text[]; selected boolean;",
+        "    DECLARE body jsonb; source submissions; mutable text[];",
     )
     body_anchor = "      body := NEW.request_json::jsonb;"
     if definition.count(body_anchor) != 1:
         raise RuntimeError("checker run request body shape changed")
     definition = definition.replace(
         body_anchor,
-        body_anchor + "\n      selected := body->>'schema_version'="
-        "'workstream.selected_post_submit_request.v1';",
+        body_anchor + "\n      IF body->>'schema_version' IS DISTINCT FROM "
+        "'workstream.selected_post_submit_request.v1' THEN\n"
+        "        RAISE EXCEPTION 'checker request schema unavailable' "
+        "USING ERRCODE='23514';\n      END IF;",
     )
     old_policy = """          OR source.locked_post_submit_checker_policy_body::jsonb IS DISTINCT FROM body->'policy'
           OR body->>'project_id' IS DISTINCT FROM NEW.project_id::text"""
-    new_policy = """          OR (NOT selected AND (
-            source.locked_post_submit_checker_policy_body::jsonb IS DISTINCT FROM body->'policy'
-            OR NEW.selected_post_submit_policy_sha256 IS NOT NULL
-            OR NEW.selected_post_submit_policy_body IS NOT NULL))
-          OR (selected AND (
-            source.selected_post_submit_policy_body::jsonb IS DISTINCT FROM body->'policy'
+    new_policy = """          OR source.selected_post_submit_policy_body::jsonb IS DISTINCT FROM body->'policy'
             OR source.selected_post_submit_policy_sha256 IS DISTINCT FROM
-              body#>>'{expected_context,selected_post_policy_hash}'
+              body#>>'{expected_context,post_policy_hash}'
             OR NEW.selected_post_submit_policy_body::jsonb IS DISTINCT FROM body->'policy'
             OR NEW.selected_post_submit_policy_sha256 IS DISTINCT FROM
-              body#>>'{expected_context,selected_post_policy_hash}'))
+              body#>>'{expected_context,post_policy_hash}'
           OR body->>'project_id' IS DISTINCT FROM NEW.project_id::text"""
     if definition.count(old_policy) != 1:
         raise RuntimeError("checker run policy body shape changed")
@@ -858,20 +855,12 @@ def _replace_checker_run_custody() -> None:
     old_context = """          OR body#>>'{expected_context,post_policy_id}' IS DISTINCT FROM NEW.locked_post_submit_checker_policy_id::text
           OR body#>>'{expected_context,post_policy_version}' IS DISTINCT FROM NEW.locked_post_submit_checker_policy_version
           OR body#>>'{expected_context,post_policy_hash}' IS DISTINCT FROM NEW.locked_post_submit_checker_policy_hash"""
-    new_context = """          OR (NOT selected AND (
-            body#>>'{expected_context,post_policy_id}' IS DISTINCT FROM
+    new_context = """          OR body#>>'{expected_context,post_policy_id}' IS DISTINCT FROM
               NEW.locked_post_submit_checker_policy_id::text
             OR body#>>'{expected_context,post_policy_version}' IS DISTINCT FROM
               NEW.locked_post_submit_checker_policy_version
             OR body#>>'{expected_context,post_policy_hash}' IS DISTINCT FROM
-              NEW.locked_post_submit_checker_policy_hash))
-          OR (selected AND (
-            body#>>'{expected_context,retained_catalogue_policy_id}' IS DISTINCT FROM
-              NEW.locked_post_submit_checker_policy_id::text
-            OR body#>>'{expected_context,retained_catalogue_policy_version}' IS DISTINCT FROM
-              NEW.locked_post_submit_checker_policy_version
-            OR body#>>'{expected_context,retained_catalogue_policy_hash}' IS DISTINCT FROM
-              NEW.locked_post_submit_checker_policy_hash))"""
+              NEW.locked_post_submit_checker_policy_hash"""
     if definition.count(old_context) != 1:
         raise RuntimeError("checker run locked context shape changed")
     op.execute(definition.replace(old_context, new_context))
@@ -883,15 +872,11 @@ def _replace_submission_dispatch_custody() -> None:
     )).scalar_one()
     old_packet = """  AND (r.request_json::jsonb->'structural_input'->>'summary')=s.summary
   AND (r.request_json::jsonb->'structural_input'->>'worker_attestation')=s.worker_attestation"""
-    new_packet = """  AND ((r.request_json::jsonb->>'schema_version'=
+    new_packet = """  AND r.request_json::jsonb->>'schema_version' IS NOT DISTINCT FROM
     'workstream.selected_post_submit_request.v1'
     AND r.selected_post_submit_policy_sha256=s.selected_post_submit_policy_sha256
     AND r.selected_post_submit_policy_body::jsonb=s.selected_post_submit_policy_body::jsonb
-    AND r.request_json::jsonb->'policy'=s.selected_post_submit_policy_body::jsonb)
-   OR (r.request_json::jsonb->>'schema_version'<>
-    'workstream.selected_post_submit_request.v1'
-    AND (r.request_json::jsonb->'structural_input'->>'summary')=s.summary
-    AND (r.request_json::jsonb->'structural_input'->>'worker_attestation')=s.worker_attestation))"""
+    AND r.request_json::jsonb->'policy'=s.selected_post_submit_policy_body::jsonb"""
     if definition.count(old_packet) != 1:
         raise RuntimeError("submission dispatch packet custody shape changed")
     definition = definition.replace(old_packet, new_packet)
@@ -913,13 +898,9 @@ def _replace_submission_dispatch_custody() -> None:
     )
     if definition.count(old_evidence_cause) != 1:
         raise RuntimeError("submission dispatch evidence cause shape changed")
-    new_evidence_cause = """((a.selected_pre_submit_run_id IS NULL
-    AND evidence.id IS NOT NULL
-    AND evidence.checker_remediation_manifest_id IS NOT DISTINCT FROM
-      a.checker_remediation_manifest_id)
-   OR (a.selected_pre_submit_run_id IS NOT NULL
+    new_evidence_cause = """(a.selected_pre_submit_run_id IS NOT NULL
     AND a.pre_submit_evidence_set_id IS NULL
-    AND evidence.id IS NULL))"""
+    AND evidence.id IS NULL)"""
     op.execute(definition.replace(old_evidence_cause, new_evidence_cause))
 
 
@@ -974,17 +955,33 @@ def _replace_checker_input_authority_digest() -> None:
 
 
 def _replace_checker_result_custody() -> None:
-    definition = op.get_bind().execute(sa.text(
-        "select pg_get_functiondef('public.protect_checker_result_custody()'::regprocedure)"
-    )).scalar_one()
-    anchor = (
-        "      entry := parent.request_json::jsonb #> "
-        "ARRAY['policy','entries',NEW.member_order::text];"
-    )
-    selected = r"""
-      IF parent.request_json::jsonb->>'schema_version'=
+    op.execute(r"""
+CREATE OR REPLACE FUNCTION public.protect_checker_result_custody() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public, pg_temp AS $$
+    DECLARE parent public.checker_runs; entry jsonb;
+    BEGIN
+      IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'checker result custody is immutable' USING ERRCODE='23514';
+      END IF;
+      SELECT * INTO parent FROM public.checker_runs
+      WHERE id=NEW.checker_run_id AND task_id=NEW.task_id
+        AND submission_id=NEW.submission_id FOR UPDATE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'checker result violates fk_checker_results_run_ownership'
+          USING ERRCODE='23503', CONSTRAINT='fk_checker_results_run_ownership',
+            TABLE='checker_results';
+      END IF;
+      IF parent.status IS DISTINCT FROM 'running' OR parent.completed_at IS NOT NULL THEN
+        RAISE EXCEPTION 'finished or unclaimed checker run cannot receive results'
+          USING ERRCODE='23514';
+      END IF;
+      entry := parent.request_json::jsonb #>
+        ARRAY['policy','entries',NEW.member_order::text];
+      IF parent.request_json::jsonb->>'schema_version' IS DISTINCT FROM
         'workstream.selected_post_submit_request.v1' THEN
-        IF entry->>'requirement_id' IS DISTINCT FROM NEW.checker_name
+        RAISE EXCEPTION 'checker request schema unavailable' USING ERRCODE='23514';
+      END IF;
+      IF entry->>'requirement_id' IS DISTINCT FROM NEW.checker_name
           OR entry#>>'{registry,entry_digest}' IS DISTINCT FROM NEW.implementation_version
           OR NEW.definition_version IS DISTINCT FROM 'external_checker_result.v1'
           OR NEW.status NOT IN ('passed','failed')
@@ -998,11 +995,10 @@ def _replace_checker_result_custody() -> None:
           RAISE EXCEPTION 'checker member differs from selected definition'
             USING ERRCODE='23514';
         END IF;
-        RETURN NEW;
-      END IF;"""
-    if definition.count(anchor) != 1:
-        raise RuntimeError("checker result selected definition anchor changed")
-    op.execute(definition.replace(anchor, anchor + selected))
+      RETURN NEW;
+    END
+$$;
+""")
 
 
 def _replace_checker_terminal_custody() -> None:
@@ -1030,7 +1026,8 @@ def _replace_checker_terminal_custody() -> None:
     if mismatch not in definition:
         mismatch = mismatch.replace("      IF", "    IF").replace("        OR", "      OR")
     selected_check = r"""
-      IF result->>'schema_version'='workstream.selected_post_submit_result.v1'
+      IF result->>'schema_version' IS NOT DISTINCT FROM
+        'workstream.selected_post_submit_result.v1'
         AND result->>'outcome'='completed' THEN
         SELECT coalesce(jsonb_agg(jsonb_build_object(
           'schema_version','post_submit_structural_result',
@@ -1059,11 +1056,12 @@ def _replace_checker_terminal_custody() -> None:
         END IF;
       END IF;
 """
-    replacement = selected_check + mismatch.replace(
-        "IF result->'member_results'",
-        "IF result->>'schema_version'<>'workstream.selected_post_submit_result.v1'\n"
-        "        AND result->'member_results'",
-    )
+    replacement = selected_check + """
+      IF result->>'schema_version' IS DISTINCT FROM
+        'workstream.selected_post_submit_result.v1' THEN
+        RAISE EXCEPTION 'checker result schema unavailable' USING ERRCODE='23514';
+      END IF;
+"""
     if definition.count(mismatch) != 1:
         raise RuntimeError("checker terminal member comparison shape changed")
     op.execute(definition.replace(mismatch, replacement))

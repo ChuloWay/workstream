@@ -204,6 +204,60 @@ def test_repeated_upgrade_head_preserves_current_database(
     assert after == before
 
 
+def test_current_head_installs_selected_only_checker_custody(
+    isolated_database_env: str, migration_lock
+) -> None:
+    """Current writers reject missing schemas and contain no executable catalogue tail."""
+    config = _alembic_config()
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, HEAD_REVISION)
+
+    async def installed_functions() -> dict[str, str]:
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        try:
+            rows = await connection.fetch(
+                "select p.proname,pg_get_functiondef(p.oid) as definition "
+                "from pg_proc p join pg_namespace n on n.oid=p.pronamespace "
+                "where n.nspname='public' and p.proname=any($1::text[])",
+                [
+                    "protect_checker_run_custody",
+                    "protect_checker_result_custody",
+                    "validate_checker_terminal_custody",
+                    "submission_dispatch_valid",
+                ],
+            )
+            return {row["proname"]: row["definition"] for row in rows}
+        finally:
+            await connection.close()
+
+    definitions = asyncio.run(installed_functions())
+    assert set(definitions) == {
+        "protect_checker_run_custody",
+        "protect_checker_result_custody",
+        "validate_checker_terminal_custody",
+        "submission_dispatch_valid",
+    }
+    for name in (
+        "protect_checker_run_custody",
+        "protect_checker_result_custody",
+        "validate_checker_terminal_custody",
+    ):
+        assert "schema_version' IS DISTINCT FROM" in definitions[name]
+    assert "check_submission_packet" not in definitions["protect_checker_result_custody"]
+    assert "member_results' IS DISTINCT FROM members" not in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "workstream.selected_post_submit_request.v1" in definitions[
+        "submission_dispatch_valid"
+    ]
+    assert "selected_pre_submit_run_id IS NOT NULL" in definitions[
+        "submission_dispatch_valid"
+    ]
+
+
 def test_current_head_installs_submission_lineage_contract(
     isolated_database_env: str, migration_lock
 ) -> None:
