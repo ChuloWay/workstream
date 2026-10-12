@@ -782,3 +782,16 @@ selected PRE ownership and selected POST consumer/current completion tests retai
 phase isolation, canonical result binding and no unchecked callback shortcut.
 Output reservation fixtures derive exact stored current request facts, not a
 constructed unrelated catalogue request. Unsupported output access remains denied.
+
+Further explicit lead scope: backend/tests/test_pre_submit_evidence_relock.py and
+backend/tests/test_submission_bundle_admission.py; peer handoff also permits
+backend/tests/checkers/external/test_selected_preparation_command.py. Remove only
+old evidence writer/pass-capability publication phases. Retain current adapter,
+preflight-denial-before-bytes, TASK/actor/PROJECT/grant order, root-only authority,
+header/media, status projection and cleanup controls. Post-byte drift moves to
+the actual selected preparation command and proves no coordinator execution or
+durable intent on failed relock. Exact selected admission capability single-use,
+construction/substitution and locked lineage remain in
+test_selected_pre_submit_coordination.py; selected command/service and actual
+root Rust/MinIO failure/replay evidence cover no admission on work/infrastructure
+failure. No old writer or live historical factory is reconstructed.

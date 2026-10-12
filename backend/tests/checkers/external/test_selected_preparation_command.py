@@ -81,7 +81,6 @@ def _runtime_case(prepared, attempt_id):
         publish_after_commit=AsyncMock(
             return_value=SubmissionBundleDurablePutResult(
                 put_attempt_id=new_record_id(),
-                pre_submit_evidence_set_id=None,
                 operation_identity="sha256:" + "2" * 64,
                 status="prepared",
                 replayed=False,
@@ -132,7 +131,7 @@ def _command(runtime, actor):
         external_checker_policies=SimpleNamespace(value="{}"),
     )
     command._lock_authorized_context = AsyncMock(
-        return_value=(SimpleNamespace(predecessor=None), project)
+        return_value=(SimpleNamespace(predecessor=None, checker_remediation_manifest_id=None), project)
     )
     command._load_predecessor = AsyncMock(return_value=None)
     command._load_predecessor_rules = AsyncMock(return_value=None)
@@ -184,11 +183,9 @@ async def test_hidden_preparation_uses_selected_pre_before_durable_admission(
     case.coordinator.reserve.assert_awaited_once_with(case.reservation)
     case.selected_execution.execute.assert_awaited_once()
     admitted = case.durable.admit_in_transaction.await_args.args[0]
-    assert admitted.pass_capability is None
     assert admitted.selected_completion is case.completion
     case.durable.publish_after_commit.assert_awaited_once_with(
         prepared,
         attempt_id,
         case.durable.admit_in_transaction.return_value[2],
-        selected_pre_submit_run_id=attempt_id,
     )
