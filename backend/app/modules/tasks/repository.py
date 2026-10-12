@@ -691,6 +691,23 @@ class TaskRepository:
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
+    async def lock_exact_submission_for_task(
+        self, *, project_id: UUID, task_id: UUID, submission_id: UUID,
+    ) -> Submission | None:
+        """Lock one retained Submission after its TASK and Assignment owners."""
+        with self._session.no_autoflush:
+            return await self._session.scalar(
+                select(Submission)
+                .join(WorkstreamTask, WorkstreamTask.id == Submission.task_id)
+                .where(
+                    WorkstreamTask.project_id == str(project_id),
+                    Submission.task_id == str(task_id),
+                    Submission.id == str(submission_id),
+                )
+                .with_for_update(of=Submission)
+                .execution_options(populate_existing=True)
+            )
+
 
     async def add_audit_event(self, event: AuditEvent) -> AuditEvent:
         """Persist an audit event.

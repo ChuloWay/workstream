@@ -15,7 +15,7 @@ This journey is not yet publicly usable end to end.
 | Public guide setup/approval/activation and TASK creation/claim/start | A contributor works under exact locked project rules | Public ZIP intake or automatic acceptance |
 | [B4 checked packet custody](../WS-ARCH-001-04E1BB4.md), [B5 bounded content](../WS-ARCH-001-04E1BB5.md), and [B6 atomic Submission/dispatch](../WS-ARCH-001-04E1BB6.md) | Hidden intake creates the exact verified Submission, receipts, initial evaluation request and shared outbox event atomically | Live delivery or public intake |
 | [B7 request delivery](../WS-ARCH-001-04E1BB7.md) and existing CHECKERS execution | Hidden request recovery and exact invocation-fenced execution with retained evidence | Registered production handlers or completion routing |
-| [B8 completion delivery](../WS-ARCH-001-04E1BB8.md), 04E2-B outcomes, [04F2 remediation handoff](../WS-ARCH-001-04F2.md) and [04F3 replacement](../WS-ARCH-001-04F3.md) | Hidden true handoff, false shared acceptance or policy-independent checker remediation, exact-cause replacement through canonical intake and writer, replay and commit-before-ACK | Setup-fault/Operator recovery, production registration or public false-guide activation |
+| [B8 completion delivery](../WS-ARCH-001-04E1BB8.md), 04E2-B outcomes, [04F2 remediation handoff](../WS-ARCH-001-04F2.md), [04F3 replacement](../WS-ARCH-001-04F3.md) and [04F4 retry](../WS-ARCH-001-04F4.md) | Hidden true handoff, false shared acceptance or policy-independent checker remediation, exact-cause replacement through canonical intake and writer, reason-bound terminal infrastructure retry with immutable source and fresh-authorized replay, and commit-before-ACK | Manager-visible setup-fault hold, production registration or public false-guide activation |
 | REV-04C / CON-07 shared participants and [REV-12A4A scoped controller](../../WS-REV-001/WS-REV-001-12A4A.md) | Atomic acceptance/task/contribution/award participation and authorized enable/stop control | Genuine acceptance-source authority, complete outcome guarantees or payment delivery |
 
 ### Remaining work — governing order
@@ -28,18 +28,18 @@ explained; do not restart delivered work or substitute a broader subsystem.
 
 | Order | Existing boundary | Required outcome and proof |
 | --- | --- | --- |
-| 1 | [ARCH-04F remediation and recovery](chunks/WS-ARCH-001-04F-checker-remediation.md) | 04F1 supplies verified failure evidence, 04F2 the hidden TASK/AUTH handoff under both policy modes, and 04F3 exact-cause hidden replacement through canonical intake and writer. Prove authorized infrastructure retry and a manager-visible hold for project/setup faults before live false-policy activation. Preserve the Submission and assign no contributor penalty; changing submitted-task rules is deferred. |
+| 1 | [ARCH-04F remediation and recovery](chunks/WS-ARCH-001-04F-checker-remediation.md) | 04F1 supplies verified failure evidence, 04F2 the hidden TASK/AUTH handoff under both policy modes, and 04F3 exact-cause hidden replacement through canonical intake and writer. 04F4 supplies hidden authorized infrastructure retry; prove a manager-visible hold for project/setup faults before live false-policy activation. Preserve the Submission and assign no contributor penalty; changing submitted-task rules is deferred. |
 | 2 | ARCH-04E3 live composition and false-policy readiness | Register the proven handlers and extend the existing controller's manifest/readiness with exact production source custody. Prove success, remediation, shutdown and restart before enabling false. Preserve default-true policy and deny unsupported paths. |
 | 3 | ARCH-02I public intake and outcome access | Expose initial upload/preparation, verification progress, feedback, admission-backed creation, checker-remediation resubmission and outcome reads through exact authorized APIs. Remove superseded touched paths; no compatibility route or provider-coordinate exposure. |
 | 4 | First-layer integration drill | A real project completes guide approval, task creation/claim/start, failed intake/correction, verified Submission, automatic checking, post-check remediation and false-policy acceptance with exact contribution evidence. Exercise real PostgreSQL, S3-compatible storage and broker/workers, lost responses, duplicate delivery, restart, revocation/isolation and recovery. |
 
-**Immediate next implementation:** group 1, authorized manager-visible setup-fault hold and Operator retry.
+**Immediate next implementation:** group 1, authorized manager-visible setup-fault hold.
 [ARCH-04F1](../WS-ARCH-001-04F1.md) supplies verified current failure evidence through the existing CHECKERS completion port, and [ARCH-04F2](../WS-ARCH-001-04F2.md) routes the exact current contributor-correctable result through the existing TASK/AUTH outcome operation. ARCH-04F3 adds hidden exact-cause replacement through the existing ART intake and TASK writer. It does not recover infrastructure or project/setup failures.
 Hidden completion delivery is complete; production registration remains disabled.
 No user-facing completion claim is valid until group 4 passes.
 
-Within group 1, terminal infrastructure retry and a manager-visible setup-fault
-hold remain required. The hold retains the Submission and its locked rules,
+Within group 1, hidden terminal infrastructure retry is delivered; a manager-visible setup-fault
+hold remains required. The hold retains the Submission and its locked rules,
 creates no contributor penalty, and acknowledges a valid completion instead of
 dead-lettering it. Changing or re-screening a submitted task under different
 rules is explicitly deferred. Reconcile these paths against the delivered
@@ -59,7 +59,7 @@ The remaining ARCH-04F work can be implemented and proven against hidden
 current-result and routing participants before production false-policy
 activation. Its dependency is the required 04E handler/result contracts, not a
 fully live false branch. 04F2 supplies the policy-independent hidden
-handoff; 04F3 adds hidden exact-cause replacement, and recovery completes the usable failure path before
+handoff; 04F3 adds hidden exact-cause replacement, 04F4 adds hidden Operator retry, and the setup-fault hold completes the usable failure path before
 the connected runtime is activated.
 True human-review handoff remains independent of CON/shared acceptance and is not
 a requirement to activate human review queues for this first milestone.
@@ -76,7 +76,7 @@ checks must genuinely meet the selected project's requirements: structural check
 must not be advertised as substantive judges, and an unsupported required evaluator
 blocks that project rather than being silently omitted.
 
-[ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. ARCH-04E1B-B6 reuses this projection in atomic Submission/dispatch creation with exact AUTH receipts and select-only replay. B7 delivers hidden request delivery with exact invocation fencing; 04E2-B supplies complete authorized success outcomes; B8 supplies hidden completion delivery; 04F2 extends that operation with the hidden remediation handoff. 04F3 supplies hidden exact-cause replacement intake; recovery remains. Production registration remains unavailable.
+[ARCH-04E1B-B5](../WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. ARCH-04E1B-B6 reuses this projection in atomic Submission/dispatch creation with exact AUTH receipts and select-only replay. B7 delivers hidden request delivery with exact invocation fencing; 04E2-B supplies complete authorized success outcomes; B8 supplies hidden completion delivery; 04F2 extends that operation with the hidden remediation handoff. 04F3 supplies hidden exact-cause replacement intake and 04F4 hidden Operator retry; manager-visible setup-fault hold remains. Production registration remains unavailable.
 
 [ARCH-04E1B-B4](../WS-ARCH-001-04E1BB4.md) binds Submission summary and attestation to the packet retained by intake, including database custody. B6 now commits the initial reservation and request event with exact receipts and fresh-authorized replay. B7 supplies hidden request delivery; 04E2-B supplies complete authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff.
 
@@ -99,8 +99,9 @@ closure rejects incomplete outcomes; fresh-authorized replay returns the stored
 complete tuple. No Review or reviewer contribution is fabricated.
 
 B8 supplies hidden completion delivery with commit-before-ACK, and 04F2 extends
-that operation with policy-independent checker remediation. 04F3 adds hidden exact-cause replacement intake. Next: authorized
-manager-visible setup-fault hold and Operator retry, then 04E3 production
+that operation with policy-independent checker remediation. 04F3 adds hidden
+exact-cause replacement intake; 04F4 adds hidden Operator retry. Next: authorized
+manager-visible setup-fault hold, then 04E3 production
 composition, public intake and the first-layer drill. False-guide activation,
 live human review/revision and payment delivery remain unavailable. Internally
 valid false-policy fixtures establish the hidden operation, not public readiness.
@@ -108,9 +109,9 @@ valid false-policy fixtures establish the hidden operation, not public readiness
 ARCH-04E1B-B1 supplies TASK-before-CHECKERS custody for reservation, current
 reads and admission. B6 atomically creates the Submission and initial dispatch;
 04E2-B owns the later authorized outcome. B8 consumes that outcome and commits
-before acknowledgment. 04F2 supplies the hidden remediation handoff and 04F3
-supplies exact-cause replacement intake. Authorized infrastructure retry and
-manager-visible setup-fault holds remain. Both request and completion handlers
+before acknowledgment. 04F2 supplies the hidden remediation handoff, 04F3
+supplies exact-cause replacement intake and 04F4 supplies hidden infrastructure
+retry. Manager-visible setup-fault hold remains. Both request and completion handlers
 remain absent from production registration.
 
 ## Current dependency contract
@@ -180,19 +181,20 @@ checker-remediation boundary before public Submission cutover.
 | [ARCH-04E1B-B6](../WS-ARCH-001-04E1BB6.md) | B3/B4/B5 plus existing TASK/ART/AUTH/CHECKERS/outbox owners | Complete: atomic new Submission, exact creation/binding receipts, generation-one request and shared event; fresh-authorized select-only replay; handlers remain unregistered |
 | [ARCH-04E1B-B7](../WS-ARCH-001-04E1BB7.md) | B6 plus existing execution/authorization/outbox owners | Complete: hidden request handler, exact committed invocation and per-phase fencing; UNKNOWN never automatically repeats execution; production registration remains unavailable |
 | [ARCH-04E1B-B8](../WS-ARCH-001-04E1BB8.md) | Complete ARCH-04E2-B authorized outcome operation and CON-02B; delivered B7 already supplies request handling | Complete: consumes the receipt-bound operation with exact typed result and commit-before-ACK; proves replay, uncertainty and generation/finalization races. Production registration remains ARCH-04E3 |
-| [REV-12A4A scoped controller](../../WS-REV-001/WS-REV-001-12A4A.md) | Same REV-12A1 fence and REV-04C participants | Complete: internal Operator transitions, immutable AUTH/history custody and current-generation participant gates. The initial manifest refuses pre-authority acceptance rows; 04E2-B supplies exact source custody; B8 completion delivery and the 04F2 policy-independent remediation handoff are implemented. 04F3 supplies hidden exact-cause replacement intake. Infrastructure retry, manager-visible setup-fault holds and production readiness remain group 1/2 work. |
+| [REV-12A4A scoped controller](../../WS-REV-001/WS-REV-001-12A4A.md) | Same REV-12A1 fence and REV-04C participants | Complete: internal Operator transitions, immutable AUTH/history custody and current-generation participant gates. The initial manifest refuses pre-authority acceptance rows; 04E2-B supplies exact source custody; B8 completion delivery and the 04F2 policy-independent remediation handoff are implemented. 04F3 replacement and 04F4 retry are hidden; manager-visible setup-fault hold and production readiness remain group 1/2 work. |
 | [ARCH-04E2-B](../WS-ARCH-001-04E2B.md) | Exact source preparation and REV-12A4A generation | Complete: mandatory actual AUTH receipt, database complete-set enforcement, shared audit/outbox and atomic true/false outcomes; B8 supplies hidden completion delivery; production registration remains |
 | ARCH-04E3 | ARCH-04E2, ARCH-04D2, AUTH-OUTBOX-02; shared acceptance proof for false | TASK live dispatch/routing composition: true to allow_review, false/pass to shared acceptance when proven |
 | ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
 | [ARCH-04F1](../WS-ARCH-001-04F1.md) | Existing CHECKERS completion read | Complete: exact current contributor/setup failure evidence; no TASK mutation |
 | [ARCH-04F2](../WS-ARCH-001-04F2.md) | 04F1 and required hidden 04E result/handler contracts; no live false-branch prerequisite | Hidden exact current checker-remediation TASK/AUTH handoff under both policy modes; no REV/CON, replacement intake or recovery |
 | [ARCH-04F3](../WS-ARCH-001-04F3.md) | Delivered 04F1/04F2 | Hidden exact-cause TASK/ART replacement through canonical intake and writer under both policy modes; uncaused revision runtime removed, migration refuses unprovable retained revision rows |
-| ARCH-04F (remaining before false activation and public intake) | Delivered 04F1/04F2/04F3 | Authorized infrastructure retry and a manager-visible setup-fault hold; retain submitted work without contributor penalty, defer changing submitted-task rules; no human Review dependency |
+| [ARCH-04F4](../WS-ARCH-001-04F4.md) | Delivered 04F1/04F2/04F3 and existing CHECKERS coordinator/request handler | Hidden reason-bound Operator retry of exact current terminal infrastructure failure; immutable receipt/AUTH/audit/outbox and historical replay; no public or production registration |
+| ARCH-04F (remaining before false activation and public intake) | Delivered 04F1/04F2/04F3/04F4 | Manager-visible setup-fault hold; retain submitted work and locked rules without contributor penalty, defer changing or re-screening submitted-task rules; no human Review dependency |
 
 False guide activation additionally requires shared acceptance, exact AUTH,
 a valid generation through the delivered REV-12A4A controller with
 production readiness verified at ARCH-04E3 and
-the remaining usable ARCH-04F recovery route after 04F3 hidden replacement. The true routing foundation may ship first
+the remaining manager-visible ARCH-04F setup-fault hold after 04F3 hidden replacement and 04F4 hidden retry. The true routing foundation may ship first
 with false still unavailable; neither route invents a new acceptance subsystem.
 Shared REV acceptance persistence/CON participation can precede live human
 queues or decisions, so this extension adds no REV-admission dependency cycle.

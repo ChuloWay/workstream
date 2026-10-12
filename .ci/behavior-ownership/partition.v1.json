@@ -566,6 +566,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/checker_retry_authorization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/contribution_policy_authorization.py"
     },
     {
@@ -599,6 +603,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/checker_registry.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/checker_retry.py"
     },
     {
       "group": "auth",
@@ -786,6 +794,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_checker_retry_replay.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/prepared_lifecycle_replay.py"
     },
     {
@@ -927,6 +939,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/catalogue.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/checker_retry.py"
     },
     {
       "group": "artifacts",
@@ -1893,7 +1909,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "767a0113ffabb5d497aaaf4b4cf7d6a4332d43d8d96ed7fcc2e28519cf865644",
+  "authority_digest": "da53a65579c9b8d2230bd946687d90ad7d14b962de67a9cc61eab81b7793953f",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

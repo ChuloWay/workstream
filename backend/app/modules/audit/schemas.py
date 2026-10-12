@@ -154,6 +154,7 @@ class LifecycleAuditEntityType(StrEnum):
     """Closed product-fact namespaces admitted by the shared participant."""
 
     TASK = "task"
+    CHECKER_RUN = "checker_run"
     REVIEW_QUEUE_ENTRY = "review_queue_entry"
     REVIEW_LEASE = "review_lease"
     REVIEW = "review"
@@ -168,6 +169,7 @@ class LifecycleAuditEventType(StrEnum):
     """Canonical REV/CON lifecycle facts admitted by the shared participant."""
 
     TASK_POST_SUBMIT_ROUTED = "TaskPostSubmitRouted"
+    CHECKER_RETRY_REQUESTED = "CheckerRetryRequested"
     TASK_CREATED = "TaskCreated"
     TASK_SCREENED = "TaskScreened"
     TASK_RELEASED = "TaskReleased"
@@ -222,6 +224,9 @@ class LifecycleAuditReferenceKind(StrEnum):
     TASK = "task_id"
     ASSIGNMENT = "assignment_id"
     SUBMISSION = "submission_id"
+    CHECKER_RUN = "checker_run_id"
+    SOURCE_CHECKER_RUN = "source_checker_run_id"
+    OUTBOX_EVENT = "outbox_event_id"
     REVIEW = "review_id"
     REVIEW_QUEUE_ENTRY = "review_queue_entry_id"
     REVIEW_LEASE = "review_lease_id"
@@ -235,6 +240,7 @@ class LifecycleAuditReferenceKind(StrEnum):
 
 
 _LIFECYCLE_EVENT_ENTITY = {
+    LifecycleAuditEventType.CHECKER_RETRY_REQUESTED: LifecycleAuditEntityType.CHECKER_RUN,
     **dict.fromkeys(
         (
             LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED,
@@ -295,6 +301,14 @@ _LIFECYCLE_EVENT_ENTITY = {
 }
 
 _LIFECYCLE_EVENT_REQUIRED_REFERENCES = {
+    LifecycleAuditEventType.CHECKER_RETRY_REQUESTED: frozenset({
+        LifecycleAuditReferenceKind.TASK,
+        LifecycleAuditReferenceKind.ASSIGNMENT,
+        LifecycleAuditReferenceKind.SUBMISSION,
+        LifecycleAuditReferenceKind.SOURCE_CHECKER_RUN,
+        LifecycleAuditReferenceKind.AUTHORIZATION_DECISION,
+        LifecycleAuditReferenceKind.OUTBOX_EVENT,
+    }),
     LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED: frozenset(
         {
             LifecycleAuditReferenceKind.ASSIGNMENT,
@@ -370,6 +384,7 @@ class LifecycleAuditEventInput(BaseModel):
     source_type: Literal["manual", "markdown_import", "csv_import"] | None = None
     locked_lineage: dict[str, object] | None = None
     task_reason: Annotated[str, Field(min_length=1, max_length=1000)] | None = None
+    operator_reason: Annotated[str, Field(min_length=1, max_length=500)] | None = None
     from_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     to_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None
     references: dict[LifecycleAuditReferenceKind, UUID] = Field(default_factory=dict)
@@ -405,8 +420,19 @@ class LifecycleAuditEventInput(BaseModel):
             raise ValueError("manager event requires exact authority facts")
         if manager:
             self.manager_authority_facts = _manager_authority_facts(self)
-        if (manager or self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.authorization_resource_digest is not None):
+        if (manager or self.event_type in {
+            LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
+            LifecycleAuditEventType.CHECKER_RETRY_REQUESTED,
+        }) != (self.authorization_resource_digest is not None):
             raise ValueError("release requires its exact authorization digest")
+        retry = self.event_type is LifecycleAuditEventType.CHECKER_RETRY_REQUESTED
+        if retry != (self.operator_reason is not None):
+            raise ValueError("checker retry requires one Operator reason")
+        if self.operator_reason is not None and (
+            not self.operator_reason.strip()
+            or any(ord(character) < 32 or ord(character) == 127 for character in self.operator_reason)
+        ):
+            raise ValueError("invalid Operator reason")
         if (self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED) != (self.assignment_invalidation_facts is not None):
             raise ValueError("assignment facts restricted to release")
         if self.assignment_invalidation_facts is not None:
@@ -459,6 +485,7 @@ class LifecycleAuditEventInput(BaseModel):
             raise ValueError("fact recording cannot carry lifecycle states")
         entity_reference = {
             LifecycleAuditEntityType.TASK: LifecycleAuditReferenceKind.TASK,
+            LifecycleAuditEntityType.CHECKER_RUN: LifecycleAuditReferenceKind.CHECKER_RUN,
             LifecycleAuditEntityType.REVIEW_QUEUE_ENTRY: LifecycleAuditReferenceKind.REVIEW_QUEUE_ENTRY,
             LifecycleAuditEntityType.REVIEW_LEASE: LifecycleAuditReferenceKind.REVIEW_LEASE,
             LifecycleAuditEntityType.REVIEW: LifecycleAuditReferenceKind.REVIEW,

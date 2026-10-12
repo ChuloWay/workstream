@@ -171,6 +171,24 @@ def evaluation_coordinator(session) -> EvaluationCoordinationPort:
     return EvaluationCoordinator(session, tasks=evaluation_task_guard(session))
 
 
+def checker_retry_service(session, context):
+    """Compose hidden Operator retry from existing owner operations only."""
+    from app.adapters.audit import checker_retry_audit
+    from app.adapters.auth import checker_retry_authorization
+    from app.adapters.outbox import outbox_append
+    from app.adapters.tasks import evaluation_task_guard
+    from app.modules.checkers.checker_retry import CheckerRetryService
+    from app.modules.checkers.execution_coordination import EvaluationCoordinator
+
+    tasks = evaluation_task_guard(session)
+    return CheckerRetryService(
+        session, actor_profile_id=context.actor_profile_id,
+        tasks=tasks, evaluations=EvaluationCoordinator(session, tasks=tasks),
+        authorization=checker_retry_authorization(session, context),
+        events=outbox_append(session), audit=checker_retry_audit(session),
+    )
+
+
 def post_submission_executor(*, sessions, materialization):
     """Compose the sole executor with exact fixed-service AUTH at both phases."""
     from app.adapters.outbox import outbox_append

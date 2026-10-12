@@ -220,9 +220,12 @@ ARCH-04F3 admits a changed full replacement ZIP only for that exact current
 authorized checker-remediation source. The existing intake and atomic Submission
 writer retain its cause, predecessor and locked policy lineage while creating
 the successor evaluation request. This hidden path creates no Review or
-contribution on failure. Remaining work includes Operator retry of known terminal
-infrastructure failures and manager-visible holds for valid setup faults, with
-no contributor penalty. Changing submitted-task rules remains deferred.
+contribution on failure. ARCH-04F4 adds hidden reason-bound Operator retry for
+known terminal infrastructure failures using the existing CHECKERS coordinator
+and request handler, with exact AUTH, audit and outbox custody. Fresh-authorized
+replay validates the historical request. Manager-visible holds for valid setup
+faults remain, without contributor penalty. Changing or re-screening submitted-task
+rules remains deferred. The retry has no public route or production registration.
 Production composition follows before public intake and the first real end-to-end drill.
 
 Active work stays on that first contribution path. Live human review/revision,
@@ -854,9 +857,10 @@ B6 supplies atomic Submission/dispatch, B7 hidden request delivery and B8 hidden
 completion handling with commit-before-ACK. 04F2 supplies the hidden remediation
 handoff without Review, acceptance, contribution or award effects. 04F3 supplies
 hidden exact-cause replacement intake through the canonical Submission writer;
-it neither creates failure economics nor activates human revision. Operator retry
-of known terminal infrastructure failures, manager-visible setup-fault holds
-without contributor penalty, live registration, false-guide
+it neither creates failure economics nor activates human revision. 04F4 adds
+hidden Operator retry for known terminal infrastructure failures with immutable
+source evidence. Manager-visible setup-fault holds without contributor penalty,
+live registration, false-guide
 activation and public intake remain subsequent gates.
 Setup-fault holds retain the Submission and locked rules; changing those rules
 for submitted work remains deferred.

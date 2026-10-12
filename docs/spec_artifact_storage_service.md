@@ -1638,13 +1638,16 @@ terminal, unroutable `material_unavailable`, after scratch cleanup and fresh
 finalization authority. It records no verified material custody, member results
 or completion event, and exact replay performs no provider I/O. Authority or
 selection denial and late lineage drift remain nonterminal. This hidden executor
-neither changes TASK state nor provides automatic or public retry. After a terminal
-result, a new authorized evaluation requires the coordinator's next generation.
+neither changes TASK state nor provides automatic or public retry. ARCH-04F4 adds
+a separate hidden, reason-bound Operator command that uses the coordinator's
+next generation only for an exact current terminal `infrastructure_failed` run;
+the prior result and ART evidence remain immutable. The existing request handler
+delivers its authorized successor without production registration.
 Unfinished expired-lease recovery retains the existing attempt and generation.
 
 The target outage policy remains distinct from that current implementation.
-Future bounded retry/continuation must preserve `evaluation_pending` while
-storage is transiently unavailable; it is not an active checker retry service.
+The hidden Operator retry preserves `evaluation_pending` while platform failure
+is retried; no automatic or public checker retry service is active.
 A provider object confirmed missing after its content was bound is a terminal
 artifact incident in v0.1: the immutable binding remains, evaluation stays
 blocked, and no contributor, Project Manager, or Operator route may replace or

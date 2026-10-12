@@ -17,8 +17,8 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 [ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either policy mode, with no Review, FinalAcceptance,
-ContributionRecord or award. 04F3 hidden exact-cause replacement intake is delivered;
-manager-visible setup-fault hold and Operator retry, 04E3 production composition, public intake and
+ContributionRecord or award. 04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; neither creates a contribution or award.
+Manager-visible setup-fault hold, 04E3 production composition, public intake and
 the first-layer drill remain. False-guide activation, live human review/revision
 and payment delivery remain unavailable.
 
@@ -72,9 +72,10 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [CON-07](WS-CON-001-07.md) adds hidden source-neutral submitter participation
   and complete frozen award-set staging/replay; no recognition route or
   fulfillment operation is live.
-- Next usable boundary: complete 04F recovery after 04F3 hidden exact-cause replacement intake,
-  04E3 live composition and false-guide readiness, public intake and the
-  first-layer drill. The delivered remediation handoff is independent of REV/CON;
+- Next usable boundary: the manager-visible setup-fault hold after 04F3 hidden
+  exact-cause replacement intake and 04F4 hidden Operator infrastructure retry,
+  followed by 04E3 live composition and false-guide readiness, public intake and
+  the first-layer drill. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: `docs/spec_contribution_compensation.md`,
   [`CONFORMANCE.md`](CONFORMANCE.md), code, migrations, and tests.

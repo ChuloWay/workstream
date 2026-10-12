@@ -65,6 +65,41 @@ def task_transition_audit(session: AsyncSession) -> TaskTransitionAuditPort:
     return _TaskTransitionAudit(session)
 
 
+class _CheckerRetryAudit:
+    """Use the shared AUDIT lifecycle participant for a retry initiation fact."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._participant = LifecycleAuditParticipant(session)
+
+    async def record(self, preparation, successor, authority) -> None:
+        source = preparation.source
+        await self._participant.add_event(LifecycleAuditEventInput(
+            event_id=successor.audit_event_id,
+            entity_type=LifecycleAuditEntityType.CHECKER_RUN,
+            entity_id=successor.run_id,
+            event_type=LifecycleAuditEventType.CHECKER_RETRY_REQUESTED,
+            actor_id=preparation.actor_profile_id,
+            reason=LifecycleAuditReason.FACT_RECORDED,
+            operator_reason=preparation.reason,
+            authorization_resource_digest=authority.resource_digest,
+            references={
+                LifecycleAuditReferenceKind.PROJECT: source.project_id,
+                LifecycleAuditReferenceKind.TASK: source.task_id,
+                LifecycleAuditReferenceKind.ASSIGNMENT: source.assignment_id,
+                LifecycleAuditReferenceKind.SUBMISSION: source.submission_id,
+                LifecycleAuditReferenceKind.CHECKER_RUN: successor.run_id,
+                LifecycleAuditReferenceKind.SOURCE_CHECKER_RUN: source.source_run_id,
+                LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: authority.decision_id,
+                LifecycleAuditReferenceKind.OUTBOX_EVENT: successor.event_id,
+            },
+        ))
+
+
+def checker_retry_audit(session: AsyncSession):
+    """Compose the existing transaction-bound AUDIT participant."""
+    return _CheckerRetryAudit(session)
+
+
 def committed_authority_invalidation(session_factory) -> AuthorityInvalidationPort:
     """Keep cause validation and independent committed reads in AUDIT."""
     return CommittedAuthorityInvalidationReader(session_factory)

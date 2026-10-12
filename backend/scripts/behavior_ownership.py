@@ -245,6 +245,12 @@ ARCH_04E1BB8_COMPLETION_TARGETS = frozenset({
 ARCH_04F3_REPLACEMENT_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_context.py",
 })
+ARCH_04F4_RETRY_TARGETS = frozenset({
+    "backend/app/modules/checkers/checker_retry.py",
+    "backend/app/modules/authorization/checker_retry_authorization.py",
+    "backend/app/modules/authorization/domain/checker_retry.py",
+    "backend/app/modules/authorization/prepared_checker_retry_replay.py",
+})
 
 ARCH_04E1BB7_DELIVERY_TARGETS = frozenset({
     "backend/app/modules/checkers/delivery_authority.py",
@@ -893,6 +899,7 @@ def _validate_additive_partition_transition(
             | ARCH_04E1BB7_DELIVERY_TARGETS
             | ARCH_04E1BB8_COMPLETION_TARGETS
             | ARCH_04F3_REPLACEMENT_TARGETS
+            | ARCH_04F4_RETRY_TARGETS
             | OBSERVABILITY_FOUNDATION_TARGETS
         | ARCH_04E1A_SOURCE_TARGETS
         | ARCH_04D2_AUTHORITY_TARGETS
