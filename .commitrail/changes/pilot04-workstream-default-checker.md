@@ -132,6 +132,11 @@ cleanup.
   tests after replacement proof.
 - Focused contract, AUTH, custody, replay, concurrency, failure, service,
   public API, CLI, PostgreSQL and MinIO tests and their exact CI ownership.
+- The existing CLI post-policy read DTO and its HTTP/public-socket contract
+  tests. Replace the removed catalogue-policy decoder with the one closed
+  `external_post_submit_policy.v1` response; preserve selectors, fresh read
+  authority, raw output, denial handling and transport failure semantics. No
+  legacy-response fallback or command-surface change is allowed.
 
 ### Not allowed
 
@@ -453,3 +458,17 @@ hash to the same pinned 520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb8
 Only the two registry prefixes and exact structural expectation change; all
 services, digest, health checks, test selection and caps remain unchanged.
 New-source CI verification is required; those failed lanes ran no tests.
+
+Fresh CLI public-contract CI then reached the current backend successfully but
+rejected its selected external POST policy locally as `invalid_api_response`.
+The CLI still decoded the removed catalogue schema. The bounded caller repair
+uses a strict closed external-policy/registry DTO, rejects the historical active
+catalogue shape and retains the existing public authority, replay and transport
+controls. Focused Go packages and five HTTP contract tests pass. The strengthened
+real PostgreSQL public-socket node publishes a genuine Operator-authorized POST
+registry entry, derives one nonempty locked binding and passes in 96.64 seconds
+at code/test head `84087f49245482ecf775a6d68dc83a849f9ebe0a`, schema head
+`0036_selected_checker_flow`, with complete isolated database/role cleanup. It
+uses the actual current backend JSON rather than a copied nested fixture. This
+record-only descendant changes no tested CLI or test bytes. The prior hosted
+143-pass/one-fail run is retained as the failing-before discriminator.
