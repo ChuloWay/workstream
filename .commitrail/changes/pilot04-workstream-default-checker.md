@@ -1317,3 +1317,26 @@ negatives validates the actual baseline then appends only its freshly parsed
 injected file to an immutable inventory copy. All exact owner paths, construction
 counts, spelling variants and required assertions remain. Require the same 35-case
 module and discriminating composition/custody mutants before claiming this repair.
+
+At clean `7cd949a646b115b265a4dd723a17366c291edf5e`, the same complete
+35-case module passed in 118.99 seconds within pytest and 140.073 seconds including
+process lifetime. Both baseline and optimized subprocesses exited zero within the
+unchanged 1200-second bound and had identical start/end heads and clean trees.
+Host contention and cache conditions differed, so these are measured local runs,
+not a guaranteed hosted speedup. The optimized complete-source fixture setup took
+17.87 seconds for composition and 9.62 for custody; the fifteen injected negative
+calls took 0.02–0.12 seconds each. No test, spelling, exact consumer path, call
+multiplicity or assertion was removed.
+
+An out-of-tree CPU probe compiled the actual parser, validators and negative test
+functions from that frozen source and read all 507 actual APP files. It confirmed
+that inventory summaries contain only immutable scalar containers, both complete
+baselines validate, all fifteen ordinary negatives pass, and no inventory changes
+between cases. Changing custody consumer equality to keys-only and disabling the
+eight composition ownership assertions caused the expected `DID NOT RAISE` failure
+for every one of the ten custody and five composition negatives. This is a pure
+source/mutation discriminator, separately qualified from the complete pytest run;
+it makes no database, native lifecycle or exhaustive hosted-suite claim. Raw
+before/after and mutant evidence remains available to the lead. Independent QA
+source review covered the complete discovery and custody extraction; composition
+addendum review remains necessary for the final union. Ruff and diff checks pass.
