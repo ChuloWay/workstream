@@ -1547,3 +1547,41 @@ Lead source review found no issue with scoped setting restoration, persisted
 ten-second duration, real database expiry or retained custody/refusal assertions.
 Serialized PostgreSQL execution remains pending; this validation does not claim
 the schema lane or the full hosted suite passed.
+
+
+### Final hosted-failure repair verification
+
+The first full hosted run at candidate `da76eabed` (tested merge reference
+`7b9a2f3a`) passed seven backend lanes. Shared A failed only the stale permission
+count and missing PRE audit-action literals; project B failed only the stale
+capability-growth draft expectation. Schema execution reached its unchanged
+1200-second cap while making progress; six obsolete lease patches caused roughly
+720 seconds of real expiry waits. These are diagnosed failures, not a full-suite
+pass. The repair batch leaves every lane, node, CI limit and production execution
+budget unchanged.
+
+At clean `7e17883e`, both capability-growth PostgreSQL cases passed in 183.83
+seconds: exact current draft output/projection/finalization links, retained
+capability gaps, no effective PRE/POST policies, oversized terminal refusal and
+exact replay without provider construction. At clean `9813a7b0`, twelve pure
+audit contracts passed, the independent inventory discriminators rejected missing
+and extra actions, and two signed public PostgreSQL read/write-denial controls
+passed in 27.78 seconds. At clean `c5d28178`, all seven receipt/delivery controls
+passed in 545.95 seconds within the unchanged 600-second local bound, proving
+persisted ten-second initial leases, real database expiry, exact AUTH receipt
+rejection, rollback, valid recovery and expired-delivery refusal. All three native
+runners installed `0036_selected_checker_flow` and verified owned database/role
+and MinIO namespace cleanup. The receipt fixtures use the current local ART
+provider; this is not a new real-image or MinIO byte proof.
+
+The integrated source at clean `85b083279` is byte-identical to those reviewed
+repair files. Lead and independent peer source/test-delta review passed, including
+review of the reviewer-authored receipt changes. Ruff and Commitrail checks pass.
+Canonical collection at that exact head contains 8,776 unique nodes in all ten
+lanes, zero skips/deselections, and no exclusions; collection is not execution
+evidence. Removing two unreferenced executor constants adds no runtime behavior.
+The exact `da76eabed` Rust/PostgreSQL/MinIO image drill and capability-activation
+proof remain separate earlier-head evidence. Fresh full hosted CI on the
+published repair candidate and authenticated completed-node evidence verification
+are still required before merge readiness. No deployment or merge is authorized
+by these local results.
