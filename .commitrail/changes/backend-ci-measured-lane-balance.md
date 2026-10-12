@@ -5,7 +5,7 @@
 - Intended merge outcome: The existing ten backend lanes have measured execution
   headroom while retaining the full test inventory and all isolation/evidence gates.
 
-## Intent and evidence
+## Intent
 
 The user approved reducing CI turnaround before continuing product integration.
 Successful Backend run `38239242806` took 25m26s and completed 9,204 tests. Its
@@ -19,7 +19,7 @@ Current logs retain only the 25 slowest pytest phases. They cannot support a
 complete cost model. Each family currently assigns nodes using the first byte
 of SHA-256 modulo its lane count; node counts do not represent execution cost.
 
-## Bounded plan
+## Bounded change
 
 1. Retain complete pytest phase durations (`--durations=0 --durations-min=0`)
    in the existing diagnostic logs for ordinary and schema-admin execution.
@@ -78,7 +78,7 @@ weakened validators, branch protection changes, cache trust changes, dynamic
 plugins, runtime timing-based selection, or removal of real PostgreSQL/MinIO/Redis
 proof. Broad collection/static-check deduplication is a later measured slice.
 
-## Acceptance and verification
+## Acceptance criteria
 
 - Every ordinary/admin command emits complete phase durations without changing
   selected node IDs, plugins, coverage or isolation arguments.
@@ -98,6 +98,8 @@ proof. Broad collection/static-check deduplication is a later measured slice.
 - Assess the capability ledger before readiness. This change adds no product
   capability; update only an affected measured CI statement, not product status.
 
+## Risk and review routing
+
 Risk: `L1` (CI test selection and evidence). Required plan review and final
 `ci_integrity`, `qa`, `test_delta`, `architecture`, `reuse_dedup`, `security`
 and proportionate `documentation` review. Shared checks run once; focused
@@ -106,3 +108,10 @@ reviewers inspect exact frozen targets and unchanged evidence owners.
 Human review focus: exact inventory/isolation preservation, simple deterministic
 allocation, measurement provenance, and actual hosted headroom. No new human
 decision or external authority is required for this bounded change.
+
+## Evidence
+
+The command regression rejects the original truncated duration flag before the
+runner change. The diagnostic-only implementation passes 117 focused command,
+catalogue and evidence tests. No allocation or runtime improvement is claimed
+from those checks; hosted timing measurements remain required.
