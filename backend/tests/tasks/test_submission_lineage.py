@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import replace
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from app.core.identifiers import new_record_id
 
@@ -252,7 +252,8 @@ async def test_packet_custody_upgrade_preserves_retained_submission(
     import asyncpg
     from alembic import command
     from app.db import session as db_session
-    from tests.migration_fixtures import _config, current_art_attempt_seed_schema
+    from tests.historical_submission_fixtures import historical_material_fixture
+    from tests.migration_fixtures import _config
 
     with migration_lock():
         await db_session.dispose_engine()
@@ -262,26 +263,23 @@ async def test_packet_custody_upgrade_preserves_retained_submission(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0021_submission_manifest")
-        async with AsyncExitStack() as stack:
-            async with current_art_attempt_seed_schema(isolated_database_env):
-                h = await stack.enter_async_context(_prepared_packet(isolated_database_env, tmp_path))
-                from tests.historical_submission_fixtures import write_historical_submission
-                created = await write_historical_submission(h.factory, h.context, h.creation)
-                # The predecessor allowed this mismatch. Upgrade must neither invent
-                # evidence nor rewrite/delete retained text, even when inconsistent.
-                async with h.factory.begin() as session:
-                    await session.execute(text(
-                        "UPDATE public.submissions SET summary = summary || ' Historical.' WHERE id=:id"
-                    ), {"id": created.submission_id})
-                    before = await session.scalar(text(
-                        "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
-                    ), {"id": created.submission_id})
+        async with historical_material_fixture(tmp_path, isolated_database_env) as h:
+            submission_id = h.request["submission_id"]
+            # The predecessor allowed this mismatch. Upgrade must neither invent
+            # evidence nor rewrite/delete retained text, even when inconsistent.
+            async with h.factory.begin() as session:
+                await session.execute(text(
+                    "UPDATE public.submissions SET summary = summary || ' Historical.' WHERE id=:id"
+                ), {"id": submission_id})
+                before = await session.scalar(text(
+                    "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                ), {"id": submission_id})
             # Bind this preservation proof to the packet-custody migration.
             await asyncio.to_thread(command.upgrade, _config(), "0022_submission_packet_custody")
             async with h.factory() as session:
                 after = await session.scalar(text(
                     "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
-                ), {"id": created.submission_id})
+                ), {"id": submission_id})
                 assert after == before
                 assert await session.scalar(text(
                     "SELECT count(*) FROM pg_catalog.pg_trigger WHERE tgname='submission_packet_custody'"
