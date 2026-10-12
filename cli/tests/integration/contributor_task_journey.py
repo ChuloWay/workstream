@@ -123,7 +123,7 @@ async def exercise_contributor_task_reads(
 
     peer_profiles = {}
     peer_tokens = {}
-    for name in ("cli-task-peer", "cli-task-reviewer"):
+    for name in ("cli-task-peer", "cli-task-reviewer", "cli-role-admin"):
         peer_tokens[name] = issue_flow_token(
             name, [], issuer=issuer, audience=audience, secret=secret
         )
@@ -215,6 +215,8 @@ async def exercise_contributor_task_reads(
             foreign_project,
             qualification,
             peer_profiles["cli-task-reviewer"],
+            peer_profiles["cli-role-admin"],
+            peer_tokens["cli-role-admin"],
         )
         # An active Submitter grant never substitutes for manager authority.
         with tempfile.TemporaryDirectory(prefix="ws-cli-submit-only-") as directory:

@@ -19,6 +19,8 @@ async def exercise_project_role_decisions(
     foreign_project,
     qualification,
     reviewer_id,
+    control_actor_id,
+    control_token,
 ):
     admin = {"Authorization": "Bearer " + tokens["cli-admin"]}
     system = {"Authorization": "Bearer " + tokens["cli-manager"]}
@@ -33,9 +35,12 @@ async def exercise_project_role_decisions(
         "reason": "CLI explicit qualification",
     }
 
-    async def post(path, payload, headers=admin):
+    async def post(path, payload, headers=None):
         response = await direct.post(
-            path, headers=headers | {"Idempotency-Key": str(uuid4())}, json=payload
+            path,
+            headers=(admin if headers is None else headers)
+            | {"Idempotency-Key": str(uuid4())},
+            json=payload,
         )
         assert response.status_code in (200, 201), response.text
         return response.json()
@@ -53,6 +58,21 @@ async def exercise_project_role_decisions(
             },
         )
 
+    # The retained journey's bootstrap administrator already performs many
+    # distinct setup/lifecycle controls. Give this independent control actor
+    # its real public authority instead of exceeding that actor's 30/minute
+    # limiter, disabling rate controls, clearing counters or retrying requests.
+    await post(
+        "/api/v1/admin-role-grants",
+        {
+            "target_actor_profile_id": control_actor_id,
+            "role": "access_administrator",
+            "scope_type": "system",
+            "scope_project_id": None,
+            "reason": "Independent CLI role lifecycle proof",
+        },
+    )
+    admin = {"Authorization": "Bearer " + control_token}
     covering = await manager_grant()
     original_covering_id = covering["resource_id"]
     paths = (await direct.get("/openapi.json")).json()["paths"]
