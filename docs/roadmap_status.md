@@ -203,6 +203,10 @@ Separate manager task create/screen/release commands now bridge an active guide
 to ready work through the public APIs, with explicit request keys and complete
 management receipts. Backend owners retain policy locking, readiness and fresh
 authority; there is no automatic create-and-release sequence or bulk import.
+Explicit CLI Submitter/Reviewer issuance and revocation use the existing public
+AUTH writes with caller-supplied qualifications/reasons, exact receipt binding
+and fresh-authorized manual replay. This is not AdminRole administration,
+automatic eligibility or activation of unfinished human review.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -461,6 +465,12 @@ cannot be reused as post-submission review-gate evidence. See the
   release with full management receipts and current-authority manual replay.
   Bulk import and hidden submission remain separate; the retained contributor
   journey proves the prepared ready task can be claimed and started.
+  [CLI contributor role decisions](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-20.md)
+  issue/revoke exact-project Submitter/Reviewer grants through public AUTH POSTs,
+  with explicit qualification evidence, full receipts and current-authority
+  manual replay. The real contributor journey retains claim/start and revoked
+  grant denial; Reviewer-only authority still cannot claim/start. AdminRole
+  administration and automatic grants are not added.
   [PILOT-13 assigned-guide access](../.commitrail/changes/pilot13-assigned-task-guide-documents.md)
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads

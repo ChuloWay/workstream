@@ -414,6 +414,11 @@ creates a draft; separate `project task screen PROJECT_ID TASK_ID` and
 `project task release PROJECT_ID TASK_ID --reason TEXT` commands each require
 their own retry key. Workstream owns guide/policy locking and readiness; no
 command automatically prepares or releases work after another command.
+`workstream project role-grant issue PROJECT_ID --input FILE --idempotency-key UUID`
+and `project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID`
+send deliberate Submitter/Reviewer decisions with explicit qualification evidence
+and reasons. AUTH retains exact-project manager authority, qualification capture
+and fresh-authorized replay; receipts are observations, not cached permission.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
