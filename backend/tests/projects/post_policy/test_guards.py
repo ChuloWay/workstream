@@ -7,7 +7,6 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from app.modules.checkers.api.historical_post_submit import current_post_submit_catalogue
 from app.modules.projects.api.guide_proposals import GuideProposalError, GuideProposalSelection
 from app.modules.projects.api.post_policy import (
     PostPolicyApproval,
@@ -38,7 +37,7 @@ async def test_missing_approval_receipt_hits_the_specific_deferred_guard(clean_p
         payload = PostPolicyApproval(target=projected.target, idempotency_key=uuid4())
         async with factory() as session:
             await session.begin()
-            service = PostPolicyService(session, PostAuthority(session, actor, command.project_id, grant), current_post_submit_catalogue())
+            service = PostPolicyService(session, PostAuthority(session, actor, command.project_id, grant))
 
             async def omit_only_operation(*args):
                 # Preserve actual policy outputs and the real prepared audit decision.
@@ -96,10 +95,8 @@ async def test_retained_policy_and_operation_evidence_is_immutable(clean_postgre
                 await session.execute(text(statement))
 
 
-@pytest.mark.parametrize('change', ['upstream', 'catalogue', 'project', 'link', 'policy_hash'])
+@pytest.mark.parametrize('change', ['upstream', 'project', 'link', 'policy_hash'])
 async def test_exact_source_and_authority_substitutions_reject_without_writes(clean_postgres_database, change):
-    from tests.checkers.post_submit.support import altered_catalogue
-
     async with proposal_case(clean_postgres_database) as (values, factory, command, actor, grant):
         derive, projected = await prepare_post_policy(factory, command, actor, grant, service_actor(values))
         payload = PostPolicyApproval(target=projected.target, idempotency_key=uuid4())
@@ -110,13 +107,12 @@ async def test_exact_source_and_authority_substitutions_reject_without_writes(cl
                 await operate(factory, service_actor(values), command.project_id, None, 'derive', bad)
         else:
             async with factory() as session, session.begin():
-                catalogue = altered_catalogue(index=8, state='disabled') if change == 'catalogue' else current_post_submit_catalogue()
                 authority = PostAuthority(session, actor, uuid4() if change == 'project' else command.project_id, grant)
                 caller = replace(actor, identity_link_id=uuid4()) if change == 'link' else actor
                 if change == 'policy_hash':
                     payload = PostPolicyApproval(target=projected.target.model_copy(update={'policy_hash': 'sha256:'+'b'*64}),
                                                  idempotency_key=uuid4())
-                service = PostPolicyService(session, authority, catalogue)
+                service = PostPolicyService(session, authority)
                 with pytest.raises(GuideProposalError, match='authority_unavailable' if change in {'project','link'} else 'proposal_stale'):
                     await service.approve(payload, actor=caller, request_id=uuid4())
         async with factory() as session:

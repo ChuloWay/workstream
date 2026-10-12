@@ -146,11 +146,11 @@ def activation_service(session, actor, command, grant, *, authority=True, close_
 
 @asynccontextmanager
 async def activation_case(
-    url, *, human_review_required=True, compensated=False, contribution_awards=()
+    url, *, human_review_required=True, compensated=False, contribution_awards=(), post_submit_registry_spec=None
 ):
     from .source_fixtures import source_case
 
-    async with source_case(url) as (values, factory, finalization, actor, grant):
+    async with source_case(url, post_submit_registry_spec=post_submit_registry_spec) as (values, factory, finalization, actor, grant):
         await seed_selected_review_revision_inputs(
             factory, finalization, actor, human_review_required=human_review_required
         )

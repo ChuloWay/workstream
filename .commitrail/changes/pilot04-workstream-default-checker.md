@@ -59,6 +59,35 @@ cleanup.
 
 ### Allowed
 
+- Delegated TEST-only reconciliation is limited to
+  `tests/projects/post_policy/test_guards.py`, `test_postgresql.py`,
+  `test_public_api.py`, `tests/authorization/post_policy/pg_support.py`,
+  `tests/projects/test_locked_policy_custody.py` and the single
+  `activation_case` registry-spec passthrough in
+  `tests/projects/guide_activation/pg_support.py` (all under `backend/`).
+  Use the current two-argument service, saved approved external policy and
+  real Operator-authorized immutable registration. Preserve authority,
+  transaction, custody, replay, mutation and revocation assertions. Shared
+  `tests/checkers/post_submit/support.py` and all production files stay untouched.
+  Remove only mutable catalogue injection, whose owner no longer exists;
+  replace its purpose with exact approved-binding version/digest substitution
+  refusal and unchanged locked-context reads without live registry lookup.
+
+  Purpose mapping: the obsolete `catalogue` parametrization of
+  `test_exact_source_and_authority_substitutions_reject_without_writes` is
+  removed because a mutable catalogue is no longer a service input. Its remaining
+  upstream/project/link/policy-hash substitutions retain their zero-write checks.
+  `test_post_policy_operation_preserves_finalization_without_provider_or_evaluator_calls`
+  now binds one genuinely registered POST entry to the approved snapshot and
+  refuses a substituted capability version. The old catalogue-rollout context
+  case is replaced by
+  `test_registry_substitution_blocks_activation_but_frozen_context_never_re_resolves`:
+  a substituted registry digest blocks activation with unchanged state; restored
+  identity activates; frozen and active contexts remain identical with live
+  registry reads forbidden. Public response comparison uses the actual saved
+  approved external policy. All SQL immutability, deferred receipt closure,
+  replay, commit rollback, revocation and HTTP admission tests remain selected.
+
 - This record and affected current PILOT-04 architecture, roadmap and owner docs.
 - CHECKERS policy contracts, registry reads, default/external execution,
   durable attempt/result custody, post routing and composition roots.
