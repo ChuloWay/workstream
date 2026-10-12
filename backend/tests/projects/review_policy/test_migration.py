@@ -57,6 +57,16 @@ async def _snapshot(connection) -> dict[str, object]:
     }
 
 
+def _require_retained_policy(snapshot, *, requires_second_review):
+    """Prevent an empty or unselected fixture from satisfying preservation."""
+    assert len(snapshot["policies"]) == len(snapshot["selectors"]) == 1
+    policy, selector = snapshot["policies"][0], snapshot["selectors"][0]
+    assert policy["requires_second_review"] is requires_second_review
+    assert selector["policy_id"] == policy["id"]
+    assert selector["generation"] == policy["policy_generation"]
+    assert selector["hash"] == policy["policy_hash"]
+
+
 async def test_upgrade_refuses_retained_true_without_changing_its_lineage(
     isolated_database_env,
     migration_lock,
@@ -73,7 +83,7 @@ async def test_upgrade_refuses_retained_true_without_changing_its_lineage(
         )
         async with db_session.get_engine().connect() as connection, connection.begin():
             before = await _snapshot(connection)
-            assert before["policies"][0]["requires_second_review"] is True
+            _require_retained_policy(before, requires_second_review=True)
             with pytest.raises(
                 IntegrityError,
                 match="retained requires_second_review=true policy",
@@ -99,6 +109,7 @@ async def test_upgrade_installs_false_guard_without_changing_hash_or_lineage(
         )
         async with db_session.get_engine().connect() as connection:
             before = await _snapshot(connection)
+            _require_retained_policy(before, requires_second_review=False)
             await connection.rollback()
         await db_session.dispose_engine()
         await asyncio.to_thread(command.upgrade, _config(), "head")
