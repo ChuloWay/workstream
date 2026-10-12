@@ -1121,3 +1121,36 @@ identical seeds, revisions, tables and values everywhere else. The archive is
 checksum-bound at `25560b75796f84cff46bb506abdcd4b9cc2b7535411096fdbbec921d245d95e9`.
 This supplies a retained predecessor identity prerequisite; canonical migration
 and receipt proof remains required.
+
+### Frozen cutover verification before publication
+
+At clean `835737909aa3844d6cda1a0605a3098ed73781c1`, the canonical isolated
+PostgreSQL/MinIO runner passed three current-schema controls in 245.53 seconds:
+all installed PL/pgSQL functions compile; new writes through retired PRE shapes
+are refused with exact SQLSTATE and retained-row equality; and the current
+selected admission/dispatch/empty-POST production completion path reaches shared
+false-policy acceptance with complete contribution/award facts and exact replay.
+Runner exit was zero and database, role and object-store cleanup completed.
+Installed fingerprint is `f510310623f222209cbbee89291edb8e1582d65ddaf9d173d534dd796ab68991`.
+
+Independent SQL/TASK/ART source reviews and archive review passed their named
+frozen heads. The full current scratch module passed 93 tests after both format
+upgrade implementations and upgrade-only tests were removed. Ruff and all six
+current documentation/process gates passed. Canonical collection at `835737909`
+found 8,754 unique tests across ten lanes with no exclusions; this is collection,
+not exhaustive execution.
+
+The repaired completed-0008 discriminator passed at clean `70424eedb` in 90.06
+seconds; its prior exact-source control failed with the intended terminal-member
+error in 89.96 seconds. Paid-0018 preservation passed at clean `0749dfb10` in 96.33
+seconds, reaching the actual submitter record and exact two awards through 0019.
+Both canonical runners exited zero with full database/role/object-store cleanup.
+Fixture join and queue/claim transaction repairs received independent test-delta
+review without changing retained-value, refusal, count or zero-effect assertions.
+Prior fixture failures and bounded runner timeouts remain qualified in raw logs;
+a timed-out runner is never counted as a pass even when its pytest log completed.
+
+Remaining raw migration controls, a fresh final image drill and full required
+hosted CI remain necessary before human merge approval. The actual Rust image
+proof at `6fd3fde80` uses local runc/docker-dev and does not claim hosted gVisor,
+public contributor upload/CLI or an exhaustive suite. No deployment or merge.
