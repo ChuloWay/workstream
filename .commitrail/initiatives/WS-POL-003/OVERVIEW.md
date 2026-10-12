@@ -91,9 +91,10 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: complete 04F recovery after 04F3 hidden exact-cause replacement intake,
-  04E3 live composition and false-guide readiness, public intake and the
-  first-layer drill. The delivered remediation handoff is independent of REV/CON;
+- Next usable boundary: the manager-visible setup-fault hold after 04F3 hidden
+  exact-cause replacement intake and 04F4 hidden Operator infrastructure retry,
+  followed by 04E3 live composition and false-guide readiness, public intake and
+  the first-layer drill. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: project-guide specifications, authorization and
   contribution-policy specifications, code, migrations, and tests.
