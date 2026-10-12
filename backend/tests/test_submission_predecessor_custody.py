@@ -920,6 +920,7 @@ async def test_nonremediation_outcome_cannot_authorize_replacement_before_bytes(
 
                 async def unavailable(*_args, **_kwargs):
                     raise ArtifactStoreUnavailableError("selected input unavailable")
+                    yield b""  # Preserve ArtifactStore.open's async-iterator port.
 
                 failure.setattr(h.store, "open", unavailable)
             result = await live_executor(h).evaluate_post_submission(h.request)

@@ -53,9 +53,10 @@ class Consumer:
 class ExternalGrantConsumer(Consumer):
     """Exercise the real POST lineage through ART's callback-scoped grant."""
 
-    def __init__(self, files, execution):
+    def __init__(self, files, execution, scratch):
         super().__init__(files)
         self.execution = execution
+        self.scratch = scratch
         self.grant_path = None
         self.manifest = None
 
@@ -91,7 +92,7 @@ class ExternalGrantConsumer(Consumer):
         await super().evaluate(request, view)
         external_request = self.external_request(view.external_checker_material)
         with view.external_checker_grant(external_request) as grant:
-            self.grant_path = view._preparation._root / "workspaces" / grant.grant_id
+            self.grant_path = self.scratch / "workspaces" / grant.grant_id
             self.manifest = json.loads(
                 (self.grant_path / ".external-checker-grant.json").read_text()
             )
@@ -161,7 +162,7 @@ async def test_exact_materialization_reads_verified_original_and_revokes_view(tm
 async def test_post_external_grant_binds_native_submission_art_and_lease(tmp_path, isolated_database_env):
     async with material_fixture(tmp_path, isolated_database_env) as h:
         execution = await material_execution(h)
-        consumer = ExternalGrantConsumer(h.files, execution)
+        consumer = ExternalGrantConsumer(h.files, execution, h.scratch)
         material = await h.service.materialize(execution, consumer)
         assert material.evaluation.outcome == "completed"
         assert consumer.manifest["lease_id"] == str(execution.lease.lease_id)

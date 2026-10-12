@@ -289,10 +289,14 @@ async def test_postgresql_consumption_is_concurrent_and_rollback_safe(
                         SubmissionBundleAdmission, str(value.admission_id)
                     )).status
 
-        outcomes = await asyncio.gather(
-            consume_competing(first_competing),
-            consume_competing(competing),
-        )
+        contenders = [
+            asyncio.create_task(consume_competing(first_competing)),
+            asyncio.create_task(consume_competing(competing)),
+        ]
+        try:
+            outcomes = await asyncio.gather(*contenders)
+        finally:
+            await asyncio.gather(*contenders, return_exceptions=True)
         assert sorted(outcomes) == [
             "consumed",
             "stale",

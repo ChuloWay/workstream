@@ -59,6 +59,11 @@ cleanup.
 
 ### Allowed
 
+- `backend/tests/test_submission_predecessor_custody.py` may replace the
+  unavailable-provider test double with the actual async-iterable `open` port.
+  Preserve the infrastructure-failure result and denial before replacement
+  byte access; no production provider behavior or outcome change.
+
 - Current selected-custody fixture closure also permits
   `backend/tests/checkers/external/test_selected_pre_submit_coordination.py`,
   `backend/tests/test_post_submit_selection.py`,
