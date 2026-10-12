@@ -185,7 +185,7 @@ class CapabilityParameter(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, value: str) -> str:
-        """Require a canonical catalogue-owned parameter name."""
+        """Require a canonical registered-checker parameter name."""
         return _validated_identifier(value)
 
     @field_validator("value")
@@ -226,7 +226,19 @@ class _CapabilityBindingIdentity(BaseModel):
 
 
 class PreSubmissionBindingProposal(_CapabilityBindingIdentity):
-    """Reference intake capability; its settings live only in the artifact policy."""
+    """Reference an external intake image with approved typed configuration."""
+
+    parameters: tuple[CapabilityParameter, ...] = Field(
+        default=(), max_length=50, exclude_if=lambda value: not value,
+    )
+
+    @model_validator(mode="after")
+    def validate_parameter_names(self) -> PreSubmissionBindingProposal:
+        """Reject duplicate names without changing retained empty bindings."""
+        names = [parameter.name for parameter in self.parameters]
+        if len(names) != len(set(names)):
+            raise ValueError("capability parameters must be unique")
+        return self
 
 
 class PostSubmissionBindingProposal(_CapabilityBindingIdentity):
@@ -744,14 +756,11 @@ def _validate_bindings(
             raise ValueError("compilation capability binding is invalid")
         if binding.capability_version != definition.capability_version:
             raise ValueError("compilation capability version is stale")
-        if expected_stage == "post_submit":
-            if not isinstance(binding, PostSubmissionBindingProposal):
-                raise ValueError("compilation capability binding is invalid")
-            if definition.registry_entry is None:
-                raise ValueError("compilation capability binding is invalid")
-            definition.registry_entry.configuration_schema.validate_instance(
-                {item.name: item.value for item in binding.parameters}
-            )
+        if definition.registry_entry is None:
+            raise ValueError("compilation capability binding is invalid")
+        definition.registry_entry.configuration_schema.validate_instance(
+            {item.name: item.model_dump(mode="json")["value"] for item in binding.parameters}
+        )
         seen_requirements.add(binding.requirement_id)
     return seen_requirements
 

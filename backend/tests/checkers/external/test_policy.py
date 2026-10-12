@@ -8,6 +8,7 @@ import pytest
 from app.core.identifiers import new_record_id
 from app.interfaces.project_agents import (
     AtomicGuideRequirement,
+    CapabilityParameter,
     CompilationStage,
     PostSubmissionBindingProposal,
     PreSubmissionBindingProposal,
@@ -15,6 +16,8 @@ from app.interfaces.project_agents import (
 )
 from app.modules.checkers.api.external import (
     ExternalCheckerRegistryEntry,
+    ExternalCheckerSchema,
+    external_checker_json_hash,
     ExternalCheckerRegistryUnavailable,
 )
 from app.modules.checkers.api.external_policy import (
@@ -27,8 +30,11 @@ from tests.checkers.external.support import registry_spec
 from tests.projects.guide_compilation.helpers import result
 
 
-def _entry(capability_id: str, phase: str) -> ExternalCheckerRegistryEntry:
-    spec = registry_spec(phase).model_copy(update={"capability_id": capability_id})
+def _entry(capability_id: str, phase: str, configuration_schema=None) -> ExternalCheckerRegistryEntry:
+    changes = {"capability_id": capability_id}
+    if configuration_schema is not None:
+        changes["configuration_schema"] = configuration_schema
+    spec = registry_spec(phase).model_copy(update=changes)
     # Revalidate after changing one digest-bound specification field.
     spec = type(spec).model_validate(spec.model_dump())
     return ExternalCheckerRegistryEntry(
@@ -195,3 +201,55 @@ async def test_selected_pre_budget_binds_ordered_deadlines_to_art_custody():
     assert selected_pre_submit_execution_budget_ms(pre, artifact_deadline_ms=150_000) == 150_000
     with pytest.raises(ExternalCheckerPolicyError, match="exceeds ART"):
         selected_pre_submit_execution_budget_ms(pre, artifact_deadline_ms=149_999)
+
+
+@pytest.mark.asyncio
+async def test_pre_configuration_is_schema_checked_and_locked_as_json():
+    document = {
+        "type": "object",
+        "properties": {
+            "threshold": {"type": "integer", "minimum": 1},
+            "tags": {"type": "array", "items": {"type": "string"}},
+        },
+        "required": ["threshold", "tags"],
+        "additionalProperties": False,
+    }
+    schema = ExternalCheckerSchema(
+        schema_id="acme.pre.configuration", schema_version="v1", document=document,
+        schema_sha256=external_checker_json_hash(document),
+    )
+    registry = _Registry((
+        _entry("acme.safe_archive", "pre_submit", schema),
+        _entry("acme.quality_review", "post_submit"),
+    ))
+    proposal = _proposal()
+    parameters = (
+        CapabilityParameter(name="threshold", value=3),
+        CapabilityParameter(name="tags", value=("alpha", "beta")),
+    )
+    binding = proposal.pre_submit_bindings[0].model_copy(update={"parameters": parameters})
+    configured = proposal.model_copy(update={"pre_submit_bindings": (binding,)})
+    pre, _ = await compile_external_checker_policies(configured, registry)
+    assert pre.entries[0].configuration == {"threshold": 3, "tags": ["alpha", "beta"]}
+    assert pre.entries[0].configuration_sha256 == external_checker_json_hash(
+        {"threshold": 3, "tags": ["alpha", "beta"]}
+    )
+    for invalid in ((), (CapabilityParameter(name="threshold", value="three"),)):
+        wrong = binding.model_copy(update={"parameters": invalid})
+        with pytest.raises(ValueError):
+            await compile_external_checker_policies(
+                proposal.model_copy(update={"pre_submit_bindings": (wrong,)}), registry,
+            )
+
+
+def test_pre_configuration_preserves_retained_empty_binding_and_rejects_duplicates():
+    binding = _proposal().pre_submit_bindings[0]
+    retained = {
+        "requirement_id": "safe_archive", "capability_id": "acme.safe_archive",
+        "capability_version": "v1.2.3", "stage": "pre_submit",
+    }
+    assert binding.model_dump(mode="json") == retained
+    assert PreSubmissionBindingProposal.model_validate(retained).model_dump(mode="json") == retained
+    duplicate = CapabilityParameter(name="threshold", value=3)
+    with pytest.raises(ValueError, match="unique"):
+        PreSubmissionBindingProposal.model_validate(retained | {"parameters": (duplicate, duplicate)})

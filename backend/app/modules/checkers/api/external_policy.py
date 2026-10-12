@@ -208,7 +208,6 @@ async def compile_external_checker_policy_bundle(
 
 async def _resolve(bindings, requirements, registry, phase):
     from app.interfaces.project_agents import (
-        PostSubmissionBindingProposal,
         RequirementDisposition,
     )
 
@@ -239,11 +238,10 @@ async def _resolve(bindings, requirements, registry, phase):
             or entry.phase != phase
         ):
             raise ExternalCheckerPolicyError("checker registry identity mismatch")
-        configuration = (
-            {parameter.name: parameter.value for parameter in binding.parameters}
-            if isinstance(binding, PostSubmissionBindingProposal)
-            else {}
-        )
+        configuration = {
+            parameter.name: parameter.model_dump(mode="json")["value"]
+            for parameter in binding.parameters
+        }
         resolved.append(
             LockedExternalCheckerBinding(
                 requirement_id=binding.requirement_id,

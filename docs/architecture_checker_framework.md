@@ -966,3 +966,10 @@ changing the current-generation fence. Request/completion handlers remain
 unregistered; this stored intent alone does not invoke checker execution or accept work.
 Preparation has no stored Submission to observe and never replaces the TASK
 evaluation guard.
+
+External PRE and POST bindings may carry the same bounded, flat typed parameters.
+Approval validates their JSON values against the exact registered configuration
+schema and retains both the values and configuration digest in the locked policy.
+Empty PRE parameters remain absent from serialized bindings so reading historical
+compilation evidence does not change its original hash. Array values serialize
+as JSON arrays before schema validation and digest computation.

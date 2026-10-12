@@ -251,3 +251,14 @@ both human review and shared automatic acceptance with complete awards. Its
 runtime result remains pending until the isolated PostgreSQL command completes.
 Publication must remove the accidentally stacked PILOT-02/PILOT-10 source and
 reconcile the selected-flow successor with the actual merged migration chain.
+
+## External PRE configuration repair
+
+PRE bindings previously forced configuration to an empty object, so an otherwise
+registered PRE image with required configuration could never be approved. PRE now
+uses the existing bounded flat CapabilityParameter contract, enforces unique
+parameter names and validates the exact registered schema in both compilation
+and approval. Configuration arrays are normalized to JSON arrays for both
+phases. Empty PRE parameters are excluded during serialization, preserving
+retained empty-binding hashes. Focused compiler regressions cover configured
+PRE success, required/type rejection, duplicate names and retained serialization.
