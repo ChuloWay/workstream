@@ -342,6 +342,18 @@ intermediate-wait regression.
 
 ## Risk and review routing
 
+The final caller trace includes `backend/app/modules/checkers/{history.py,
+execution_results.py,api/history.py}`, the existing history privacy expectation,
+and `backend/tests/checkers/execution/test_storage.py`. Remove retired catalogue
+message lookup and severity-policy classification from history reads. Render
+bounded messages from normalized status, admit the persisted selected `error`
+severity, and mark required failed image members as blocking. Keep concealed
+internal findings, exact parent selectors, immutable rows and read authority.
+A real failed registered-image result must be readable by both contributor and
+management projections without raw image messages; the regression must fail on
+the prior reader. Independent authority/architecture review checks the caller
+repair. Risk remains L1; no public route or stored-data rewrite is added.
+
 Final cleanup also permits `backend/scripts/behavior_ownership.py`, its existing
 PILOT-04 partition transition test and `.ci/behavior-ownership/partition.v1.json`.
 Retire exactly the five removed checker contracts and two removed ART PRE

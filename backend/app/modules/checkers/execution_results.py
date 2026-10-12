@@ -37,30 +37,8 @@ def classify_result(
     )
 
 
-RESULT_MESSAGES = {
+RESULT_STATUS_MESSAGES = {
     "passed": ("Check passed.", None),
-    "packet_fields_missing": (
-        "Required submission fields are missing.",
-        "Complete the required submission fields.",
-    ),
-    "policy_context_invalid": ("The locked policy context is inconsistent.", None),
-    "evidence_missing": ("Required evidence is missing.", "Include the required evidence."),
-    "evidence_structure_invalid": (
-        "Evidence references are invalid.",
-        "Correct the evidence references.",
-    ),
-    "required_files_missing": ("Required files are missing.", "Include the required files."),
-    "forbidden_path_present": (
-        "The submission includes a forbidden path.",
-        "Remove the forbidden content.",
-    ),
-    "attestation_missing": (
-        "Required attestation is missing.",
-        "Complete the required attestation.",
-    ),
-    "placeholder_signal": (
-        "A possible placeholder needs attention.",
-        "Check the flagged submission structure.",
-    ),
-    "acceptance_criteria_missing": ("Task acceptance criteria are missing.", None),
+    "warning": ("Check reported a warning.", "Review the project guide and check findings."),
+    "failed": ("Project check failed.", "Review the project guide and check findings."),
 }

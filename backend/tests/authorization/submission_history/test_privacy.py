@@ -102,7 +102,7 @@ async def test_denied_read_never_loads_private_rows(task_client, monkeypatch):
 async def test_nested_values_match_exact_stored_parents(task_client, monkeypatch, manager):
     from app.modules.tasks.models import EvidenceItem
     from app.modules.checkers.models import CheckerResult
-    from app.modules.checkers.execution_results import RESULT_MESSAGES
+    from app.modules.checkers.execution_results import RESULT_STATUS_MESSAGES
     project = await create_active_project(task_client)
     task = await create_started_task(task_client, project["id"], monkeypatch)
     submission = await seed_retained_submission(task["id"], complete_submission_payload())
@@ -127,11 +127,11 @@ async def test_nested_values_match_exact_stored_parents(task_client, monkeypatch
                 if row.checker_run_id != run_id:
                     continue
                 assert row.task_id == task["id"] and row.submission_id == submission
-                message, fix = RESULT_MESSAGES[row.code]
+                message, fix = RESULT_STATUS_MESSAGES[row.status]
                 entry = {field:getattr(row,field) for field in ("id","checker_name","status","severity")}
                 entry.update(worker_message=message, worker_suggested_fix=fix)
                 if manager:
-                    entry.update(message=message, blocks_review=row.status=="failed" and row.severity in {"high","critical"})
+                    entry.update(message=message, blocks_review=row.status=="failed")
                 expected_results[run_id].append(entry)
         assert expected_results[run] != expected_results[sibling] and expected_evidence
     set_dev_actor(monkeypatch, roles="", subject="project-manager-subject" if manager else "worker-one")

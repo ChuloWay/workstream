@@ -16,6 +16,37 @@ from .test_concurrency import final_facts
 from tests.checkers.external.support import post_registry_spec
 
 
+async def test_failed_external_image_history_uses_normalized_result_status(
+    tmp_path, isolated_database_env,
+):
+    from app.modules.checkers.history import CheckerHistoryRepository
+
+    async with material_fixture(
+        tmp_path, isolated_database_env, post_submit_registry_spec=post_registry_spec()
+    ) as h:
+        await reserve(h)
+        executor = live_executor(h)
+        lease, _ = await executor._claim(h.request)
+        facts = await final_facts(h, lease, verdict="failed")
+        await executor.finalize(facts)
+        async with h.factory() as session:
+            for manager in (False, True):
+                rows, more = await CheckerHistoryRepository(session).read(
+                    submission_id=h.request.submission_id,
+                    task_id=h.request.task_id,
+                    manager=manager,
+                )
+                assert not more and len(rows) == 1
+                member, = rows[0].results
+                assert member.checker_name == h.request.policy.entries[0].requirement_id
+                assert member.status == "failed" and member.severity == "error"
+                assert member.worker_message == "Project check failed."
+                assert member.worker_suggested_fix == "Review the project guide and check findings."
+                if manager:
+                    assert member.blocks_review is True
+                    assert member.message == member.worker_message
+
+
 @pytest.mark.parametrize("duplicate", ["request", "generation"])
 async def test_duplicate_request_and_generation_rejected(
     tmp_path, isolated_database_env, duplicate
