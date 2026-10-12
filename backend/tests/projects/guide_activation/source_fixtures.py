@@ -309,7 +309,7 @@ async def _register_external_checker_fixture(factory, spec):
         if existing:
             assert len(existing) == 1 and existing[0].entry_digest == spec.spec_digest
             return await reader.read_exact(
-                existing[0].registry_entry_id, existing[0].entry_digest,
+                UUID(str(existing[0].registry_entry_id)), existing[0].entry_digest,
             )
         profile, link = await seed_fixture_actor(
             session,

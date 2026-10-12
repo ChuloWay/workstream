@@ -117,6 +117,8 @@ class LockedExternalPostSubmitPolicy(_PolicyValue):
             self.model_dump(mode="json", exclude={"policy_sha256"})
         ):
             raise ExternalCheckerPolicyError("post-submit policy digest mismatch")
+        # Approval, admission and dispatch share this closed runnable policy.
+        selected_post_submit_execution_budget_ms(self)
         return self
 
 

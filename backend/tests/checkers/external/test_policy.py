@@ -323,3 +323,35 @@ def test_pre_configuration_preserves_retained_empty_binding_and_rejects_duplicat
     duplicate = CapabilityParameter(name="threshold", value=3)
     with pytest.raises(ValueError, match="unique"):
         PreSubmissionBindingProposal.model_validate(retained | {"parameters": (duplicate, duplicate)})
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("aggregate", [False, True])
+async def test_policy_compilation_refuses_unrunnable_post_images(aggregate: bool):
+    proposal = _proposal()
+    entries = [_entry("acme.safe_archive", "pre_submit")]
+    if aggregate:
+        binding = proposal.post_submit_bindings[0]
+        requirement = next(
+            item for item in proposal.requirements
+            if item.requirement_id == binding.requirement_id
+        )
+        proposal = proposal.model_copy(update={
+            "requirements": proposal.requirements + (
+                requirement.model_copy(update={"requirement_id": "secondary_review"}),
+            ),
+            "post_submit_bindings": proposal.post_submit_bindings + (
+                binding.model_copy(update={
+                    "requirement_id": "secondary_review",
+                    "capability_id": "acme.secondary_review",
+                }),
+            ),
+        })
+        entries.extend([
+            _entry("acme.quality_review", "post_submit", deadline_ms=1_700_000),
+            _entry("acme.secondary_review", "post_submit", deadline_ms=1_700_000),
+        ])
+    else:
+        entries.append(_entry("acme.quality_review", "post_submit", deadline_ms=3_600_000))
+    with pytest.raises(ValueError, match="durable worker deadline"):
+        await compile_external_checker_policies(proposal, _Registry(entries))
