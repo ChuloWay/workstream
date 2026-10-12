@@ -202,15 +202,14 @@ async def test_post_policy_public_socket_history_and_fresh_authority(
                 assert compiled["policy"]["schema_version"] == (
                     "external_post_submit_policy.v1"
                 )
-                assert compiled["policy"]["policy_sha256"] == (
-                    compiled["target"]["policy_hash"]
+                assert (
+                    compiled["policy"]["policy_sha256"]
+                    == (compiled["target"]["policy_hash"])
                 )
                 assert len(compiled["policy"]["entries"]) == 1
                 selected = compiled["policy"]["entries"][0]
                 assert (
-                    selected["stage"]
-                    == selected["registry"]["phase"]
-                    == "post_submit"
+                    selected["stage"] == selected["registry"]["phase"] == "post_submit"
                 )
                 assert selected["registry"]["input_schema"]["schema_id"] == (
                     "external_checker_post_submit_input"
@@ -218,11 +217,14 @@ async def test_post_policy_public_socket_history_and_fresh_authority(
                 assert selected["registry"]["output_schema"]["schema_id"] == (
                     "external_checker_result"
                 )
-                assert not {
-                    "catalogue_id",
-                    "catalogue_source_version",
-                    "blocking_severities",
-                } & compiled["policy"].keys()
+                assert (
+                    not {
+                        "catalogue_id",
+                        "catalogue_source_version",
+                        "blocking_severities",
+                    }
+                    & compiled["policy"].keys()
+                )
                 assert (
                     compiled["lifecycle_status"] == "compiled"
                     and compiled["current"] is True

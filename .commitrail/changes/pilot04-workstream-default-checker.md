@@ -514,3 +514,7 @@ full required CI proof remain separate. Five unaffected snapshot files retain
 exact bytes, source and hashes; all nine operations are unchanged. Initial
 harness setup failures (invalid output-parent layout and an incompatible backend
 MCP SDK for test conftest) are retained in raw logs and are not test results.
+
+Hosted e7 CLI checks found one formatting-only failure in the public policy
+regression. Apply the repository formatter; Python AST equality before/after
+confirms no test behavior change, preserving the native 8408 producer proof.
