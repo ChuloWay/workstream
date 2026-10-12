@@ -226,7 +226,7 @@ async def test_registry_substitution_blocks_activation_but_frozen_context_never_
 
         with monkeypatch.context() as patch:
             patch.setattr(ExternalCheckerRegistryReader, "read_exact", substituted)
-            with pytest.raises(GuideProposalError, match="proposal_stale"):
+            with pytest.raises(GuideProposalError, match="approval_blocked"):
                 await activate(factory, actor, command)
         assert await activation_state(factory) == before
         receipt = await activate(factory, actor, command)
