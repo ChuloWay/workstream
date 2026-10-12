@@ -229,7 +229,9 @@ class PreSubmissionBindingProposal(_CapabilityBindingIdentity):
     """Reference an external intake image with approved typed configuration."""
 
     parameters: tuple[CapabilityParameter, ...] = Field(
-        default=(), max_length=50, exclude_if=lambda value: not value,
+        default=(),
+        max_length=50,
+        exclude_if=lambda value: not value,
     )
 
     @model_validator(mode="after")
@@ -554,12 +556,12 @@ def validate_project_guide_compilation_result(
 
     capabilities = ExternalCheckerCapabilityProjection.model_validate(context.checker_capabilities)
     pre_definitions = {
-        definition.capability_id: definition
+        (definition.capability_id, definition.capability_version): definition
         for definition in capabilities.definitions
         if definition.phase == "pre_submit"
     }
     post_definitions = {
-        definition.capability_id: definition
+        (definition.capability_id, definition.capability_version): definition
         for definition in capabilities.definitions
         if definition.phase == "post_submit"
     }
@@ -601,7 +603,7 @@ def validate_post_submission_bindings(
         result.post_submit_bindings,
         requirements,
         {
-            item.capability_id: item
+            (item.capability_id, item.capability_version): item
             for item in capabilities.definitions
             if item.phase == "post_submit"
         },
@@ -673,8 +675,8 @@ def _validate_status_consistency(result: ProjectGuideCompilationResult) -> None:
 
 def _validate_platform_coverage(
     requirements: tuple[AtomicGuideRequirement, ...],
-    pre_definitions: dict[str, ExternalCheckerCapabilityDefinition],
-    post_definitions: dict[str, ExternalCheckerCapabilityDefinition],
+    pre_definitions: dict[tuple[str, str], ExternalCheckerCapabilityDefinition],
+    post_definitions: dict[tuple[str, str], ExternalCheckerCapabilityDefinition],
 ) -> None:
     """Resolve platform coverage only against eligible phase-owner truth."""
     for requirement in requirements:
@@ -686,10 +688,9 @@ def _validate_platform_coverage(
         if coverage is None:
             raise ValueError("platform-covered requirement requires canonical proof")
         if coverage.stage is CompilationStage.PRE_SUBMIT:
-            definition = pre_definitions.get(coverage.capability_id)
+            definition = pre_definitions.get((coverage.capability_id, coverage.capability_version))
             valid = (
                 definition is not None
-                and definition.capability_version == coverage.capability_version
                 and definition.capability_id == "workstream.default"
                 and not definition.selectable
             )
@@ -732,7 +733,7 @@ def _validate_evidence_lineage(
 def _validate_bindings(
     bindings: tuple[PreSubmissionBindingProposal | PostSubmissionBindingProposal, ...],
     requirements: dict[str, AtomicGuideRequirement],
-    definitions: dict[str, ExternalCheckerCapabilityDefinition],
+    definitions: dict[tuple[str, str], ExternalCheckerCapabilityDefinition],
     expected_stage: Literal["pre_submit", "post_submit"],
 ) -> set[str]:
     """Validate exact stage, version, selectability, and parameter ownership."""
@@ -744,7 +745,11 @@ def _validate_bindings(
     )
     for binding in bindings:
         requirement = requirements.get(binding.requirement_id)
-        definition = definitions.get(binding.capability_id)
+        definition = definitions.get((binding.capability_id, binding.capability_version))
+        if definition is None and any(
+            capability_id == binding.capability_id for capability_id, _ in definitions
+        ):
+            raise ValueError("compilation capability version is stale")
         if (
             requirement is None
             or requirement.disposition is not expected_disposition
@@ -754,8 +759,6 @@ def _validate_bindings(
             or binding.stage.value != expected_stage
         ):
             raise ValueError("compilation capability binding is invalid")
-        if binding.capability_version != definition.capability_version:
-            raise ValueError("compilation capability version is stale")
         if definition.registry_entry is None:
             raise ValueError("compilation capability binding is invalid")
         definition.registry_entry.configuration_schema.validate_instance(

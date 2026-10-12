@@ -171,8 +171,13 @@ SOURCE_ITEM_ID = new_record_id()
 DOCUMENT_VERSION_ID = new_record_id()
 
 
-def _registered_capability(capability_id: str, phase: str):
-    spec = registry_spec(phase).model_copy(update={"capability_id": capability_id})
+def _registered_capability(capability_id: str, phase: str, capability_version: str = "v1.2.3"):
+    spec = registry_spec(phase).model_copy(
+        update={
+            "capability_id": capability_id,
+            "capability_version": capability_version,
+        }
+    )
     spec = type(spec).model_validate(spec.model_dump())
     entry = ExternalCheckerRegistryEntry(
         **spec.model_dump(),
@@ -508,6 +513,67 @@ def test_unified_result_accepts_exact_stage_capability_and_closed_parameters() -
         agent_version="v1",
     )
     validate_project_guide_compilation_result(context, result)
+
+
+def test_unified_result_selects_each_exact_registered_capability_version() -> None:
+    definitions = tuple(
+        sorted(
+            (
+                ExternalCheckerCapabilityDefinition(
+                    capability_id=WORKSTREAM_DEFAULT_CHECKER_ID,
+                    capability_version=WORKSTREAM_DEFAULT_CHECKER_VERSION,
+                    phase="pre_submit",
+                    selectable=False,
+                ),
+                _registered_capability("acme.pre", "pre_submit", "v1.0.0"),
+                _registered_capability("acme.pre", "pre_submit", "v2.0.0"),
+                _registered_capability("acme.post", "post_submit"),
+            ),
+            key=lambda item: (item.phase, item.capability_id, item.capability_version),
+        )
+    )
+    body = {
+        "schema_version": "external_checker_capabilities.v1",
+        "definitions": [item.model_dump(mode="json") for item in definitions],
+    }
+    capabilities = ExternalCheckerCapabilityProjection(
+        definitions=definitions,
+        manifest_sha256=external_checker_json_hash(body),
+    )
+    context = _context().model_copy(update={"checker_capabilities": capabilities})
+
+    for version in ("v1.0.0", "v2.0.0"):
+        result = ProjectGuideCompilationResult(
+            status="draft_ready",
+            submission_artifact_policy=_artifact_policy(),
+            requirements=(
+                AtomicGuideRequirement(
+                    requirement_id="requirement.packet",
+                    statement="Validate the submission packet.",
+                    disposition="supported_pre_submit",
+                ),
+            ),
+            pre_submit_bindings=(
+                PreSubmissionBindingProposal(
+                    requirement_id="requirement.packet",
+                    capability_id="acme.pre",
+                    capability_version=version,
+                    stage="pre_submit",
+                ),
+            ),
+            agent_version="v1",
+        )
+        validate_project_guide_compilation_result(context, result)
+
+    wrong_version = result.model_copy(
+        update={
+            "pre_submit_bindings": (
+                result.pre_submit_bindings[0].model_copy(update={"capability_version": "v1.5.0"}),
+            )
+        }
+    )
+    with pytest.raises(ValueError, match="version is stale"):
+        validate_project_guide_compilation_result(context, wrong_version)
 
 
 @pytest.mark.parametrize(
