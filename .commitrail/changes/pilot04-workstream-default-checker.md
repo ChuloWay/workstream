@@ -1022,3 +1022,20 @@ column/restore calls and imports. Literal snapshots must load into the exact
 installed predecessor schema, without temporary current ART/remediation columns.
 Every migration assertion and row/custody/lock check remains in place; the shared
 helper owner removes unused definitions after its remaining consumers are traced.
+
+### Scratch format cutover cleanup
+
+User explicitly requires no backward compatibility in the selected checker flow.
+Allowed files: `backend/app/modules/artifacts/preparation.py` and
+`backend/tests/test_artifact_preparation.py`. Remove the superseded scratch marker
+upgrade, version-2 ledger coercion, and their upgrade-only test. Retain current
+marker/ledger validation, concurrent initialization, bounded scratch custody and
+restart recovery. No retained business data, authorization, migration schema,
+provider runtime, CI selection or resource limits change. Verify the full scratch
+preparation test module and independent affected source review before readiness.
+
+The same cleanup authorizes deleting the now-unused `add_current_art_seed_column`
+and `restore_predecessor_evidence_schema` functions from
+`backend/tests/migration_fixtures.py` after the raw callers were reconciled.
+A repository search found no remaining callers. The separately consumed project
+guide fixture context remains unchanged; no shared live consumer is deleted.

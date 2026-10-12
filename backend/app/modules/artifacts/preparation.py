@@ -1167,7 +1167,7 @@ class ArtifactScratchManager:
             os.fsync(self._root_fd)
 
     def _validate_existing_root_marker(self) -> None:
-        """Require exact limits, with a safe-empty upgrade from the prior marker."""
+        """Require the exact current scratch limits marker."""
         descriptor = os.open(
             _ROOT_MARKER,
             os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
@@ -1178,25 +1178,8 @@ class ArtifactScratchManager:
             marker = os.read(descriptor, max(len(self._root_marker_content), 256) + 1)
         finally:
             os.close(descriptor)
-        if marker == self._root_marker_content:
-            return
-        if marker != self._legacy_marker_content(self._limits):
+        if marker != self._root_marker_content:
             raise ValueError("artifact scratch root marker is invalid")
-        ledger = self._read_ledger_optional()
-        if ledger is None or ledger["reservations"] or ledger["workspaces"]:
-            raise ValueError("artifact scratch root marker cannot migrate while in use")
-        descriptor = os.open(
-            _ROOT_MARKER,
-            os.O_WRONLY | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0),
-            dir_fd=self._root_fd,
-        )
-        try:
-            self._assert_private_file_descriptor(descriptor, expected_mode=0o600)
-            self._write_all(descriptor, memoryview(self._root_marker_content))
-            os.fsync(descriptor)
-        finally:
-            os.close(descriptor)
-        os.fsync(self._root_fd)
 
     @staticmethod
     def _marker_content(limits: ArtifactPreparationLimits) -> bytes:
@@ -1221,7 +1204,7 @@ class ArtifactScratchManager:
         ).encode("utf-8")
         return _ROOT_MARKER_PREFIX + hashlib.sha256(canonical).hexdigest().encode("ascii") + b"\n"
 
-    @staticmethod
+
     def _legacy_marker_content(limits: ArtifactPreparationLimits) -> bytes:
         """Reconstruct the pre-04B2 marker for one safe-empty local upgrade."""
         payload = {
@@ -1640,22 +1623,6 @@ class ArtifactScratchManager:
             ledger = json.loads(raw.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise ArtifactScratchIntegrityError("artifact scratch ledger is invalid") from exc
-        if isinstance(ledger, dict) and ledger.get("version") == 2:
-            if set(ledger) == {"version", "reservations"}:
-                ledger = {**ledger, "workspaces": []}
-            if set(ledger) == {"version", "reservations", "workspaces"}:
-                ledger = {
-                    **ledger,
-                    "version": _LEDGER_VERSION,
-                    "workspaces": [
-                        {
-                            **entry,
-                            "reserved_bytes": 0,
-                            "maximum_entries": self._limits.maximum_workspace_entries,
-                        }
-                        for entry in ledger["workspaces"]
-                    ],
-                }
         self._validate_ledger(ledger)
         return ledger
 

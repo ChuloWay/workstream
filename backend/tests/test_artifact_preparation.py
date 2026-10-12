@@ -1355,21 +1355,6 @@ async def test_truncated_version_three_scratch_ledger_fails_closed(tmp_path: Pat
         ArtifactScratchManager(root=root, limits=preparation_limits())
 
 
-def test_legacy_safe_empty_root_marker_upgrades_once(tmp_path: Path) -> None:
-    """Upgrade only the exact prior marker while the scratch root is empty."""
-    limits = preparation_limits()
-    root = tmp_path / "scratch"
-    initial = ArtifactScratchManager(root=root, limits=limits)
-    initial.close()
-    marker = root / ".workstream-artifact-scratch-v1"
-    marker.write_bytes(ArtifactScratchManager._legacy_marker_content(limits))
-
-    reopened = ArtifactScratchManager(root=root, limits=limits)
-    reopened.close()
-
-    assert marker.read_bytes() == ArtifactScratchManager._marker_content(limits)
-
-
 @pytest.mark.asyncio
 async def test_ledger_read_failures_are_explicit_and_bounded(tmp_path: Path) -> None:
     """Reject missing, oversized, and malformed coordination documents."""
