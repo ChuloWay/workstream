@@ -1197,6 +1197,33 @@ checksum-bound at `25560b75796f84cff46bb506abdcd4b9cc2b7535411096fdbbec921d245d9
 This supplies a retained predecessor identity prerequisite; canonical migration
 and receipt proof remains required.
 
+### Literal routing-success predecessor fixture
+
+The retained 0031-to-0032 routing upgrade control must not execute the removed
+checker or routing runtime against a predecessor schema. A one-time isolated
+capture at source commit `3e2d59ba426a950e64b8e1632f4587c3265b0ea7`
+produced one genuine human-review outcome and one genuine automatic-acceptance
+outcome, restored every temporary current-only seed column, and then proved the
+original receipt, context, governed outcome and acceptance predicates before
+the existing upgrade passed. The committed
+`0031_routing_success_true_false` snapshot contains all 579 rows across the 76
+nonempty public tables in that exact predecessor database. Its provenance names
+the source revision, producer, capture shape and the two manifest IDs.
+
+Allowed scope is limited to the checksum-bound predecessor archive and loader,
+`tests/tasks/post_submit_routing/test_remediation_migration.py`, and this record.
+The migration test restores literal rows into an owned isolated 0031 database,
+revalidates both complete success closures before upgrade, upgrades to 0032,
+and requires byte-identical retained owners plus the exact new recommendation.
+No archived writer, old request/result decoder, checker service, temporary
+current column, guard bypass or compatibility API remains in the committed test.
+The one-time generator passed the original migration control in 173.92 seconds
+with complete database, role and object-store cleanup. The first current-loader
+replay passed in 110.52 seconds with the same complete cleanup; its metadata
+identifies the clean parent because the archive/test repair was not committed
+yet, so this is qualified working-tree evidence. A clean frozen-head replay and
+independent archive/test review remain required.
+
 ### Frozen cutover verification before publication
 
 At clean `835737909aa3844d6cda1a0605a3098ed73781c1`, the canonical isolated

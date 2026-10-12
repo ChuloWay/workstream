@@ -28,7 +28,7 @@ from conftest import _assert_owned_test_database
 
 
 _ARCHIVE = Path(__file__).with_name("fixtures") / "pilot04_predecessor_rows.json.gz"
-_ARCHIVE_SHA256 = "25560b75796f84cff46bb506abdcd4b9cc2b7535411096fdbbec921d245d95e9"
+_ARCHIVE_SHA256 = "3a874b8eb30c86d82f11093f839167c9841194027e3c6b1dfbae99b5fc510a96"
 _SCHEMA_VERSION = "workstream.pilot04_predecessor_rows.v1"
 
 
