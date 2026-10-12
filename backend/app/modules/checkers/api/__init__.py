@@ -28,19 +28,6 @@ from app.modules.checkers.api.external import (
     make_external_checker_execution_result,
     make_external_checker_registration_request,
 )
-from app.modules.checkers.api.pre_submit import (
-    EffectivePreSubmissionExecutionPlan,
-    EffectivePreSubmissionPlanEntry,
-    EffectivePreSubmissionPlanError,
-    EffectivePreSubmissionPlanLineage,
-    EffectivePreSubmissionPlanningPort,
-    FrozenJsonObject,
-    PreSubmissionExecutionEntryFacts,
-    PreSubmissionExecutionFacts,
-    PreSubmissionInfrastructureUnavailableError,
-    PRE_SUBMISSION_RESULT_METADATA_KEYS,
-    validate_pre_submission_execution_facts,
-)
 from app.modules.checkers.api.pre_submit_material import (
     ALLOWED_PRE_SUBMIT_STORAGE_SCHEMES,
     SubmissionPacketView,
@@ -54,18 +41,7 @@ from app.modules.checkers.api.selected_pre_submit import (
 
 __all__ = (
     "ALLOWED_PRE_SUBMIT_STORAGE_SCHEMES",
-    "EffectivePreSubmissionExecutionPlan",
-    "EffectivePreSubmissionPlanEntry",
-    "EffectivePreSubmissionPlanError",
-    "EffectivePreSubmissionPlanLineage",
-    "EffectivePreSubmissionPlanningPort",
-    "FrozenJsonObject",
-    "PreSubmissionExecutionEntryFacts",
-    "PreSubmissionExecutionFacts",
-    "PreSubmissionInfrastructureUnavailableError",
-    "PRE_SUBMISSION_RESULT_METADATA_KEYS",
     "SubmissionPacketView",
-    "validate_pre_submission_execution_facts",
     "ExternalPreSubmitIsolationFacts",
     "ExternalPreSubmitMemberFacts",
     "SelectedPreSubmitExecutionFacts",

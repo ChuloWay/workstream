@@ -59,6 +59,18 @@ cleanup.
 
 ### Allowed
 
+- Final dead-contract removal permits the obsolete CHECKERS modules
+  `api/pre_submit.py`, `api/post_submit.py`, `api/historical_post_submit.py`,
+  `api/policy_compilation.py` and `post_submit_contracts.py`, their unused exports
+  in `api/__init__.py`, and this record. Production consumers now use the sole
+  external contracts and canonical packet/value primitives. Remove these
+  unreferenced catalogue/planner/DTO implementations rather than aliases or
+  replacement decoders. Preserve current public ports, schema identifiers,
+  stored records, migrations, AUTH and immutable evidence. Acceptance is no
+  production reference to the removed modules, current app/contract imports,
+  Ruff, full collection, focused current-owner controls and the final native
+  journey. Architecture reviewers inspect the combined removal; risk is L1.
+
 - Project POST-policy custody accepts only the locked external-image policy.
   This repair permits `backend/app/modules/projects/post_policy/custody.py`
   and this record: remove the obsolete catalogue union, read fallback and
