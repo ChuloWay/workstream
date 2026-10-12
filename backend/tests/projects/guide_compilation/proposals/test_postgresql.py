@@ -70,58 +70,30 @@ async def correct(factory, command, actor, grant, payload, *, authority_resource
 
 
 async def test_review_package_is_exact_complete_and_redacted(clean_postgres_database):
-    from app.interfaces.project_agents import ProjectGuideCompilationResult
-    from tests.projects.guide_compilation.helpers import result
-
-    body = result().model_dump(mode="json")
-    evidence = body["findings"][0]["evidence_refs"]
-    body.update(
-        status="guide_blocked",
-        submission_artifact_policy=None,
-        requirements=[
-            dict(
-                requirement_id="packet",
-                statement="Limit artifact file size.",
-                disposition="pre_submit_capability_gap",
-                evidence_refs=evidence,
-            ),
-            dict(
-                requirement_id="semantic",
-                statement="Evaluate specialist correctness.",
-                disposition="post_submit_capability_gap",
-                evidence_refs=evidence,
-            ),
-        ],
-        pre_submit_bindings=[],
-        post_submit_bindings=[],
-        capability_suggestions=[
-            dict(
-                requirement_id="packet",
-                stage="pre_submit",
-                title="Artifact size checker",
-                rationale="Register a checker for the exact package size requirement.",
-                evidence_refs=evidence,
-            ),
-            dict(
-                requirement_id="semantic",
-                stage="post_submit",
-                title="Specialist correctness evaluator",
-                rationale="No registered external checker covers this evaluation.",
-                evidence_refs=evidence,
-            ),
-        ],
-        setup_notes=["A project manager must review the specialist evaluation gap."],
+    from tests.projects.guide_compilation.test_capability_growth import (
+        _context as growth_context,
+        growth_report,
     )
-    body["findings"][0]["severity"] = "blocking_gap"
-    outcome = ProjectGuideCompilationResult.model_validate(body)
+
+    outcome = growth_report()
+    capabilities = growth_context().checker_capabilities
     async with proposal_case(
-        clean_postgres_database, classification="guide_blocked", outcome=outcome
+        clean_postgres_database,
+        classification=outcome.status,
+        outcome=outcome,
+        checker_capabilities=capabilities,
     ) as (_, factory, command, actor, grant):
         package = await read_package(factory, command, actor, grant)
         assert package.target.compilation_id == command.compilation_id
         assert package.target.setup_run_id == command.setup_run_id
         assert package.current is True
         expected = outcome.model_dump(mode="json")
+        assert len(expected["pre_submit_bindings"]) == 1
+        assert len(expected["post_submit_bindings"]) == 1
+        assert {item["stage"] for item in expected["capability_suggestions"]} == {
+            "pre_submit",
+            "post_submit",
+        }
         for section in ("findings", "requirements", "capability_suggestions"):
             for item in expected[section]:
                 item["evidence_refs"] = [

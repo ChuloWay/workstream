@@ -1266,7 +1266,8 @@ their assertions: `tests/projects/guide_compilation/test_capability_growth.py`,
 `test_capability_growth_postgresql.py`, `test_compilation_storage_limit.py`,
 `test_live_worker.py`, `test_context_builder.py`,
 `proposals/test_postgresql.py`, the active-guide read fixtures and activation
-tests, and the matching assertions in `tests/test_projects.py`. The batch may
+tests, their proposal/finalization context helpers, and the matching assertions
+in `tests/test_projects.py`. The batch may
 update current registered capability projections, strict worker error fakes,
 current proposal fields and current compiler identifiers. It must not restore a
 built-in checker catalogue, legacy decoder, execution fallback, migration or

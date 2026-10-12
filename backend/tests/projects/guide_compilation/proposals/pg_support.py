@@ -174,9 +174,20 @@ class ProposalAuthority:
 
 
 @asynccontextmanager
-async def proposal_case(url, *, classification="draft_ready", guide_version="v1", outcome=None):
+async def proposal_case(
+    url,
+    *,
+    classification="draft_ready",
+    guide_version="v1",
+    outcome=None,
+    checker_capabilities=None,
+):
     async with database_case(
-        url, classification=classification, guide_version=guide_version, outcome=outcome
+        url,
+        classification=classification,
+        guide_version=guide_version,
+        outcome=outcome,
+        checker_capabilities=checker_capabilities,
     ) as (values, factory, command):
         await finalize(factory, values, command)
         async with factory() as session:
