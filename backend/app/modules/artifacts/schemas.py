@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Protocol, TypeAlias, final
 from uuid import UUID
@@ -208,6 +208,7 @@ class SubmissionBundleDurableIntentAuthorityFacts:
     assignment_id: UUID
     predecessor_submission_id: UUID | None
     predecessor_submission_version: int | None
+    checker_remediation_manifest_id: UUID | None = field(default=None, kw_only=True)
     pre_submit_evidence_set_id: UUID | None
     prepared_generation_id: UUID
     guide_id: UUID

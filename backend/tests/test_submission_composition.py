@@ -19,6 +19,8 @@ from app.modules.tasks.api import (
     TaskLockedProjectContextReferences,
 )
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
+from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.submission_consumption import parse_consumption_binding
 from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.adapters.tasks import TransactionalSubmissionCreationCommand
 from app.modules.artifacts.submission_bindings import SubmissionAdmissionConsumptionService
@@ -126,9 +128,7 @@ async def test_human_lifecycle_denial_precedes_task_state(
         evaluations=None, events=None,
         admissions=None,
         contexts=task_service(_Session(), settings=get_settings()),
-    )
-    service._repository = SimpleNamespace(
-        lock_submission_context=lambda value: pytest.fail("TASK state was revealed")
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(side_effect=AssertionError("TASK state was revealed"))),
     )
     with pytest.raises(SubmissionCreationUnavailable):
         await service.create(request)
@@ -149,9 +149,7 @@ async def test_foreign_contributor_denial_precedes_task_lookup():
         evaluations=None, events=None,
         admissions=None,
         contexts=task_service(_Session(), settings=get_settings()),
-    )
-    service._repository = SimpleNamespace(
-        lock_submission_context=lambda value: pytest.fail("foreign task was inspected"),
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(side_effect=AssertionError("foreign task was inspected"))),
     )
     with pytest.raises(SubmissionCreationUnavailable):
         await service.create(request)
@@ -171,9 +169,7 @@ async def test_denial_precedes_task_lock_and_all_mutation():
         evaluations=None, events=None,
         admissions=None,
         contexts=task_service(_Session(), settings=get_settings()),
-    )
-    service._repository = SimpleNamespace(
-        lock_submission_context=lambda value: pytest.fail("TASK state was revealed")
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(side_effect=AssertionError("TASK state was revealed"))),
     )
     with pytest.raises(SubmissionCreationUnavailable):
         await service.create(_request())
@@ -203,11 +199,11 @@ async def test_fresh_authority_denial_precedes_art_and_mutation(revocation):
         evaluations=None, events=None,
         admissions=Admissions(),
         contexts=task_service(_Session(), settings=get_settings()),
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(return_value=_context(request))),
     )
     persisted = []
 
     class Repository:
-        async def lock_submission_context(self, value): return _context(request)
         async def get_task(self, task_id, **kwargs): return _task()
         async def add_submission(self, submission): persisted.append(submission)
 
@@ -244,11 +240,11 @@ async def test_invalid_admission_result_denies_before_lineage_and_final_authorit
         evaluations=None, events=None,
         admissions=Admissions(),
         contexts=task_service(_Session(), settings=get_settings()),
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(return_value=_context(request))),
     )
     persisted = []
 
     class Repository:
-        async def lock_submission_context(self, value): return _context(request)
         async def get_task(self, task_id, **kwargs): return _task()
         async def add_submission(self, submission): persisted.append(submission)
 
@@ -291,9 +287,9 @@ async def test_policy_failure_closes_prepared_authority_before_any_submission_or
         contexts=SimpleNamespace(
             _load_locked_task_context=AsyncMock(side_effect=ValueError("custody changed"))
         ),
+        submission_contexts=SimpleNamespace(lock_submission_context=AsyncMock(return_value=_context(request))),
     )
     service._repository = SimpleNamespace(
-        lock_submission_context=AsyncMock(return_value=_context(request)),
         get_task=AsyncMock(return_value=_task()), add_submission=AsyncMock(),
     )
     with pytest.raises(ValueError, match="custody changed"):
@@ -315,3 +311,75 @@ def test_task_and_assignment_policy_facts_reject_substitution():
     for invalid in (None, str(facts.locked_project_context.locked_contribution_policy_version_id)):
         with pytest.raises(ValueError, match="task contribution policy identity is invalid"):
             replace(facts.locked_project_context, locked_contribution_policy_version_id=invalid)
+
+
+def _consumption_values(*, binding=False, remediation=False):
+    values = {name: str(new_record_id()) for name in (
+        "actor_profile_id", "identity_link_id", "task_id", "assignment_id",
+        "admission_id", "submission_id", "source_snapshot_id", "effective_policy_id",
+        "pre_submit_policy_id",
+    )}
+    values.update({name: "sha256:" + "1" * 64 for name in (
+        "source_snapshot_sha256", "effective_policy_sha256", "pre_submit_policy_sha256",
+    )})
+    values.update(
+        guide_version="guide-a",
+        predecessor_submission_id=str(new_record_id()) if remediation else None,
+        predecessor_submission_version=1 if remediation else None,
+        submission_version=2 if remediation else 1,
+        checker_remediation_manifest_id=str(new_record_id()) if remediation else None,
+    )
+    if binding:
+        values.update({name: str(new_record_id()) for name in (
+            "evidence_set_id", "project_id", "guide_id", "semantic_manifest_id", "content_id",
+        )})
+        values.update(
+            resource_type="submission_binding", resource_id=values["admission_id"],
+            locked_policy_context_hash="sha256:" + "2" * 64,
+            semantic_manifest_sha256="sha256:" + "3" * 64,
+            sha256="sha256:" + "4" * 64, byte_count=42,
+            logical_role="submission_bundle_original",
+        )
+    else:
+        values.update(
+            resource_type="submission_creation", resource_id=values["submission_id"],
+            scope_project_id=str(new_record_id()),
+            contribution_policy_version_id=str(new_record_id()),
+            task_status="needs_revision" if remediation else "in_progress",
+            submission_kind="checker_remediation" if remediation else "initial",
+        )
+    return values
+
+
+@pytest.mark.parametrize("remediation,changes", [
+    (False, {"predecessor_submission_id": str(UUID(int=123)), "predecessor_submission_version": 1}),
+    (False, {"submission_version": 2}),
+    (False, {"task_status": "needs_revision"}),
+    (False, {"checker_remediation_manifest_id": str(UUID(int=456))}),
+    (False, {"submission_kind": "checker_remediation"}),
+    (True, {"predecessor_submission_id": None, "predecessor_submission_version": None}),
+    (True, {"predecessor_submission_id": None}),
+    (True, {"predecessor_submission_version": None}),
+    (True, {"checker_remediation_manifest_id": None}),
+    (True, {"task_status": "in_progress"}),
+    (True, {"submission_kind": "initial"}),
+    (True, {"submission_version": 1}),
+    (True, {"submission_version": 3}),
+    (True, {"predecessor_submission_version": 2}),
+])
+def test_creation_authority_parser_rejects_inconsistent_lifecycle(remediation, changes):
+    values = _consumption_values(remediation=remediation)
+    valid = parse_consumption_binding(ActionId.SUBMISSION_CREATE, values, ValueError)
+    assert valid.submission_version == (2 if remediation else 1)
+    with pytest.raises(ValueError, match="invalid prepared authorization handle"):
+        parse_consumption_binding(ActionId.SUBMISSION_CREATE, values | changes, ValueError)
+
+
+@pytest.mark.parametrize("remediation,version", [(False, 2), (True, 1), (True, 3)])
+def test_binding_authority_parser_requires_exact_successor_version(remediation, version):
+    values = _consumption_values(binding=True, remediation=remediation)
+    action = ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE
+    valid = parse_consumption_binding(action, values, ValueError)
+    assert valid.submission_version == (2 if remediation else 1)
+    with pytest.raises(ValueError, match="invalid prepared authorization handle"):
+        parse_consumption_binding(action, values | {"submission_version": version}, ValueError)

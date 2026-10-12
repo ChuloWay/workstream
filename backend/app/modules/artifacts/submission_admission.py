@@ -470,6 +470,9 @@ class SubmissionBundleAdmissionPublisher:
                 if selected_lineage is not None
                 else evidence.predecessor_submission_version
             ),
+            checker_remediation_manifest_id=(
+                None if evidence is None else evidence.checker_remediation_manifest_id
+            ),
             locked_policy_context_hash=(
                 selected_lineage.locked_policy_context_hash
                 if selected_lineage is not None
@@ -731,6 +734,7 @@ class PreparedSubmissionBundlePreparationCommand:
                     task_context, project_context = await self._lock_authorized_context(request)
                     predecessor = await self._load_predecessor(task_context)
                     predecessor_rules_sha256 = await self._load_predecessor_rules(task_context)
+                    remediation_manifest_id = task_context.checker_remediation_manifest_id
                 prepared = await runtime.preparation.prepare(
                     request.byte_source,
                     media_type="application/zip",
@@ -738,6 +742,10 @@ class PreparedSubmissionBundlePreparationCommand:
                 scratch_cleanup.push_async_callback(prepared.close)
                 async with self._session.begin():
                     task_context, project_context = await self._lock_authorized_context(request)
+                    if task_context.checker_remediation_manifest_id != remediation_manifest_id:
+                        raise SubmissionBundlePreparationRejected(
+                            "submission_bundle_preparation_context_changed"
+                        )
                     policies = LockedExternalCheckerPolicies.model_validate_json(
                         project_context.external_checker_policies.value
                     )
@@ -809,6 +817,7 @@ class PreparedSubmissionBundlePreparationCommand:
                             if task_context.predecessor is not None
                             else None
                         ),
+                        checker_remediation_manifest_id=remediation_manifest_id,
                         prepared_artifact=prepared,
                         effective_plan=None,
                         inspection=inspection,
@@ -972,6 +981,7 @@ class PreparedSubmissionBundlePreparationCommand:
                 "assignment_id",
                 "predecessor_submission_id",
                 "predecessor_submission_version",
+                "checker_remediation_manifest_id",
                 "archive_sha256",
                 "archive_byte_count",
                 "semantic_manifest_sha256",

@@ -451,6 +451,7 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "operations.checker.retry",
     "contribution.read_self",
     "contribution.read_project",
     "task.post_submit.route",

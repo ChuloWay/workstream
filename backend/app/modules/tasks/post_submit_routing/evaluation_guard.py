@@ -92,3 +92,47 @@ class TaskEvaluationGuard:
         } or assignment.status != "active" or assignment.released_at is not None:
             raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
         return True
+
+    async def lock_terminal_retry_scope(self, request: PostSubmissionExecutionRequest) -> None:
+        """New recovery must target an active and unrouted evaluation-pending task."""
+        if not await self.lock_evaluation_scope(request):
+            raise CheckerExecutionUnavailable("checker_retry_scope_unavailable")
+        task = await self._repository.lock_project_task(request.project_id, request.task_id)
+        if task is None or task.status != "evaluation_pending":
+            raise CheckerExecutionUnavailable("checker_retry_scope_unavailable")
+
+    async def lock_retry_replay_scope(self, request: PostSubmissionExecutionRequest) -> None:
+        """Replay retains exact historical owners even after accepted completion."""
+        task = await self._repository.lock_project_task(request.project_id, request.task_id)
+        if task is None:
+            raise CheckerExecutionUnavailable("checker_retry_replay_unavailable")
+        assignment = await self._repository.lock_accepted_assignment(
+            project_id=request.project_id, task_id=request.task_id,
+            assignment_id=request.assignment_id,
+        )
+        submission = await self._repository.lock_exact_submission_for_task(
+            project_id=request.project_id, task_id=request.task_id,
+            submission_id=request.submission_id,
+        )
+        if assignment is None or submission is None or not (
+            submission.version == request.submission_version
+            and submission.status == "submitted"
+            and submission.task_assignment_id == assignment.id
+            and submission.contributor_id == assignment.contributor_id
+        ):
+            raise CheckerExecutionUnavailable("checker_retry_replay_unavailable")
+        try:
+            facts = await self._submitted.read(SubmittedBundleRequest(
+                request.project_id, request.task_id, request.submission_id,
+            ))
+        except SubmittedBundleUnavailable:
+            raise CheckerExecutionUnavailable("checker_retry_replay_unavailable") from None
+        if not (
+            facts.assignment_id == request.assignment_id
+            and facts.submission_version == request.submission_version
+            and facts.contributor_id == UUID(assignment.contributor_id)
+            and facts.binding_id == request.binding_id
+            and facts.content_id == request.content_id
+            and asdict(facts.context) == request.expected_context.model_dump()
+        ):
+            raise CheckerExecutionUnavailable("checker_retry_replay_unavailable")

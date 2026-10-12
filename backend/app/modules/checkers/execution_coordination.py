@@ -11,6 +11,7 @@ from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import (
     CheckerRequestConflict,
     CheckerExecutionUnavailable,
+    CheckerRetryDelivery,
     CompletedEvaluation,
     EvaluationReservation,
     ReservedEvaluation,
@@ -64,6 +65,13 @@ class EvaluationCoordinator:
                 if replay is None:
                     raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
                 return reservation(replay)
+        return await self._reserve_after_task_lock(request)
+
+    async def _reserve_after_task_lock(
+        self, request: PostSubmissionExecutionRequest, *, terminal_source_id: UUID | None = None,
+    ) -> EvaluationReservation:
+        """Use the existing CHECKERS locks after the caller has retained TASK custody."""
+        require_transaction(self._session)
         # Every new generation takes TASK custody before this key, fence and run.
         await self._session.execute(
             text("select pg_advisory_xact_lock(hashtextextended(:key, 0))"),
@@ -90,6 +98,16 @@ class EvaluationCoordinator:
                 .with_for_update()
                 .execution_options(populate_existing=True)
             )
+        if terminal_source_id is not None:
+            if (
+                prior is None or prior.id != str(terminal_source_id)
+                or prior.status != "infrastructure_failed"
+                or prior.finalize_evidence_id is None
+                or prior.result_json is None or prior.result_digest is None
+                or prior.completion_event_id is not None
+                or stored_result(prior).outcome != "infrastructure_failed"
+            ):
+                raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
         expected = 1 if prior is None else prior.evaluation_generation + 1
         if request.evaluation_generation != expected:
             raise CheckerRequestConflict("checker_generation_conflict")
@@ -184,6 +202,17 @@ class EvaluationCoordinator:
         ):
             raise CheckerExecutionUnavailable("checker_reservation_unavailable")
         return ReservedEvaluation(request=request, reservation=reservation(run))
+
+    async def read_retry_delivery(
+        self, *, project_id: UUID, submission_id: UUID, event_id: UUID,
+    ) -> CheckerRetryDelivery | None:
+        """Expose exact CHECKERS retry receipt facts without a private TASK import."""
+        from app.modules.checkers.checker_retry import read_retry_delivery
+        require_transaction(self._session)
+        return await read_retry_delivery(
+            self._session, self, project_id=project_id,
+            submission_id=submission_id, event_id=event_id,
+        )
 
     async def _lock_task_scope(self, request: PostSubmissionExecutionRequest) -> bool:
         """Retain root-transaction TASK custody before any coordination fence lock."""

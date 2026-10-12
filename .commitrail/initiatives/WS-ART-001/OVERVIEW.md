@@ -21,6 +21,11 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   routes the exact current contributor-correctable result through existing
   TASK/AUTH owners under either policy mode, with no new ART write or REV/CON
   effect.
+- Delivered replacement dependency: [ARCH-04F3](../WS-ARCH-001/WS-ARCH-001-04F3.md)
+  reuses full ART intake, verification and admission for a changed ZIP with the
+  exact current authorized checker-remediation cause. TASK creates the successor
+  Submission and dispatch through its canonical atomic writer; prior evidence
+  remains immutable.
 - Delivered contract: [ART-07A1](WS-ART-001-07A1.md) defines exact, metadata-only
   reviewer packet membership. REV-03B corrects its original `guide_binding_id`
   to live upload `ingest_id`; the completed ART record preserves the original
@@ -30,8 +35,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
-- Next usable boundary: exact-cause replacement intake through the existing ART
-  ports, setup-fault/Operator recovery, 04E3 production composition/readiness,
+- Next usable boundary: manager-visible setup-fault hold after hidden exact-cause
+  replacement intake and 04F4 Operator retry, 04E3 production composition/readiness,
   public intake and the first-layer drill.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
@@ -72,11 +77,12 @@ must prove exact approved lineage at preparation, consumption and binding.
 2. ART-07A1 metadata-only membership types, REV packet/Review/FinalAcceptance
    storage, CON contribution/award storage and participation, exact routing AUTH,
    B8 completion delivery and the 04F2 hidden remediation handoff are delivered.
-3. Remaining ARCH-04F owns exact-cause checker-remediation resubmission using
-   existing ART ports plus setup-fault/Operator recovery; later reviewer-requested
-   revision remains a separate REV boundary. Add those remaining dependencies
-   before public Submission cutover.
-4. Perform ARCH-02I only after those replacement paths exist; historical
+3. ARCH-04F3 supplies exact-cause checker-remediation resubmission using
+   existing ART ports. 04F4 adds hidden Operator retry through existing CHECKERS custody without changing ART bindings. Remaining ARCH-04F owns manager-visible setup-fault hold;
+   later reviewer-requested revision remains a separate REV boundary. Add the
+   manager-visible hold before public Submission cutover; submitted-task rule
+   changes or re-screening are deferred.
+4. Perform ARCH-02I only after that recovery path exists; historical
    ART-05/06 and XINT-05 designs remain non-executable.
 
 ## Preserved history

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager, contextmanager
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Protocol, final
 from uuid import UUID
@@ -85,6 +85,7 @@ class PreparedBundleMaterializationRequest:
     submission_artifact_policy_id: UUID
     checker_policy_id: UUID
     predecessor_submission_version: int | None
+    checker_remediation_manifest_id: UUID | None = field(default=None, kw_only=True)
     prepared_artifact: PreparedArtifact
     effective_plan: EffectivePreSubmissionExecutionPlan | None
     inspection: SubmissionArchiveInspectionResult
@@ -812,6 +813,9 @@ class PreparedBundlePreSubmitEvidenceService:
             assignment_id=request.assignment_id,
             predecessor_submission_id=preparation_request.predecessor_submission_id,
             expected_predecessor_submission_version=request.predecessor_submission_version,
+            expected_checker_remediation_manifest_id=(
+                request.checker_remediation_manifest_id
+            ),
             prepared_generation_id=request.prepared_artifact.generation_id,
             archive_sha256=commitment.sha256,
             archive_byte_count=commitment.byte_count,

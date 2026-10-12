@@ -4,8 +4,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision = "0037_selected_checker_flow"
-down_revision = "0036_contribution_export_pages"
+revision = "0036_selected_checker_flow"
+down_revision = "0035_checker_retry"
 branch_labels = None
 depends_on = None
 

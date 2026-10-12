@@ -5,10 +5,9 @@
 These are target v0.1 states, not a claim of live route availability. The locked
 ReviewPolicy selects the success route: true requires human review; false
 uses the [same shared acceptance operation](spec_review_lifecycle.md#finalacceptance)
-after required post-submit checks pass. False activation remains unavailable
-although the REV-04C hidden FinalAcceptance/TASK/CON participant is delivered;
-mandatory AUTH receipt, database closure, currentness race, audit/outbox and
-activation proof still must land.
+after required post-submit checks pass. Hidden authorized success outcomes and
+their AUTH/database custody are delivered; production registration and public
+false-policy activation remain unavailable.
 
 ```text
 DRAFT
@@ -172,7 +171,7 @@ Required before entering:
 - from `REVIEW_PENDING`: the same TaskAssignment remains `active`, with no
   FinalAcceptance or submitter contribution
 
-Before the contributor resumes from a human Review, Workstream appends one
+In the planned human-Review path, before the contributor resumes, Workstream appends one
 immutable Review-rooted RevisionContextPreparation in the same transaction that
 enters `needs_revision`. It compares the complete prior stamped context with
 the active applicable guide/source, submission/checker, review, revision,
@@ -182,12 +181,14 @@ inconsistent, revoked, or unsafe context blocks the whole preparation for
 Project Manager repair. Changed context atomically rebases the continuing Task
 and TaskAssignment for the next submission attempt. The prior Submission,
 completed Review, ReviewLease, contribution, and award do not change.
-Checker-caused remediation
-remains a distinct CheckerRun-rooted path, keeps the Task's locked context, and
+Hidden checker-caused remediation remains a distinct CheckerRun-rooted path,
+keeps the Task's locked context, and
 creates no Review, ReviewFinding, preparation, reviewer contribution, or
-synthetic human actor. Its corrected Submission persists the unique immutable
-`remediation_source_checker_run_id` for the exact predecessor CheckerRun; a
-later retry cannot rewrite that causal lineage.
+synthetic human actor. The corrected Submission links its immediate predecessor
+and ART admission; ART evidence/admission and the TASK dispatch retain the exact
+server-selected `checker_remediation_manifest_id` and AUTH receipts. That
+manifest identifies the authorized predecessor CheckerRun. A later retry cannot
+rewrite the committed cause or Submission lineage.
 
 A revision context rebase never mutates the prior submitted attempt or
 completed contribution/award. It prepares and stamps only the next attempt. The

@@ -566,6 +566,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/checker_retry_authorization.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/contribution_policy_authorization.py"
     },
     {
@@ -599,6 +603,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/checker_registry.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/checker_retry.py"
     },
     {
       "group": "auth",
@@ -786,6 +794,10 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/prepared_checker_retry_replay.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/prepared_lifecycle_replay.py"
     },
     {
@@ -943,6 +955,10 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/default_checker.py"
+    },
+    {
+      "group": "artifacts",
+      "target": "backend/app/modules/checkers/checker_retry.py"
     },
     {
       "group": "artifacts",
@@ -1722,6 +1738,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/submission_context.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/submission_dispatch.py"
     },
     {
@@ -1889,7 +1909,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "680cffbc4aab0f6abde3520ac34fe36f4d581cba475e5b6316f6b90ccf7731de",
+  "authority_digest": "4c48eb383f3d00de9e709bf3d4364958477ec93d228dda91fa0f39a26cd5ced7",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

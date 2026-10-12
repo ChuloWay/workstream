@@ -103,6 +103,10 @@ class LifecycleAuditParticipant:
                 {"authorization_resource_digest": value.authorization_resource_digest,
                  "assignment_invalidation_facts": value.assignment_invalidation_facts}
                 if value.assignment_invalidation_facts is not None else {}
+            ), **(
+                {"operator_reason": value.operator_reason,
+                 "authorization_resource_digest": value.authorization_resource_digest}
+                if value.operator_reason is not None else {}
             )},
             event_domain="legacy_lifecycle",
             event_version=None,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 import threading
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -44,6 +44,7 @@ def validate_predecessor_lineage(
     *,
     predecessor_submission_id: UUID | None,
     predecessor_submission_version: int | None,
+    checker_remediation_manifest_id: UUID | None,
 ) -> None:
     """Require the post-byte predecessor to equal the initially checked version."""
     predecessor = task_context.predecessor
@@ -54,6 +55,7 @@ def validate_predecessor_lineage(
             predecessor.submission_id != predecessor_submission_id
             or predecessor.version != predecessor_submission_version
         )
+        or task_context.checker_remediation_manifest_id != checker_remediation_manifest_id
     ):
         raise PreSubmitEvidenceConflict("pre_submit_locked_context_changed")
 
@@ -104,6 +106,7 @@ class PreSubmitEvidenceContext:
     assignment_id: UUID
     predecessor_submission_id: UUID | None
     predecessor_submission_version: int | None
+    checker_remediation_manifest_id: UUID | None = field(default=None, kw_only=True)
     prepared_generation_id: UUID
     archive_sha256: str
     archive_byte_count: int
@@ -139,7 +142,10 @@ class PreSubmitEvidenceContext:
         )
         if any(type(value) is not UUID for value in identifiers) or (
             self.predecessor_submission_id is not None
-            and type(self.predecessor_submission_id) is not UUID
+            and not isinstance(self.predecessor_submission_id, UUID)
+        ) or (
+            self.checker_remediation_manifest_id is not None
+            and not isinstance(self.checker_remediation_manifest_id, UUID)
         ):
             raise ValueError("pre-submit evidence identity is invalid")
         if type(self.archive_byte_count) is not int or self.archive_byte_count < 0:
@@ -154,6 +160,10 @@ class PreSubmitEvidenceContext:
             )
         ):
             raise ValueError("pre-submit evidence predecessor lineage is invalid")
+        if (self.predecessor_submission_id is None) != (
+            self.checker_remediation_manifest_id is None
+        ):
+            raise ValueError("pre-submit evidence remediation source is invalid")
         for digest in (
             self.archive_sha256,
             self.semantic_manifest_sha256,
@@ -187,6 +197,7 @@ class PreSubmitEvidenceContext:
                 **{
                     key: str(value) if isinstance(value, UUID) else value
                     for key, value in asdict(self).items()
+                    if key != "checker_remediation_manifest_id" or value is not None
                 },
                 "effective_plan_sha256": effective_plan_sha256,
                 "attempt_id": str(attempt_id),
@@ -212,6 +223,7 @@ class PreSubmitEvidenceInput:
     assignment_id: UUID
     predecessor_submission_id: UUID | None
     expected_predecessor_submission_version: int | None
+    expected_checker_remediation_manifest_id: UUID | None = field(default=None, kw_only=True)
     prepared_generation_id: UUID
     archive_sha256: str
     archive_byte_count: int
@@ -355,6 +367,7 @@ class PreSubmitPassCapability:
         "evidence_set_id",
         "prepared_generation_id",
         "predecessor_submission_id",
+        "checker_remediation_manifest_id",
         "effective_plan_sha256",
         "archive_sha256",
         "semantic_manifest_sha256",
@@ -374,6 +387,7 @@ class PreSubmitPassCapability:
         evidence_set_id: UUID,
         prepared_generation_id: UUID,
         predecessor_submission_id: UUID | None,
+        checker_remediation_manifest_id: UUID | None,
         effective_plan_sha256: str,
         archive_sha256: str,
         semantic_manifest_sha256: str,
@@ -388,6 +402,7 @@ class PreSubmitPassCapability:
         capability.evidence_set_id = evidence_set_id
         capability.prepared_generation_id = prepared_generation_id
         capability.predecessor_submission_id = predecessor_submission_id
+        capability.checker_remediation_manifest_id = checker_remediation_manifest_id
         capability.effective_plan_sha256 = effective_plan_sha256
         capability.archive_sha256 = archive_sha256
         capability.semantic_manifest_sha256 = semantic_manifest_sha256
@@ -402,6 +417,7 @@ class PreSubmitPassCapability:
         *,
         prepared_generation_id: UUID,
         predecessor_submission_id: UUID | None,
+        checker_remediation_manifest_id: UUID | None,
         effective_plan_sha256: str,
         archive_sha256: str,
         semantic_manifest_sha256: str,
@@ -415,6 +431,7 @@ class PreSubmitPassCapability:
                 or (
                     prepared_generation_id != self.prepared_generation_id
                     or predecessor_submission_id != self.predecessor_submission_id
+                    or checker_remediation_manifest_id != self.checker_remediation_manifest_id
                     or effective_plan_sha256 != self.effective_plan_sha256
                     or archive_sha256 != self.archive_sha256
                     or semantic_manifest_sha256 != self.semantic_manifest_sha256
@@ -549,6 +566,7 @@ class _PreSubmitEvidenceRepository:
             key: str(value) if isinstance(value, UUID) else value
             for key, value in asdict(context).items()
         }
+        values["checker_remediation_manifest_id"] = context.checker_remediation_manifest_id
         values = {
             "operation_identity": operation_identity,
             **values,
@@ -640,6 +658,7 @@ class PreSubmitEvidenceService:
         evidence_set_id: UUID,
         prepared_generation_id: UUID,
         predecessor_submission_id: UUID | None,
+        checker_remediation_manifest_id: UUID | None,
         effective_plan_sha256: str,
         archive_sha256: str,
         semantic_manifest_sha256: str,
@@ -655,6 +674,7 @@ class PreSubmitEvidenceService:
                 evidence_set_id=evidence_set_id,
                 prepared_generation_id=prepared_generation_id,
                 predecessor_submission_id=predecessor_submission_id,
+                checker_remediation_manifest_id=checker_remediation_manifest_id,
                 effective_plan_sha256=effective_plan_sha256,
                 archive_sha256=archive_sha256,
                 semantic_manifest_sha256=semantic_manifest_sha256,
@@ -713,6 +733,7 @@ class PreSubmitEvidenceService:
                 evidence_set_id=evidence.evidence_set_id,
                 prepared_generation_id=request.prepared_generation_id,
                 predecessor_submission_id=request.predecessor_submission_id,
+                checker_remediation_manifest_id=request.expected_checker_remediation_manifest_id,
                 effective_plan_sha256=request.plan.plan_sha256,
                 archive_sha256=custody.archive_sha256,
                 semantic_manifest_sha256=custody.semantic_manifest_sha256,
@@ -795,6 +816,7 @@ class PreSubmitEvidenceService:
             predecessor_submission_version=(
                 request.expected_predecessor_submission_version
             ),
+            checker_remediation_manifest_id=request.expected_checker_remediation_manifest_id,
         )
         lineage = request.plan.lineage
         if (
@@ -833,6 +855,7 @@ class PreSubmitEvidenceService:
                 if task_context.predecessor is not None
                 else None
             ),
+            checker_remediation_manifest_id=task_context.checker_remediation_manifest_id,
             prepared_generation_id=request.prepared_generation_id,
             archive_sha256=request.archive_sha256,
             archive_byte_count=request.archive_byte_count,

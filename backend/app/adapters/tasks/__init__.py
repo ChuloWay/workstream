@@ -173,8 +173,10 @@ def contributor_task_repository(session: AsyncSession) -> TaskRepository:
 
 
 def task_submission_context_port(session: AsyncSession) -> TaskSubmissionContextPort:
-    """Bind the public TASK submission-context port to its repository."""
-    return TaskRepository(session)
+    """Bind every intake caller to TASK's current-source composite."""
+    from app.adapters.checkers import evaluation_coordinator
+    from app.modules.tasks.submission_context import TaskSubmissionContextService
+    return TaskSubmissionContextService(session, evaluation_coordinator(session))
 
 
 class _ArtifactAdmissionAdapter:
@@ -303,6 +305,7 @@ class TransactionalSubmissionCreationCommand:
             return await TaskSubmissionCreationService(
                 self._session,
                 contexts=task_service(self._session, settings=self._settings),
+                submission_contexts=task_submission_context_port(self._session),
                 authorization=self._authorization,
                 admissions=_ArtifactAdmissionAdapter(self._admissions),
                 evaluations=evaluation_coordinator(self._session),

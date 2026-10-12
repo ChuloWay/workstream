@@ -482,19 +482,17 @@ async def insert_request(session, values):
 
 
 async def successor_submission(h):
-    """Use the hidden real intake writer after seeding the future revision precondition.
+    """Create a successor only after the real authorized checker-remediation outcome."""
+    from app.adapters.tasks import evaluation_completion_handler
+    from app.modules.outbox.api import HandlerOutcome
 
-    This proves retained Submission ordering, not a live Review/revision operation.
-    """
-    from sqlalchemy import text
+    assert await evaluation_completion_handler(sessions=h.factory)(h.envelope) is HandlerOutcome.ACKNOWLEDGE
     async with h.factory() as session, session.begin():
         original = await session.get(Submission, str(h.request.submission_id))
         identity_link_id = await session.scalar(select(ActorIdentityLink.id).where(
             ActorIdentityLink.actor_profile_id == original.contributor_id,
             ActorIdentityLink.status == "active",
         ))
-        await session.execute(text("UPDATE public.workstream_tasks SET status='needs_revision' WHERE id=:id"),
-                              {"id": h.request.task_id})
         context = _context(actor_profile_id=as_uuid(original.contributor_id), identity_link_id=as_uuid(identity_link_id))
     successor = SimpleNamespace(**(vars(h) | {"data": revision_archive(h.data)}))
     return await _create_submission(successor, context, h.request.task_id, h.request.assignment_id, h.request.submission_id)

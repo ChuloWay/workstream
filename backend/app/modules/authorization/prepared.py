@@ -5,6 +5,7 @@ from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS, POST_
 from app.modules.authorization.domain.lifecycle import parse_lifecycle_prepare, lifecycle_matches
 from app.modules.authorization.prepared_routing_replay import validate_routing_replay
 from app.modules.authorization.prepared_lifecycle_replay import validate_lifecycle_replay
+from app.modules.authorization.prepared_checker_retry_replay import validate_checker_retry_replay
 from app.modules.reviews.api.lifecycle import LifecycleTransitionCommand
 
 from copy import Error as CopyError
@@ -40,6 +41,8 @@ from app.modules.authorization.domain.guide_compilation import (
 from app.modules.authorization.domain.guide_proposals import (
     GUIDE_PROPOSAL_RESOURCE_BY_ACTION,
 )
+from app.modules.authorization.domain.checker_retry import checker_retry_resource_matches, parse_checker_retry_prepare
+from app.modules.checkers.api.execution import CheckerRetryPreparation
 from app.modules.authorization.domain.prepared_submission_policy import parse_submission_policy_prepare
 from app.modules.authorization.domain.prepared_compilation import prepared_compilation_matches
 from app.modules.authorization.domain.contribution_policies import (
@@ -198,6 +201,7 @@ class _PreparedAuthorizationBinding:
     scope: PreparedAuthorityScope
     idempotency_key: UUID
     request_digest: str
+    checker_retry_preparation: CheckerRetryPreparation | None = None
     assignment_invalidation_context: AssignmentInvalidationResourceContext | None = None
     outbox_dispatch_digest: str | None = None
     post_submit_prepare_context: dict | None = None
@@ -606,7 +610,7 @@ class PreparedAuthorizationService:
         return issuance
 
     def _validate_consumption(
-        self, issuance, expected_action_id, caller_input, final_resource_context
+        self, issuance, expected_action_id, caller_input, final_resource_context, *, historical_checker_retry_link=False,
     ):
         """Bind consumption to its issued request, root transaction and exact resource."""
         if expected_action_id is not issuance.binding.action_id:
@@ -653,6 +657,11 @@ class PreparedAuthorizationService:
             or issuance.binding.outbox_dispatch_digest != authorization_resource_digest(final_resource_context)
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared outbox authority")
+        if expected_action_id is ActionId.OPERATIONS_CHECKER_RETRY and not checker_retry_resource_matches(
+            issuance.binding.checker_retry_preparation, final_resource_context,
+            issuance.authority.context.identity_link_id, historical_checker_retry_link,
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid prepared checker retry authority")
 
     async def consume(
         self,
@@ -760,6 +769,8 @@ class PreparedAuthorizationService:
             replay = (
                 validate_routing_replay
                 if expected_action_id is ActionId.TASK_POST_SUBMIT_ROUTE
+                else validate_checker_retry_replay
+                if expected_action_id is ActionId.OPERATIONS_CHECKER_RETRY
                 else validate_lifecycle_replay
                 if expected_action_id is ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE
                 else validate_submission_replay
@@ -904,6 +915,9 @@ class PreparedAuthorizationService:
             scope=scope,
             idempotency_key=caller_input.idempotency_key,
             request_digest=prepared_request_digest(caller_input.request_value),
+            checker_retry_preparation=parse_checker_retry_prepare(
+                action_id, caller_input, scope, self._context, PreparedAuthorizationHandleInvalid,
+            ),
             **service_bindings,
             project_create_operation_id=operation_id,
             project_create_project_id=project_id,

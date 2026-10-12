@@ -348,6 +348,7 @@ async def test_hidden_preparation_replays_persisted_checked_custody(monkeypatch,
         return_value=(
             SimpleNamespace(
                 predecessor=None,
+                checker_remediation_manifest_id=None,
                 locked_project_context=SimpleNamespace(project_id=project_id),
             ),
             locked,

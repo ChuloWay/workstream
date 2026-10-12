@@ -19,6 +19,7 @@ from app.modules.tasks.api import (
     SubmissionCreationResult,
     SubmissionCreationUnavailable,
     TaskSubmissionContextRequest,
+    TaskSubmissionContextPort,
 )
 from app.modules.checkers.api import SubmissionPacketView
 from app.modules.tasks.models import EvidenceItem, Submission
@@ -107,6 +108,7 @@ class TaskSubmissionCreationService:
         authorization: SubmissionCreationAuthorizationPort,
         admissions: SubmissionArtifactAdmissionPort,
         contexts: TaskService,
+        submission_contexts: TaskSubmissionContextPort,
         evaluations: EvaluationCoordinationPort,
         events: OutboxAppendPort,
     ) -> None:
@@ -115,6 +117,7 @@ class TaskSubmissionCreationService:
         self._admissions = admissions
         self._repository = TaskRepository(session)
         self._contexts = contexts
+        self._submission_contexts = submission_contexts
         self._evaluations = evaluations
         self._events = events
 
@@ -145,7 +148,7 @@ class TaskSubmissionCreationService:
         replay = await read_creation_replay(self._session, task, request)
         if replay is not None:
             return await self._replay(request, *replay)
-        context = await self._repository.lock_submission_context(
+        context = await self._submission_contexts.lock_submission_context(
             TaskSubmissionContextRequest(
                 task_id=request.task_id,
                 assignment_id=request.assignment_id,
@@ -247,6 +250,7 @@ class TaskSubmissionCreationService:
                 creation_decision_id=str(creation_decision_id), binding_decision_id=str(consumed.binding_decision_id),
                 request_digest=creation_request_digest(request),
                 creation_kind=context.kind, creation_status=context.status,
+                checker_remediation_manifest_id=context.checker_remediation_manifest_id,
                 evaluation_request_id=str(reservation.request_id),
                 evaluation_request_digest=reservation.request_digest,
                 evaluation_attempt_id=str(reservation.attempt_id), evaluation_result_id=str(reservation.result_id),

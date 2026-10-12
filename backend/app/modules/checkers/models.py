@@ -364,6 +364,60 @@ class CheckerSubmissionFence(Base):
     current_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, unique=True)
 
 
+class CheckerRetryReceipt(Base):
+    """Immutable Operator decision and exact successor of one failed source run."""
+
+    __tablename__ = "checker_retry_receipts"
+    __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint("successor_generation = source_generation + 1 and source_generation > 0", name="generation"),
+        CheckConstraint("length(reason) between 1 and 500 and reason !~ '[[:cntrl:]]'", name="reason"),
+        CheckConstraint("source_request_digest ~ '^sha256:[0-9a-f]{64}$' and source_result_digest ~ '^sha256:[0-9a-f]{64}$' and successor_request_digest ~ '^sha256:[0-9a-f]{64}$' and resource_digest ~ '^sha256:[0-9a-f]{64}$'", name="digests"),
+        CheckConstraint("octet_length(resource_json) <= 8192 and resource_json = public.project_guide_projection_canonical_json(resource_json::jsonb) and resource_digest = 'sha256:' || encode(sha256(convert_to(resource_json, 'UTF8')), 'hex')", name="resource_json_digest"),
+        UniqueConstraint("actor_profile_id", "request_key", name="uq_checker_retry_actor_key"),
+        UniqueConstraint("source_run_id", name="uq_checker_retry_source"),
+        UniqueConstraint("successor_run_id", name="uq_checker_retry_successor"),
+        UniqueConstraint("event_id", name="uq_checker_retry_event"),
+        UniqueConstraint("audit_event_id", name="uq_checker_retry_audit"),
+        ForeignKeyConstraint(["source_run_id", "task_id", "submission_id"],
+                             ["checker_runs.id", "checker_runs.task_id", "checker_runs.submission_id"],
+                             name="fk_checker_retry_source_ownership"),
+        ForeignKeyConstraint(["successor_run_id", "task_id", "submission_id"],
+                             ["checker_runs.id", "checker_runs.task_id", "checker_runs.submission_id"],
+                             name="fk_checker_retry_successor_ownership"),
+    )
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    actor_profile_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("actor_profiles.id"), nullable=False)
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("actor_identity_links.id"), nullable=False)
+    request_key: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    assignment_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("task_assignments.id"), nullable=False)
+    submission_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("submissions.id"), nullable=False)
+    submission_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    source_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    source_request_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    source_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    source_result_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    source_result_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    source_finalize_evidence_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id"), nullable=False)
+    source_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    failure_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    successor_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    successor_request_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    successor_request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    successor_result_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    successor_generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_id: Mapped[UUID] = mapped_column(Uuid(), ForeignKey("outbox_events.event_id"), nullable=False)
+    audit_event_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id"), nullable=False)
+    authorization_decision_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), ForeignKey("audit_events.id"), nullable=False)
+    resource_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    resource_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 class SelectedPreSubmitRun(Base):
     """Durable selected PRE lease and terminal facts before any Submission exists."""
 

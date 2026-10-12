@@ -1,11 +1,13 @@
 """Exact execution custody contracts; no value is self-authorizing."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
 from datetime import UTC
 from typing import Literal, Protocol
 
-from pydantic import AwareDatetime, Field, model_validator
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from app.core.hashing import canonical_json_hash
 
@@ -31,6 +33,141 @@ class CheckerExecutionUnavailable(RuntimeError):
 
 class CheckerRequestConflict(CheckerExecutionUnavailable):
     """A request key or generation already belongs to different facts."""
+
+
+class CheckerRetryCommand(PostSubmitValue):
+    """Operator's exact source, reason and replay key; no caller-selected successor."""
+
+    source_run_id: ResourceId
+    request_key: ResourceId
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_reason(cls, value: str) -> str:
+        if not value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
+            raise ValueError("checker retry reason is invalid")
+        return value
+
+
+class CheckerRetrySource(PostSubmitValue):
+    """Stored immutable failed-run tuple presented to AUTH before supersession."""
+
+    project_id: ResourceId
+    task_id: ResourceId
+    assignment_id: ResourceId
+    submission_id: ResourceId
+    submission_version: VersionNumber
+    source_run_id: ResourceId
+    source_request_id: ResourceId
+    source_request_digest: Sha256
+    source_result_id: ResourceId
+    source_result_digest: Sha256
+    source_finalize_evidence_id: ResourceId
+    source_generation: VersionNumber
+    failure_code: str = Field(min_length=1, max_length=100)
+
+
+class CheckerRetryPreparation(PostSubmitValue):
+    """Stable actor/request/source identity bound before AUTH grants are locked."""
+
+    actor_profile_id: ResourceId
+    request_key: ResourceId
+    reason: str = Field(min_length=1, max_length=500)
+    source: CheckerRetrySource
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_reason(cls, value: str) -> str:
+        if not value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
+            raise ValueError("checker retry reason is invalid")
+        return value
+
+
+class CheckerRetrySuccessor(PostSubmitValue):
+    """Actual coordinator and participant identities appended in one transaction."""
+
+    request_id: ResourceId
+    request_digest: Sha256
+    run_id: ResourceId
+    result_id: ResourceId
+    generation: VersionNumber
+    event_id: ResourceId
+    audit_event_id: ResourceId
+
+
+class CheckerRetryResult(PostSubmitValue):
+    """Retained receipt identities returned on new request or authorized replay."""
+
+    receipt_id: ResourceId
+    source: CheckerRetrySource
+    successor: CheckerRetrySuccessor
+    authorization_decision_id: ResourceId
+
+
+class CheckerRetryEventExpectation(PostSubmitValue):
+    """Immutable retry event facts for exact TASK delivery comparison."""
+
+    event_type: str
+    event_version: int
+    aggregate_type: str
+    aggregate_id: ResourceId
+    correlation_id: str
+    causation_event_id: ResourceId | None
+    idempotency_key: str
+    payload_json: str
+    payload_digest: Sha256
+
+
+class CheckerRetryDelivery(PostSubmitValue):
+    """CHECKERS-owned committed source and exact event for the single TASK handler."""
+
+    request: PostSubmissionExecutionRequest
+    expected_event: CheckerRetryEventExpectation
+
+
+class CheckerRetryAuthorityReceipt(PostSubmitValue):
+    """AUTH's consumed exact resource, used only in the caller transaction."""
+
+    actor_profile_id: ResourceId
+    identity_link_id: ResourceId
+    decision_id: ResourceId
+    resource_digest: Sha256
+    resource_json: str
+
+
+class CheckerRetryAuthorizationPort(Protocol):
+    """Fresh Operator preparation, consumption and exact historical replay."""
+
+    async def prepare(self, facts: CheckerRetryPreparation) -> object:
+        ...
+
+    async def consume(
+        self, handle: object, facts: CheckerRetryPreparation,
+        successor: CheckerRetrySuccessor,
+    ) -> CheckerRetryAuthorityReceipt:
+        ...
+
+    async def validate_replay(
+        self, handle: object, facts: CheckerRetryPreparation,
+        successor: CheckerRetrySuccessor, original_link_id: ResourceId,
+        decision_id: ResourceId,
+    ) -> None:
+        ...
+
+    def close(self, handle: object) -> None:
+        ...
+
+
+class CheckerRetryAuditPort(Protocol):
+    """Append one privacy-bounded initiation fact in the caller transaction."""
+
+    async def record(
+        self, preparation: CheckerRetryPreparation,
+        successor: CheckerRetrySuccessor,
+        authority: CheckerRetryAuthorityReceipt,
+    ) -> None:
+        ...
 
 
 class EvaluationReservation(PostSubmitValue):
@@ -248,6 +385,14 @@ class EvaluationTaskGuard(Protocol):
         """Hold TASK locks through commit; False forbids new reservations, not current reads."""
         ...
 
+    async def lock_terminal_retry_scope(self, request: PostSubmissionExecutionRequest) -> None:
+        """Lock the active, latest evaluation-pending TASK scope for a new retry."""
+        ...
+
+    async def lock_retry_replay_scope(self, request: PostSubmissionExecutionRequest) -> None:
+        """Lock exact historical receipt owners without current lifecycle eligibility."""
+        ...
+
 
 class EvaluationCoordinationPort(Protocol):
     """Reserve and read exact current evaluations in caller transactions."""
@@ -257,6 +402,13 @@ class EvaluationCoordinationPort(Protocol):
         submission_id: ResourceId, request_id: ResourceId,
     ) -> ReservedEvaluation:
         """Read scoped retained custody without reserving or advancing a fence."""
+        ...
+
+    async def read_retry_delivery(
+        self, *, project_id: ResourceId, submission_id: ResourceId,
+        event_id: ResourceId,
+    ) -> CheckerRetryDelivery | None:
+        """Return one exact committed retry receipt/event, or no retry source."""
         ...
 
     async def require_current_completion(

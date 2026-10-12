@@ -656,6 +656,17 @@ validates the original immutable owners under live authority without reserve or
 append calls; it cannot reset a later generation. Every new predecessor-linked
 Submission uses the same writer. Public intake and delivery activation remain deferred.
 
+ARCH-04F3 names the supported predecessor-linked creation kind
+`checker_remediation`. TASK locks its task, assignment and latest Submission,
+selects the owner-qualified 04F2 manifest, and checks its exact completed
+current CHECKERS result and AUTH-backed consequence before ART reads replacement
+bytes. The same cause is rechecked at later preparation and consumption locks.
+The existing writer consumes only a ready admission carrying that cause and
+atomically creates the successor Submission, binding, exact AUTH decisions,
+generation-one reservation and request event. A replay under fresh authority
+returns the committed identities. Human-review revision has no uncaused runtime
+or replay path; its own exact Review source remains future work.
+
 ### Hidden initial evaluation delivery
 
 ARCH-04E1B-B7 recovers the exact immutable dispatch event and CHECKERS request.
@@ -685,8 +696,11 @@ shared OUTBOX UNKNOWN, never an automatic uncertain-effect retry. A still-curren
 unfinalized invocation can replay the exact outcome with fresh authority.
 The true branch never observes REV generation or enters CON. Both request and
 completion handlers remain absent from production registration. Connected
-production readiness and the remaining remediation intake/recovery boundaries
-precede public intake.
+production readiness and authorized manager-visible setup-fault hold precede
+public intake; 04F3 supplies hidden exact-cause replacement intake. ARCH-04F4
+supplies separate hidden Operator retry of a known terminal
+`infrastructure_failed` checker run through the existing request handler.
+Fresh-authorized historical replay does not require the old run to remain current.
 
 ARCH-04F2 extends this handler and the existing root outcome transaction for an
 exact current `needs_revision` checker recommendation. The manifest retains the
@@ -699,6 +713,9 @@ stored source, receipt and complete outcome and returns their identities without
 repeating effects. Existing acceptance consumers admit only `allow_review`.
 
 The operation adds no route or contributor response schema. Contributors use the
-existing bounded Submission/checker-history reads above. Exact-cause replacement
-Submission intake, setup-fault and Operator recovery, production handler
-registration, public intake and the first end-to-end drill remain separate work.
+existing bounded Submission/checker-history reads above. ARCH-04F3 supplies
+hidden exact-cause replacement Submission intake through the same writer.
+Manager-visible setup-fault hold, production handler registration, public intake
+and the first end-to-end drill remain separate work. The hold retains the
+Submission and locked rules without contributor penalty; changing or
+re-screening submitted-task rules is deferred.

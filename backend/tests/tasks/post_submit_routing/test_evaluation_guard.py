@@ -125,9 +125,10 @@ async def test_changed_locked_context_cannot_advance_generation(tmp_path, isolat
 
 async def test_superseded_submission_cannot_reserve_or_replay(tmp_path, isolated_database_env):
     from tests.checkers.execution.storage_fixture import storage_request
-    from .support import completed_source, successor_submission
+    from .remediation_support import remediation_source
+    from .support import successor_submission
 
-    async with completed_source(tmp_path, isolated_database_env) as h:
+    async with remediation_source(tmp_path, isolated_database_env) as h:
         successor = await successor_submission(h)
         async with h.factory() as session, session.begin():
             before = list(await session.scalars(select(CheckerRun.id)))

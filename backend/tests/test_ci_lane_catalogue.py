@@ -51,7 +51,6 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/external/test_postgresql.py",
         "tests/checkers/external/test_registry.py",
         "tests/checkers/external/test_runtime.py",
-        "tests/checkers/execution/test_results.py",
         "tests/checkers/external/test_policy.py",
         "tests/checkers/external/test_selected_post_submit.py",
         "tests/checkers/external/test_selected_pre_submit.py",
@@ -65,6 +64,10 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/execution/test_migration.py",
         "tests/checkers/execution/test_material_lineage.py",
         "tests/checkers/execution/test_material_migration.py",
+        "tests/checkers/execution/test_checker_retry.py",
+        "tests/checkers/execution/test_checker_retry_authority.py",
+        "tests/checkers/execution/test_checker_retry_history_replay.py",
+        "tests/checkers/execution/test_checker_retry_migration.py",
         "tests/test_post_submit_materialization.py",
         "tests/test_post_submit_selection.py",
         "tests/test_checker_output_custody.py",
@@ -95,28 +98,28 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         )
 
 
-def test_measured_project_modules_partition_between_project_a_and_c() -> None:
+def test_measured_project_intake_partitions_between_project_c_and_d() -> None:
     expected = {
         "tests/test_guide_document_intake.py",
         "tests/test_projects.py",
     }
-    assert set(catalogue.PROJECT_AC_PARTITION_MODULES) == expected
+    assert set(catalogue.PROJECT_INTAKE_MODULES) == expected
     assert not expected & set(catalogue.PROJECT_MODULES)
     assert all(
-        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_AC_LANES
+        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_INTAKE_LANES
         for module in expected
     )
 
     for module in expected:
         assert tuple(lane.name for lane in LANES if module in lane.modules) == (
-            "project_lifecycle_a",
             "project_lifecycle_c",
+            "project_lifecycle_d",
         )
 
     nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
     manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
     assert {row["nodeid"] for row in manifest["nodes"]} == set(nodes)
-    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_PROJECT_AC_LANES)
+    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_PROJECT_INTAKE_LANES)
 
 
 def test_measured_hotspots_have_explicit_semantic_owners() -> None:
@@ -141,6 +144,8 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/submission_dispatch/test_composition.py",
             "tests/tasks/submission_dispatch/test_concurrency.py",
             "tests/tasks/submission_dispatch/test_migration.py",
+            "tests/tasks/submission_dispatch/test_replacement_migration.py",
+            "tests/tasks/submission_dispatch/test_replacement_creation.py",
             "tests/tasks/submission_dispatch/test_replay.py",
             "tests/tasks/submission_dispatch/test_rollback.py",
             "tests/tasks/submission_dispatch/test_storage.py",
@@ -274,11 +279,11 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/test_api_drill_repairs.py",
         }
     )
+    assert modules_by_lane["project_lifecycle_a"] == partitioned_project_modules
     assert modules_by_lane["project_lifecycle_b"] == partitioned_project_modules
-    assert modules_by_lane["project_lifecycle_d"] == partitioned_project_modules
-    project_ac_modules = partitioned_project_modules | set(catalogue.PROJECT_AC_PARTITION_MODULES)
-    assert modules_by_lane["project_lifecycle_a"] == project_ac_modules
-    assert modules_by_lane["project_lifecycle_c"] == project_ac_modules
+    project_intake_modules = partitioned_project_modules | set(catalogue.PROJECT_INTAKE_MODULES)
+    assert modules_by_lane["project_lifecycle_c"] == project_intake_modules
+    assert modules_by_lane["project_lifecycle_d"] == project_intake_modules
     assert (
         modules_by_lane["task_lifecycle_a"]
         == modules_by_lane["task_lifecycle_b"]
@@ -314,6 +319,8 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_public_queues.py",
             "tests/tasks/test_locked_compensation.py",
             "tests/tasks/test_task_import_contract.py",
+            "tests/test_task_import_sources.py",
+            "tests/test_submission_predecessor_custody.py",
             "tests/authorization/task_queues/test_authority.py",
             "tests/authorization/task_queues/test_contracts.py",
             "tests/authorization/task_queues/test_transactions.py",
@@ -367,7 +374,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert "tests/tasks/evaluation_delivery/test_worker_materialization.py" in shared_a
     assert "tests/artifacts/test_review_packet_contract.py" in shared_a
     assert {
-        "tests/test_task_import_sources.py",
         "tests/authorization/post_submit/test_atomicity.py",
         "tests/authorization/post_submit/test_concurrency.py",
         "tests/authorization/post_submit/test_live_authority.py",

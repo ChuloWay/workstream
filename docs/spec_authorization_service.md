@@ -331,7 +331,9 @@ provisioning actions without activating a route; AUTH-09B activates only
 `actor.service.provision`, AUTH-09C activates only `actor.profile.read` and
 `actor.identity_link.read`, AUTH-09D-A activates the three profile lifecycle
 actions, and AUTH-09D-B activates the two identity-link lifecycle actions. The
-other registry rows cover three planned Operator recovery actions and the ART
+other registry rows cover three Operator recovery actions: task start override
+and hidden checker retry are active, while submission-gate repair remains
+planned. The ART
 catalogue: 16 planned, three active foundation-service actions, active
 `artifact.guide_source.ingest`, and active fixed-service guide binding/read;
 the remaining rows cover canonical
@@ -466,11 +468,14 @@ remain unavailable; this action grants neither acceptance nor payment authority.
 XINT-002 packet, evidence-binding, and revision-submission actions are external
 handoff references only and are not redefined by this manifest.
 
-Initial and revision submission use the same `submission.create` action,
-permission, and route. Revision preparation is an internal participant and
-lifecycle guard of that command; no `submission.revise` or revision-prepare
-action exists. Finding and finding-response evidence intake are distinct
-protected commands mapped to existing permissions. The only new permission is
+Initial and checker-remediation replacement Submission use the same
+`submission.create` action, permission and canonical writer. The replacement
+binds the server-selected exact remediation manifest through preparation,
+binding and creation AUTH resources; the preliminary actor/assignment guard
+precedes byte access. Human-review revision requires its own exact Review cause
+before admission and has no runtime path yet. No `submission.revise` or
+revision-prepare action exists. Finding and finding-response evidence intake
+are distinct protected commands mapped to existing permissions. The only new permission is
 `review.queue.override`.
 
 Artifact verification recovery remains the existing
@@ -478,6 +483,15 @@ Artifact verification recovery remains the existing
 `ArtifactOperatorRecoveryPort`; no `artifact_recovery.request` permission is
 registered. Shared outbox dispatch/retry remains owned by the shared-outbox
 subsystem and is not represented as a REV-owned projection action.
+
+ARCH-04F4 activates hidden `operations.checker.retry` for an active system-scoped
+human Operator grant. The reason-bound prepared resource, actual AUTH decision,
+canonical audit event, CHECKERS retry receipt, successor generation and shared
+request event commit together. New requests require the exact current terminal
+`infrastructure_failed` run; fresh-authorized replay validates the historical
+TASK/Submission and original receipt even after later routing. This is neither a
+public route nor a registered production handler. `task_setup_blocked` is not
+eligible for this retry, and `operations.submission_gate.repair` remains planned.
 
 The v0.1 baseline is availability-neutral for this surface. PostgreSQL enforces the closed
 ActionId set, authorization-decision event shape, exact ActionId-to-PermissionId
@@ -721,7 +735,7 @@ manifests; a planning document does not grant a service permission.
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B9 hidden handler/fence and ARCH-03C1 real feature authority/decision receipts complete; ARCH-03C2 atomic producer wiring and registration |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | Implemented by ARCH-04C/04D2; no dispatcher registration |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest, retained material and original execute receipt; fresh post-I/O authority and atomic evidence; current outputs are empty | Implemented by ARCH-04C/04D2; no dispatcher registration |
-| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state. `allow_review` with true permits only TASK `review_pending`; `allow_review` with false binds exact accepted TASK effects for shared FinalAcceptance. `needs_revision` under either mode permits only TASK remediation with the assignment active and no REV/CON effect. Never a human review decision or generic CON write | 04E2-B delivers canonical fixed-router PREP consumption and actual receipt custody for complete hidden success outcomes; ARCH-04F2 extends that same operation and receipt to exact checker remediation. SQL rejects orphan or incomplete outcomes and failure-to-acceptance substitution. B8 supplies hidden completion delivery; replacement intake/recovery and 04E3 production registration remain. |
+| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state. `allow_review` with true permits only TASK `review_pending`; `allow_review` with false binds exact accepted TASK effects for shared FinalAcceptance. `needs_revision` under either mode permits only TASK remediation with the assignment active and no REV/CON effect. Never a human review decision or generic CON write | 04E2-B delivers canonical fixed-router PREP consumption and actual receipt custody for complete hidden success outcomes; ARCH-04F2 extends that same operation and receipt to exact checker remediation. SQL rejects orphan or incomplete outcomes and failure-to-acceptance substitution. B8 supplies hidden completion delivery; 04F3 adds hidden exact-cause replacement under existing AUTH actions; 04F4 adds separate hidden Operator retry authority through CHECKERS. Manager-visible setup-fault hold and 04E3 production registration remain. |
 
 Each action maps to the identically named permission in this table and only
 its singleton fixed-service row. Humans, dispatchers and unrelated services
@@ -1737,3 +1751,13 @@ replay rechecks live authority and the complete original tuple without issuing
 another allow or repairing effects. B8 supplies hidden completion delivery;
 production registration remains unavailable. Human acceptance-source authority
 is still future work; detached human receipts grant nothing.
+
+ARCH-04F3 uses existing `artifact.submission_bundle.prepare`,
+`artifact.submission.binding.create` and `submission.create` authority for hidden
+checker-remediation replacement. Each final resource binds the same selected
+remediation manifest, predecessor and locked context. A different or stale
+source denies before new evidence, admission consumption or Submission commit;
+the initial pre-byte context also denies a source mismatch before ZIP access.
+No AUTH action or permission is added for an uncaused `revision` path. The
+successor preserves the old failure evidence and creates no Review, acceptance,
+ContributionRecord or award merely by resubmission.

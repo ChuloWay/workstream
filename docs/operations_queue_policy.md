@@ -2,9 +2,11 @@
 
 ## Status
 
-Review and revision lanes below are the planned v0.1 operating contract. Their
-routes and jobs remain unavailable until the owning REV chunks, exact AUTH
-activation, and REV-13 joint release complete.
+Human review and revision lanes below are the planned v0.1 operating contract.
+Their routes and jobs remain unavailable until the owning REV chunks, exact
+AUTH activation, and REV-13 joint release complete. Hidden checker-remediation
+replacement is implemented through the existing intake and writer; its public
+route remains pending.
 
 ## Purpose
 
@@ -181,6 +183,9 @@ Policy:
 
 - checker-caused remediation carries CheckerResult lineage; human-review
   revision carries an immutable Review and at least one blocking finding
+- checker-caused remediation retains the Task's locked rules and reruns full
+  pre-submit intake against a changed ZIP; it needs no Review preparation,
+  finding response, or context rebase
 - human-review resubmission includes one immutable response per unresolved
   blocking finding
 
@@ -263,8 +268,9 @@ Every operating day starts with:
 | `REVIEW_PENDING -> NEEDS_REVISION` | immutable Review, at least one blocking ReviewFinding, reviewer `completed_review` under the completed lease freeze, atomic complete-context kept/rebased/blocked preparation for the next attempt; no FinalAcceptance or submitter contribution |
 | `REVIEW_PENDING -> ACCEPTED` | immutable accepting Review, FinalAcceptance, reviewer `completed_review`, submitter `accepted_submission` sourced from FinalAcceptance, applicable awards |
 | `REVIEW_PENDING -> REJECTED` | immutable rejected Review, bounded reason, same-task assignment block, reviewer `completed_review`; no FinalAcceptance or submitter contribution |
-| `NEEDS_REVISION -> SUBMITTED` | exact complete-context preparation head/digest, replacement Submission stamped with its selected guide/policy context, response for every unresolved blocking finding, policy limit/deadline not reached |
-| `NEEDS_REVISION -> CANCELLED` | covered manager limit/deadline closure or Operator legacy-context closure, bounded canonical reason, assignment release; no synthetic Review or contribution |
+| `NEEDS_REVISION -> SUBMITTED` after checker remediation | Exact current authorized checker-remediation cause for the immediate predecessor, unchanged locked Task/assignment rules, changed full ZIP passing pre-submit intake, verified ART admission and atomic Submission/dispatch with exact AUTH receipts; no Review preparation or finding response |
+| `NEEDS_REVISION -> SUBMITTED` after human Review (planned) | Exact complete-context preparation head/digest, replacement Submission stamped with its selected guide/policy context, response for every unresolved blocking finding, policy limit/deadline not reached |
+| `NEEDS_REVISION -> CANCELLED` after human Review (planned) | covered manager limit/deadline closure or Operator legacy-context closure, bounded canonical reason, assignment release; no synthetic Review or contribution |
 | compensation `pending -> fulfilled` | immutable fulfillment receipt, external reference, and audit event |
 
 ## Lane Capacity

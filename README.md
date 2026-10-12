@@ -216,8 +216,17 @@ CHECKERS custody and historical PROJECTS policy, without inserting a manifest
 or granting authority by itself. ARCH-04E2-B consumes this source in the complete
 authorized outcome. B8 supplies hidden completion delivery; 04F2 routes verified
 contributor-correctable failures to `needs_revision` under either policy mode.
-Exact-cause replacement intake, setup-fault/Operator recovery and production
-composition remain before public intake and the first real end-to-end drill.
+ARCH-04F3 admits a changed full replacement ZIP only for that exact current
+authorized checker-remediation source. The existing intake and atomic Submission
+writer retain its cause, predecessor and locked policy lineage while creating
+the successor evaluation request. This hidden path creates no Review or
+contribution on failure. ARCH-04F4 adds hidden reason-bound Operator retry for
+known terminal infrastructure failures using the existing CHECKERS coordinator
+and request handler, with exact AUTH, audit and outbox custody. Fresh-authorized
+replay validates the historical request. Manager-visible holds for valid setup
+faults remain, without contributor penalty. Changing or re-screening submitted-task
+rules remains deferred. The retry has no public route or production registration.
+Production composition follows before public intake and the first real end-to-end drill.
 
 Active work stays on that first contribution path. Live human review/revision,
 reviewer participation and fulfillment delivery follow separately.
@@ -846,9 +855,15 @@ the original tuple with fresh authority instead of repairing it.
 
 B6 supplies atomic Submission/dispatch, B7 hidden request delivery and B8 hidden
 completion handling with commit-before-ACK. 04F2 supplies the hidden remediation
-handoff without Review, acceptance, contribution or award effects. Exact-cause
-replacement intake, setup-fault/Operator recovery, live registration, false-guide
+handoff without Review, acceptance, contribution or award effects. 04F3 supplies
+hidden exact-cause replacement intake through the canonical Submission writer;
+it neither creates failure economics nor activates human revision. 04F4 adds
+hidden Operator retry for known terminal infrastructure failures with immutable
+source evidence. Manager-visible setup-fault holds without contributor penalty,
+live registration, false-guide
 activation and public intake remain subsequent gates.
+Setup-fault holds retain the Submission and locked rules; changing those rules
+for submitted work remains deferred.
 The hidden false-path proof uses explicitly seeded valid policy lineage;
 normal guide activation still rejects false until the runtime is ready.
 Conditional awards stay atomic; payment delivery and fulfillment-root machinery
@@ -868,9 +883,11 @@ bar.
 
 Workstream is built as durable operational infrastructure. Project rules live
 in versioned guides and policies rather than chat memory. Each active attempt
-keeps its locked governing context; `needs_revision` preparation rebases a
-complete valid context for the next attempt rather than silently mixing old and
-new rules.
+keeps its locked governing context. Hidden checker remediation keeps those
+rules and reruns full intake for a changed ZIP; it creates no Review or finding
+responses. Future human-Review revision preparation may rebase a complete valid
+context for the next attempt without silently mixing old and new rules.
+Changing or re-screening rules for already submitted work remains deferred.
 
 Lifecycle state is a ledger, not a loose label. Submitted artifacts remain
 immutable and hash-bound to their checks; findings, responses, resolutions,
