@@ -145,7 +145,9 @@ async def test_preparation_retains_parent_custody_and_successor_wins_next(tmp_pa
 
 async def test_successor_preparation_matches_stored_predecessor(tmp_path, isolated_database_env):
     from datetime import UTC, datetime
-    async with routing_source(tmp_path, isolated_database_env) as original:
+    from .remediation_support import remediation_source
+
+    async with remediation_source(tmp_path, isolated_database_env) as original:
         successor = await completed_successor_source(original)
         expected = await joined_source_facts(successor, successor.source | {"created_at": datetime.now(UTC)})
         async with original.factory() as session, session.begin():
@@ -159,5 +161,9 @@ async def test_successor_preparation_matches_stored_predecessor(tmp_path, isolat
             assert prepared.source.submission_version == 2
             assert prepared.source.predecessor_submission_id == original.request.submission_id
             assert prepared.source.predecessor_submission_version == 1
-            assert await source_count(session) == 0
+            # Only the predecessor's authorized remediation has a stored source.
+            assert await source_count(session) == 1
+            assert await session.scalar(text(
+                "SELECT submission_id FROM public.task_post_submit_routing_manifests"
+            )) == original.request.submission_id
             assert await effect_snapshot(session) == before

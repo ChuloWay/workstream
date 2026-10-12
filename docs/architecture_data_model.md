@@ -1550,8 +1550,6 @@ Fields:
 - `submitted_at`
 - `locked_at`
 - `supersedes_submission_id`
-- `remediation_source_checker_run_id` (checker-remediation submissions only)
-- `revision_context_preparation_id` (human-Review revision submissions only)
 - `contribution_policy_version_id` (immutable exact attempt policy copied from
   the TaskAssignment during Submission creation)
 
@@ -1589,15 +1587,20 @@ immutably before any later rebase can change the continuing assignment. Human
 revision preparation records prior/next policy lineage before it may update
 that selector; publication alone cannot.
 
-Version 1 has neither revision-source field. Every later version has exactly one:
-a checker-remediation version stores the server-derived
-`remediation_source_checker_run_id`, while a human-Review revision stores the
-server-selected `revision_context_preparation_id`. The checker source must be the
-completed, needs-revision, current-at-selection CheckerRun for the immediate
-predecessor Submission and same Task. PostgreSQL enforces same-task/immediate-
-predecessor lineage, one successor per source CheckerRun, source-field XOR, and
-post-finalization immutability. A later CheckerRun retry cannot rewrite committed
-Submission lineage. Contributor requests supply neither authoritative source ID.
+Version 1 has no replacement cause. For a current checker-remediation replacement,
+TASK selects the exact authorized `needs_revision` routing manifest for the
+immediate predecessor and its current completed CheckerRun. The server-selected
+`checker_remediation_manifest_id` travels through ART's pre-submit evidence and
+verified admission, then the TASK creation dispatch and exact AUTH resources.
+Submission retains its immediate predecessor and admission link; the dispatch
+references the new Submission. It does not duplicate the cause in a Submission
+column. PostgreSQL closes same-task,
+assignment, predecessor, cause and receipt lineage. A later CheckerRun retry
+cannot rewrite committed evidence or dispatch. Contributor requests do not
+select the cause. A future human-Review revision needs its own exact Review-rooted
+preparation and lineage before that path becomes available; no current
+`revision_context_preparation_id` Submission field is delivered by checker
+remediation.
 
 Implementation note: submissions stamp explicit post-submit checker provenance
 from the task. Durable `CheckerRun` creation uses those

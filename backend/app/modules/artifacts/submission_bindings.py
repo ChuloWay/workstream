@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, cast
 from uuid import UUID
 from app.core.identifiers import new_record_id
@@ -43,6 +43,7 @@ class SubmissionBindingAuthorityFacts:
     assignment_id: UUID
     predecessor_submission_id: UUID | None
     predecessor_submission_version: int | None
+    checker_remediation_manifest_id: UUID | None = field(default=None, kw_only=True)
     submission_id: UUID
     submission_version: int
     guide_id: UUID
@@ -300,6 +301,8 @@ class SubmissionAdmissionConsumptionService:
             == admission.predecessor_submission_id
             and evidence.predecessor_submission_version
             == admission.predecessor_submission_version
+            and evidence.checker_remediation_manifest_id
+            == admission.checker_remediation_manifest_id
             and evidence.locked_policy_context_hash
             == admission.locked_policy_context_hash
             and evidence.semantic_manifest_id == admission.semantic_manifest_id
@@ -332,6 +335,8 @@ class SubmissionAdmissionConsumptionService:
             == (str(predecessor.submission_id) if predecessor is not None else None)
             and admission.predecessor_submission_version
             == (predecessor.version if predecessor is not None else None)
+            and admission.checker_remediation_manifest_id
+            == context.checker_remediation_manifest_id
             and evidence.guide_version == references.guide_version
             and evidence.source_snapshot_id == str(references.source_snapshot_id)
             and evidence.source_snapshot_sha256 == references.source_snapshot_hash
@@ -362,6 +367,7 @@ class SubmissionAdmissionConsumptionService:
                 else None
             ),
             predecessor_submission_version=admission.predecessor_submission_version,
+            checker_remediation_manifest_id=admission.checker_remediation_manifest_id,
             submission_id=request.submission_id,
             submission_version=request.submission_version,
             guide_id=UUID(evidence.guide_id),

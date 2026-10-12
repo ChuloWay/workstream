@@ -1255,9 +1255,19 @@ reloads the active actor and identity link, task, active assignment, immediate
 predecessor, locked guide lineage, effective submission-artifact policy and
 compiled pre-submit policy. Drift fails closed before evidence persistence.
 
+For a checker-remediation replacement, TASK first supplies the exact current
+authorized source selected from its own locked predecessor and the retained
+CHECKERS result. ART checks that source before reading ZIP bytes and at each
+later context relock; a missing, foreign or superseded cause denies intake.
+
 `PreSubmitEvidenceSet` stores the exact actor/task/assignment/predecessor,
 prepared generation, archive digest/size, semantic-manifest identity, locked
 guide and policy hashes, effective-plan identity and catalogue identity.
+ARCH-04F3 also carries the server-selected `checker_remediation_manifest_id`
+for replacement. It is absent for an initial Submission and binds the existing
+evidence operation identity and passing capability; ART does not copy the
+checker result body into a second findings store.
+
 Ordered `PreSubmitEvidenceResult` rows store the closed definition, policy
 trace, phase, classification, status and bounded codes directly; required
 provenance is never hidden in generic metadata. A result-manifest digest binds
@@ -1295,6 +1305,9 @@ preserve the actor and identity link, project, task, assignment, predecessor ide
 locked guide/snapshot/policy lineage, semantic-manifest identity/digest,
 archive digest/size/media type, effective-plan digest, storage scheme, and
 operation identity required for database-only verified-admission publication.
+The replacement's exact remediation cause is part of the final preparation
+AUTH resource and durable lineage through evidence to the verified admission.
+
 It is not a bindable admission, Submission, review, or contribution fact.
 
 The intent, transaction-local authorization evidence, provisional capacity
@@ -1328,6 +1341,7 @@ project_id                     = UUID
 task_id                        = UUID
 assignment_id                  = UUID
 predecessor_submission_id      = UUID | null
+checker_remediation_manifest_id = UUID | null (required for replacement)
 locked_policy_context_hash    = SHA-256 copied from immutable pre-submit evidence
 artifact_content_id            = UUID
 verified_replica_id            = UUID
@@ -1417,8 +1431,17 @@ new human decision. That transaction consumes both fresh human
 `artifact.submission.binding.create` capabilities, mapped to PermissionId
 `artifact.binding.create`, locks and matches
 admission/task/assignment/predecessor/context, creates the
-immutable Submission and binding, and marks admission consumed. Any denial,
-cancellation, stale execution, or persistence failure rolls back all effects.
+immutable Submission and binding, and marks admission consumed.
+
+For replacement, both final AUTH resources and TASK consumption must match the
+admission's exact checker-remediation cause. The new Submission and generation-one
+evaluation dispatch commit through the same canonical writer. Direct SQL cannot
+substitute that cause or the required AUTH receipts. A retained uncaused
+`revision` dispatch cannot be invented into this lineage: migration
+`0034_checker_remediation_replacement` refuses upgrade before DDL if its exact
+cause and receipts cannot be proven, preserving the 0032 schema and rows.
+Any denial, cancellation, stale execution, or persistence failure rolls back
+all effects.
 After authority succeeds, proven task closure, predecessor advancement, or
 locked-context replacement may commit only `ready -> stale` plus bounded
 evidence, never a Submission/binding. Authorization/concealment precedes

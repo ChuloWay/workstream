@@ -53,8 +53,9 @@ async def read_creation_replay(
         or submission.artifact_binding_id != str(receipt.artifact_binding_id)
         or submission.artifact_content_id != str(receipt.artifact_content_id)
         or submission.contribution_policy_version_id != assignment.submitter_contribution_policy_version_id
-        or receipt.creation_kind != ("revision" if predecessor_id else "initial")
+        or receipt.creation_kind != ("checker_remediation" if predecessor_id else "initial")
         or receipt.creation_status != ("needs_revision" if predecessor_id else "in_progress")
+        or (receipt.checker_remediation_manifest_id is None) != (predecessor_id is None)
     ):
         raise invalid
     predecessor = None
@@ -95,6 +96,7 @@ async def read_creation_replay(
             submitter_contribution_policy_version_id=submission.contribution_policy_version_id,
             locked_project_context=refs, locked_policy=policy,
             acceptance_criteria=task.acceptance_criteria,
+            checker_remediation_manifest_id=receipt.checker_remediation_manifest_id,
         )
     except (ValueError, TypeError, AttributeError) as exc:
         raise invalid from exc

@@ -2479,3 +2479,17 @@ def test_completion_delivery_ownership_does_not_allow_registration():
         ownership._validate_additive_partition_transition(_partition(sorted({
             retained, *targets, "backend/app/workers/evaluation_completion_delivery.py",
         })), trusted)
+
+
+def test_replacement_context_ownership_does_not_allow_a_second_writer():
+    targets = ownership.ARCH_04F3_REPLACEMENT_TARGETS
+    assert targets == {"backend/app/modules/tasks/submission_context.py"}
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition(sorted({
+            retained, *targets, "backend/app/modules/tasks/replacement_submission.py",
+        })), trusted)

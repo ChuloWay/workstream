@@ -1,10 +1,10 @@
 # WS-ARCH-001 — Modular monolith boundaries
 
-[ARCH-04F1](WS-ARCH-001-04F1.md) extends the existing CHECKERS completion read to verified contributor/setup failure evidence, including retained typed results. [ARCH-04F2](WS-ARCH-001-04F2.md) routes an exact current contributor-correctable result through the existing hidden TASK/AUTH outcome operation to `needs_revision` under either locked ReviewPolicy mode. Replacement intake and authorized setup-fault/Operator recovery remain; no production registration or public surface is activated.
+[ARCH-04F1](WS-ARCH-001-04F1.md) extends the existing CHECKERS completion read to verified contributor/setup failure evidence, including retained typed results. [ARCH-04F2](WS-ARCH-001-04F2.md) routes an exact current contributor-correctable result through the existing hidden TASK/AUTH outcome operation to `needs_revision` under either locked ReviewPolicy mode. 04F3 supplies hidden exact-cause replacement intake; authorized manager-visible setup-fault hold and Operator retry remains; no production registration or public surface is activated.
 
 [REV-12A4A](../WS-REV-001/WS-REV-001-12A4A.md) adds internal Operator-controlled lifecycle transitions and current-generation terminal replay. New acceptance effects require LIVE; 04E2-B supplies hidden source AUTH custody, while production routing remains unavailable. Conditional award facts stay atomic, while fulfillment admission, payment delivery and their root/cutoff machinery remain deferred until a successor manifest enables them.
 
-[ARCH-04E1B-B5](WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. ARCH-04E1B-B6 reuses this projection in atomic Submission/dispatch creation with exact AUTH receipts and select-only replay. B7 delivers hidden request delivery with exact invocation fencing; 04E2-B supplies complete authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff. Replacement intake and recovery remain. Production registration remains unavailable.
+[ARCH-04E1B-B5](WS-ARCH-001-04E1BB5.md) delivers shared bounded evaluation content and rejects unrepresentable ZIP input before durable admission. ARCH-04E1B-B6 reuses this projection in atomic Submission/dispatch creation with exact AUTH receipts and select-only replay. B7 delivers hidden request delivery with exact invocation fencing; 04E2-B supplies complete authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff. 04F3 supplies hidden exact-cause replacement intake; recovery remains. Production registration remains unavailable.
 
 Delivery priority: [first complete contributor milestone](planning/PLAN.md#first-complete-contributor-milestone). Use its four remaining outcome groups and end-to-end exit proof when selecting the next bounded change; live human review/revision and external integration are later work.
 
@@ -31,9 +31,8 @@ complete tuple. No Review or reviewer contribution is fabricated.
 B8 supplies hidden completion delivery with commit-before-ACK. 04E3A supplies
 the hidden request handler with the existing Celery ART provider lease and
 invocation-scoped scratch, without production registration. 04F2 extends the
-existing hidden outcome with exact policy-independent checker remediation. Next:
-exact-cause replacement intake and recovery,
-04E3 production composition, public intake and the first-layer drill. False-guide activation,
+existing hidden outcome with exact policy-independent checker remediation. 04F3 adds hidden exact-cause replacement intake. Next: authorized
+manager-visible setup-fault hold and Operator retry, 04E3 production composition, public intake and the first-layer drill. False-guide activation,
 live human review/revision and payment delivery remain unavailable. Internally
 valid false-policy fixtures establish the hidden operation, not public readiness.
 
@@ -78,7 +77,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or a production writer.
-- Next usable boundary: complete 04F replacement intake and recovery, 04E3 live
+- Next usable boundary: complete 04F recovery after 04F3 hidden replacement intake, 04E3 live
   composition and false-guide readiness, public intake
   and the first-layer drill. True handoff remains independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
@@ -90,7 +89,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 REV-12A4A supplies scoped lifecycle transitions on the existing REV fence.
 04E2-B supplies exact source AUTH custody and complete database/effect closure;
 04F2 extends it with a `checker_remediation` consequence that retains the active
-assignment and creates no REV/CON effect. Replacement intake, authorized
+assignment and creates no REV/CON effect. 04F3 hidden replacement intake is delivered; authorized
 recovery, production composition and false-guide activation remain separate work.
 
 This is delivery priority, not a prerequisite of true human admission. Both
@@ -103,7 +102,7 @@ ARCH-04E1B-B1 supplies TASK-before-CHECKERS custody for reservation, current
 reads and admission. B6 atomically creates the Submission and initial dispatch;
 04E2-B owns the later authorized success outcome. B8 consumes that outcome and
 commits before acknowledgment; 04F2 adds the hidden remediation outcome through
-the same operation. Replacement intake and recovery remain. Both request and
+the same operation. 04F3 supplies hidden exact-cause replacement intake; recovery remains. Both request and
 completion handlers remain absent from production registration.
 
 ## Delivered and remaining

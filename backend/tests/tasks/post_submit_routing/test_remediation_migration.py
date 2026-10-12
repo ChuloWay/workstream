@@ -8,7 +8,11 @@ from alembic import command
 
 from app.db import session as db_session
 from scripts.bootstrap_access_administrator import _run as run_bootstrap
-from tests.migration_fixtures import _config
+from tests.migration_fixtures import (
+    _add_current_cause_seed_columns,
+    _config,
+    _restore_current_cause_seed_columns,
+)
 from tests.reviews.lifecycle.transition_support import command_for, transition
 from tests.tasks.post_submit_routing.outcome_support import (
     apply_outcome,
@@ -106,14 +110,15 @@ async def test_routing_upgrade_preserves_success_evidence(
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0031_task_import_source")
 
-        # Current application construction requires the future owner column while
-        # it writes genuine predecessor outcomes. Remove it before the real upgrade.
+        # Current application construction needs later nullable columns while it
+        # writes genuine predecessor outcomes. Restore exact 0031 shape before upgrade.
         connection = await asyncpg.connect(url)
         try:
             await connection.execute(
                 "ALTER TABLE public.task_post_submit_routing_manifests "
                 "ADD COLUMN routing_recommendation varchar(32) NOT NULL"
             )
+            cause_originals = await _add_current_cause_seed_columns(connection)
         finally:
             await connection.close()
 
@@ -140,6 +145,7 @@ async def test_routing_upgrade_preserves_success_evidence(
         await db_session.dispose_engine()
         connection = await asyncpg.connect(url)
         try:
+            await _restore_current_cause_seed_columns(connection, cause_originals)
             await connection.execute(
                 "ALTER TABLE public.task_post_submit_routing_manifests "
                 "DROP COLUMN routing_recommendation"

@@ -2,7 +2,7 @@
 
 from app.core.config import get_settings
 
-from app.adapters.tasks import task_service
+from app.adapters.tasks import task_service, task_submission_context_port
 
 from uuid import UUID, uuid4
 from unittest.mock import AsyncMock
@@ -100,6 +100,7 @@ async def test_invalid_locked_policy_never_reaches_art_or_submission(
                     authorization=PreparedSubmissionCreationAuthorization(session, context),
                     admissions=admissions, evaluations=AsyncMock(), events=AsyncMock(),
                     contexts=task_service(session, settings=get_settings()),
+                    submission_contexts=task_submission_context_port(session),
                 ).create(
                     SubmissionCreationRequest(
                         task_id=UUID(task.id),

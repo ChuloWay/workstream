@@ -1,6 +1,7 @@
 """Additive custody never manufactures dispatch or authority for retained data."""
 
 import asyncio
+import json
 
 import asyncpg
 import pytest
@@ -34,7 +35,45 @@ async def test_upgrade_preserves_retained_owners_without_backfill(tmp_path, isol
             try:
                 before = await snapshot()
                 await asyncio.to_thread(command.upgrade, _config(), current_schema_revision())
-                assert await snapshot() == before
+                after = await snapshot()
+                before_admissions = json.loads(before.pop("submission_bundle_admissions"))
+                after_admissions = json.loads(after.pop("submission_bundle_admissions"))
+                assert len(after_admissions) == len(before_admissions)
+                for retained, upgraded in zip(
+                    before_admissions, after_admissions, strict=True
+                ):
+                    assert set(upgraded) == set(retained) | {
+                        "checker_remediation_manifest_id"
+                    }
+                    assert upgraded.pop("checker_remediation_manifest_id") is None
+                    assert upgraded == retained
+                assert after == before
+                columns = await connection.fetch("""
+                    SELECT table_name,data_type,is_nullable
+                    FROM information_schema.columns
+                    WHERE table_schema='public'
+                      AND table_name=ANY($1::text[])
+                      AND column_name='checker_remediation_manifest_id'
+                    ORDER BY table_name
+                """, [
+                    "pre_submit_evidence_sets",
+                    "submission_bundle_admissions",
+                    "submission_dispatches",
+                ])
+                assert [tuple(row) for row in columns] == [
+                    ("pre_submit_evidence_sets", "uuid", "YES"),
+                    ("submission_bundle_admissions", "uuid", "YES"),
+                    ("submission_dispatches", "uuid", "YES"),
+                ]
+                for table in (
+                    "pre_submit_evidence_sets",
+                    "submission_bundle_admissions",
+                    "submission_dispatches",
+                ):
+                    assert await connection.fetchval(
+                        f"SELECT count(*) FROM public.{table} "
+                        "WHERE checker_remediation_manifest_id IS NOT NULL"
+                    ) == 0
                 assert await connection.fetchval("SELECT count(*) FROM public.submission_dispatches") == 0
                 assert await connection.fetchval("SELECT count(*) FROM public.submission_binding_receipts") == 0
                 assert await connection.fetchval("SELECT status FROM public.submission_bundle_admissions WHERE id=$1", h.created.admission_id) == "consumed"

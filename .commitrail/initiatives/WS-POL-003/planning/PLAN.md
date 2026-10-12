@@ -4,8 +4,7 @@
 routing operation with actual source/phase/AUTH receipts, database-enforced
 consequences, shared audit/outbox and exact replay. True performs the TASK
 human-review handoff independently of REV/CON; false uses shared acceptance and
-atomic submitter contribution/applicable awards. Hidden completion delivery is supplied by B8; remediation is next,
-then production composition, public intake and the first-layer drill.
+atomic submitter contribution/applicable awards. B8 supplies hidden completion delivery; 04F2 supplies the policy-independent checker-remediation handoff and 04F3 the hidden exact-cause replacement through the canonical writer. Authorized manager-visible setup-fault hold and Operator retry is next, then production composition, public intake and the first-layer drill.
 Public false-guide activation, live human review/revision and payment delivery
 remain unavailable.
 

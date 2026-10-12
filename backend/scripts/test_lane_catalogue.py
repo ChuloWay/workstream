@@ -275,6 +275,8 @@ PROJECT_MODULES = (
     "tests/tasks/submission_dispatch/test_composition.py",
     "tests/tasks/submission_dispatch/test_concurrency.py",
     "tests/tasks/submission_dispatch/test_migration.py",
+    "tests/tasks/submission_dispatch/test_replacement_migration.py",
+    "tests/tasks/submission_dispatch/test_replacement_creation.py",
     "tests/tasks/submission_dispatch/test_replay.py",
     "tests/tasks/submission_dispatch/test_rollback.py",
     "tests/tasks/submission_dispatch/test_storage.py",
