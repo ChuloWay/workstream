@@ -61,10 +61,6 @@ from app.modules.checkers.api.materialization import (
 from app.modules.outbox.api import OutboxAppendPort
 from app.modules.outbox.api import OutboxAppendInput
 
-LEASE_SECONDS = 300
-EXECUTION_TIMEOUT_SECONDS = 240
-
-
 def _lease(run):
     """Recover the exact persisted lease, including its database expiry."""
     return ExecutionLease(

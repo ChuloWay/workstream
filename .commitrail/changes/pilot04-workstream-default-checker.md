@@ -1513,3 +1513,37 @@ system-auditor permission read and write refusal through signed public callers.
 Native verification is serial with the other owner and uses only isolated owned
 resources. Lead CI/test-delta review and complete hosted CI remain required; no
 publication, merge or full-suite claim follows from these fixture repairs.
+
+### Receipt-expiry fixture repair after the schema-lane cap
+
+Allowed scope is the current receipt-custody fixture in
+`backend/tests/authorization/post_submit/test_receipt_custody.py`, the expired
+execution delivery control in `backend/tests/tasks/evaluation_delivery/test_custody.py`,
+the two unused constants in `backend/app/modules/checkers/execution.py`, and this record.
+The six AUTH expiry controls patch an unused `LEASE_SECONDS` name while the
+current owner derives its lease from the selected execution budget and finalization
+margin. Hosted SQL timestamps show six real expiry waits of roughly 120 seconds
+each, contributing to the unchanged 1200-second schema-lane cap.
+
+Use a scoped one-second initial execution budget and nine-second finalization
+margin, then restore the current owner settings before takeover/finalization.
+Wait for the persisted database expiry and assert database time has reached it;
+retain genuine AUTH receipt substitution, exact rollback, valid recovery and
+expired-delivery refusal controls. Remove the unused `LEASE_SECONDS` and
+`EXECUTION_TIMEOUT_SECONDS` declarations; no executing owner reads either name.
+Do not change production budgets, database facts/guards, lane placement, caps,
+nodes, skips or exemptions. Required validation is Ruff/diff, exact seven-node
+collection, independent source review and serialized real PostgreSQL controls.
+This is an author repair; no completed native or full hosted-suite result is
+claimed before those checks finish.
+
+The changed sources pass Ruff, Python parsing and `git diff --check`.
+Focused collection retains exactly seven nodes: the five execute-receipt
+substitutions, finalization's execute-chain substitution, and expired delivery
+execution. Exact-word scans find no remaining references to either removed
+constant. Neither changed test file nor the execution owner has a protected
+structural-debt entry; the existing behavior ownership target is unchanged.
+Lead source review found no issue with scoped setting restoration, persisted
+ten-second duration, real database expiry or retained custody/refusal assertions.
+Serialized PostgreSQL execution remains pending; this validation does not claim
+the schema lane or the full hosted suite passed.
