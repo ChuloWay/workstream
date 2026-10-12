@@ -63,6 +63,38 @@ class ControlledSelectedExecution:
         )
 
 
+def selected_request(*, project_id=None):
+    """Supply a closed empty selected policy for pure contract boundary tests."""
+    from app.core.hashing import canonical_json_hash
+    from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
+    from app.modules.checkers.api.selected_post_submit import (
+        SelectedPostSubmitLockedContext, make_selected_post_submit_request,
+    )
+
+    sha = "sha256:" + "a" * 64
+    policy = LockedExternalPostSubmitPolicy(
+        entries=(), policy_sha256=canonical_json_hash({
+            "schema_version": "external_post_submit_policy.v1", "entries": [],
+        }),
+    )
+    context = {
+        name: (new_record_id() if name.endswith("_id") else
+               1 if name.endswith("generation") else
+               "v1" if "version" in name else sha)
+        for name in SelectedPostSubmitLockedContext.model_fields
+    }
+    context["selected_post_policy_hash"] = policy.policy_sha256
+    return make_selected_post_submit_request(
+        project_id=project_id or new_record_id(),
+        expected_context=SelectedPostSubmitLockedContext(**context), policy=policy,
+        evaluation_request_id=new_record_id(), evaluation_generation=1,
+        task_id=new_record_id(), assignment_id=new_record_id(),
+        submission_id=new_record_id(), submission_version=1,
+        content_id=new_record_id(), binding_id=new_record_id(),
+        content_sha256=sha, byte_count=42,
+    )
+
+
 def selected_result(source, **changes):
     """Supply closed empty-policy evidence for owner and material boundary tests."""
     from app.modules.checkers.api.selected_post_submit import (

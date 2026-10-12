@@ -104,7 +104,7 @@ async def test_verified_material_execution_and_replay(
                 )
             )
             assert tuple(row.checker_name for row in rows) == tuple(
-                m.registry_entry_id for m in result.execution.external_members
+                m.requirement_id for m in result.execution.external_members
             )
             assert len(rows) == len(h.request.policy.entries) == 0
             event = await session.scalar(

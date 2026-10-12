@@ -173,7 +173,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         locked_pre_submit_checker_policy_id=str(references.pre_submit_policy_id),
         locked_pre_submit_checker_bundle_hash=references.pre_submit_policy_bundle_hash,
     )
-    from tests.checkers.post_submit.support import request as evaluation_request
+    from tests.checkers.execution.support import selected_request
     from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 
     base_context = submission_context_facts(
@@ -182,10 +182,10 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         submitter_contribution_policy_version_id=references.locked_contribution_policy_version_id,
         locked_project_context=references,
     )
-    post_policy = evaluation_request(project_id=references.project_id).policy
+    post_policy = selected_request(project_id=references.project_id).policy
     lineage = TaskPolicyLineage(**{
         **base_context.locked_policy.model_dump(),
-        "locked_post_submit_checker_policy_hash": post_policy.policy_hash,
+        "locked_post_submit_checker_policy_hash": post_policy.policy_sha256,
     })
     for field, value in lineage.model_dump().items():
         setattr(task, field, str(value) if field.endswith("_id") and field != "locked_contribution_policy_version_id" else value)

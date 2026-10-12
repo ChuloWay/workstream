@@ -35,7 +35,7 @@ from tests.checker_output_custody_helpers import (
     output_custody_harness,
     selector_for,
 )
-from tests.checkers.post_submit.support import request as post_submit_request
+from tests.checkers.execution.support import selected_request
 
 
 async def test_default_composition_denies_before_owner_source_or_storage() -> None:
@@ -57,7 +57,7 @@ async def test_default_composition_denies_before_owner_source_or_storage() -> No
         yield b"must-not-be-read"
 
     selector = CheckerOutputSelector(
-        evaluation=post_submit_request(),
+        evaluation=selected_request(),
         checker_run_id=new_record_id(),
         worker_lease_id=new_record_id(),
         worker_lease_generation=1,

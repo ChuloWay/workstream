@@ -1,10 +1,8 @@
 """New contracts cannot expose persistence, individual dispatch or live execution."""
 
 import ast
-import inspect
 from pathlib import Path
 
-from app.modules.checkers.api import PostSubmissionExecutionPort
 from app.modules.checkers.api.selected_post_submit import SelectedPostSubmissionEvaluationRequest
 
 
@@ -19,12 +17,5 @@ def test_public_api_has_no_private_owner_types():
         assert not any(
             item.startswith(("sqlalchemy", "app.interfaces.project_agents")) for item in imports
         )
-    for cls in (PostSubmissionExecutionPort,):
-        methods = [
-            name
-            for name, method in inspect.getmembers(cls, inspect.isfunction)
-            if not name.startswith("_")
-        ]
-        assert methods == ["evaluate_post_submission"]
     assert "checker_names" not in SelectedPostSubmissionEvaluationRequest.model_fields
     assert "prepared" not in SelectedPostSubmissionEvaluationRequest.model_fields

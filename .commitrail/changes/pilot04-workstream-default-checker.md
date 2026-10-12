@@ -772,3 +772,13 @@ while exact raw guide/review/revision policy bodies, package URI, summary and
 attestation remain absent. The previous blanket policy_body substring assertion
 rejected the required selected policy projection; exact project selectors and
 no FOR UPDATE read contract remain unchanged.
+
+Further current test-consumer scope, explicitly handed off by the peer: backend/
+tests/checker_output_admission_helpers.py, tests/test_tasks.py,
+tests/test_checker_output_custody.py, tests/test_submission_bundle_preparation_recovery.py,
+tests/checkers/execution/test_completion_contract.py, removal of
+tests/checkers/test_phase_service.py. The obsolete phase adapter is removed;
+selected PRE ownership and selected POST consumer/current completion tests retain
+phase isolation, canonical result binding and no unchecked callback shortcut.
+Output reservation fixtures derive exact stored current request facts, not a
+constructed unrelated catalogue request. Unsupported output access remains denied.
