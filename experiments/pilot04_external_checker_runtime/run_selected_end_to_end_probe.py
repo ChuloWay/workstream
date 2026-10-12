@@ -152,8 +152,8 @@ async def _prepare(fixture, settings, request):
         ).prepare(request)
 
 
-async def _prove_work_failure(fixture, settings) -> dict[str, object]:
-    """A default-check failure leaves a separate Task in progress."""
+async def _prove_work_failure(fixture, settings, *, external=False) -> dict[str, object]:
+    """Either actual default or project-image failure prevents admission."""
     task_id, assignment_id = new_record_id(), new_record_id()
     params = {
         "task": str(task_id),
@@ -163,6 +163,12 @@ async def _prove_work_failure(fixture, settings) -> dict[str, object]:
     }
     async with fixture.engine.begin() as connection:
         await seed_started_task_for_artifact_test(connection, params)
+    data = _secret_archive(fixture.data)
+    if external:
+        output = BytesIO(fixture.data)
+        with ZipFile(output, "a") as archive:
+            archive.writestr("project-rejected.txt", b"sample project rejection\n")
+        data = output.getvalue()
     request = SubmissionBundlePreparationRequest(
         actor=ActorIdentityFacts(
             fixture.actor_context.actor_profile_id,
@@ -178,7 +184,7 @@ async def _prove_work_failure(fixture, settings) -> dict[str, object]:
         summary=fixture.creation_request.summary,
         contributor_attestation=fixture.creation_request.contributor_attestation,
         media_type="application/zip",
-        byte_source=byte_source(_secret_archive(fixture.data)),
+        byte_source=byte_source(data),
     )
     try:
         await _prepare(fixture, settings, request)
@@ -188,8 +194,15 @@ async def _prove_work_failure(fixture, settings) -> dict[str, object]:
             for check in error.facts.workstream_default.checks
             if check.failure_code is not None
         )
+        if external:
+            if codes or len(error.facts.external_members) != 1:
+                raise RuntimeError("project failure did not follow passing defaults")
+            result = error.facts.external_members[0].result
+            codes = tuple(item.code for item in result.findings)
+            if result.verdict != "failed" or codes != ("probe.project_rule_failed",):
+                raise RuntimeError("project image did not return its exact failure")
     else:
-        raise RuntimeError("secret-bearing input unexpectedly passed selected PRE")
+        raise RuntimeError("rejected input unexpectedly passed selected PRE")
     async with fixture.factory() as session:
         task = await session.get(WorkstreamTask, str(task_id))
         submissions = await session.scalar(select(func.count()).select_from(Submission))
@@ -566,6 +579,7 @@ async def run(
             if not workspace_cleanup:
                 raise RuntimeError("selected checker workspace cleanup is incomplete")
             work_failure = await _prove_work_failure(fixture, settings)
+            external_pre_failure = await _prove_work_failure(fixture, settings, external=True)
             infrastructure_recovery = await _prove_infrastructure_recovery(
                 fixture,
                 settings,
@@ -589,6 +603,7 @@ async def run(
                 "submission_count": submission_count,
                 "workspace_cleanup": workspace_cleanup,
                 "work_failure": work_failure,
+                "external_pre_failure": external_pre_failure,
                 "infrastructure_recovery": infrastructure_recovery,
                 "minio_bucket": bucket,
             }

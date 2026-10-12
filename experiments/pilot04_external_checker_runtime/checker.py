@@ -1,4 +1,4 @@
-"""Small protocol fixture for the local unselected external-checker probe."""
+"""Small protocol fixture for the local selected external-checker probe."""
 
 from __future__ import annotations
 
@@ -74,6 +74,13 @@ def main() -> int:
         }
         for item in failures
     ]
+    if Path("/work/input/project-rejected.txt").exists():
+        findings.append({
+            "code": "probe.project_rule_failed",
+            "level": "error",
+            "message": "The sample project rejects this fixture file.",
+            "path": "project-rejected.txt",
+        })
     body = {
         "schema_version": "external_checker_result.v1",
         "request_digest": request["request_digest"],

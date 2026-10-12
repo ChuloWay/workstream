@@ -89,6 +89,9 @@ cleanup.
   replay, commit rollback, revocation and HTTP admission tests remain selected.
 
 - This record and affected current PILOT-04 architecture, roadmap and owner docs.
+- The existing local Rust-runtime protocol fixture and selected end-to-end
+  probe, to distinguish actual default rejection from actual project-image
+  rejection and verify both leave the task in progress without a Submission.
 - The existing OUTBOX prefork topology and its delivery task hard bound, with
   topology and real process-containment regressions, to honor the selected
   request budget without changing event-specific owner deadlines or selectors.
