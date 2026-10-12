@@ -61,7 +61,11 @@ async def test_policy_read_binds_exact_target_facts(action: ActionId) -> None:
         "guide_id": repository.guide_id,
         "guide_version": "v1",
         "guide_status": "active",
-        "target_kind": "pre_submit_checker_policy" if checker is not None else "effective_policy",
+        "target_kind": (
+            "pre_submit_checker_policy"
+            if action is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
+            else "effective_policy"
+        ),
         "project_exists": True,
         "project_status": "active",
         "guide_exists": True,
@@ -168,6 +172,30 @@ async def test_policy_read_rejects_generic_hash_valid_checker_bundle() -> None:
     context = authorization.require.await_args.args[1]
     assert context.target_exists is False
     assert context.target_binding_digest is None
+
+
+@pytest.mark.asyncio
+async def test_effective_policy_read_conceals_chain_missing_current_pre_policy() -> None:
+    """The effective row is not readable without its current selected PRE policy."""
+    repository = _PolicyReadRepository()
+    repository.checker = None
+    authorization = SimpleNamespace(require=AsyncMock())
+
+    with pytest.raises(RuntimeError, match="missing policy authorization unexpectedly allowed"):
+        await _read(
+            repository,
+            authorization,
+            ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
+        )
+
+    authorization.require.assert_awaited_once()
+    action, context = authorization.require.await_args.args
+    assert action is ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ
+    assert context.target_kind == "effective_policy"
+    assert context.target_exists is False
+    assert context.target_binding_digest is None
+    assert context.checker_policy_id is None
+    assert context.checker_bundle_hash is None
 
 
 @pytest.mark.asyncio

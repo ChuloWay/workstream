@@ -52,19 +52,26 @@ async def corrupt_locked_policy_reads(monkeypatch, task_id, mutation):
             "package_required": "yes", "allowed_package_formats": "zip",
         }
     elif mutation == "bundle":
-        pre.compiled_bundle["workstream_default"]["checker_version"] = "unsupported-default"
+        pre.compiled_bundle["workstream_default"]["behavior_sha256"] = (
+            f"sha256:{'f' * 64}"
+        )
     elif mutation == "stale_effective":
         effective.effective_policy["required_evidence"] = []
     elif mutation == "stale_bundle":
         pre.compiled_bundle["tampered"] = True
     else:
         raise ValueError("unknown policy read fault")
-    if mutation in {"schema", "evidence", "packaging", "bundle"}:
+    if mutation in {"schema", "evidence", "packaging"}:
         effective.effective_policy_hash = canonical_json_hash(effective.effective_policy)
         pre.effective_policy_hash = effective.effective_policy_hash
-        pre.compiled_bundle["effective_policy_hash"] = effective.effective_policy_hash
-        pre.compiled_bundle_hash = canonical_json_hash(pre.compiled_bundle)
         task.locked_effective_project_submission_artifact_policy_hash = effective.effective_policy_hash
+    if mutation == "bundle":
+        pre.compiled_bundle["policy_sha256"] = canonical_json_hash({
+            key: value
+            for key, value in pre.compiled_bundle.items()
+            if key != "policy_sha256"
+        })
+        pre.compiled_bundle_hash = pre.compiled_bundle["policy_sha256"]
         task.locked_pre_submit_checker_bundle_hash = pre.compiled_bundle_hash
 
     def replace_read(owner, name, row):
