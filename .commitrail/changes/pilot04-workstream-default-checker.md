@@ -1065,6 +1065,18 @@ remaining Submission field used by this helper is checked against the canonical
 model. All migration assertions and actual SQL guards remain unchanged; only the
 same paid discriminator is rerun after this repair.
 
+### Archived queue and claim custody
+
+The subsequent paid discriminator at clean `d524a4090` reached the raw queue
+fixture and correctly refused its pending-insert deferred event after an active
+lease was added in the same transaction. In the same allowed raw ancestor helper,
+commit the literal pending queue without a lease, then claim that stored queue in
+a separate transaction by inserting its lease and updating the queue pointer.
+This matches the predecessor SQL lifecycle without disabling guards or invoking
+a current Review service. Audit the remaining queue/lease enums, packet identity,
+review counts/digests and terminal updates against the installed predecessor
+guards before rerunning only the paid discriminator; retain all assertions.
+
 ### Retired PRE database write refusal
 
 The current-schema cutover now refuses every new write through the retained PRE

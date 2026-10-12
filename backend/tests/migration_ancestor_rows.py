@@ -70,6 +70,9 @@ async def seed_packet_ancestors(h):
             routing_reason="first_submission", queue_state="pending", active_lease_id=None,
             routing_generation=1, lifecycle_generation=1, first_queued_at=now, available_since=now,
         ))
+    # The pending-insert deferred guard must see the committed queue without a
+    # lease before the separate claim transaction creates its active lease.
+    async with h.factory() as session, session.begin():
         await session.execute(insert(ReviewLease).values(
             id=h.lease_id, review_queue_entry_id=h.queue_id,
             project_id=str(submission["project_id"]), task_id=str(submission["task_id"]),
