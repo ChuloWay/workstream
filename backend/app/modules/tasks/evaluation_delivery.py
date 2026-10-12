@@ -1,4 +1,4 @@
-"""Recover the committed initial evaluation; outbox values never grant authority."""
+"""Recover a committed initial or Operator-retry evaluation request."""
 
 from collections.abc import Callable
 import json
@@ -22,38 +22,51 @@ from app.modules.tasks.submission_dispatch import evaluation_request_event
 
 
 class EvaluationDeliveryUnavailable(RuntimeError):
-    """The initial event and its retained request do not have exact custody."""
+    """The event and its retained request do not have exact custody."""
 
 
 class EvaluationDeliveryRequestReader:
-    """TASK owns dispatch selection; CHECKERS owns the stored request body."""
+    """TASK owns initial dispatch; CHECKERS owns retry and stored request facts."""
 
     def __init__(self, session: AsyncSession, evaluations: EvaluationCoordinationPort):
         self._session, self._evaluations = session, evaluations
 
     async def read(self, envelope: OutboxEventEnvelope) -> PostSubmissionEvaluationRequest:
         """Select all owner identifiers together, without creating or repairing rows."""
+        retry = await self._evaluations.read_retry_delivery(
+            project_id=envelope.claim.project_id,
+            submission_id=envelope.aggregate_id,
+            event_id=envelope.claim.event_id,
+        )
         receipt = await self._session.scalar(select(SubmissionDispatch).where(
             SubmissionDispatch.project_id == str(envelope.claim.project_id),
             SubmissionDispatch.submission_id == str(envelope.aggregate_id),
             SubmissionDispatch.evaluation_event_id == envelope.claim.event_id,
         ).execution_options(populate_existing=True))
-        if receipt is None:
+        if (receipt is None) == (retry is None):
             raise EvaluationDeliveryUnavailable("evaluation_delivery_unavailable")
-        expected = evaluation_request_event(receipt)
-        expected_payload = json.dumps(
-            expected.payload, sort_keys=True, separators=(",", ":"),
-            ensure_ascii=False, allow_nan=False,
-        )
+        if receipt is not None:
+            expected = evaluation_request_event(receipt)
+            expected_payload = json.dumps(
+                expected.payload, sort_keys=True, separators=(",", ":"),
+                ensure_ascii=False, allow_nan=False,
+            )
+            expected_digest = canonical_json_hash(expected.payload)
+        else:
+            expected = retry.expected_event
+            expected_payload = expected.payload_json
+            expected_digest = expected.payload_digest
         if (
             any(getattr(envelope, name) != getattr(expected, name) for name in (
                 "event_type", "event_version", "aggregate_type", "aggregate_id",
                 "correlation_id", "causation_event_id", "idempotency_key",
             ))
             or envelope.payload_json != expected_payload
-            or envelope.claim.payload_digest != canonical_json_hash(expected.payload)
+            or envelope.claim.payload_digest != expected_digest
         ):
             raise EvaluationDeliveryUnavailable("evaluation_delivery_unavailable")
+        if retry is not None:
+            return retry.request
         stored = await self._evaluations.read_reserved_evaluation(
             project_id=UUID(receipt.project_id), task_id=UUID(receipt.task_id),
             submission_id=UUID(receipt.submission_id),

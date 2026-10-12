@@ -47,12 +47,13 @@ async def test_wrong_project_does_not_wait(task_client, monkeypatch):
 
 
 async def test_cursor_scope_and_continuation(task_client, monkeypatch):
-    from tests.submission_fixtures import seed_retained_submission
+    from tests.submission_fixtures import (
+        route_retained_checker_remediation,
+        seed_retained_submission,
+    )
     from tests.test_tasks import complete_submission_payload
     case = await history_case(task_client, monkeypatch)
-    async with db_session.get_session_factory()() as session, session.begin():
-        task = await session.get(WorkstreamTask, case[1])
-        task.status = "needs_revision"
+    await route_retained_checker_remediation(case[2], generation=2)
     successor = await seed_retained_submission(case[1], complete_submission_payload("sha256:successor"), predecessor_id=case[2])
     path = history_paths(*case)["task.submission.list"]
     first = await task_client.get(path, headers=auth_headers(), params={"limit": 1})

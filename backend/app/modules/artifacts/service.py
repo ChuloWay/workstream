@@ -2042,6 +2042,7 @@ class ArtifactAdmissionService:
                 consumed_evidence_id = request.custody.pass_capability.consume(
                     prepared_generation_id=authority_facts.prepared_generation_id,
                     predecessor_submission_id=authority_facts.predecessor_submission_id,
+                    checker_remediation_manifest_id=authority_facts.checker_remediation_manifest_id,
                     effective_plan_sha256=authority_facts.effective_plan_sha256,
                     archive_sha256=authority_facts.archive_sha256,
                     semantic_manifest_sha256=authority_facts.semantic_manifest_sha256,
@@ -2378,6 +2379,7 @@ class ArtifactAdmissionService:
                 prior.assignment_id,
                 prior.predecessor_submission_id,
                 prior.predecessor_submission_version,
+                prior.checker_remediation_manifest_id,
                 prior.guide_id,
                 prior.guide_version,
                 prior.source_snapshot_id,
@@ -2400,6 +2402,7 @@ class ArtifactAdmissionService:
                 if current.predecessor_submission_id is not None
                 else None,
                 current.predecessor_submission_version,
+                current.checker_remediation_manifest_id,
                 str(current.guide_id),
                 current.guide_version,
                 str(current.source_snapshot_id),
@@ -2429,6 +2432,7 @@ class ArtifactAdmissionService:
             evidence.assignment_id,
             evidence.predecessor_submission_id,
             evidence.predecessor_submission_version,
+            evidence.checker_remediation_manifest_id,
             evidence.archive_sha256,
             evidence.archive_byte_count,
             evidence.semantic_manifest_id,
@@ -2485,6 +2489,8 @@ class ArtifactAdmissionService:
                 if pass_capability.predecessor_submission_id is not None
                 else None
             )
+            or evidence.checker_remediation_manifest_id
+            != pass_capability.checker_remediation_manifest_id
             or evidence.effective_plan_sha256 != pass_capability.effective_plan_sha256
             or evidence.semantic_manifest_sha256 != pass_capability.semantic_manifest_sha256
             or evidence.storage_scheme != pass_capability.storage_scheme
@@ -2527,6 +2533,8 @@ class ArtifactAdmissionService:
             locked.project_id != UUID(evidence.project_id)
             or (task.predecessor.version if task.predecessor else None)
             != evidence.predecessor_submission_version
+            or task.checker_remediation_manifest_id
+            != evidence.checker_remediation_manifest_id
             or task.submitter_contribution_policy_version_id
             != locked.activation_receipt.command.contribution_policy_version_id
             or locked.guide_id != UUID(evidence.guide_id)
@@ -2558,6 +2566,7 @@ class ArtifactAdmissionService:
                 else None
             ),
             predecessor_submission_version=evidence.predecessor_submission_version,
+            checker_remediation_manifest_id=evidence.checker_remediation_manifest_id,
             pre_submit_evidence_set_id=UUID(evidence.id),
             prepared_generation_id=UUID(evidence.prepared_generation_id),
             guide_id=UUID(evidence.guide_id),

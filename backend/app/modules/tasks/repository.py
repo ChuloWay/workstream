@@ -498,17 +498,18 @@ class TaskRepository:
             select(Submission.id).where(Submission.task_id == str(task_id)).exists(),
         )))
 
-    async def lock_submission_context(
+    async def select_submission_context(
         self,
         request: TaskSubmissionContextRequest,
-    ) -> TaskSubmissionContextFacts:
-        """Lock and project exact TASK-owned Submission lifecycle facts.
+    ) -> tuple[TaskSubmissionContextFacts, TaskPostSubmitRoutingManifest | None]:
+        """Lock TASK rows and select one owner-qualified remediation source.
 
         Args:
             request: Exact task, assignment, contributor, and predecessor selectors.
 
         Returns:
-            Immutable TASK-owned context facts from the locked rows.
+            Provisional TASK facts and selected immutable routing source. The
+            caller must verify current CHECKERS custody before exposing facts.
 
         Raises:
             TaskSubmissionContextUnavailable: When the context is invalid or the
@@ -559,6 +560,24 @@ class TaskRepository:
         ):
             raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
 
+        remediation = None
+        if latest_submission is not None:
+            candidates = (await self._session.scalars(
+                select(TaskPostSubmitRoutingManifest).where(
+                    TaskPostSubmitRoutingManifest.project_id == task.project_id,
+                    TaskPostSubmitRoutingManifest.task_id == task.id,
+                    TaskPostSubmitRoutingManifest.assignment_id == assignment.id,
+                    TaskPostSubmitRoutingManifest.contributor_id == contributor_id,
+                    TaskPostSubmitRoutingManifest.submission_id == latest_submission.id,
+                    TaskPostSubmitRoutingManifest.submission_version == latest_submission.version,
+                    TaskPostSubmitRoutingManifest.routing_recommendation == "needs_revision",
+                ).order_by(TaskPostSubmitRoutingManifest.evaluation_generation.desc()).limit(2)
+            )).all()
+            if (not candidates or len(candidates) == 2 and
+                    candidates[0].evaluation_generation == candidates[1].evaluation_generation):
+                raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
+            remediation = candidates[0]
+
         locked_values = (
             task.project_id,
             task.locked_guide_version,
@@ -607,18 +626,20 @@ class TaskRepository:
                 if latest_submission is not None
                 else None
             )
-            return TaskSubmissionContextFacts(
+            facts = TaskSubmissionContextFacts(
                 task_id=request.task_id,
                 assignment_id=request.assignment_id,
                 contributor_id=request.contributor_id,
                 status=task.status,
-                kind="revision" if predecessor is not None else "initial",
+                kind="checker_remediation" if predecessor is not None else "initial",
                 predecessor=predecessor,
                 locked_project_context=locked_project_context,
                 locked_policy=locked_policy,
                 acceptance_criteria=task.acceptance_criteria,
                 submitter_contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
+                checker_remediation_manifest_id=remediation.id if remediation is not None else None,
             )
+            return facts, remediation
         except (TypeError, ValueError) as exc:
             raise TaskSubmissionContextUnavailable(
                 "task_submission_context_invalid"
@@ -669,6 +690,23 @@ class TaskRepository:
             statement = statement.execution_options(populate_existing=True)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
+
+    async def lock_exact_submission_for_task(
+        self, *, project_id: UUID, task_id: UUID, submission_id: UUID,
+    ) -> Submission | None:
+        """Lock one retained Submission after its TASK and Assignment owners."""
+        with self._session.no_autoflush:
+            return await self._session.scalar(
+                select(Submission)
+                .join(WorkstreamTask, WorkstreamTask.id == Submission.task_id)
+                .where(
+                    WorkstreamTask.project_id == str(project_id),
+                    Submission.task_id == str(task_id),
+                    Submission.id == str(submission_id),
+                )
+                .with_for_update(of=Submission)
+                .execution_options(populate_existing=True)
+            )
 
 
     async def add_audit_event(self, event: AuditEvent) -> AuditEvent:

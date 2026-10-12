@@ -1255,9 +1255,19 @@ reloads the active actor and identity link, task, active assignment, immediate
 predecessor, locked guide lineage, effective submission-artifact policy and
 compiled pre-submit policy. Drift fails closed before evidence persistence.
 
+For a checker-remediation replacement, TASK first supplies the exact current
+authorized source selected from its own locked predecessor and the retained
+CHECKERS result. ART checks that source before reading ZIP bytes and at each
+later context relock; a missing, foreign or superseded cause denies intake.
+
 `PreSubmitEvidenceSet` stores the exact actor/task/assignment/predecessor,
 prepared generation, archive digest/size, semantic-manifest identity, locked
 guide and policy hashes, effective-plan identity and catalogue identity.
+ARCH-04F3 also carries the server-selected `checker_remediation_manifest_id`
+for replacement. It is absent for an initial Submission and binds the existing
+evidence operation identity and passing capability; ART does not copy the
+checker result body into a second findings store.
+
 Ordered `PreSubmitEvidenceResult` rows store the closed definition, policy
 trace, phase, classification, status and bounded codes directly; required
 provenance is never hidden in generic metadata. A result-manifest digest binds
@@ -1295,6 +1305,9 @@ preserve the actor and identity link, project, task, assignment, predecessor ide
 locked guide/snapshot/policy lineage, semantic-manifest identity/digest,
 archive digest/size/media type, effective-plan digest, storage scheme, and
 operation identity required for database-only verified-admission publication.
+The replacement's exact remediation cause is part of the final preparation
+AUTH resource and durable lineage through evidence to the verified admission.
+
 It is not a bindable admission, Submission, review, or contribution fact.
 
 The intent, transaction-local authorization evidence, provisional capacity
@@ -1328,6 +1341,7 @@ project_id                     = UUID
 task_id                        = UUID
 assignment_id                  = UUID
 predecessor_submission_id      = UUID | null
+checker_remediation_manifest_id = UUID | null (required for replacement)
 locked_policy_context_hash    = SHA-256 copied from immutable pre-submit evidence
 artifact_content_id            = UUID
 verified_replica_id            = UUID
@@ -1417,8 +1431,17 @@ new human decision. That transaction consumes both fresh human
 `artifact.submission.binding.create` capabilities, mapped to PermissionId
 `artifact.binding.create`, locks and matches
 admission/task/assignment/predecessor/context, creates the
-immutable Submission and binding, and marks admission consumed. Any denial,
-cancellation, stale execution, or persistence failure rolls back all effects.
+immutable Submission and binding, and marks admission consumed.
+
+For replacement, both final AUTH resources and TASK consumption must match the
+admission's exact checker-remediation cause. The new Submission and generation-one
+evaluation dispatch commit through the same canonical writer. Direct SQL cannot
+substitute that cause or the required AUTH receipts. A retained uncaused
+`revision` dispatch cannot be invented into this lineage: migration
+`0034_checker_remediation_replacement` refuses upgrade before DDL if its exact
+cause and receipts cannot be proven, preserving the 0032 schema and rows.
+Any denial, cancellation, stale execution, or persistence failure rolls back
+all effects.
 After authority succeeds, proven task closure, predecessor advancement, or
 locked-context replacement may commit only `ready -> stale` plus bounded
 evidence, never a Submission/binding. Authorization/concealment precedes
@@ -1615,13 +1638,16 @@ terminal, unroutable `material_unavailable`, after scratch cleanup and fresh
 finalization authority. It records no verified material custody, member results
 or completion event, and exact replay performs no provider I/O. Authority or
 selection denial and late lineage drift remain nonterminal. This hidden executor
-neither changes TASK state nor provides automatic or public retry. After a terminal
-result, a new authorized evaluation requires the coordinator's next generation.
+neither changes TASK state nor provides automatic or public retry. ARCH-04F4 adds
+a separate hidden, reason-bound Operator command that uses the coordinator's
+next generation only for an exact current terminal `infrastructure_failed` run;
+the prior result and ART evidence remain immutable. The existing request handler
+delivers its authorized successor without production registration.
 Unfinished expired-lease recovery retains the existing attempt and generation.
 
 The target outage policy remains distinct from that current implementation.
-Future bounded retry/continuation must preserve `evaluation_pending` while
-storage is transiently unavailable; it is not an active checker retry service.
+The hidden Operator retry preserves `evaluation_pending` while platform failure
+is retried; no automatic or public checker retry service is active.
 A provider object confirmed missing after its content was bound is a terminal
 artifact incident in v0.1: the immutable binding remains, evaluation stays
 blocked, and no contributor, Project Manager, or Operator route may replace or

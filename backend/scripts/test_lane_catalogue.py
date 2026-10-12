@@ -11,7 +11,7 @@ PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_c",
     "project_lifecycle_d",
 )
-PARTITIONED_PROJECT_AC_LANES = ("project_lifecycle_a", "project_lifecycle_c")
+PARTITIONED_PROJECT_INTAKE_LANES = ("project_lifecycle_c", "project_lifecycle_d")
 PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b", "task_lifecycle_c")
 
 
@@ -77,7 +77,6 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_artifact_preparation.py",
     "tests/test_artifact_store_conformance.py",
     "tests/test_artifact_verification.py",
-    "tests/test_task_import_sources.py",
     "tests/test_artifacts.py",
     "tests/test_assertion_helpers.py",
     "tests/test_aws_credential_isolation.py",
@@ -226,7 +225,6 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_submission_bundle_preparation_recovery.py",
     "tests/checkers/test_phase_service.py",
     "tests/test_submission_preparation_adapter.py",
-    "tests/test_submission_predecessor_custody.py",
     "tests/test_submission_preparation_authorization.py",
     "tests/test_submission_composition.py",
     "tests/test_artifact_bindings.py",
@@ -275,6 +273,8 @@ PROJECT_MODULES = (
     "tests/tasks/submission_dispatch/test_composition.py",
     "tests/tasks/submission_dispatch/test_concurrency.py",
     "tests/tasks/submission_dispatch/test_migration.py",
+    "tests/tasks/submission_dispatch/test_replacement_migration.py",
+    "tests/tasks/submission_dispatch/test_replacement_creation.py",
     "tests/tasks/submission_dispatch/test_replay.py",
     "tests/tasks/submission_dispatch/test_rollback.py",
     "tests/tasks/submission_dispatch/test_storage.py",
@@ -413,10 +413,9 @@ PROJECT_MODULES = (
     "tests/projects/test_retired_submission_derivation_route.py",
 )
 
-# These broad PROJECT owners exhausted project B's execution budget. Retained
-# hosted timings keep their deterministic node partition on project A and C,
-# excluding B while preserving headroom across both measured current trees.
-PROJECT_AC_PARTITION_MODULES = (
+# Broad project intake keeps its deterministic node partition on project C and
+# D, leaving project A capacity for the completed checker retry proofs.
+PROJECT_INTAKE_MODULES = (
     "tests/test_guide_document_intake.py",
     "tests/test_projects.py",
 )
@@ -437,6 +436,10 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers/execution/test_migration.py",
     "tests/checkers/execution/test_material_lineage.py",
     "tests/checkers/execution/test_material_migration.py",
+    "tests/checkers/execution/test_checker_retry.py",
+    "tests/checkers/execution/test_checker_retry_authority.py",
+    "tests/checkers/execution/test_checker_retry_history_replay.py",
+    "tests/checkers/execution/test_checker_retry_migration.py",
     "tests/test_post_submit_materialization.py",
     "tests/test_post_submit_selection.py",
     "tests/test_submission_evaluation_capacity.py",
@@ -447,6 +450,8 @@ CHECKER_DELIVERY_MODULES = (
 
 TASK_MODULES = (
     "tests/tasks/test_task_import_contract.py",
+    "tests/test_task_import_sources.py",
+    "tests/test_submission_predecessor_custody.py",
     "tests/checkers/execution/test_completion_evidence.py",
     "tests/checkers/execution/test_completion_contract.py",
     "tests/tasks/post_submit_routing/test_failure_completion.py",
@@ -571,7 +576,7 @@ PARTITION_GROUPS = (
         PARTITIONED_PROJECT_LANES,
         PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
     ),
-    (PARTITIONED_PROJECT_AC_LANES, PROJECT_AC_PARTITION_MODULES),
+    (PARTITIONED_PROJECT_INTAKE_LANES, PROJECT_INTAKE_MODULES),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
@@ -618,7 +623,7 @@ LANES = (
             PROJECT_MODULES
             + CHECKER_DELIVERY_MODULES
             + ROUTING_AUTH_PREPARATION_MODULES
-            + (PROJECT_AC_PARTITION_MODULES if name in PARTITIONED_PROJECT_AC_LANES else ()),
+            + (PROJECT_INTAKE_MODULES if name in PARTITIONED_PROJECT_INTAKE_LANES else ()),
         )
         for name in PARTITIONED_PROJECT_LANES
     ),

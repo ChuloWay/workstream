@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import Uuid
 from sqlalchemy import (
@@ -175,6 +176,10 @@ class PreSubmitEvidenceSet(Base):
             ["submissions.id", "submissions.task_id", "submissions.version"],
             name="fk_pre_submit_evidence_predecessor",
         ),
+        CheckConstraint(
+            "(predecessor_submission_id is null) = (checker_remediation_manifest_id is null)",
+            name="remediation_shape",
+        ),
         ForeignKeyConstraint(
             ["task_id", "effective_policy_id", "locked_artifact_policy_sha256"],
             [
@@ -290,6 +295,11 @@ class PreSubmitEvidenceSet(Base):
         ForeignKey("submissions.id", ondelete="RESTRICT")
     )
     predecessor_submission_version: Mapped[int | None] = mapped_column(Integer)
+    checker_remediation_manifest_id: Mapped[UUID | None] = mapped_column(
+        Uuid(),
+        ForeignKey("task_post_submit_routing_manifests.id", ondelete="RESTRICT",
+                   name="fk_pre_submit_evidence_sets_checker_remediation_manifest"),
+    )
     prepared_generation_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     archive_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     archive_byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -1278,6 +1288,10 @@ class SubmissionBundleAdmission(Base):
             name="predecessor_shape",
         ),
         CheckConstraint(
+            "(predecessor_submission_id is null) = (checker_remediation_manifest_id is null)",
+            name="remediation_shape",
+        ),
+        CheckConstraint(
             "((put_operation_receipt_id is not null)::int + "
             "(put_observation_receipt_id is not null)::int) = 1",
             name="write_receipt_shape",
@@ -1340,6 +1354,11 @@ class SubmissionBundleAdmission(Base):
         ForeignKey("submissions.id", ondelete="RESTRICT")
     )
     predecessor_submission_version: Mapped[int | None] = mapped_column(Integer)
+    checker_remediation_manifest_id: Mapped[UUID | None] = mapped_column(
+        Uuid(),
+        ForeignKey("task_post_submit_routing_manifests.id", ondelete="RESTRICT",
+                   name="fk_submission_bundle_admissions_checker_remediation_manifest"),
+    )
     locked_policy_context_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     semantic_manifest_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)

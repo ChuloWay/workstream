@@ -1,7 +1,7 @@
 """Lock human administration authority before the kernel takes product custody."""
 
 from app.modules.authorization.artifact_project_authority import lock_project_role_mutation_principals
-from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.catalogue import ActionAvailability, ActionId, PermissionId
 from app.modules.authorization.domain import (
     adapter_bindings,
     checker_registry,
@@ -10,7 +10,7 @@ from app.modules.authorization.domain import (
 from app.modules.authorization.domain.action_groups import PROJECT_SCOPED_ADMIN_MUTATIONS
 from app.modules.authorization.runtime import (
     AuthorizationDenialCode, HumanAuthorizationContext, PreparedAuthorizationUnsupported,
-    PreparedAuthorityScopeKind,
+    PreparedAuthorityScopeKind, ProjectCreateResourceContext,
 )
 from app.modules.authorization.schemas import AdminRole
 
@@ -47,7 +47,9 @@ async def lock_admin_mutation_authority(repository, context, scope, action_id, p
         scope_project_id=scope.project_id,
         system_scope_only=scope.project_id is None,
         for_update=True,
-        **({"allowed_roles": (AdminRole.OPERATOR,)} if action_id is ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE else {}),
+        **({"allowed_roles": (AdminRole.OPERATOR,)} if action_id in {
+            ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE, ActionId.OPERATIONS_CHECKER_RETRY,
+        } else {}),
         **adapter_bindings.finance_authority_grant_filters(action_id),
         **checker_registry.checker_registry_grant_filters(action_id),
         **contribution_policies.policy_finance_grant_filters(action_id),
@@ -57,3 +59,45 @@ async def lock_admin_mutation_authority(repository, context, scope, action_id, p
             AuthorizationDenialCode.PERMISSION_NOT_GRANTED
         )
     return context, grant
+
+
+async def lock_project_create_authority(repository, context, scope, locked_context):
+    """Lock the human and system grant for one prepared project creation."""
+    if not isinstance(context, HumanAuthorizationContext):
+        raise PreparedAuthorizationUnsupported(
+            AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+        )
+    if scope.kind is not PreparedAuthorityScopeKind.SYSTEM:
+        raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED)
+    locked = await repository.lock_request_actor(
+        context.identity_link_id, context.actor_profile_id
+    )
+    context = locked_context(locked, context)
+    grant = await repository.find_effective_grant(
+        context.actor_profile_id,
+        PermissionId.PROJECT_CREATE,
+        scope_project_id=None,
+        system_scope_only=True,
+        for_update=True,
+    )
+    if grant is None:
+        raise PreparedAuthorizationUnsupported(
+            AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+        )
+    return context, grant
+
+
+def project_create_prelocked_denial(action, resource_context, authority, lifecycle_denial):
+    """Check the same prepared system grant against final project-create facts."""
+    denial = lifecycle_denial
+    if denial is None and action.availability is not ActionAvailability.ACTIVE:
+        denial = AuthorizationDenialCode.ACTION_UNAVAILABLE
+    if denial is None and not isinstance(resource_context, ProjectCreateResourceContext):
+        denial = AuthorizationDenialCode.RESOURCE_GUARD_DENIED
+    if denial is None and authority.scope_project_id is not None:
+        denial = AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED
+    if denial is None and (
+        authority.matched_grant_id is None or authority.matched_grant_status != "active"
+    ):
+        denial = AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+    return denial

@@ -249,7 +249,11 @@ async def test_manifest_upgrade_preserves_old_evidence_without_inventing_metadat
                 after = await session.scalar(text(
                     "select to_jsonb(e) from pre_submit_evidence_sets e where id=:id"
                 ), {"id": evidence_id})
+            assert set(after) == set(before) | {
+                "semantic_manifest_body", "checker_remediation_manifest_id",
+            }
             assert after.pop("semantic_manifest_body") is None
+            assert after.pop("checker_remediation_manifest_id") is None
             assert after == before
             async with harness.factory() as session:
                 workflow = harness.workflow(session, calls)
@@ -306,9 +310,19 @@ async def test_upgraded_consumed_admission_without_metadata_is_unavailable(
             async with h.factory() as session, session.begin():
                 with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
                     await SubmissionAdmissionConsumptionService(session, authority).read_consumed(request)
-                assert await session.scalar(text(
+                after = await session.scalar(text(
                     "select to_jsonb(a) from submission_bundle_admissions a where id=:id"
-                ), {"id": str(request.admission_id)}) == before
+                ), {"id": str(request.admission_id)})
+                assert set(after) == set(before) | {"checker_remediation_manifest_id"}
+                assert after.pop("checker_remediation_manifest_id") is None
+                assert after == before
+                column = (await session.execute(text(
+                    "select data_type,is_nullable from information_schema.columns "
+                    "where table_schema='public' "
+                    "and table_name='submission_bundle_admissions' "
+                    "and column_name='checker_remediation_manifest_id'"
+                ))).one()
+                assert tuple(column) == ("uuid", "YES")
                 assert await session.scalar(text("select count(*) from artifact_bindings")) == bindings
             authority.consume.assert_not_awaited()
             assert h.store.opens == []

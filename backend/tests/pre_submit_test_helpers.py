@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 from app.core.identifiers import new_record_id
 
 from app.adapters.checkers import PreSubmitCheckerExecutionAdapter
+from app.adapters.tasks import task_submission_context_port
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
 from app.modules.artifacts.submission_materialization import (
     PreparedBundleMaterializationService,
@@ -19,7 +20,6 @@ from app.modules.artifacts.submission_materialization import (
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
-from app.modules.tasks.repository import TaskRepository
 from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim
 from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidencePersistenceResult
 
@@ -105,7 +105,7 @@ def evidence_workflow(
             storage_scheme="s3",
         ),
         preparation_authorization=preparation_authorization,
-        task_contexts=TaskRepository(session),
+        task_contexts=task_submission_context_port(session),
         project_contexts=ProjectLockedPolicyRepository(session),
     )
 
@@ -246,6 +246,6 @@ def durable_put_service(session, settings, namespace, storage, authorization):
     return SubmissionBundleDurablePutService(
         session=session, admission=ArtifactAdmissionService(session, settings, namespace),
         storage=storage, authorization=authorization,
-        task_contexts=TaskRepository(session),
+        task_contexts=task_submission_context_port(session),
         project_contexts=ProjectLockedPolicyRepository(session),
     )

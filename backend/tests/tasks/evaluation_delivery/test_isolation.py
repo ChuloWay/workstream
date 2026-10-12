@@ -117,6 +117,10 @@ async def test_resolver_rejects_crossed_checker_reservation(tmp_path, isolated_d
                 )
 
                 class Crossed:
+                    async def read_retry_delivery(self, **selectors):
+                        assert await coordinator.read_retry_delivery(**selectors) is None
+                        return None
+
                     async def read_reserved_evaluation(self, **selectors):
                         assert await coordinator.read_reserved_evaluation(**selectors) == current
                         return replacement

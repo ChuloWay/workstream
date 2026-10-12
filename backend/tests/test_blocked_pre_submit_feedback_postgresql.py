@@ -11,6 +11,7 @@ from sqlalchemy import func, select, text
 
 from app.adapters.artifacts import CheckerPhaseService
 from app.adapters.checkers import submission_evaluation_content
+from app.adapters.tasks import task_submission_context_port
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.artifacts.api import SubmissionBundlePreparationCheckFailed
@@ -30,7 +31,6 @@ from app.modules.checkers.api.execution import REQUEST_EVENT
 from app.modules.outbox.api import OutboxAppendDisposition, OutboxAppendInput
 from app.modules.outbox.service import OutboxService
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
-from app.modules.tasks.repository import TaskRepository
 from tests.authorization.test_pre_submit_attempt_authority import _seed_materializer
 from tests.checkers.execution.support import forbidden_post_submission
 from tests.test_default_pre_submit_execution import _archive, _bytes
@@ -140,7 +140,7 @@ async def _invoke_blocked(harness, calls: list[int]):
         command = PreparedSubmissionBundlePreparationCommand(
             session=session,
             authority=contributor,
-            task_contexts=TaskRepository(session),
+            task_contexts=task_submission_context_port(session),
             project_contexts=ProjectLockedPolicyRepository(session),
             runtime_factory=runtime,
         )

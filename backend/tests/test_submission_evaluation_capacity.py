@@ -80,10 +80,11 @@ async def test_real_zip_capacity_rejects_before_effects_and_valid_control_passes
 
 async def _locked_facts(h):
     async with h.factory.begin() as session:
-        task = await TaskRepository(session).lock_submission_context(TaskSubmissionContextRequest(
+        task, source = await TaskRepository(session).select_submission_context(TaskSubmissionContextRequest(
             task_id=h.request.task_id, assignment_id=h.request.assignment_id,
             contributor_id=h.context.actor_profile_id, predecessor_submission_id=None,
         ))
+        assert source is None
         refs = task.locked_project_context
         project = await ProjectLockedPolicyRepository(session).lock_locked_policy_context(ProjectLockedPolicyContextRequest(
             project_id=refs.project_id, guide_version=refs.guide_version,

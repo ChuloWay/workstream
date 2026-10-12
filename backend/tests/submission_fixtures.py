@@ -106,3 +106,47 @@ async def seed_retained_checker_run(submission_id: str, *, failures=(), state="c
     from tests.checkers.execution.storage_fixture import seed_storage_run
     return await seed_storage_run(db_session.get_session_factory(), submission_id,
                                   failures=failures, state=state, generation=generation)
+
+
+async def route_retained_checker_remediation(submission_id: str, *, generation: int = 1) -> str:
+    """Give a retained packet the real completed failure and authorized route."""
+    from types import SimpleNamespace
+
+    from sqlalchemy import text
+
+    from app.adapters.tasks import evaluation_completion_handler
+    from app.modules.checkers.models import CheckerRun
+    from app.modules.outbox.api import HandlerOutcome
+    from tests.authorization.post_submit_routing.support import provision_router
+    from tests.checkers.execution.storage_fixture import storage_request
+    from tests.tasks.post_submit_routing.outcome_support import invoked_completion
+
+    factory = db_session.get_session_factory()
+    run_id = await seed_retained_checker_run(
+        submission_id, failures=("check_submission_packet",), generation=generation,
+    )
+    async with factory() as session:
+        run = await session.get(CheckerRun, run_id)
+        assert run is not None and run.routing_recommendation == "needs_revision"
+        assert run.completion_event_id is not None
+        request = await storage_request(session, submission_id, generation=generation)
+    await provision_router(factory)
+    source = SimpleNamespace(
+        factory=factory,
+        service=None,
+        request=request,
+        source={"completion_event_id": run.completion_event_id},
+    )
+    envelope = await invoked_completion(source)
+    assert await evaluation_completion_handler(sessions=factory)(envelope) is HandlerOutcome.ACKNOWLEDGE
+    async with factory() as session:
+        result = (await session.execute(text("""
+            SELECT m.id, m.routing_recommendation, t.status,
+                   public.task_routing_outcome_complete(m) AS complete
+              FROM public.task_post_submit_routing_manifests m
+              JOIN public.workstream_tasks t ON t.id = m.task_id
+             WHERE m.checker_run_id = :run_id
+        """), {"run_id": run_id})).one()
+        assert result.routing_recommendation == result.status == "needs_revision"
+        assert result.complete is True
+        return str(result.id)
