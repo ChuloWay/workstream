@@ -129,7 +129,7 @@ async def test_unsupported_request_envelope_never_reaches_execution(monkeypatch)
         materialization=None, outbox=None,
     )
     monkeypatch.setattr(executor, "_claim", forbidden_claim)
-    for schema in ("workstream.post_submit_request.v1", "arbitrary_request.v1"):
+    for schema in ("post_submit_evaluation_request", "arbitrary_request.v1"):
         with pytest.raises(ValueError):
             await executor.evaluate_post_submission({"schema_version": schema})
 

@@ -157,9 +157,9 @@ async def test_member_shape_and_complete_set_enforced_in_database(
                 {"member_order": len(facts.result.execution.external_members)},
                 "differs from selected definition",
             ),
-            ({"status": "passed", "code": "packet_fields_missing"}, "differs from selected definition"),
-            ({"counters": [{"key": "invalid_count", "value": 1025}]}, "differs from selected definition"),
-            ({"counters": [{"key": "invalid_count"}]}, "differs from selected definition"),
+            ({"status": "passed", "code": "unexpected_pass_code"}, "differs from selected definition"),
+            ({"counters": [{"metric": 1}]}, "differs from selected definition"),
+            ({"counters": {"metric": 1}}, "differs from selected definition"),
             ({"task_id": str(new_record_id())}, "fk_checker_results_run_ownership"),
         ]
         async with h.factory() as session:
