@@ -10,7 +10,8 @@
 ## Intent
 
 Final predecessor cleanup permits `backend/app/modules/artifacts/submission_admission.py`,
-`backend/tests/artifacts/test_selected_predecessor_rules.py` and this record.
+`backend/tests/artifacts/test_selected_predecessor_rules.py`, its explicit module
+registration in `backend/scripts/test_lane_catalogue.py`, and this record.
 Require a consumed predecessor's actual selected PRE lineage and rules commitment;
 reject missing selected custody before preparing bytes. Never reinterpret its
 retained policy-context hash as a checker-rules hash. Preserve all stored rows,

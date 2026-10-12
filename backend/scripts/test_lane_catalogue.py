@@ -28,6 +28,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/reviews/lifecycle/test_transitions.py",
     "tests/reviews/lifecycle/test_authority_binding.py",
     "tests/artifacts/test_review_packet_contract.py",
+    "tests/artifacts/test_selected_predecessor_rules.py",
     "tests/authorization/post_submit/test_atomicity.py",
     "tests/authorization/post_submit/test_concurrency.py",
     "tests/authorization/post_submit/test_live_authority.py",
