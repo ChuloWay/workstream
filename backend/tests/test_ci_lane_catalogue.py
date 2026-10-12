@@ -564,7 +564,7 @@ def test_schema_nodes_share_one_lane() -> None:
 @pytest.mark.parametrize(
     ("names", "modules"),
     catalogue.PARTITION_GROUPS,
-    ids=("shared", "project", "project-ac", "task"),
+    ids=("shared", "project", "project-intake", "task"),
 )
 def test_owner_nodes_partition_deterministically(names, modules) -> None:
     module = modules[0]
