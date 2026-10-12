@@ -218,6 +218,10 @@ async def exercise_contributor_task_reads(
             peer_profiles["cli-role-admin"],
             peer_tokens["cli-role-admin"],
         )
+        # Keep independent contributor lifecycle/cursor setup on the same real
+        # control administrator, not the outer self-service bootstrap actor.
+        # All contributor/manager CLI calls retain their original bearers.
+        admin = {"Authorization": f"Bearer {peer_tokens['cli-role-admin']}"}
         # An active Submitter grant never substitutes for manager authority.
         with tempfile.TemporaryDirectory(prefix="ws-cli-submit-only-") as directory:
             task_input = Path(directory) / "task.json"
