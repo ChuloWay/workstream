@@ -8,7 +8,8 @@ from app.adapters.checkers import evaluation_coordinator
 from app.modules.checkers.models import CheckerRun, CheckerResult
 from app.modules.outbox.models import OutboxEvent
 from tests.post_submit_materialization_helpers import material_fixture
-from .support import live_executor, reserve, service_link_state
+from .support import ControlledSelectedExecution, live_executor, reserve, service_link_state
+from tests.checkers.external.support import post_registry_spec
 from app.modules.actors.api import ServiceIdentity
 
 
@@ -333,7 +334,10 @@ async def test_unreadable_stored_bytes_terminalize_and_replay(
 ):
     from tests.test_local_artifact_store import object_path
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with material_fixture(
+        tmp_path, isolated_database_env, post_submit_registry_spec=post_registry_spec(),
+    ) as h:
+        assert len(h.request.policy.entries) == 1
         reservation = await reserve(h)
         digest = h.request.content_sha256
         path = object_path(h.settings.artifact_local_root, f"sha256/{digest[7:9]}/{digest[9:]}")
@@ -344,12 +348,13 @@ async def test_unreadable_stored_bytes_terminalize_and_replay(
             path.chmod(0o600)
             path.write_bytes(bytes([h.data[0] ^ 1]) + h.data[1:])
             path.chmod(0o400)
-        executor = live_executor(h)
+        selected_execution = ControlledSelectedExecution()
+        executor = live_executor(h, selected_execution=selected_execution)
 
         async def forbidden_checker(*args, **kwargs):
             pytest.fail("unverified stored bytes reached a checker")
 
-        monkeypatch.setattr(executor._registry, "run", forbidden_checker)
+        monkeypatch.setattr(selected_execution, "execute", forbidden_checker)
         # The byte failure cannot bypass the separate finalization authority.
         pending = []
         finalize = executor.finalize

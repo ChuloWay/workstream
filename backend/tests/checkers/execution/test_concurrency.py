@@ -110,12 +110,18 @@ async def test_stale_worker_cannot_finalize_after_takeover(
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
         executor = live_executor(h)
-        monkeypatch.setattr(execution, "LEASE_SECONDS", 1)
-        old, _ = await executor._claim(h.request)
+        with monkeypatch.context() as patch:
+            patch.setattr(executor, "_execution_budget_seconds", lambda _request: 1)
+            patch.setattr(execution, "SELECTED_POST_FINALIZATION_MARGIN_MS", 9_000)
+            old, _ = await executor._claim(h.request)
         old_facts = await final_facts(h, old)
         async with h.factory() as session:
-            await session.execute(text("select pg_sleep(1.05)"))
-        monkeypatch.setattr(execution, "LEASE_SECONDS", 300)
+            await session.execute(text(
+                "SELECT pg_sleep(GREATEST(EXTRACT(EPOCH FROM "
+                "CAST(:expiry AS timestamptz)-clock_timestamp()),0)+0.05)"
+            ), {"expiry": old.expires_at})
+            assert await session.scalar(text("SELECT clock_timestamp()>=:expiry"),
+                                        {"expiry": old.expires_at})
         current, _ = await executor._claim(h.request)
         assert (
             current.reservation == old.reservation

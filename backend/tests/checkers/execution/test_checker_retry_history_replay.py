@@ -10,6 +10,8 @@ from app.modules.checkers.api.execution import CheckerExecutionUnavailable
 from app.modules.outbox.api import HandlerOutcome
 from tests.authorization.post_submit_routing.support import provision_router
 from tests.checkers.external.support import post_registry_spec
+from tests.checkers.execution.support import ControlledSelectedExecution
+from app.modules.checkers.models import CheckerRun
 from tests.checkers.execution.test_checker_retry import _command, _failed_source, _operator_for
 from tests.tasks.evaluation_delivery.support import outcome
 from tests.tasks.post_submit_routing.outcome_support import invoked_completion
@@ -24,6 +26,11 @@ from tests.tasks.submission_dispatch.test_replacement_creation import (
 async def test_retry_replays_after_real_later_submission_without_reopening_old_source(
     tmp_path, isolated_database_env, monkeypatch,
 ):
+    selected_execution = ControlledSelectedExecution(verdict="failed")
+    monkeypatch.setattr(
+        "app.adapters.checkers.configured_external_checker_execution",
+        lambda _settings: selected_execution,
+    )
     async with _failed_source(
         tmp_path,
         isolated_database_env,
@@ -43,6 +50,12 @@ async def test_retry_replays_after_real_later_submission_without_reopening_old_s
             created.successor.event_id, h.request.project_id, "retry-remediation",
         )
         assert outcome(delivered)["delivery_state"] == "acknowledged"
+        assert len(selected_execution.requests) == 1
+        async with h.factory() as session:
+            successor = await session.get(CheckerRun, str(created.successor.run_id))
+            assert successor.status == "completed"
+            assert successor.routing_recommendation == "needs_revision"
+            assert successor.completion_event_id is not None
         async with h.factory.begin() as session:
             accepted = await session.execute(text(
                 "UPDATE public.task_assignments SET accepted_at=clock_timestamp() "

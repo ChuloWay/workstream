@@ -1229,3 +1229,32 @@ Remaining raw migration controls, a fresh final image drill and full required
 hosted CI remain necessary before human merge approval. The actual Rust image
 proof at `6fd3fde80` uses local runc/docker-dev and does not claim hosted gVisor,
 public contributor upload/CLI or an exhaustive suite. No deployment or merge.
+
+### Hosted checker execution fixture reconciliation
+
+Lead-authorized test-only scope: `backend/tests/checkers/execution/` files
+`test_checker_retry.py`, `test_concurrency.py`, `test_execution.py`,
+`test_storage.py`, `test_checker_retry_history_replay.py`, plus
+`backend/tests/checkers/external/test_registry.py` and this existing record.
+The hosted 683 logs retain the exact failed nodes. Production, migrations,
+fingerprints, workflow caps, skips, inventories and shared producers are prohibited.
+
+The former lease constant no longer controls a selected policy lease. Arrange a
+short first lease through the actual budget/margin inputs in a scoped test patch,
+then wait for its persisted expiry using the real database clock. Restore normal
+budgets before takeover; all native expiry, generation, AUTH and stale-finalizer
+guards stay enabled. Completed retry negatives use the supported failed-image
+`needs_revision` outcome instead of the removed built-in setup classification.
+Unreadable bytes forbid the current selected consumer, not a retired registry.
+Storage negatives require the current exact guard message and SQLSTATE 23514,
+retained-row rollback and valid recovery. The retry-history journey supplies a
+controlled selected executor before handler composition and requires a stored
+completed successor before deriving its completion source; it retains actual ART,
+AUTH, governed remediation, replacement and no-byte-reopen replay. The registry
+mock implements only the current exact-row read and keeps all conflict assertions.
+
+Risk: bounded test fixture changes can otherwise hide a lifecycle failure; require
+lead/independent test-delta review, focused pure registry controls and canonical
+isolated native retry/takeover, byte-failure, storage and later-Submission replay
+cases with exact heads and complete DB/role/MinIO cleanup. No current failure
+boundary, assertion, cap or test selection is removed to obtain a pass.

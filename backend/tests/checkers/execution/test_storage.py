@@ -124,15 +124,16 @@ async def test_execution_custody_rejects_mutation(tmp_path, isolated_database_en
             original = await session.get(CheckerRun, str(receipt.attempt_id))
             before = getattr(original, field)
             replacement = (
-                "{}"
+                request_text(change_request(h.request, evaluation_request_id=new_record_id()))
                 if field == "request_json"
                 else 2
                 if field == "evaluation_generation"
                 else str(new_record_id())
             )
             setattr(original, field, replacement)
-            with pytest.raises(IntegrityError, match="checker run custody is immutable"):
+            with pytest.raises(IntegrityError, match="checker run custody is immutable") as refused:
                 await session.flush()
+            assert refused.value.orig.sqlstate == "23514"
             await session.rollback()
             assert getattr(await session.get(CheckerRun, str(receipt.attempt_id)), field) == before
 
@@ -270,8 +271,9 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
             await material_storage_helpers.write_terminal(
                 session, facts, facts.material.model_dump(mode="json"),
             )
-            with pytest.raises(IntegrityError, match="checker completed custody or routing invalid"):
+            with pytest.raises(IntegrityError, match="checker terminal selected policy differs") as refused:
                 await session.execute(text("SET CONSTRAINTS public.checker_terminal_custody IMMEDIATE"))
+            assert refused.value.orig.sqlstate == "23514"
             await session.rollback()
         async with h.factory() as session:
             assert (
