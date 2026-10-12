@@ -847,5 +847,5 @@ Fresh full discovery on the raw-producer composition collected 8,731 tests with
 one import error: the current default-checker test still imported its packet
 from the deleted PRE DTO module. The current-consumer test scope therefore
 includes `backend/tests/checkers/default/test_execution.py` for the exact neutral
-`api.submission_packet.SubmissionPacketView` import correction only. All four
+`api.pre_submit_material.SubmissionPacketView` import correction only. All four
 default checks and their controls remain required; no deleted DTO is restored.
