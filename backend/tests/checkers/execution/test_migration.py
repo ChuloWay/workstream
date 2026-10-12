@@ -74,7 +74,7 @@ async def test_migration_refuses_retained_history(tmp_path, isolated_database_en
                     is_current_for_submission=True,
                     package_hash=h.request["content_sha256"],
                     artifact_hash_manifest=source["artifact_hash_manifest"],
-                    artifact_manifest_hash=h.manifest.sha256,
+                    artifact_manifest_hash=h.archived_material["semantic_manifest_sha256"],
                     passed_count=0,
                     warning_count=0,
                     failed_count=0,

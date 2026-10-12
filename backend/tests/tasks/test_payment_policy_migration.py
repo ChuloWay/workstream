@@ -61,7 +61,7 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
         await _drop_test_database_schema(isolated_database_env)
         await asyncio.to_thread(command.upgrade, _config(), "0022_submission_packet_custody")
         async with historical_material_fixture(tmp_path, isolated_database_env) as h:
-            async with h.engine.connect() as connection:
+            async with db_session.get_engine().connect() as connection:
                 task = await connection.scalar(text("SELECT to_jsonb(t) FROM public.workstream_tasks t WHERE id=:id"),
                                                {"id": h.request["task_id"]})
                 await connection.rollback()
@@ -117,7 +117,7 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
                     before = await _snapshot(connection)
             # Full Alembic upgrade: current records exist, but obsolete facts do not.
             await asyncio.to_thread(command.upgrade, _config(), "head")
-            async with h.engine.connect() as connection:
+            async with db_session.get_engine().connect() as connection:
                 assert await connection.scalar(text("SELECT to_regclass('public.payment_policies')")) is None
                 for table, fields in (("workstream_tasks", FIELDS), ("submissions", (FIELDS[-1],))):
                     actual = set(await connection.scalars(text("SELECT column_name FROM information_schema.columns "

@@ -76,6 +76,6 @@ async def test_upgrade_preserves_retained_owners_without_backfill(tmp_path, isol
                     ) == 0
                 assert await connection.fetchval("SELECT count(*) FROM public.submission_dispatches") == 0
                 assert await connection.fetchval("SELECT count(*) FROM public.submission_binding_receipts") == 0
-                assert await connection.fetchval("SELECT status FROM public.submission_bundle_admissions WHERE id=$1", h.created.admission_id) == "consumed"
+                assert await connection.fetchval("SELECT status FROM public.submission_bundle_admissions WHERE id=$1", h.created["admission_id"]) == "consumed"
             finally:
                 await connection.close()
