@@ -23,7 +23,7 @@ from scripts.run_isolated_tests import LOOPBACK, NAME_RE, ROLE_RE
 DDL_LOCK_DIRECTORY = Path("/tmp")
 # Match the PostgreSQL 16 engine used by Backend CI. Catalog identity rendering
 # differs across major versions; regenerate only after comparing actual objects.
-EXPECTED_PUBLIC_SCHEMA_SHA256 = "2970241168e5b843b0526a94d32e87166c8956fbbcb9e73de2c395b2f3a154cf"
+EXPECTED_PUBLIC_SCHEMA_SHA256 = "8d9ba7f3f7b7701775b23257a4eb0ceb898fa6cf6bf615dd6f694da8b7ffb1b8"
 PROTECTED_TEST_TABLES = (
     "actor_profile_migration_state",
     "alembic_version",

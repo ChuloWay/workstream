@@ -348,6 +348,119 @@ end $$
 
 def _selected_run_guards() -> None:
     op.execute(r"""
+create function public.guard_selected_pre_submit_run_insert() returns trigger
+language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+declare lineage jsonb; predecessor_id uuid; predecessor_version integer;
+        remediation_id uuid;
+begin
+ lineage := new.request_json->'admission_lineage';
+ if new.status is distinct from 'queued'
+    or new.id is distinct from (new.request_json->>'attempt_id')::uuid
+    or new.actor_profile_id is distinct from (new.request_json->>'actor_profile_id')::uuid
+    or new.identity_link_id is distinct from (new.request_json->>'identity_link_id')::uuid
+    or new.project_id is distinct from (new.request_json->>'project_id')::uuid
+    or new.task_id is distinct from (new.request_json->>'task_id')::uuid
+    or new.assignment_id is distinct from (new.request_json->>'assignment_id')::uuid
+    or new.idempotency_key is distinct from (new.request_json->>'idempotency_key')::uuid
+    or new.prepared_generation_id is distinct from
+       (new.request_json->>'prepared_generation_id')::uuid
+    or new.policy_sha256 is distinct from new.request_json->>'policy_sha256'
+    or new.default_behavior_sha256 is distinct from
+       new.request_json->>'default_behavior_sha256'
+    or new.default_input_sha256 is distinct from new.request_json->>'default_input_sha256'
+    or new.archive_sha256 is distinct from new.request_json->>'archive_sha256'
+    or new.archive_byte_count is distinct from
+       (new.request_json->>'archive_byte_count')::bigint
+    or new.semantic_manifest_sha256 is distinct from
+       new.request_json->>'semantic_manifest_sha256'
+    or new.execution_budget_ms is distinct from
+       (new.request_json->>'execution_budget_ms')::integer
+    or new.request_json->>'schema_version' is distinct from
+       'workstream.selected_pre_submit_reservation.v1'
+    or jsonb_typeof(lineage) is distinct from 'object'
+    or new.request_digest is distinct from public.external_checker_registry_digest(new.request_json)
+ then raise exception 'selected PRE reservation lineage mismatch' using errcode='23514'; end if;
+
+ predecessor_id := nullif(lineage->>'predecessor_submission_id','')::uuid;
+ predecessor_version := (lineage->>'predecessor_submission_version')::integer;
+ remediation_id := nullif(lineage->>'checker_remediation_manifest_id','')::uuid;
+
+ -- Match the application owner order: TASK, assignment, predecessor, CHECKERS.
+ perform 1 from public.workstream_tasks t
+ join public.project_guides g
+   on g.project_id=t.project_id and g.version=t.locked_guide_version
+ where t.id=new.task_id and t.project_id=new.project_id
+   and t.assigned_to=new.actor_profile_id
+   and t.status=case when predecessor_id is null then 'in_progress' else 'needs_revision' end
+   and g.id=(lineage->>'guide_id')::uuid
+   and t.locked_guide_version=lineage->>'guide_version'
+   and t.locked_guide_source_snapshot_id=(lineage->>'source_snapshot_id')::uuid
+   and t.locked_guide_source_snapshot_hash=lineage->>'source_snapshot_sha256'
+   and t.locked_effective_project_submission_artifact_policy_id=
+       (lineage->>'effective_policy_id')::uuid
+   and t.locked_effective_project_submission_artifact_policy_hash=
+       lineage->>'effective_policy_sha256'
+   and t.locked_pre_submit_checker_policy_id=(lineage->>'pre_submit_policy_id')::uuid
+   and t.locked_pre_submit_checker_bundle_hash=lineage->>'pre_submit_policy_sha256'
+ for update of t;
+ if not found then
+  raise exception 'selected PRE reservation lineage mismatch' using errcode='23514';
+ end if;
+
+ perform 1 from public.task_assignments a
+ where a.id=new.assignment_id and a.task_id=new.task_id
+   and a.project_id=new.project_id and a.contributor_id=new.actor_profile_id
+   and a.status='active' and a.released_at is null
+   and (predecessor_id is null or a.accepted_at is not null)
+ for update;
+ if not found then
+  raise exception 'selected PRE reservation lineage mismatch' using errcode='23514';
+ end if;
+
+ if predecessor_id is null then
+  if predecessor_version is not null or remediation_id is not null
+     or exists(select 1 from public.submissions s where s.task_id=new.task_id)
+  then raise exception 'selected PRE reservation lineage mismatch' using errcode='23514'; end if;
+ else
+  if predecessor_version is null or remediation_id is null then
+   raise exception 'selected PRE reservation lineage mismatch' using errcode='23514';
+  end if;
+  perform 1 from public.submissions s
+   where s.id=predecessor_id and s.task_id=new.task_id
+     and s.contributor_id=new.actor_profile_id and s.task_assignment_id=new.assignment_id
+     and s.version=predecessor_version
+     and not exists(select 1 from public.submissions successor
+       where successor.task_id=s.task_id and successor.version>s.version)
+   for update;
+  if not found then
+   raise exception 'selected PRE reservation routed cause is not current' using errcode='23514';
+  end if;
+
+  if not exists(
+   select 1 from public.task_post_submit_routing_manifests m
+   where m.id=remediation_id and m.project_id=new.project_id and m.task_id=new.task_id
+     and m.assignment_id=new.assignment_id and m.contributor_id=new.actor_profile_id
+     and m.submission_id=predecessor_id and m.submission_version=predecessor_version
+     and m.routing_recommendation='needs_revision'
+  ) then
+   raise exception 'selected PRE reservation routed cause is foreign' using errcode='23514';
+  end if;
+
+  perform 1 from public.checker_submission_fences f
+  join public.task_post_submit_routing_manifests m
+    on m.submission_id=f.submission_id and m.checker_run_id=f.current_run_id
+  where m.id=remediation_id and f.submission_id=predecessor_id
+    and public.task_routing_outcome_complete(m)
+  for update of f;
+  if not found then
+   raise exception 'selected PRE reservation routed cause is not current' using errcode='23514';
+  end if;
+ end if;
+ return new;
+end $$
+""")
+    op.execute("create trigger selected_pre_submit_run_insert before insert on public.selected_pre_submit_runs for each row execute function public.guard_selected_pre_submit_run_insert()")
+    op.execute(r"""
 create function public.selected_pre_submit_facts_digest(r public.selected_pre_submit_runs, phase text)
 returns text language sql immutable strict set search_path=pg_catalog,public,pg_temp as $$
  select case phase
