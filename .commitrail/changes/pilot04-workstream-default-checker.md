@@ -929,3 +929,12 @@ factory hook. Its now-unused `completed_source_factory` parameter is removed fro
 `backend/tests/reviews/packet/support.py`; the current fixture always uses the
 same canonical `completed_source`. This exact helper cleanup adds no raw/current
 switch, changes no current source behavior and retains all current packet tests.
+
+The two identity controls reproduced missing native custody at clean `154062bde`:
+all deferred constraints accepted the foreign registry UUID and image digest
+while the current request validator rejected them. Both failed with the intended
+`DID NOT RAISE` in 62.64 seconds, with complete resource cleanup. The sole schema
+author supplied the exact policy identity guard; the controls now pin its
+`checker terminal selected policy differs` message and SQLSTATE `23514`, not an
+unrelated integrity error. Affected native replay follows that frozen DDL; the
+original failed evidence is retained.

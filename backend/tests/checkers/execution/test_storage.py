@@ -346,8 +346,9 @@ async def test_same_count_result_cannot_substitute_locked_image_identity(
             await material_storage_helpers.write_terminal(
                 session, facts, facts.material.model_dump(mode="json"),
             )
-            with pytest.raises(IntegrityError):
+            with pytest.raises(IntegrityError, match="checker terminal selected policy differs") as denied:
                 await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+            assert denied.value.orig.sqlstate == "23514"
             await session.rollback()
         async with h.factory() as session:
             run = await session.get(CheckerRun, str(lease.reservation.attempt_id))
