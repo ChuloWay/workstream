@@ -1368,6 +1368,17 @@ the sole current external pre/post policy schemas and their self-excluding
 digests. It removes generic canonical-hash and old-plan fallbacks without
 rewriting retained rows.
 
+The final hosted capability-growth repair is limited to this record and
+`tests/projects/guide_compilation/test_capability_growth_postgresql.py`. Its
+non-oversized branch must expect the current `policy_draft_ready` handoff: one
+immutable sufficiency report, one draft submission-artifact policy and the two
+exact linked projection operations. It must retain both original gap requirement
+IDs and stages while proving that no effective, PRE or POST checker policy exists
+before project-manager approval. The oversized terminal branch, canonical byte
+measurement, single runtime call, stored-result replay, audit count and
+provider-construction refusal remain unchanged. No product, schema, guard,
+workflow selection or timeout change is authorized by this repair.
+
 ### Complete-source custody inventory performance
 
 Lead-authorized bounded test-only performance scope: this existing record and
