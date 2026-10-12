@@ -257,6 +257,8 @@ begin
     and new.assignment_id=evidence.assignment_id
     and new.predecessor_submission_id is not distinct from evidence.predecessor_submission_id
     and new.predecessor_submission_version is not distinct from evidence.predecessor_submission_version
+    and new.checker_remediation_manifest_id is not distinct from
+      evidence.checker_remediation_manifest_id
     and new.locked_policy_context_hash=evidence.locked_policy_context_hash
     and new.semantic_manifest_id=evidence.semantic_manifest_id
     and new.semantic_manifest_sha256=evidence.semantic_manifest_sha256
@@ -306,6 +308,8 @@ begin
       nullif(r.request_json#>>'{admission_lineage,predecessor_submission_id}','')::uuid
     and new.predecessor_submission_version is not distinct from
       (r.request_json#>>'{admission_lineage,predecessor_submission_version}')::integer
+    and new.checker_remediation_manifest_id is not distinct from
+      nullif(r.request_json#>>'{admission_lineage,checker_remediation_manifest_id}','')::uuid
     and new.guide_id=(r.request_json#>>'{admission_lineage,guide_id}')::uuid
     and new.guide_version=r.request_json#>>'{admission_lineage,guide_version}'
     and new.source_snapshot_id=(r.request_json#>>'{admission_lineage,source_snapshot_id}')::uuid
@@ -792,6 +796,7 @@ LANGUAGE sql STABLE SET search_path = pg_catalog, public, pg_temp AS $$
   'project_id',a.project_id,'task_id',a.task_id,'assignment_id',a.assignment_id,
   'predecessor_submission_id',a.predecessor_submission_id,
   'predecessor_submission_version',a.predecessor_submission_version,
+  'checker_remediation_manifest_id',a.checker_remediation_manifest_id,
   'submission_id',a.consumed_by_submission_id,
   'submission_version',a.consumed_by_submission_version,
   'guide_id',a.guide_id,'guide_version',a.guide_version,
