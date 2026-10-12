@@ -1485,3 +1485,31 @@ missing compiled rows, null stored hashes and substituted default behavior even
 with a recomputed valid outer policy digest. Independent QA reviewed that frozen
 source and ledger with no required finding. This is pure structural/test evidence;
 PROJECT native custody and the complete hosted suite remain separate obligations.
+
+### Exact selected PRE catalogue expectations in shared foundation tests
+
+Lead-authorized test-only scope: this existing record,
+`backend/tests/authorization/admin_access/test_grant_reads_postgresql.py`, and
+`backend/tests/authorization/catalogue_fixtures.py`. Fresh hosted shared-A evidence
+at `da76eabed` fails only stale expectations for the two current selected PRE
+execute/finalize permissions and active actions. The catalogue defines 80
+permissions; the system-auditor read test still expects 78. The separate explicit
+audit-allowed action set omits `checker.pre_submit.execute` and
+`checker.pre_submit.finalize`, although both are active and their fixed-service
+expectations are already exact.
+
+Update only 78 to 80 in the exact public permission total/items comparison and
+add those two literal action strings to the independent audit expectation. Keep
+five role definitions, grant/profile/link identities, exact scope, denial and
+zero-effect assertions unchanged. Preserve the actual audit-schema test body,
+including permission/action mismatch, planned-action refusal, missing/unknown
+action, decision evidence and digest validators. No production, authority grants,
+DDL, ledger/limits, skipped tests or dynamically derived expected inventory.
+
+Risk: masking an authority expansion through a count-only fix. Verify the exact
+two catalogue additions and unchanged fixed-service bindings, pure audit contract
+and missing/extra expected-set discriminators, plus the actual PostgreSQL-backed
+system-auditor permission read and write refusal through signed public callers.
+Native verification is serial with the other owner and uses only isolated owned
+resources. Lead CI/test-delta review and complete hosted CI remain required; no
+publication, merge or full-suite claim follows from these fixture repairs.

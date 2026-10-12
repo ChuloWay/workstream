@@ -451,6 +451,8 @@ expected = {
 
 
 AUDIT_ALLOWED_ACTION_VALUES = {
+    "checker.pre_submit.execute",
+    "checker.pre_submit.finalize",
     "operations.checker.retry",
     "contribution.read_self",
     "contribution.read_project",
