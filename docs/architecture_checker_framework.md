@@ -99,40 +99,25 @@ bindings, registry entries and checker results. Approved policies bind the
 exact digest, configuration and schema identities; registration alone changes
 no locked task or approved guide generation.
 
-## Retained post-submit contract
+## Post-submit contract
 
-This section describes immutable pre-cutover policy/result evidence, not new
-compilation or execution. New POST requests carry `LockedExternalPostSubmitPolicy`
-and `SelectedPostSubmissionEvaluationRequest`; their results retain every
-required image and exact observed isolation facts.
+POST requests carry the task's locked `LockedExternalPostSubmitPolicy` and the
+exact immutable Submission/ART identity. One request/result contract drives
+reservation, execution, completion and recovery. Every approved digest-pinned
+image receives verified read-only material; its normalized findings and observed
+isolation become immutable evidence for the existing routing owner.
 
-The former CHECKERS implementation owned one immutable initial-v0.1 catalogue, one implementation per
-checker ID, and closed evaluation-request/result contracts. PROJECTS used that
-same catalogue to compile the retained canonical policy body. Retained-evidence readers validate that body and its exact hash; persisted required,
-warning and blocking summaries must agree with it. Unsupported development
-bodies reject without translation or an alternate reader.
+Policies bind exact registry entries, image digests, configuration and schema
+hashes. TASK and ART validate the locked guide, source, policy, assignment,
+predecessor and material context before admission or evaluation. Checker results
+supply work evidence and do not grant acceptance authority. Passing required
+POST checks routes through the existing human-review or shared final-acceptance
+branch selected by the locked ReviewPolicy.
 
-The retained structural identities included eight mandatory defaults and
-selectable `check_acceptance_criteria_present`; these are not current executors. Criteria presence
-does not prove that work satisfies the criteria. Unsupported substantive
-automation remains a capability gap; an explicitly approved `human_review`
-disposition remains valid without a checker binding.
-
-The single policy-context check compares actual Task and Submission locks:
-guide version, source snapshot, effective artifact policy, pre-submit bundle,
-post-submit policy, review policy and revision policy. It has no economic-policy
-prerequisite. Compilation and ContributionPolicy task references are not yet
-persisted and are not fabricated as checker inputs. Project ownership remains
-checked by the owning services. Structural consistency grants no authorization.
-
-The canonical `policy_hash` binds ordered entries, configuration and exact
-catalogue/implementation identities. Domain project policy versions record
-changes to project rules; they do not select obsolete software implementations.
-These earlier component proofs supplied hidden execution and phase authority;
-PILOT-04 separately installs selected production delivery without a public
-execution route.
-POL-04B connects unified guide setup; POL-05B and POL-06B expose separate
-pre-submit and post-submit policy approvals.
+There is no catalogue request/result decoder, generic rule planner, alternate
+phase service or old execution path. Removing those implementations does not
+rewrite or delete stored records. Unsupported stored envelopes fail closed;
+stored historical facts cannot select a checker implementation.
 
 ## Durable execution custody
 

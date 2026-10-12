@@ -35,7 +35,7 @@ The selected POST processor consumes only actual Submission and ART material
 through the phase-typed callback grant, runs every locked POST image in order,
 and returns canonical evidence and observed isolation without any acceptance
 or routing authority. The existing CHECKERS scheduler now recognizes that
-selected envelope alongside retained legacy evidence, derives its lease and
+sole external envelope, derives its lease and
 execution deadlines from the exact locked images, recomputes the ART-owned
 manifest before execution, and retains the complete selected result for
 restart/replay. The existing production outbox registry now owns the evaluation
@@ -43,11 +43,11 @@ request handler alongside assignment invalidation, leases worker-owned ART
 material only during execution, and creates the configured Rust adapter only
 for a selected request. New TASK submission composition now requires selected
 POST custody and refuses an unresolved legacy admission instead of executing
-it; retained legacy envelopes remain read-only decoding inputs. Admission,
+it; no old request/result runtime or decoder remains. Admission,
 routing completion and remediation fixtures now exercise the selected PRE/POST
 owners. Both obsolete executable catalogues and their isolated callers and
-tests have been removed; retained immutable evidence has only its bounded
-historical decoder. F-020 recovery now proves that registration alone cannot
+tests are removed together with obsolete contracts; stored immutable evidence
+remains intact without an old runtime reader. F-020 recovery now proves that registration alone cannot
 activate the retained warning-bearing generation and that only an exact
 registered binding in a corrected, linked approval can activate. The combined
 native journey now exercises real PostgreSQL 16, MinIO, the Rust service and the
@@ -272,12 +272,11 @@ acknowledgment guards remain.
 The old pre/post catalogues are removed in the same final change after every
 production caller and required proof uses the selected runtime.
 Retained approvals, locked guides, evidence and completed runs are never
-rewritten or deleted. Historical decoders remain narrowly scoped to immutable
-old evidence. An unresolved old-catalogue queue item or locked guide fails
-closed and requires an authorized recompile/reapproval transition; it is never
-silently run through a new image. This retained-data reader is not an executable
-compatibility runtime. New selected admission columns are nullable only for
-those retained legacy rows; native checks require the complete guide, policy,
+rewritten or deleted. No historical catalogue decoder or executable compatibility
+path remains. Unsupported queue envelopes and locked policy bodies fail closed;
+they cannot select a checker implementation. Existing nullable storage columns
+preserve original facts without adding an old writer or reader. Native checks
+require the complete guide, policy,
 packet, manifest and selected-run custody whenever selected lineage is present,
 so migration does not synthesize or rewrite historical facts.
 
