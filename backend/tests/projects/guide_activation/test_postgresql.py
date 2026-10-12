@@ -11,6 +11,19 @@ from app.modules.projects.models import ProjectGuide
 from .pg_support import activation_case, activation_service
 
 
+async def _activation_effects(session):
+    """Capture lifecycle, activation replay, release and dispatch facts exactly."""
+    return {
+        table: tuple(await session.scalars(text(
+            f"SELECT to_jsonb(r)::text FROM public.{table} r ORDER BY to_jsonb(r)::text"
+        )))
+        for table in (
+            "projects", "project_guides", "guide_mutation_idempotency_records",
+            "workstream_tasks", "submissions", "outbox_events",
+        )
+    }
+
+
 def _capability_outcome(*, supported):
     """Return the same requirement before and after exact capability coverage."""
     from app.interfaces.project_agents import (
@@ -234,6 +247,7 @@ async def test_checker_registration_requires_corrected_approval_before_activatio
         await seed_selected_review_revision_inputs(factory, initial, actor)
         stale = await _activation_inputs(factory, initial, first, actor, grant, values, policy)
         async with factory() as session, session.begin():
+            before = await _activation_effects(session)
             with pytest.raises(GuideProposalError, match="approval_blocked") as refusal:
                 await activation_service(session, actor, stale, grant).activate(
                     stale, actor=actor, request_id=uuid4()
@@ -244,6 +258,7 @@ async def test_checker_registration_requires_corrected_approval_before_activatio
             ]
             guide = await session.get(ProjectGuide, str(stale.target.proposal.guide_id))
             assert guide.status == "draft" and guide.activation_operation_id is None
+            assert await _activation_effects(session) == before
 
         correction = await correct(
             factory,
