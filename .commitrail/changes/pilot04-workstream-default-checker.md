@@ -1074,3 +1074,13 @@ boundary after all function validators and measured
 measurement used the uncommitted repair tree and is fingerprint evidence, not a
 frozen-head positive runtime claim. Current selected PRE/Submission/POST native
 flow must pass again after integration.
+
+### Archived terminal member envelope
+
+The literal terminal fixture now encodes raw archived member columns with the
+required `post_submit_structural_result` protocol tag, matching the predecessor
+0008 SQL reconstruction. Supplied counts, routing, severity and material remain
+literal; a conflicting supplied tag refuses. The pure bare-member control passes
+and fails on the prior helper at the intended envelope equality assertion.
+Ruff and diff checks pass. This repairs fixture serialization only; the completed
+0008 native migration discriminator remains required before claiming that path.

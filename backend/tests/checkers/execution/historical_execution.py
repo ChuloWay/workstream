@@ -183,6 +183,18 @@ def archived_terminal_rows(h, lease, *, outcome, members, counts,
     """Encode supplied archived terminal facts without classifying any member."""
     request = _json_facts(h.request)
     reservation = lease["reservation"]
+    serialized_members = []
+    for member in members:
+        assert member.get("schema_version", "post_submit_structural_result") == (
+            "post_submit_structural_result"
+        ), "archived member protocol tag differs from predecessor SQL"
+        serialized_members.append({
+            "schema_version": "post_submit_structural_result",
+            **{key: deepcopy(member[key]) for key in (
+                "checker_id", "definition_version", "implementation_version", "status",
+                "code", "failure_category", "severity", "counters",
+            )},
+        })
     result = _json_facts({
         "schema_version": "post_submit_evaluation_result",
         "request_id": request["evaluation_request_id"],
@@ -191,7 +203,7 @@ def archived_terminal_rows(h, lease, *, outcome, members, counts,
         "evaluation_generation": request["evaluation_generation"],
         "result_id": reservation["result_id"],
         "outcome": outcome,
-        "member_results": members,
+        "member_results": serialized_members,
         "infrastructure_failure_code": failure_code,
     })
     result["result_digest"] = canonical_json_hash(result)
