@@ -576,3 +576,14 @@ backend two services, CLI one and MCP one. All version/digest, health, PostgreSQ
 configuration, resource bounds, job dependencies and required checks are retained.
 No container or image layers were provisioned for this source repair. Actual
 new-source hosted service startup, SDK/wire, build and full CI remain required.
+
+Refreshed frozen-head native evidence at 953e9f9ab452f982160ff12d1d8ca8794e4564bf:
+production empty POST with absent external settings passed 1 test in 49.19s.
+This supersedes the earlier optional-runtime sidecar whose recorded HEAD was
+e7 while the author tested uncommitted changes; do not attribute that earlier
+run to the later frozen commit. The configured Rust/MinIO flow also passed at
+953 with the same c2d957 platform image: default and external PRE rejection,
+passing atomic Submission/dispatch through POST and completion to review_pending,
+restart/replay and unavailable-service recovery via fresh verified bytes. Both
+isolated runners record schema0036 and completed DB/role/MinIO cleanup; runtime
+remains local runc/docker-dev. Later README/roadmap reconciliation is prose-only.
