@@ -38,7 +38,7 @@ class CheckerHistoryRepository:
         rows = (await self._session.execute(statement.order_by(CheckerRun.created_at, CheckerRun.id).limit(limit + 1))).mappings().all()
         values = []
         for row in rows[:limit]:
-            columns = [getattr(CheckerResult, name) for name in ("id", "checker_name", "status", "severity", "code", "failure_category")]
+            columns = [getattr(CheckerResult, name) for name in ("id", "checker_name", "status", "severity", "failure_category")]
             if manager:
                 columns.append((CheckerResult.status == "failed").label("blocks_review"))
             result_query = select(*columns).join(CheckerRun, CheckerRun.id == CheckerResult.checker_run_id).where(
