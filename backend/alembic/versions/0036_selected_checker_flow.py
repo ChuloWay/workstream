@@ -992,12 +992,29 @@ def _replace_checker_terminal_custody() -> None:
         raise RuntimeError("checker terminal declaration shape changed")
     definition = definition.replace(
         declaration,
-        declaration.replace(
+        declaration.replace(" blocking integer; setup integer;", " blocking integer;")
+        .replace(
             "envelope jsonb;",
             "envelope jsonb; expected_members jsonb; "
             "expected_execution_members jsonb; actual_execution_members jsonb;",
         ),
     )
+    old_aggregate = """        count(*) FILTER(WHERE status='passed'), count(*) FILTER(WHERE status='warning'), count(*) FILTER(WHERE status='failed'),
+        count(*) FILTER(WHERE status<>'passed' AND current_run.request_json::jsonb #> '{policy,blocking_severities}' ? severity),
+        count(*) FILTER(WHERE status<>'passed' AND failure_category='task_configuration'
+          AND current_run.request_json::jsonb #> '{policy,blocking_severities}' ? severity)
+      INTO members,passed,warning,failed,blocking,setup FROM checker_results WHERE checker_run_id=current_run.id;"""
+    selected_aggregate = """        count(*) FILTER(WHERE status='passed'), count(*) FILTER(WHERE status='warning'),
+        count(*) FILTER(WHERE status='failed')
+      INTO members,passed,warning,failed FROM checker_results WHERE checker_run_id=current_run.id;"""
+    if definition.count(old_aggregate) != 1:
+        raise RuntimeError("checker terminal aggregate shape changed")
+    definition = definition.replace(old_aggregate, selected_aggregate)
+    old_route = """      expected_route := CASE WHEN setup>0 THEN 'task_setup_blocked' WHEN blocking>0 THEN 'needs_revision' ELSE 'allow_review' END;"""
+    selected_route = """      expected_route := CASE WHEN failed>0 THEN 'needs_revision' ELSE 'allow_review' END;"""
+    if definition.count(old_route) != 1:
+        raise RuntimeError("checker terminal route shape changed")
+    definition = definition.replace(old_route, selected_route)
     mismatch = """      IF result->'member_results' IS DISTINCT FROM members OR current_run.passed_count IS DISTINCT FROM passed
         OR current_run.warning_count IS DISTINCT FROM warning OR current_run.failed_count IS DISTINCT FROM failed
         OR current_run.blocking_count IS DISTINCT FROM blocking THEN
@@ -1062,7 +1079,6 @@ def _replace_checker_terminal_custody() -> None:
         INTO expected_members
         FROM jsonb_array_elements(result#>'{execution,external_members}') item;
         blocking := failed;
-        setup := 0;
         IF members IS DISTINCT FROM expected_members
           OR current_run.passed_count IS DISTINCT FROM passed
           OR current_run.warning_count IS DISTINCT FROM warning
