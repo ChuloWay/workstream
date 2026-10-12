@@ -42,8 +42,8 @@ async def test_post_policy_operation_preserves_finalization_without_provider_or_
 
         monkeypatch.setattr(OpenAIAgentSdkProjectGuideRuntime, 'compile_project_guide', forbidden)
         monkeypatch.setattr(ScopedGuideDocumentGrant, 'open', forbidden)
-        from app.adapters.artifacts import CheckerPhaseService
-        monkeypatch.setattr(CheckerPhaseService, 'evaluate_post_submission', forbidden)
+        from app.modules.checkers.execution import PostSubmissionExecutor
+        monkeypatch.setattr(PostSubmissionExecutor, 'evaluate_post_submission', forbidden)
         original = await stored_state(factory, command)
         receipts = []
         for _ in range(2):

@@ -872,3 +872,11 @@ completion/audit facts on rollback, and permit the restored valid result. These
 controls test SQL custody independently of the application guard. No product or
 DDL edits, mismatched earlier AUTH evidence, fixture bypass, or weakened checks
 are permitted; the sole migration author owns any reproduced SQL repair.
+
+Current-consumer scan found a body-local import missed by collection: the
+already-owned PROJECT post-policy PostgreSQL test patched the removed phase
+wrapper as its no-execution sentinel. Replace only that sentinel with
+`PostSubmissionExecutor.evaluate_post_submission`. Preserve actual approved
+external policy, proposal finalization, provider/document denial, derive/approval
+replay and unchanged finalization state. This is a required current isolation
+control, not obsolete catalogue behavior; the old wrapper is not restored.
