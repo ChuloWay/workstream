@@ -866,7 +866,7 @@ class PreparedSubmissionBundlePreparationCommand:
         self,
         task_context: TaskSubmissionContextFacts,
     ) -> str | None:
-        """Return exact selected rules, treating retained legacy context as changed."""
+        """Require the predecessor's exact selected rules commitment."""
         predecessor = task_context.predecessor
         if predecessor is None:
             return None
@@ -877,11 +877,16 @@ class PreparedSubmissionBundlePreparationCommand:
                 SubmissionBundleAdmission.status == "consumed",
             )
         )
-        if admission is None:
+        if (
+            admission is None
+            or admission.selected_pre_submit_run_id is None
+            or admission.pre_submit_evidence_set_id is not None
+            or admission.selected_rules_sha256 is None
+        ):
             raise SubmissionBundlePreparationRejected(
                 "submission_canonical_predecessor_unavailable"
             )
-        return admission.selected_rules_sha256 or admission.locked_policy_context_hash
+        return admission.selected_rules_sha256
 
     @staticmethod
     def _result(result: SubmissionBundleDurablePutResult) -> SubmissionBundlePreparationResult:

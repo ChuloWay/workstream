@@ -9,6 +9,18 @@
 
 ## Intent
 
+Final predecessor cleanup permits `backend/app/modules/artifacts/submission_admission.py`,
+`backend/tests/artifacts/test_selected_predecessor_rules.py` and this record.
+Require a consumed predecessor's actual selected PRE lineage and rules commitment;
+reject missing selected custody before preparing bytes. Never reinterpret its
+retained policy-context hash as a checker-rules hash. Preserve all stored rows,
+current unchanged-work rejection and genuine rules-change acceptance. Prohibited:
+schema/data changes, legacy resubmission adapters, invented hash sentinels,
+skip/cap changes or broader admission rewrites. Risk is L1; focused current and
+missing/contradictory-lineage regressions, existing native predecessor controls,
+the final real-image drill and full CI verify it. Independent QA reviews custody
+and rejection ordering; human review focuses on fail-closed retained inputs.
+
 Issue #491 owns the complete checker cutover. A contributor ZIP must first pass
 the one Workstream default checker and every required project pre-submit image.
 Only then may the existing caller-owned transaction create an immutable
