@@ -59,6 +59,25 @@ cleanup.
 
 ### Allowed
 
+- The bounded CI collection/selected-contract repair permits only additive
+  package markers `backend/tests/authorization/pre_submit/__init__.py` and
+  `backend/tests/authorization/post_submit_routing/__init__.py`, plus the exact
+  affected `mcp_server/contracts/{authorization_context_get,permissions_list,
+  admin_roles_list,actor_get}.json` snapshots and
+  this record. No production, CLI, migration, workflow, pytest import mode,
+  collection selection, canonical runner or test assertion changes are allowed.
+  Both AUTH directories sit under the existing packaged `tests.authorization`
+  owner and have colliding flat `test_contracts` names; package-qualified imports
+  must retain every original node. Reuse the selected-fragment canonical capture
+  functions, change only the demonstrated selected PRE ActionId/PermissionId additions,
+  ServiceIdentity addition, dependent permission count, hashes and source
+  provenance. Preserve all nine operations and the other five snapshot files
+  byte-for-byte, including their captured source and hash. No MCP tool is added.
+  Acceptance is fresh complete canonical backend collection with every node
+  assigned once across all ten declared lanes, plus real backend OpenAPI drift
+  checks and a deliberately wrong-schema negative that still fails. This repair
+  makes no database/runtime or hosted green claim.
+
 - Bounded current-document reconciliation covers `docs/roadmap_status.md`,
   `docs/architecture_checker_framework.md` and
   `docs/decision_0014_external_service_adapter_convention.md`. Describe selected
