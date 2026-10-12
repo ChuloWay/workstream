@@ -1432,3 +1432,17 @@ debt, ledger exceptions, suppressed guards or any unrelated test/assertion edit.
 Acceptance requires exact canonical observed-ledger parity, protected-base
 shrink-only transition and retained new-debt/growth refusal controls. No native
 lifecycle proof or full hosted-suite claim is added by this metadata repair.
+
+At clean `25742a230207880315db3dd66daa1ec501db267c`, eight focused pure tests
+passed in 414.37 seconds (447.322 seconds including process lifetime), exit zero
+and identical clean start/end heads. They exercise actual active inventory,
+complete structural-ledger parity, protected-main transition/assertion maps, and
+retained new/grown/unshrunk debt, stale-hash and policy-limit refusals. A separate
+actual-source discriminator proves the exact 117 action literals are unchanged:
+removing either PRE action or activating an extra planned action fails equality.
+It also confirms only the three approved duplicate assertion nodes were removed;
+all other PROJECT test-body AST is identical. The retained postconditions reject
+missing compiled rows, null stored hashes and substituted default behavior even
+with a recomputed valid outer policy digest. Independent QA reviewed that frozen
+source and ledger with no required finding. This is pure structural/test evidence;
+PROJECT native custody and the complete hosted suite remain separate obligations.
