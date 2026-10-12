@@ -21,3 +21,14 @@ archive through the callback-scoped POST grant, and requires the normalized
 result, isolation receipt, database finalization, and workspace cleanup. The
 database must be disposable and independently cleaned by the caller; the probe
 does not create or drop it.
+
+`run_selected_end_to_end_probe.py` exercises PostgreSQL and MinIO through
+selected PRE admission, immutable Submission/initial dispatch and production
+request/completion handlers. It requires default-secret rejection and an actual
+external PRE image rejection to preserve `in_progress` with no new Submission.
+The latter uses `project-rejected.txt` as a fixture project rule, implemented
+only inside the image. It also tests unavailable-service recovery through fresh
+verified bytes and restarted completion delivery with exact replay. This hidden
+owner drill does not provide public contributor upload/CLI, false-guide
+activation or hosted gVisor deployment proof. Run it through the isolated-test
+runner so owned database, role and MinIO cleanup are checked.
