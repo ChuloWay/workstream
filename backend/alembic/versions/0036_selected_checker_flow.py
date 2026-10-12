@@ -1037,9 +1037,7 @@ def _replace_checker_terminal_custody() -> None:
         INTO actual_execution_members
         FROM jsonb_array_elements(result#>'{execution,external_members}')
           WITH ORDINALITY actual(item,ordinality);
-        IF result#>>'{execution,schema_version}' IS DISTINCT FROM
-             'workstream.selected_post_submit_execution.v1'
-          OR result#>>'{execution,policy_sha256}' IS DISTINCT FROM
+        IF result#>>'{execution,policy_sha256}' IS DISTINCT FROM
              current_run.request_json::jsonb#>>'{policy,policy_sha256}'
           OR (result#>>'{execution,required_external_count}')::integer IS DISTINCT FROM
              jsonb_array_length(current_run.request_json::jsonb#>'{policy,entries}')
