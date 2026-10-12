@@ -785,7 +785,7 @@ def _replace_post_policy_custody() -> None:
                 AND entry->'registry'->>'capability_id'=binding->>'capability_id'
                 AND entry->'registry'->>'capability_version'=binding->>'capability_version'
                 AND entry->'configuration'=COALESCE((SELECT jsonb_object_agg(parameter->>'name',parameter->'value')
-                   FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb)) THEN
+                   FROM jsonb_array_elements(binding->'parameters') parameter),'{}'::jsonb))) THEN
         RAISE EXCEPTION 'post-policy compiled selection not requested' USING ERRCODE='23514';
       END IF;"""
     if definition.count(old_required) != 1 or definition.count(old_extra) != 1:
@@ -996,7 +996,9 @@ def _replace_checker_terminal_custody() -> None:
     )
     mismatch = """      IF result->'member_results' IS DISTINCT FROM members OR current_run.passed_count IS DISTINCT FROM passed
         OR current_run.warning_count IS DISTINCT FROM warning OR current_run.failed_count IS DISTINCT FROM failed
-        OR current_run.blocking_count IS DISTINCT FROM blocking THEN"""
+        OR current_run.blocking_count IS DISTINCT FROM blocking THEN
+        RAISE EXCEPTION 'checker terminal members differ' USING ERRCODE='23514';
+      END IF;"""
     if mismatch not in definition:
         mismatch = mismatch.replace("      IF", "    IF").replace("        OR", "      OR")
     selected_check = r"""

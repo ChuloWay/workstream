@@ -216,8 +216,29 @@ def test_current_head_installs_selected_only_checker_custody(
         command.upgrade(config, HEAD_REVISION)
 
     async def installed_functions() -> dict[str, str]:
+        from tests.conftest import _assert_canonical_test_schema
+
         connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        transaction = connection.transaction()
+        await transaction.start()
         try:
+            await connection.execute("set local check_function_bodies = true")
+            installed = await connection.fetch(
+                "select p.oid,p.oid::regprocedure::text as identity "
+                "from pg_proc p join pg_namespace n on n.oid=p.pronamespace "
+                "join pg_language l on l.oid=p.prolang "
+                "where n.nspname='public' and l.lanname='plpgsql' order by p.oid"
+            )
+            assert installed
+            for row in installed:
+                try:
+                    await connection.fetchval(
+                        "select pg_catalog.plpgsql_validator($1::oid)", row["oid"]
+                    )
+                except asyncpg.PostgresError as error:
+                    raise AssertionError(
+                        f"installed function does not compile: {row['identity']}"
+                    ) from error
             rows = await connection.fetch(
                 "select p.proname,pg_get_functiondef(p.oid) as definition "
                 "from pg_proc p join pg_namespace n on n.oid=p.pronamespace "
@@ -232,8 +253,10 @@ def test_current_head_installs_selected_only_checker_custody(
                     "require_post_policy_operation",
                 ],
             )
+            await _assert_canonical_test_schema(connection)
             return {row["proname"]: row["definition"] for row in rows}
         finally:
+            await transaction.rollback()
             await connection.close()
 
     definitions = asyncio.run(installed_functions())
