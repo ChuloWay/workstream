@@ -258,6 +258,20 @@ intermediate-wait regression.
 | Default behavior and warnings | `pytest -q backend/tests/checkers/default/test_contract.py backend/tests/checkers/default/test_execution.py backend/tests/checkers/external/test_selected_pre_submit.py -m 'not postgres_schema_contract'` | 30 passed. The manifest and executable behavior retain exactly four ordered blockers; empty summary and attestation produce warnings without changing eligibility. | Full required checks remain on the final reconciled head. |
 | End-to-end replacement | `run_selected_end_to_end_probe.py` through the isolated runner, `/tmp/pilot04-selected-e2e10.log` and `.json`, using platform manifest `sha256:c664d8d85d6dfcded31710223c8d91441548e5445f0aa9b59d246fc464a129ef` | PASS on PostgreSQL 16/schema 0037 with database/role/MinIO/workspace cleanup complete. Real MinIO PRE and the Rust/runc image commit one Submission, `evaluation_pending` and dispatch, then actual Submission/ART POST evidence. A secret finding leaves a separate Task `in_progress` with no Submission. Service loss retains `implementation_unavailable`; restart uses a fresh upload and independent ART verification, records a completed successor generation and commits exactly one later Submission/dispatch. | This local proof uses explicit `runc`/`docker-dev`; hosted CI must exercise its configured runtime and the final reconciled head. |
 
+
+| Delegated current post-policy callers | Exact `c1195f8b2d55bc02976efe41d6052bca8b975a66`: six focused PostgreSQL cases in `/tmp/pilot04-post-policy-c119-native-callers.log` and producer metadata `.json`; scoped Ruff and `git diff --check` | 6 passed in 104.91s, schema `0036_selected_checker_flow`, database/role cleanup complete. The registered digest substitution refuses activation with unchanged activation facts; restored registration activates, and active/frozen reads never consult registry. Public approval/replay/revocation and commit rollback, plus canonical AUTH derive/read/approve evidence pass. | Local PostgreSQL 16.15 uses an owned 512 MiB tmpfs and 256 MiB memory bound with fsync/synchronous_commit/full_page_writes enabled. This test-only proof uses local ART and scripted setup, not MinIO or runtime evaluation; final combined source and hosted CI remain separately verified. |
+
+The registered-one-entry projection and exact approved-binding version rejection
+also passed at `397e8812c`, with that test/source blob unchanged at `c1195f8b2`.
+The companion registry-refusal test initially expected `proposal_stale`; its
+actual canonical readiness outcome is `approval_blocked`, corrected and verified
+in the six-case proof above. Two broader selections reached their unchanged
+240-second child budget (physical-disk reset IO, then a selection too large for
+that focused budget); both cleaned their databases/roles and are not reported as
+complete module passes. All surviving tests remain in their canonical CI lanes.
+The delegated reconciliation changes no capability or public exposure, so it has
+no independent roadmap change beyond the parent cutover's documented scope.
+
 ## Reconciliation
 
 - Current-source reconciliation: implementation starts at PR538 head
