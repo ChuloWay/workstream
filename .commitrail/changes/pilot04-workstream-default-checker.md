@@ -342,6 +342,15 @@ intermediate-wait regression.
 
 ## Risk and review routing
 
+Final cleanup also permits `backend/scripts/behavior_ownership.py`, its existing
+PILOT-04 partition transition test and `.ci/behavior-ownership/partition.v1.json`.
+Retire exactly the five removed checker contracts and two removed ART PRE
+writers; admit only the canonical value and PRE packet owners. Regenerate the
+current partition with its existing protected base. Preserve all other target
+assignments and refusal of unrelated additions/removals. The focused transition
+test and architecture/ownership checks verify this metadata reconciliation;
+it changes no runtime behavior or test selection.
+
 - Risk class: L1
 - Required reviewers: architecture, security, authorization, product_ops,
   reuse_dedup, qa, test_delta, documentation, ci_integrity

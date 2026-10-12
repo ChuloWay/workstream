@@ -1957,9 +1957,14 @@ def test_pilot04_partition_allows_only_the_selected_flow_and_retired_catalogues(
     retired = ownership.PILOT_04_RETIRED_CATALOGUE_TARGETS
     trusted = _partition(sorted({retained, *retired}))
     selected = ownership.PILOT_04_SELECTED_FLOW_TARGETS
+    assert retired.isdisjoint(selected)
     ownership._validate_additive_partition_transition(
         _partition(sorted({retained, *selected})), trusted
     )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(
+            _partition(sorted(selected)), trusted
+        )
     with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
         ownership._validate_additive_partition_transition(
             _partition(sorted({*selected, "backend/app/modules/checkers/unreviewed.py"})),
