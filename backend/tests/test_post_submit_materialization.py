@@ -109,7 +109,8 @@ class ExternalGrantConsumer(Consumer):
             update={"binding_id": new_record_id()}
         )
         with pytest.raises(ArtifactScratchIntegrityError, match="material identity differs"):
-            view.external_checker_grant(self.external_request(changed))
+            with view.external_checker_grant(self.external_request(changed)):
+                pytest.fail("substituted material acquired an external grant")
         return result(request)
 
 
