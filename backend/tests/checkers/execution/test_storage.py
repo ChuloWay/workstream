@@ -223,9 +223,21 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
             return ResultClassification("allow_review", len(short.execution.external_members), 0, 0, 0)
 
         monkeypatch.setattr(material_storage_helpers, "classify_result", faulty_classifier)
+        # This SQL-owner control deliberately simulates an application accepting
+        # only this counterfeit, while its AUTH digest binds the same counterfeit
+        # facts. A mismatched valid AUTH receipt must not mask policy-set custody.
+        from app.modules.checkers.api.selected_post_submit import SelectedPostSubmissionEvaluationResult
+        validate_request = SelectedPostSubmissionEvaluationResult.validate_request
+
+        def faulty_request_validator(result, request):
+            if result == short and request == h.request:
+                return None
+            return validate_request(result, request)
+
+        monkeypatch.setattr(SelectedPostSubmissionEvaluationResult, "validate_request", faulty_request_validator)
         async with h.factory() as session:
             await material_storage_helpers.write_terminal(
-                session, facts, facts.material.model_dump(mode="json"), authorized_facts=valid,
+                session, facts, facts.material.model_dump(mode="json"),
             )
             with pytest.raises(IntegrityError, match="checker completed custody or routing invalid"):
                 await session.execute(text("SET CONSTRAINTS public.checker_terminal_custody IMMEDIATE"))

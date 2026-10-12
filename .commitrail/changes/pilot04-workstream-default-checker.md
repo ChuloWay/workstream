@@ -795,3 +795,10 @@ construction/substitution and locked lineage remain in
 test_selected_pre_submit_coordination.py; selected command/service and actual
 root Rust/MinIO failure/replay evidence cover no admission on work/infrastructure
 failure. No old writer or live historical factory is reconstructed.
+
+The zero-member/locked-one-image direct SQL negative now binds fresh final AUTH
+to the same counterfeit facts and bypasses request validation only for that
+exact counterfeit, simulating a faulty application. This prevents a mismatched
+valid AUTH digest from masking the locked-policy completeness guard. The normal
+request validator remains active for every other result; the final positive
+control uses the original complete result. No product checks are weakened.
