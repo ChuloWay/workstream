@@ -83,7 +83,7 @@ def selected_request(*, project_id=None):
                "v1" if "version" in name else sha)
         for name in SelectedPostSubmitLockedContext.model_fields
     }
-    context["selected_post_policy_hash"] = policy.policy_sha256
+    context["post_policy_hash"] = policy.policy_sha256
     return make_selected_post_submit_request(
         project_id=project_id or new_record_id(),
         expected_context=SelectedPostSubmitLockedContext(**context), policy=policy,
