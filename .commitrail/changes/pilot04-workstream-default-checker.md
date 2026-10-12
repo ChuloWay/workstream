@@ -663,3 +663,27 @@ Validation at this source checkpoint: TASK/ART Ruff and Python compilation pass;
 current owner/DTO imports pass. Native and broader current-flow checks remain
 required after the CHECKERS composition and selected fixture repairs are combined.
 This checkpoint does not claim hosted suite readiness.
+
+
+### Current ART projection and runtime proof reconciliation
+
+ART input selection now uses the single POST context identity and requires its
+hash to equal the retained submitted external policy digest. Binding authority
+projects the sole selected PRE run and a constant null historical evidence key,
+matching the unchanged authorization protocol. The private durable put result and
+publish call expose one selected run only. PRE execution input requires the lease
+attempt, request digest and genuine ART grant port, with no optional old plan.
+
+The selected PRE unit arrangement now uses canonical reservation and committed
+lease facts instead of the retired plan/invocation claim. It retains real scratch
+inspection and the callback grant and proves that substituting the default packet
+fails before byte access or external invocation. The actual Rust end-to-end probe
+constructs its registry specs from the pure external contract helper; it no longer
+imports the obsolete PRE arrangement merely for a spec. The open PRE schema,
+digest pinning and resource limits remain the same.
+
+Focused selected PRE processor, current ART factory/admission publication and
+short-root execution service checks pass (11 cases). Ruff and diff whitespace
+checks pass. This is author verification; independent review and the final clean
+combined PostgreSQL/MinIO/real-image journey remain required, as does full hosted
+CI. No migration or provider proof is claimed by this checkpoint.

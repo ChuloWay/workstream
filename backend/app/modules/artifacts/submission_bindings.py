@@ -330,16 +330,8 @@ class SubmissionAdmissionConsumptionService:
     ) -> SubmissionBindingAuthorityFacts:
         return SubmissionBindingAuthorityFacts(
             admission_id=request.admission_id,
-            evidence_set_id=(
-                UUID(admission.pre_submit_evidence_set_id)
-                if admission.pre_submit_evidence_set_id is not None
-                else None
-            ),
-            selected_pre_submit_run_id=(
-                UUID(admission.selected_pre_submit_run_id)
-                if admission.selected_pre_submit_run_id is not None
-                else None
-            ),
+            evidence_set_id=None,
+            selected_pre_submit_run_id=UUID(admission.selected_pre_submit_run_id),
             actor_profile_id=UUID(admission.actor_profile_id),
             identity_link_id=UUID(admission.identity_link_id),
             project_id=UUID(admission.project_id),
@@ -403,9 +395,9 @@ class SubmissionAdmissionConsumptionService:
             material=material,
             binding_decision_id=binding_decision_id,
             selected_post_submit_policy_sha256=(
-                getattr(admission, "selected_post_submit_policy_sha256", None)
+                admission.selected_post_submit_policy_sha256
             ),
             selected_post_submit_policy_body=(
-                getattr(admission, "selected_post_submit_policy_body", None)
+                admission.selected_post_submit_policy_body
             ),
         )

@@ -47,7 +47,12 @@ from app.modules.artifacts.authorization import (
     PreparedSubmissionBundlePreparationAuthorization,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.checkers.api.external import ExternalCheckerRegistrySpec
+from app.modules.checkers.api.external import (
+    PRE_SUBMIT_INPUT_SCHEMA_ID,
+    ExternalCheckerRegistrySpec,
+    ExternalCheckerSchema,
+    external_checker_json_hash,
+)
 from app.modules.checkers.models import CheckerRun, SelectedPreSubmitRun
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.models import Submission, SubmissionDispatch, WorkstreamTask
@@ -57,8 +62,7 @@ from app.modules.checkers.execution_repository import stored_result
 from tests.authorization.post_submit_routing.support import provision_router
 from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome
 from tests.tasks.post_submit_routing.outcome_support import outcome_snapshot
-from tests.checkers.external.test_selected_post_submit import _post_spec
-from tests.checkers.external.test_selected_pre_submit import _policy
+from tests.checkers.external.support import post_registry_spec, registry_spec
 from tests.archive_fixtures import byte_source
 from tests.post_submit_materialization_helpers import material_fixture
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
@@ -72,18 +76,16 @@ from tests.test_s3_artifact_store import (
 
 
 def _locked_spec(phase: str, image: dict[str, str]) -> ExternalCheckerRegistrySpec:
-    source = _policy().entries[0].registry if phase == "pre_submit" else _post_spec()
-    values = source.model_dump(
-        mode="json",
-        exclude={
-            "registry_entry_id",
-            "entry_digest",
-            "registration_operation_id",
-            "registered_by_actor_profile_id",
-            "authorization_decision_event_id",
-            "created_at",
-        },
-    )
+    source = registry_spec("pre_submit") if phase == "pre_submit" else post_registry_spec()
+    values = source.model_dump(mode="json")
+    if phase == "pre_submit":
+        document = {"type": "object"}
+        values["input_schema"] = ExternalCheckerSchema(
+            schema_id=PRE_SUBMIT_INPUT_SCHEMA_ID,
+            schema_version="v1",
+            document=document,
+            schema_sha256=external_checker_json_hash(document),
+        ).model_dump(mode="json")
     values["image_digest"] = image["platform_manifest_digest"]
     values["resources"] |= {"deadline_ms": 30_000, "maximum_output_bytes": 8_192}
     return ExternalCheckerRegistrySpec.model_validate(values)

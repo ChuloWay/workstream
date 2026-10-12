@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 import zipfile
 import pytest
 
@@ -54,7 +54,6 @@ from app.modules.checkers.api.selected_pre_submit import (
 )
 from app.modules.checkers.selected_pre_submit_execution import SelectedPreSubmitProcessor
 from app.adapters.checkers import SelectedPreSubmitCheckerExecutionAdapter
-from app.modules.artifacts.pre_submit_attempts import PreSubmitAttemptClaim
 from app.modules.artifacts.preparation import (
     HARD_MAXIMUM_ARTIFACT_BYTES,
     ArtifactPreparationLimits,
@@ -73,6 +72,7 @@ from app.modules.artifacts.submission_archive import (
 from app.modules.artifacts.submission_manifest import (
     SubmissionCanonicalPredecessor,
     build_submission_manifest,
+    semantic_manifest_identity,
     evaluate_submission_change,
 )
 from app.modules.artifacts.submission_materialization import (
@@ -80,11 +80,7 @@ from app.modules.artifacts.submission_materialization import (
     PreparedBundleMaterializationService,
 )
 from app.modules.authorization.prepared import PreparedAuthorizationHandle
-from app.modules.checkers.api.pre_submit import (
-    EffectivePreSubmissionExecutionPlan,
-    EffectivePreSubmissionPlanLineage,
-    SubmissionPacketView,
-)
+from app.modules.checkers.api.pre_submit_material import SubmissionPacketView
 from tests.checkers.external.support import SHA, registry_entry
 
 
@@ -256,27 +252,6 @@ async def _request(
     *,
     primary_bytes: bytes = b"[task]\nname='proof'\n",
 ):
-    lineage = EffectivePreSubmissionPlanLineage(
-        project_id=new_record_id(),
-        guide_id=new_record_id(),
-        guide_version="v1",
-        source_snapshot_id=new_record_id(),
-        source_snapshot_hash=SHA,
-        effective_policy_id=new_record_id(),
-        effective_policy_hash=SHA,
-        pre_submit_policy_id=new_record_id(),
-        pre_submit_policy_bundle_hash=SHA,
-    )
-    plan = EffectivePreSubmissionExecutionPlan(
-        lineage=lineage,
-        catalogue_id="retired.test.fixture",
-        catalogue_version="v1",
-        catalogue_schema_version="retired",
-        catalogue_manifest_sha256=SHA,
-        entries=(),
-        plan_sha256=SHA,
-    )
-    plan = replace(plan, plan_sha256=canonical_json_hash(plan.as_dict()))
     inspector = SubmissionArchiveInspector(SubmissionArchiveLimits())
     manager = ArtifactScratchManager(root=tmp_path / "scratch", limits=_limits())
     preparation = ArtifactPreparationService(manager)
@@ -285,30 +260,54 @@ async def _request(
     )
     inspection = await prepared.inspect(inspector)
     manifest = build_submission_manifest(inspection)
-    request = PreparedBundleMaterializationRequest(
-        prepared_authorization=cast(PreparedAuthorizationHandle, _PreparedHandle()),
-        task_id=new_record_id(),
-        assignment_id=new_record_id(),
-        submission_artifact_policy_id=lineage.effective_policy_id,
-        checker_policy_id=lineage.pre_submit_policy_id,
-        predecessor_submission_version=None,
-        checker_remediation_manifest_id=None,
-        prepared_artifact=prepared,
-        effective_plan=plan,
-        inspection=inspection,
-        manifest=manifest,
-        change_gate=evaluate_submission_change(
-            commitment=prepared.commitment,
-            manifest=manifest,
-            predecessor=None,
-            predecessor_exists=False,
-        ),
-        packet=SubmissionPacketView(
-            summary="Completed exact project work.",
-            contributor_attestation="rights_confirmed",
+    policy = _policy()
+    packet = SubmissionPacketView(
+        summary="Completed exact project work.", contributor_attestation="rights_confirmed",
+    )
+    _, _, seed = _selected_admission_reservation()
+    default_input = WorkstreamDefaultCheckerInput(
+        archive_sha256=prepared.commitment.sha256,
+        archive_byte_count=prepared.commitment.byte_count,
+        archive_media_type="application/zip",
+        semantic_manifest_sha256=manifest.sha256,
+        entries=tuple(SubmissionMaterialEntry(
+            item.normalized_path, item.entry_type.value, item.byte_count,
+            item.sha256, item.executable,
+        ) for item in manifest.entries),
+        predecessor=None, predecessor_exists=False, current_predecessor=None,
+        current_rules_sha256=seed.admission_lineage.rules_sha256,
+        predecessor_rules_sha256=None, packet=packet,
+    )
+    reservation = replace(
+        seed,
+        prepared_generation_id=prepared.generation_id,
+        policy_sha256=policy.policy_sha256,
+        default_input_sha256=workstream_default_input_sha256(default_input),
+        archive_sha256=prepared.commitment.sha256,
+        archive_byte_count=prepared.commitment.byte_count,
+        semantic_manifest_sha256=manifest.sha256,
+        admission_lineage=replace(
+            seed.admission_lineage,
+            effective_plan_sha256=policy.policy_sha256,
+            semantic_manifest_id=semantic_manifest_identity(manifest.sha256),
+            semantic_manifest_body=manifest.as_dict(), packet_sha256=packet.sha256,
         ),
     )
-    return request, inspector, manager, preparation, None
+    request = PreparedBundleMaterializationRequest(
+        prepared_authorization=cast(PreparedAuthorizationHandle, _PreparedHandle()),
+        task_id=reservation.task_id, assignment_id=reservation.assignment_id,
+        submission_artifact_policy_id=reservation.admission_lineage.effective_policy_id,
+        checker_policy_id=reservation.admission_lineage.pre_submit_policy_id,
+        predecessor_submission_version=None, checker_remediation_manifest_id=None,
+        prepared_artifact=prepared, inspection=inspection, manifest=manifest,
+        change_gate=evaluate_submission_change(
+            commitment=prepared.commitment, manifest=manifest,
+            predecessor=None, predecessor_exists=False,
+        ),
+        packet=packet, external_policy=policy, default_checker_input=default_input,
+        selected_reservation=reservation,
+    )
+    return request, inspector, manager, preparation
 
 
 def _open_input_schema() -> ExternalCheckerSchema:
@@ -458,7 +457,7 @@ class _Execution:
 
 def _execution_context(request, policy):
     identity = PreSubmitExternalCheckerIdentity(
-        project_id=request.effective_plan.lineage.project_id,
+        project_id=request.selected_reservation.project_id,
         task_id=request.task_id,
         assignment_id=request.assignment_id,
         prepared_generation_id=request.prepared_artifact.generation_id,
@@ -495,7 +494,7 @@ def _execution_context(request, policy):
         predecessor=None,
         predecessor_exists=False,
         current_predecessor=None,
-        current_rules_sha256=request.effective_plan.lineage.pre_submit_policy_bundle_hash,
+        current_rules_sha256=request.selected_reservation.admission_lineage.rules_sha256,
         predecessor_rules_sha256=None,
         packet=SubmissionPacketView(summary="", contributor_attestation=""),
     )
@@ -552,7 +551,7 @@ def _assert_terminal_round_trip(identity, policy, default_input, material, resul
 async def test_selected_pre_runs_default_then_locked_external_image(
     tmp_path, verdict: str, eligible: bool
 ) -> None:
-    request, inspector, manager, preparation, _catalogue = await _request(tmp_path)
+    request, inspector, manager, preparation = await _request(tmp_path)
     policy = _policy()
     identity, material, default_input = _execution_context(request, policy)
     grants, execution = _GrantIssuer(), _Execution(verdict)
@@ -595,7 +594,7 @@ async def test_selected_pre_runs_default_then_locked_external_image(
 async def test_selected_pre_only_requires_runtime_for_locked_external_images(
     tmp_path, external: bool
 ) -> None:
-    request, inspector, manager, preparation, _catalogue = await _request(tmp_path)
+    request, inspector, manager, preparation = await _request(tmp_path)
     policy = _policy() if external else _empty_policy()
     identity, material, default_input = _execution_context(request, policy)
     grants = _GrantIssuer()
@@ -681,13 +680,13 @@ async def test_selected_pre_terminal_publishes_self_contained_ready_admission(
 async def test_selected_pre_default_secret_blocker_precedes_external_image(
     tmp_path,
 ) -> None:
-    request, inspector, manager, preparation, _catalogue = await _request(
+    request, inspector, manager, preparation = await _request(
         tmp_path,
         primary_bytes=b"-----BEGIN OPENSSH PRIVATE KEY-----\nencoded",
     )
     policy = _policy()
     identity = PreSubmitExternalCheckerIdentity(
-        project_id=request.effective_plan.lineage.project_id,
+        project_id=request.selected_reservation.project_id,
         task_id=request.task_id,
         assignment_id=request.assignment_id,
         prepared_generation_id=request.prepared_artifact.generation_id,
@@ -730,7 +729,7 @@ async def test_selected_pre_default_secret_blocker_precedes_external_image(
             predecessor=None,
             predecessor_exists=False,
             current_predecessor=None,
-            current_rules_sha256=request.effective_plan.lineage.pre_submit_policy_bundle_hash,
+            current_rules_sha256=request.selected_reservation.admission_lineage.rules_sha256,
             predecessor_rules_sha256=None,
             packet=request.packet,
         ),
@@ -762,9 +761,9 @@ async def test_selected_pre_default_secret_blocker_precedes_external_image(
 async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
     tmp_path,
 ) -> None:
-    request, _inspector, manager, _preparation, _catalogue = await _request(tmp_path)
+    request, _inspector, manager, _preparation = await _request(tmp_path)
     policies = _policies()
-    project_id = request.effective_plan.lineage.project_id
+    project_id = request.selected_reservation.project_id
     actor_profile_id = new_record_id()
     identity_link_id = new_record_id()
     assignment_id = new_record_id()
@@ -861,8 +860,8 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
 
 @pytest.mark.asyncio
 async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
-    request, inspector, manager, preparation, _catalogue = await _request(tmp_path)
-    policy = _policy()
+    request, inspector, manager, preparation = await _request(tmp_path)
+    policy = request.external_policy
     entries = tuple(
         SubmissionMaterialEntry(
             item.normalized_path,
@@ -874,41 +873,40 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
         for item in request.manifest.entries
     )
     request = replace(
-        request,
-        external_policy=policy,
+        request, external_policy=policy,
         default_checker_input=WorkstreamDefaultCheckerInput(
             archive_sha256=request.prepared_artifact.commitment.sha256,
             archive_byte_count=request.prepared_artifact.commitment.byte_count,
             archive_media_type="application/zip",
             semantic_manifest_sha256=request.manifest.sha256,
-            entries=entries,
-            predecessor=None,
-            predecessor_exists=False,
+            entries=entries, predecessor=None, predecessor_exists=False,
             current_predecessor=None,
-            current_rules_sha256=request.effective_plan.lineage.pre_submit_policy_bundle_hash,
-            predecessor_rules_sha256=None,
-            packet=request.packet,
+            current_rules_sha256=request.selected_reservation.admission_lineage.rules_sha256,
+            predecessor_rules_sha256=None, packet=request.packet,
         ),
     )
+    reservation = request.selected_reservation
+    lease = SelectedPreSubmitLeaseFacts(
+        reservation=reservation, lease_id=new_record_id(), lease_generation=1,
+        lease_expires_at=datetime.now(UTC) + timedelta(minutes=2),
+    )
     transaction = True
-    claim = object.__new__(PreSubmitAttemptClaim)
-    claim.attempt_id, claim._nonce = new_record_id(), new_record_id()
-    claim.request_digest = SHA
-    claim._request = replace(request, prepared_authorization=None)
-    claim._started, claim._execution = False, None
-    row = SimpleNamespace(
-        status="reserved",
-        evidence_set_id=None,
-        claim_nonce=str(claim._nonce),
-        request_digest=claim.request_digest,
-        prepared_generation_id=str(request.prepared_artifact.generation_id),
-    )
-    session = SimpleNamespace(
-        in_transaction=lambda: transaction,
-        in_nested_transaction=lambda: False,
-        scalar=AsyncMock(return_value=row),
-    )
-    claim._session = session
+    session = SimpleNamespace(in_transaction=lambda: transaction)
+
+    class CommittedAuthority:
+        def __init__(self):
+            self.calls = 0
+
+        def consume(self, *, run_id, lease):
+            assert not transaction
+            assert run_id == reservation.attempt_id
+            assert lease == expected_lease
+            assert self.calls == 0
+            self.calls += 1
+            return lease
+
+    expected_lease = lease
+    committed = CommittedAuthority()
     execution = _Execution("passed")
     authority = SimpleNamespace(
         prepare=AsyncMock(return_value=object()),
@@ -925,25 +923,38 @@ async def test_selected_factory_uses_request_bound_art_grant(tmp_path) -> None:
         storage_scheme="s3",
     )
     try:
-        await service.prepare_authorization(
-            task_id=request.task_id,
-            assignment_id=request.assignment_id,
-            submission_artifact_policy_id=request.submission_artifact_policy_id,
-            checker_policy_id=request.checker_policy_id,
-            prepared_artifact=request.prepared_artifact,
-            effective_plan=request.effective_plan,
-            idempotency_key=new_record_id(),
-            external_policy=policy,
-        )
-        assert authority.prepare.await_count == 1
-        await service.authorize_prepared_bundle(request, claim=claim)
+        await service.authorize_inspected(request)
+        assert authority.consume.await_count == 1
+        assert execution.requests == []
         transaction = False
-        result = await service.materialize_prepared_bundle(
-            replace(request, prepared_authorization=None), claim=claim
+        # A substituted default packet must fail before byte access or grants,
+        # even when the committed lease is otherwise exact.
+        process = AsyncMock()
+        with patch.object(preparation, "_process_prepared_submission", process):
+            with pytest.raises(SelectedPreSubmitInfrastructureUnavailable) as refusal:
+                await service.materialize_selected_pre_submit(
+                    replace(
+                        request,
+                        prepared_authorization=None,
+                        default_checker_input=replace(
+                            request.default_checker_input,
+                            packet=SubmissionPacketView("Changed packet", "rights_confirmed"),
+                        ),
+                    ),
+                    run_id=reservation.attempt_id, lease=lease,
+                    execution_authority=CommittedAuthority(),
+                )
+            assert refusal.value.code == "material_unavailable"
+            process.assert_not_awaited()
+            assert execution.requests == []
+        result = await service.materialize_selected_pre_submit(
+            replace(request, prepared_authorization=None),
+            run_id=reservation.attempt_id, lease=lease, execution_authority=committed,
         )
-        assert result.checker_facts.eligible is True
+        assert result.eligible is True
+        assert committed.calls == 1
         assert len(execution.requests) == 1
-        assert execution.requests[0].identity.attempt_id == claim.attempt_id
+        assert execution.requests[0].identity.attempt_id == reservation.attempt_id
         assert execution.requests[0].materials[0].archive_sha256 == (
             request.prepared_artifact.commitment.sha256
         )

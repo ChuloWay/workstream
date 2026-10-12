@@ -92,9 +92,9 @@ class PreSubmitCheckerExecutionRequest:
     storage_scheme: str
     external_policy: LockedExternalPreSubmitPolicy
     default_checker_input: WorkstreamDefaultCheckerInput
-    attempt_id: UUID | None = None
-    attempt_request_digest: str | None = None
-    external_grants: "PreSubmitExternalGrantPort | None" = None
+    attempt_id: UUID
+    attempt_request_digest: str
+    external_grants: "PreSubmitExternalGrantPort"
 
 
 class PreSubmitExternalGrantPort(Protocol):

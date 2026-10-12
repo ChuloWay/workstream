@@ -124,12 +124,11 @@ class SubmissionBundleDurablePutResult:
     """Bounded durable operation result without provider coordinates."""
 
     put_attempt_id: UUID
-    pre_submit_evidence_set_id: UUID | None
     operation_identity: str
     status: str
     replayed: bool
     admission_id: UUID | None
-    selected_pre_submit_run_id: UUID | None = None
+    selected_pre_submit_run_id: UUID
 
 
 class SubmissionBundleDurablePutService:
@@ -206,13 +205,8 @@ class SubmissionBundleDurablePutService:
         prepared: PreparedArtifact,
         lineage_id: UUID,
         admission: ArtifactAdmissionResult,
-        *,
-        selected_pre_submit_run_id: UUID,
     ) -> SubmissionBundleDurablePutResult:
         """Hand the exact ZIP to storage only after the durable transaction ended."""
-        if selected_pre_submit_run_id != lineage_id:
-            await prepared.close()
-            raise RuntimeError("submission bundle selected lineage changed")
         if self._session.in_transaction():
             await prepared.close()
             raise RuntimeError("submission bundle durable transaction is still active")
@@ -227,22 +221,20 @@ class SubmissionBundleDurablePutService:
             if admission_id is not None:
                 return SubmissionBundleDurablePutResult(
                     put_attempt_id=admission.attempt_id,
-                    pre_submit_evidence_set_id=None,
                     operation_identity=admission.operation_identity,
                     status="ready",
                     replayed=True,
                     admission_id=admission_id,
-                    selected_pre_submit_run_id=selected_pre_submit_run_id,
+                    selected_pre_submit_run_id=lineage_id,
                 )
             if admission.replayed and admission.status == "object_confirmed":
                 return SubmissionBundleDurablePutResult(
                     put_attempt_id=admission.attempt_id,
-                    pre_submit_evidence_set_id=None,
                     operation_identity=admission.operation_identity,
                     status="object_confirmed",
                     replayed=True,
                     admission_id=None,
-                    selected_pre_submit_run_id=selected_pre_submit_run_id,
+                    selected_pre_submit_run_id=lineage_id,
                 )
             if admission.replayed:
                 status = await self._storage.resume_committed_put(
@@ -261,12 +253,11 @@ class SubmissionBundleDurablePutService:
                 )
             return SubmissionBundleDurablePutResult(
                 put_attempt_id=admission.attempt_id,
-                pre_submit_evidence_set_id=None,
                 operation_identity=admission.operation_identity,
                 status=status,
                 replayed=admission.replayed,
                 admission_id=admission_id,
-                selected_pre_submit_run_id=selected_pre_submit_run_id,
+                selected_pre_submit_run_id=lineage_id,
             )
         finally:
             await prepared.close()
@@ -723,7 +714,6 @@ class PreparedSubmissionBundlePreparationCommand:
                     retained,
                     reservation.attempt_id,
                     durable,
-                    selected_pre_submit_run_id=reservation.attempt_id,
                 )
                 return self._result(result)
         except SelectedPreSubmitRequestConflict as exc:

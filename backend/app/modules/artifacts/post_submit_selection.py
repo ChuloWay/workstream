@@ -68,13 +68,13 @@ async def select_post_submission_material(
         and context.pre_policy_id == request.expected_context.pre_policy_id
         and context.pre_policy_hash == request.expected_context.pre_policy_hash
         and context.post_policy_id
-        == request.expected_context.retained_catalogue_policy_id
+        == request.expected_context.post_policy_id
         and context.post_policy_version
-        == request.expected_context.retained_catalogue_policy_version
+        == request.expected_context.post_policy_version
         and context.post_policy_hash
-        == request.expected_context.retained_catalogue_policy_hash
+        == request.expected_context.post_policy_hash
         and context.selected_post_policy_hash
-        == request.expected_context.selected_post_policy_hash
+        == request.expected_context.post_policy_hash
         and context.selected_post_policy_body == request.policy.model_dump(mode="json")
         and context.review_policy_id == request.expected_context.review_policy_id
         and context.review_generation == request.expected_context.review_generation
