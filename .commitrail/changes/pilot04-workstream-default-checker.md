@@ -1632,3 +1632,41 @@ only this stale UUID-inventory test failing. This is not a full-suite pass. A fr
 required hosted run on the published metadata-repair candidate remains required
 for merge readiness. Earlier native/image proofs remain explicitly tied to their
 recorded heads; this metadata-only correction requires no new runtime proof.
+
+### Owner-aligned completion-evidence lane capacity
+
+Lead-authorized bounded scope: this existing record,
+`backend/scripts/test_lane_catalogue.py`, and only the literal expected-module
+sets in `backend/tests/test_ci_lane_catalogue.py`. Move the whole six-node
+`tests/checkers/execution/test_completion_evidence.py` module from TASK selection
+to the existing four PROJECT partitions in `CHECKER_DELIVERY_MODULES`. Its native
+proofs own current CHECKERS result, material, execution/finalization receipts and
+successor currentness, without TASK routing or mutation authority. Preserve every
+test body, assertion, PostgreSQL marker, execution kind and selection algorithm.
+No production, migration, workflow, timeout, lane-count, exclusion, waiver or
+required-check change is allowed. Correct only the accompanying outdated
+three-way description of the existing four-way checker partition.
+
+Authenticated hosted run `38297853598`, tested merge
+`d5ba919b2488724027bf0326e148a816a3f6ebe1`, completed all six cases: two on TASK-A
+and four on TASK-C. TASK-C completed 294 of 295 nodes before its unchanged
+1200-second cap; the last ordinary worker permission-denial test did not finish.
+PROJECT A/B/C/D elapsed 736.325/892.426/934.605/995.090 seconds, leaving observed
+headroom of 463.675/307.574/265.395/204.910 seconds. TASK-B passed in 1127.335
+seconds and receives no additional margin from this move. The captured TASK-A
+foreign-owner case took 9.07 seconds; the interrupted TASK-C run has no complete
+per-node duration report. Removing native fixture work is a bounded capacity
+repair, not a measured whole-module saving or guarantee of future execution time.
+
+Risk: missing or duplicating nodes during reassignment, or confusing natural
+HEAD-seeded UUID parameter changes with catalogue effects. Acceptance requires
+real canonical before/after collection of all 8,776 unique nodes across the same
+ten lanes without skips or deselections. Apply both catalogues to one identical
+real collected node list to prove exactly six lane changes, 8,770 unrelated lane
+assignments unchanged, and all six execution kinds still `ordinary_isolated`.
+Cross-head comparisons must qualify the collector's existing HEAD-seeded UUID
+parameter values. Existing exact catalogue, exhaustive assignment and negative
+partition tests remain mandatory. Lead CI-integrity and independent peer
+test-delta review inspect the frozen scope and evidence; a fresh complete hosted
+run is required for capacity and merge readiness. No new native proof is needed
+because test sources and runtime owners are unchanged.

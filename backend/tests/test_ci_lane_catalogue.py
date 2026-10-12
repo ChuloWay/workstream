@@ -58,6 +58,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/external/test_selected_pre_submit_service.py",
         "tests/checkers/external/test_selected_preparation_command.py",
         "tests/checkers/execution/test_execution.py",
+        "tests/checkers/execution/test_completion_evidence.py",
         "tests/checkers/execution/test_coordination.py",
         "tests/checkers/execution/test_concurrency.py",
         "tests/checkers/execution/test_storage.py",
@@ -289,7 +290,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         == modules_by_lane["task_lifecycle_b"]
         == modules_by_lane["task_lifecycle_c"]
         == {
-            "tests/checkers/execution/test_completion_evidence.py",
             "tests/checkers/execution/test_completion_contract.py",
             "tests/tasks/post_submit_routing/test_remediation.py",
             "tests/tasks/post_submit_routing/test_remediation_storage.py",

@@ -417,7 +417,7 @@ PROJECT_INTAKE_MODULES = (
 )
 
 # Checker delivery shares project dispatch ownership and the existing
-# three-way partition; exclusive placement exceeded the hosted execution cap.
+# four-way partition; exclusive placement exceeded the hosted execution cap.
 CHECKER_DELIVERY_MODULES = (
     "tests/checkers/default/test_contract.py",
     "tests/checkers/default/test_execution.py",
@@ -433,6 +433,7 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers/external/test_selected_pre_submit_service.py",
     "tests/checkers/external/test_selected_preparation_command.py",
     "tests/checkers/execution/test_execution.py",
+    "tests/checkers/execution/test_completion_evidence.py",
     "tests/checkers/execution/test_coordination.py",
     "tests/checkers/execution/test_concurrency.py",
     "tests/checkers/execution/test_storage.py",
@@ -454,7 +455,6 @@ TASK_MODULES = (
     "tests/tasks/test_task_import_contract.py",
     "tests/test_task_import_sources.py",
     "tests/test_submission_predecessor_custody.py",
-    "tests/checkers/execution/test_completion_evidence.py",
     "tests/checkers/execution/test_completion_contract.py",
     "tests/tasks/post_submit_routing/test_remediation.py",
     "tests/tasks/post_submit_routing/test_remediation_storage.py",
