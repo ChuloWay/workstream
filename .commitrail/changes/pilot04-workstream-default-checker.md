@@ -1039,3 +1039,7 @@ and `restore_predecessor_evidence_schema` functions from
 `backend/tests/migration_fixtures.py` after the raw callers were reconciled.
 A repository search found no remaining callers. The separately consumed project
 guide fixture context remains unchanged; no shared live consumer is deleted.
+
+The first scratch-module run passed 93 current cases and exposed one remaining
+obsolete version-two normalization test. Remove that upgrade-only test as part
+of the same authorized cutover; rerun the complete current scratch module.
