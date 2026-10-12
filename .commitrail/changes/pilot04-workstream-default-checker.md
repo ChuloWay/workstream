@@ -1159,6 +1159,29 @@ and fails on the prior helper at the intended envelope equality assertion.
 Ruff and diff checks pass. This repairs fixture serialization only; the completed
 0008 native migration discriminator remains required before claiming that path.
 
+### Shared authorization contract replay
+
+Reconcile the current exact action inventory and fixed-service binding snapshots
+in `authorization/setup_finalization/test_catalogue.py` and
+`authorization/test_assignment_invalidation_contract.py` with the selected PRE
+actions/context. Diagnose and repair the controlled executor deadline fixture in
+`authorization/post_submit/test_timeout.py` while retaining revocation, replica
+drift, cancellation, source/workspace/projection cleanup and zero-terminal-effect
+controls. The boundary waiter must expose an executor failure that occurs before
+the consumer rather than report only its own timeout. Scope is these tests and
+necessary shared test support; no production authorization, timing cap, schema or
+runtime behavior is authorized to change by this fixture reconciliation.
+
+The diagnostic exposes `checker lease progression is invalid` before the consumer:
+the old 12,345-second sentinel also extended the real selected execution lease
+beyond its installed one-hour guard. Use a controlled 300-second budget and its
+existing finalization margin; the event-armed real timeout and ten-second test
+boundary remain unchanged. The diagnostic failed its intended native node in
+113.79 seconds with database/role cleanup complete (683 producer with the waiter
+change, not a frozen-head replay). Both current pure modules pass all 35 cases;
+Ruff and diff checks pass. The complete deadline module must pass on the frozen
+repair before closing its cancellation and cleanup proof.
+
 ### Captured service principal prerequisites
 
 The static predecessor archive now carries the exact project-neutral POST service
