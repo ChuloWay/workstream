@@ -342,6 +342,21 @@ intermediate-wait regression.
 
 ## Risk and review routing
 
+The migration-only archive scope includes
+`backend/tests/fixtures/pilot04_predecessor_rows.json.gz`,
+`backend/tests/historical_submission_fixtures.py`, and the existing retry and
+replacement migration tests. Replace executable pinned-source writers and the
+raw DTO facade with checksum-bound stored rows and explicit snapshot selection.
+Fixture restoration is restricted to an owned isolated test database. It must
+restore trigger/FK settings, validate foreign keys and named material custody,
+and compare every restored row before any migration assertion receives data.
+Restoring terminal archive facts is setup evidence, not proof of a current or
+predecessor writer. The archive records capture/schema provenance; no product
+runtime, deployment, retained-row deletion or permissive current guard is added.
+Wrong checksums, unowned targets, changed schema/rows and unsupported fixture
+variants must refuse. Independent CI/QA review and the preserved real PostgreSQL
+migration invariants verify this fixture replacement.
+
 Current history and queue fixtures also replace built-in failure-name switches
 with normalized registered-image verdicts. Allowed producer paths are
 `backend/tests/checkers/execution/storage_fixture.py`,
