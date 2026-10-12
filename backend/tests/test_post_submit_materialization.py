@@ -100,7 +100,10 @@ class ExternalGrantConsumer(Consumer):
             assert self.manifest["submission_id"] == str(request.submission_id)
             assert self.manifest["request_digest"] == external_request.request_digest
             assert self.manifest["binding_digest"] == grant.binding_digest
-        assert not self.grant_path.exists()
+        # Revocation removes the service grant immediately; the outer material
+        # callback still owns its workspace until materialization completes.
+        assert self.grant_path.is_dir()
+        assert not (self.grant_path / ".external-checker-grant.json").exists()
 
         changed = view.external_checker_material.model_copy(
             update={"binding_id": new_record_id()}
