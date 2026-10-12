@@ -989,33 +989,12 @@ errors are not retried; a second 40001 remains unavailable. This bounded read
 recovery does not retry product mutations. Export reads mutate no recognition
 or economic facts.
 
-The complete fixed membership is bounded at 100,000 selected contributions.
-Each response accepts `page_size` (1–1,000, default 100) and optional `cursor`.
-Filters apply before membership capture; excess selection returns 422
+The maximum is 1,000 selected contributions. Filters apply before the repository
+probes the 1,001st row; excess selection returns 422
 `contribution_export_too_large` with no partial export. Empty selections succeed.
-Rows sort by `(recorded_at, contribution_id)`, not business commit order.
-
-The first response captures its visible selected contribution identities in
-CON-private, expiring native membership rows, separate from retained economic
-facts. Native guards require sealing the complete member set before commit and
-refuse subsequent additions or changes. Later commits, even from transactions
-already in progress at capture, cannot enter the original selection. Every page
-reapplies the selected actor/project/type/time filters and fresh canonical AUTH;
-stored membership confers no read authority. Source display labels may reflect
-the fresh page snapshot; contribution membership and economic facts are fixed.
-
-JSON returns `exported_at`, `items` and `next_cursor` (null on the final page).
-CSV returns `X-Workstream-Exported-At` and, when another page exists,
-`X-Workstream-Next-Cursor`. The export instant is identical on every page.
-Signed cursors bind the original member set, actor, audience, project, normalized
-filters, output format, page size, expiry and last ordering key. Change none of
-those selections during traversal. Cursors expire after 15 minutes; malformed,
-forged, expired or mismatched continuation returns 422
-`contribution_export_invalid_cursor`. Restart an export for a fresh selection.
-The existing `WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET` is required for
-continuation; an unavailable key refuses pagination rather than inventing one.
-Expired private membership alone is cleaned in bounded batches, never retained
-contributions, awards or audits. CLI consumption is a separate bounded change.
+Rows sort by `(recorded_at, contribution_id)` for display, not commit order.
+There is no continuation cursor or snapshot retained across requests. Fixed
+membership pagination and CLI consumption remain separate implementation work.
 
 CSV uses the same validated projection, quotes every UTF-8 cell and retains one
 row for an unpaid contribution or one row per award (at most 2,000 data rows).
@@ -1204,11 +1183,11 @@ repository; all communication is through typed ports.
 
 Contribution and award reads use PostgreSQL canonical truth directly. They do
 not depend on ART, optional evidence, provider availability, balances, or
-settlement ledgers. The public contribution reads use the bounded fixed-membership
-page contract above, with signed expiring continuation, exact self/project scope,
-pre-filtering and fresh authorization/concealment on every page. CLI consumption
-remains separately scoped issue #497 work. Provider references, credentials and
-secret routes are never returned.
+settlement ledgers. The public contribution reads use the bounded single-response
+contract above, with no continuation cursor, exact self/project scope,
+pre-filtering, and concealment. Stable fixed-membership pagination remains later
+issue #497 work. Provider references, credentials, and secret routes are never
+returned.
 
 CP05A exposes only ContributionPolicy administration, using the existing CP05
 Finance authority and caller-owned transaction. Under the project-scoped
@@ -1325,9 +1304,8 @@ not wait for contribution/award persistence or REV decisions.
 
 PILOT-10's bounded reads consume existing immutable CON/award facts after their
 own exact AUTH/audit activation and snapshot proof. They do not wait for CON-08B
-fulfillment or the historical CON-10A ordering below. The fixed-membership
-list extends those reads without changing economic facts; CLI remains separately
-scoped under issue 497.
+fulfillment or the historical CON-10A ordering below. The later fixed-membership
+list and CLI remain separately scoped under issue 497.
 
 ```text
 CON-01 -> CON-02A

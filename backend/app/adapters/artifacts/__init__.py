@@ -623,20 +623,18 @@ async def get_task_import_source_commands(
     session: Annotated[AsyncSession, Depends(get_db_session)],
     context: Annotated[object, Depends(get_artifact_authorization_context)],
 ) -> TaskImportSourceCommandPort:
-    """Capture actor facts, then compose the same source owner for public commands."""
-    await session.rollback()
-    return task_import_source_commands(session, settings=request.app.state.settings, context=context)
-
-
-def task_import_source_commands(session: AsyncSession, *, settings, context):
-    """Compose source reads/bindings and lazy provider runtime through one owner path."""
+    """Compose exact source commands in ART's registered owner root."""
     from app.adapters.auth import task_import_source_authorization
     from app.modules.artifacts.service import (
         ArtifactAdmissionService, ArtifactStorageOrchestrator, artifact_storage_namespace_spec,
     )
     from app.modules.artifacts.task_import_sources import ArtifactTaskImportSourceCommands, TaskImportSourceRuntime
 
-    request_id, correlation_id = context.request_id, context.correlation_id
+    settings = request.app.state.settings
+    request_id, correlation_id = (UUID(value) for value in request_ids(request))
+    # Identity provisioning is committed by its owner. As in TASK commands,
+    # discard the resolver's read-only refresh before ART owns each root.
+    await session.rollback()
 
     @asynccontextmanager
     async def runtime():

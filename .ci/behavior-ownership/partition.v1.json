@@ -117,10 +117,6 @@
       "target": "backend/app/api/deps/rate_controls.py"
     },
     {
-      "group": "lifecycle",
-      "target": "backend/app/api/deps/task_batch_transitions.py"
-    },
-    {
       "group": "shared",
       "target": "backend/app/api/router.py"
     },
@@ -406,14 +402,6 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/artifacts/selected_pre_submit_admission.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/artifacts/selected_pre_submit_execution.py"
-    },
-    {
-      "group": "artifacts",
       "target": "backend/app/modules/artifacts/service.py"
     },
     {
@@ -666,10 +654,6 @@
     },
     {
       "group": "auth",
-      "target": "backend/app/modules/authorization/domain/pre_submit.py"
-    },
-    {
-      "group": "auth",
       "target": "backend/app/modules/authorization/domain/prepared_adapter_bindings.py"
     },
     {
@@ -790,10 +774,6 @@
     },
     {
       "group": "auth",
-      "target": "backend/app/modules/authorization/pre_submit_authorization.py"
-    },
-    {
-      "group": "auth",
       "target": "backend/app/modules/authorization/pre_submit_materialization.py"
     },
     {
@@ -910,10 +890,6 @@
     },
     {
       "group": "artifacts",
-      "target": "backend/app/modules/checkers/api/evaluation_contract.py"
-    },
-    {
-      "group": "artifacts",
       "target": "backend/app/modules/checkers/api/execution.py"
     },
     {
@@ -931,10 +907,6 @@
     {
       "group": "artifacts",
       "target": "backend/app/modules/checkers/api/history.py"
-    },
-    {
-      "group": "artifacts",
-      "target": "backend/app/modules/checkers/api/material.py"
     },
     {
       "group": "artifacts",
@@ -1135,10 +1107,6 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/contributions/records/csv.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/modules/contributions/records/cursors.py"
     },
     {
       "group": "lifecycle",
@@ -1662,19 +1630,11 @@
     },
     {
       "group": "lifecycle",
-      "target": "backend/app/modules/tasks/api/task_batch_transition.py"
-    },
-    {
-      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/task_detail.py"
     },
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/task_import.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/modules/tasks/api/task_import_membership.py"
     },
     {
       "group": "lifecycle",
@@ -1779,26 +1739,6 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/submitted_bundle.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/modules/tasks/task_batch_transition/models.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/modules/tasks/task_batch_transition_router.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/modules/tasks/task_batch_transitions.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/modules/tasks/task_import_batches.py"
-    },
-    {
-      "group": "lifecycle",
-      "target": "backend/app/modules/tasks/task_import_membership.py"
     },
     {
       "group": "auth",

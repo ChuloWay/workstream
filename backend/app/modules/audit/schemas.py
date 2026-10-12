@@ -41,7 +41,7 @@ _RESOURCE_TYPES = frozenset(
     project_guide_compilation_attempt project_guide_sufficiency_projection
     project_submission_artifact_policy_projection project_guide_setup_finalization
     project_guide_compilation_review_package project_guide_compilation_correction
-    project_post_submit_checker_policy_mutation external_checker_registry_entry task_import_source task_import_batch""".split()
+    project_post_submit_checker_policy_mutation external_checker_registry_entry task_import_source""".split()
 )
 _UUID_TARGET_KINDS = frozenset(
     {
@@ -53,7 +53,6 @@ _UUID_TARGET_KINDS = frozenset(
         "project_role_grant",
         "external_checker_registry_entry",
         "task_import_source",
-        "task_import_batch",
     }
 )
 _TARGET_REF_KINDS = _UUID_TARGET_KINDS | {"project"}
@@ -368,7 +367,7 @@ class LifecycleAuditEventInput(BaseModel):
     event_type: LifecycleAuditEventType
     actor_id: UUID
     reason: LifecycleAuditReason
-    source_type: Literal["manual", "markdown_import", "csv_import", "json_import"] | None = None
+    source_type: Literal["manual", "markdown_import", "csv_import"] | None = None
     locked_lineage: dict[str, object] | None = None
     task_reason: Annotated[str, Field(min_length=1, max_length=1000)] | None = None
     from_status: Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")] | None = None

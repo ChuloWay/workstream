@@ -21,11 +21,9 @@ async def test_projection_reads_actual_immutable_source_and_complete_awards(
             await session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
             before = {table: await rows(session, table) for table in
                       ("contribution_records", "compensation_awards", "final_acceptances")}
-            page = await ContributionReadRepository(session, cursor_codec=None).read(ContributionReadRequest(
+            record, = await ContributionReadRepository(session).read(ContributionReadRequest(
                 audience="self", actor_profile_id=h.actor_context.actor_profile_id,
             ))
-            record, = page.records
-            assert page.next_cursor is None
             assert record.id == h.submitter_record.id
             assert record.source_final_acceptance_id == h.acceptance.id
             assert {definition.instrument for definition in record.award_definitions} == set(instruments)

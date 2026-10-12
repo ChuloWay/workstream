@@ -3,7 +3,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends
 from pydantic import AwareDatetime, ValidationError
 
 from app.api.deps.contribution_exports import (
@@ -14,25 +14,16 @@ from app.modules.contributions.api.records import ContributionExportResponse, Co
 
 router = APIRouter(tags=["contributions"])
 _ERRORS = {status: {"model": ApiErrorResponse} for status in (404, 422, 503)}
-_CSV = {"200": {
-    "content": {"text/csv": {"schema": {"type": "string"}}},
-    "headers": {
-        "X-Workstream-Exported-At": {"description": "CSV original export instant, identical on every page",
-                                    "schema": {"type": "string", "format": "date-time"}},
-        "X-Workstream-Next-Cursor": {"description": "CSV continuation; absent on the final page",
-                                    "schema": {"type": "string", "maxLength": 4096}},
-    },
-}}
+_CSV = {"200": {"content": {"text/csv": {"schema": {"type": "string"}}}}}
 
 
-def _selected(context, audience, project_id, output_format, contribution_type, recorded_from, recorded_before,
-              page_size, cursor):
+def _selected(context, audience, project_id, output_format, contribution_type, recorded_from, recorded_before):
     """Bind self actor on the server and reject inverted/naive recorded-time filters."""
     try:
         return ContributionReadRequest(
             audience=audience, actor_profile_id=context.actor_profile_id, project_id=project_id,
             output_format=output_format, contribution_type=contribution_type,
-            recorded_from=recorded_from, recorded_before=recorded_before, page_size=page_size, cursor=cursor,
+            recorded_from=recorded_from, recorded_before=recorded_before,
         )
     except ValidationError as exc:
         raise StructuredHTTPException(status_code=422, detail="contribution_export_invalid",
@@ -47,13 +38,10 @@ async def read_own_contributions(
     project_id: UUID | None = None, format: Literal["json", "csv"] = "json",
     contribution_type: Literal["accepted_submission", "completed_review"] | None = None,
     recorded_from: AwareDatetime | None = None, recorded_before: AwareDatetime | None = None,
-    page_size: Annotated[int, Query(ge=1, le=1000)] = 100,
-    cursor: Annotated[str | None, Query(min_length=1, max_length=4096,
-                                       pattern=r"^[A-Za-z0-9_-]+$")] = None,
 ):
-    """Return one authorized page of a fixed own-contribution selection."""
+    """Return all selected own records, refusing over 1000 instead of truncating."""
     return await contribution_export_response(context, _selected(
-        context, "self", project_id, format, contribution_type, recorded_from, recorded_before, page_size, cursor,
+        context, "self", project_id, format, contribution_type, recorded_from, recorded_before,
     ))
 
 
@@ -65,11 +53,8 @@ async def export_project_contributions(
     format: Literal["json", "csv"] = "json",
     contribution_type: Literal["accepted_submission", "completed_review"] | None = None,
     recorded_from: AwareDatetime | None = None, recorded_before: AwareDatetime | None = None,
-    page_size: Annotated[int, Query(ge=1, le=1000)] = 100,
-    cursor: Annotated[str | None, Query(min_length=1, max_length=4096,
-                                       pattern=r"^[A-Za-z0-9_-]+$")] = None,
 ):
     """Export one project for covering PM or exact-project Finance authority."""
     return await contribution_export_response(context, _selected(
-        context, "project", project_id, format, contribution_type, recorded_from, recorded_before, page_size, cursor,
+        context, "project", project_id, format, contribution_type, recorded_from, recorded_before,
     ))

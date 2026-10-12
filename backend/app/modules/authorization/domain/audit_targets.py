@@ -15,7 +15,7 @@ from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS, SUBMISSION_POLICY_MUTATIONS,
 )
 from app.modules.authorization.domain.project_create import ProjectCreateResourceContext
-from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext, TaskImportBatchResourceContext
+from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext
 from app.modules.authorization.domain.task_queues import QueueReadResourceContext
 from app.modules.authorization.domain.submission_history import HistoryReadResourceContext
 
@@ -55,9 +55,6 @@ def project_authority_audit_target(
 
     if type(resource) is ReviewLifecycleActivationContract:
         return None, resource.resource_type, str(resource.resource_id), "joint_lifecycle_control", str(resource.resource_id)
-    if type(resource) is TaskImportBatchResourceContext:
-        return (str(resource.scope_project_id), resource.resource_type, str(resource.resource_id),
-                resource.resource_type, str(resource.resource_id))
     if type(resource) is ContributionProjectReadResourceContext:
         if matched_scope_project_id != resource.scope_project_id:
             return None

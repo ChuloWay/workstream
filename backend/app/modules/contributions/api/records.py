@@ -16,12 +16,8 @@ class ContributionExportUnavailable(RuntimeError):
     """Canonical evidence or exact current read authority cannot be established."""
 
 
-class InvalidContributionCursor(ValueError):
-    """Signed continuation is malformed, expired or belongs to another query."""
-
-
 class ContributionExportTooLarge(ValueError):
-    """The complete selection exceeds the membership bound; no partial export is valid."""
+    """The complete selection exceeds the fixed limit; no partial export is valid."""
 
 
 class ContributionReadDenied(RuntimeError):
@@ -39,8 +35,6 @@ class ContributionReadRequest(BaseModel):
     contribution_type: ContributionType | None = None
     recorded_from: AwareDatetime | None = None
     recorded_before: AwareDatetime | None = None
-    page_size: int = Field(default=100, ge=1, le=MAX_EXPORT_CONTRIBUTIONS)
-    cursor: str | None = Field(default=None, min_length=1, max_length=4096, pattern=r"^[A-Za-z0-9_-]+$")
 
     @field_validator("recorded_from", "recorded_before")
     @classmethod
@@ -138,16 +132,15 @@ class ContributionRecordView(BaseModel):
 
 
 class ContributionExportResponse(BaseModel):
-    """One bounded fixed-membership page from a fresh authorized read transaction."""
+    """The complete bounded selection from one repeatable-read request transaction."""
 
     model_config = _STRICT
     exported_at: AwareDatetime
-    next_cursor: str | None = Field(default=None, min_length=1, max_length=4096, pattern=r"^[A-Za-z0-9_-]+$")
     items: tuple[ContributionRecordView, ...] = Field(max_length=MAX_EXPORT_CONTRIBUTIONS)
 
     @model_validator(mode="after")
     def validate_unique_order(self) -> Self:
-        """Stable key order is required for traversal and conveys no business commit order."""
+        """Stable display order does not claim a cursor or business commit order."""
         keys = [(item.recorded_at, item.contribution_id) for item in self.items]
         if keys != sorted(keys) or len({item.contribution_id for item in self.items}) != len(keys):
             raise ValueError("contribution export order or identity differs")

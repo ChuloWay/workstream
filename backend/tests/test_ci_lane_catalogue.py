@@ -44,7 +44,6 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
 
 def test_checker_delivery_and_routing_preparation_partition_every_node_once() -> None:
     delivery = {
-        "tests/authorization/pre_submit/test_contracts.py",
         "tests/checkers/default/test_contract.py",
         "tests/checkers/default/test_execution.py",
         "tests/checkers/external/test_contracts.py",
@@ -52,6 +51,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/external/test_postgresql.py",
         "tests/checkers/external/test_registry.py",
         "tests/checkers/external/test_runtime.py",
+        "tests/checkers/execution/test_results.py",
         "tests/checkers/external/test_policy.py",
         "tests/checkers/external/test_selected_post_submit.py",
         "tests/checkers/external/test_selected_pre_submit.py",
@@ -129,15 +129,12 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         | {
             "tests/contributions/test_export_csv.py",
             "tests/contributions/test_export_projection.py",
-            "tests/contributions/test_export_cursors.py",
-            "tests/contributions/test_export_model_registry.py",
             "tests/authorization/test_contribution_read_scope.py",
             "tests/authorization/test_contribution_read_kernel.py",
             "tests/contributions/exports/test_source_reads.py",
             "tests/contributions/exports/test_public_reads.py",
             "tests/contributions/exports/test_failures.py",
             "tests/contributions/exports/test_concurrency.py",
-            "tests/contributions/exports/test_pagination.py",
             "tests/tasks/evaluation_delivery/test_custody.py",
             "tests/tasks/evaluation_delivery/test_delivery.py",
             "tests/tasks/evaluation_delivery/test_isolation.py",
@@ -317,11 +314,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_public_queues.py",
             "tests/tasks/test_locked_compensation.py",
             "tests/tasks/test_task_import_contract.py",
-            "tests/tasks/test_task_batch_transition_contract.py",
-            "tests/tasks/test_task_batch_transitions.py",
-            "tests/tasks/test_task_import_batch_contract.py",
-            "tests/tasks/test_task_import_batch_bindings.py",
-            "tests/tasks/test_task_import_batches.py",
             "tests/authorization/task_queues/test_authority.py",
             "tests/authorization/task_queues/test_contracts.py",
             "tests/authorization/task_queues/test_transactions.py",
@@ -374,7 +366,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
     assert "tests/tasks/evaluation_delivery/test_worker_materialization.py" in shared_a
     assert "tests/artifacts/test_review_packet_contract.py" in shared_a
-    assert "tests/authorization/task_authority/test_management_participants.py" in shared_a
     assert {
         "tests/test_task_import_sources.py",
         "tests/authorization/post_submit/test_atomicity.py",

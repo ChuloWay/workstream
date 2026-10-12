@@ -120,7 +120,7 @@ from app.modules.authorization.submission_preparation import (
     SubmissionBundlePreparationResourceContext,
 )
 from app.modules.authorization.domain.task_authority import (
-    TASK_ACTIONS, TASK_IMPORT_BATCH_ACTIONS, TaskAuthorityResourceContext, TaskImportBatchResourceContext, parse_task_authority_binding,
+    TASK_ACTIONS, TaskAuthorityResourceContext, parse_task_authority_binding,
 )
 from app.modules.authorization.domain.post_submit_routing import (
     ROUTE, PostSubmitRoutingResourceContext, post_submit_routing_prepare_matches,
@@ -203,7 +203,7 @@ class _PreparedAuthorizationBinding:
     post_submit_prepare_context: dict | None = None
     pre_submit_prepare_context: dict | None = None
     routing_request: TaskRoutingRequestFacts | None = None
-    task_authority_context: TaskAuthorityResourceContext | TaskImportBatchResourceContext | None = None
+    task_authority_context: TaskAuthorityResourceContext | None = None
     lifecycle_command: LifecycleTransitionCommand | None = None
     project_create_operation_id: UUID | None = None
     project_create_project_id: UUID | None = None
@@ -664,8 +664,8 @@ class PreparedAuthorizationService:
         """Consume one exact capability before evaluating and evidencing final facts."""
         issuance = self._live_issuance(handle)
         self._validate_consumption(issuance, expected_action_id, caller_input, final_resource_context)
-        if expected_action_id in TASK_ACTIONS | TASK_IMPORT_BATCH_ACTIONS and (
-            not isinstance(final_resource_context, (TaskAuthorityResourceContext, TaskImportBatchResourceContext))
+        if expected_action_id in TASK_ACTIONS and (
+            not isinstance(final_resource_context, TaskAuthorityResourceContext)
             or issuance.binding.task_authority_context != final_resource_context
         ):
             raise PreparedAuthorizationHandleInvalid("invalid prepared authorization handle")
@@ -974,7 +974,6 @@ class PreparedAuthorizationService:
             or GUIDE_PROPOSAL_RESOURCE_BY_ACTION.get(action_id)
             or COMPILATION_RESOURCE_BY_ACTION.get(action_id)
             or (TaskAuthorityResourceContext if action_id in TASK_ACTIONS else None)
-            or (TaskImportBatchResourceContext if action_id in TASK_IMPORT_BATCH_ACTIONS else None)
             or (TaskImportSourceResourceContext if action_id in TASK_IMPORT_SOURCE_ACTIONS else None)
         )
         if action_id in CONTRIBUTION_POLICY_MUTATION_ACTIONS and isinstance(resource, ContributionPolicyMutationResourceContext):

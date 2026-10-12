@@ -1737,12 +1737,3 @@ replay rechecks live authority and the complete original tuple without issuing
 another allow or repairing effects. B8 supplies hidden completion delivery;
 production registration remains unavailable. Human acceptance-source authority
 is still future work; detached human receipts grant nothing.
-
-
-PILOT-02B owns the distinct TASK actions `project.task.import` and
-`project.task.import_batch.read` under existing `project.task.manage`. They
-require an active human covering Project Manager grant and exact native batch,
-selected source, received-byte identity and original manifest facts. They do
-not enlarge the ART action custody table or grant screen/release authority.
-The [atomic import contract](spec_chunk_4_task_queue_assignment.md#atomic-json-to-draft-import-contract)
-separates immutable original creation facts from current member states.

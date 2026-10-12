@@ -1,5 +1,7 @@
 """One authorized canonical evidence projection shared by JSON and CSV."""
 
+from datetime import UTC, datetime
+
 from pydantic import ValidationError
 
 from app.modules.actors.api.contribution_labels import (
@@ -8,8 +10,9 @@ from app.modules.actors.api.contribution_labels import (
 from app.modules.compensation.api.award_reads import ContributionAwardReadPort
 from app.modules.compensation.api.awards import CompensationAwardFacts
 from app.modules.contributions.api.records import (
+    MAX_EXPORT_CONTRIBUTIONS,
     ContributionAwardView, ContributionExportResponse, ContributionExportTooLarge,
-    ContributionExportUnavailable, InvalidContributionCursor,
+    ContributionExportUnavailable,
     ContributionReadAuthorizationPort,
     ContributionReadRequest, ContributionRecordView,
 )
@@ -18,7 +21,7 @@ from app.modules.contributions.api.source_reads import (
     ContributionTaskSourceFacts, ContributionTaskSourceReadPort,
 )
 from app.modules.contributions.records.read_facts import (
-    ContributionReadFacts, ContributionReadPage, ContributionReadRepositoryPort,
+    ContributionReadFacts, ContributionReadRepositoryPort,
 )
 
 
@@ -53,10 +56,10 @@ class ContributionReadService:
         request = ContributionReadRequest.model_validate(request)
         await self._authorization.authorize(request)
         try:
-            page = ContributionReadPage.model_validate(await self._records.read(request))
-            records = tuple(ContributionReadFacts.model_validate(row) for row in page.records)
-            if len(records) > request.page_size:
-                raise ContributionExportUnavailable("Contribution page exceeds its authorized bound")
+            records = tuple(ContributionReadFacts.model_validate(row)
+                            for row in await self._records.read(request))
+            if len(records) > MAX_EXPORT_CONTRIBUTIONS:
+                raise ContributionExportTooLarge("Contribution export exceeds 1000 records; narrow the filters")
             for record in records:
                 self._require_selected(record, request)
             record_ids = {record.id for record in records}
@@ -93,8 +96,8 @@ class ContributionReadService:
                 actors[record.contributor_id],
                 acceptances.get((record.project_id, record.source_final_acceptance_id)),
             ) for record in records)
-            return ContributionExportResponse(exported_at=page.exported_at, items=items, next_cursor=page.next_cursor)
-        except (ContributionExportTooLarge, InvalidContributionCursor):
+            return ContributionExportResponse(exported_at=datetime.now(UTC), items=items)
+        except ContributionExportTooLarge:
             raise
         except (ValidationError, ValueError, TypeError) as exc:
             raise ContributionExportUnavailable("Contribution evidence unavailable") from exc

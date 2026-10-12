@@ -7,7 +7,7 @@ from uuid import UUID
 from app.modules.authorization.catalogue import ActionAvailability, ActionId
 from app.modules.authorization.schemas import AdminRole
 from app.modules.authorization.domain.task_authority import (
-    TASK_ACTIONS, TASK_IMPORT_BATCH_ACTIONS, TASK_PROJECT_ROLE_READ_ACTIONS, TASK_SUBMITTER_ACTIONS,
+    TASK_ACTIONS, TASK_PROJECT_ROLE_READ_ACTIONS, TASK_SUBMITTER_ACTIONS,
     evaluate_task_authority,
 )
 from app.modules.authorization.runtime import (
@@ -24,7 +24,7 @@ from app.modules.authorization.runtime import (
 PROJECT_SUBMITTER_ACTIONS = TASK_SUBMITTER_ACTIONS | {
     ActionId.ARTIFACT_SUBMISSION_BUNDLE_PREPARE, ActionId.SUBMISSION_CREATE,
 }
-PROJECT_AUTHORITY_ACTIONS = TASK_ACTIONS | TASK_IMPORT_BATCH_ACTIONS | PROJECT_SUBMITTER_ACTIONS | {
+PROJECT_AUTHORITY_ACTIONS = TASK_ACTIONS | PROJECT_SUBMITTER_ACTIONS | {
     ActionId.ARTIFACT_GUIDE_SOURCE_INGEST,
     ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE,
     ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
@@ -52,7 +52,7 @@ async def lock_project_authority(repository, context, scope, action, locked_cont
             ActionId.OPERATIONS_TASK_START_OVERRIDE, ActionId.OPERATIONS_TASK_LOCKED_CONTEXT_READ,
         },
         allowed_roles={
-            **{action: frozenset({AdminRole.PROJECT_MANAGER}) for action in TASK_IMPORT_SOURCE_ACTIONS | TASK_IMPORT_BATCH_ACTIONS},
+            **{action: frozenset({AdminRole.PROJECT_MANAGER}) for action in TASK_IMPORT_SOURCE_ACTIONS},
             ActionId.PROJECT_TASK_LOCKED_CONTEXT_READ: frozenset({AdminRole.PROJECT_MANAGER}),
             ActionId.OPERATIONS_TASK_LOCKED_CONTEXT_READ: frozenset({AdminRole.OPERATOR}),
             ActionId.AUDIT_TASK_LOCKED_CONTEXT_READ: frozenset({AdminRole.AUDIT_AUTHORITY}),
@@ -90,15 +90,13 @@ def evaluate_project_authority(action, context, authority, resource, lifecycle_d
     """Keep each resource guard distinct while sharing the closed dispatch boundary."""
     if action.action_id in TASK_ACTIONS:
         return evaluate_task_authority(action, context, authority, resource, lifecycle_denial)
-    if action.action_id in TASK_IMPORT_SOURCE_ACTIONS | TASK_IMPORT_BATCH_ACTIONS:
-        from app.modules.authorization.runtime import TaskImportSourceResourceContext, TaskImportBatchResourceContext
-        expected_resource = (TaskImportBatchResourceContext if action.action_id in TASK_IMPORT_BATCH_ACTIONS
-                             else TaskImportSourceResourceContext)
+    if action.action_id in TASK_IMPORT_SOURCE_ACTIONS:
+        from app.modules.authorization.runtime import TaskImportSourceResourceContext
         denial = lifecycle_denial
         if denial is None and action.availability is not ActionAvailability.ACTIVE:
             denial = AuthorizationDenialCode.ACTION_UNAVAILABLE
         if denial is None and (
-            type(resource) is not expected_resource
+            type(resource) is not TaskImportSourceResourceContext
             or resource.scope_project_id != authority.scope_project_id
             or resource.actor_profile_id != context.actor_profile_id
             or resource.identity_link_id != context.identity_link_id

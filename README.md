@@ -221,14 +221,6 @@ composition remain before public intake and the first real end-to-end drill.
 
 Active work stays on that first contribution path. Live human review/revision,
 reviewer participation and fulfillment delivery follow separately.
-Current human contributors can read their own contribution evidence at
-`GET /api/v1/actors/me/contributions`; covering Project Managers and exact-project
-Finance Authorities can export it at
-`GET /api/v1/projects/{project_id}/contributions/export`. JSON and CSV share
-complete exact award facts and signed, 15-minute fixed-membership pagination.
-Use the returned cursor with unchanged filters, format and page size; authorization
-is checked on every page. See the [contribution evidence contract](docs/spec_contribution_compensation.md#bounded-contribution-evidence-reads)
-for limits and continuation details. These are earned facts, not proof of payment.
 Contribution evidence remains the input for a separately implemented future
 reputation projection. Frontend product work follows stable and tested backend
 contracts for the surface it consumes.

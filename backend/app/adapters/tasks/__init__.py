@@ -165,58 +165,11 @@ def task_commands(
     )
 
 
-def task_import_batch_commands(
-    session: AsyncSession,
-    *,
-    authorization,
-    audit: TaskTransitionAuditPort,
-    actor_profile_id: UUID,
-    identity_link_id: UUID,
-    settings: Settings,
-    source,
-):
-    """Compose the batch root from canonical TASK commands and one ART source owner."""
-    from app.modules.tasks.task_import_batches import TaskImportBatchCommands
-
-    return TaskImportBatchCommands(
-        session,
-        actor_profile_id=actor_profile_id,
-        identity_link_id=identity_link_id,
-        authorization=authorization,
-        tasks=task_commands(
-            session,
-            authorization=authorization,
-            audit=audit,
-            actor_profile_id=actor_profile_id,
-            settings=settings,
-        ),
-        source=source,
-    )
-
-
 def contributor_task_repository(session: AsyncSession) -> TaskRepository:
     """Compose contributor reads with CON's bounded locked-terms public port."""
     from app.adapters.contributions import locked_compensation_terms_port
 
     return TaskRepository(session, compensation_terms=locked_compensation_terms_port(session))
-
-
-def task_batch_transition_commands(
-    session: AsyncSession,
-    *,
-    tasks: AuthorizedTaskCommands,
-    actor_profile_id: UUID,
-    identity_link_id: UUID,
-):
-    """Bind the batch root to the same canonical Task authority and participants."""
-    from app.modules.tasks.task_batch_transitions import TaskBatchTransitionCommands
-
-    return TaskBatchTransitionCommands(
-        session,
-        tasks=tasks,
-        actor_profile_id=actor_profile_id,
-        identity_link_id=identity_link_id,
-    )
 
 
 def task_submission_context_port(session: AsyncSession) -> TaskSubmissionContextPort:

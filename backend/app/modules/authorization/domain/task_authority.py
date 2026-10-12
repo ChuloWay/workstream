@@ -33,7 +33,6 @@ TASK_PROJECT_ROLE_ACTIONS = TASK_SUBMITTER_ACTIONS | TASK_PROJECT_ROLE_READ_ACTI
 TASK_MANAGER_ACTIONS = frozenset({
     ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,
 })
-TASK_IMPORT_BATCH_ACTIONS = frozenset({ActionId.PROJECT_TASK_IMPORT, ActionId.PROJECT_TASK_IMPORT_BATCH_READ})
 TASK_ACTIONS = TASK_PROJECT_ROLE_ACTIONS | TASK_MANAGER_ACTIONS | TASK_MANAGER_READ_ACTIONS | TASK_LOCKED_CONTEXT_READ_ACTIONS | {
     ActionId.OPERATIONS_TASK_START_OVERRIDE,
     ActionId.AUDIT_TASK_EVIDENCE_READ,
@@ -61,36 +60,15 @@ class TaskAuthorityResourceContext(BaseModel):
     replay_command_id: UUID | None = None
 
 
-class TaskImportBatchResourceContext(BaseModel):
-    """Exact native batch, selected byte ancestry and original manifest under fresh PM authority."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    resource_type: Literal["task_import_batch"] = "task_import_batch"
-    resource_id: UUID
-    scope_project_id: UUID
-    source_id: UUID
-    actor_profile_id: UUID
-    identity_link_id: UUID
-    sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    byte_count: int = Field(ge=1, le=8388608)
-    row_count: int = Field(ge=1, le=500)
-    manifest_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    source_binding_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-    idempotency_key: UUID
-    request_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
-
-
 def parse_task_authority_binding(
     action: ActionId, request: Mapping[str, object], invalid_error: type[Exception],
     idempotency_key: UUID,
-) -> TaskAuthorityResourceContext | TaskImportBatchResourceContext | None:
+) -> TaskAuthorityResourceContext | None:
     """Keep the complete task commitment typed and immutable through consumption."""
-    if action not in TASK_ACTIONS | TASK_IMPORT_BATCH_ACTIONS:
+    if action not in TASK_ACTIONS:
         return None
     try:
-        model = TaskImportBatchResourceContext if action in TASK_IMPORT_BATCH_ACTIONS else TaskAuthorityResourceContext
-        resource = model.model_validate_json(json.dumps(dict(request)))
+        resource = TaskAuthorityResourceContext.model_validate_json(json.dumps(dict(request)))
         if resource.idempotency_key is not None and resource.idempotency_key != idempotency_key:
             raise ValueError("task key differs from prepared binding")
         return resource

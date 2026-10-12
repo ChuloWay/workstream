@@ -11,9 +11,9 @@ from app.modules.actors.api.contribution_labels import ContributionActorLabel
 from app.modules.compensation.api.awards import CompensationAwardFacts
 from app.modules.compensation.api.instruments import CompensationInstrumentType
 from app.modules.contributions.api.records import (
-    ContributionExportTooLarge, ContributionExportUnavailable, ContributionReadRequest, InvalidContributionCursor,
+    ContributionExportTooLarge, ContributionExportUnavailable, ContributionReadRequest,
 )
-from app.modules.contributions.records.read_facts import ContributionReadFacts, ContributionReadPage, FrozenContributionAward
+from app.modules.contributions.records.read_facts import ContributionReadFacts, FrozenContributionAward
 from app.modules.contributions.records.read_service import ContributionReadService
 from app.modules.contributions.api.source_reads import (
     ContributionAcceptanceSourceFacts, ContributionTaskSourceFacts,
@@ -64,7 +64,7 @@ class Ports:
 
     async def read(self, request):
         assert self.authorized, "owner load preceded authority"
-        return ContributionReadPage(records=(self.value.record,), exported_at=TIME)
+        return (self.value.record,)
 
     async def read_contribution_awards(self, selected):
         assert selected == (self.value.record.id,)
@@ -158,15 +158,13 @@ async def test_faulty_over_limit_loader_cannot_start_owner_projections():
     class OverLimit(Ports):
         async def read(self, request):
             assert self.authorized
-            return ContributionReadPage(records=(self.value.record,), exported_at=TIME).model_copy(
-                update={"records": tuple(self.value.record.model_copy(update={"id": new_record_id()})
-                                         for _ in range(1001))},
-            )
+            return tuple(self.value.record.model_copy(update={"id": new_record_id()})
+                         for _ in range(1001))
 
         async def read_contribution_awards(self, selected):
             pytest.fail("over-limit loader started owner projections")
 
-    with pytest.raises(ContributionExportUnavailable):
+    with pytest.raises(ContributionExportTooLarge):
         await service(OverLimit(value)).read(request(value))
 
 
@@ -225,47 +223,3 @@ async def test_human_acceptance_review_reference_does_not_replace_contribution_s
     assert item.acceptance_review_id == review_id
     assert item.source_review_id is item.source_review_lease_id is None
     assert item.source_final_acceptance_id == value.acceptance.id
-
-
-async def test_projection_preserves_original_export_time_and_next_cursor():
-    value = facts()
-
-    class Continued(Ports):
-        async def read(self, request):
-            assert self.authorized
-            return ContributionReadPage(records=(self.value.record,), exported_at=TIME,
-                                        next_cursor="signed_continuation")
-
-    response = await service(Continued(value)).read(request(value))
-    assert response.exported_at == TIME
-    assert response.next_cursor == "signed_continuation"
-
-
-async def test_page_size_refusal_precedes_loading_other_owners():
-    value = facts()
-
-    class FaultyPage(Ports):
-        async def read(self, request):
-            assert self.authorized
-            return ContributionReadPage(records=(self.value.record, self.value.record), exported_at=TIME)
-
-        async def read_contribution_awards(self, selected):
-            pytest.fail("faulty oversized page loaded other owner facts")
-
-    with pytest.raises(ContributionExportUnavailable):
-        await service(FaultyPage(value)).read(request(value).model_copy(update={"page_size": 1}))
-
-
-async def test_invalid_cursor_refusal_reaches_public_boundary_without_owner_projections():
-    value = facts()
-
-    class InvalidCursor(Ports):
-        async def read(self, request):
-            assert self.authorized
-            raise InvalidContributionCursor("Invalid contribution export cursor")
-
-        async def read_contribution_awards(self, selected):
-            pytest.fail("invalid cursor loaded award evidence")
-
-    with pytest.raises(InvalidContributionCursor):
-        await service(InvalidCursor(value)).read(request(value))

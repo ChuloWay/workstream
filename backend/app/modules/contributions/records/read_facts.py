@@ -44,18 +44,9 @@ class ContributionReadFacts(ContributionRecordInput):
         return self
 
 
-class ContributionReadPage(BaseModel):
-    """One complete page with its original export instant and verified continuation."""
-
-    model_config = _STRICT
-    records: tuple[ContributionReadFacts, ...] = Field(max_length=1000)
-    exported_at: AwareDatetime
-    next_cursor: str | None = None
-
-
 class ContributionReadRepositoryPort(Protocol):
-    """Load a bounded page from one fixed selection; never silently truncate."""
+    """Load at most the complete fixed-limit set; never silently truncate."""
 
-    async def read(self, request: ContributionReadRequest) -> ContributionReadPage:
-        """Pre-filter before membership capture and load only the selected page."""
+    async def read(self, request: ContributionReadRequest) -> tuple[ContributionReadFacts, ...]:
+        """Pre-filter audience/project/date/type before the over-limit probe."""
         ...

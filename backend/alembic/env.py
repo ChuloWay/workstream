@@ -87,9 +87,6 @@ def do_run_migrations(connection: Connection) -> None:
             ("0031_task_import_source",),
             ("0032_checker_remediation",),
             ("0033_contribution_reads",),
-            ("0034_task_import_batches",),
-            ("0035_task_batch_transitions",),
-            ("0036_contribution_export_pages",),
             (_CURRENT_HEAD_REVISION,),
         ):
             raise RuntimeError(_RECREATE_GUIDANCE)

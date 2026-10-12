@@ -92,78 +92,12 @@ locked guide/policy identities, creator identity or server provenance fields.
 PILOT-02A supplies usable authorized declaration, upload, status and verified
 download through the [ART source custody contract](spec_artifact_storage_service.md#task-import-source-custody).
 These operations create no Tasks. Failed or abandoned declarations remain
-retained source records with no batch/task success claim. The separate atomic JSON-to-DRAFT import contract is below. Source custody alone
-still supplies no batch screen/release or CLI conversion.
-
-### Atomic JSON-to-DRAFT import contract
-
-`POST /api/v1/projects/{project_id}/task-import-batches` accepts only a native
-`source_id` and the shared UUID `Idempotency-Key`. A covered Project Manager's
-first import reads and verifies actual provider bytes, parses the retained JSON,
-then creates one immutable native batch and every DRAFT Task in one root. Each
-row uses the normal authorized Task creation and `TaskCreated` evidence; a
-later row, audit, binding or uniqueness failure rolls back the complete batch.
-Case-sensitive project/external-ID uniqueness covers all non-NULL Task external
-IDs, including normal creation. Existing arbitrary `import_batch_id` strings
-remain metadata; only immutable native membership supplies batch custody.
-
-The server stamps `json_import`, `task-import-source:<source UUID>`, the actual
-received-file SHA and the native batch UUID spelling. Normal manual TaskCreate
-cannot select `json_import`; row input cannot supply these labels or other
-provenance. Published difficulty values through 80 characters are preserved.
-The response retains original document order, optional display label and original
-Task creation facts; it does not transition or assign any Task.
-
-After commit, same-key replay and a new key selecting the same actual project/
-SHA/byte-count recover the original batch and Task IDs after fresh batch/source
-authority, even after Tasks advance. This recovery uses immutable native
-source/verification/acknowledgement receipts and performs no provider read or
-reparsing. A different source needs its own actual verified receipt; a claimed
-SHA alone cannot recover. Reusing the original key with a changed source selector
-conflicts even if both verified sources contain identical bytes.
-
-`GET /api/v1/projects/{project_id}/task-import-batches/{batch_id}` returns original
-creation facts separately from current states selected by ordered native
-membership. Missing, foreign and revoked status access is concealed. The bounded
-implementation and required native proof are recorded in the
-[atomic-import change record](../.commitrail/changes/pilot02-atomic-json-draft-import.md).
-
-### Explicit whole-batch screening and release contract
-
-Separate `POST /api/v1/projects/{project_id}/task-import-batches/{batch_id}/screen`
-and `/release` accept a reason and exactly one UUID `Idempotency-Key`. SCREEN
-permits an omitted reason; RELEASE requires the normal nonblank decision reason.
-Both operate on the complete immutable native import membership, preserving
-original row order. Arbitrary `Task.import_batch_id` metadata cannot select
-members. Each actual Task consumes fresh covered-PM authority through the normal
-SCREEN/RELEASE owner, with all Task/assignment custody locked before authority
-and guide/policy evaluation. One caller transaction commits every member's normal
-transition, guide/policy locks, authority evidence and success receipt together;
-a late failure rolls back the complete successful effect set.
-
-The compact response identifies project, native batch, operation and row count,
-then returns every ordered Task ID, row index, poststate, locked guide version,
-locked ContributionPolicyVersion ID and locked context hash. It repeats no Task
-instructions. SCREEN returns `screening`; RELEASE returns `ready`. The server
-records a separate aggregate retry namespace and retained canonical per-Task
-keys; callers cannot choose those row keys or attach old standalone successes.
-
-Same-key replay reauthorizes every current member and recovers the exact recorded
-response only while all Tasks retain their corresponding poststate, unassigned
-custody and locked context. A partially advanced or assigned member refuses the
-whole operation, as does a changed reason, selector or member set. This differs
-from import replay, which recovers original DRAFT creation facts after Tasks
-advance. An uncertain client write requires manual replay of the unchanged
-project, batch, operation, reason and key; later authority or Task changes may
-prevent recovery. There are no automatic write retries or per-row commits.
-
-The CLI keeps local CSV conversion, source declaration/upload/status, import,
-batch status, screening and release explicit. UTF-8 quoted CSV and semicolon skill
-fields produce validated canonical JSON; its exact bytes supply the uploaded
-SHA/count. The server retains those JSON bytes, with no claim to retaining the
-original CSV. Native aggregate DDL and the public 200/500-member journey remain
-pending in the [bulk/CLI change record](../.commitrail/changes/pilot02-bulk-transitions-cli.md);
-this contract does not establish delivered bulk readiness.
+retained source records with no batch/task success claim. A later bounded
+PILOT-02 operation must import a verified source into DRAFT atomically, enforce
+project/external-ID uniqueness and replay/conflict rules, and bind exact ART
+and AUTH custody. Explicit screen and release, their existing locked-guide
+prerequisites and normal transitions remain unchanged. No public batch import,
+batch screen/release or CLI conversion is delivered by source custody alone.
 
 ## Transitions and locked lineage
 

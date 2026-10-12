@@ -88,10 +88,6 @@ from app.modules.tasks.models import (  # noqa: F401
     TaskAssignment,
     WorkstreamTask,
 )
-from app.modules.tasks.task_batch_transition.models import (  # noqa: F401
-    TaskBatchTransitionMember,
-    TaskBatchTransitionReceipt,
-)
 from app.modules.tasks.post_submit_routing.models import (  # noqa: F401
     TaskPostSubmitRoutingManifest,
     TaskRoutingRequest,
