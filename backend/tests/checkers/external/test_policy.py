@@ -355,3 +355,28 @@ async def test_policy_compilation_refuses_unrunnable_post_images(aggregate: bool
         entries.append(_entry("acme.quality_review", "post_submit", deadline_ms=3_600_000))
     with pytest.raises(ValueError, match="durable worker deadline"):
         await compile_external_checker_policies(proposal, _Registry(entries))
+
+
+@pytest.mark.asyncio
+async def test_policy_compilation_refuses_pre_images_exceeding_platform_custody():
+    proposal = _proposal()
+    binding = proposal.pre_submit_bindings[0]
+    requirement = proposal.requirements[0]
+    proposal = proposal.model_copy(update={
+        "requirements": proposal.requirements + (
+            requirement.model_copy(update={"requirement_id": "secondary_archive"}),
+        ),
+        "pre_submit_bindings": proposal.pre_submit_bindings + (
+            binding.model_copy(update={
+                "requirement_id": "secondary_archive",
+                "capability_id": "acme.secondary_archive",
+            }),
+        ),
+    })
+    entries = [
+        _entry("acme.safe_archive", "pre_submit", deadline_ms=3_600_000),
+        _entry("acme.secondary_archive", "pre_submit", deadline_ms=3_600_000),
+        _entry("acme.quality_review", "post_submit"),
+    ]
+    with pytest.raises(ValueError, match="ART custody deadline"):
+        await compile_external_checker_policies(proposal, _Registry(entries))

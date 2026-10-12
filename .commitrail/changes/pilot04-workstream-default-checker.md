@@ -374,3 +374,14 @@ checker entry via the public registry reader, asserting the full spec digest;
 otherwise they publish through real Operator authority. They do not duplicate
 registrations or bypass registry custody. Selected replacement test substitutions
 normalize a native cause UUID at the typed fixture boundary.
+
+Static selected policy budgets are validated before compilation and approval.
+POST rejects both a single excessive image and an excessive aggregate; PRE
+rejects aggregate work beyond the platform custody ceiling. Lower deployment
+limits still produce a recoverable infrastructure refusal at runtime. Focused
+policy, outbox and transport verification passed 56 tests in the local locked
+environment; this is not final-head full-suite CI evidence. Native 434b9e0d3
+passed replacement replay, unknown registration and automatic acceptance; its
+two cause guards stopped at a native UUID fixture boundary. Normalize that
+fixture identifier only, preserving the strict production registry reader.
+Database, role and MinIO cleanup completed; cause-guard rerun remains pending.

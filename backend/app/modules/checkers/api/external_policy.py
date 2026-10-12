@@ -100,6 +100,9 @@ class LockedExternalPreSubmitPolicy(_PolicyValue):
             self.model_dump(mode="json", exclude={"policy_sha256"})
         ):
             raise ExternalCheckerPolicyError("pre-submit policy digest mismatch")
+        selected_pre_submit_execution_budget_ms(
+            self, artifact_deadline_ms=MAXIMUM_SELECTED_PRE_EXECUTION_BUDGET_MS
+        )
         return self
 
 
