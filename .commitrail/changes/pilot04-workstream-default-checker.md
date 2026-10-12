@@ -955,3 +955,20 @@ author supplied the exact policy identity guard; the controls now pin its
 `checker terminal selected policy differs` message and SQLSTATE `23514`, not an
 unrelated integrity error. Affected native replay follows that frozen DDL; the
 original failed evidence is retained.
+
+### Current external-policy and normalized-verdict consumers
+
+Lead/QA handoff permits current caller changes in
+`backend/tests/projects/post_submit_fixtures.py`, actual test bodies only in
+`backend/tests/test_tasks.py`, `backend/tests/authorization/task_authority/test_submission_policy.py`,
+`backend/tests/tasks/test_project_display.py`, `backend/tests/tasks/test_locked_context.py`,
+`backend/tests/authorization/submission_history/{test_reads,test_privacy}.py` and
+`backend/tests/test_review_queue_persistence.py`. QA owns producer/helper definitions
+and the registry-before-activation bootstrap. Use explicit approved image specs
+for work-failing/member-visible fixtures and normalized passed/failed verdicts;
+never translate old built-in names or create failed evidence under an empty policy.
+Remove only obsolete platform catalogue assertions, retaining exact locked policy
+identity, corrupted-read refusal, zero effects, privacy, parent isolation, stable
+successor display and current generation guards. Current registered capabilities
+replace old catalogue labels in summaries. No source, migration, CI, cap or skip
+changes are authorized. Native verification follows combined QA producer freeze.

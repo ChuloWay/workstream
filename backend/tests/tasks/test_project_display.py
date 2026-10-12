@@ -17,6 +17,7 @@ from app.modules.projects.models import Project, ProjectGuide, PostSubmitChecker
 from app.modules.tasks.models import AuditEvent, WorkstreamTask
 from tests.authorization.task_locked_context.support import KINDS, path, grant_development_context_roles
 from tests.projects.locked_policy_fixtures import activated_context, frozen_request
+from tests.checkers.external.support import post_registry_spec
 from tests.test_tasks import (
     task_database_env as task_database_env,
     task_client as task_client,
@@ -223,7 +224,7 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
     await create_policy_bundle_for_guide(
         task_client, project["id"], successor.json()["id"],
         task_artifact_proposal().model_copy(update={"required_artifacts": ("v2-answer.md",)}),
-        post_submit_required_checkers=["check_acceptance_criteria_present"],
+        post_submit_registry_spec=post_registry_spec(),
     )
     await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(), project_id=project["id"], guide_id=successor.json()["id"],
@@ -239,9 +240,8 @@ async def test_task_display_survives_guide_successor_for_contributor_and_manager
             PostSubmitCheckerPolicy.project_id == project["id"],
             PostSubmitCheckerPolicy.guide_id == active.id,
         ))
-        required = [entry["checker_id"] for entry in successor_policy.policy_body["entries"]
-                    if entry["classification"] == "project_required"]
-        assert required == ["check_acceptance_criteria_present"]
+        required = [entry["registry"]["capability_id"] for entry in successor_policy.policy_body["entries"]]
+        assert required == [post_registry_spec().capability_id]
         assert required != original_summary["required_checkers"]
         effective = await session.scalar(select(EffectiveProjectSubmissionArtifactPolicy).where(
             EffectiveProjectSubmissionArtifactPolicy.guide_id == active.id,

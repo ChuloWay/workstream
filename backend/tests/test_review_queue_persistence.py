@@ -32,6 +32,7 @@ from app.modules.reviews.schemas import (
 )
 from app.modules.tasks.models import Submission
 from project_create_fixtures import grant_system_project_manager, insert_historical_project
+from tests.checkers.external.support import post_registry_spec
 from tests.submission_fixtures import seed_retained_submission, seed_retained_checker_run
 from tests.test_tasks import (
     auth_headers,
@@ -87,7 +88,7 @@ async def _reviewable_lineage(
     monkeypatch: pytest.MonkeyPatch,
     *, checker_status: str = "completed",
 ) -> tuple[dict, dict, dict]:
-    project = await create_active_project(client)
+    project = await create_active_project(client, post_submit_registry_spec=post_registry_spec())
     task = await create_started_task(
         client,
         project["id"],
@@ -370,11 +371,11 @@ async def test_database_rejects_non_admissible_checker_and_project_mismatch(
     original_run = submission["checker_run_id"]
     # Each state rejection uses the current generation. Supersession separately
     # tests an otherwise admissible completed/allow_review predecessor.
-    for generation, state, failures in (
-        (2, "running", ()), (3, "completed", ("check_submission_packet",)),
+    for generation, state, verdict in (
+        (2, "running", "passed"), (3, "completed", "failed"),
     ):
         current = await seed_retained_checker_run(submission["id"], state=state,
-                                                 failures=failures, generation=generation)
+                                                 verdict=verdict, generation=generation)
         invalid = submission | {"checker_run_id": current}
         async with db_session.get_session_factory()() as session:
             session.add(ReviewQueueEntry(**_queue_input(project, task, invalid).model_dump()))

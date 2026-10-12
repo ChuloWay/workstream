@@ -307,18 +307,5 @@ async def test_submission_rejects_crossed_post_submit_policy_sidecar(
     assert task.status == "in_progress"
     assert submissions == []
     assert task.locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in [
-        entry["checker_id"]
-        for entry in locked_body["entries"]
-        if entry["classification"] == "project_required"
-    ]
-    assert "check_acceptance_criteria_present" not in [
-        entry["checker_id"] for entry in locked_body["entries"]
-    ]
-    assert "check_required_files" in [
-        entry["checker_id"]
-        for entry in locked_body["entries"]
-        if entry["classification"] == "platform_default"
-    ]
-    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
+
     assert checker_runs == []

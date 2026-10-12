@@ -1528,20 +1528,7 @@ async def test_release_rejects_crossed_post_submit_policy_sidecar(
     assert persisted_task is not None
     assert persisted_task.status == "screening"
     assert persisted_task.locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in [
-        entry["checker_id"]
-        for entry in locked_body["entries"]
-        if entry["classification"] == "project_required"
-    ]
-    assert "check_acceptance_criteria_present" not in [
-        entry["checker_id"] for entry in locked_body["entries"]
-    ]
-    assert "check_required_files" in [
-        entry["checker_id"]
-        for entry in locked_body["entries"]
-        if entry["classification"] == "platform_default"
-    ]
-    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
+
 
 
 async def test_worker_task_response_redacts_locked_policy_hashes(
@@ -2434,7 +2421,8 @@ async def test_retained_submission_versions_are_readable_without_exposing_packet
     task_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project = await create_active_project(task_client)
+    from tests.checkers.external.support import post_registry_spec
+    project = await create_active_project(task_client, post_submit_registry_spec=post_registry_spec())
     started_task = await create_started_task(task_client, project["id"], monkeypatch)
     v1_payload = complete_submission_payload()
     v1_id = await seed_retained_submission(
@@ -2543,7 +2531,8 @@ async def test_retained_version_read_does_not_rewrite_prior_finalized_packet(
     task_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project = await create_active_project(task_client)
+    from tests.checkers.external.support import post_registry_spec
+    project = await create_active_project(task_client, post_submit_registry_spec=post_registry_spec())
     started_task = await create_started_task(task_client, project["id"], monkeypatch)
     v1_payload = complete_submission_payload()
     v1_id = await seed_retained_submission(
