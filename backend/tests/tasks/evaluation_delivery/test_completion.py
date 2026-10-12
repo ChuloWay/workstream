@@ -183,6 +183,14 @@ async def test_production_registry_delivers_request_then_completion_exactly_once
     ) as h:
         await provision_router(h.factory)
         await delivery_fixture(h)
+        # This fixture has no external POST bindings; use the real configured
+        # adapter without requiring an unused service to run. Actual image
+        # execution is covered by the production Rust/MinIO probe.
+        settings = h.settings.model_copy(update={
+            "external_checker_service_socket": tmp_path / "checker.sock",
+            "external_checker_material_root": h.scratch,
+        })
+        monkeypatch.setattr("app.core.config.get_settings", lambda: settings)
         monkeypatch.setattr(
             artifact_adapters,
             "worker_post_submission_materialization",
@@ -199,7 +207,7 @@ async def test_production_registry_delivers_request_then_completion_exactly_once
             h.request.project_id,
             "production-request",
         )
-        assert outcome(request_receipt)["delivery_state"] == "acknowledged"
+        assert outcome(request_receipt)["delivery_state"] == "acknowledged", outcome(request_receipt)
         completed = await state(h)
         assert completed["run"]["status"] == "completed"
         completion_event_id = completed["run"]["completion_event_id"]

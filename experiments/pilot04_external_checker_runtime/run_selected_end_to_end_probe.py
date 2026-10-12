@@ -12,6 +12,7 @@ import tempfile
 from io import BytesIO
 from types import SimpleNamespace
 from uuid import UUID
+from unittest.mock import patch
 from zipfile import ZipFile, ZipInfo
 
 from aiobotocore.config import AioConfig
@@ -25,6 +26,8 @@ from app.adapters.artifacts import (
     get_submission_bundle_preparation_command,
 )
 from app.adapters.checkers import external_checker_execution_factory
+from app.adapters.outbox import production_outbox_delivery
+from app.adapters.artifacts.internal_workers import shutdown_artifact_internal_runtime
 from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
 from app.modules.actors.api.service_identities import ServiceIdentity
@@ -50,7 +53,10 @@ from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.models import Submission, SubmissionDispatch, WorkstreamTask
 from experiments.pilot04_external_checker_runtime.run_probe import _image_identity
 from tests.artifact_store_helpers import artifact_admission_limit_settings
-from tests.checkers.execution.support import live_executor, reserve
+from app.modules.checkers.execution_repository import stored_result
+from tests.authorization.post_submit_routing.support import provision_router
+from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome
+from tests.tasks.post_submit_routing.outcome_support import outcome_snapshot
 from tests.checkers.external.test_selected_post_submit import _post_spec
 from tests.checkers.external.test_selected_pre_submit import _policy
 from tests.archive_fixtures import byte_source
@@ -418,6 +424,53 @@ async def _prove_infrastructure_recovery(
     }
 
 
+async def _production_post_delivery(fixture, settings):
+    """Use production handlers and a fresh worker runtime, then replay delivery."""
+    await provision_router(fixture.factory)
+    await delivery_fixture(fixture)
+    # Supply only this isolated run's configuration. Every provider, grant,
+    # authority, execution and routing operation remains the production owner.
+    with patch("app.core.config.get_settings", return_value=settings), patch(
+        "app.adapters.artifacts.internal_workers.get_settings", return_value=settings
+    ):
+        shutdown_artifact_internal_runtime()
+        try:
+            delivery = production_outbox_delivery(fixture.factory)
+            requested = await delivery.deliver(
+                fixture.created.evaluation_event_id, fixture.facts.project_id,
+                "selected-production-request",
+            )
+            if requested is None or outcome(requested)["delivery_state"] != "acknowledged":
+                raise RuntimeError("production evaluation request was not acknowledged")
+            async with fixture.factory() as session:
+                run = await session.get(CheckerRun, str(fixture.created.evaluation_attempt_id))
+                if run.status != "completed" or run.completion_event_id is None:
+                    raise RuntimeError("production selected execution did not emit completion")
+                result = stored_result(run)
+                completion_id = run.completion_event_id
+            # Reconstruct the worker between the two durable events. No callback
+            # grant, lease capability or in-memory result crosses this boundary.
+            shutdown_artifact_internal_runtime()
+            delivery = production_outbox_delivery(fixture.factory)
+            completed = await delivery.deliver(
+                completion_id, fixture.facts.project_id, "selected-production-completion",
+            )
+            if completed is None or outcome(completed)["delivery_state"] != "acknowledged":
+                raise RuntimeError("production completion was not acknowledged")
+            async with fixture.factory() as session:
+                before = await outcome_snapshot(session)
+            if await delivery.deliver(
+                completion_id, fixture.facts.project_id, "selected-production-replay",
+            ) is not None:
+                raise RuntimeError("production completion was delivered twice")
+            async with fixture.factory() as session:
+                if await outcome_snapshot(session) != before:
+                    raise RuntimeError("duplicate completion changed retained owner facts")
+            return result
+        finally:
+            shutdown_artifact_internal_runtime()
+
+
 async def run(
     *, database_url: str, image_reference: str, service_binary: Path, root: Path
 ) -> dict[str, object]:
@@ -476,10 +529,7 @@ async def run(
             post_scratch_root=scratch,
             scratch_limits=artifact_preparation_limits(settings),
         ) as fixture:
-            await reserve(fixture)
-            result = await live_executor(
-                fixture, selected_execution=adapter
-            ).evaluate_post_submission(fixture.request)
+            result = await _production_post_delivery(fixture, settings)
             async with fixture.factory() as session:
                 task = await session.get(WorkstreamTask, str(fixture.facts.task_id))
                 submission_count = await session.scalar(
@@ -488,7 +538,7 @@ async def run(
                 run_row = await session.get(CheckerRun, str(result.attempt_id))
             if (
                 submission_count != 1
-                or task.status != "evaluation_pending"
+                or task.status != "review_pending"
                 or result.outcome != "completed"
                 or result.execution is None
                 or len(result.execution.external_members) != 1
