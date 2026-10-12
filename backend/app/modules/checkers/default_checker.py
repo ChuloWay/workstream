@@ -22,7 +22,7 @@ from app.modules.checkers.api.materialization import (
     SubmissionMaterialEntry,
     SubmissionMaterialView,
 )
-from app.modules.checkers.api.pre_submit import SubmissionPacketView
+from app.modules.checkers.api.pre_submit_material import SubmissionPacketView
 
 
 _CONTRIBUTOR_ARCHIVE_FAILURES = frozenset(

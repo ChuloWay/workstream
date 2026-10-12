@@ -28,7 +28,6 @@ from app.modules.checkers.api.execution import EvaluationCoordinationPort
 from typing import Any, Protocol
 from pathlib import Path
 
-from app.modules.checkers.api import PreSubmissionInfrastructureUnavailableError
 from app.modules.checkers.api.external import (
     ExternalCheckerCapabilityDefinition,
     ExternalCheckerCapabilityProjection,
@@ -42,6 +41,9 @@ from app.modules.checkers.api.default_checker import (
     WORKSTREAM_DEFAULT_CHECKER_VERSION,
 )
 from app.modules.checkers.selected_pre_submit_execution import SelectedPreSubmitProcessor
+from app.modules.checkers.api.selected_pre_submit import (
+    SelectedPreSubmitInfrastructureUnavailable,
+)
 
 
 def external_checker_execution_factory(
@@ -190,7 +192,6 @@ def selected_pre_submit_coordinator(session):
 
 
 class _ExecutionRequest(Protocol):
-    plan: Any
     project_id: Any
     task_id: Any
     assignment_id: Any
@@ -224,8 +225,8 @@ class SelectedPreSubmitCheckerExecutionAdapter:
             or attempt_request_digest is None
             or grants is None
         ):
-            raise PreSubmissionInfrastructureUnavailableError(
-                "external_pre_submit_context_unavailable"
+            raise SelectedPreSubmitInfrastructureUnavailable(
+                "material_unavailable"
             )
         identity = PreSubmitExternalCheckerIdentity(
             project_id=request.project_id,

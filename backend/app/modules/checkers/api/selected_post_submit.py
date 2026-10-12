@@ -259,8 +259,8 @@ class SelectedPostSubmissionEvaluationResult(CheckerValue):
 class SelectedPostSubmitCurrentResultReference(CheckerValue):
     """Owner-issued reference to one completed selected POST result."""
 
-    schema_version: Literal["workstream.selected_post_submit_current_result.v1"] = (
-        "workstream.selected_post_submit_current_result.v1"
+    schema_version: Literal["post_submit_current_result_reference"] = (
+        "post_submit_current_result_reference"
     )
     request_id: ResourceId
     request_digest: Sha256
