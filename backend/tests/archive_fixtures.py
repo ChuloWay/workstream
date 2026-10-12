@@ -28,4 +28,3 @@ def submission_archive(
         if path != evidence_path:
             write(evidence_path, b"verified\n")
     return output.getvalue()
-
