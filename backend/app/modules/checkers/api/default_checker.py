@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.material import SubmissionMaterialEntry
-from app.modules.checkers.api.pre_submit import SubmissionPacketView
+from app.modules.checkers.api.pre_submit_material import SubmissionPacketView
 
 
 WORKSTREAM_DEFAULT_CHECKER_ID = "workstream.default"
