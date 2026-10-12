@@ -491,3 +491,26 @@ at code/test head `84087f49245482ecf775a6d68dc83a849f9ebe0a`, schema head
 uses the actual current backend JSON rather than a copied nested fixture. This
 record-only descendant changes no tested CLI or test bytes. The prior hosted
 143-pass/one-fail run is retained as the failing-before discriminator.
+
+At clean `a9547a49b42c246d355b818e63c68ed85fa6270a`, the unchanged canonical
+`run_test_lanes.py --collect-only` collected 8,887 unique nodes in 228.06 seconds,
+with zero deselections and complete, nonoverlapping assignment to all ten lanes.
+Both namespaced AUTH families are retained: three selected PRE contracts and
+96 post-submit-routing nodes. Producer manifest and per-lane inventories are in
+`/tmp/pilot04-a954-collection-canonical/`; raw collection output is
+`/tmp/pilot04-a954-collection-canonical.log`, with generated metadata in
+`/tmp/pilot04-a954-collection-metadata.json`. This is collection proof, not
+backend test execution or lane-runtime evidence.
+
+All eleven MCP selected-fragment tests passed in 37.93 seconds against a fresh
+backend OpenAPI command. A deliberately added counterfeit ActionId produced the
+intended one drift-check failure with ten other checks passing in 1.24 seconds.
+Logs are `/tmp/pilot04-a954-mcp-current-canonical.log` and
+`/tmp/pilot04-a954-mcp-wrong-enum.log`. Canonical capture is from backend source
+`3fde44797607d4c187dc62f93876e6ae70d5c555`; this repair leaves that backend code
+unchanged. The local contract tests reuse the existing MCP 2.2.0 environment,
+with the backend command in the locked backend environment; hosted SDK/wire and
+full required CI proof remain separate. Five unaffected snapshot files retain
+exact bytes, source and hashes; all nine operations are unchanged. Initial
+harness setup failures (invalid output-parent layout and an incompatible backend
+MCP SDK for test conftest) are retained in raw logs and are not test results.
