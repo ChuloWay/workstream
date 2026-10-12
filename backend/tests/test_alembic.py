@@ -251,6 +251,11 @@ def test_current_head_installs_selected_only_checker_custody(
                     "external_checker_locked_policies_valid",
                     "require_guide_proposal_approval",
                     "require_post_policy_operation",
+                    "guard_pre_submit_attempt",
+                    "guard_pre_submit_evidence_set_creation",
+                    "guard_pre_submit_evidence_result_membership",
+                    "require_pre_submit_attempt_evidence",
+                    "require_pre_submit_result_reconstruction",
                 ],
             )
             await _assert_canonical_test_schema(connection)
@@ -268,6 +273,11 @@ def test_current_head_installs_selected_only_checker_custody(
         "external_checker_locked_policies_valid",
         "require_guide_proposal_approval",
         "require_post_policy_operation",
+        "guard_pre_submit_attempt",
+        "guard_pre_submit_evidence_set_creation",
+        "guard_pre_submit_evidence_result_membership",
+        "require_pre_submit_attempt_evidence",
+        "require_pre_submit_result_reconstruction",
     }
     for name in (
         "protect_checker_run_custody",
@@ -303,6 +313,24 @@ def test_current_head_installs_selected_only_checker_custody(
     assert "is distinct from 'external_checker_policies.v1'" in definitions[
         "external_checker_locked_policies_valid"
     ].lower()
+    retired = {
+        "guard_pre_submit_attempt": "retained pre-submit attempts are immutable",
+        "guard_pre_submit_evidence_set_creation": (
+            "retained pre-submit evidence is immutable"
+        ),
+        "guard_pre_submit_evidence_result_membership": (
+            "retained pre-submit evidence results are immutable"
+        ),
+        "require_pre_submit_attempt_evidence": (
+            "retained pre-submit evidence is immutable"
+        ),
+        "require_pre_submit_result_reconstruction": (
+            "retained pre-submit evidence results are immutable"
+        ),
+    }
+    for name, message in retired.items():
+        assert message in definitions[name]
+        assert " select " not in definitions[name].lower()
 
 
 def test_current_head_installs_submission_lineage_contract(

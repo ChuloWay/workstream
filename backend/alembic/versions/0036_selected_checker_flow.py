@@ -182,8 +182,12 @@ begin
   raise exception 'submission bundle durable intent requires submission_bundle put attempt'
     using errcode='23514';
  end if;
- if new.selected_pre_submit_run_id is not null then
-  select count(*) into selected_matches
+ if new.pre_submit_evidence_set_id is not null
+    or new.selected_pre_submit_run_id is null then
+  raise exception 'submission bundle durable intent requires selected PRE lineage'
+    using errcode='23514';
+ end if;
+ select count(*) into selected_matches
   from public.selected_pre_submit_runs r
   join public.artifact_put_attempts a on a.id=new.put_attempt_id
   where r.id=new.selected_pre_submit_run_id and r.status='completed' and r.eligible
@@ -195,9 +199,8 @@ begin
     and a.project_id=r.project_id and a.task_id=r.task_id
     and a.sha256=r.archive_sha256 and a.byte_count=r.archive_byte_count
     and a.media_type='application/zip';
-  if selected_matches<>1 then
-   raise exception 'selected PRE durable intent custody mismatch' using errcode='23514';
-  end if;
+ if selected_matches<>1 then
+  raise exception 'selected PRE durable intent custody mismatch' using errcode='23514';
  end if;
  return new;
 end $$
@@ -224,57 +227,12 @@ create or replace function public.guard_submission_bundle_admission_verified_lin
 returns trigger language plpgsql set search_path=pg_catalog,public,pg_temp as $$
 declare matches integer;
 begin
- if new.pre_submit_evidence_set_id is not null then
-  select count(*) into matches
-  from public.submission_bundle_durable_intents intent
-  join public.pre_submit_evidence_sets evidence on evidence.id=intent.pre_submit_evidence_set_id
-  join public.artifact_put_attempts attempt on attempt.id=intent.put_attempt_id
-  join public.artifact_replicas replica on replica.id=attempt.replica_id
-  join public.artifact_contents content on content.id=replica.content_id
-  join public.artifact_verification_jobs job
-    on job.originating_put_attempt_id=attempt.id and job.replica_id=replica.id
-  join public.artifact_verification_receipts verification on verification.verification_job_id=job.id
-  where intent.id=new.durable_intent_id and evidence.id=new.pre_submit_evidence_set_id
-    and attempt.id=new.put_attempt_id and content.id=new.artifact_content_id
-    and replica.id=new.verified_replica_id and verification.id=new.verification_receipt_id
-    and attempt.producer_request_type='submission_bundle'
-    and attempt.producer_type='actor_profile' and attempt.producer_ref=evidence.actor_profile_id::text
-    and attempt.project_id=evidence.project_id and attempt.task_id=evidence.task_id
-    and attempt.media_type='application/zip' and content.media_type='application/zip'
-    and attempt.status='object_confirmed' and evidence.terminal_status='passed' and evidence.eligible
-    and replica.verification_state='verified' and replica.availability_state='available'
-    and replica.integrity_state='valid' and verification.outcome='verified'
-    and verification.execution_generation=job.execution_generation
-    and verification.observed_sha256=attempt.sha256
-    and verification.observed_sha256=content.sha256
-    and verification.observed_sha256=evidence.archive_sha256
-    and verification.observed_byte_count=attempt.byte_count
-    and verification.observed_byte_count=content.byte_count
-    and verification.observed_byte_count=evidence.archive_byte_count
-    and new.actor_profile_id=evidence.actor_profile_id
-    and new.identity_link_id=evidence.identity_link_id
-    and new.project_id=evidence.project_id and new.task_id=evidence.task_id
-    and new.assignment_id=evidence.assignment_id
-    and new.predecessor_submission_id is not distinct from evidence.predecessor_submission_id
-    and new.predecessor_submission_version is not distinct from evidence.predecessor_submission_version
-    and new.checker_remediation_manifest_id is not distinct from
-      evidence.checker_remediation_manifest_id
-    and new.locked_policy_context_hash=evidence.locked_policy_context_hash
-    and new.semantic_manifest_id=evidence.semantic_manifest_id
-    and new.semantic_manifest_sha256=evidence.semantic_manifest_sha256
-    and new.archive_sha256=evidence.archive_sha256 and new.archive_byte_count=evidence.archive_byte_count
-    and ((new.put_operation_receipt_id is not null and exists(
-      select 1 from public.artifact_operation_receipts receipt
-      where receipt.id=new.put_operation_receipt_id and receipt.put_attempt_id=attempt.id
-        and receipt.replica_id=replica.id and receipt.outcome='stored_pending_verification'))
-      or (new.put_observation_receipt_id is not null and exists(
-      select 1 from public.artifact_put_observation_receipts observation
-      where observation.id=new.put_observation_receipt_id and observation.put_attempt_id=attempt.id
-        and observation.outcome='observed_confirmed'
-        and observation.observed_sha256=attempt.sha256
-        and observation.observed_byte_count=attempt.byte_count)));
- else
-  select count(*) into matches
+ if new.pre_submit_evidence_set_id is not null
+    or new.selected_pre_submit_run_id is null then
+  raise exception 'submission bundle admission requires selected PRE lineage'
+    using errcode='23514';
+ end if;
+ select count(*) into matches
   from public.submission_bundle_durable_intents intent
   join public.selected_pre_submit_runs r on r.id=intent.selected_pre_submit_run_id
   join public.artifact_put_attempts attempt on attempt.id=intent.put_attempt_id
@@ -338,13 +296,51 @@ begin
         and observation.outcome='observed_confirmed'
         and observation.observed_sha256=attempt.sha256
         and observation.observed_byte_count=attempt.byte_count)));
- end if;
  if matches<>1 then
   raise exception 'submission bundle admission verified lineage mismatch' using errcode='23514';
  end if;
  return new;
 end $$
 """)
+
+
+def _retire_legacy_pre_submit_writers() -> None:
+    op.execute(r"""
+create or replace function public.guard_pre_submit_attempt()
+returns trigger language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+begin
+  raise exception 'retained pre-submit attempts are immutable' using errcode='55000';
+end $$
+""")
+    op.execute(r"""
+create or replace function public.guard_pre_submit_evidence_set_creation()
+returns trigger language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+begin
+  raise exception 'retained pre-submit evidence is immutable' using errcode='55000';
+end $$
+""")
+    op.execute(r"""
+create or replace function public.guard_pre_submit_evidence_result_membership()
+returns trigger language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+begin
+  raise exception 'retained pre-submit evidence results are immutable' using errcode='55000';
+end $$
+""")
+    op.execute(r"""
+create or replace function public.require_pre_submit_attempt_evidence()
+returns trigger language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+begin
+  raise exception 'retained pre-submit evidence is immutable' using errcode='55000';
+end $$
+""")
+    op.execute(r"""
+create or replace function public.require_pre_submit_result_reconstruction()
+returns trigger language plpgsql set search_path=pg_catalog,public,pg_temp as $$
+begin
+  raise exception 'retained pre-submit evidence results are immutable' using errcode='55000';
+end $$
+""")
+
 
 def _selected_run_guards() -> None:
     op.execute(r"""
@@ -1126,6 +1122,7 @@ def upgrade() -> None:
     _create_selected_run_table()
     _alter_selected_lineage()
     _replace_admission_guards()
+    _retire_legacy_pre_submit_writers()
     _selected_run_guards()
     _replace_guide_approval_custody()
     _replace_post_policy_custody()

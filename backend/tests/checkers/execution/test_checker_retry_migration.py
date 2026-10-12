@@ -223,3 +223,103 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
             )
         finally:
             await connection.close()
+
+async def test_current_schema_refuses_new_archived_pre_submit_lineage(
+    isolated_database_env,
+    migration_lock,
+):
+    """Retain archived rows while refusing every new old-lineage insertion."""
+    with migration_lock():
+        await _reset_to_predecessor(isolated_database_env)
+        await restore_archived_snapshot(
+            isolated_database_env, "0034_checker_retry_source"
+        )
+        await db_session.dispose_engine()
+        await asyncio.to_thread(command.upgrade, _config(), "head")
+        connection = await _connection(isolated_database_env)
+        try:
+            before = await _retained_rows(connection)
+            intent_id = await connection.fetchval("""
+                SELECT id FROM public.submission_bundle_durable_intents
+                WHERE pre_submit_evidence_set_id IS NOT NULL
+            """)
+            admission_id = await connection.fetchval("""
+                SELECT id FROM public.submission_bundle_admissions
+                WHERE pre_submit_evidence_set_id IS NOT NULL
+            """)
+            attempt_id = await connection.fetchval(
+                "SELECT id FROM public.pre_submit_execution_attempts"
+            )
+            evidence_id = await connection.fetchval(
+                "SELECT id FROM public.pre_submit_evidence_sets"
+            )
+            result_id = await connection.fetchval(
+                "SELECT id FROM public.pre_submit_evidence_results ORDER BY result_order LIMIT 1"
+            )
+            assert all((intent_id, admission_id, attempt_id, evidence_id, result_id))
+            with pytest.raises(
+                asyncpg.CheckViolationError,
+                match="submission bundle durable intent requires selected PRE lineage",
+            ):
+                async with connection.transaction():
+                    await connection.execute("""
+                        INSERT INTO public.submission_bundle_durable_intents
+                        SELECT (jsonb_populate_record(
+                          NULL::public.submission_bundle_durable_intents,
+                          to_jsonb(value) || jsonb_build_object('id',$1::uuid)
+                        )).* FROM public.submission_bundle_durable_intents value
+                        WHERE value.id=$2::uuid
+                    """, new_record_id(), intent_id)
+            with pytest.raises(
+                asyncpg.CheckViolationError,
+                match="submission bundle admission requires selected PRE lineage",
+            ):
+                async with connection.transaction():
+                    await connection.execute("""
+                        INSERT INTO public.submission_bundle_admissions
+                        SELECT (jsonb_populate_record(
+                          NULL::public.submission_bundle_admissions,
+                          to_jsonb(value) || jsonb_build_object('id',$1::uuid)
+                        )).* FROM public.submission_bundle_admissions value
+                        WHERE value.id=$2::uuid
+                    """, new_record_id(), admission_id)
+            for table, source_id, message in (
+                (
+                    "pre_submit_execution_attempts",
+                    attempt_id,
+                    "retained pre-submit attempts are immutable",
+                ),
+                (
+                    "pre_submit_evidence_sets",
+                    evidence_id,
+                    "retained pre-submit evidence is immutable",
+                ),
+                (
+                    "pre_submit_evidence_results",
+                    result_id,
+                    "retained pre-submit evidence results are immutable",
+                ),
+            ):
+                with pytest.raises(asyncpg.PostgresError, match=message) as refused:
+                    async with connection.transaction():
+                        await connection.execute(f"""
+                            INSERT INTO public.{table}
+                            SELECT (jsonb_populate_record(
+                              NULL::public.{table},
+                              to_jsonb(value) || jsonb_build_object('id',$1::uuid)
+                            )).* FROM public.{table} value WHERE value.id=$2::uuid
+                        """, new_record_id(), source_id)
+                assert refused.value.sqlstate == "55000"
+            with pytest.raises(
+                asyncpg.PostgresError,
+                match="retained pre-submit attempts are immutable",
+            ) as refused:
+                async with connection.transaction():
+                    await connection.execute("""
+                        UPDATE public.pre_submit_execution_attempts
+                        SET status=status WHERE id=$1::uuid
+                    """, attempt_id)
+            assert refused.value.sqlstate == "55000"
+            assert await _retained_rows(connection) == before
+        finally:
+            await connection.close()

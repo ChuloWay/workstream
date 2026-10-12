@@ -1054,3 +1054,23 @@ Admissions, Submissions and CheckerRuns. Every added value must remain NULL;
 all retained rows/values, counts, authority and no-dispatch assertions remain
 exact. No automatic/dynamic column exclusion, backfill, schema change, relaxed
 selection or skip. Rerun the failed node and independently review the delta.
+
+### Retired PRE database write refusal
+
+The current-schema cutover now refuses every new write through the retained PRE
+attempt/evidence tables while preserving their immutable rows for historical
+inspection. New bundle intent and admission rows must carry selected PRE lineage;
+valid archived evidence can no longer open the removed writer path. The five
+legacy trigger functions are reduced to unconditional SQLSTATE 55000 retained-data
+refusals, so no catalogue reconstruction or attempt-completion implementation
+remains executable at the current head. An archived 0034 source regression clones
+each old row shape and proves intent, admission, attempt, evidence, result and
+attempt-update refusal with byte-exact retained-row equality. The installed-body
+test validates every PL/pgSQL function and asserts these functions contain only
+the refusal contract. A fresh PG16 install reached the canonical fingerprint
+boundary after all function validators and measured
+`f510310623f222209cbbee89291edb8e1582d65ddaf9d173d534dd796ab68991` in
+199.51 seconds; isolated database, role and MinIO cleanup all completed. This
+measurement used the uncommitted repair tree and is fingerprint evidence, not a
+frozen-head positive runtime claim. Current selected PRE/Submission/POST native
+flow must pass again after integration.
