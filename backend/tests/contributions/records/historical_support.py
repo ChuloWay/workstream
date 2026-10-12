@@ -45,28 +45,28 @@ async def historical_contribution_source(
                 SELECT task_assignment_id, contribution_policy_version_id, contributor_id
                 FROM public.submissions WHERE id=:id
             """),
-                        {"id": h.review.submission_id},
+                        {"id": h.review["submission_id"]},
                     )
                 )
                 .mappings()
                 .one()
             )
         common = dict(
-            project_id=h.review.project_id,
-            task_id=h.review.task_id,
-            submission_id=h.review.submission_id,
-            artifact_hash=h.review.artifact_hash,
+            project_id=h.review["project_id"],
+            task_id=h.review["task_id"],
+            submission_id=h.review["submission_id"],
+            artifact_hash=h.review["artifact_hash"],
         )
         h.reviewer_record = ContributionRecordInput(
             **common,
             id=new_record_id(),
             contribution_type="completed_review",
-            contributor_id=h.review.reviewer_id,
-            source_review_id=h.review.id,
-            source_review_lease_id=h.review.review_lease_id,
+            contributor_id=h.review["reviewer_id"],
+            source_review_id=h.review["id"],
+            source_review_lease_id=h.review["review_lease_id"],
             source_final_acceptance_id=None,
             source_task_assignment_id=None,
-            contribution_policy_version_id=h.review.reviewer_contribution_policy_version_id,
+            contribution_policy_version_id=h.review["reviewer_contribution_policy_version_id"],
         )
         h.submitter_record = ContributionRecordInput(
             **common,
@@ -75,7 +75,7 @@ async def historical_contribution_source(
             contributor_id=UUID(str(row["contributor_id"])),
             source_review_id=None,
             source_review_lease_id=None,
-            source_final_acceptance_id=h.acceptance.id,
+            source_final_acceptance_id=h.acceptance["id"],
             source_task_assignment_id=UUID(str(row["task_assignment_id"])),
             contribution_policy_version_id=row["contribution_policy_version_id"],
         )

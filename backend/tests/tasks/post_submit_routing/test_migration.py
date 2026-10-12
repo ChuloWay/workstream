@@ -10,7 +10,7 @@ from app.db import session as db_session
 from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 
-from tests.checkers.execution.historical_execution import historical_completed_source
+from tests.checkers.execution.historical_execution import archived_completed_checker_source
 
 
 pytestmark = pytest.mark.postgres_schema_contract
@@ -18,13 +18,13 @@ pytestmark = pytest.mark.postgres_schema_contract
 
 async def _snapshot(connection, h):
     identifiers = {
-        "submission": h.request.submission_id,
+        "submission": h.request["submission_id"],
         "run": h.result.attempt_id,
         "execute": h.source["execute_evidence_id"],
         "finalize": h.source["finalize_evidence_id"],
         "completion": h.source["completion_event_id"],
-        "task": h.request.task_id,
-        "assignment": h.request.assignment_id,
+        "task": h.request["task_id"],
+        "assignment": h.request["assignment_id"],
     }
     return {
         "submission": await connection.fetchval(
@@ -82,7 +82,7 @@ async def test_upgrade_preserves_existing_sources_without_publishing(
         await asyncio.to_thread(command.upgrade, _config(), "0010_post_submit_authority")
 
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with historical_completed_source(tmp_path, isolated_database_env) as h:
+        async with archived_completed_checker_source(tmp_path, isolated_database_env) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             connection = await asyncpg.connect(url)
             try:
@@ -125,7 +125,7 @@ async def test_request_upgrade_preserves_completed_owners(
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0017_acceptance_source_contracts")
         original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with historical_completed_source(tmp_path, isolated_database_env) as h:
+        async with archived_completed_checker_source(tmp_path, isolated_database_env) as h:
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             connection = await asyncpg.connect(url)
             try:

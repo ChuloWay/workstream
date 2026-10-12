@@ -905,3 +905,27 @@ wrapper as its no-execution sentinel. Replace only that sentinel with
 external policy, proposal finalization, provider/document denial, derive/approval
 replay and unchanged finalization state. This is a required current isolation
 control, not obsolete catalogue behavior; the old wrapper is not restored.
+
+### Plain archived migration consumers
+
+Lead assigns migration consumers to this lane and raw execution/base producers
+to the QA/backend owners. Allowed test paths: execution/test_material_migration;
+authorization/post_submit/test_migration; tasks/post_submit_routing/{test_migration,
+test_outcome_migration}; reviews/{packet,decision,acceptance,lifecycle}/test_migration;
+contributions/records/test_migration; the existing reviews/acceptance and
+contributions/records historical_support helpers; and one migration-only
+`backend/tests/migration_ancestor_rows.py` for literal ancestor queue, lease,
+packet and Review rows. Keep these separate from current packet/review fixtures.
+No dict-versus-current compatibility switch, old model facade, archived service
+subprocess, production or migration edits are allowed. Plain request/result/
+material/lease dictionaries and direct SQL carry predecessor facts only. Preserve
+retained-row equality, immutability, preflight refusal and observed writer locks;
+current public/native tests own current execution and economic behavior. Risks
+remain L1 fixture/custody reconciliation, requiring QA/test-delta review, fresh
+collection and discriminating native predecessor checks before readiness.
+
+The raw migration consumers no longer call the current packet fixture's alternate
+factory hook. Its now-unused `completed_source_factory` parameter is removed from
+`backend/tests/reviews/packet/support.py`; the current fixture always uses the
+same canonical `completed_source`. This exact helper cleanup adds no raw/current
+switch, changes no current source behavior and retains all current packet tests.

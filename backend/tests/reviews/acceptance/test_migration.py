@@ -6,7 +6,6 @@ import asyncpg
 import pytest
 from alembic import command
 
-from tests.checkers.execution.historical_execution import historical_completed_source
 from app.db import session as db_session
 from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
@@ -37,7 +36,7 @@ async def test_acceptance_upgrade_preserves_owners(tmp_path, isolated_database_e
         await asyncio.to_thread(command.upgrade, _config(), "0013_review_source")
         original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_acceptance_source(
-            tmp_path, isolated_database_env, completed_source_factory=historical_completed_source
+            tmp_path, isolated_database_env
         ):
             await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             connection = await asyncpg.connect(url)
