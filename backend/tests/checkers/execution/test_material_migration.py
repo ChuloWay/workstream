@@ -11,7 +11,6 @@ from sqlalchemy.exc import IntegrityError
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
-from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 from tests.historical_submission_fixtures import historical_material_fixture
 from types import SimpleNamespace
@@ -57,11 +56,9 @@ async def test_retained_material_upgrade(
 ):
     with migration_lock():
         await predecessor_database(isolated_database_env)
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_material_fixture(
-            tmp_path, isolated_database_env, provision_checker=False
+            tmp_path, isolated_database_env
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             await seed_archived_checker_request(h)
             lease = await seed_archived_running_checker(h)
             material = dict(h.archived_material)
@@ -123,11 +120,9 @@ async def test_upgrade_excludes_writer_until_guard_is_installed(
 
     with migration_lock():
         await predecessor_database(isolated_database_env)
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_material_fixture(
-            tmp_path, isolated_database_env, provision_checker=False
+            tmp_path, isolated_database_env
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             await seed_archived_checker_request(h)
             lease = await seed_archived_running_checker(h)
             material = dict(h.archived_material) | {"admission_id": h.request["submission_id"]}

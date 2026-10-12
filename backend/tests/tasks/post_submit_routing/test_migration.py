@@ -7,7 +7,6 @@ import pytest
 from alembic import command
 
 from app.db import session as db_session
-from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 
 from tests.checkers.execution.historical_execution import archived_completed_checker_source
@@ -81,9 +80,7 @@ async def test_upgrade_preserves_existing_sources_without_publishing(
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0010_post_submit_authority")
 
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with archived_completed_checker_source(tmp_path, isolated_database_env) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             connection = await asyncpg.connect(url)
             try:
                 assert await connection.fetchval(
@@ -124,9 +121,7 @@ async def test_request_upgrade_preserves_completed_owners(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0017_acceptance_source_contracts")
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with archived_completed_checker_source(tmp_path, isolated_database_env) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             connection = await asyncpg.connect(url)
             try:
                 before = await _snapshot(connection, h)

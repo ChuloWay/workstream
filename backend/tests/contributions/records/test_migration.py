@@ -16,7 +16,6 @@ from tests.contributions.records.support import (
     insert_award,
     insert_record,
 )
-from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 from tests.reviews.acceptance.historical_support import (
     historical_acceptance_source,
@@ -60,11 +59,9 @@ async def test_contribution_upgrade_preserves_sources(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0014_final_acceptance")
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_acceptance_source(
             tmp_path, isolated_database_env
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session:
                 await insert_historical_acceptance(session, h.acceptance)
                 await session.commit()
@@ -124,13 +121,11 @@ async def test_completeness_upgrade_preserves_complete_retained_awards(
 ):
     with migration_lock():
         await _reset_to_0018(isolated_database_env)
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_contribution_source(
             tmp_path,
             isolated_database_env,
             paid=True,
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session:
                 await insert_record(session, h.submitter_record)
                 for award in await award_values(session, h.submitter_record):
@@ -200,13 +195,11 @@ async def test_completeness_upgrade_refuses_incomplete_retained_awards_unchanged
 ):
     with migration_lock():
         await _reset_to_0018(isolated_database_env)
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_contribution_source(
             tmp_path,
             isolated_database_env,
             paid=True,
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             async with h.factory() as session:
                 await insert_record(session, h.submitter_record)
                 await insert_award(

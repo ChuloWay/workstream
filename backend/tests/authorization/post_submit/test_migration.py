@@ -8,7 +8,6 @@ from alembic import command
 from sqlalchemy.exc import IntegrityError
 
 from app.db import session as db_session
-from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 from tests.checkers.execution.historical_execution import seed_archived_running_checker, seed_archived_checker_request
 from tests.checkers.execution.test_material_migration import retained_snapshot
@@ -29,11 +28,9 @@ async def test_actual_upgrade_preserves_or_refuses_without_repair(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_material_fixture(
-            tmp_path, isolated_database_env, provision_checker=False
+            tmp_path, isolated_database_env
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             await seed_archived_checker_request(h)
             if unprovable_receipt:
                 await seed_archived_running_checker(h)
@@ -64,11 +61,9 @@ async def test_upgrade_excludes_writer_across_receipt_preflight(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_material_fixture(
-            tmp_path, isolated_database_env, provision_checker=False
+            tmp_path, isolated_database_env
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             reserved = await seed_archived_checker_request(h)
             scanned, resume = threading.Event(), threading.Event()
             execute = Operations.execute

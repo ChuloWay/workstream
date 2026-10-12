@@ -1007,3 +1007,18 @@ guard message and SQLSTATE `23514`, installed schema 0036 and complete cleanup.
 Plain archived material supplies its semantic manifest digest; the payment
 migration uses the canonical session engine, without reintroducing fixture DTOs
 or engine facades.
+
+The frozen literal-base handoff removes unused `provision_checker` keywords
+from the owned execution/material/AUTH migration tests. The existing
+`backend/tests/contributions/records/historical_support.py` selects the explicit
+paid snapshot for the actual installed predecessor revision (0015, 0018 or
+0024) through the canonical session owner. Its unused award-shape and arbitrary
+option parameters are removed: unsupported shapes fail at the function boundary,
+not by silently dropping requested awards. Preserve the two/four exact award
+assertions and complete/incomplete retained-award refusal; no runtime policy or
+award synthesis, producer, schema or test-selection changes.
+The same owned raw migration files remove the obsolete current-writer seeding
+column/restore calls and imports. Literal snapshots must load into the exact
+installed predecessor schema, without temporary current ART/remediation columns.
+Every migration assertion and row/custody/lock check remains in place; the shared
+helper owner removes unused definitions after its remaining consumers are traced.

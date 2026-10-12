@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from uuid import UUID
 from sqlalchemy import text
 from app.core.identifiers import new_record_id
+from app.db import session as db_session
 from app.modules.contributions.records.schemas import ContributionRecordInput
 from tests.reviews.acceptance.historical_support import (
     historical_acceptance_source,
@@ -18,21 +19,25 @@ async def historical_contribution_source(
     *,
     decision="accept",
     paid=False,
-    contribution_awards=None,
     persist_acceptance=True,
-    **options,
 ):
-    frozen_awards = (
-        tuple(contribution_awards)
-        if contribution_awards is not None
-        else (("money", "project_points") if paid else ())
-    )
+    if type(paid) is not bool:
+        raise ValueError("Archived contribution paid selection must be boolean")
+    snapshot_name = None
+    if paid:
+        async with db_session.get_session_factory()() as session:
+            revision = await session.scalar(text("SELECT version_num FROM public.alembic_version"))
+        if revision not in {
+            "0015_contribution_awards", "0018_task_routing_request",
+            "0024_require_second_review_false",
+        }:
+            raise ValueError("No archived paid contribution snapshot for this revision")
+        snapshot_name = revision + "_paid"
     async with historical_acceptance_source(
         tmp_path,
         url,
         decision=decision,
-        contribution_awards=frozen_awards,
-        **options,
+        snapshot_name=snapshot_name,
     ) as h:
         async with h.factory() as session:
             if decision == "accept" and persist_acceptance:
