@@ -98,6 +98,19 @@ cleanup.
   topology, CI cap or execution behavior changes. Acceptance is the isolated
   no-broker test and existing worker topology controls, followed by full CI.
 
+- The bounded hosted shared-fixture repair permits only
+  `backend/tests/checker_output_admission_helpers.py`,
+  `backend/tests/test_artifact_admission_digest.py` and this record. Reconstruct
+  the current selected POST request through the CHECKERS repository's strict
+  stored-request owner, including its separately retained digest, and include
+  the selected PRE run's explicit null slot in the guide admission digest
+  expectation. Preserve real stored CHECKERS rows, ART authority, storage,
+  recovery, replay and immutable lineage assertions. No production, schema,
+  migration, compatibility decoder, old checker contract, test selection, skip
+  or cap change is allowed. Acceptance is focused collection, Ruff, the affected
+  real PostgreSQL fixture consumers and the unchanged guide replay proof. Risk
+  is L0 because the repair only aligns shared test inputs with current owners.
+
 - Final dead-contract removal permits the obsolete CHECKERS modules
   `api/pre_submit.py`, `api/post_submit.py`, `api/historical_post_submit.py`,
   `api/policy_compilation.py` and `post_submit_contracts.py`, their unused exports

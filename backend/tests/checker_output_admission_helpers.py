@@ -26,8 +26,8 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
     CheckerOutputSlot,
 )
+from app.modules.checkers.execution_repository import stored_request
 from app.modules.checkers.models import CheckerRun
-from app.modules.checkers.api.evaluation_contract import validate_execution_request
 from app.modules.tasks.models import Submission, WorkstreamTask
 
 
@@ -53,9 +53,7 @@ async def make_checker_output_reservation(
     )
     task = await session.get(WorkstreamTask, checker_run.task_id)
     assert submission is not None and task is not None
-    import json
-
-    evaluation = validate_execution_request(json.loads(checker_run.request_json))
+    evaluation = stored_request(checker_run)
     assert (evaluation.project_id, evaluation.task_id, evaluation.submission_id,
             evaluation.submission_version, evaluation.assignment_id) == (
                 UUID(task.project_id), UUID(task.id), UUID(submission.id),
