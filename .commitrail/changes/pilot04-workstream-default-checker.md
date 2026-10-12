@@ -641,3 +641,26 @@ The existing public manager-handoff regression reproduces that failure at
 `2f1f46930` in 23.18 seconds with isolated schema `0036` and cleanup complete;
 the targeted trace locates the missing registry-read transaction. Final proof
 uses the normal public owner, with diagnostic exception capture removed.
+
+
+### TASK/ART single execution flow cleanup
+
+The current TASK and ART consumers now accept only the closed external POST policy
+and selected PRE run custody. TASK admission/replay no longer decodes catalogue
+checker content, and ART material selection requires selected PRE admission and the
+exact submitted external policy. ART removed its obsolete PRE evidence writer,
+invocation store, phase wrapper, old capability issuance, and durable publication
+and replay branches. Immutable historical models and columns remain retained;
+these are not executable checker contracts.
+
+The selected PRE materializer still requires the committed lease, callback-scoped
+genuine ART grant, exact generation/manifest/bytes and default input digest before
+execution. The mounted failed-PRE projection accepts only selected execution facts
+and retains the existing sanitized default and external findings. The existing
+AUTH protocol fields remain stable, but runtime submission admission rejects an
+old evidence-set lineage. No migration or catalogue fallback is added.
+
+Validation at this source checkpoint: TASK/ART Ruff and Python compilation pass;
+current owner/DTO imports pass. Native and broader current-flow checks remain
+required after the CHECKERS composition and selected fixture repairs are combined.
+This checkpoint does not claim hosted suite readiness.

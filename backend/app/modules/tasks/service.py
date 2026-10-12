@@ -16,7 +16,6 @@ from app.modules.checkers.api.external_policy import (
     LockedExternalPostSubmitPolicy,
     validate_stored_external_post_policy,
 )
-from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
 from app.modules.projects.api.locked_policy import (
     ProjectLockedPolicyContextFacts,
     ProjectLockedPolicyContextPort,
@@ -260,32 +259,22 @@ class TaskService:
     def _parse_post_submit_policy_summary(
         facts: ProjectLockedPolicyContextFacts,
     ) -> PostSubmitPolicyBodySummary:
-        """Decode selected policy bodies while retaining historical read custody."""
+        """Decode the closed external POST policy bound to approval custody."""
         body = json.loads(facts.compiled_post_submit_policy.value)
-        if body.get("schema_version") == "external_post_submit_policy.v1":
-            selected = validate_stored_external_post_policy(body)
-            policies = LockedExternalCheckerPolicies.model_validate_json(
-                facts.external_checker_policies.value
-            )
-            if selected != policies.post_submit:
-                raise ValueError("locked selected POST policy differs from approval")
-            checkers = tuple(item.registry.capability_id for item in selected.entries)
-            return PostSubmitPolicyBodySummary(
-                schema_version=selected.schema_version,
-                default_checkers=(),
-                required_checkers=checkers,
-                warning_checkers=(),
-                execution_checkers=checkers,
-                blocking_severities=("critical", "high"),
-            )
-        historical = CompiledPostSubmitPolicy.model_validate(body)
+        selected = validate_stored_external_post_policy(body)
+        policies = LockedExternalCheckerPolicies.model_validate_json(
+            facts.external_checker_policies.value
+        )
+        if selected != policies.post_submit:
+            raise ValueError("locked selected POST policy differs from approval")
+        checkers = tuple(item.registry.capability_id for item in selected.entries)
         return PostSubmitPolicyBodySummary(
-            schema_version=historical.schema_version,
-            default_checkers=tuple(historical.default_checkers),
-            required_checkers=tuple(historical.required_checkers),
-            warning_checkers=tuple(historical.warning_checkers),
-            execution_checkers=tuple(historical.execution_checkers),
-            blocking_severities=tuple(historical.blocking_severities),
+            schema_version=selected.schema_version,
+            default_checkers=(),
+            required_checkers=checkers,
+            warning_checkers=(),
+            execution_checkers=checkers,
+            blocking_severities=("critical", "high"),
         )
 
     def _missing_locked_context_fields(self, task: WorkstreamTask) -> list[str]:

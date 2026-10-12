@@ -61,54 +61,6 @@ from app.modules.authorization.api import ActorIdentityFacts
 from app.modules.tasks.api.guide_documents import TaskGuideDocumentsPort
 
 
-from app.modules.artifacts.api import SubmissionBundlePreparationRequest
-from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidencePersistenceResult
-from app.modules.artifacts.submission_materialization import (
-    PreparedBundleMaterializationRequest,
-    PreparedBundlePreSubmitEvidenceService,
-)
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
-    PostSubmissionExecutionPort,
-)
-
-
-class CheckerPhaseService:
-    """One command per phase, composed from the canonical ART and CHECKER owners."""
-
-    def __init__(
-        self, *, pre_submission: PreparedBundlePreSubmitEvidenceService,
-        post_submission: PostSubmissionExecutionPort,
-    ) -> None:
-        self._pre_submission = pre_submission
-        self._post_submission = post_submission
-
-    async def evaluate_pre_submission(
-        self, request: PreparedBundleMaterializationRequest, reservation: object, *,
-        preparation_request: SubmissionBundlePreparationRequest,
-    ) -> PreSubmitEvidencePersistenceResult:
-        """Finish ART's committed selection, preserving its exact canonical result."""
-        if request.prepared_authorization is not None:
-            raise ValueError("pre_submission_phase_requires_consumed_authorization")
-        if isinstance(reservation, PreSubmitEvidencePersistenceResult):
-            return reservation
-        return await self._pre_submission.execute_reserved(
-            request, reservation, preparation_request=preparation_request,
-        )
-
-    async def evaluate_post_submission(
-        self, request: PostSubmissionEvaluationRequest,
-    ) -> PostSubmissionEvaluationResult:
-        """Delegate the closed post contract; production execution remains unavailable."""
-        request = PostSubmissionEvaluationRequest.model_validate(request)
-        result = PostSubmissionEvaluationResult.model_validate(
-            await self._post_submission.evaluate_post_submission(request)
-        )
-        result.validate_request(request)
-        return result
-
-
 async def get_submission_bundle_preparation_actor(
     actor: Annotated[
         ActorIdentityFacts,
@@ -582,23 +534,19 @@ class _WorkerPostSubmissionMaterialization:
         from app.modules.checkers.api.materialization import (
             PostSubmissionMaterializationFailure,
         )
-        from app.modules.checkers.api.selected_post_submit import (
-            SelectedPostSubmissionEvaluationRequest,
-        )
 
         settings = get_settings()
-        if isinstance(facts.request, SelectedPostSubmissionEvaluationRequest):
-            try:
-                selected_post_submit_execution_budget_ms(
-                    facts.request.policy,
-                    artifact_deadline_ms=int(
-                        settings.artifact_preparation_total_deadline_seconds * 1000
-                    ),
-                )
-            except ExternalCheckerPolicyError:
-                raise PostSubmissionMaterializationFailure(
-                    "post_submit_material_deadline_unavailable"
-                ) from None
+        try:
+            selected_post_submit_execution_budget_ms(
+                facts.request.policy,
+                artifact_deadline_ms=int(
+                    settings.artifact_preparation_total_deadline_seconds * 1000
+                ),
+            )
+        except ExternalCheckerPolicyError:
+            raise PostSubmissionMaterializationFailure(
+                "post_submit_material_deadline_unavailable"
+            ) from None
         await initialize_artifact_internal_runtime()
         with _artifact_internal_runtime() as (store, namespace):
             manager = create_artifact_scratch_manager(settings)

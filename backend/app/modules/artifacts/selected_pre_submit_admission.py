@@ -7,9 +7,9 @@ from uuid import UUID
 
 from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.sources import ArtifactCommitment
-from app.modules.artifacts.pre_submit_evidence import semantic_manifest_identity
 from app.modules.artifacts.submission_manifest import (
     SubmissionCanonicalPredecessor,
+    semantic_manifest_identity,
     SubmissionChangeGateResult,
     SubmissionManifest,
     bind_submission_change,
@@ -26,7 +26,7 @@ from app.modules.checkers.api.external_policy import (
     LockedExternalPreSubmitPolicy,
 )
 from app.modules.checkers.api.materialization import SubmissionMaterialEntry
-from app.modules.checkers.api.pre_submit import SubmissionPacketView
+from app.modules.checkers.api.pre_submit_material import SubmissionPacketView
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitAdmissionLineage,
     SelectedPreSubmitReservationFacts,

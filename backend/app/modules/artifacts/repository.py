@@ -18,7 +18,6 @@ from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
     ArtifactOperationReceipt,
-    PreSubmitEvidenceSet,
     ArtifactPutAttempt,
     ArtifactPutAttemptCharge,
     ArtifactPutObservationReceipt,
@@ -295,26 +294,6 @@ class ArtifactRepository:
             )
         )
 
-    async def lock_pre_submit_evidence_set(
-        self, evidence_set_id: str
-    ) -> PreSubmitEvidenceSet | None:
-        """Lock one immutable passing evidence identity for durable continuation."""
-        return await self._session.scalar(
-            select(PreSubmitEvidenceSet)
-            .where(PreSubmitEvidenceSet.id == evidence_set_id)
-            .with_for_update(key_share=True)
-            .execution_options(populate_existing=True)
-        )
-
-    async def get_submission_bundle_intent_by_evidence(
-        self, evidence_set_id: str
-    ) -> SubmissionBundleDurableIntent | None:
-        """Load the one durable intent already created from an evidence set."""
-        return await self._session.scalar(
-            select(SubmissionBundleDurableIntent).where(
-                SubmissionBundleDurableIntent.pre_submit_evidence_set_id == evidence_set_id
-            )
-        )
 
     async def get_submission_bundle_intent_by_selected_run(
         self, run_id: str

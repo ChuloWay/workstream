@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import final
 from uuid import UUID
 
-from app.modules.artifacts.pre_submit_evidence import PreSubmitPassCapability
 from app.modules.artifacts.sources import CommittedArtifactSource, PreparedArtifact
 from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitCompletion,
@@ -17,32 +16,11 @@ from app.modules.checkers.api.selected_pre_submit import (
 class SubmissionBundlePreparedCustody:
     """Unforgeable join of live prepared bytes and their fresh pass capability."""
 
-    __slots__ = ("_capability", "_prepared", "_selected")
+    __slots__ = ("_prepared", "_selected")
 
     def __init__(self, *_: object, **__: object) -> None:
         raise TypeError("submission bundle custody requires live prepared work")
 
-    @classmethod
-    def _from_live_preparation(
-        cls,
-        *,
-        prepared: PreparedArtifact,
-        capability: PreSubmitPassCapability,
-    ) -> SubmissionBundlePreparedCustody:
-        if (
-            type(prepared) is not PreparedArtifact
-            or type(capability) is not PreSubmitPassCapability
-        ):
-            raise TypeError("submission bundle custody requires live prepared work")
-        capability._assert_live_prepared_custody(
-            prepared_generation_id=prepared.generation_id,
-            archive_sha256=prepared.commitment.sha256,
-        )
-        custody = object.__new__(cls)
-        custody._prepared = prepared
-        custody._capability = capability
-        custody._selected = None
-        return custody
 
     @classmethod
     def _from_selected_pre_submit(
@@ -82,7 +60,6 @@ class SubmissionBundlePreparedCustody:
             raise TypeError("submission bundle selected custody is unavailable")
         custody = object.__new__(cls)
         custody._prepared = prepared
-        custody._capability = None
         custody._selected = completion.terminal
         return custody
 
@@ -90,11 +67,6 @@ class SubmissionBundlePreparedCustody:
     def prepared_generation_id(self) -> UUID:
         return self._prepared.generation_id
 
-    @property
-    def pass_capability(self) -> PreSubmitPassCapability:
-        if type(self._capability) is not PreSubmitPassCapability:
-            raise TypeError("legacy submission pass capability is unavailable")
-        return self._capability
 
     @property
     def selected_reservation(self) -> SelectedPreSubmitReservationFacts:
@@ -120,8 +92,3 @@ class SubmissionBundlePreparedCustody:
     @property
     def source(self) -> CommittedArtifactSource:
         return self._prepared.committed_source
-
-    @property
-    def is_selected(self) -> bool:
-        """Distinguish new selected custody from the retained legacy decoder."""
-        return self._selected is not None

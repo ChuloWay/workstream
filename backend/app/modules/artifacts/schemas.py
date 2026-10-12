@@ -107,10 +107,9 @@ class SubmissionBundleArtifactAdmissionRequest:
 
     def __post_init__(self) -> None:
         if (
-            (self.pre_submit_evidence_set_id is None)
-            == (self.selected_pre_submit_run_id is None)
-            or (self.selected_pre_submit_run_id is None)
-            != (self.selected_terminal_digest is None)
+            self.pre_submit_evidence_set_id is not None
+            or self.selected_pre_submit_run_id is None
+            or self.selected_terminal_digest is None
             or (
                 self.selected_terminal_digest is not None
                 and (
@@ -235,10 +234,9 @@ class SubmissionBundleDurableIntentAuthorityFacts:
 
     def __post_init__(self) -> None:
         if (
-            (self.pre_submit_evidence_set_id is None)
-            == (self.selected_pre_submit_run_id is None)
-            or (self.selected_pre_submit_run_id is None)
-            != (self.selected_terminal_digest is None)
+            self.pre_submit_evidence_set_id is not None
+            or self.selected_pre_submit_run_id is None
+            or self.selected_terminal_digest is None
         ):
             raise ValueError("submission bundle authority lineage is invalid")
 

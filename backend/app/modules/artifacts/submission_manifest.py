@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
-from uuid import UUID
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.core.hashing import canonical_json_hash
 from app.modules.artifacts.api.submission_admission import SubmissionBundleFile
@@ -20,6 +20,15 @@ from app.modules.artifacts.submission_archive import (
 
 
 SUBMISSION_MANIFEST_SCHEMA_VERSION = "workstream.submission_bundle_manifest.v1"
+
+
+def semantic_manifest_identity(semantic_manifest_sha256: str) -> UUID:
+    """Derive one provider-neutral identity from the canonical manifest digest."""
+    ArtifactCommitment.validate_sha256(semantic_manifest_sha256)
+    return uuid5(
+        NAMESPACE_URL,
+        f"workstream:submission-semantic-manifest:v1:{semantic_manifest_sha256}",
+    )
 
 
 class SubmissionChangeFailureCode(StrEnum):

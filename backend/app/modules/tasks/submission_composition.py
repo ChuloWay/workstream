@@ -21,7 +21,7 @@ from app.modules.tasks.api import (
     TaskSubmissionContextRequest,
     TaskSubmissionContextPort,
 )
-from app.modules.checkers.api import SubmissionPacketView
+from app.modules.checkers.api.pre_submit_material import SubmissionPacketView
 from app.modules.tasks.models import EvidenceItem, Submission
 from app.modules.tasks.submission_participants import (
     SubmissionArtifactAdmissionPort, SubmissionArtifactAdmissionRequest,
@@ -34,7 +34,6 @@ from app.modules.tasks.submission_replay import read_creation_replay
 from app.modules.tasks.lifecycle import ensure_allowed_transition
 from app.modules.checkers.api.execution import EvaluationCoordinationPort
 from app.modules.checkers.api.selected_post_submit import (
-    SelectedPostSubmissionEvaluationRequest,
     make_selected_post_submit_request,
 )
 from app.modules.outbox.api import OutboxAppendPort
@@ -305,24 +304,10 @@ class TaskSubmissionCreationService:
                 or evaluation.content_id != consumed.content_id
                 or evaluation.content_sha256 != consumed.archive_sha256
                 or evaluation.byte_count != consumed.byte_count
-                or (
-                    isinstance(evaluation, SelectedPostSubmissionEvaluationRequest)
-                    and (
-                        consumed.selected_evaluation_content is None
-                        or evaluation.project_id != consumed.selected_evaluation_content.project_id
-                        or evaluation.expected_context
-                        != consumed.selected_evaluation_content.expected_context
-                        or evaluation.policy != consumed.selected_evaluation_content.policy
-                    )
-                )
-                or (
-                    not isinstance(evaluation, SelectedPostSubmissionEvaluationRequest)
-                    and (
-                        evaluation.structural_input.summary != request.summary
-                        or evaluation.structural_input.worker_attestation
-                        != request.contributor_attestation
-                    )
-                )
+                or consumed.selected_evaluation_content is None
+                or evaluation.project_id != consumed.selected_evaluation_content.project_id
+                or evaluation.expected_context != consumed.selected_evaluation_content.expected_context
+                or evaluation.policy != consumed.selected_evaluation_content.policy
             ):
                 raise SubmissionCreationUnavailable("submission creation is unavailable")
             await self._events.require_existing(receipt.evaluation_event_id, evaluation_request_event(receipt))

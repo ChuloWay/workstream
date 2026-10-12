@@ -27,16 +27,12 @@ from app.modules.artifacts.preparation import (
 )
 from app.modules.artifacts.service import ArtifactStorageNamespaceError, ArtifactStorageNamespaceSpec
 from app.modules.artifacts.submission_archive import (
-    SealedSubmissionTree, SubmissionArchiveInspector, SubmissionArchiveEntryType,
-    SubmissionArchiveRejectedError,
+    SealedSubmissionTree, SubmissionArchiveInspector, SubmissionArchiveRejectedError,
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
 from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionResult,
     validate_execution_result,
-)
-from app.modules.checkers.api.selected_post_submit import (
-    SelectedPostSubmissionEvaluationRequest,
 )
 from app.modules.checkers.api.execution import (
     ExecuteFacts, CurrentExecutionPort, VerifiedMaterialFacts, CheckerExecutionUnavailable,
@@ -328,23 +324,7 @@ class PostSubmissionMaterializer:
                 )
                 inspection = await prepared.inspect(self._inspector)
                 manifest = build_submission_manifest(inspection)
-                expected_files = tuple((entry.normalized_path, entry.sha256, entry.byte_count)
-                                       for entry in manifest.entries
-                                       if entry.entry_type is SubmissionArchiveEntryType.FILE)
-                supplied_files = (
-                    expected_files
-                    if isinstance(request, SelectedPostSubmissionEvaluationRequest)
-                    else tuple(
-                        sorted(
-                            (entry.artifact, entry.hash, entry.size_bytes)
-                            for entry in request.structural_input.manifest
-                        )
-                    )
-                )
-                if (
-                    manifest.sha256 != selected.semantic_manifest_sha256
-                    or supplied_files != expected_files
-                ):
+                if manifest.sha256 != selected.semantic_manifest_sha256:
                     raise PostSubmissionMaterializationFailure("post_submit_material_manifest_mismatch")
                 materialization_facts = self._authority_facts(facts, selected)
                 evaluation = await self._preparation._process_prepared_submission(

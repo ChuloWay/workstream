@@ -23,7 +23,6 @@ from app.modules.checkers.api.external_policy import validate_stored_external_po
 from app.modules.artifacts.models import (
     ArtifactBinding,
     ArtifactContent,
-    PreSubmitEvidenceSet,
     SubmissionBundleAdmission,
     SubmissionBindingReceipt,
 )
@@ -124,7 +123,6 @@ class SubmissionAdmissionConsumptionService:
             raise SubmissionAdmissionConsumptionError(
                 "submission_bundle_admission_already_consumed"
             )
-        evidence = await self._legacy_evidence(admission)
         content = await self._session.scalar(
             select(ArtifactContent)
             .where(ArtifactContent.id == admission.artifact_content_id)
@@ -134,7 +132,7 @@ class SubmissionAdmissionConsumptionService:
             raise SubmissionAdmissionConsumptionError(
                 "submission_bundle_admission_unavailable"
             )
-        if not self._art_lineage_is_intact(admission, evidence, content):
+        if not self._art_lineage_is_intact(admission, content):
             raise SubmissionAdmissionConsumptionError(
                 "submission_bundle_admission_unavailable"
             )
@@ -255,7 +253,6 @@ class SubmissionAdmissionConsumptionService:
                                           populate_existing=True)
         if receipt is None:
             raise SubmissionAdmissionConsumptionError("submission_bundle_admission_unavailable")
-        evidence = await self._legacy_evidence(admission)
         content = await self._session.scalar(select(ArtifactContent).where(
             ArtifactContent.id == admission.artifact_content_id,
         ).with_for_update().execution_options(populate_existing=True))
@@ -270,7 +267,7 @@ class SubmissionAdmissionConsumptionService:
             content is None or binding is None
             or binding.content_id != admission.artifact_content_id
             or binding.id != receipt.binding_id
-            or not self._art_lineage_is_intact(admission, evidence, content)
+            or not self._art_lineage_is_intact(admission, content)
             or admission.packet_sha256 != request.packet_sha256
         ):
             raise SubmissionAdmissionConsumptionError("submission_bundle_admission_context_changed")
@@ -280,66 +277,18 @@ class SubmissionAdmissionConsumptionService:
         return self._result(admission, request, binding=binding, replayed=True,
                             binding_decision_id=UUID(receipt.decision_id))
 
-    async def _legacy_evidence(
-        self, admission: SubmissionBundleAdmission
-    ) -> PreSubmitEvidenceSet | None:
-        """Load retained legacy evidence only for historical lineage validation."""
-        if admission.pre_submit_evidence_set_id is None:
-            return None
-        return await self._session.scalar(
-            select(PreSubmitEvidenceSet)
-            .where(PreSubmitEvidenceSet.id == admission.pre_submit_evidence_set_id)
-            .with_for_update()
-            .execution_options(populate_existing=True)
-        )
-
     @staticmethod
     def _art_lineage_is_intact(
-        admission: SubmissionBundleAdmission,
-        evidence: PreSubmitEvidenceSet | None,
-        content: ArtifactContent,
+        admission: SubmissionBundleAdmission, content: ArtifactContent,
     ) -> bool:
-        legacy_intact = evidence is None or bool(
-            evidence.id == admission.pre_submit_evidence_set_id
-            and admission.selected_pre_submit_run_id is None
-            and evidence.actor_profile_id == admission.actor_profile_id
-            and evidence.identity_link_id == admission.identity_link_id
-            and evidence.project_id == admission.project_id
-            and evidence.task_id == admission.task_id
-            and evidence.assignment_id == admission.assignment_id
-            and evidence.predecessor_submission_id
-            == admission.predecessor_submission_id
-            and evidence.predecessor_submission_version
-            == admission.predecessor_submission_version
-            and evidence.checker_remediation_manifest_id
-            == admission.checker_remediation_manifest_id
-            and evidence.locked_policy_context_hash
-            == admission.locked_policy_context_hash
-            and evidence.semantic_manifest_id == admission.semantic_manifest_id
-            and evidence.semantic_manifest_sha256
-            == admission.semantic_manifest_sha256
-            and evidence.archive_sha256 == admission.archive_sha256
-            and evidence.archive_byte_count == admission.archive_byte_count
-            and evidence.terminal_status == "passed"
-            and evidence.eligible is True
-        )
-        selected_policy_intact = admission.selected_pre_submit_run_id is None
-        if admission.selected_pre_submit_run_id is not None:
-            try:
-                selected_policy = validate_stored_external_post_policy(
-                    admission.selected_post_submit_policy_body
-                )
-                selected_policy_intact = (
-                    selected_policy.policy_sha256
-                    == admission.selected_post_submit_policy_sha256
-                )
-            except (TypeError, ValueError):
-                selected_policy_intact = False
+        try:
+            policy = validate_stored_external_post_policy(admission.selected_post_submit_policy_body)
+        except (TypeError, ValueError):
+            return False
         return bool(
-            legacy_intact
-            and selected_policy_intact
-            and (admission.pre_submit_evidence_set_id is None)
-            != (admission.selected_pre_submit_run_id is None)
+            admission.pre_submit_evidence_set_id is None
+            and admission.selected_pre_submit_run_id is not None
+            and policy.policy_sha256 == admission.selected_post_submit_policy_sha256
             and content.id == admission.artifact_content_id
             and content.sha256 == admission.archive_sha256
             and content.byte_count == admission.archive_byte_count

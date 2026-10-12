@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterable
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
 from app.modules.authorization.api import ActorIdentityFacts
-from app.modules.checkers.api import PreSubmissionExecutionFacts
 from app.modules.checkers.api.selected_pre_submit import SelectedPreSubmitExecutionFacts
 
 
@@ -22,12 +21,9 @@ class SubmissionBundlePreparationCheckFailed(SubmissionBundlePreparationRejected
 
     def __init__(
         self,
-        facts: PreSubmissionExecutionFacts | SelectedPreSubmitExecutionFacts,
+        facts: SelectedPreSubmitExecutionFacts,
     ) -> None:
-        if type(facts) not in {
-            PreSubmissionExecutionFacts,
-            SelectedPreSubmitExecutionFacts,
-        }:
+        if type(facts) is not SelectedPreSubmitExecutionFacts:
             raise TypeError("pre-submission feedback facts are invalid")
         if facts.eligible is not False:
             raise ValueError("blocked pre-submission facts require eligible false")
@@ -36,9 +32,6 @@ class SubmissionBundlePreparationCheckFailed(SubmissionBundlePreparationRejected
 
     def public_results(self) -> list[dict[str, object]]:
         """Return sanitized ordered work findings without execution authority."""
-        if type(self.facts) is PreSubmissionExecutionFacts:
-            return [asdict(entry) for entry in self.facts.entries]
-        assert type(self.facts) is SelectedPreSubmitExecutionFacts
         default = self.facts.workstream_default
         results: list[dict[str, object]] = [
             {

@@ -7,7 +7,6 @@ from collections.abc import Sequence
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.checkers.api.external_policy import validate_stored_external_post_policy
-from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
 from uuid import UUID
 
 from sqlalchemy import Row, Select, and_, or_, select, tuple_
@@ -750,22 +749,12 @@ class TaskRepository:
                 for value in (getattr(task, key),)
             }))
             post_body = task.locked_post_submit_checker_policy_body
-            if post_body.get("schema_version") == "external_post_submit_policy.v1":
-                selected_post = validate_stored_external_post_policy(post_body)
-                if (
-                    selected_post.policy_sha256
-                    != locked_policy.locked_post_submit_checker_policy_hash
-                ):
-                    raise ValueError("task post-submit policy body differs from locked identity")
-            else:
-                historical_post = CompiledPostSubmitPolicy.model_validate(post_body)
-                if (
-                    historical_post.policy_hash
-                    != locked_policy.locked_post_submit_checker_policy_hash
-                    or historical_post.project_id != UUID(task.project_id)
-                    or historical_post.guide_version != locked_policy.locked_guide_version
-                ):
-                    raise ValueError("task post-submit policy body differs from locked identity")
+            selected_post = validate_stored_external_post_policy(post_body)
+            if (
+                selected_post.policy_sha256
+                != locked_policy.locked_post_submit_checker_policy_hash
+            ):
+                raise ValueError("task post-submit policy body differs from locked identity")
             locked_project_context = TaskLockedProjectContextReferences(
                 project_id=UUID(task.project_id),
                 locked_contribution_policy_version_id=task.locked_contribution_policy_version_id,

@@ -215,19 +215,16 @@ class _ArtifactAdmissionAdapter:
             else None
         )
         if selected_post_policy is None:
-            raise RuntimeError("legacy checker admission cannot create a submission")
+            raise RuntimeError("external checker admission policy is unavailable")
         return SubmissionArtifactAdmissionResult(
             binding_id=result.binding_id,
             content_id=result.content_id,
             binding_decision_id=result.binding_decision_id,
             archive_sha256=result.material.archive_sha256,
             byte_count=result.material.archive_byte_count,
-            evaluation_content=None,
             selected_post_submit_policy=selected_post_policy,
-            selected_evaluation_content=(
-                selected_submission_evaluation_content(request.task_context, selected_post_policy)
-                if selected_post_policy is not None
-                else None
+            selected_evaluation_content=selected_submission_evaluation_content(
+                request.task_context, selected_post_policy
             ),
         )
 
@@ -258,12 +255,8 @@ class _ArtifactAdmissionAdapter:
             validate_stored_external_post_policy,
         )
 
-        selected_post_policy = (
-            validate_stored_external_post_policy(
-                result.selected_post_submit_policy_body
-            )
-            if result.selected_post_submit_policy_body is not None
-            else None
+        selected_post_policy = validate_stored_external_post_policy(
+            result.selected_post_submit_policy_body
         )
         return SubmissionArtifactBindingFacts(
             binding_id=result.binding_id,
@@ -271,12 +264,8 @@ class _ArtifactAdmissionAdapter:
             binding_decision_id=result.binding_decision_id,
             archive_sha256=result.material.archive_sha256,
             byte_count=result.material.archive_byte_count,
-            selected_evaluation_content=(
-                selected_submission_evaluation_content(
-                    request.task_context, selected_post_policy
-                )
-                if selected_post_policy is not None
-                else None
+            selected_evaluation_content=selected_submission_evaluation_content(
+                request.task_context, selected_post_policy
             ),
         )
 
@@ -363,17 +352,10 @@ def evaluation_request_handler(*, sessions, materialization):
     )
     from app.adapters.outbox import committed_invocation_reader
     from app.core.config import get_settings
-    from app.modules.checkers.api.selected_post_submit import (
-        SelectedPostSubmissionEvaluationRequest,
-    )
     from app.modules.tasks.evaluation_delivery import EvaluationRequestHandler
 
     def executor(envelope, request):
-        selected_execution = (
-            configured_external_checker_execution(get_settings())
-            if isinstance(request, SelectedPostSubmissionEvaluationRequest)
-            else None
-        )
+        selected_execution = configured_external_checker_execution(get_settings())
         return delivery_bound_post_submission_executor(
             sessions=sessions,
             materialization=materialization,
