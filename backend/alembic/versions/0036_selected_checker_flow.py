@@ -781,7 +781,33 @@ def _replace_submission_dispatch_custody() -> None:
     AND (r.request_json::jsonb->'structural_input'->>'worker_attestation')=s.worker_attestation))"""
     if definition.count(old_packet) != 1:
         raise RuntimeError("submission dispatch packet custody shape changed")
-    op.execute(definition.replace(old_packet, new_packet))
+    definition = definition.replace(old_packet, new_packet)
+    old_evidence_join = (
+        "JOIN public.pre_submit_evidence_sets evidence "
+        "ON evidence.id = a.pre_submit_evidence_set_id"
+    )
+    if old_evidence_join not in definition:
+        old_evidence_join = old_evidence_join.replace(" = ", "=")
+    if definition.count(old_evidence_join) != 1:
+        raise RuntimeError("submission dispatch evidence join shape changed")
+    definition = definition.replace(
+        old_evidence_join,
+        old_evidence_join.replace("JOIN public", "LEFT JOIN public"),
+    )
+    old_evidence_cause = (
+        "evidence.checker_remediation_manifest_id IS NOT DISTINCT FROM "
+        "a.checker_remediation_manifest_id"
+    )
+    if definition.count(old_evidence_cause) != 1:
+        raise RuntimeError("submission dispatch evidence cause shape changed")
+    new_evidence_cause = """((a.selected_pre_submit_run_id IS NULL
+    AND evidence.id IS NOT NULL
+    AND evidence.checker_remediation_manifest_id IS NOT DISTINCT FROM
+      a.checker_remediation_manifest_id)
+   OR (a.selected_pre_submit_run_id IS NOT NULL
+    AND a.pre_submit_evidence_set_id IS NULL
+    AND evidence.id IS NULL))"""
+    op.execute(definition.replace(old_evidence_cause, new_evidence_cause))
 
 
 def _replace_submission_binding_resource() -> None:
