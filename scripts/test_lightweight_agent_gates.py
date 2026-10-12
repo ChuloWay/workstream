@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import subprocess
 import tempfile
 import textwrap
@@ -29,9 +30,15 @@ class LightweightAgentGateTests(unittest.TestCase):
             1,
         )[1]
         script = textwrap.dedent(step.split("        run: |\n", 1)[1])
-        self.assertIn("set -euo pipefail", script)
-        self.assertIn("--timeout-seconds 300", script)
-        self.assertIn("-- python -m pytest -q ../cli/tests/integration", script)
+        self.assertEqual(
+            shlex.split(script.replace("\\\n", ""), comments=True),
+            [
+                "set", "-euo", "pipefail", "python", "scripts/run_isolated_tests.py",
+                "--metadata-json", "${RUNNER_TEMP}/workstream-cli-isolation.json",
+                "--timeout-seconds", "300", "--", "python", "-m", "pytest", "-q",
+                "../cli/tests/integration",
+            ],
+        )
         self.assertNotIn("continue-on-error", workflow)
         self.assertNotIn("|| true", script)
         for exit_code in (0, 1, 124):
