@@ -15,16 +15,34 @@ from app.modules.checkers.api.execution import (
 from app.adapters.checkers import evaluation_coordinator
 from app.modules.checkers.models import CheckerRun
 from tests.checkers.post_submit.support import change_request
-from tests.checkers.post_submit.test_result_contract import result
+from tests.checkers.execution.support import selected_result as result
 from tests.post_submit_materialization_helpers import material_fixture
 from .support import reserve, live_executor
 
 
-async def final_facts(h, lease):
+async def final_facts(h, lease, *, verdict="passed"):
     """A controlled closed result for lease races, not a byte-evaluation assertion."""
     from tests.checkers.execution.storage_fixture import authorize_stored_material
     from app.modules.checkers.api.execution import ExecuteFacts
 
+    if h.request.policy.entries:
+        from dataclasses import asdict
+        from .support import ControlledSelectedExecution
+
+        consumer = live_executor(
+            h, selected_execution=ControlledSelectedExecution(verdict=verdict),
+        )._consumer(h.request, lease)
+        materialized = await h.service.materialize(ExecuteFacts(request=h.request, lease=lease), consumer)
+        material = VerifiedMaterialFacts(**{
+            key: value for key, value in asdict(materialized).items()
+            if key not in {"evaluation", "input_materialization_evidence_id"}
+        })
+        return FinalizeFacts(
+            request=h.request, lease=lease, result=materialized.evaluation,
+            material=material,
+            input_materialization_evidence_id=materialized.input_materialization_evidence_id,
+            output_binding_ids=(),
+        )
     material = VerifiedMaterialFacts(
         submission_id=h.request.submission_id,
         submission_version=h.request.submission_version,
@@ -232,14 +250,14 @@ async def test_evaluation_releases_transaction_before_materialization(
                 await probe("before_bytes")
                 return await h.service.materialize(request, consumer)
 
-        original = execution._StructuralConsumer.evaluate
+        original = execution._SelectedExternalConsumer.evaluate
 
         async def evaluate(consumer, request, material):
             assert material.entries
             await probe("inside_consumer")
             return await original(consumer, request, material)
 
-        monkeypatch.setattr(execution._StructuralConsumer, "evaluate", evaluate)
+        monkeypatch.setattr(execution._SelectedExternalConsumer, "evaluate", evaluate)
         executor = live_executor(h)
         executor._execute_authority = TrackingAuthority
         executor._materialization = MaterializationProbe()

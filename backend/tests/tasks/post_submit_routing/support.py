@@ -215,6 +215,7 @@ async def completed_source(
     storage_settings=None,
     contribution_awards=(),
     human_review_required=True,
+    post_submit_registry_spec=None,
 ):
     """Yield one real authorized allow-review run and its valid source scalars."""
     async with material_fixture(
@@ -224,6 +225,7 @@ async def completed_source(
         storage_settings=storage_settings,
         contribution_awards=contribution_awards,
         human_review_required=human_review_required,
+        post_submit_registry_spec=post_submit_registry_spec,
     ) as h:
         await reserve(h)
         result = await live_executor(h).evaluate_post_submission(h.request)
@@ -252,8 +254,8 @@ async def _create_submission(h, context, task_id, assignment_id, predecessor_id=
         assignment_id=assignment_id,
         predecessor_submission_id=predecessor_id,
         idempotency_key=new_record_id(),
-        summary=h.request.structural_input.summary,
-        contributor_attestation=h.request.structural_input.worker_attestation,
+        summary=h.creation_request.summary,
+        contributor_attestation=h.creation_request.contributor_attestation,
         media_type="application/zip",
         byte_source=_bytes(h.data),
     )

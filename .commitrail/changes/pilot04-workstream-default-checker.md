@@ -699,3 +699,69 @@ short-root execution service checks pass (11 cases). Ruff and diff whitespace
 checks pass. This is author verification; independent review and the final clean
 combined PostgreSQL/MinIO/real-image journey remain required, as does full hosted
 CI. No migration or provider proof is claimed by this checkpoint.
+
+### Hosted selected-test reconciliation
+
+The hosted cutover artifacts expose obsolete catalogue test callers alongside
+real owner defects. This test-only repair replaces live fixture references to
+removed structural request/consumer/result contracts with selected external
+contracts and deletes cases whose sole purpose is built-in catalogue execution.
+Immutable retained data remains; no historical runtime/DTO path is restored. Authority, full lineage, lease/lock, cleanup, rollback, exact replay and
+review-source proof must remain. No aliases, fallback providers, skips, selector,
+timeout, migration or production edits are allowed.
+
+Allowed files: this record; backend/tests/checkers/execution/{support.py,
+test_concurrency.py,test_coordination.py,test_execution.py};
+backend/tests/checkers/post_submit/{test_requirement_dispositions.py,
+test_public_boundary.py}; backend/tests/authorization/post_submit/{test_live_authority.py,
+test_timeout.py}; backend/tests/test_post_submit_materialization.py;
+backend/tests/test_post_submit_selection.py; backend/tests/test_agent_runtime.py;
+backend/tests/tasks/post_submit_routing/{support.py,test_evaluation_guard.py,
+test_evaluation_currentness.py}; backend/tests/reviews/decision/support.py.
+Parent/peer owns admin permission counts, TASK port fixture wiring, current
+owner corrections, compilation coordinator awaits and migration baselines.
+
+Acceptance: updated live tests target the sole selected execution contract;
+retained required checks keep their discriminating negatives; deleted obsolete
+semantics have an explicit retained-proof mapping. Focused pure/current-contract
+checks and native authority/material/locking cases are required, followed by the
+lead's complete canonical suite. Risk is test-integrity: independent test-delta
+review checks each deletion and preserves authority/evidence behavior.
+
+Additional causal test scope (peer confirmed disjoint):
+backend/tests/checkers/execution/{test_material_lineage.py,test_storage.py,
+material_storage_helpers.py,storage_fixture.py};
+backend/tests/authorization/post_submit/test_receipt_custody.py;
+backend/tests/authorization/task_locked_context/test_visibility.py. These repair
+selected result/member SQL fixture shapes and retain current closed-policy
+visibility, immutable lineage and action receipt controls. The unsupported raw
+envelope guard is retained at the current owner entry. Retained raw row migration
+custody remains peer-owned proof.
+
+Explicit user cleanup supersedes prior retained-runtime/decoder test preservation.
+Allowed additional files: backend/tests/checkers/post_submit/support.py and
+removal of test_configuration.py, test_input_bounds.py, test_request.py and
+test_result_contract.py in that directory. These obsolete tests enforce removed
+historical catalogue/rule request contracts, not current selected execution.
+Current selected PRE/POST/default tests retain exact closed input/result bounds,
+phase/id/digest/stage binding, infrastructure/work separation and no acceptance.
+Stored immutable data remains; no active historical DTO/factory/terminal executor
+path is recreated. The unsupported raw envelope negative retains the no alternate
+execution boundary. Exact module inventory deletion is coordinated with the lead
+for the final canonical exhaustive suite; no test selection/cap is weakened.
+
+Deleted semantic families: built-in catalogue configuration/selection, old
+structural request DTO field/aggregate bounds, nine-member generic result shapes,
+and disabled mandatory catalogue readiness. Required current proof remains in
+checkers/external/{test_contracts.py,test_policy.py,test_selected_pre_submit.py,
+test_selected_post_submit.py}, test_workstream_default_checker.py and unified
+project guide compilation contract tests (unknown/stale/stage/typed config).
+Authority, callback lifetime, post-I/O revocation, cleanup failure, crossed native
+lineage/receipts, exact replay, complete selected member closure and review-source
+mutation tests are updated rather than removed.
+
+First focused pure scope passed 5 tests in 21.53s before the backend selected-only
+API checkpoint; raw /tmp/pilot04-selected-test-pure-current.log. The wider caller
+collection failure from module-level old output fixture imports is retained at
+/tmp/pilot04-selected-test-pure-first.log. Full composed collection/native proof
+remains required after peer source/shared fixture cleanup; this is not green CI.

@@ -15,7 +15,7 @@ from app.modules.checkers.api.execution import (
 )
 from app.modules.checkers.execution_repository import ExecutionRepository, reservation
 from app.modules.checkers.models import CheckerRun, CheckerResult
-from app.modules.checkers.post_submit_contracts import make_post_submit_result
+from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_result
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import AuditEvent
 from tests.checkers.execution.support import live_executor, reserve
@@ -122,16 +122,16 @@ async def test_final_receipt_commits_only_exact_outcome(
             await wait_for_expiry(h, lease)
             lease = await next_lease(h)
         source = await final_facts(h, lease)
-        result = make_post_submit_result(
+        result = make_selected_post_submit_result(
             request_id=h.request.evaluation_request_id, request_digest=h.request.request_sha256,
             attempt_id=lease.reservation.attempt_id, result_id=lease.reservation.result_id,
             evaluation_generation=h.request.evaluation_generation, outcome="infrastructure_failed",
-            member_results=(), infrastructure_failure_code="deadline_exceeded",
+            execution=None, infrastructure_failure_code="deadline_exceeded",
         )
         facts = source.model_copy(update={"result": result})
         stored = facts
         if substitution == "result":
-            changed = make_post_submit_result(**(result.model_dump(exclude={"result_digest"}) | {
+            changed = make_selected_post_submit_result(**(result.model_dump(exclude={"result_digest"}) | {
                 "infrastructure_failure_code": "invalid_output",
             }))
             stored = facts.model_copy(update={"result": changed})
@@ -181,14 +181,14 @@ async def test_terminal_receipt_digest_matches_database(tmp_path, isolated_datab
                 update={
                     "material": None,
                     "input_materialization_evidence_id": None,
-                    "result": make_post_submit_result(
+                    "result": make_selected_post_submit_result(
                         request_id=h.request.evaluation_request_id,
                         request_digest=h.request.request_sha256,
                         attempt_id=lease.reservation.attempt_id,
                         result_id=lease.reservation.result_id,
                         evaluation_generation=h.request.evaluation_generation,
                         outcome=outcome,
-                        member_results=(),
+                        execution=None,
                         infrastructure_failure_code="material_unavailable",
                     ),
                 }
@@ -218,14 +218,14 @@ async def test_final_receipt_independently_requires_execute_receipt(
             update={
                 "material": None,
                 "input_materialization_evidence_id": None,
-                "result": make_post_submit_result(
+                "result": make_selected_post_submit_result(
                     request_id=h.request.evaluation_request_id,
                     request_digest=h.request.request_sha256,
                     attempt_id=lease.reservation.attempt_id,
                     result_id=lease.reservation.result_id,
                     evaluation_generation=h.request.evaluation_generation,
                     outcome="infrastructure_failed",
-                    member_results=(),
+                    execution=None,
                     infrastructure_failure_code="material_unavailable",
                 ),
             }

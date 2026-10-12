@@ -16,9 +16,7 @@ async def test_reservation_replay_rejects_changed_envelope(tmp_path, isolated_da
     async with material_fixture(tmp_path, isolated_database_env) as h:
         first = await reserve(h)
         assert await reserve(h) == first
-        changed = change_request(h.request, structural_input=h.request.structural_input.model_copy(
-            update={"summary": "Changed request with the same exact owner lineage."}
-        ))
+        changed = change_request(h.request, byte_count=h.request.byte_count + 1)
         with pytest.raises(CheckerRequestConflict, match="checker_request_conflict"):
             await reserve(h, changed)
         async with h.factory() as session:

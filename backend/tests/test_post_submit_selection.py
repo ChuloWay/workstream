@@ -66,14 +66,11 @@ async def test_task_projection_is_owner_qualified_and_exact(tmp_path, isolated_d
 
 async def test_frozen_context_substitution_rejected_by_art_selection(tmp_path, isolated_database_env):
     async with material_fixture(tmp_path, isolated_database_env) as h:
-        for name in ("source_id", "effective_policy_id", "pre_policy_id", "post_policy_id", "review_policy_id", "revision_policy_id", "review_generation", "revision_hash"):
+        for name in ("source_id", "effective_policy_id", "pre_policy_id", "retained_catalogue_policy_id", "review_policy_id", "revision_policy_id", "review_generation", "revision_hash"):
             value = (2 if name == "review_generation" else "sha256:" + "0" * 64 if name == "revision_hash" else new_record_id())
             expected = h.request.expected_context.model_copy(update={name: value})
-            packet = h.request.structural_input.model_copy(update={
-                "observed_context": h.request.structural_input.observed_context.model_copy(update={name: value}),
-            })
             with pytest.raises(PostSubmissionMaterializationUnavailable, match="identity_mismatch"):
-                await select_material(h, change_request(h.request, expected_context=expected, structural_input=packet))
+                await select_material(h, change_request(h.request, expected_context=expected))
         assert not h.store.opens and not h.preparation._active
         selected = await select_material(h, h.request)
         assert selected.submission.admission_id == h.created.admission_id
@@ -111,8 +108,7 @@ async def test_valid_foreign_lineage_mixes_deny_before_material_access(tmp_path,
                             # Keep duplicated project/policy facts schema-valid so
                             # rejection must come from persisted owner selection.
                             mix.update(policy=foreign.request.policy,
-                                       expected_context=foreign.request.expected_context,
-                                       structural_input=foreign.request.structural_input)
+                                       expected_context=foreign.request.expected_context)
                         mixed = change_request(own.request, **mix)
                         with pytest.raises((PostSubmissionMaterializationUnavailable, SubmittedBundleUnavailable)):
                             await select_material(own, mixed)

@@ -1,17 +1,15 @@
 """Historical locked facts remain readable in every stored lifecycle state."""
-import json
-
 import pytest
 from sqlalchemy import select
 
 from app.db import session as db_session
 from app.modules.authorization.models import AdminRoleGrant
-from app.modules.checkers.api.historical_post_submit import CompiledPostSubmitPolicy
+from app.modules.checkers.api.external_policy import validate_stored_external_post_policy
 from app.modules.tasks.lifecycle import ALLOWED_TASK_TRANSITIONS
 from app.modules.tasks.models import WorkstreamTask
 from tests.authorization.task_locked_context.support import KINDS, grant_for, path
 from tests.authorization.task_reads.support import task_case
-from tests.tasks.test_locked_context import REFERENCE_FIELDS, SUMMARY, SUMMARY_FIELDS
+from tests.tasks.test_locked_context import REFERENCE_FIELDS, SUMMARY
 
 
 @pytest.mark.parametrize("kind", KINDS)
@@ -23,9 +21,11 @@ async def test_locked_context_exact_fields_all_states_and_corrupt_custody(admin_
         stored = await session.get(WorkstreamTask, str(task))
         expected = {field: str(getattr(stored, "id" if field == "task_id" else field))
                     if field.endswith("_id") else getattr(stored, field) for field in REFERENCE_FIELDS}
-        compiled = CompiledPostSubmitPolicy.model_validate_json(json.dumps(stored.locked_post_submit_checker_policy_body))
-        summary = {field: getattr(compiled, field) for field in SUMMARY_FIELDS}
-        summary["blocking_severities"] = list(compiled.blocking_severities)
+        compiled = validate_stored_external_post_policy(stored.locked_post_submit_checker_policy_body)
+        required = [item.registry.capability_id for item in compiled.entries]
+        summary = dict(schema_version=compiled.schema_version, default_checkers=[],
+                       required_checkers=required, warning_checkers=[],
+                       execution_checkers=required, blocking_severities=["critical", "high"])
         expected |= {SUMMARY: summary} if kind == "management" else {}
     states = {state for transition in ALLOWED_TASK_TRANSITIONS for state in transition}
     assert len(states) == 9
@@ -40,9 +40,9 @@ async def test_locked_context_exact_fields_all_states_and_corrupt_custody(admin_
         assert response.json() == expected
     async with factory() as session, session.begin():
         stored = await session.get(WorkstreamTask, str(task))
-        stored.locked_post_submit_checker_policy_body = {**stored.locked_post_submit_checker_policy_body, "blocking_severities": []}
+        stored.locked_post_submit_checker_policy_body = {**stored.locked_post_submit_checker_policy_body, "policy_sha256": "sha256:" + "0" * 64}
     async with factory() as independent:
-        assert (await independent.get(WorkstreamTask, str(task))).locked_post_submit_checker_policy_body["blocking_severities"] == []
+        assert (await independent.get(WorkstreamTask, str(task))).locked_post_submit_checker_policy_body["policy_sha256"] == "sha256:" + "0" * 64
     response = await admin_access.signed.client.get(path(kind, project, task), headers=admin_access.target.headers)
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "task_locked_context_invalid"

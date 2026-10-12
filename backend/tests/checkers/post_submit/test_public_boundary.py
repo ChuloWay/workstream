@@ -5,12 +5,12 @@ import inspect
 from pathlib import Path
 
 from app.modules.checkers.api import PostSubmissionExecutionPort
-from app.modules.checkers.api.post_submit import PostSubmissionEvaluationRequest
+from app.modules.checkers.api.selected_post_submit import SelectedPostSubmissionEvaluationRequest
 
 
 def test_public_api_has_no_private_owner_types():
     directory = Path(__file__).resolve().parents[3] / "app" / "modules" / "checkers" / "api"
-    for name in ("post_submit.py", "post_submit_catalogue.py"):
+    for name in ("selected_post_submit.py", "external.py"):
         tree = ast.parse((directory / name).read_text())
         imports = [node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom)]
         assert not any(
@@ -26,5 +26,5 @@ def test_public_api_has_no_private_owner_types():
             if not name.startswith("_")
         ]
         assert methods == ["evaluate_post_submission"]
-    assert "checker_names" not in PostSubmissionEvaluationRequest.model_fields
-    assert "prepared" not in PostSubmissionEvaluationRequest.model_fields
+    assert "checker_names" not in SelectedPostSubmissionEvaluationRequest.model_fields
+    assert "prepared" not in SelectedPostSubmissionEvaluationRequest.model_fields

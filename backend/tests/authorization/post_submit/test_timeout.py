@@ -29,7 +29,7 @@ async def test_outer_deadline_revalidates_material_after_cleanup(tmp_path, isola
                     error = RuntimeError if consumer_failure == "runtime_error" else TimeoutError
                     raise error("consumer failed after abort") from None
                 raise
-        monkeypatch.setattr(execution._StructuralConsumer, "evaluate", paused)
+        monkeypatch.setattr(execution._SelectedExternalConsumer, "evaluate", paused)
         # Arm the actual asyncio deadline after the consumer enters, avoiding a
         # machine-speed race between setup queries and the short test deadline.
         deadlines = controlled_deadline(monkeypatch, execution)
@@ -74,7 +74,7 @@ def controlled_deadline(monkeypatch, execution):
         if seconds == 12345:
             deadlines.append(timer)
         return timer
-    monkeypatch.setattr(execution, "EXECUTION_TIMEOUT_SECONDS", 12345)
+    monkeypatch.setattr(execution.PostSubmissionExecutor, "_execution_budget_seconds", staticmethod(lambda request: 12345))
     monkeypatch.setattr(asyncio, "timeout", timeout)
     return deadlines
 
@@ -110,7 +110,7 @@ async def test_outer_deadline_cannot_hide_failed_scratch_cleanup(tmp_path, isola
         if failure == "release":
             monkeypatch.setattr(h.manager, "release", failed_release)
         else:
-            monkeypatch.setattr(execution._StructuralConsumer, "evaluate", paused_consumer)
+            monkeypatch.setattr(execution._SelectedExternalConsumer, "evaluate", paused_consumer)
             if failure == "workspace":
                 monkeypatch.setattr(h.manager, "_cleanup_workspace_sync", failed_workspace)
             else:

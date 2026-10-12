@@ -13,6 +13,7 @@ from tests.checkers.post_submit.support import change_request
 from tests.post_submit_materialization_helpers import material_fixture
 from .support import reserve, live_executor
 from .test_concurrency import final_facts
+from tests.checkers.external.support import post_registry_spec
 
 
 @pytest.mark.parametrize("duplicate", ["request", "generation"])
@@ -55,31 +56,15 @@ async def test_duplicate_request_and_generation_rejected(
 
 
 async def test_terminal_member_and_routing_custody(tmp_path, isolated_database_env, monkeypatch):
-    from app.modules.checkers.api.post_submit import PostSubmitMemberResult
-    from app.modules.checkers.post_submit_contracts import make_post_submit_result
     import app.modules.checkers.execution as execution
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
-        facts = await final_facts(h, lease)
-        members = list(facts.result.member_results)
-        definition = h.request.catalogue.definition(
-            members[0].checker_id, members[0].definition_version
-        )
-        members[0] = PostSubmitMemberResult(
-            checker_id=definition.capability_id,
-            implementation_version=definition.implementation_version,
-            status=definition.failure_status,
-            severity=definition.failure_severity,
-            code=definition.failure_code,
-            failure_category=definition.failure_category,
-        )
-        body = facts.result.model_dump(exclude={"result_digest"})
-        body["member_results"] = tuple(members)
-        blocked = make_post_submit_result(**body)
-        facts = facts.model_copy(update={"result": blocked})
+        facts = await final_facts(h, lease, verdict="failed")
+        blocked = facts.result
         canonical = execution.classify_result
         assert canonical(h.request, blocked).routing == "needs_revision"
         monkeypatch.setattr(
@@ -122,7 +107,8 @@ async def test_execution_custody_rejects_mutation(tmp_path, isolated_database_en
 
 
 async def test_unfinished_members_cannot_commit(tmp_path, isolated_database_env):
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         lease, _ = await live_executor(h)._claim(h.request)
         async with h.factory() as session:
@@ -143,36 +129,37 @@ async def test_member_shape_and_complete_set_enforced_in_database(
     from sqlalchemy import insert
     from app.modules.checkers.execution_repository import ExecutionRepository
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
         facts = await final_facts(h, lease)
-        first = facts.result.member_results[0]
+        first = facts.result.execution.external_members[0]
         values = dict(
             id=str(new_record_id()),
             checker_run_id=str(lease.reservation.attempt_id),
             task_id=str(h.request.task_id),
             submission_id=str(h.request.submission_id),
             member_order=0,
-            checker_name=first.checker_id,
-            definition_version=first.definition_version,
-            implementation_version=first.implementation_version,
-            status=first.status,
-            code=first.code,
-            failure_category=first.failure_category,
-            severity=first.severity,
+            checker_name=first.requirement_id,
+            definition_version=first.result.schema_version,
+            implementation_version=first.registry_entry_digest,
+            status=first.result.verdict,
+            code="passed",
+            failure_category="none",
+            severity="info",
             counters=[],
         )
         invalid = [
             ({"checker_name": "unselected_checker"}, "differs from selected definition"),
             (
-                {"member_order": len(facts.result.member_results)},
+                {"member_order": len(facts.result.execution.external_members)},
                 "differs from selected definition",
             ),
-            ({"status": "passed", "code": "packet_fields_missing"}, "passing member shape invalid"),
-            ({"counters": [{"key": "invalid_count", "value": 1025}]}, "counters invalid"),
-            ({"counters": [{"key": "invalid_count"}]}, "counters invalid"),
+            ({"status": "passed", "code": "packet_fields_missing"}, "differs from selected definition"),
+            ({"counters": [{"key": "invalid_count", "value": 1025}]}, "differs from selected definition"),
+            ({"counters": [{"key": "invalid_count"}]}, "differs from selected definition"),
             ({"task_id": str(new_record_id())}, "fk_checker_results_run_ownership"),
         ]
         async with h.factory() as session:
@@ -188,7 +175,7 @@ async def test_member_shape_and_complete_set_enforced_in_database(
 
         async def omit_last(repo, run, result):
             await original(
-                repo, run, result.model_copy(update={"member_results": result.member_results[:-1]})
+                repo, run, result.model_copy(update={"execution": replace(result.execution, required_external_count=0, external_members=())})
             )
 
         monkeypatch.setattr(ExecutionRepository, "write_members", omit_last)
@@ -207,23 +194,24 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
     tmp_path, isolated_database_env, monkeypatch
 ):
     from app.modules.checkers.execution_results import ResultClassification
-    from app.modules.checkers.post_submit_contracts import make_post_submit_result
+    from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_result
     from app.modules.outbox.models import OutboxEvent
     from app.modules.checkers.api.execution import COMPLETION_EVENT
     from sqlalchemy import func
     from sqlalchemy import text
     from . import material_storage_helpers
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
         valid = await final_facts(h, lease)
-        assert len(valid.result.member_results) > 1
-        assert all(member.status == "passed" for member in valid.result.member_results)
+        assert len(valid.result.execution.external_members) == 1
+        assert all(member.result.verdict == "passed" for member in valid.result.execution.external_members)
         body = valid.result.model_dump(exclude={"result_digest"})
-        body["member_results"] = valid.result.member_results[:-1]
-        short = make_post_submit_result(**body)
+        body["execution"] = replace(valid.result.execution, required_external_count=0, external_members=())
+        short = make_selected_post_submit_result(**body)
         facts = valid.model_copy(update={"result": short})
         # Simulate a faulty validator/compiler accepting a self-consistent short
         # result. Persisted members, counts, result digest and event all agree;
@@ -232,7 +220,7 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
 
         def faulty_classifier(request, result):
             assert request == h.request and result == short
-            return ResultClassification("allow_review", len(short.member_results), 0, 0, 0)
+            return ResultClassification("allow_review", len(short.execution.external_members), 0, 0, 0)
 
         monkeypatch.setattr(material_storage_helpers, "classify_result", faulty_classifier)
         async with h.factory() as session:
@@ -263,16 +251,16 @@ async def test_infrastructure_failure_code_is_closed_in_database(tmp_path, isola
     import json
     from sqlalchemy import update, func, text
     from app.core.hashing import canonical_json_hash
-    from app.modules.checkers.post_submit_contracts import make_post_submit_result
+    from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_result
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
         lease, _ = await live_executor(h)._claim(h.request)
-        result = make_post_submit_result(
+        result = make_selected_post_submit_result(
             request_id=h.request.evaluation_request_id, request_digest=h.request.request_sha256,
             attempt_id=lease.reservation.attempt_id, result_id=lease.reservation.result_id,
             evaluation_generation=h.request.evaluation_generation, outcome="infrastructure_failed",
-            member_results=(), infrastructure_failure_code="material_unavailable",
+            execution=None, infrastructure_failure_code="material_unavailable",
         )
         body = result.model_dump(mode="json", exclude={"result_digest"})
         async with h.factory() as session:

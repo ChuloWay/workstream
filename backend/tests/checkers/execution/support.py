@@ -63,6 +63,30 @@ class ControlledSelectedExecution:
         )
 
 
+def selected_result(source, **changes):
+    """Supply closed empty-policy evidence for owner and material boundary tests."""
+    from app.modules.checkers.api.selected_post_submit import (
+        SelectedPostSubmissionEvaluationRequest,
+        SelectedPostSubmitExecutionFacts,
+        make_selected_post_submit_result,
+    )
+
+    source = SelectedPostSubmissionEvaluationRequest.model_validate(source)
+    assert source.policy.entries == (), "external members require actual image execution"
+    fields = dict(
+        request_id=source.evaluation_request_id,
+        request_digest=source.request_sha256,
+        attempt_id=new_record_id(),
+        evaluation_generation=source.evaluation_generation,
+        result_id=new_record_id(),
+        outcome="completed",
+        execution=SelectedPostSubmitExecutionFacts(source.policy.policy_sha256, 0, ()),
+        infrastructure_failure_code=None,
+    )
+    fields.update(changes)
+    return make_selected_post_submit_result(**fields)
+
+
 class ForbiddenPostSubmission:
     async def evaluate_post_submission(self, request):
         pytest.fail("pre-submit-only test entered post-submit execution")

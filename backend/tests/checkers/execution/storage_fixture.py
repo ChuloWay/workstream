@@ -1,18 +1,14 @@
 """Closed history with canonical stored ART lineage and real fixed-service phase authority."""
 
-from app.modules.checkers.api.post_submit import make_post_submit_request
+from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_request
 from uuid import UUID
 
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.models import SubmissionBundleAdmission
 from app.modules.checkers.api.execution import ExecuteFacts, FinalizeFacts, VerifiedMaterialFacts
-from app.modules.checkers.api.post_submit import PostSubmitMemberResult
 from app.adapters.checkers import evaluation_coordinator
-from app.modules.checkers.post_submit_contracts import (
-    make_post_submit_result,
-)
 from app.modules.tasks.models import Submission
-from tests.checkers.post_submit.test_result_contract import result as value_result
+from tests.checkers.execution.support import selected_result
 from tests.checkers.execution.support import live_executor, provision_post_submit_service
 from types import SimpleNamespace
 
@@ -30,7 +26,7 @@ async def storage_request(session, submission_id, *, generation=1):
         return stored.request
     body = stored.request.model_dump(exclude={"request_sha256"})
     body.update(evaluation_generation=generation, evaluation_request_id=new_record_id())
-    return make_post_submit_request(**body)
+    return make_selected_post_submit_request(**body)
 
 
 async def seed_storage_run(factory, submission_id, *, failures=(), state="completed", generation=1):
@@ -46,30 +42,12 @@ async def seed_storage_run(factory, submission_id, *, failures=(), state="comple
     if state == "running":
         return str(receipt.attempt_id)
     assert state in {"completed", "infrastructure_failed"}
-    members = []
-    for member in value_result(request).member_results:
-        if member.checker_id in failures:
-            definition = request.catalogue.definition(member.checker_id, member.definition_version)
-            member = PostSubmitMemberResult(
-                checker_id=member.checker_id,
-                definition_version=member.definition_version,
-                implementation_version=member.implementation_version,
-                status=definition.failure_status,
-                severity=definition.failure_severity,
-                code=definition.failure_code,
-                failure_category=definition.failure_category,
-            )
-        members.append(member)
-    assert set(failures).issubset({member.checker_id for member in members})
-    result = make_post_submit_result(
-        request_id=request.evaluation_request_id,
-        request_digest=request.request_sha256,
-        attempt_id=receipt.attempt_id,
-        result_id=receipt.result_id,
-        evaluation_generation=generation,
+    assert not failures, "removed built-in checker failures are not selected image evidence"
+    result = selected_result(
+        request, attempt_id=receipt.attempt_id, result_id=receipt.result_id,
         outcome=state,
-        member_results=tuple(members) if state == "completed" else (),
-        infrastructure_failure_code=None if state == "completed" else "deadline_exceeded",
+        **({"execution": None, "infrastructure_failure_code": "deadline_exceeded"}
+           if state == "infrastructure_failed" else {}),
     )
     async with factory() as session:
         submission = await session.get(Submission, str(submission_id))
@@ -149,7 +127,7 @@ async def authorize_stored_material(factory, execution, material):
                 MaterializationFacts(
                     execution=execution,
                     material=material,
-                    evidence_id=UUID(a.pre_submit_evidence_set_id),
+                    evidence_id=UUID(a.selected_pre_submit_run_id),
                     verification_receipt_id=UUID(v.id),
                     verification_job_id=UUID(v.verification_job_id),
                     verification_generation=v.execution_generation,

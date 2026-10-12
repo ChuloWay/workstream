@@ -5,7 +5,6 @@ from sqlalchemy import select, func
 
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable, COMPLETION_EVENT
 from app.adapters.checkers import evaluation_coordinator
-from app.core.identifiers import new_record_id
 from app.modules.checkers.models import CheckerRun, CheckerResult
 from app.modules.outbox.models import OutboxEvent
 from tests.post_submit_materialization_helpers import material_fixture
@@ -105,9 +104,9 @@ async def test_verified_material_execution_and_replay(
                 )
             )
             assert tuple(row.checker_name for row in rows) == tuple(
-                m.checker_id for m in result.member_results
+                m.registry_entry_id for m in result.execution.external_members
             )
-            assert len(rows) == len(h.request.policy.entries)
+            assert len(rows) == len(h.request.policy.entries) == 0
             event = await session.scalar(
                 select(OutboxEvent).where(OutboxEvent.event_type == COMPLETION_EVENT)
             )
@@ -118,28 +117,21 @@ async def test_verified_material_execution_and_replay(
         assert list((h.scratch / "workspaces").iterdir()) == []
 
 
-async def test_unresolved_legacy_request_is_refused_without_leasing_or_materialization(
-    tmp_path, isolated_database_env, autoflush_clock
-):
-    async with material_fixture(tmp_path, isolated_database_env) as h:
-        await reserve(h)
-        executor = live_executor(h)
-        with pytest.raises(CheckerExecutionUnavailable, match="checker_legacy_execution_retired"):
-            await executor.evaluate_post_submission(h.request)
-        assert h.store.opens == []
-        async with h.factory() as session, session.begin():
-            run = await session.scalar(select(CheckerRun))
-            assert run.status == "queued"
-            assert run.worker_lease_id is None
-            assert run.execute_evidence_id is None
-            assert (
-                await session.scalar(
-                    select(func.count())
-                    .select_from(OutboxEvent)
-                    .where(OutboxEvent.event_type == COMPLETION_EVENT)
-                )
-                == 0
-            )
+async def test_unsupported_request_envelope_never_reaches_execution(monkeypatch):
+    """Raw obsolete or arbitrary envelopes cannot claim, materialize or publish."""
+    import app.modules.checkers.execution as owner
+
+    async def forbidden_claim(request):
+        pytest.fail("unsupported request reached execution lease or authority")
+
+    executor = owner.PostSubmissionExecutor(
+        sessions=None, execute_authority=None, finalize_authority=None,
+        materialization=None, outbox=None,
+    )
+    monkeypatch.setattr(executor, "_claim", forbidden_claim)
+    for schema in ("workstream.post_submit_request.v1", "arbitrary_request.v1"):
+        with pytest.raises(ValueError):
+            await executor.evaluate_post_submission({"schema_version": schema})
 
 
 @pytest.mark.parametrize("substitution", ["prepared", "receipt"])
@@ -380,7 +372,7 @@ async def test_unreadable_stored_bytes_terminalize_and_replay(
         result = await finalize(pending[0])
         assert result.outcome == "infrastructure_failed"
         assert result.infrastructure_failure_code == "material_unavailable"
-        assert result.member_results == ()
+        assert result.execution is None
         assert not h.preparation._active
         assert list((h.scratch / "workspaces").iterdir()) == []
         opened = len(h.store.opens)
@@ -415,17 +407,6 @@ async def test_nonrecordable_material_failure_leaves_attempt_recoverable(
     )
 
     async with material_fixture(tmp_path, isolated_database_env) as h:
-        if failure == "cleanup":
-            from tests.checkers.post_submit.support import change_request
-
-            h.request = change_request(
-                h.request,
-                evaluation_request_id=new_record_id(),
-                evaluation_generation=2,
-                structural_input=h.request.structural_input.model_copy(
-                    update={"manifest": ()},
-                ),
-            )
         reservation = await reserve(h)
         executor = live_executor(h)
         if failure == "authority":
@@ -447,6 +428,10 @@ async def test_nonrecordable_material_failure_leaves_attempt_recoverable(
                 await original_close(prepared)
                 raise ArtifactScratchIntegrityError("controlled close failure")
 
+            async def fail_inspect(prepared, inspector):
+                raise PostSubmissionMaterializationFailure("post_submit_material_manifest_mismatch")
+
+            monkeypatch.setattr(PreparedArtifact, "inspect", fail_inspect)
             monkeypatch.setattr(PreparedArtifact, "close", fail_close)
         else:
             expected = {

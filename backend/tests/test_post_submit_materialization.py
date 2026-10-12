@@ -13,7 +13,7 @@ from app.modules.checkers.api.materialization import (
     PostSubmissionMaterializationUnavailable, PostSubmissionMaterializationFailure,
 )
 from tests.checkers.post_submit.support import change_request
-from tests.checkers.post_submit.test_result_contract import result
+from tests.checkers.execution.support import selected_result as result
 from tests.post_submit_materialization_helpers import material_fixture
 from tests.checkers.execution.support import material_execution, service_link_state
 from app.modules.actors.api import ServiceIdentity
@@ -228,7 +228,7 @@ async def test_async_exit_and_concurrent_drift_never_return_stale_material(tmp_p
         assert_closed(h, consumer)
 
 
-async def test_wrong_provider_bytes_or_manifest_never_reach_consumer(tmp_path, isolated_database_env):
+async def test_wrong_provider_bytes_never_reach_consumer(tmp_path, isolated_database_env):
     from tests.archive_fixtures import byte_source as _bytes
     async with material_fixture(tmp_path, isolated_database_env) as h:
         execution = await material_execution(h)
@@ -238,12 +238,6 @@ async def test_wrong_provider_bytes_or_manifest_never_reach_consumer(tmp_path, i
         with pytest.raises(PostSubmissionMaterializationFailure, match="material_unavailable"):
             await h.service.materialize(execution, consumer)
         h.store.open = original
-        packet = h.request.structural_input.model_copy(update={"manifest": ()})
-        h.request = change_request(h.request, structural_input=packet,
-            evaluation_request_id=new_record_id(), evaluation_generation=2)
-        execution = await material_execution(h)
-        with pytest.raises(PostSubmissionMaterializationFailure, match="manifest_mismatch"):
-            await h.service.materialize(execution, consumer)
         assert consumer.calls == 0 and not h.preparation._active
 
 
