@@ -245,6 +245,7 @@ class SelectedPostSubmissionEvaluationResult(CheckerValue):
                 entry.requirement_id,
                 entry.registry.registry_entry_id,
                 entry.registry.entry_digest,
+                entry.registry.image_digest,
             )
             for order, entry in enumerate(request.policy.entries)
         )
@@ -255,6 +256,7 @@ class SelectedPostSubmissionEvaluationResult(CheckerValue):
                     member.requirement_id,
                     member.registry_entry_id,
                     member.registry_entry_digest,
+                    member.isolation.platform_manifest_digest,
                 )
                 for member in result.execution.external_members
             )

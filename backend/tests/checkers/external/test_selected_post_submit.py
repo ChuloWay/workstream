@@ -414,6 +414,32 @@ async def test_selected_post_request_and_result_bind_exact_locked_policy() -> No
             infrastructure_failure_code=None,
         ).validate_request(foreign_request)
 
+    wrong_image_execution = SelectedPostSubmitExecutionFacts(
+        policy_sha256=two_policy.policy_sha256,
+        required_external_count=2,
+        external_members=(
+            replace(
+                two_execution.external_members[0],
+                isolation=replace(
+                    two_execution.external_members[0].isolation,
+                    platform_manifest_digest="sha256:" + "b" * 64,
+                ),
+            ),
+            two_execution.external_members[1],
+        ),
+    )
+    with pytest.raises(ValueError, match="request mismatch"):
+        make_selected_post_submit_result(
+            request_id=two_request.evaluation_request_id,
+            request_digest=two_request.request_sha256,
+            attempt_id=identity.attempt_id,
+            evaluation_generation=two_request.evaluation_generation,
+            result_id=identity.result_id,
+            outcome="completed",
+            execution=wrong_image_execution,
+            infrastructure_failure_code=None,
+        ).validate_request(two_request)
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
