@@ -1,9 +1,12 @@
 """Checksum-bound predecessor rows for migration tests only.
 
-The archive is a one-time database backup from the last pre-cutover writer. It
-contains data, not an executable checker implementation. Restore is confined
-to an isolated predecessor database and finishes with every trigger and foreign
-key setting restored before a migration test receives the fixture.
+The archive projects one-time predecessor captures to their declared schemas.
+Snapshots from 0010 through 0024 also include the exact project-neutral POST
+service actor and link captured by the same writer in the 0034 source snapshot;
+the archive provenance names those two supplemental row IDs. It contains data,
+not an executable checker implementation. Restore is confined to an isolated
+predecessor database and finishes with every trigger and foreign key setting
+restored before a migration test receives the fixture.
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ from conftest import _assert_owned_test_database
 
 
 _ARCHIVE = Path(__file__).with_name("fixtures") / "pilot04_predecessor_rows.json.gz"
-_ARCHIVE_SHA256 = "a3dd109d6f25e49ff47746906561fccf4ec7e2bd3e40dd3cb984ce8e0ddc2e37"
+_ARCHIVE_SHA256 = "25560b75796f84cff46bb506abdcd4b9cc2b7535411096fdbbec921d245d95e9"
 _SCHEMA_VERSION = "workstream.pilot04_predecessor_rows.v1"
 
 

@@ -1084,3 +1084,18 @@ literal; a conflicting supplied tag refuses. The pure bare-member control passes
 and fails on the prior helper at the intended envelope equality assertion.
 Ruff and diff checks pass. This repairs fixture serialization only; the completed
 0008 native migration discriminator remains required before claiming that path.
+
+### Captured service principal prerequisites
+
+The static predecessor archive now carries the exact project-neutral POST service
+actor `01a13047-9e70-7b29-a0c9-f30981caec3b` and active identity link
+`01a13047-9e71-7f5e-88ea-ee2d1b04ac68` in the 15 applicable 0010-through-0024
+snapshots. Both rows were captured by writer `926b4ef118db3708e50d1869db5ee78a79e5b5de`
+in the named `0034_checker_retry_source` snapshot; provenance therefore describes
+these snapshots as composite captures rather than claiming every row came from
+one fresh database. No retry run, audit, grant, receipt or project-bound row is
+copied. A decoded old/new comparison proves exactly 30 supplemental rows and
+identical seeds, revisions, tables and values everywhere else. The archive is
+checksum-bound at `25560b75796f84cff46bb506abdcd4b9cc2b7535411096fdbbec921d245d95e9`.
+This supplies a retained predecessor identity prerequisite; canonical migration
+and receipt proof remains required.
