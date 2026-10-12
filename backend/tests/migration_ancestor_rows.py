@@ -19,8 +19,14 @@ from app.modules.reviews.decision.models import Review, ReviewFinding, ReviewDec
 from tests.checkers.execution.historical_execution import archived_completed_checker_source
 
 
+def _uuid_json(value):
+    if isinstance(value, UUID):
+        return str(value)
+    raise TypeError(f"Non-JSON archived fact: {type(value).__name__}")
+
+
 def _json(value):
-    return json.loads(json.dumps(value, default=str))
+    return json.loads(json.dumps(value, default=_uuid_json, allow_nan=False))
 
 
 @asynccontextmanager
