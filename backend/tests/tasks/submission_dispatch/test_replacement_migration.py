@@ -77,7 +77,7 @@ async def _custody(connection):
     """)
 
 
-async def test_upgrade_preserves_real_initial_rows_and_exact_receipts(
+async def test_upgrade_preserves_archived_initial_rows_and_exact_receipts(
     tmp_path,
     isolated_database_env,
     migration_lock,
@@ -177,7 +177,7 @@ async def test_retained_uncaused_revision_refuses_upgrade_without_changes(
     isolated_database_env,
     migration_lock,
 ):
-    """A real 0032 writer can retain version two without a persisted source ID."""
+    """The archived predecessor can retain version two without a source ID."""
     with migration_lock():
         await _reset_to_predecessor(isolated_database_env)
         await restore_archived_snapshot(

@@ -102,7 +102,7 @@ async def _source_custody(connection, submission_id):
 
 
 async def _predecessor_evidence(connection, submission_id):
-    """Verify the actual old writer's complete source before comparing its upgrade."""
+    """Verify the complete archived source before comparing its upgrade."""
     assert await connection.fetchval("SELECT version_num FROM public.alembic_version") == PREDECESSOR
     assert await connection.fetchval(
         "SELECT to_regclass('public.checker_retry_receipts') IS NULL"
