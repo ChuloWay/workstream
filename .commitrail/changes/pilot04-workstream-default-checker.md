@@ -59,6 +59,16 @@ cleanup.
 
 ### Allowed
 
+- Administrative permission-read fixture reconciliation permits only
+  `backend/tests/authorization/admin_access/test_admin_reads_postgresql.py`
+  and this record. Replace the obsolete exact permission total 78 with 80,
+  reflecting the selected PRE execute/finalize permissions. Preserve role,
+  response, authority and observation assertions. No product, migration,
+  workflow, test selection or implementation change is permitted. Acceptance
+  is both existing public administrative reads on real PostgreSQL, plus Ruff
+  and whitespace checks. The low-risk review checks the exact diff and native
+  evidence. This fixture correction has no additional roadmap impact.
+
 - The bounded permission-fixture/PostgreSQL CI provider repair permits only
   `mcp_server/tests/test_access_reads.py`'s representative permission response
   total (78 to the current exact 80), four exact PostgreSQL image source
