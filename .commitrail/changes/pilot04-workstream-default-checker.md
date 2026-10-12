@@ -1221,8 +1221,9 @@ in the named `0034_checker_retry_source` snapshot; provenance therefore describe
 these snapshots as composite captures rather than claiming every row came from
 one fresh database. No retry run, audit, grant, receipt or project-bound row is
 copied. A decoded old/new comparison proves exactly 30 supplemental rows and
-identical seeds, revisions, tables and values everywhere else. The archive is
-checksum-bound at `25560b75796f84cff46bb506abdcd4b9cc2b7535411096fdbbec921d245d95e9`.
+identical seeds, revisions, tables and values everywhere else. Those rows remain
+unchanged in the additive archive, now checksum-bound at
+`e24ab79e764452f92d41bf93ecb00c6a9e08fae427145c51a3e55160108ed054`.
 This supplies a retained predecessor identity prerequisite; canonical migration
 and receipt proof remains required.
 
@@ -1255,7 +1256,34 @@ passed in 227.07 seconds with complete cleanup, then independent review required
 stronger non-vacuity assertions for the two policy branches. The final test
 therefore requires exactly `[true, false]`, two requests, one Final Acceptance,
 one ContributionRecord and exact automatic-manifest-to-acceptance-to-contribution
-lineage. A clean successor replay and final independent review remain required.
+lineage. At clean `48bc8d741a0796292aaed6d19d99f1ca1f59c859`, that final
+control passed in 228.89 seconds with database, role and object-store cleanup
+complete. Independent review verified the exact archive provenance, both branch
+counts and links, unchanged retained rows and installed 0032 validity predicate.
+
+### Literal second-review predecessor fixtures
+
+The two 0023-to-0024 ReviewPolicy controls must preserve the retained-true
+refusal and valid-false upgrade without running the removed policy/checker
+owners against a predecessor schema. At exact source commit
+`3e2d59ba426a950e64b8e1632f4587c3265b0ea7`, the unchanged original nodes
+passed together in 394.45 seconds with complete database, role and object-store
+cleanup. A one-time follow-up capture then emitted separate exact 0023 databases
+after the genuine true and false policy writes and after every temporary
+current-only seed column was removed. Each snapshot contains 240 rows across 33
+nonempty public tables and exactly one ReviewPolicy with the named boolean.
+
+Allowed scope is limited to the checksum-bound predecessor archive and loader,
+`tests/projects/review_policy/test_migration.py`,
+`tests/projects/guide_activation/source_fixtures.py`,
+`tests/migration_fixtures.py`, and this record. The committed migration tests
+restore literal true/false snapshots and retain the original exact refusal,
+unchanged policy/selector/hash checks, current-head upgrade and installed CHECK
+constraint assertion. Current guide compilation now calls its current writer
+directly. The unused predecessor-shape wrapper and its cause-column add/restore
+helpers are deleted after repository search found no callers. No old policy
+model construction, private mutation service, temporary column, compatibility
+alias, guard bypass or archived writer remains in the committed tests.
 
 ### Frozen cutover verification before publication
 
