@@ -34,16 +34,21 @@ def outbox_delivery(
 def production_outbox_delivery(session_factory):
     """Install exact assignment and selected evaluation handlers."""
     from app.adapters.artifacts import worker_post_submission_materialization
-    from app.adapters.auth import outbox_dispatch_authorization, assignment_invalidation_authorization
+    from app.adapters.auth import (
+        outbox_dispatch_authorization,
+        assignment_invalidation_authorization,
+    )
     from app.adapters.tasks import (
         TransactionalAssignmentInvalidationHandler,
+        evaluation_completion_handler,
         evaluation_request_handler,
     )
-    from app.modules.checkers.api.execution import REQUEST_EVENT
+    from app.modules.checkers.api.execution import COMPLETION_EVENT, REQUEST_EVENT
     from app.modules.tasks.api.assignment_invalidation import ASSIGNMENT_INVALIDATION_EVENT
 
     return outbox_delivery(
-        session_factory, authorization_factory=outbox_dispatch_authorization,
+        session_factory,
+        authorization_factory=outbox_dispatch_authorization,
         registry=HandlerRegistry(
             [
                 (
@@ -64,6 +69,11 @@ def production_outbox_delivery(session_factory):
                             sessions=session_factory
                         ),
                     ),
+                ),
+                (
+                    COMPLETION_EVENT,
+                    1,
+                    evaluation_completion_handler(sessions=session_factory),
                 ),
             ]
         ),

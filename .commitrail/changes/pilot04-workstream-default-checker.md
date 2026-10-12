@@ -238,3 +238,16 @@ intermediate-wait regression.
   no component-only merge.
 - Remaining risk: reconcile the final stacked migration and owner metadata with
   actual `main`, then validate the complete required test union on that tree.
+
+## Production completion repair
+
+Independent review found that the production outbox registry selected evaluation
+requests but omitted the existing completion handler. The earlier real Rust/MinIO
+probe called the executor directly and ended at `evaluation_pending`; it did not
+prove worker completion routing. The registry now composes the canonical
+completion handler. The new native production-registry test exercises request
+delivery, emitted completion delivery, acknowledgment and duplicate refusal for
+both human review and shared automatic acceptance with complete awards. Its
+runtime result remains pending until the isolated PostgreSQL command completes.
+Publication must remove the accidentally stacked PILOT-02/PILOT-10 source and
+reconcile the selected-flow successor with the actual merged migration chain.
