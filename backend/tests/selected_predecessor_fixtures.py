@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from io import BytesIO
+from uuid import UUID
 import json
 from zipfile import ZipFile
 
@@ -122,7 +123,7 @@ async def _queued_selected_body(h, admission_id, *, cause=None) -> dict:
         idempotency_key=key,
         prepared_generation_id=new_record_id(),
         admission_lineage=(
-            replace(lineage, checker_remediation_manifest_id=cause)
+            replace(lineage, checker_remediation_manifest_id=UUID(str(cause)))
             if cause is not None
             else lineage
         ),

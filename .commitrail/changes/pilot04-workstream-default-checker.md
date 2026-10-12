@@ -318,3 +318,16 @@ The same-head native run passed the real production automatic acceptance case
 lineage construction. Normalize the native PostgreSQL remediation UUID to the
 TASK public port's Python UUID representation rather than weakening validation.
 Replacement proof and runtime-budget alignment remain pending.
+
+Runtime budget repair aligns selected POST work, ART custody and the production
+request transport; only request events receive extended delivery bounds. Preserve
+unknown-event refusal before invocation and authorized immutable finalization
+replay by resolving bounds independently of current handler registration; the
+existing claim/invocation guards still require a registered handler. Focused
+unknown-registration and selected production delivery regressions are required.
+
+Canonical multi-project fixtures reuse only an exact already-registered immutable
+checker entry via the public registry reader, asserting the full spec digest;
+otherwise they publish through real Operator authority. They do not duplicate
+registrations or bypass registry custody. Selected replacement test substitutions
+normalize a native cause UUID at the typed fixture boundary.

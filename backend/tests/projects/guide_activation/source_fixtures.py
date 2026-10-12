@@ -291,13 +291,26 @@ async def _register_external_checker_fixture(factory, spec):
         ExternalCheckerRegistryAuthorizationAdapter,
     )
     from app.modules.checkers.api.external import make_external_checker_registration_request
-    from app.modules.checkers.external_registry import ExternalCheckerRegistryService
+    from app.modules.checkers.external_registry import (
+        ExternalCheckerRegistryReader, ExternalCheckerRegistryService,
+    )
     from tests.project_create_fixtures import (
         grant_fixture_admin_role,
         seed_fixture_actor,
     )
 
     async with factory() as session, session.begin():
+        reader = ExternalCheckerRegistryReader(session)
+        existing = tuple(
+            entry for entry in await reader.list_entries()
+            if (entry.capability_id, entry.capability_version, entry.phase)
+            == (spec.capability_id, spec.capability_version, spec.phase)
+        )
+        if existing:
+            assert len(existing) == 1 and existing[0].entry_digest == spec.spec_digest
+            return await reader.read_exact(
+                existing[0].registry_entry_id, existing[0].entry_digest,
+            )
         profile, link = await seed_fixture_actor(
             session,
             issuer="https://external-checker-fixture.test",

@@ -170,8 +170,6 @@ class OutboxDelivery:
 
     def _options_for(self, event_type: str, event_version: int) -> DeliveryOptions:
         """Resolve one registered event's immutable limits or the shared defaults."""
-        if self._registry.get(event_type, event_version) is None:
-            raise DeliveryUnavailable("outbox_delivery_unavailable")
         return self._event_options.get((event_type, event_version), self._options)
 
     @asynccontextmanager
