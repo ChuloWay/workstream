@@ -38,7 +38,7 @@ ExternalServiceAdapter
 |- IdentityIssuerVerifier
 |- ProjectGuideAgentRuntime
 |- ArtifactStore
-`- ExternalCheckerExecutionAdapter (hidden, unselected Unix-socket runtime)
+`- ExternalCheckerExecutionAdapter (selected hidden Unix-socket runtime)
 ```
 
 Concrete implementations satisfy explicit capability ports:
@@ -60,10 +60,11 @@ The checker capability publishes a normalized pre/post request/result contract,
 an immutable digest-pinned metadata registry, and a hidden typed Unix-socket
 adapter for its trusted Rust node service. The registry remains data, not an
 adapter factory: it cannot select Python code, discover plugins, grant execution
-authority or construct a transport. The adapter factory is instance-local and
-unselected; no product composition root or checker caller installs it yet.
-Later cutover must preserve CHECKERS request/lease/result ownership and ART
-material custody when it adds that explicit composition.
+authority or construct a transport. The adapter factory is instance-local and explicitly installed by the selected
+hidden CHECKERS composition. Durable PRE/POST owners retain request, lease and
+result custody, while ART owns verified material and callback-scoped grants.
+Production request/completion registration does not expose public intake.
+Local integration uses runc/docker-dev; hosted gVisor proof remains separate.
 
 The Rust service alone owns container-engine access. Python sends an opaque,
 request-bound callback grant issued from ART's existing pre-admission scratch

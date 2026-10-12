@@ -59,6 +59,18 @@ cleanup.
 
 ### Allowed
 
+- Bounded current-document reconciliation covers `docs/roadmap_status.md`,
+  `docs/architecture_checker_framework.md` and
+  `docs/decision_0014_external_service_adapter_convention.md`. Describe selected
+  hidden PRE/POST and production request/completion composition, distinguish
+  retained predecessor contracts from removed executable catalogues, preserve
+  the four default blockers and warning-only summary/attestation, and retain
+  PILOT-08 false-guide activation and PILOT-12 public intake as remaining work.
+  Generated output-file authority is still deny-only; normalized JSON result
+  custody does not prove ART file outputs. Local runc/docker-dev proof is not
+  deployed or gVisor proof. Worker transport/budget code and
+  `docs/operations_authorization_service.md` remain lead-owned.
+
 - Delegated TEST-only reconciliation is limited to
   `tests/projects/post_policy/test_guards.py`, `test_postgresql.py`,
   `test_public_api.py`, `tests/authorization/post_policy/pg_support.py`,
@@ -408,3 +420,10 @@ to reject shorter or longer overrides. Per-event bounds remain selected request
 3520/3600 and ordinary events 240/300. Preserve the existing scaled real-prefork
 kill/reap/UNKNOWN regression while scaling both the installed test bound and its
 entry guard; no production duration is shortened for verification.
+
+Current-document reconciliation distinguishes selected hidden production
+composition from public intake and false-guide activation. Immutable predecessor
+contracts are retained provenance, not executable catalogue fallback. Source
+inspection confirms output-file storage/binding is deny-only while selected
+images produce closed JSON results. This editorial repair adds no runtime
+proof; the lead owns final-head native cause guards, worker timing and hosted CI.
