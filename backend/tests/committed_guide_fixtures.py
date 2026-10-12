@@ -90,7 +90,7 @@ async def seed_setup_service_for_compiled_fixture(sessions):
 
 
 async def create_compiled_report_fixture(
-    report_id: str, source_snapshot_id: str, *, artifact_proposal=None, post_submit_required_checkers=(),
+    report_id: str, source_snapshot_id: str, *, artifact_proposal=None, post_submit_registry_spec=None,
 ) -> str:
     """Project a scripted unified result under real service authority and custody."""
     from app.adapters.auth import guide_compilation_request_authority, guide_compilation_execution_authority, guide_sufficiency_projection_authorization, artifact_policy_projection_authorization
@@ -107,6 +107,12 @@ async def create_compiled_report_fixture(
     from app.interfaces.project_agents import CompilationFinding, GuideEvidenceRef
 
     sessions = db_session.get_session_factory()
+    from tests.projects.guide_activation.source_fixtures import _register_external_checker_fixture
+
+    post_entry = (
+        await _register_external_checker_fixture(sessions, post_submit_registry_spec)
+        if post_submit_registry_spec is not None else None
+    )
     await seed_setup_service_for_compiled_fixture(sessions)
     async with sessions() as session:
         report = await session.scalar(select(GuideSufficiencyReport).where(GuideSufficiencyReport.source_snapshot_id == source_snapshot_id, GuideSufficiencyReport.project_setup_run_id.is_not(None)))
@@ -155,18 +161,14 @@ async def create_compiled_report_fixture(
             patch = {"status": {"blocked": "guide_blocked", "passed": "draft_ready", "passed_with_warnings": "draft_ready_with_warnings"}[status], "findings": compiled_findings}
             if artifact_proposal is not None:
                 patch["submission_artifact_policy"] = artifact_proposal
-            from app.interfaces.project_agents import AtomicGuideRequirement, PostSubmissionBindingProposal
-            patch["requirements"] = tuple(AtomicGuideRequirement(
-                requirement_id=f"post_requirement_{index}", statement="Apply the selected task evaluation requirement",
-                disposition="supported_post_submit", evidence_refs=refs,
-            ) for index, _ in enumerate(post_submit_required_checkers))
-            patch["post_submit_bindings"] = tuple(PostSubmissionBindingProposal(
-                requirement_id=f"post_requirement_{index}", capability_id=checker,
-                capability_version="v0.1", stage="post_submit", parameters=(),
-            ) for index, checker in enumerate(post_submit_required_checkers))
             if status == "blocked":
                 patch["submission_artifact_policy"] = None
-            return result().model_copy(update=patch)
+            from tests.projects.guide_activation.source_fixtures import _external_compilation_outcome
+
+            return _external_compilation_outcome(
+                result().model_copy(update=patch),
+                (post_entry,) if post_entry is not None else (), None, post_entry, refs,
+            )
 
     execution = project_guide_compilation_execution_port(
         sessions,

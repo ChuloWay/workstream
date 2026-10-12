@@ -342,6 +342,23 @@ intermediate-wait regression.
 
 ## Risk and review routing
 
+Current history and queue fixtures also replace built-in failure-name switches
+with normalized registered-image verdicts. Allowed producer paths are
+`backend/tests/checkers/execution/storage_fixture.py`,
+`backend/tests/submission_fixtures.py`, `backend/tests/retained_material_fixtures.py`,
+the project bootstrap helpers in `backend/tests/test_tasks.py`,
+`backend/tests/projects/{policy_bundle_fixtures.py,unified_policy_fixtures.py}`,
+and `backend/tests/committed_guide_fixtures.py`. Register and bind the exact POST
+image before guide approval and TASK release. Preserve admitted immutable bytes
+in the existing scripted provider for the test session factory, and traverse
+current ART reads, grants, CHECKERS phase AUTH and finalization for both verdicts.
+Do not retrofit locked policies, synthesize failed members, translate old names,
+or add compatibility arguments. Consumer assertions remain independently owned.
+Required real PostgreSQL controls cover failed/passing generations, currentness,
+bounded history and review non-admissibility. Scripted provider evidence does
+not claim MinIO or real container execution. Independent root review covers this
+test-fixture author repair; production, DDL and public route changes are prohibited.
+
 The final caller trace includes `backend/app/modules/checkers/{history.py,
 execution_results.py,api/history.py}`, the existing history privacy expectation,
 and `backend/tests/checkers/execution/test_storage.py`. Remove retired catalogue

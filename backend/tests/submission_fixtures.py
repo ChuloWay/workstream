@@ -2,7 +2,8 @@
 
 These fixtures use ART preparation, verification and consumption owners with
 a scripted provider, then seed retained Submission projections with locked
-lineage. They do not expose public intake or claim live post-submit authority.
+lineage. CHECKERS reads these bytes with real phase authority and controlled
+external-image outcomes; this is not a deployment/provider conformance proof.
 """
 
 from uuid import UUID
@@ -101,11 +102,11 @@ async def seed_retained_submission(
     return submission_id
 
 
-async def seed_retained_checker_run(submission_id: str, *, failures=(), state="completed", generation=1) -> str:
-    """Seed closed history through real CHECKERS custody, with controlled phase authority."""
+async def seed_retained_checker_run(submission_id: str, *, verdict="passed", state="completed", generation=1) -> str:
+    """Execute closed history with real phase custody and controlled image verdicts."""
     from tests.checkers.execution.storage_fixture import seed_storage_run
     return await seed_storage_run(db_session.get_session_factory(), submission_id,
-                                  failures=failures, state=state, generation=generation)
+                                  verdict=verdict, state=state, generation=generation)
 
 
 async def route_retained_checker_remediation(submission_id: str, *, generation: int = 1) -> str:
@@ -123,7 +124,7 @@ async def route_retained_checker_remediation(submission_id: str, *, generation: 
 
     factory = db_session.get_session_factory()
     run_id = await seed_retained_checker_run(
-        submission_id, failures=("check_submission_packet",), generation=generation,
+        submission_id, verdict="failed", generation=generation,
     )
     async with factory() as session:
         run = await session.get(CheckerRun, run_id)

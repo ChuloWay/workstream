@@ -585,7 +585,7 @@ async def create_policy_bundle_for_guide(
     guide_id: str,
     artifact_proposal=None,
     *,
-    post_submit_required_checkers: list[str] | None = None,
+    post_submit_registry_spec=None,
 ) -> dict:
     for kind, body in (
         (
@@ -631,7 +631,7 @@ async def create_policy_bundle_for_guide(
         client, project_id, guide_id,
         artifact_proposal=artifact_proposal or task_artifact_proposal(),
         request_headers=auth_headers(),
-        post_submit_required_checkers=post_submit_required_checkers,
+        post_submit_registry_spec=post_submit_registry_spec,
     )
 
 
@@ -685,7 +685,9 @@ def complete_submission_payload(package_hash: str = "sha256:package-v1") -> dict
     }
 
 
-async def create_active_project(client: AsyncClient, *, slug: str = "task-queue-project") -> dict:
+async def create_active_project(
+    client: AsyncClient, *, slug: str = "task-queue-project", post_submit_registry_spec=None,
+) -> dict:
     project_response = await client.post(
         "/api/v1/projects",
         headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
@@ -705,7 +707,9 @@ async def create_active_project(client: AsyncClient, *, slug: str = "task-queue-
     )
     assert guide_response.status_code == 201, guide_response.text
     guide = guide_response.json()
-    await create_policy_bundle_for_guide(client, project["id"], guide["id"])
+    await create_policy_bundle_for_guide(
+        client, project["id"], guide["id"], post_submit_registry_spec=post_submit_registry_spec,
+    )
 
     await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(),

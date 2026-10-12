@@ -9,6 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from uuid import UUID
+from weakref import WeakKeyDictionary
 from zipfile import ZipFile
 
 from sqlalchemy import select
@@ -75,9 +76,9 @@ class _ForbiddenExternalExecution:
 class MemoryStore:
     """Implement the existing byte port; all database work stays in ART owners."""
 
-    def __init__(self, namespace):
+    def __init__(self, namespace, *, objects=None):
         self.identity = ExternalServiceAdapterIdentity("artifact_store", namespace.adapter)
-        self.objects = {}
+        self.objects = {} if objects is None else objects
 
     async def put(self, source):
         ref = artifact_provider_object_ref(source.commitment)
@@ -102,6 +103,16 @@ class MemoryStore:
     async def head(self, ref):
         data = self.objects.get(ref)
         return ArtifactObjectHead(ref, data is not None, len(data) if data is not None else None)
+
+
+_RETAINED_OBJECTS = WeakKeyDictionary()
+
+
+def retained_archive_store(factory, namespace):
+    """Keep immutable fixture bytes until their owning test factory is disposed."""
+    namespaces = _RETAINED_OBJECTS.setdefault(factory, {})
+    objects = namespaces.setdefault(namespace.namespace_fingerprint, {})
+    return MemoryStore(namespace, objects=objects)
 
 
 def _submission_request(task, assignment, link, packet, predecessor_id, policy):
@@ -231,7 +242,7 @@ async def retained_admission(
             )
         ).effective_policy
     context, request = _submission_request(task, assignment, link, packet, predecessor_id, policy)
-    store = MemoryStore(namespace)
+    store = retained_archive_store(factory, namespace)
     with TemporaryDirectory(prefix="retained-material-") as directory:
         settings = _settings(Path(directory), maximum_bytes=1024 * 1024)
         # This fixture traverses multiple real database transactions. Its scratch

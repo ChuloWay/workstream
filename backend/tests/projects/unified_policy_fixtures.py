@@ -46,7 +46,7 @@ def downstream_artifact_proposal():
     )
 
 
-async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=None, post_submit_required_checkers=()):
+async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=None, post_submit_registry_spec=None):
     """Project the actual scripted result, with no manual policy row replacement."""
     sessions = db_session.get_session_factory()
     proposal = proposal or downstream_artifact_proposal()
@@ -54,7 +54,7 @@ async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=N
         report_id,
         snapshot_id,
         artifact_proposal=proposal,
-        post_submit_required_checkers=post_submit_required_checkers,
+        post_submit_registry_spec=post_submit_registry_spec,
     )
     async with sessions() as session:
         compilation = (
