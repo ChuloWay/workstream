@@ -754,7 +754,7 @@ Deleted semantic families: built-in catalogue configuration/selection, old
 structural request DTO field/aggregate bounds, nine-member generic result shapes,
 and disabled mandatory catalogue readiness. Required current proof remains in
 checkers/external/{test_contracts.py,test_policy.py,test_selected_pre_submit.py,
-test_selected_post_submit.py}, test_workstream_default_checker.py and unified
+test_selected_post_submit.py}, checkers/default/{test_contract.py,test_execution.py} and unified
 project guide compilation contract tests (unknown/stale/stage/typed config).
 Authority, callback lifetime, post-I/O revocation, cleanup failure, crossed native
 lineage/receipts, exact replay, complete selected member closure and review-source
