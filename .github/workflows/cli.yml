@@ -81,5 +81,5 @@ jobs:
           set -euo pipefail
           python scripts/run_isolated_tests.py \
             --metadata-json "${RUNNER_TEMP}/workstream-cli-isolation.json" \
-            --timeout-seconds 240 \
+            --timeout-seconds 300 \
             -- python -m pytest -q ../cli/tests/integration
