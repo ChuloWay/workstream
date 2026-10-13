@@ -33,6 +33,8 @@ context/intake requirements:
 | `workstream project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID/revoke` |
 | `workstream project role-grant list PROJECT_ID [--status active\|revoked] [--role submitter\|reviewer]` | `GET /api/v1/projects/PROJECT_ID/role-grants` |
 | `workstream project role-grant show PROJECT_ID GRANT_ID` | `GET /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID` |
+| `workstream project contribution-policy current PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contribution-policies/current` |
+| `workstream project contribution-policy show PROJECT_ID POLICY_ID [--version UUID]` | `GET /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID` with optional `version_id` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
@@ -201,6 +203,43 @@ substituted responses, normalized duplicate grant IDs, filter contradictions
 and credential reflection fail with empty stdout. These reads require the
 backend's covered Project Manager or Audit Authority, not a contributor grant.
 They do not cache permission, authorize a later write, or establish rollback.
+
+## Inspect contribution policies
+
+```sh
+workstream project contribution-policy current PROJECT_ID -o json
+workstream project contribution-policy show PROJECT_ID POLICY_ID -o json
+workstream project contribution-policy show PROJECT_ID POLICY_ID --version VERSION_ID -o json
+```
+
+These are Finance Authority reads, not Project Manager permissions. Workstream
+requires current covering Finance authority and active admission for each call;
+PM-only, foreign-project or withdrawn authority remains a concealed server denial.
+Each command sends one public GET, without a preflight or automatic selector fetch.
+
+`current` returns the aggregate ID and nullable published/open-draft version IDs.
+`show` without `--version` uses backend selection: the published version takes
+precedence over an open successor draft. Supply `--version` to inspect that draft
+or an exact retained historical version. Retired aggregates are excluded from
+current discovery but exact historical inspection remains authorized separately.
+An explicitly empty or invalid selector fails before HTTP; UUID spelling is
+preserved in the request and compared by identity in the response.
+
+Both output formats retain all authorized fields: policy/version identity and
+status, positive integer version number, complete rules and award definitions,
+including binding IDs and exact decimal-string quantities. Empty drafts are
+valid observations, not readiness. JSON preserves the API object; complete text
+escapes terminal controls. Missing, null, unknown, duplicate, substituted or
+credential-reflecting facts fail with empty stdout. These commands never publish,
+retire, pay, activate a guide or authorize a later write.
+
+Native proof extends the existing public guide-activation journey with empty
+drafts, unpaid publication, simultaneous published/draft selection, exact history,
+foreign stored policies/versions, and public Finance suspension/revocation with
+restored positive controls. Policy/guide SQL snapshots remain unchanged by the
+reads; legitimate AUTH read evidence is excluded. Compensated precision and
+malformed nested definitions are process-boundary proof, not a new native payout
+or compensated-policy certification. Full backend integration proof remains in CI.
 
 ## Declare a guide and its setup inputs
 

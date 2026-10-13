@@ -215,6 +215,11 @@ CLI grant list/detail now expose the existing authorized qualification and
 revocation history: one filtered count-free page with explicit continuation,
 or one exact project/grant. Current authority remains backend-owned; no actor
 discovery, role cache or automatic decisions are added.
+CLI contribution-policy current/exact-version reads now expose the authorized
+Finance policy graph, including empty drafts, published/open-draft selectors and
+retained historical versions. Backend selection and current Finance authority
+remain decisive; PM-only permission does not suffice. Explicit policy editing,
+publication/retirement and contribution-evidence CLI consumption remain separate.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -497,6 +502,12 @@ cannot be reused as post-submission review-gate evidence. See the
   qualification/provenance and revocation facts. Cursors remain opaque,
   continuation is explicit and each request requires fresh backend authority.
   Observed history does not authorize subsequent writes.
+  [CLI contribution-policy inspection](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-22.md)
+  discovers current published/open-draft selectors and reads backend-selected or
+  explicit retained versions with complete rules and exact award quantities.
+  Real API proof covers unpaid policy history, current Finance authority,
+  suspension/revocation and project/version isolation; compensated precision is
+  process-boundary proof. Reads do not publish, activate, pay or infer readiness.
   [PILOT-13 assigned-guide access](../.commitrail/changes/pilot13-assigned-task-guide-documents.md)
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads
