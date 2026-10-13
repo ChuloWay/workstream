@@ -34,17 +34,13 @@ def project_authority_audit_target(
         AdapterBindingReadResourceContext,
         AdapterBindingMutationResourceContext,
     )
-    from app.modules.authorization.domain.checker_registry import (
-        ExternalCheckerRegistryResourceContext,
-    )
+    from app.modules.authorization.domain.checker_registry import ExternalCheckerRegistryResourceContext
     from app.modules.authorization.domain.checker_retry import CheckerRetryResourceContext
     from app.modules.authorization.domain.guide_compilation import (
         ProjectGuideCompilationRequestResourceContext,
         ProjectGuideCompilationExecuteResourceContext,
     )
-    from app.modules.authorization.domain.guide_compilation_projections import (
-        ProjectGuideProjectionResourceContext,
-    )
+    from app.modules.authorization.domain.guide_compilation_projections import ProjectGuideProjectionResourceContext
     from app.modules.authorization.domain.project_setup_finalization import (
         ProjectSetupFinalizationResourceContext,
     )
