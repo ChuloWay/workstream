@@ -166,9 +166,9 @@ func (c *Client) TransitionTaskBatch(ctx context.Context, project, batch, operat
 	if !validBatchSelectors(project, batch, key) || (operation != "screen" && operation != "release") {
 		return result, errors.New("PROJECT_ID, BATCH_ID and --idempotency-key must be UUIDs; action must be screen or release")
 	}
-	if (reason != nil && (!utf8.ValidString(*reason) || utf8.RuneCountInString(*reason) > 4000)) ||
+	if (reason != nil && (!utf8.ValidString(*reason) || utf8.RuneCountInString(*reason) > 1000)) ||
 		(operation == "release" && (reason == nil || strings.TrimSpace(*reason) == "")) {
-		return result, errors.New("reason must contain at most 4000 UTF-8 characters; release requires a nonblank reason")
+		return result, errors.New("reason must contain at most 1000 UTF-8 characters; release requires a nonblank reason")
 	}
 	body, err := json.Marshal(struct {
 		Reason *string `json:"reason"`

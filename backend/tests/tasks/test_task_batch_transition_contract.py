@@ -81,8 +81,10 @@ def test_release_and_reason_contracts_are_separate_from_screen():
         task["status"] = "ready"
     assert TaskBatchTransitionResponse.model_validate(value).operation == "release"
     assert TaskBatchTransitionRequest(reason="Decision\nwith Unicode café").reason.endswith("café")
-    with pytest.raises(ValidationError):
-        TaskBatchTransitionRequest(reason="x" * 4001)
+    assert TaskBatchTransitionRequest(reason="é" * 1000).reason == "é" * 1000
+    for count in (1001, 4001):
+        with pytest.raises(ValidationError):
+            TaskBatchTransitionRequest(reason="é" * count)
     with pytest.raises(ValidationError):
         TaskBatchTransitionRequest.model_validate({"task_ids": [str(uuid4())]})
 

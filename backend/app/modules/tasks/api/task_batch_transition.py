@@ -11,7 +11,7 @@ class TaskBatchTransitionRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    reason: str | None = Field(default=None, max_length=4000)
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 class TaskBatchTransitionResult(BaseModel):

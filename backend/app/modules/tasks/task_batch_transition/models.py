@@ -62,7 +62,7 @@ class TaskBatchTransitionReceipt(Base):
             name="digests",
         ),
         CheckConstraint("row_count between 1 and 500", name="bounds"),
-        CheckConstraint("reason is null or length(reason)<=4000", name="reason_bounds"),
+        CheckConstraint("reason is null or length(reason)<=1000", name="reason_bounds"),
         CheckConstraint(
             "action_id<>'project.task.release' or (reason is not null and length(btrim(reason))>0)",
             name="release_reason",

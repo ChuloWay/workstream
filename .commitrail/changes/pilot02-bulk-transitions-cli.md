@@ -733,3 +733,9 @@ All owned cleanup completed. The isolated rollback case at `38a6bcae8` then
 passed in 72.53 seconds (39.32-second call), with all cleanup complete; it did
 not reproduce a lock hang. Raw evidence: `/tmp/pilot02-bulk-current-native4`
 and `/tmp/pilot02-bulk-rollback-diagnostic` `.log`/`.json` pairs.
+
+The reason discriminator at `785c7f7dd172b6790d899cea723d27e5862c8e08`
+reproduced an actual HTTP 500 for a 1001-character reason instead of the expected
+422 (`/tmp/pilot02-bulk-reason-before.{log,json}`, one failed in 93.96 seconds,
+all cleanup true). New DTO, CLI, ORM and sole-author DDL bounds now use the
+canonical 1000-character limit; the existing canonical owner is unchanged.
