@@ -496,7 +496,8 @@ def lane_command(
         *_plugin_args(),
         "--cov=app",
         "--cov-report=",
-        "--durations=25",
+        "--durations=0",
+        "--durations-min=0",
         *nodes,
     ]
     return [
@@ -525,7 +526,8 @@ def admin_runner_command(nodes: list[str]) -> list[str]:
         *_plugin_args(),
         "--cov=app",
         "--cov-report=",
-        "--durations=25",
+        "--durations=0",
+        "--durations-min=0",
         *nodes,
     ]
     return [sys.executable, "-c", ADMIN_REDACTING_WRAPPER, *pytest_command]

@@ -564,14 +564,14 @@ def test_schema_nodes_share_one_lane() -> None:
 @pytest.mark.parametrize(
     ("names", "modules"),
     catalogue.PARTITION_GROUPS,
-    ids=("shared", "project", "project-ac", "task"),
+    ids=("shared", "project", "project-intake", "task"),
 )
 def test_owner_nodes_partition_deterministically(names, modules) -> None:
     module = modules[0]
     nodes = [f"{module}::test_shared_{index}" for index in range(100)]
 
     first = runner.build_manifest("a" * 40, nodes)
-    second = runner.build_manifest("a" * 40, list(reversed(nodes)))
+    second = runner.build_manifest("b" * 40, list(reversed(nodes)))
     first_by_node = {row["nodeid"]: row["lane"] for row in first["nodes"]}
     second_by_node = {row["nodeid"]: row["lane"] for row in second["nodes"]}
 
