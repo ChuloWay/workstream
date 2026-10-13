@@ -256,8 +256,8 @@ External PR review at `9e49f4057` found that the new POST also mapped command
 composition `RuntimeError` to retryable infrastructure failure. The route now
 reserves retryable 503 for SQLAlchemy failures, while focused proof requires
 composition errors to propagate. Public denial tests now require exact
-predecessor, packet and suspended-actor codes; the planning baseline and ART
-next-boundary prose are reconciled with delivered entry.
+predecessor, packet and concealed suspended-actor codes; the planning baseline
+and ART next-boundary prose are reconciled with delivered entry.
 
 ## Reconciliation
 
