@@ -589,10 +589,27 @@ frozen.
 Independent source review found the pending-to-committed SQL closure did not
 bind response `created_at` to the authoritative native batch timestamp. Extend
 the existing counterfeit test by shifting only the staged response timestamp;
-reproduce before adding the SQL equality and the owner replay mirror. Preserve
-all prior native checks, add one real foreign-project public selector control,
-and execute existing invalid-upload controls on the reconciled source. The
-first full native module at `057a2a581` timed out after 900s and is not a pass;
-all owned resources cleaned up. Its next focused metadata membership control
-passed (1 case, 136.27s), including actual call33.56s/setup13.34s, with no observed
-lock hang. Use targeted timed runs and complete hosted evidence for closure.
+the exact failing-before run at `da23ea0a8` returned 201 instead of the expected
+503 (1 failed in 178.08 seconds), proving both staged response copies could carry
+the same forged header while the native batch timestamp remained unchanged.
+Database, role, bucket and prefix cleanup all completed; raw evidence is
+`/tmp/pilot02-takeover-timestamp-repro.log` with adjacent JSON metadata. The
+minimal migration repair compares the parsed response timestamp with
+`task_import_batches.created_at` in the existing response-custody closure; the
+application owner supplies the matching replay check. Preserve all prior native
+checks, add one real foreign-project public selector control, and execute
+existing invalid-upload controls on the reconciled source. The first full native
+module at `057a2a581` timed out after 900s and is not a pass; all owned resources
+cleaned up. Its next focused metadata membership control passed (1 case, 136.27s),
+including actual call33.56s/setup13.34s, with no observed lock hang. Use targeted
+timed runs and complete hosted evidence for closure; this repair requires a new
+measured combined schema fingerprint and affected native replay before any pass
+claim.
+
+The three additive import modules use the existing four project lanes, preserving
+every main module assignment and execution cap. The merged-main Task C lane used
+1099.091 of 1200 seconds; project lanes have more measured headroom. The import
+source, project authority and native batch proofs belong together there. Matching
+closed catalogue expectations move with the modules; final hosted timing remains
+required. The application membership validator also compares the original
+response timestamp with the authoritative batch timestamp.

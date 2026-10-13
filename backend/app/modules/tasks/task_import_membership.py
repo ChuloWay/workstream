@@ -47,9 +47,10 @@ class TaskImportMembership:
         """Recover immutable creation facts; mutable Task state is not replay input."""
         response = TaskImportBatchResponse.model_validate(batch.response)
         if (str(response.batch_id), str(response.project_id), str(response.source_id), response.sha256,
-                response.byte_count, response.row_count, response.schema_version, response.mapping_version) != (
+                response.byte_count, response.row_count, response.schema_version, response.mapping_version,
+                response.created_at) != (
             batch.id, batch.project_id, batch.source_id, batch.sha256, batch.byte_count, batch.row_count,
-            batch.schema_version, batch.mapping_version,
+            batch.schema_version, batch.mapping_version, batch.created_at,
         ):
             raise TaskImportBatchError("task_import_batch_custody_invalid", 409)
         rows = (await self._session.execute(select(TaskImportBatchMember, TaskCommandReceipt).join(
