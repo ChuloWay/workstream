@@ -169,8 +169,8 @@ resource-context digest, retaining AUTH's bounded audit projection rather than
 requiring raw private resource selectors.
 
 - Earlier source reconciliation: main `20b0beb8023c53e7c101c325aaceb3d38fb2a215` includes the merged lifecycle transitions, CLI guide/post-policy inspection and pre-submit proposal approval, PILOT-04 external checker contract/registry, and complete hidden authorized routing outcomes. Source actions coexist with the incoming routing action activation and the complete lifecycle/registry resource and role classifications. Native UUID mappings retain each owner's string or UUID representation. The roadmap retains main's delivered routing statements and only this source prerequisite's additions; existing selected MCP operations remain unchanged. The earlier `94fe55c3a171deb619debb2310d323703b71c666` reconciliation preceded the denial-owner repair and was source-equivalent to the `c5f5a1` native proof. The subsequent exact `a3ef23fe46ec6687ba749b714b46e7e99b768a0e` denial proof remains historical evidence for its tested tree; it is not relabeled as proof of this newer integration.
-- Next usable boundary: atomic DRAFT TASK import from verified source, then explicit batch screen/release and CLI conversion in separately authorized bounded changes.
-- Remaining risks: source retention has no deletion scheduler; Issue #489 remains open.
+- Next usable boundary: consume source custody through the delivered [atomic DRAFT import](pilot02-atomic-json-draft-import.md) and [explicit batch screen/release and CLI conversion](pilot02-bulk-transitions-cli.md). Issue #489 is closed; source custody itself still creates no Tasks.
+- Remaining risks: source retention has no deletion scheduler; no retained source deletion is authorized by completion of the import journey.
 - Schema handoff: main owns `0028_lifecycle_transitions`,
   `0029_external_checker_registry` and `0030_routing_outcomes`. The sole coordinated
   migration author supplied successor `0031_task_import_source` in

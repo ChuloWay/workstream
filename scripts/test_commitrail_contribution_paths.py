@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
 from scripts import check_commitrail_records as gate
+from scripts.git_delta import run_checked
 
 
 class ContributionPathTests(unittest.TestCase):
@@ -62,6 +65,90 @@ class ContributionPathTests(unittest.TestCase):
             self.initiative,
             self.record().replace("Initiative: None", "Initiative: WS-EXAMPLE-001"),
         )
+
+    def git(self, *args: str) -> str:
+        return run_checked(["git", *args], repository_root=self.root).strip()
+
+    def commit(self) -> str:
+        self.git("add", ".")
+        self.git("-c", "user.name=Gate test", "-c", "user.email=gate@example.test",
+                 "-c", "commit.gpgsign=false", "commit", "-m", "fixture")
+        return self.git("rev-parse", "HEAD")
+
+    def run_gate(self, base: str) -> tuple[int, str]:
+        output = StringIO()
+        with (
+            patch.object(gate, "ROOT", self.root),
+            patch("sys.argv", ["check_commitrail_records.py", "--base-ref", base]),
+            redirect_stdout(output), redirect_stderr(output),
+        ):
+            result = gate.main()
+        return result, output.getvalue()
+
+    def test_merged_records_can_be_reconciled_with_one_new_record(self) -> None:
+        self.git("init")
+        self.add_initiative()
+        other = ".commitrail/changes/existing-proof.md"
+        self.write(other, self.record())
+        base = self.commit()
+        self.write(self.initiative, (self.root / self.initiative).read_text() +
+                   "\nReconciled delivered capability.\n")
+        self.write(other, self.record() + "\nCorrected next boundary.\n")
+        self.write(self.standalone, self.record())
+        self.commit()
+        self.assertEqual(self.run_gate(base)[0], 0)
+
+        # Existing records do not become an unvalidated exception.
+        self.write(other, self.record().replace("Initiative: None", "Initiative: Other"))
+        self.commit()
+        result, output = self.run_gate(base)
+        self.assertEqual(result, 1)
+        self.assertIn("STANDALONE_INITIATIVE_INVALID", output)
+
+    def test_two_new_records_still_fail_with_a_known_base(self) -> None:
+        self.git("init")
+        base = self.commit()
+        self.add_initiative()
+        self.write(self.standalone, self.record())
+        self.commit()
+        result, output = self.run_gate(base)
+        self.assertEqual(result, 1)
+        self.assertIn("MULTIPLE_CHANGE_RECORDS", output)
+
+    def test_multiple_existing_records_need_one_bounded_new_record(self) -> None:
+        self.git("init")
+        self.add_initiative()
+        self.write(self.standalone, self.record())
+        base = self.commit()
+        for path in (self.initiative, self.standalone):
+            self.write(path, (self.root / path).read_text() + "\nCorrected outcome.\n")
+        self.commit()
+        result, output = self.run_gate(base)
+        self.assertEqual(result, 1)
+        self.assertIn("MULTIPLE_CHANGE_RECORDS", output)
+
+    def test_missing_base_fails_closed(self) -> None:
+        self.git("init")
+        self.write(self.standalone, self.record())
+        self.commit()
+        result, output = self.run_gate("missing-base")
+        self.assertEqual(result, 1)
+        self.assertIn("GIT_COMMAND_FAILED", output)
+
+    def test_advanced_base_cannot_hide_a_new_record_in_the_pr(self) -> None:
+        self.git("init")
+        base = self.commit()
+        # The same path is independently introduced on main and the PR.
+        self.git("checkout", "-b", "advanced-main")
+        self.write(self.standalone, self.record())
+        advanced = self.commit()
+        self.git("checkout", "-b", "candidate", base)
+        self.write(self.standalone, self.record() + "\nDifferent PR intent.\n")
+        self.add_initiative()
+        self.commit()
+        result, output = self.run_gate(advanced)
+        self.assertEqual(result, 1)
+        self.assertIn("MULTIPLE_CHANGE_RECORDS", output)
 
     def test_standalone_backend_record_needs_no_initiative(self) -> None:
         self.write(self.standalone, self.record())

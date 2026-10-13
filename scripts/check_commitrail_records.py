@@ -12,9 +12,15 @@ from pathlib import Path
 from markdown_it import MarkdownIt
 
 try:
-    from scripts.git_delta import GitCommandError, committed_changed_files, run_checked
+    from scripts.git_delta import (
+        GitCommandError, committed_changed_files, resolve_commit, resolve_merge_base,
+        run_checked,
+    )
 except ModuleNotFoundError:  # Direct `python scripts/...` execution.
-    from git_delta import GitCommandError, committed_changed_files, run_checked
+    from git_delta import (
+        GitCommandError, committed_changed_files, resolve_commit, resolve_merge_base,
+        run_checked,
+    )
 
 ROOT = Path(__file__).resolve().parents[1]
 DISPOSITIONS = {"Planned", "Complete", "Stopped", "Superseded"}
@@ -388,7 +394,17 @@ def validate(
     )
     records = sorted(path for path in changed if RECORD_PATH.fullmatch(path))
     if len(records) > 1:
-        raise CommitrailError("COMMITRAIL_MULTIPLE_CHANGE_RECORDS")
+        if comparison_base_ref is None:
+            raise CommitrailError("COMMITRAIL_MULTIPLE_CHANGE_RECORDS")
+        existing = set(run_checked(
+            ["git", "ls-tree", "-r", "--name-only", comparison_base_ref,
+             "--", ".commitrail"],
+            repository_root=root,
+        ).splitlines())
+        # Reconciliation may correct merged records, not bundle new changes.
+        # Keep all edited records below for full content/ownership validation.
+        if len(set(records) - existing) != 1:
+            raise CommitrailError("COMMITRAIL_MULTIPLE_CHANGE_RECORDS")
     if implementation and not records:
         raise CommitrailError("COMMITRAIL_CHANGE_RECORD_REQUIRED")
 
@@ -462,10 +478,13 @@ def main() -> int:
     parser.add_argument("--head-ref", default="HEAD")
     args = parser.parse_args()
     try:
+        head = resolve_commit(args.head_ref, repository_root=ROOT)
+        base = resolve_commit(args.base_ref, repository_root=ROOT)
+        merge_base = resolve_merge_base(base, head, repository_root=ROOT)
         validate(
             ROOT,
-            changed_paths(args.base_ref, args.head_ref),
-            comparison_base_ref=args.base_ref,
+            changed_paths(merge_base, head),
+            comparison_base_ref=merge_base,
         )
     except (CommitrailError, GitCommandError) as exc:
         print(str(exc), file=sys.stderr)
