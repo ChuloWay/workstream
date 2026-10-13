@@ -1019,7 +1019,8 @@ queues and leases are not prerequisites for that branch. The diagram shows the
 successful evaluation branches. The hidden failure handoff, exact-cause replacement intake
 and Operator retry are delivered. The setup-fault hold is future safety work;
 the current selected production classifier emits no `task_setup_blocked`.
-Neither branch is live end to end yet.
+Both branches passed the bounded local public API/Celery drill; hosted deployment
+is not established by that evidence.
 
 No claim-time policy selection exists. A normal task claim copies the version
 already locked on the ready task. Review claim copies the version stamped on

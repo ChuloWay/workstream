@@ -1246,8 +1246,9 @@ changing these selectors: active and superseded guide selections remain frozen.
 omitted replacements preserve the exact predecessor's value. Every new version
 uses `semantics_format=v2` and hashes the explicit setting. Existing v1 rows
 retain their hashes and mean true; incomplete history remains incomplete.
-False may be saved in draft, but the current guide activation service explicitly
-rejects it until automated acceptance and contribution execution is available.
+False may be saved in draft. A complete supported guide may activate when its
+exact approved requirement inventory contains no `human_review` disposition.
+New false/pass acceptance effects still require an authorized live REV generation.
 An exact committed retry recovers the original response under the adopted
 WS-XINT-003-02B actor/request contract; it does not reselect today's policy or
 perform another mutation. An omitted setting differs from an explicit true in

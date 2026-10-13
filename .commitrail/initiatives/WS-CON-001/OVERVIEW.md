@@ -88,7 +88,7 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 REV-12A4A supplies scoped lifecycle transitions on the existing REV fence.
 04E2-B supplies exact source AUTH custody and complete database/effect closure.
 PILOT-04 selected production composition and ARCH-04E3-B supported
-false-guide activation are delivered; complete public/worker proof remains.
+false-guide activation are delivered; the bounded local public/worker drill passed; hosted operation remains.
 
 This is delivery priority, not a prerequisite of true human admission. Both
 routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → delivered authorized outcomes 04E2-B → completion delivery 04E1B-B → PILOT-04 selected production registration; true routing

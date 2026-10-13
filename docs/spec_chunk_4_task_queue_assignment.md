@@ -732,7 +732,8 @@ validates the original immutable owners under live authority without reserve or
 append calls; it cannot reset a later generation. Every new predecessor-linked
 Submission uses the same writer. ARCH-02I-B exposes public ZIP preparation
 and admission-backed Submission creation; PILOT-04 registers selected request
-and completion handlers. Complete connected proof remains pending.
+and completion handlers. The bounded local public/worker drill passed under
+scripted approved-guide preconditions; hosted operation remains separate.
 
 ARCH-04F3 names the supported predecessor-linked creation kind
 `checker_remediation`. TASK locks its task, assignment and latest Submission,
