@@ -1,8 +1,16 @@
 # PILOT-02C — Atomic batch screening/release and explicit CLI intake
 
 - Initiative: `None`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: Covered Project Managers explicitly screen and release every immutable imported batch member atomically and use the public CLI for separate source/import/status/screen/release operations and local CSV conversion.
+
+Current outcome: delivered by [PR #543](https://github.com/Flow-Research/workstream/pull/543)
+after #542; [issue #489](https://github.com/Flow-Research/workstream/issues/489)
+is closed. Its final [hosted verification](https://github.com/Flow-Research/workstream/actions/runs/38383261833)
+passed at `c4879e895`. The earlier source-specific failures, pending proof and
+repair instructions below are retained history, not unfinished implementation
+or current contribution gates. Deployment and the wider contributor lifecycle
+remain separate work; batch CLI and contribution exports share the same binary.
 
 ## Intent
 
@@ -666,17 +674,16 @@ that stronger observation and the larger journeys before any readiness claim.
 
 - Current-source reconciliation: Preserve the atomic owner's import/status and
   source custody; shared-file regions require handoff before edits.
-- Next usable boundary: Complete the separate explicit bulk/CLI journey under
-  issue 489; whole-issue completion requires every agreed acceptance criterion.
-- Remaining risks: The installed aggregate receipt/currentness contract has the
-  recorded historical native 200/500, rollback, concurrency and direct-SQL proof.
-  The atomic prerequisite is now merged as `0037`; bulk adds only its `0038`
-  successor and does not edit merged predecessor migrations. Required final
-  independent reviews and complete hosted CI remain. Historical bounded CLI
-  partitions passed; final-source native journeys and job-level timing remain
-  unproved after the context-reuse repairs.
+- Next usable boundary: Consume the delivered public source/import/status and
+  explicit batch screen/release operations; no remaining PILOT-02 implementation
+  gate. Submission and the full contributor journey retain their own scope.
+- Remaining limits: Source builds and hosted native proof do not establish a
+  deployed service. Migration `0038` follows `0037` without changing predecessors.
+  The final hosted run passed correctness/completeness checks, including native
+  batch execution, but missed the diagnostic CI timing target. Performance is
+  not reclassified as passing merely because correctness checks passed.
 
-## Current-main takeover reconciliation
+## Historical main-takeover reconciliation
 
 The initial takeover reconciled bulk/CLI against the root atomic import slice and
 selected-checker main `6d64a6353`. The current baseline is merged main
