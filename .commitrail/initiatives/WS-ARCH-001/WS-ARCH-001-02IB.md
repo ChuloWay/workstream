@@ -312,3 +312,15 @@ DTO rejection and the former TASK nonempty guard when restored separately.
 - Remaining risks: a crash before selected PRE reservation leaves no durable
   lookup target, and a passing PRE run without durable intent may need a
   narrower retryable recovery path. Neither can be represented as `ready`.
+
+### Current-contract correction
+
+Current contract prose, the dependency map and static lifecycle diagram describe
+public ZIP preparation and admission-backed initial/checker-remediation entry.
+They preserve separate false-guide activation and full API/Celery proof. The
+allowed documentation reconciliation includes
+`scripts/check_stale_workstream_wording.py`: remove only its obsolete blanket
+`ContributionRecord` prohibition for the current-flow diagram, since selected
+shared acceptance already writes the submitter record. Retain all other stale
+patterns, deferred fulfillment checks and workflow invocations. This changes no
+product behavior, test selection, required checks or execution evidence.
