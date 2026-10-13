@@ -35,6 +35,44 @@ The canonical `require_guide_activation_custody(operation, true)` PostgreSQL fun
 - `experiments/pilot04_external_checker_runtime/checker.py`, `run_public_journey_probe.py`, and that experiment's `README.md`: companion proof for the integrated public activation, task, ZIP intake and Submission path through real broker/worker PRE/POST delivery, including a phase-aware POST failure fixture. The runtime owner edits these files; include them in this bounded activation PR after the clean entry stack is assembled.
 - `README.md`, `docs/operations_project_operating_manual.md`, `docs/operations_revision_replay.md`, `docs/operations_queue_policy.md`, `docs/glossary.md`, `docs/architecture_lockdown.md`, `docs/architecture_checker_framework.md`, `docs/architecture_system_architecture.md`, `docs/architecture_lifecycle_state_machine.md`, `docs/architecture_data_model.md`, `docs/product_brief.md`, `docs/product_first_user_flows.md`, `docs/decision_0011_submission_artifact_policy_drives_pre_submit.md`, `docs/engineering/authorization_activation_custody.md`, `docs/engineering/review_authorization_action_custody.md`, `docs/operations_authorization_service.md`, `docs/spec_week2_checker_framework.md`, `docs/spec_chunk_3_project_guide_foundation.md`, `docs/spec_chunk_5_submission_packet_foundation.md`, `docs/spec_chunk_6_checker_contract_records.md`, `docs/spec_chunk_7_checker_runner_registry.md`, `docs/template_submission_packet.md`, `docs/template_submission_artifact_policy.md`, `docs/template_checker_policy.md`, `docs/spec_authorization_service.md`, `docs/spec_contribution_compensation.md`, `docs/architecture_brief/workstream_architecture_brief.md`, `docs/architecture_brief/README.md`, its generated `docs/architecture_brief/workstream_architecture_brief.pdf`, `docs/spec_artifact_storage_service.md`, `docs/spec_chunk_4_task_queue_assignment.md`, `docs/spec_review_lifecycle.md`, `docs/roadmap_status.md`, and this record: update only affected current claims after implementation evidence. The lead owns shared roadmap reconciliation and any required local sheet exports.
 
+### Reviewed verification and drill repair
+
+The integrated drill exposed an intermittent verifier failure after a job was
+claimed. A diagnostic run subsequently completed both policy branches, but did
+not capture that earlier exception; its cause remains unassigned. Source review
+separately identified an admission-publication lock-order risk: implicit foreign
+key checks can lock the contributor before the assignment, while public
+preparation locks TASK/assignment before the contributor. Correct that ordering
+without attributing the observed failure to it without evidence.
+
+Additional allowed files are `backend/app/modules/tasks/api/submission_context.py`,
+`backend/app/modules/tasks/api/__init__.py`,
+`backend/app/modules/tasks/submission_context.py`,
+`backend/app/modules/artifacts/submission_admission.py`, and
+`backend/tests/test_submission_bundle_admission.py`,
+`backend/tests/tasks/test_submission_lineage.py`, and
+`backend/tests/tasks/submission_lineage_support.py`; the already listed ART
+service, worker composition, verification tests and TASK lineage fixture may
+change for the same bounded repair. Extend the existing TASK context port with
+retained-parent locking, using immutable project/task/assignment/contributor
+identities. Acquire those locks before terminal ART row locks, then reparse and
+compare the locked intent to the identity used for the owner lock. Do not add
+fresh contributor lifecycle authorization to retained byte verification, weaken
+foreign keys, change stored evidence, or introduce a second context lookup.
+Submission-bundle verification must require its composed owner port; other
+artifact producers retain their existing behavior. Keep the focused regression
+in the existing relevant verification/admission tests unless a separately
+registered test module is explicitly added to scope.
+
+The companion drill also exercises an owned worker restart after a committed
+known no-effect retry, and public routing-identity revocation after retained
+external checker output. Reuse the existing Operator lifecycle transitions to
+hold the latter completion safely; do not add a runtime barrier or manually
+publish ordinary delivery. Preserve prior accepted facts, prove the revoked
+second task creates no routing/economic effects, and distinguish its closed
+unknown delivery from the retryable non-live refusal. These are proof extensions,
+not activation of human review, fulfillment, or deployment.
+
 ### Not allowed
 
 - PILOT-08 caps, rebases, deadlines or claim expiry; changes to locked checker remediation; setup-fault hold; payment/fulfillment; human review/revision runtime; CLI or frontend; another policy, controller, acceptance path, permission, worker or subsystem.
