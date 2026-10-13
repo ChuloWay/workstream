@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import inspect
 from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
 from threading import Event, Thread
@@ -16,6 +17,7 @@ from unittest.mock import AsyncMock, Mock, call
 
 import app.interfaces.artifact_operations  # noqa: F401 - cumulative contract coverage
 import app.adapters.artifacts.internal_workers as internal_worker_adapter
+import app.modules.artifacts.service as artifact_service
 from app.adapters.artifacts.local import LocalStorageAdapter, LocalStorageBootstrap
 from app.core.config import Settings, get_settings
 from app.interfaces.artifacts import ArtifactStoreNamespaceClaim
@@ -43,6 +45,15 @@ def _scoped_worker_database(session_factory):
         yield session_factory
 
     return database
+
+
+def test_worker_database_composition_has_no_application_global_factory() -> None:
+    assert "get_session_factory" not in vars(internal_worker_adapter)
+    assert "get_session_factory" not in vars(artifact_service)
+    parameter = inspect.signature(
+        artifact_service.validate_artifact_storage_namespace_at_startup
+    ).parameters["session_factory"]
+    assert parameter.default is inspect.Parameter.empty
 
 
 @pytest.mark.asyncio
