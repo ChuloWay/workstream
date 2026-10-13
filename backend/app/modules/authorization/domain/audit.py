@@ -44,6 +44,7 @@ CONTEXT_DIGEST_RESOURCE_TYPES = (
     "contribution_policy",
     "external_checker_registry_entry",
     "task_import_source",
+    "task_import_batch",
 )
 
 
@@ -108,6 +109,7 @@ AuthorizationDecisionResourceType = Literal[
     "contribution_policy",
     "external_checker_registry_entry",
     "task_import_source",
+    "task_import_batch",
 ]
 
 

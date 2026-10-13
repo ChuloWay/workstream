@@ -7,6 +7,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -200,6 +201,7 @@ class WorkstreamTask(Base):
         ),
         UniqueConstraint("id", "locked_guide_version", name="uq_workstream_tasks_id_locked_guide"),
         UniqueConstraint("id", "project_id", name="uq_workstream_tasks_id_project"),
+        UniqueConstraint("project_id", "external_task_id", name="uq_workstream_tasks_project_external_id"),
         UniqueConstraint(
             "id",
             "locked_post_submit_checker_policy_id",
@@ -303,7 +305,7 @@ class WorkstreamTask(Base):
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     task_type: Mapped[str | None] = mapped_column(String(100))
-    difficulty: Mapped[str | None] = mapped_column(String(50))
+    difficulty: Mapped[str | None] = mapped_column(String(80))
     skill_tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     estimated_time_minutes: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
@@ -774,3 +776,170 @@ class SubmissionDispatch(Base):
             name: UUID(str(getattr(self, name))) if name.endswith("_id") else getattr(self, name)
             for name in SubmissionCreationResult.__dataclass_fields__
         })
+
+
+class TaskImportBatch(Base):
+    """One exact received JSON file and its immutable ordered creation result."""
+
+    __tablename__ = "task_import_batches"
+    __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        UniqueConstraint("project_id", "sha256", "byte_count", name="uq_task_import_batch_file"),
+        UniqueConstraint("id", "project_id", name="uq_task_import_batch_project"),
+        UniqueConstraint("creation_command_receipt_id", name="uq_task_import_batch_creation_command"),
+        ForeignKeyConstraint(
+            ["source_id", "project_id", "sha256", "byte_count", "media_type"],
+            ["artifact_task_import_sources.id", "artifact_task_import_sources.project_id",
+             "artifact_task_import_sources.sha256", "artifact_task_import_sources.byte_count",
+             "artifact_task_import_sources.media_type"],
+            name="fk_task_import_batch_source", ondelete="RESTRICT", deferrable=True, initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["identity_link_id", "actor_profile_id"],
+            ["actor_identity_links.id", "actor_identity_links.actor_profile_id"],
+            name="fk_task_import_batch_actor_link", ondelete="RESTRICT", deferrable=True, initially="DEFERRED",
+        ),
+        CheckConstraint("sha256 ~ '^sha256:[0-9a-f]{64}$'", name="source_hash"),
+        CheckConstraint("source_operation_identity ~ '^sha256:[0-9a-f]{64}$'", name="source_operation"),
+        CheckConstraint("manifest_digest ~ '^sha256:[0-9a-f]{64}$'", name="manifest_hash"),
+        CheckConstraint("byte_count between 1 and 8388608 and row_count between 1 and 500", name="bounds"),
+        CheckConstraint("media_type='application/json' and schema_version='workstream.task_import.v1' "
+                        "and mapping_version='workstream.task_import.draft_mapping.v1'", name="format"),
+        CheckConstraint(
+            "(status='pending' and response is null and authorization_decision_id is null and committed_at is null) or "
+            "(status='committed' and response is not null and jsonb_typeof(response)='object' "
+            "and authorization_decision_id is not null and committed_at is not null "
+            "and put_attempt_id is not null and content_id is not null and replica_id is not null "
+            "and verification_job_id is not null and verification_generation is not null "
+            "and verification_generation>0 and verification_receipt_id is not null "
+            "and ((operation_receipt_id is not null and observation_receipt_id is null) "
+            "or (operation_receipt_id is null and observation_receipt_id is not null)))", name="state_shape",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    source_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    creation_command_receipt_id: Mapped[str] = mapped_column(ForeignKey(
+        "task_import_batch_command_receipts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED",
+    ))
+    sha256: Mapped[str] = mapped_column(String(71))
+    byte_count: Mapped[int] = mapped_column(BigInteger)
+    media_type: Mapped[str] = mapped_column(String(255), default="application/json")
+    schema_version: Mapped[str] = mapped_column(String(80))
+    mapping_version: Mapped[str] = mapped_column(String(80))
+    manifest_digest: Mapped[str] = mapped_column(String(71))
+    row_count: Mapped[int] = mapped_column(Integer)
+    metadata_label: Mapped[str | None] = mapped_column(String(255))
+    actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    authorization_decision_id: Mapped[str | None] = mapped_column(ForeignKey("audit_events.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    response: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_operation_identity: Mapped[str] = mapped_column(String(71))
+    put_attempt_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_put_attempts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    content_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_contents.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    replica_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_replicas.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    verification_job_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_verification_jobs.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    verification_generation: Mapped[int | None] = mapped_column(BigInteger)
+    verification_receipt_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_verification_receipts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    operation_receipt_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_operation_receipts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    observation_receipt_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_put_observation_receipts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+
+
+class TaskImportBatchMember(Base):
+    """Append-only document row bound to its canonical Task creation receipt."""
+
+    __tablename__ = "task_import_batch_members"
+    __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        UniqueConstraint("task_id", name="uq_task_import_member_task"),
+        UniqueConstraint("batch_id", "row_index", name="uq_task_import_member_row"),
+        UniqueConstraint("project_id", "external_task_id", name="uq_task_import_member_external_id"),
+        UniqueConstraint("task_command_receipt_id", name="uq_task_import_member_creation"),
+        ForeignKeyConstraint(["batch_id", "project_id"], ["task_import_batches.id", "task_import_batches.project_id"],
+                             name="fk_task_import_member_batch", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
+        ForeignKeyConstraint(["task_id", "project_id"], ["workstream_tasks.id", "workstream_tasks.project_id"],
+                             name="fk_task_import_member_task", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
+        CheckConstraint("row_index between 0 and 499", name="row_index"),
+        CheckConstraint("row_digest ~ '^sha256:[0-9a-f]{64}$'", name="row_hash"),
+        CheckConstraint("jsonb_typeof(response)='object'", name="response_shape"),
+    )
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    batch_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    row_index: Mapped[int] = mapped_column(Integer)
+    external_task_id: Mapped[str] = mapped_column(String(200))
+    row_digest: Mapped[str] = mapped_column(String(71))
+    create_idempotency_key: Mapped[UUID] = mapped_column(Uuid())
+    task_command_receipt_id: Mapped[UUID] = mapped_column(ForeignKey("task_command_receipts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    authorization_decision_id: Mapped[str] = mapped_column(ForeignKey("audit_events.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    response: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TaskImportBatchCommandReceipt(Base):
+    """Actor/action/key retry custody with independently verified selected-source ancestry."""
+
+    __tablename__ = "task_import_batch_command_receipts"
+    __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        UniqueConstraint("actor_profile_id", "action_id", "idempotency_key", name="uq_task_import_command_namespace"),
+        ForeignKeyConstraint(["batch_id", "project_id"], ["task_import_batches.id", "task_import_batches.project_id"],
+                             name="fk_task_import_command_batch", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
+        ForeignKeyConstraint(["identity_link_id", "actor_profile_id"],
+                             ["actor_identity_links.id", "actor_identity_links.actor_profile_id"],
+                             name="fk_task_import_command_actor_link", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"),
+        ForeignKeyConstraint(
+            ["source_id", "project_id", "sha256", "byte_count", "media_type"],
+            ["artifact_task_import_sources.id", "artifact_task_import_sources.project_id",
+             "artifact_task_import_sources.sha256", "artifact_task_import_sources.byte_count",
+             "artifact_task_import_sources.media_type"],
+            name="fk_task_import_command_source", ondelete="RESTRICT", deferrable=True, initially="DEFERRED",
+        ),
+        CheckConstraint("action_id='project.task.import'", name="action"),
+        CheckConstraint("request_digest ~ '^sha256:[0-9a-f]{64}$'", name="request_hash"),
+        CheckConstraint("sha256 ~ '^sha256:[0-9a-f]{64}$' and source_operation_identity ~ '^sha256:[0-9a-f]{64}$'", name="source_hash"),
+        CheckConstraint("byte_count between 1 and 8388608 and media_type='application/json'", name="bounds"),
+        CheckConstraint(
+            "(status='pending' and response is null and authorization_decision_id is null and committed_at is null) or "
+            "(status='committed' and batch_id is not null and response is not null and jsonb_typeof(response)='object' "
+            "and authorization_decision_id is not null and committed_at is not null "
+            "and put_attempt_id is not null and content_id is not null and replica_id is not null "
+            "and verification_job_id is not null and verification_generation is not null "
+            "and verification_generation>0 and verification_receipt_id is not null "
+            "and ((operation_receipt_id is not null and observation_receipt_id is null) "
+            "or (operation_receipt_id is null and observation_receipt_id is not null)))", name="state_shape",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    actor_profile_id: Mapped[str] = mapped_column(ForeignKey("actor_profiles.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    action_id: Mapped[str] = mapped_column(String(160))
+    idempotency_key: Mapped[UUID] = mapped_column(Uuid())
+    request_digest: Mapped[str] = mapped_column(String(71))
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    source_id: Mapped[str] = mapped_column(Uuid(as_uuid=False))
+    sha256: Mapped[str] = mapped_column(String(71))
+    byte_count: Mapped[int] = mapped_column(BigInteger)
+    media_type: Mapped[str] = mapped_column(String(255), default="application/json")
+    batch_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    authorization_decision_id: Mapped[str | None] = mapped_column(ForeignKey("audit_events.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    status: Mapped[str] = mapped_column(String(16), default="pending")
+    response: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    source_operation_identity: Mapped[str] = mapped_column(String(71))
+    put_attempt_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_put_attempts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    content_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_contents.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    replica_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_replicas.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    verification_job_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_verification_jobs.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    verification_generation: Mapped[int | None] = mapped_column(BigInteger)
+    verification_receipt_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_verification_receipts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    operation_receipt_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_operation_receipts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))
+    observation_receipt_id: Mapped[str | None] = mapped_column(ForeignKey("artifact_put_observation_receipts.id", ondelete="RESTRICT", deferrable=True, initially="DEFERRED"))

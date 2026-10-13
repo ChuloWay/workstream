@@ -256,8 +256,10 @@ same-project Submitter without the assignment.
 - Current-source reconciliation: `cdfdebd74` had hidden ART preparation,
   atomic TASK/ART creation and public history reads, but no public creation
   POST or OpenAPI exposure for ZIP preparation. This change exposes those
-  existing owners. Main through `07f5655ac` adds CLI Finance policy management
-  without changing the entry owners or adding CLI submit/status. False-guide
+  existing owners. Main through `42fd31b8f` adds CLI Finance policy management
+  and PILOT-02B atomic JSON-to-DRAFT import with migration 0037. The reconciled
+  public task router retains both batch commands and canonical Submission entry;
+  CLI submit/status is still separate. False-guide
   activation and the realistic Celery service drill remain necessary before
   claiming a complete public false-policy journey.
 - Next usable boundary: false-guide activation/readiness, outcome access and the
