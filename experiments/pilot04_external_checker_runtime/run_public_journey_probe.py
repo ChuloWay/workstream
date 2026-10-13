@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -186,6 +187,19 @@ def _process(command: list[str], *, env: dict[str, str], log: Path) -> subproces
         )
 
 
+def _start_worker(env: dict[str, str], root: Path, generation: int) -> tuple[subprocess.Popen, str]:
+    """Start one owned prefork worker with a distinct broker identity and log."""
+    hostname = f"first-journey-{uuid4().hex}@localhost"
+    process = _process([
+        sys.executable, "-m", "celery", "-A", "app.workers.celery_app",
+        "worker", "--pool=prefork", "--concurrency=1",
+        "--queues=celery,workstream.outbox", "--hostname", hostname,
+        "--without-gossip", "--without-mingle", "--without-heartbeat",
+        "--loglevel=ERROR",
+    ], env=env, log=root / ("worker.log" if generation == 1 else f"worker-{generation}.log"))
+    return process, hostname
+
+
 def _stop_process(process: subprocess.Popen | None) -> None:
     if process is None or process.poll() is not None:
         return
@@ -358,6 +372,37 @@ async def _assert_outbox_worker_custody(session, event: OutboxEvent,
                      "OUTBOX phase decision differs from registered project dispatcher")
 
 
+_GOVERNED_TABLES = (
+    "task_post_submit_routing_requests", "task_post_submit_routing_manifests",
+    "final_acceptances", "contribution_records", "compensation_awards", "reviews",
+)
+
+
+async def _project_effects_snapshot(session, project_id: UUID) -> dict[str, tuple[str, ...]]:
+    """Compare complete retained owner facts without logging their private contents."""
+    rows = {}
+    for table in _GOVERNED_TABLES:
+        values = (await session.scalars(text(
+            f"SELECT to_jsonb(t) FROM public.{table} t WHERE project_id=:project"
+        ), {"project": str(project_id)})).all()
+        rows[table] = tuple(sorted(json.dumps(value, sort_keys=True) for value in values))
+    return rows
+
+
+async def _assert_task_has_no_effects(session, task_id: str) -> None:
+    """A second task cannot borrow its first task's accepted project evidence."""
+    for table in _GOVERNED_TABLES:
+        query = (
+            "SELECT count(*) FROM public.compensation_awards a "
+            "JOIN public.contribution_records c ON c.id=a.contribution_record_id "
+            "WHERE c.task_id=:task"
+            if table == "compensation_awards" else
+            f"SELECT count(*) FROM public.{table} WHERE task_id=:task"
+        )
+        _require(await session.scalar(text(query), {"task": task_id}) == 0,
+                 "late-refusal task committed governed effects")
+
+
 async def _wait_outbox_acknowledged(factory, event_id: UUID, project_id: UUID) -> None:
     """Observe ordinary Beat-discovered delivery by the real prefork worker."""
     async with factory() as session:
@@ -377,7 +422,9 @@ async def _wait_outbox_acknowledged(factory, event_id: UUID, project_id: UUID) -
 
 
 async def _wait_known_retry(factory, event_id: UUID, project_id: UUID,
-                            task_id: str, submission_id: str) -> None:
+                            task_id: str, submission_id: str, *,
+                            prior_effects: dict[str, tuple[str, ...]] | None = None,
+                            prior_route_audits: int = 0) -> None:
     """Observe one safe non-live attempt from ordinary scheduled delivery."""
     deadline = time.monotonic() + 240
     while time.monotonic() < deadline:
@@ -401,23 +448,52 @@ async def _wait_known_retry(factory, event_id: UUID, project_id: UUID,
                 _require(task.status == "evaluation_pending"
                          and submission.status == "submitted",
                          "non-live completion changed Task or Submission")
-                for table in ("task_post_submit_routing_requests",
-                              "task_post_submit_routing_manifests", "final_acceptances",
-                              "contribution_records", "compensation_awards", "reviews"):
-                    count = await session.scalar(text(
-                        f"SELECT count(*) FROM public.{table} WHERE project_id=:project"
-                    ), {"project": str(project_id)})
-                    _require(count == 0, "non-live retry committed governed effects")
+                effects = await _project_effects_snapshot(session, project_id)
+                _require(effects == (prior_effects or {name: () for name in _GOVERNED_TABLES}),
+                         "non-live retry changed project governed effects")
+                await _assert_task_has_no_effects(session, task_id)
                 _require(await session.scalar(text(
                     "SELECT count(*) FROM public.audit_events "
                     "WHERE project_id=:project AND action_id='task.post_submit.route'"
-                ), {"project": str(project_id)}) == 0,
+                ), {"project": str(project_id)}) == prior_route_audits,
                          "non-live retry retained routing authorization")
                 return
             if event.delivery_state in {"acknowledged", "dead_letter", "cancelled"}:
                 raise RuntimeError("non-live completion escaped the safe retry path")
         await asyncio.sleep(0.3)
     raise RuntimeError("Beat-discovered non-live completion did not become retryable")
+
+
+async def _wait_revoked_completion(factory, event_id: UUID, project_id: UUID) -> None:
+    """Require a scheduled second attempt to close after late router revocation."""
+    deadline = time.monotonic() + 240
+    while time.monotonic() < deadline:
+        async with factory() as session:
+            event = await session.get(OutboxEvent, event_id)
+            _require(event is not None, "late-revocation completion is missing")
+            if event.delivery_state == "dead_letter":
+                attempts = (await session.scalars(select(OutboxDeliveryAttempt).where(
+                    OutboxDeliveryAttempt.event_id == event_id
+                ).order_by(OutboxDeliveryAttempt.claim_generation))).all()
+                _require(event.attempt_count == 2 and len(attempts) == 2
+                         and event.last_error_code == "INVOKE_OUTCOME_UNKNOWN"
+                         and event.next_attempt_at is None,
+                         "late authority refusal did not close the exact due retry")
+                first, second = (json.loads(item.outcome_json) for item in attempts)
+                _require(first["delivery_state"] == "retryable"
+                         and first["error_code"] == "RETRY_REQUESTED"
+                         and first["invocation_unknown"] is False
+                         and second["delivery_state"] == "dead_letter"
+                         and second["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+                         and second["invocation_unknown"] is True
+                         and attempts[0].claim_owner != attempts[1].claim_owner,
+                         "late authority refusal lost restart-separated attempt custody")
+                await _assert_outbox_worker_custody(session, event, project_id)
+                return
+            if event.delivery_state in {"acknowledged", "cancelled"}:
+                raise RuntimeError("revoked router completion escaped closed refusal")
+        await asyncio.sleep(0.3)
+    raise RuntimeError("Beat-discovered revoked completion did not close after restart")
 
 
 async def _outbox_snapshot(factory, event_id: UUID) -> tuple:
@@ -566,6 +642,40 @@ async def _submit(client, factory, *, task_id: str, assignment_id: str,
     _require(saved["admission_id"] == admission_id,
              "Submission consumed another admission")
     return saved
+
+
+async def _started_public_task(client, *, project_id: str, manager_token: str,
+                               contributor_token: str, source_ref: str) -> tuple[str, str]:
+    """Use the same public task, claim and start path for both project tasks."""
+    from tests.test_tasks import complete_task_payload
+
+    payload = complete_task_payload()
+    payload["source_ref"] = source_ref
+    created = await _json(
+        client, "POST", f"/api/v1/projects/{project_id}/tasks", manager_token, 201,
+        headers={"Idempotency-Key": str(uuid4())}, json=payload,
+    )
+    task_id = created["id"]
+    for operation in ("screen", "release"):
+        await _json(
+            client, "POST", f"/api/v1/tasks/{task_id}/{operation}",
+            manager_token, 200, headers={"Idempotency-Key": str(uuid4())},
+            json={"reason": "Public first journey"},
+        )
+    claimed = await _json(
+        client, "POST", f"/api/v1/tasks/{task_id}/claim", contributor_token,
+        200, headers={"Idempotency-Key": str(uuid4())},
+    )
+    assignment_id = claimed["assignment"]["id"]
+    await _json(
+        client, "POST", f"/api/v1/tasks/{task_id}/start", contributor_token,
+        200, headers={"Idempotency-Key": str(uuid4())},
+    )
+    await _json(
+        client, "GET", f"/api/v1/tasks/{task_id}/submission-requirements",
+        contributor_token, 200,
+    )
+    return task_id, assignment_id
 
 
 async def _complete_post(factory, *, submission_id: str,
@@ -728,8 +838,97 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
         return counts | {"task_status": task.status}
 
 
+async def _late_revocation_trial(client, factory, env, *, project_id: UUID,
+                                 accepted_task_id: str, manager_token: str,
+                                 contributor_token: str, operator_id: UUID,
+                                 archive: bytes, summary: str, attestation: str,
+                                 stop_worker: Callable[[], None],
+                                 start_worker: Callable[[], Awaitable[None]]) -> dict:
+    """Revoke routing authority after real POST I/O and a known non-live retry."""
+    from tests.reviews.lifecycle.transition_support import command_for, transition
+
+    async with factory() as session:
+        prior_effects = await _project_effects_snapshot(session, project_id)
+        prior_route_audits = await session.scalar(text(
+            "SELECT count(*) FROM public.audit_events "
+            "WHERE project_id=:project AND action_id='task.post_submit.route'"
+        ), {"project": str(project_id)})
+    for phase in ("draining", "disabled", "shadow"):
+        await transition(await command_for(operator_id, phase))
+
+    task_id, assignment_id = await _started_public_task(
+        client, project_id=str(project_id), manager_token=manager_token,
+        contributor_token=contributor_token, source_ref="local-ticket-late-revocation",
+    )
+    saved = await _submit(
+        client, factory, task_id=task_id, assignment_id=assignment_id,
+        contributor_token=contributor_token,
+        archive=_with_fixture_file(archive, "late-revocation-trial.txt"),
+        summary=summary, attestation=attestation, predecessor_id=None,
+    )
+    attempt_id, completion_id = await _complete_post(
+        factory, submission_id=saved["submission_id"], project_id=project_id,
+        recommendation="allow_review", deliver_completion=False,
+    )
+    await _wait_known_retry(
+        factory, completion_id, project_id, task_id, saved["submission_id"],
+        prior_effects=prior_effects, prior_route_audits=prior_route_audits,
+    )
+    stop_worker()
+    async with factory() as session:
+        held = await session.get(OutboxEvent, completion_id)
+        _require(held.delivery_state == "retryable" and held.attempt_count == 1,
+                 "late completion advanced before the worker stopped")
+
+    administrator, _ = await seed_review_actor(
+        factory, None, role="access_administrator", scope="system"
+    )
+    async with factory() as session:
+        router_link = await session.scalar(
+            select(ActorIdentityLink.id).join(
+                ActorProfile, ActorIdentityLink.actor_profile_id == ActorProfile.id
+            ).where(ActorProfile.service_identity
+                    == ServiceIdentity.TASK_POST_SUBMIT_ROUTER.value)
+        )
+        _require(router_link is not None, "provisioned routing service link is absent")
+    revoked = await _json(
+        client, "POST", f"/api/v1/actor-identity-links/{router_link}/revoke",
+        _token(env, administrator), 200,
+        headers={"Idempotency-Key": str(uuid4())},
+        json={"reason": "Exercise late post-check routing authority refusal"},
+    )
+    _require(revoked["resource_type"] == "actor_identity_link"
+             and revoked["resource_id"] == str(router_link),
+             "public revocation did not name the fixed router link")
+    async with factory() as session:
+        link = await session.get(ActorIdentityLink, router_link)
+        _require(link.status == "revoked", "public router-link revocation did not persist")
+    await transition(await command_for(operator_id, "live"))
+    await _wait_outbox_due(factory, completion_id)
+    await start_worker()
+    await _wait_revoked_completion(factory, completion_id, project_id)
+    async with factory() as session:
+        task = await session.get(WorkstreamTask, task_id)
+        submission = await session.get(Submission, saved["submission_id"])
+        run = await session.get(CheckerRun, attempt_id)
+        prior_task = await session.get(WorkstreamTask, accepted_task_id)
+        _require(task.status == "evaluation_pending"
+                 and submission.status == "submitted"
+                 and run.status == "completed"
+                 and prior_task.status == "accepted",
+                 "late revocation changed a task, Submission, or completed checker result")
+        await _assert_task_has_no_effects(session, task_id)
+        _require(await _project_effects_snapshot(session, project_id) == prior_effects,
+                 "late revocation changed the first task's governed evidence")
+    return {"task_id": task_id, "submission_id": saved["submission_id"],
+            "checker_run_id": attempt_id, "completion_event_id": str(completion_id),
+            "outbox_state": "dead_letter", "routing_authority": "revoked_after_post_result"}
+
+
 async def _one_mode(client, factory, database_url, namespace, image, env, *,
                     human_review_required: bool, operator_id: UUID | None,
+                    stop_worker: Callable[[], None] | None = None,
+                    start_worker: Callable[[], Awaitable[None]] | None = None,
                     bootstrap_only: bool = False) -> dict:
     awards = () if human_review_required else ("project_points",)
     proposal = SubmissionArtifactPolicyProposal(
@@ -824,31 +1023,9 @@ async def _one_mode(client, factory, database_url, namespace, image, env, *,
                  and role_grant["actor_profile_id"] == str(contributor.actor_profile_id),
                  "public project submitter grant names another actor or role")
 
-        from tests.test_tasks import complete_task_payload
-
-        created = await _json(
-            client, "POST", f"/api/v1/projects/{project_id}/tasks", manager_token, 201,
-            headers={"Idempotency-Key": str(uuid4())}, json=complete_task_payload(),
-        )
-        task_id = created["id"]
-        for operation in ("screen", "release"):
-            await _json(
-                client, "POST", f"/api/v1/tasks/{task_id}/{operation}",
-                manager_token, 200, headers={"Idempotency-Key": str(uuid4())},
-                json={"reason": "Public first journey"},
-            )
-        claimed = await _json(
-            client, "POST", f"/api/v1/tasks/{task_id}/claim", contributor_token,
-            200, headers={"Idempotency-Key": str(uuid4())},
-        )
-        assignment_id = claimed["assignment"]["id"]
-        await _json(
-            client, "POST", f"/api/v1/tasks/{task_id}/start", contributor_token,
-            200, headers={"Idempotency-Key": str(uuid4())},
-        )
-        await _json(
-            client, "GET", f"/api/v1/tasks/{task_id}/submission-requirements",
-            contributor_token, 200,
+        task_id, assignment_id = await _started_public_task(
+            client, project_id=project_id, manager_token=manager_token,
+            contributor_token=contributor_token, source_ref="local-ticket-1",
         )
 
         archive = archive_with_modes("evidence/results", compilation.project_id)
@@ -963,9 +1140,13 @@ async def _one_mode(client, factory, database_url, namespace, image, env, *,
                 factory, completion_id, compilation.project_id,
                 task_id, first_submission_id,
             )
+            _require(stop_worker is not None and start_worker is not None,
+                     "prefork restart control is absent")
+            stop_worker()
             from tests.reviews.lifecycle.transition_support import command_for, transition
             await transition(await command_for(operator_id, "live"))
             await _wait_outbox_due(factory, completion_id)
+            await start_worker()
             await _wait_outbox_acknowledged(factory, completion_id,
                                            compilation.project_id)
             async with factory() as session:
@@ -1021,6 +1202,15 @@ async def _one_mode(client, factory, database_url, namespace, image, env, *,
             expected_submissions=2 if human_review_required else 1,
         )
         _require(again == outcome, "duplicate completion changed governed outcome")
+        late_revocation = None
+        if not human_review_required:
+            late_revocation = await _late_revocation_trial(
+                client, factory, env, project_id=compilation.project_id,
+                accepted_task_id=task_id, manager_token=manager_token,
+                contributor_token=contributor_token, operator_id=operator_id,
+                archive=archive, summary=summary, attestation=attestation,
+                stop_worker=stop_worker, start_worker=start_worker,
+            )
         return {
             "project_id": project_id,
             "task_id": task_id,
@@ -1034,6 +1224,7 @@ async def _one_mode(client, factory, database_url, namespace, image, env, *,
                 [first_attempt_id, attempt_id] if human_review_required else [attempt_id]
             ),
             "outcome": outcome,
+            "late_revocation": late_revocation,
         }
 
 
@@ -1148,6 +1339,24 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     rust = api = worker = beat = None
+    worker_generation = 0
+
+    def stop_owned_worker() -> None:
+        _require(worker is not None and worker.poll() is None,
+                 "prefork worker was not running before restart")
+        _stop_process(worker)
+        _require(worker.poll() is not None, "old prefork worker did not exit")
+
+    async def start_owned_worker() -> None:
+        nonlocal worker, worker_generation
+        _require(worker is None or worker.poll() is not None,
+                 "prefork worker was not stopped before restart")
+        previous_pid = worker.pid if worker is not None else None
+        worker_generation += 1
+        worker, hostname = _start_worker(env, root, worker_generation)
+        _require(worker.pid != previous_pid, "restart reused the old worker process")
+        await _wait_worker(worker, hostname)
+
     try:
         await provision_material_services(factory, artifacts=True, checker=True)
         await provision_router(factory)
@@ -1167,15 +1376,7 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
             "--log-level", "error", "--no-access-log",
         ], env=env, log=root / "api.log")
         await _wait_api(origin, api)
-        hostname = f"first-journey-{uuid4().hex}@localhost"
-        worker = _process([
-            sys.executable, "-m", "celery", "-A", "app.workers.celery_app",
-            "worker", "--pool=prefork", "--concurrency=1",
-            "--queues=celery,workstream.outbox", "--hostname", hostname,
-            "--without-gossip", "--without-mingle", "--without-heartbeat",
-            "--loglevel=ERROR",
-        ], env=env, log=root / "worker.log")
-        await _wait_worker(worker, hostname)
+        await start_owned_worker()
         scans_before_beat = await _scan_audit_count(factory)
         beat = _process([
             sys.executable, "-m", "celery", "-A", "app.workers.celery_app",
@@ -1189,7 +1390,9 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
                                    operator_id=operator.actor_profile_id)
             false = await _one_mode(client, factory, database_url, namespace, image, env,
                                     human_review_required=False,
-                                    operator_id=operator.actor_profile_id)
+                                    operator_id=operator.actor_profile_id,
+                                    stop_worker=stop_owned_worker,
+                                    start_worker=start_owned_worker)
         _require(api.poll() is None and worker.poll() is None and beat.poll() is None,
                  "API, prefork worker, or Beat exited during public journey")
         return {"tree_sha": subprocess.check_output(

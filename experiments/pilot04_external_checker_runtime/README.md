@@ -60,9 +60,18 @@ verified immutable admission, a selected POST failure routed to
 both locked review modes. It checks exact false-mode FinalAcceptance and
 submitter contribution/award evidence and replay. The false-mode completion
 first runs while the acceptance lifecycle is legitimately in shadow, requiring
-one known safe OUTBOX retry with no governed effects; an Operator then uses the
-owner lifecycle transition to live and the same event succeeds when due. The
-phase-aware
+one known safe OUTBOX retry with no governed effects. The probe stops the
+owned prefork worker, moves the authorized lifecycle to live, then restarts a
+fresh worker while Beat remains active; the same due event must succeed exactly
+once through ordinary scheduled delivery. It then moves the authorized
+lifecycle through draining, disabled, and shadow, submits a second public task,
+and waits for its real selected POST result and first known non-live completion
+retry. With the worker stopped, a Flow-linked access administrator publicly
+revokes the fixed routing service link. The lifecycle returns to live before a
+fresh worker starts; scheduled redelivery must close as an unknown invocation,
+with no second-task routing, acceptance, contribution, or award and no change
+to the first task's accepted evidence. This exercises revocation after checker
+I/O, not a fabricated checker result or direct database mutation. The phase-aware
 `post-rejected.txt` rule lives only in this small checker fixture. The drill
 must keep guide activation guards and database triggers
 enabled. PostgreSQL, MinIO, Redis, the digest registry, Rust checker service,
