@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from contextlib import nullcontext
+from decimal import Decimal
 import json
 import os
 from pathlib import Path
@@ -253,7 +254,7 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
         }, "governed record counts differ")
         if not human_review_required:
             row = (await session.execute(text(
-                "SELECT c.contributor_id,c.submission_id,c.source_review_id,"
+                "SELECT c.id,c.contributor_id,c.submission_id,c.source_review_id,"
                 "c.source_final_acceptance_id,c.source_task_assignment_id,c.artifact_hash,"
                 "c.contribution_policy_version_id,f.acceptance_source "
                 "FROM public.contribution_records c JOIN public.final_acceptances f "
@@ -269,6 +270,21 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
                 and str(row.contribution_policy_version_id) == str(submission.contribution_policy_version_id)
                 and row.acceptance_source == "task_post_submit_route",
                 "submitter ContributionRecord lost its exact source or artifact lineage",
+            )
+            award = (await session.execute(text(
+                "SELECT contribution_record_id,contributor_id,contribution_policy_version_id,"
+                "instrument_type,unit_code,quantity FROM public.compensation_awards "
+                "WHERE project_id=:project"
+            ), {"project": str(project_id)})).one()
+            _require(
+                str(award.contribution_record_id) == str(row.id)
+                and str(award.contributor_id) == str(contributor_id)
+                and str(award.contribution_policy_version_id)
+                == str(submission.contribution_policy_version_id)
+                and award.instrument_type == "project_points"
+                and award.unit_code == "PTS"
+                and award.quantity == Decimal("7"),
+                "conditional award differs from the locked contribution policy",
             )
         return counts | {"task_status": task.status}
 
@@ -441,7 +457,8 @@ async def _one_mode(client, factory, namespace, image, env, *, human_review_requ
             item = exported["items"][0]
             _require(item["submission_id"] == saved["submission_id"]
                      and item["acceptance_source"] == "task_post_submit_route"
-                     and len(item["awards"]) == len(awards),
+                     and [(award["instrument"], award["unit"], Decimal(award["quantity"]))
+                     for award in item["awards"]] == [("project_points", "PTS", Decimal("7"))],
                      "public contribution source or award set differs")
         # Retained outbox outcome must be stable after a duplicate real broker delivery.
         await asyncio.to_thread(deliver_event.apply_async,
