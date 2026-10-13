@@ -33,6 +33,7 @@ SchemaVersion = Annotated[
     StrictStr, Field(min_length=1, max_length=50, pattern=r"^[a-z0-9][a-z0-9_.-]*$")
 ]
 ExternalCheckerPhase = Literal["pre_submit", "post_submit"]
+EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS = 60_000
 
 PRE_SUBMIT_INPUT_SCHEMA_ID = "external_checker_pre_submit_input"
 POST_SUBMIT_INPUT_SCHEMA_ID = "external_checker_post_submit_input"
@@ -67,13 +68,15 @@ def _canonical_json(value: object) -> str:
     """Match PostgreSQL JSONB canonical scalars without changing shared hashes."""
     if isinstance(value, Mapping):
         if any(type(key) is not str or "\x00" in key for key in value):
-            raise ExternalCheckerContractError(
-                "external checker value is not canonical JSON"
+            raise ExternalCheckerContractError("external checker value is not canonical JSON")
+        return (
+            "{"
+            + ",".join(
+                f"{json.dumps(key, ensure_ascii=False)}:{_canonical_json(item)}"
+                for key, item in sorted(value.items())
             )
-        return "{" + ",".join(
-            f"{json.dumps(key, ensure_ascii=False)}:{_canonical_json(item)}"
-            for key, item in sorted(value.items())
-        ) + "}"
+            + "}"
+        )
     if isinstance(value, (list, tuple)):
         return "[" + ",".join(_canonical_json(item) for item in value) + "]"
     if value is None:
@@ -84,17 +87,13 @@ def _canonical_json(value: object) -> str:
         return str(value)
     if type(value) is float:
         if not isfinite(value):
-            raise ExternalCheckerContractError(
-                "external checker value is not canonical JSON"
-            )
+            raise ExternalCheckerContractError("external checker value is not canonical JSON")
         if value == 0.0:
             return "0.0"
         return format(Decimal(str(value)), "f")
     if type(value) is str:
         if "\x00" in value:
-            raise ExternalCheckerContractError(
-                "external checker value is not canonical JSON"
-            )
+            raise ExternalCheckerContractError("external checker value is not canonical JSON")
         return json.dumps(value, ensure_ascii=False)
     raise ExternalCheckerContractError("external checker value is not canonical JSON")
 
@@ -215,9 +214,7 @@ class ExternalCheckerRegistryEntry(ExternalCheckerRegistrySpec):
     def validate_registry_entry_id(cls, value: UUID) -> UUID:
         """Require the server-selected registry identity to be canonical UUIDv7."""
         if value.version != 7 or value.variant != RFC_4122:
-            raise ExternalCheckerContractError(
-                "external checker registry entry ID must be UUIDv7"
-            )
+            raise ExternalCheckerContractError("external checker registry entry ID must be UUIDv7")
         return value
 
     @model_validator(mode="after")
@@ -255,9 +252,7 @@ class ExternalCheckerRegistrationRequest(ExternalCheckerValue):
     def validate_registry_entry_id(cls, value: UUID) -> UUID:
         """Require the requested durable identity to be canonical UUIDv7."""
         if value.version != 7 or value.variant != RFC_4122:
-            raise ExternalCheckerContractError(
-                "external checker registry entry ID must be UUIDv7"
-            )
+            raise ExternalCheckerContractError("external checker registry entry ID must be UUIDv7")
         return value
 
     @model_validator(mode="after")
@@ -310,16 +305,116 @@ class ExternalCheckerRegistryPort(Protocol):
     ) -> ExternalCheckerRegistryEntry:
         """Read one exact immutable entry without selecting a latest version."""
 
+    async def read_identity(
+        self, *, capability_id: str, capability_version: str, phase: ExternalCheckerPhase
+    ) -> ExternalCheckerRegistryEntry:
+        """Resolve the one immutable registered phase identity during approval."""
 
-class ExternalCheckerMaterial(ExternalCheckerValue):
-    """One verified read-only material identity without provider coordinates."""
+    async def list_entries(self) -> tuple[ExternalCheckerRegistryEntry, ...]:
+        """Return every immutable identity in canonical phase/name/version order."""
 
+
+class ExternalCheckerCapabilityDefinition(ExternalCheckerValue):
+    """One model-facing capability backed by code or an immutable registry row."""
+
+    capability_id: Identifier
+    capability_version: SchemaVersion
+    phase: ExternalCheckerPhase
+    selectable: bool
+    registry_entry: ExternalCheckerRegistryEntry | None = None
+
+    @model_validator(mode="after")
+    def validate_source(self) -> Self:
+        """Keep the sole code-owned default distinct from selectable project images."""
+        if self.selectable != (self.registry_entry is not None):
+            raise ExternalCheckerContractError("external checker capability source is invalid")
+        if self.registry_entry is not None and (
+            self.capability_id,
+            self.capability_version,
+            self.phase,
+        ) != (
+            self.registry_entry.capability_id,
+            self.registry_entry.capability_version,
+            self.registry_entry.phase,
+        ):
+            raise ExternalCheckerContractError("external checker capability identity is invalid")
+        return self
+
+
+class ExternalCheckerCapabilityProjection(ExternalCheckerValue):
+    """Complete immutable compiler input with one default and registered images."""
+
+    schema_version: Literal["external_checker_capabilities.v1"] = "external_checker_capabilities.v1"
+    definitions: tuple[ExternalCheckerCapabilityDefinition, ...]
+    manifest_sha256: Sha256
+
+    @model_validator(mode="after")
+    def validate_projection(self) -> Self:
+        identities = [
+            (item.phase, item.capability_id, item.capability_version) for item in self.definitions
+        ]
+        if identities != sorted(identities) or len(identities) != len(set(identities)):
+            raise ExternalCheckerContractError(
+                "external checker capability projection is not canonical"
+            )
+        defaults = [item for item in self.definitions if not item.selectable]
+        if len(defaults) != 1 or (
+            defaults[0].capability_id,
+            defaults[0].capability_version,
+            defaults[0].phase,
+        ) != ("workstream.default", "v1", "pre_submit"):
+            raise ExternalCheckerContractError("external checker default capability is invalid")
+        body = self.model_dump(mode="json", exclude={"manifest_sha256"})
+        if self.manifest_sha256 != external_checker_json_hash(body):
+            raise ExternalCheckerContractError(
+                "external checker capability projection digest mismatch"
+            )
+        return self
+
+
+class PreSubmitExternalCheckerMaterial(ExternalCheckerValue):
+    """Verified prepared bytes that exist before a Submission or ART binding."""
+
+    phase: Literal["pre_submit"] = "pre_submit"
     role: Identifier
+    prepared_generation_id: UUID = Field(strict=True)
+    attempt_id: UUID = Field(strict=True)
+    attempt_request_digest: Sha256
+    archive_sha256: Sha256
+    archive_byte_count: Annotated[StrictInt, Field(ge=0, le=9_223_372_036_854_775_807)]
+    semantic_manifest_sha256: Sha256
+    media_type: Annotated[
+        StrictStr, Field(min_length=1, max_length=255, pattern=r"^[^\s/]+/[^\s/]+$")
+    ]
+
+
+class PostSubmitExternalCheckerMaterial(ExternalCheckerValue):
+    """Verified native Submission and ART ancestry selected for POST execution."""
+
+    phase: Literal["post_submit"] = "post_submit"
+    role: Identifier
+    submission_id: UUID = Field(strict=True)
+    submission_version: Annotated[StrictInt, Field(ge=1)]
+    binding_id: UUID = Field(strict=True)
     content_id: UUID = Field(strict=True)
     replica_id: UUID = Field(strict=True)
-    sha256: Sha256
+    content_sha256: Sha256
     byte_count: Annotated[StrictInt, Field(ge=0, le=9_223_372_036_854_775_807)]
-    media_type: Annotated[StrictStr, Field(min_length=1, max_length=255, pattern=r"^[^\s/]+/[^\s/]+$")]
+    media_type: Annotated[
+        StrictStr, Field(min_length=1, max_length=255, pattern=r"^[^\s/]+/[^\s/]+$")
+    ]
+    evidence_id: UUID = Field(strict=True)
+    verification_receipt_id: UUID = Field(strict=True)
+    verification_job_id: UUID = Field(strict=True)
+    verification_generation: Annotated[StrictInt, Field(ge=1)]
+    namespace_fingerprint: Sha256
+    semantic_manifest_sha256: Sha256
+
+
+ExternalCheckerMaterial = Annotated[
+    PreSubmitExternalCheckerMaterial | PostSubmitExternalCheckerMaterial,
+    Field(discriminator="phase"),
+]
 
 
 class PreSubmitExternalCheckerIdentity(ExternalCheckerValue):
@@ -363,16 +458,14 @@ ExternalCheckerExecutionIdentity = Annotated[
 class ExternalCheckerExecutionRequest(ExternalCheckerValue):
     """One bounded normalized invocation selected by a later owner operation."""
 
-    schema_version: Literal["external_checker_request.v1"] = (
-        EXTERNAL_CHECKER_REQUEST_SCHEMA_VERSION
-    )
+    schema_version: Literal["external_checker_request.v1"] = EXTERNAL_CHECKER_REQUEST_SCHEMA_VERSION
     registry: ExternalCheckerRegistryEntry
     identity: ExternalCheckerExecutionIdentity
     configuration: dict[str, JsonValue]
     configuration_sha256: Sha256
     input: dict[str, JsonValue]
     input_sha256: Sha256
-    materials: tuple[ExternalCheckerMaterial, ...] = Field(max_length=32)
+    materials: tuple[ExternalCheckerMaterial, ...] = Field(min_length=1, max_length=32)
     request_digest: Sha256
 
     @model_validator(mode="after")
@@ -382,10 +475,36 @@ class ExternalCheckerExecutionRequest(ExternalCheckerValue):
             raise ExternalCheckerContractError("external checker request phase mismatch")
         if len({item.role for item in self.materials}) != len(self.materials):
             raise ExternalCheckerContractError("external checker material role is duplicated")
+        if any(item.phase != self.identity.phase for item in self.materials):
+            raise ExternalCheckerContractError("external checker material phase mismatch")
+        if self.identity.phase == "pre_submit":
+            for material in self.materials:
+                if not isinstance(material, PreSubmitExternalCheckerMaterial) or (
+                    material.prepared_generation_id,
+                    material.attempt_id,
+                    material.attempt_request_digest,
+                ) != (
+                    self.identity.prepared_generation_id,
+                    self.identity.attempt_id,
+                    self.identity.attempt_request_digest,
+                ):
+                    raise ExternalCheckerContractError(
+                        "external checker prepared material identity mismatch"
+                    )
+        else:
+            for material in self.materials:
+                if not isinstance(material, PostSubmitExternalCheckerMaterial) or (
+                    material.submission_id,
+                    material.submission_version,
+                ) != (
+                    self.identity.submission_id,
+                    self.identity.submission_version,
+                ):
+                    raise ExternalCheckerContractError(
+                        "external checker submission material identity mismatch"
+                    )
         if self.configuration_sha256 != external_checker_json_hash(self.configuration):
-            raise ExternalCheckerContractError(
-                "external checker configuration digest mismatch"
-            )
+            raise ExternalCheckerContractError("external checker configuration digest mismatch")
         if self.input_sha256 != external_checker_json_hash(self.input):
             raise ExternalCheckerContractError("external checker input digest mismatch")
         if len(_canonical_bytes(self.configuration)) > MAX_CONFIGURATION_BYTES:
@@ -412,9 +531,7 @@ class ExternalCheckerFinding(ExternalCheckerValue):
 class ExternalCheckerExecutionResult(ExternalCheckerValue):
     """Normalized completed or infrastructure result bound to one exact request."""
 
-    schema_version: Literal["external_checker_result.v1"] = (
-        EXTERNAL_CHECKER_RESULT_SCHEMA_VERSION
-    )
+    schema_version: Literal["external_checker_result.v1"] = EXTERNAL_CHECKER_RESULT_SCHEMA_VERSION
     request_digest: Sha256
     registry_entry_id: UUID = Field(strict=True)
     registry_entry_digest: Sha256
@@ -438,7 +555,11 @@ class ExternalCheckerExecutionResult(ExternalCheckerValue):
     def validate_result(self) -> Self:
         """Keep work verdicts distinct from bounded infrastructure outcomes."""
         if self.outcome == "infrastructure_failed":
-            if self.verdict is not None or self.findings or self.infrastructure_failure_code is None:
+            if (
+                self.verdict is not None
+                or self.findings
+                or self.infrastructure_failure_code is None
+            ):
                 raise ExternalCheckerContractError(
                     "external checker infrastructure result shape is invalid"
                 )
@@ -449,9 +570,7 @@ class ExternalCheckerExecutionResult(ExternalCheckerValue):
                 )
             has_error = any(item.level == "error" for item in self.findings)
             if (self.verdict == "failed") != has_error:
-                raise ExternalCheckerContractError(
-                    "external checker verdict and findings disagree"
-                )
+                raise ExternalCheckerContractError("external checker verdict and findings disagree")
         body = self.model_dump(mode="json", exclude={"result_digest"})
         if len(_canonical_bytes(body)) > MAX_RESULT_BYTES:
             raise ExternalCheckerContractError("external checker result is too large")
@@ -530,15 +649,11 @@ def make_external_checker_execution_request(
     **fields: object,
 ) -> ExternalCheckerExecutionRequest:
     """Build one external execution request with a derived canonical digest."""
-    return _make_derived(
-        ExternalCheckerExecutionRequest, _REQUEST_FIELDS, "request_digest", fields
-    )
+    return _make_derived(ExternalCheckerExecutionRequest, _REQUEST_FIELDS, "request_digest", fields)
 
 
 def make_external_checker_execution_result(
     **fields: object,
 ) -> ExternalCheckerExecutionResult:
     """Build one normalized result with a derived canonical digest."""
-    return _make_derived(
-        ExternalCheckerExecutionResult, _RESULT_FIELDS, "result_digest", fields
-    )
+    return _make_derived(ExternalCheckerExecutionResult, _RESULT_FIELDS, "result_digest", fields)

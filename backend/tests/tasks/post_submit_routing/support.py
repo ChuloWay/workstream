@@ -26,7 +26,7 @@ from tests.post_submit_materialization_helpers import material_fixture
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.tasks.submission_lineage_support import _verified_admission
 from tests.test_artifact_admission import _context
-from tests.test_default_pre_submit_execution import _bytes
+from tests.archive_fixtures import byte_source as _bytes
 
 
 SOURCE_COLUMNS = (
@@ -78,13 +78,12 @@ async def source_rows(session) -> list[dict]:
     )
 
 
-async def next_request(h, *, structural_input=None):
+async def next_request(h):
     """Build a genuine later generation for the same immutable Submission."""
     request = change_request(
         h.request,
         evaluation_request_id=new_record_id(),
         evaluation_generation=h.request.evaluation_generation + 1,
-        **({"structural_input": structural_input} if structural_input is not None else {}),
     )
     h.request = request
     return request
@@ -215,6 +214,7 @@ async def completed_source(
     storage_settings=None,
     contribution_awards=(),
     human_review_required=True,
+    post_submit_registry_spec=None,
 ):
     """Yield one real authorized allow-review run and its valid source scalars."""
     async with material_fixture(
@@ -224,6 +224,7 @@ async def completed_source(
         storage_settings=storage_settings,
         contribution_awards=contribution_awards,
         human_review_required=human_review_required,
+        post_submit_registry_spec=post_submit_registry_spec,
     ) as h:
         await reserve(h)
         result = await live_executor(h).evaluate_post_submission(h.request)
@@ -252,8 +253,8 @@ async def _create_submission(h, context, task_id, assignment_id, predecessor_id=
         assignment_id=assignment_id,
         predecessor_submission_id=predecessor_id,
         idempotency_key=new_record_id(),
-        summary=h.request.structural_input.summary,
-        contributor_attestation=h.request.structural_input.worker_attestation,
+        summary=h.creation_request.summary,
+        contributor_attestation=h.creation_request.contributor_attestation,
         media_type="application/zip",
         byte_source=_bytes(h.data),
     )
@@ -436,13 +437,13 @@ async def activate_successor_guide(h):
 def completion_for(h):
     """Build the actual completed publication from retained fixture facts."""
     from app.modules.checkers.api.execution import EvaluationCompletion
-    from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
+    from app.modules.checkers.api.selected_post_submit import SelectedPostSubmitCurrentResultReference
 
     return EvaluationCompletion(
         project_id=h.request.project_id, task_id=h.request.task_id,
         submission_id=h.request.submission_id,
-        reference=PostSubmitCurrentResultReference(
-            **h.result.model_dump(include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"})
+        reference=SelectedPostSubmitCurrentResultReference(
+            **h.result.model_dump(include=set(SelectedPostSubmitCurrentResultReference.model_fields) - {"schema_version"})
         ),
         routing_recommendation="allow_review", output_binding_ids=(),
         execute_evidence_id=h.source["execute_evidence_id"],

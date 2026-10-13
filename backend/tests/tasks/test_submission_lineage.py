@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import replace
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from app.core.identifiers import new_record_id
 
@@ -23,7 +23,7 @@ from app.modules.artifacts.models import (
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.models import AuditEvent, Submission, TaskAssignment, WorkstreamTask
-from tests.pre_submit_test_helpers import approved_pre_submit_fixture
+from tests.selected_policy_fixtures import approved_selected_policy_fixture
 from tests.submission_preparation_auth_helpers import install_submitter_grant
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.test_artifact_admission import (
@@ -33,7 +33,7 @@ from tests.test_artifact_admission import (
     _context,
     _seed_human_actor,
 )
-from tests.test_default_pre_submit_execution import _archive, _bytes
+from tests.archive_fixtures import byte_source as _bytes, submission_archive as _archive
 
 
 from tests.tasks.submission_lineage_support import _seed_services, _verified_admission
@@ -43,11 +43,16 @@ from tests.tasks.submission_lineage_support import _seed_services, _verified_adm
 async def _prepared_packet(isolated_database_env, tmp_path):
     engine = create_async_engine(isolated_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    settings = _settings(tmp_path, maximum_bytes=1024 * 1024)
+    settings = _settings(tmp_path, maximum_bytes=1024 * 1024).model_copy(
+        update={"external_checker_service_socket": tmp_path / "checker.sock",
+                "external_checker_material_root": tmp_path / "scratch"}
+    )
     namespace = _namespace(settings)
     bootstrap, store = _local_store(settings, namespace)
     try:
-        plan, policy = await approved_pre_submit_fixture(factory, namespace, guide_version="v1")
+        plan, policy = await approved_selected_policy_fixture(
+            factory, namespace, guide_version="v1"
+        )
         context = _context()
         await _seed_services(factory)
         task_id, assignment_id = new_record_id(), new_record_id()
@@ -222,10 +227,10 @@ async def _assert_bound_packet_immutable(h, created):
                 await session.execute(text(f"UPDATE public.submissions SET {update} WHERE id=:id"),
                                       {"id": created.submission_id, "foreign": new_record_id()})
     for statement, message in (
-        ("UPDATE public.pre_submit_evidence_sets SET packet_sha256='sha256:' || repeat('0',64) "
-         "WHERE id=(SELECT pre_submit_evidence_set_id FROM public.submission_bundle_admissions WHERE id=:id)",
-         "pre_submit_evidence_sets rows are immutable"),
-        ("UPDATE public.submission_bundle_admissions SET pre_submit_evidence_set_id=:foreign WHERE id=:id",
+        ("UPDATE public.selected_pre_submit_runs SET request_digest='sha256:' || repeat('0',64) "
+         "WHERE id=(SELECT selected_pre_submit_run_id FROM public.submission_bundle_admissions WHERE id=:id)",
+         "selected PRE request custody is immutable"),
+        ("UPDATE public.submission_bundle_admissions SET selected_pre_submit_run_id=:foreign WHERE id=:id",
          "submission bundle admission lineage is immutable"),
     ):
         with pytest.raises(DBAPIError, match=message):
@@ -247,7 +252,8 @@ async def test_packet_custody_upgrade_preserves_retained_submission(
     import asyncpg
     from alembic import command
     from app.db import session as db_session
-    from tests.migration_fixtures import _config, current_art_attempt_seed_schema
+    from tests.historical_submission_fixtures import historical_material_fixture
+    from tests.migration_fixtures import _config
 
     with migration_lock():
         await db_session.dispose_engine()
@@ -257,26 +263,23 @@ async def test_packet_custody_upgrade_preserves_retained_submission(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0021_submission_manifest")
-        async with AsyncExitStack() as stack:
-            async with current_art_attempt_seed_schema(isolated_database_env):
-                h = await stack.enter_async_context(_prepared_packet(isolated_database_env, tmp_path))
-                from tests.historical_submission_fixtures import write_historical_submission
-                created = await write_historical_submission(h.factory, h.context, h.creation)
-                # The predecessor allowed this mismatch. Upgrade must neither invent
-                # evidence nor rewrite/delete retained text, even when inconsistent.
-                async with h.factory.begin() as session:
-                    await session.execute(text(
-                        "UPDATE public.submissions SET summary = summary || ' Historical.' WHERE id=:id"
-                    ), {"id": created.submission_id})
-                    before = await session.scalar(text(
-                        "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
-                    ), {"id": created.submission_id})
+        async with historical_material_fixture(tmp_path, isolated_database_env) as h:
+            submission_id = h.request["submission_id"]
+            # The predecessor allowed this mismatch. Upgrade must neither invent
+            # evidence nor rewrite/delete retained text, even when inconsistent.
+            async with h.factory.begin() as session:
+                await session.execute(text(
+                    "UPDATE public.submissions SET summary = summary || ' Historical.' WHERE id=:id"
+                ), {"id": submission_id})
+                before = await session.scalar(text(
+                    "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                ), {"id": submission_id})
             # Bind this preservation proof to the packet-custody migration.
             await asyncio.to_thread(command.upgrade, _config(), "0022_submission_packet_custody")
             async with h.factory() as session:
                 after = await session.scalar(text(
                     "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
-                ), {"id": created.submission_id})
+                ), {"id": submission_id})
                 assert after == before
                 assert await session.scalar(text(
                     "SELECT count(*) FROM pg_catalog.pg_trigger WHERE tgname='submission_packet_custody'"

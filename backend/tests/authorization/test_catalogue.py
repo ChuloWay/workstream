@@ -26,7 +26,7 @@ def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() ->
     assert {item.value for item in HISTORICAL_PERMISSION_IDS} == historical_permissions
     assert {item.value for item in NEW_PERMISSION_IDS} == new_permissions
     assert {item.value for item in PERMISSION_IDS} == historical_permissions | new_permissions
-    assert len(ACTION_IDS) == len(ACTION_DEFINITIONS) == len(ACTION_BY_ID) == 150
+    assert len(ACTION_IDS) == len(ACTION_DEFINITIONS) == len(ACTION_BY_ID) == 152
     assert set(ACTION_BY_ID) == ACTION_IDS
     assert {definition.owner for definition in ACTION_DEFINITIONS} == set(ActionOwner)
     assert {
@@ -105,7 +105,7 @@ def test_closed_permission_and_action_catalogue_is_exact_and_non_executable() ->
     }
     assert all(not owner.value.startswith("WS-REV-") for owner in ActionOwner)
     assert Counter(definition.availability for definition in ACTION_DEFINITIONS) == {
-        ActionAvailability.ACTIVE: 115,
+        ActionAvailability.ACTIVE: 117,
         ActionAvailability.PLANNED: 35,
     }
     assert resolve_executable_action(ActionId.ACTOR_PROFILE_READ_SELF).permission_id is PermissionId.ACTOR_PROFILE_READ_SELF
@@ -132,7 +132,7 @@ def test_proposal_actions_have_exact_executable_authority(action):
 
 def test_permission_definition_response_is_exact() -> None:
     permission_response = AdminRoleGrantService.permission_definitions()
-    assert permission_response.total == 78
+    assert permission_response.total == 80
     assert [item.permission_id.value for item in permission_response.items] == sorted(
         permission.value for permission in PermissionId
     )
@@ -147,7 +147,7 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
         identity: {action.value for action in actions}
         for identity, actions in SERVICE_ACTIONS_BY_IDENTITY.items()
     } == expected
-    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 28
+    assert sum(map(len, SERVICE_ACTIONS_BY_IDENTITY.values())) == 30
     assert FUTURE_INTENT_REQUIRED_ACTIONS == {
         ActionId.REVIEW_FINDING_EVIDENCE_INGEST,
         ActionId.REVIEW_FINDING_RESPONSE_EVIDENCE_INGEST,
@@ -204,6 +204,8 @@ def test_fixed_service_action_matrix_and_activation_are_exact_and_immutable() ->
 def test_active_fixed_service_actions_are_exact():
     """Only the explicitly active fixed-service actions are executable."""
     active_internal = {
+        ActionId.CHECKER_PRE_SUBMIT_EXECUTE,
+        ActionId.CHECKER_PRE_SUBMIT_FINALIZE,
         ActionId.CHECKER_POST_SUBMIT_EXECUTE,
         ActionId.CHECKER_POST_SUBMIT_FINALIZE,
         ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,

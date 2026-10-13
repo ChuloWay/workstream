@@ -21,6 +21,7 @@ from app.interfaces.external_services import (
     ExternalServiceUnavailableError,
 )
 from app.modules.checkers.api.external import (
+    EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS,
     MAX_RESULT_BYTES,
     ExternalCheckerContractError,
     ExternalCheckerExecutionRequest,
@@ -31,7 +32,7 @@ EXTERNAL_CHECKER_CAPABILITY_KEY = "external_checker_execution"
 EXTERNAL_CHECKER_PROVIDER_KEY = "unix_socket"
 _PROTOCOL = "external_checker_service.v1"
 _MAXIMUM_RESPONSE_BYTES = MAX_RESULT_BYTES + 16_384
-_EXECUTION_OVERHEAD_SECONDS = 60.0
+_EXECUTION_OVERHEAD_SECONDS = EXTERNAL_CHECKER_EXECUTION_CLEANUP_MARGIN_MS / 1000
 
 
 class UnixSocketExternalCheckerAdapter:

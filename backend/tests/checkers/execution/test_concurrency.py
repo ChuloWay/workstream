@@ -15,16 +15,34 @@ from app.modules.checkers.api.execution import (
 from app.adapters.checkers import evaluation_coordinator
 from app.modules.checkers.models import CheckerRun
 from tests.checkers.post_submit.support import change_request
-from tests.checkers.post_submit.test_result_contract import result
+from tests.checkers.execution.support import selected_result as result
 from tests.post_submit_materialization_helpers import material_fixture
 from .support import reserve, live_executor
 
 
-async def final_facts(h, lease):
+async def final_facts(h, lease, *, verdict="passed"):
     """A controlled closed result for lease races, not a byte-evaluation assertion."""
     from tests.checkers.execution.storage_fixture import authorize_stored_material
     from app.modules.checkers.api.execution import ExecuteFacts
 
+    if h.request.policy.entries:
+        from dataclasses import asdict
+        from .support import ControlledSelectedExecution
+
+        consumer = live_executor(
+            h, selected_execution=ControlledSelectedExecution(verdict=verdict),
+        )._consumer(h.request, lease)
+        materialized = await h.service.materialize(ExecuteFacts(request=h.request, lease=lease), consumer)
+        material = VerifiedMaterialFacts(**{
+            key: value for key, value in asdict(materialized).items()
+            if key not in {"evaluation", "input_materialization_evidence_id"}
+        })
+        return FinalizeFacts(
+            request=h.request, lease=lease, result=materialized.evaluation,
+            material=material,
+            input_materialization_evidence_id=materialized.input_materialization_evidence_id,
+            output_binding_ids=(),
+        )
     material = VerifiedMaterialFacts(
         submission_id=h.request.submission_id,
         submission_version=h.request.submission_version,
@@ -92,12 +110,18 @@ async def test_stale_worker_cannot_finalize_after_takeover(
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
         executor = live_executor(h)
-        monkeypatch.setattr(execution, "LEASE_SECONDS", 1)
-        old, _ = await executor._claim(h.request)
+        with monkeypatch.context() as patch:
+            patch.setattr(executor, "_execution_budget_seconds", lambda _request: 1)
+            patch.setattr(execution, "SELECTED_POST_FINALIZATION_MARGIN_MS", 9_000)
+            old, _ = await executor._claim(h.request)
         old_facts = await final_facts(h, old)
         async with h.factory() as session:
-            await session.execute(text("select pg_sleep(1.05)"))
-        monkeypatch.setattr(execution, "LEASE_SECONDS", 300)
+            await session.execute(text(
+                "SELECT pg_sleep(GREATEST(EXTRACT(EPOCH FROM "
+                "CAST(:expiry AS timestamptz)-clock_timestamp()),0)+0.05)"
+            ), {"expiry": old.expires_at})
+            assert await session.scalar(text("SELECT clock_timestamp()>=:expiry"),
+                                        {"expiry": old.expires_at})
         current, _ = await executor._claim(h.request)
         assert (
             current.reservation == old.reservation
@@ -232,14 +256,14 @@ async def test_evaluation_releases_transaction_before_materialization(
                 await probe("before_bytes")
                 return await h.service.materialize(request, consumer)
 
-        original = execution._StructuralConsumer.evaluate
+        original = execution._SelectedExternalConsumer.evaluate
 
         async def evaluate(consumer, request, material):
             assert material.entries
             await probe("inside_consumer")
             return await original(consumer, request, material)
 
-        monkeypatch.setattr(execution._StructuralConsumer, "evaluate", evaluate)
+        monkeypatch.setattr(execution._SelectedExternalConsumer, "evaluate", evaluate)
         executor = live_executor(h)
         executor._execute_authority = TrackingAuthority
         executor._materialization = MaterializationProbe()
@@ -256,7 +280,10 @@ async def test_member_insertion_waits_for_terminal_parent(
     from app.modules.checkers.execution_repository import ExecutionRepository
     from tests.auth_concurrency_support import wait_for_named_database_lock
 
-    async with material_fixture(tmp_path, isolated_database_env) as h:
+    from tests.checkers.external.support import post_registry_spec
+
+    async with material_fixture(tmp_path, isolated_database_env,
+                                post_submit_registry_spec=post_registry_spec()) as h:
         await reserve(h)
         executor = live_executor(h)
         lease, _ = await executor._claim(h.request)
@@ -272,7 +299,7 @@ async def test_member_insertion_waits_for_terminal_parent(
             return await original(repo, run, result)
 
         monkeypatch.setattr(ExecutionRepository, "write_members", paused)
-        first = facts.result.member_results[0]
+        first = facts.result.execution.external_members[0]
         waiter = "checker-member-race-" + new_record_id().hex
 
         async def insert_member():
@@ -287,13 +314,13 @@ async def test_member_insertion_waits_for_terminal_parent(
                         task_id=str(h.request.task_id),
                         submission_id=str(h.request.submission_id),
                         member_order=0,
-                        checker_name=first.checker_id,
-                        definition_version=first.definition_version,
-                        implementation_version=first.implementation_version,
-                        status=first.status,
-                        code=first.code,
-                        failure_category=first.failure_category,
-                        severity=first.severity,
+                        checker_name=first.requirement_id,
+                        definition_version=first.result.schema_version,
+                        implementation_version=first.registry_entry_digest,
+                        status=first.result.verdict,
+                        code="passed",
+                        failure_category="none",
+                        severity="info",
                         counters=[],
                     )
                 )
@@ -327,7 +354,7 @@ async def test_member_insertion_waits_for_terminal_parent(
             await asyncio.gather(*pending, return_exceptions=True)
         async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(CheckerResult)) == len(
-                facts.result.member_results
+                facts.result.execution.external_members
             )
             assert (
                 await session.get(CheckerRun, str(facts.result.attempt_id))

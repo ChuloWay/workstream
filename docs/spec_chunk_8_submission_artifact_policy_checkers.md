@@ -3,12 +3,12 @@
 > Historical implementation record. It does not define current sequencing or
 > status; later canonical specifications and merged behavior take precedence.
 
-Current submission-bundle preparation does not revive this document's
-caller-owned precheck surface or standalone registry. WS-ART-001 PLAN4 and
-04B1-04B3 place these constrained policy checks in the single versioned
-pre-submission catalogue after ART-owned outer-ZIP custody gates, using the
-server-derived manifest and sealed workspace. Catalogue availability follows
-the fail-closed mandatory/advisory semantics in ADR 0011.
+Current preparation uses the four Workstream defaults followed by approved
+digest-pinned external PRE images on ART-verified read-only files. Both built-in
+catalogues and this document's caller-owned precheck surface are removed.
+Project-specific required-file, forbidden-file and similar rules belong in the
+project image. Use the [current checker framework](architecture_checker_framework.md)
+for the implemented flow; the record below describes the retired implementation.
 
 ## Purpose
 

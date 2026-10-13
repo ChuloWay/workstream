@@ -2,6 +2,7 @@
 
 import asyncio
 from collections.abc import Callable
+from contextlib import contextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -10,6 +11,7 @@ from app.interfaces.artifacts import (
     ArtifactStore, ArtifactObjectMissingError, ArtifactInputMismatchError,
     ArtifactIntegrityError, ArtifactLimitExceededError, ArtifactStoreUnavailableError,
 )
+from app.interfaces.external_checker_execution import ExternalCheckerMaterialGrant
 from app.modules.checkers.api.materialization import (
     PostSubmissionMaterialConsumer, PostSubmissionMaterializationResult,
     PostSubmissionMaterializationUnavailable, PostSubmissionMaterializationFailure,
@@ -19,24 +21,41 @@ from app.modules.artifacts.post_submit_selection import (
     select_post_submission_material,
 )
 from app.modules.artifacts.preparation import ArtifactPreparationService, ArtifactScratchIntegrityError
+from app.modules.artifacts.preparation import (
+    ExternalMaterialFile,
+    PostExternalMaterialGrantRequest,
+)
 from app.modules.artifacts.service import ArtifactStorageNamespaceError, ArtifactStorageNamespaceSpec
 from app.modules.artifacts.submission_archive import (
-    SealedSubmissionTree, SubmissionArchiveInspector, SubmissionArchiveEntryType,
-    SubmissionArchiveRejectedError,
+    SealedSubmissionTree, SubmissionArchiveInspector, SubmissionArchiveRejectedError,
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
-from app.modules.checkers.api import PostSubmissionEvaluationResult
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionResult,
+    validate_execution_result,
+)
 from app.modules.checkers.api.execution import (
     ExecuteFacts, CurrentExecutionPort, VerifiedMaterialFacts, CheckerExecutionUnavailable,
 )
 from app.modules.tasks.api.submitted_bundle import SubmittedBundlePort, SubmittedBundleUnavailable
+from app.modules.checkers.api.external import (
+    ExternalCheckerExecutionRequest,
+    PostSubmitExternalCheckerIdentity,
+    PostSubmitExternalCheckerMaterial,
+)
 
 
 class _MaterialView:
     """Revoke callback access independently of the private projection lifetime."""
-    def __init__(self, tree: SealedSubmissionTree) -> None:
+    def __init__(
+        self, tree: SealedSubmissionTree, *, preparation, prepared, workspace,
+        execution: ExecuteFacts, materialization: MaterializationFacts, media_type: str,
+    ) -> None:
         """Wrap the single ART-owned sealed tree without exposing its path."""
         self._tree = tree
+        self._preparation, self._prepared, self._workspace = preparation, prepared, workspace
+        self._execution, self._materialization = execution, materialization
+        self._media_type = media_type
         self._closed = False
 
     def close(self) -> None:
@@ -61,6 +80,113 @@ class _MaterialView:
         self._require_open()
         return self._tree.read_file(normalized_path, maximum_bytes=maximum_bytes)
 
+    @contextmanager
+    def external_checker_grant(self, request: ExternalCheckerExecutionRequest):
+        """Bind a POST service grant to actual current execution and ART ancestry."""
+        self._require_open()
+        checked = ExternalCheckerExecutionRequest.model_validate(request)
+        identity = checked.identity
+        if not isinstance(identity, PostSubmitExternalCheckerIdentity):
+            raise ArtifactScratchIntegrityError("external POST request identity differs")
+        execution, facts = self._execution, self._materialization
+        source = execution.request
+        lease = execution.lease
+        reservation = lease.reservation
+        if (
+            identity.project_id != source.project_id
+            or identity.task_id != source.task_id
+            or identity.assignment_id != source.assignment_id
+            or identity.submission_id != source.submission_id
+            or identity.submission_version != source.submission_version
+            or identity.evaluation_request_id != source.evaluation_request_id
+            or identity.evaluation_request_digest != source.request_sha256
+            or identity.evaluation_generation != source.evaluation_generation
+            or identity.attempt_id != reservation.attempt_id
+            or identity.result_id != reservation.result_id
+            or identity.lease_id != lease.lease_id
+            or identity.lease_generation != lease.lease_generation
+            or identity.lease_expires_at != lease.expires_at
+            or len(checked.materials) != 1
+            or not isinstance(checked.materials[0], PostSubmitExternalCheckerMaterial)
+        ):
+            raise ArtifactScratchIntegrityError("external POST execution identity differs")
+        material = checked.materials[0]
+        expected = facts.material
+        if (
+            material.submission_id != expected.submission_id
+            or material.submission_version != expected.submission_version
+            or material.binding_id != expected.binding_id
+            or material.content_id != expected.content_id
+            or material.replica_id != expected.replica_id
+            or material.content_sha256 != expected.content_sha256
+            or material.byte_count != expected.byte_count
+            or material.evidence_id != facts.evidence_id
+            or material.verification_receipt_id != facts.verification_receipt_id
+            or material.verification_job_id != facts.verification_job_id
+            or material.verification_generation != facts.verification_generation
+            or material.namespace_fingerprint != facts.namespace_fingerprint
+            or material.semantic_manifest_sha256 != expected.semantic_manifest_sha256
+        ):
+            raise ArtifactScratchIntegrityError("external POST material identity differs")
+        entries = self.entries
+        directories = tuple(item.normalized_path for item in entries if item.entry_type == "directory")
+        files = tuple(ExternalMaterialFile(
+            normalized_path=item.normalized_path, byte_count=item.byte_count,
+            sha256=item.sha256 or "", executable=bool(item.executable),
+        ) for item in entries if item.entry_type == "file")
+        lease_expires_at = identity.model_dump(mode="json")["lease_expires_at"]
+        grant_request = PostExternalMaterialGrantRequest(
+            request_digest=checked.request_digest,
+            submission_id=str(identity.submission_id),
+            submission_version=identity.submission_version,
+            evaluation_request_id=str(identity.evaluation_request_id),
+            evaluation_request_digest=identity.evaluation_request_digest,
+            evaluation_generation=identity.evaluation_generation,
+            attempt_id=str(identity.attempt_id), result_id=str(identity.result_id),
+            lease_id=str(identity.lease_id), lease_generation=identity.lease_generation,
+            lease_expires_at=lease_expires_at,
+            binding_id=str(material.binding_id), content_id=str(material.content_id),
+            replica_id=str(material.replica_id), content_sha256=material.content_sha256,
+            byte_count=material.byte_count, evidence_id=str(material.evidence_id),
+            verification_receipt_id=str(material.verification_receipt_id),
+            verification_job_id=str(material.verification_job_id),
+            verification_generation=material.verification_generation,
+            namespace_fingerprint=material.namespace_fingerprint,
+            semantic_manifest_sha256=material.semantic_manifest_sha256,
+            directories=directories, files=files,
+        )
+        with self._preparation.external_material_grant(
+            self._prepared, self._workspace, grant_request
+        ) as grant:
+            yield ExternalCheckerMaterialGrant(
+                grant_id=grant.grant_id,
+                binding_digest=grant.binding_digest,
+            )
+
+    @property
+    def external_checker_material(self) -> PostSubmitExternalCheckerMaterial:
+        """Detach the exact verified POST lineage selected before byte access."""
+        self._require_open()
+        facts = self._materialization
+        material = facts.material
+        return PostSubmitExternalCheckerMaterial(
+            role="submission_archive",
+            submission_id=material.submission_id,
+            submission_version=material.submission_version,
+            binding_id=material.binding_id,
+            content_id=material.content_id,
+            replica_id=material.replica_id,
+            content_sha256=material.content_sha256,
+            byte_count=material.byte_count,
+            media_type=self._media_type,
+            evidence_id=facts.evidence_id,
+            verification_receipt_id=facts.verification_receipt_id,
+            verification_job_id=facts.verification_job_id,
+            verification_generation=facts.verification_generation,
+            namespace_fingerprint=facts.namespace_fingerprint,
+            semantic_manifest_sha256=material.semantic_manifest_sha256,
+        )
+
     def __reduce__(self):
         """Prevent transfer of a process-local read capability."""
         raise TypeError("submission material view is process-local")
@@ -68,12 +194,18 @@ class _MaterialView:
 
 class _MaterialProcessor:
     """Keep async evaluation inside the shared projection and scratch lifetime."""
-    def __init__(self, inspector, inspection, request, consumer) -> None:
+    def __init__(
+        self, inspector, inspection, request, consumer, *, preparation, prepared,
+        execution, materialization, media_type,
+    ) -> None:
         """Bind one inspection, request and consumer for preparation-owned execution."""
         self._inspector, self._inspection = inspector, inspection
         self._request, self._consumer = request, consumer
+        self._preparation, self._prepared = preparation, prepared
+        self._execution, self._materialization = execution, materialization
+        self._media_type = media_type
         self._aborted = False
-        self._consumer_task: asyncio.Task[PostSubmissionEvaluationResult] | None = None
+        self._consumer_task: asyncio.Task[PostSubmissionExecutionResult] | None = None
         self._view: _MaterialView | None = None
 
     def abort(self) -> None:
@@ -84,7 +216,7 @@ class _MaterialProcessor:
         if self._consumer_task is not None:
             self._consumer_task.cancel()
 
-    async def process(self, reader, workspace) -> PostSubmissionEvaluationResult:
+    async def process(self, reader, workspace) -> PostSubmissionExecutionResult:
         """Project off-loop, validate callback output, and drain projection cleanup."""
         projection = self._inspector._projected_tree(reader, workspace, expected=self._inspection)
         # The preparation owner shields and drains this entire operation, including
@@ -93,9 +225,13 @@ class _MaterialProcessor:
         try:
             if self._aborted:
                 raise asyncio.CancelledError
-            self._view = _MaterialView(tree)
+            self._view = _MaterialView(
+                tree, preparation=self._preparation, prepared=self._prepared,
+                workspace=workspace, execution=self._execution,
+                materialization=self._materialization, media_type=self._media_type,
+            )
             self._consumer_task = asyncio.create_task(self._consumer.evaluate(self._request, self._view))
-            result = PostSubmissionEvaluationResult.model_validate(await self._consumer_task)
+            result = validate_execution_result(await self._consumer_task)
             result.validate_request(self._request)
             return result
         finally:
@@ -188,16 +324,19 @@ class PostSubmissionMaterializer:
                 )
                 inspection = await prepared.inspect(self._inspector)
                 manifest = build_submission_manifest(inspection)
-                expected_files = tuple((entry.normalized_path, entry.sha256, entry.byte_count)
-                                       for entry in manifest.entries
-                                       if entry.entry_type is SubmissionArchiveEntryType.FILE)
-                supplied_files = tuple(sorted((entry.artifact, entry.hash, entry.size_bytes)
-                                              for entry in request.structural_input.manifest))
-                if manifest.sha256 != selected.semantic_manifest_sha256 or supplied_files != expected_files:
+                if manifest.sha256 != selected.semantic_manifest_sha256:
                     raise PostSubmissionMaterializationFailure("post_submit_material_manifest_mismatch")
+                materialization_facts = self._authority_facts(facts, selected)
                 evaluation = await self._preparation._process_prepared_submission(
-                    prepared, _MaterialProcessor(self._inspector, inspection, request, consumer),
-                    reserved_bytes=manifest.total_expanded_bytes, maximum_entries=manifest.entry_count,
+                    prepared, _MaterialProcessor(
+                        self._inspector, inspection, request, consumer,
+                        preparation=self._preparation, prepared=prepared,
+                        execution=facts, materialization=materialization_facts,
+                        media_type=selected.media_type,
+                    ),
+                    reserved_bytes=manifest.total_expanded_bytes,
+                    # ART's external grant adds one owned mount around the tree.
+                    maximum_entries=manifest.entry_count + 1,
                 )
             finally:
                 if prepared is not None:

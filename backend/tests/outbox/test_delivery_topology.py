@@ -68,7 +68,8 @@ def test_validated_prefork_child_enters(monkeypatch):
     topology.validate_outbox_worker(configured)
     monkeypatch.setattr(topology.os, "getppid", os.getpid)
     topology.require_outbox_worker(SimpleNamespace(app=configured.app,
-        time_limit=300, request=SimpleNamespace(is_eager=False, called_directly=False, timelimit=None)))
+        time_limit=topology.OUTBOX_HARD_LIMIT_SECONDS,
+        request=SimpleNamespace(is_eager=False, called_directly=False, timelimit=None)))
 
 
 def test_synchronous_task_rejects_before_sql(monkeypatch):
@@ -104,7 +105,12 @@ def test_delivery_routes_to_dedicated_queue(monkeypatch):
         get_settings.cache_clear()
 
 
-@pytest.mark.parametrize("task_limit,message_limit", [(None, None), (301, None), (300, 301)])
+@pytest.mark.parametrize("task_limit,message_limit", [
+    (None, None), (300, None), (topology.OUTBOX_HARD_LIMIT_SECONDS + 1, None),
+    (topology.OUTBOX_HARD_LIMIT_SECONDS, 300),
+    (topology.OUTBOX_HARD_LIMIT_SECONDS, topology.OUTBOX_HARD_LIMIT_SECONDS + 1),
+    (topology.OUTBOX_HARD_LIMIT_SECONDS, 0),
+])
 def test_delivery_cannot_disable_or_extend_process_bound(monkeypatch, task_limit, message_limit):
     configured = worker()
     topology.validate_outbox_worker(configured)

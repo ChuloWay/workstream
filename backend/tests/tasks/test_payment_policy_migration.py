@@ -61,9 +61,9 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
         await _drop_test_database_schema(isolated_database_env)
         await asyncio.to_thread(command.upgrade, _config(), "0022_submission_packet_custody")
         async with historical_material_fixture(tmp_path, isolated_database_env) as h:
-            async with h.engine.connect() as connection:
+            async with db_session.get_engine().connect() as connection:
                 task = await connection.scalar(text("SELECT to_jsonb(t) FROM public.workstream_tasks t WHERE id=:id"),
-                                               {"id": h.request.task_id})
+                                               {"id": h.request["task_id"]})
                 await connection.rollback()
                 cases = [
                     ("submission_stamp", "retained Submission payment stamp"),
@@ -82,15 +82,15 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
                         if case in {"submission_stamp", "locked_payment_policy_version"}:
                             await connection.execute(text("UPDATE public.workstream_tasks "
                                 "SET locked_payment_policy_version=locked_guide_version WHERE id=:id"),
-                                {"id": h.request.task_id})
+                                {"id": h.request["task_id"]})
                         if case == "submission_stamp":
                             await connection.execute(text("UPDATE public.submissions "
                                 "SET locked_payment_policy_version=locked_guide_version WHERE id=:id"),
-                                {"id": h.request.submission_id})
+                                {"id": h.request["submission_id"]})
                         if case in {"base_amount", "currency", "payout_type"}:
                             value = {"base_amount": 0, "currency": "USD", "payout_type": "fixed"}[case]
                             await connection.execute(text(f"UPDATE public.workstream_tasks SET {case}=:value WHERE id=:id"),
-                                                     {"value": value, "id": h.request.task_id})
+                                                     {"value": value, "id": h.request["task_id"]})
                         if case.startswith("receipt:"):
                             _, nested, field = case.split(":")
                             payload = {field: None} if nested == "False" else {"task": {field: None}}
@@ -100,9 +100,9 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
                                 VALUES(:id,:actor,:action,:key,:digest,:task,'committed',
                                        :assignment,:contributor,:digest,CAST(:response AS jsonb),CURRENT_TIMESTAMP)"""),
                                 {"id": new_record_id(), "actor": task["assigned_to"], "key": new_record_id(),
-                                 "digest": "sha256:" + "a" * 64, "task": h.request.task_id,
+                                 "digest": "sha256:" + "a" * 64, "task": h.request["task_id"],
                                  "action": "task.claim" if nested == "True" else "project.task.create",
-                                 "assignment": h.request.assignment_id if nested == "True" else None,
+                                 "assignment": h.request["assignment_id"] if nested == "True" else None,
                                  "contributor": task["assigned_to"] if nested == "True" else None,
                                  "response": json.dumps(payload)})
                         # All pre-existing FKs must pass before the intended refusal.
@@ -117,7 +117,7 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
                     before = await _snapshot(connection)
             # Full Alembic upgrade: current records exist, but obsolete facts do not.
             await asyncio.to_thread(command.upgrade, _config(), "head")
-            async with h.engine.connect() as connection:
+            async with db_session.get_engine().connect() as connection:
                 assert await connection.scalar(text("SELECT to_regclass('public.payment_policies')")) is None
                 for table, fields in (("workstream_tasks", FIELDS), ("submissions", (FIELDS[-1],))):
                     actual = set(await connection.scalars(text("SELECT column_name FROM information_schema.columns "
@@ -128,6 +128,15 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
                         f"SELECT to_jsonb(t) FROM public.{table} t ORDER BY to_jsonb(t)::text")))
                     removed = FIELDS if table == "workstream_tasks" else (FIELDS[-1],) if table == "submissions" else ()
                     expected = [{k: v for k, v in row.items() if k not in removed} for row in before[0][table]]
+                    if table == "submissions":
+                        added = {"selected_post_submit_policy_sha256", "selected_post_submit_policy_body"}
+                        actual.sort(key=lambda row: row["id"])
+                        expected.sort(key=lambda row: row["id"])
+                        assert len(actual) == len(expected)
+                        for upgraded, retained in zip(actual, expected, strict=True):
+                            assert set(upgraded) == set(retained) | added
+                            for column in added:
+                                assert upgraded.pop(column) is None
                     assert actual == expected, table
                 assert (
                     await connection.scalar(text("SELECT version_num FROM public.alembic_version"))

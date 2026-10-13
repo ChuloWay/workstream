@@ -33,6 +33,7 @@ from project_create_fixtures import (
 from app.core.config import get_settings
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
+from app.modules.checkers.api.external_policy import validate_stored_external_pre_policy
 from app.db import session as db_session
 from app.db.base import Base
 from app.main import create_app
@@ -4001,16 +4002,14 @@ async def test_submission_artifact_policy_approval_persists_effective_policy_has
         ref.startswith("guide-document:") and "#sha256:" in ref
         for ref in persisted_policy.source_material_refs
     )
-    assert pre_submit_checker_policy is not None
     assert pre_submit_checker_policy.lifecycle_status == "compiled"
     assert pre_submit_checker_policy.effective_policy_hash == effective["effective_policy_hash"]
-    assert pre_submit_checker_policy.compiler_version == "workstream-pre-submit-compiler-v0.1"
-    assert pre_submit_checker_policy.compiled_bundle_hash is not None
-    assert (
-        pre_submit_checker_policy.compiled_bundle["effective_policy_hash"]
-        == (effective["effective_policy_hash"])
+    assert pre_submit_checker_policy.compiler_version == "external_checker_policy.v1"
+    locked_pre_policy = validate_stored_external_pre_policy(
+        pre_submit_checker_policy.compiled_bundle
     )
-    assert "require_file" in pre_submit_checker_policy.checker_configs
+    assert locked_pre_policy.policy_sha256 == pre_submit_checker_policy.compiled_bundle_hash
+    assert locked_pre_policy.entries == ()
 
 
 async def test_approved_submission_artifact_policy_cannot_be_updated(

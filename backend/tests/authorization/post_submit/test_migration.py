@@ -8,9 +8,8 @@ from alembic import command
 from sqlalchemy.exc import IntegrityError
 
 from app.db import session as db_session
-from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
-from tests.checkers.execution.historical_execution import historical_lease, historical_reserve
+from tests.checkers.execution.historical_execution import seed_archived_running_checker, seed_archived_checker_request
 from tests.checkers.execution.test_material_migration import retained_snapshot
 from tests.historical_submission_fixtures import historical_material_fixture
 
@@ -29,14 +28,12 @@ async def test_actual_upgrade_preserves_or_refuses_without_repair(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_material_fixture(
-            tmp_path, isolated_database_env, provision_checker=False
+            tmp_path, isolated_database_env
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
-            await historical_reserve(h)
+            await seed_archived_checker_request(h)
             if unprovable_receipt:
-                await historical_lease(h)
+                await seed_archived_running_checker(h)
             before = await retained_snapshot(h.factory)
             if unprovable_receipt:
                 with pytest.raises(IntegrityError, match="retained checker authorization receipts are unprovable"):
@@ -64,12 +61,10 @@ async def test_upgrade_excludes_writer_across_receipt_preflight(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0009_checker_material_lineage")
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_material_fixture(
-            tmp_path, isolated_database_env, provision_checker=False
+            tmp_path, isolated_database_env
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
-            reserved = await historical_reserve(h)
+            reserved = await seed_archived_checker_request(h)
             scanned, resume = threading.Event(), threading.Event()
             execute = Operations.execute
 
@@ -93,7 +88,7 @@ async def test_upgrade_excludes_writer_across_receipt_preflight(
                         worker_lease_id=:lease,worker_lease_generation=1,
                         worker_lease_expires_at=clock_timestamp()+interval '300 seconds',
                         execute_evidence_id=:receipt,started_at=clock_timestamp() WHERE id=:id"""),
-                        {"lease":new_record_id(),"receipt":new_record_id(),"id":reserved.attempt_id})
+                        {"lease":new_record_id(),"receipt":new_record_id(),"id":reserved["attempt_id"]})
 
             try:
                 assert await asyncio.to_thread(scanned.wait, 10)
@@ -114,13 +109,13 @@ async def test_upgrade_excludes_writer_across_receipt_preflight(
                 with pytest.raises(IntegrityError, match="receipt custody|foreign key"):
                     await asyncio.wait_for(writer, 10)
                 async with h.factory() as session:
-                    row = (await session.execute(text("SELECT status,execute_evidence_id,worker_lease_id FROM checker_runs WHERE id=:id"), {"id": reserved.attempt_id})).one()
+                    row = (await session.execute(text("SELECT status,execute_evidence_id,worker_lease_id FROM checker_runs WHERE id=:id"), {"id": reserved["attempt_id"]})).one()
                     assert row == ("queued", None, None)
                 from tests.checkers.execution.support import provision_post_submit_service
 
                 await provision_post_submit_service(h.factory)
-                valid = await historical_lease(h)
-                assert valid.reservation.attempt_id == reserved.attempt_id
+                valid = await seed_archived_running_checker(h)
+                assert valid["reservation"]["attempt_id"] == reserved["attempt_id"]
             finally:
                 resume.set()
                 await asyncio.gather(migration, *([writer] if writer else []), return_exceptions=True)

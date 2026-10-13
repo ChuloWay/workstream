@@ -251,7 +251,7 @@ async def test_invalid_admission_result_denies_before_lineage_and_final_authorit
     service._repository = Repository()
     # This test isolates ART result validation, not policy validation behavior.
     service._contexts = SimpleNamespace(_load_locked_task_context=AsyncMock())
-    with pytest.raises(RuntimeError, match="exact binding facts"):
+    with pytest.raises(SubmissionCreationUnavailable, match="submission creation is unavailable"):
         await service.create(request)
     assert events == ["authorize", "prepare", "art"]
     assert len(persisted) == 1
@@ -331,9 +331,10 @@ def _consumption_values(*, binding=False, remediation=False):
     )
     if binding:
         values.update({name: str(new_record_id()) for name in (
-            "evidence_set_id", "project_id", "guide_id", "semantic_manifest_id", "content_id",
+            "selected_pre_submit_run_id", "project_id", "guide_id", "semantic_manifest_id", "content_id",
         )})
         values.update(
+            evidence_set_id=None,
             resource_type="submission_binding", resource_id=values["admission_id"],
             locked_policy_context_hash="sha256:" + "2" * 64,
             semantic_manifest_sha256="sha256:" + "3" * 64,

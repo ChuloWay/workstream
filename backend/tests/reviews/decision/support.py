@@ -32,11 +32,14 @@ from tests.reviews.packet.support import packet_source, prepare_packet
 from tests.tasks.post_submit_routing.support import next_request, source_values
 from tests.tasks.submission_lineage_support import _verified_admission
 from tests.test_artifact_admission import _context
-from tests.test_default_pre_submit_execution import _bytes
+from tests.archive_fixtures import byte_source as _bytes
 
 
 @asynccontextmanager
 async def review_source(tmp_path, database_url, **options):
+    from tests.checkers.external.support import post_registry_spec
+
+    options.setdefault("post_submit_registry_spec", post_registry_spec())
     async with packet_source(tmp_path, database_url, **options) as h:
         await attach_review_source(h)
         yield h
@@ -180,7 +183,7 @@ async def _route_replacement_cause(h):
     from app.adapters.tasks import evaluation_completion_handler
     from app.modules.outbox.api import HandlerOutcome
     from tests.authorization.post_submit_routing.support import provision_router
-    from tests.checkers.execution.completion_fixture import controlled_registry
+    from tests.checkers.execution.support import ControlledSelectedExecution
     from tests.tasks.post_submit_routing.outcome_support import invoked_completion
 
     async with h.factory() as session:
@@ -200,7 +203,7 @@ async def _route_replacement_cause(h):
     await next_request(failure)
     await reserve(failure)
     failure.result = await live_executor(
-        failure, registry=controlled_registry("needs_revision")
+        failure, selected_execution=ControlledSelectedExecution(verdict="failed")
     ).evaluate_post_submission(failure.request)
     async with h.factory() as session:
         run = await session.get(CheckerRun, str(failure.result.attempt_id))
@@ -277,8 +280,8 @@ async def _admit_successor(h):
         assignment_id=h.request.assignment_id,
         predecessor_submission_id=h.request.submission_id,
         idempotency_key=new_record_id(),
-        summary=h.request.structural_input.summary,
-        contributor_attestation=h.request.structural_input.worker_attestation,
+        summary=h.creation_request.summary,
+        contributor_attestation=h.creation_request.contributor_attestation,
         media_type="application/zip",
         byte_source=_bytes(revised_data),
     )

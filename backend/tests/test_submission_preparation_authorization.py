@@ -3,6 +3,7 @@
 from types import SimpleNamespace
 from uuid import UUID
 from app.core.identifiers import new_record_id
+from app.core.hashing import canonical_json_hash
 
 import pytest
 
@@ -47,7 +48,11 @@ def _final_values(request_values):
         "effective_policy_sha256": "sha256:" + "2" * 64,
         "pre_submit_policy_sha256": "sha256:" + "3" * 64,
         "effective_plan_sha256": "sha256:" + "4" * 64,
-        "semantic_manifest_sha256": "sha256:" + "5" * 64,
+        "semantic_manifest_body": {"schema_version": "submission_manifest.v1", "entries": []},
+        "semantic_manifest_sha256": canonical_json_hash(
+            {"schema_version": "submission_manifest.v1", "entries": []}
+        ),
+        "packet_sha256": "sha256:" + "8" * 64,
         "archive_sha256": "sha256:" + "6" * 64,
         "archive_byte_count": 42,
         "media_type": "application/zip",

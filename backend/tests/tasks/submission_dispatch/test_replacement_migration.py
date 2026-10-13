@@ -1,12 +1,6 @@
 """0034 preserves initial custody and refuses uncaused retained replacements."""
 
 import asyncio
-import io
-import os
-from pathlib import Path
-import subprocess
-import sys
-import tarfile
 
 import asyncpg
 import pytest
@@ -14,83 +8,13 @@ from alembic import command
 from sqlalchemy.exc import DBAPIError
 
 from app.db import session as db_session
+from tests.historical_submission_fixtures import restore_archived_snapshot
 from tests.migration_fixtures import _config
 
 
 pytestmark = pytest.mark.postgres_schema_contract
 PREDECESSOR = "0033_contribution_reads"
 SUCCESSOR = "0034_checker_replacement"
-# The last merged 0032 writer could produce an authorized revision without a
-# persisted checker-remediation cause; current runtime deliberately cannot.
-HISTORICAL_WRITER = "735cf26591e4ed616bcaa57f12eeb37cee741973"
-HISTORICAL_SEED = """
-import asyncio
-import os
-from pathlib import Path
-import sys
-
-from app.adapters.tasks import evaluation_completion_handler
-from app.api.deps.authorization import compose_hidden_submission_creation_command
-from app.core.identifiers import new_record_id
-from app.db import session as db_session
-from app.modules.artifacts.api import SubmissionBundlePreparationRequest
-from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.outbox.api import HandlerOutcome
-from app.modules.tasks.api import SubmissionCreationRequest
-from tests.post_submit_materialization_helpers import material_fixture
-from tests.tasks.post_submit_routing.remediation_support import remediation_source
-from tests.tasks.post_submit_routing.support import revision_archive
-from tests.tasks.submission_lineage_support import _verified_admission
-from tests.test_default_pre_submit_execution import _bytes
-
-
-async def seed():
-    tmp_path = Path(sys.argv[2])
-    database_url = os.environ["WS_MIGRATION_DATABASE_URL"]
-    if sys.argv[1] == "initial":
-        async with material_fixture(tmp_path, database_url) as h:
-            assert h.created.submission_version == 1
-    else:
-        async with remediation_source(tmp_path, database_url) as h:
-            assert await evaluation_completion_handler(sessions=h.factory)(h.envelope) is HandlerOutcome.ACKNOWLEDGE
-            changed = revision_archive(h.data)
-            preparation = SubmissionBundlePreparationRequest(
-                actor=ActorIdentityFacts(
-                    h.actor_context.actor_profile_id,
-                    h.actor_context.identity_link_id,
-                    ActorKind.HUMAN,
-                ),
-                request_id=new_record_id(), correlation_id=new_record_id(),
-                task_id=h.request.task_id, assignment_id=h.request.assignment_id,
-                predecessor_submission_id=h.created.submission_id,
-                idempotency_key=new_record_id(),
-                summary=h.request.structural_input.summary,
-                contributor_attestation=h.request.structural_input.worker_attestation,
-                media_type="application/zip", byte_source=_bytes(changed),
-            )
-            admission_id = await _verified_admission(
-                h.factory, h.store, h.namespace, h.settings, h.actor_context, preparation,
-            )
-            async with h.factory() as session:
-                created = await compose_hidden_submission_creation_command(
-                    session,
-                    h.actor_context.model_copy(update={
-                        "request_id": new_record_id(), "correlation_id": new_record_id(),
-                    }),
-                    request_id=new_record_id(), correlation_id=new_record_id(),
-                ).create(SubmissionCreationRequest(
-                    task_id=h.request.task_id, assignment_id=h.request.assignment_id,
-                    contributor_id=h.actor_context.actor_profile_id,
-                    predecessor_submission_id=h.created.submission_id,
-                    admission_id=admission_id, summary=preparation.summary,
-                    contributor_attestation=preparation.contributor_attestation,
-                ))
-            assert created.submission_version == 2
-    await db_session.dispose_engine()
-
-
-asyncio.run(seed())
-"""
 RETAINED_TABLES = (
     "submissions",
     "pre_submit_evidence_sets",
@@ -120,34 +44,6 @@ async def _reset_to_predecessor(database_url):
     finally:
         await connection.close()
     await asyncio.to_thread(command.upgrade, _config(), PREDECESSOR)
-
-
-def _historical_backend(tmp_path):
-    root = Path(__file__).resolve().parents[4]
-    archived = subprocess.run(
-        ["git", "archive", "--format=tar", HISTORICAL_WRITER, "backend"],
-        cwd=root,
-        capture_output=True,
-        check=True,
-    )
-    source = tmp_path / "historical"
-    with tarfile.open(fileobj=io.BytesIO(archived.stdout), mode="r:") as archive:
-        archive.extractall(source, filter="data")
-    return source / "backend"
-
-
-def _seed_with_historical_writer(tmp_path, database_url, mode):
-    backend = _historical_backend(tmp_path)
-    subprocess.run(
-        [sys.executable, "-c", HISTORICAL_SEED, mode, str(tmp_path)],
-        cwd=backend,
-        env={
-            **os.environ,
-            "PYTHONPATH": os.pathsep.join((str(backend), str(backend / "tests"))),
-            "WS_MIGRATION_DATABASE_URL": database_url,
-        },
-        check=True,
-    )
 
 
 async def _retained_rows(connection):
@@ -181,15 +77,15 @@ async def _custody(connection):
     """)
 
 
-async def test_upgrade_preserves_real_initial_rows_and_exact_receipts(
+async def test_upgrade_preserves_archived_initial_rows_and_exact_receipts(
     tmp_path,
     isolated_database_env,
     migration_lock,
 ):
     with migration_lock():
         await _reset_to_predecessor(isolated_database_env)
-        await asyncio.to_thread(
-            _seed_with_historical_writer, tmp_path, isolated_database_env, "initial"
+        await restore_archived_snapshot(
+            isolated_database_env, "0033_checker_replacement_initial"
         )
         connection = await _connection(isolated_database_env)
         try:
@@ -281,11 +177,11 @@ async def test_retained_uncaused_revision_refuses_upgrade_without_changes(
     isolated_database_env,
     migration_lock,
 ):
-    """A real 0032 writer can retain version two without a persisted source ID."""
+    """The archived predecessor can retain version two without a source ID."""
     with migration_lock():
         await _reset_to_predecessor(isolated_database_env)
-        await asyncio.to_thread(
-            _seed_with_historical_writer, tmp_path, isolated_database_env, "revision"
+        await restore_archived_snapshot(
+            isolated_database_env, "0033_checker_replacement_revision"
         )
 
         await db_session.dispose_engine()

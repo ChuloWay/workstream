@@ -7,12 +7,10 @@ import asyncpg
 import pytest
 from alembic import command
 
-from tests.checkers.execution.historical_execution import historical_completed_source
+from tests.migration_ancestor_rows import archived_packet_ancestors
 from app.db import session as db_session
-from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 from tests.migration_fixtures import current_schema_revision
-from tests.reviews.packet.support import packet_source
 
 pytestmark = pytest.mark.postgres_schema_contract
 
@@ -49,11 +47,9 @@ async def test_packet_upgrade_preserves_existing_owners(
         finally:
             await connection.close()
         await asyncio.to_thread(command.upgrade, _config(), "0011_task_routing_source")
-        original_columns = await add_current_art_seed_column(isolated_database_env)
-        async with packet_source(
-            tmp_path, isolated_database_env, completed_source_factory=historical_completed_source
+        async with archived_packet_ancestors(
+            tmp_path, isolated_database_env
         ):
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
             connection = await asyncpg.connect(url)
             try:
                 before = await snapshot(connection)

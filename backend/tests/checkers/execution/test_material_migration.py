@@ -8,20 +8,18 @@ from alembic import command
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
-from tests.migration_fixtures import add_current_art_seed_column, restore_predecessor_evidence_schema
 from tests.migration_fixtures import _config
 from tests.historical_submission_fixtures import historical_material_fixture
 from types import SimpleNamespace
 
-from app.modules.checkers.post_submit_contracts import make_post_submit_result
-from tests.checkers.post_submit.support import change_request
 from .historical_execution import (
-    historical_reserve,
-    historical_lease,
-    historical_terminal_facts,
-    historical_write_terminal,
+    seed_archived_checker_request,
+    seed_archived_running_checker,
+    archived_terminal_rows,
+    seed_archived_terminal,
 )
 
 pytestmark = pytest.mark.postgres_schema_contract
@@ -58,39 +56,46 @@ async def test_retained_material_upgrade(
 ):
     with migration_lock():
         await predecessor_database(isolated_database_env)
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_material_fixture(
-            tmp_path, isolated_database_env, provision_checker=False
+            tmp_path, isolated_database_env
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
-            await historical_reserve(h)
-            lease = await historical_lease(h)
-            facts = historical_terminal_facts(h, lease, outcome)
-            material = facts.material.model_dump(mode="json")
+            await seed_archived_checker_request(h)
+            lease = await seed_archived_running_checker(h)
+            material = dict(h.archived_material)
             if not valid:
                 # A real but wrong admission is covered separately in direct SQL
                 # tests. This retained 0008 row proves no fabricated ID backfill.
-                material["admission_id"] = str(h.request.submission_id)
+                material["admission_id"] = h.request["submission_id"]
+            rows = archived_terminal_rows(
+                h, lease, outcome=outcome,
+                members=h.archived_members if outcome == "completed" else (),
+                counts=h.archived_counts if outcome == "completed" else dict(passed=0, warning=0, failed=0, blocking=0),
+                routing_recommendation="allow_review" if outcome == "completed" else "not_evaluated",
+                failure_code=None if outcome == "completed" else "implementation_unavailable",
+                material=material,
+            )
             async with h.factory() as session, session.begin():
-                await historical_write_terminal(session, facts, material)
+                await seed_archived_terminal(session, rows)
             if valid:
                 # Preserve superseded completed/failed history and a current
                 # failure that never received material, plus later replica loss.
                 successor = SimpleNamespace(**vars(h))
-                successor.request = change_request(h.request, evaluation_generation=2,
-                                                   evaluation_request_id=new_record_id())
-                await historical_reserve(successor)
-                next_lease = await historical_lease(successor)
-                empty = historical_terminal_facts(successor, next_lease, "infrastructure_failed")
-                body = empty.result.model_dump(exclude={"result_digest"})
-                body["infrastructure_failure_code"] = "material_unavailable"
-                empty = empty.model_copy(update={"result": make_post_submit_result(**body), "material": None})
+                request_body = {key: value for key, value in h.request.items() if key != "request_sha256"}
+                request_body.update(evaluation_generation=2, evaluation_request_id=str(new_record_id()))
+                successor.request = request_body | {"request_sha256": canonical_json_hash(request_body)}
+                await seed_archived_checker_request(successor)
+                next_lease = await seed_archived_running_checker(successor)
+                empty = archived_terminal_rows(
+                    successor, next_lease, outcome="infrastructure_failed", members=(),
+                    counts=dict(passed=0, warning=0, failed=0, blocking=0),
+                    routing_recommendation="not_evaluated", failure_code="material_unavailable", material=None,
+                )
                 async with h.factory() as session, session.begin():
-                    await historical_write_terminal(session, empty, None)
+                    await seed_archived_terminal(session, empty)
                     await session.execute(text(
                         "update artifact_replicas set availability_state='unavailable', "
                         "content_id=(select id from artifact_contents where id<>:content limit 1) where id=:id"
-                    ), {"id": h.replica_id, "content": facts.material.content_id})
+                    ), {"id": h.replica_id, "content": h.archived_material["content_id"]})
             before = await retained_snapshot(h.factory)
             assert before[1] == "0008_checker_execution"
             if valid:
@@ -115,15 +120,16 @@ async def test_upgrade_excludes_writer_until_guard_is_installed(
 
     with migration_lock():
         await predecessor_database(isolated_database_env)
-        original_columns = await add_current_art_seed_column(isolated_database_env)
         async with historical_material_fixture(
-            tmp_path, isolated_database_env, provision_checker=False
+            tmp_path, isolated_database_env
         ) as h:
-            await restore_predecessor_evidence_schema(isolated_database_env, original_columns)
-            await historical_reserve(h)
-            lease = await historical_lease(h)
-            facts = historical_terminal_facts(h, lease, "completed")
-            material = facts.material.model_dump(mode="json") | {"admission_id": str(h.request.submission_id)}
+            await seed_archived_checker_request(h)
+            lease = await seed_archived_running_checker(h)
+            material = dict(h.archived_material) | {"admission_id": h.request["submission_id"]}
+            rows = archived_terminal_rows(
+                h, lease, outcome="completed", members=h.archived_members, counts=h.archived_counts,
+                routing_recommendation="allow_review", failure_code=None, material=material,
+            )
             scanned, resume = threading.Event(), threading.Event()
             execute = Operations.execute
 
@@ -142,7 +148,7 @@ async def test_upgrade_excludes_writer_until_guard_is_installed(
             async def write():
                 async with h.factory() as session, session.begin():
                     await pid.put(await session.scalar(text("select pg_backend_pid()")))
-                    await historical_write_terminal(session, facts, material)
+                    await seed_archived_terminal(session, rows)
 
             try:
                 assert await asyncio.to_thread(scanned.wait, 10), "migration did not reach preflight"
@@ -164,7 +170,7 @@ async def test_upgrade_excludes_writer_until_guard_is_installed(
                     await asyncio.wait_for(writer, 10)
                 async with h.factory() as session:
                     assert await session.scalar(text("select status from checker_runs where id=:id"),
-                                                {"id": str(facts.result.attempt_id)}) == "running"
+                                                {"id": rows["run"]["id"]}) == "running"
             finally:
                 resume.set()
                 await asyncio.gather(migration, *([writer] if writer is not None else []), return_exceptions=True)

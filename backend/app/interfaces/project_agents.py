@@ -10,7 +10,8 @@ from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
 from app.modules.checkers.api.artifact_paths import (
-    is_canonical_relative_path, is_canonical_relative_pattern,
+    is_canonical_relative_path,
+    is_canonical_relative_pattern,
 )
 
 from pydantic import (
@@ -26,10 +27,9 @@ from pydantic import (
 )
 
 from app.modules.projects.api.task_examples import ProjectGuideTaskExamples
-from app.modules.checkers.api import PostSubmitCatalogue, PostSubmitDefinition
-from app.modules.checkers.api.pre_submit_catalogue import (
-    PreSubmissionCapabilityDefinition,
-    PreSubmissionCapabilityProjection,
+from app.modules.checkers.api.external import (
+    ExternalCheckerCapabilityDefinition,
+    ExternalCheckerCapabilityProjection,
 )
 from app.interfaces.external_services import (
     ExternalServiceAdapter,
@@ -37,7 +37,11 @@ from app.interfaces.external_services import (
     ExternalServiceConfigurationError,
 )
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
-from app.modules.projects.api.guide_documents import GuideRuntimeCleanupCustody, GuideDocumentManifest, GuideRuntimeCapabilities
+from app.modules.projects.api.guide_documents import (
+    GuideRuntimeCleanupCustody,
+    GuideDocumentManifest,
+    GuideRuntimeCapabilities,
+)
 
 
 MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES = 1_000_000
@@ -78,12 +82,17 @@ _MODEL_PROSE_SCHEMA = {
     ),
 }
 ModelProse = Annotated[str, Field(json_schema_extra=_MODEL_PROSE_SCHEMA)]
-PolicyIdentifier = Annotated[str, Field(json_schema_extra={
-    "pattern": _SAFE_IDENTIFIER.pattern,
-    "minLength": 1,
-    "maxLength": 100,
-    "description": "Canonical machine identifier, not prose or a file path: start with a lowercase letter, then lowercase letters, digits, underscores, dots or hyphens. Example: results or rights_confirmed.",
-})]
+PolicyIdentifier = Annotated[
+    str,
+    Field(
+        json_schema_extra={
+            "pattern": _SAFE_IDENTIFIER.pattern,
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "Canonical machine identifier, not prose or a file path: start with a lowercase letter, then lowercase letters, digits, underscores, dots or hyphens. Example: results or rights_confirmed.",
+        }
+    ),
+]
 
 
 def _validated_safe_model_text(value: str) -> str:
@@ -131,10 +140,14 @@ class GuideEvidenceRef(BaseModel):
     sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
     start_page: StrictInt | None = Field(default=None, ge=1, le=100_000)
     end_page: StrictInt | None = Field(default=None, ge=1, le=100_000)
-    section: str | None = Field(default=None, max_length=200, description=(
-        "Optional plain-prose section label. Paraphrase headings; do not copy URLs, "
-        "paths, slash-separated phrases, credentials or executable command tokens."
-    ))
+    section: str | None = Field(
+        default=None,
+        max_length=200,
+        description=(
+            "Optional plain-prose section label. Paraphrase headings; do not copy URLs, "
+            "paths, slash-separated phrases, credentials or executable command tokens."
+        ),
+    )
 
     @field_validator("section")
     @classmethod
@@ -164,12 +177,15 @@ class CapabilityParameter(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     name: str = Field(json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern})
-    value: CapabilityScalar | Annotated[tuple[CapabilityScalar, ...], Field(min_length=1, max_length=50)]
+    value: (
+        CapabilityScalar
+        | Annotated[tuple[CapabilityScalar, ...], Field(min_length=1, max_length=50)]
+    )
 
     @field_validator("name")
     @classmethod
     def validate_name(cls, value: str) -> str:
-        """Require a canonical catalogue-owned parameter name."""
+        """Require a canonical registered-checker parameter name."""
         return _validated_identifier(value)
 
     @field_validator("value")
@@ -185,7 +201,14 @@ class CapabilityParameter(BaseModel):
             if type(item) not in {str, int, float, bool}:
                 raise ValueError("capability parameter scalar is invalid")
             if isinstance(item, str):
-                _validated_safe_model_text(item)
+                if "/" in item or "\\" in item:
+                    if not is_canonical_relative_pattern(item):
+                        raise ValueError("capability parameter path is invalid")
+                    # Machine paths belong to the image configuration. Keep
+                    # command/credential checks without treating '/' as prose.
+                    _validated_safe_model_text(item.replace("/", " "))
+                else:
+                    _validated_safe_model_text(item)
             elif isinstance(item, (int, float)):
                 if not math.isfinite(item) or abs(item) > 10**12:
                     raise ValueError("capability parameter number is out of range")
@@ -208,8 +231,23 @@ class _CapabilityBindingIdentity(BaseModel):
         """Require canonical requirement and capability identity fields."""
         return _validated_identifier(value)
 
+
 class PreSubmissionBindingProposal(_CapabilityBindingIdentity):
-    """Reference intake capability; its settings live only in the artifact policy."""
+    """Reference an external intake image with approved typed configuration."""
+
+    parameters: tuple[CapabilityParameter, ...] = Field(
+        default=(),
+        max_length=50,
+        exclude_if=lambda value: not value,
+    )
+
+    @model_validator(mode="after")
+    def validate_parameter_names(self) -> PreSubmissionBindingProposal:
+        """Reject duplicate names without changing retained empty bindings."""
+        names = [parameter.name for parameter in self.parameters]
+        if len(names) != len(set(names)):
+            raise ValueError("capability parameters must be unique")
+        return self
 
 
 class PostSubmissionBindingProposal(_CapabilityBindingIdentity):
@@ -263,13 +301,15 @@ class AtomicGuideRequirement(BaseModel):
 
     requirement_id: str = Field(json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern})
     statement: ModelProse
-    disposition: RequirementDisposition = Field(description=(
-        "Use human_review for work assigned to an authorized human reviewer. "
-        "Use a capability gap only for required unsupported automated evaluation. "
-        "Any guide_blocker, pre_submit_capability_gap or post_submit_capability_gap "
-        "requires guide_blocked and no artifact policy. Exact supported binding "
-        "proposals may remain as catalogue-match evidence without being projected."
-    ))
+    disposition: RequirementDisposition = Field(
+        description=(
+            "Use human_review for work assigned to an authorized human reviewer. "
+            "Use a capability gap only for required unsupported automated evaluation. "
+            "A guide_blocker requires guide_blocked and no artifact policy. Capability "
+            "gaps remain explicit activation blockers while the manager reviews the "
+            "available exact bindings in a warning-ready proposal."
+        )
+    )
     platform_coverage: PlatformCoverageRef | None = None
     evidence_refs: tuple[GuideEvidenceRef, ...] = Field(
         default=(), max_length=MAXIMUM_EVIDENCE_REFS
@@ -287,24 +327,29 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     packaging: Literal["zip"] = "zip"
     maximum_file_size_bytes: StrictInt = Field(gt=0, le=10 * 1024 * 1024 * 1024)
     maximum_package_size_bytes: StrictInt = Field(
-        gt=0, le=10 * 1024 * 1024 * 1024,
+        gt=0,
+        le=10 * 1024 * 1024 * 1024,
         description="Maximum total expanded bytes in the submitted ZIP, verified from actual contents; not compressed upload bytes.",
     )
     maximum_archive_size_bytes: StrictInt | None = Field(
-        default=None, gt=0,
+        default=None,
+        gt=0,
         description="Maximum verified byte count of the entire submitted compressed ZIP, including archive metadata; not expanded contents or summed compressed member sizes. Null adds no project limit; platform safety limits always apply.",
     )
     maximum_archive_entries: StrictInt | None = Field(
-        default=None, gt=0,
+        default=None,
+        gt=0,
         description="Maximum normalized outer ZIP entries, counting files and directory entries including implied parent directories. Omitting a directory record cannot evade the limit. Nested archives count as files, not recursively expanded members. Null adds no project limit; platform safety limits always apply.",
     )
     allowed_storage_schemes: tuple[Literal["artifact"], ...] = ("artifact",)
     required_artifacts: tuple[Annotated[str, Field(min_length=1, max_length=500)], ...] = Field(
-        default=(), max_length=100,
+        default=(),
+        max_length=100,
         description="Exact canonical relative POSIX paths inside the submitted ZIP. A bare path such as task.toml requires that file at the ZIP root; wrapper/task.toml does not satisfy it. Nested paths such as outputs/answer.md require that exact location. No traversal, storage references or secret files.",
     )
     forbidden_artifacts: tuple[Annotated[str, Field(min_length=1, max_length=500)], ...] = Field(
-        default=(), max_length=100,
+        default=(),
+        max_length=100,
         description="Relative artifact prohibition patterns, such as secret* or outputs/*.tmp; these are machine fields, not prose.",
     )
     required_evidence: tuple[PolicyIdentifier, ...] = Field(default=(), max_length=100)
@@ -314,7 +359,9 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     @classmethod
     def validate_required_paths(cls, values: tuple[str, ...]) -> tuple[str, ...]:
         """Artifact paths are machine fields, not display prose."""
-        if len(values) != len(set(values)) or not all(is_canonical_relative_path(value) for value in values):
+        if len(values) != len(set(values)) or not all(
+            is_canonical_relative_path(value) for value in values
+        ):
             raise ValueError("artifact policy paths must be unique canonical relative paths")
         return values
 
@@ -322,7 +369,9 @@ class SubmissionArtifactPolicyProposal(BaseModel):
     @classmethod
     def validate_forbidden_patterns(cls, values: tuple[str, ...]) -> tuple[str, ...]:
         """Express prohibition patterns without treating their secret names as requests."""
-        if len(values) != len(set(values)) or not all(is_canonical_relative_pattern(value) for value in values):
+        if len(values) != len(set(values)) or not all(
+            is_canonical_relative_pattern(value) for value in values
+        ):
             raise ValueError("artifact policy patterns must be unique canonical relative patterns")
         return values
 
@@ -383,10 +432,11 @@ class ProjectGuideCompilationContext(BaseModel):
     setup_generation: StrictInt = Field(ge=1)
     instruction_version: str = Field(max_length=100)
     agent_identity: str = Field(max_length=100)
-    agent_version: str = Field(max_length=100, json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern})
+    agent_version: str = Field(
+        max_length=100, json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern}
+    )
     runtime_configuration: ProjectGuideRuntimeConfiguration
-    pre_submission_capabilities: PreSubmissionCapabilityProjection
-    post_submission_capabilities: PostSubmitCatalogue
+    checker_capabilities: ExternalCheckerCapabilityProjection
     task_examples: ProjectGuideTaskExamples
     correction_feedback: ProjectGuideCorrectionFeedback | None = None
 
@@ -394,11 +444,17 @@ class ProjectGuideCompilationContext(BaseModel):
     def validate_instruction_configuration(self) -> ProjectGuideCompilationContext:
         """Bind the semantic instruction version to its exact execution snapshot."""
         configuration = self.runtime_configuration
-        if (self.material.setup_run_id != self.setup_run_id
-                or self.material.setup_generation != self.setup_generation
-                or len(self.material.documents) > configuration.maximum_documents
-                or any(item.byte_count > configuration.maximum_document_bytes for item in self.material.documents)
-                or sum(item.byte_count for item in self.material.documents) > configuration.maximum_total_document_bytes):
+        if (
+            self.material.setup_run_id != self.setup_run_id
+            or self.material.setup_generation != self.setup_generation
+            or len(self.material.documents) > configuration.maximum_documents
+            or any(
+                item.byte_count > configuration.maximum_document_bytes
+                for item in self.material.documents
+            )
+            or sum(item.byte_count for item in self.material.documents)
+            > configuration.maximum_total_document_bytes
+        ):
             raise ValueError("compilation document manifest exceeds its execution boundary")
         if self.instruction_version != self.runtime_configuration.instruction_version:
             raise ValueError("compilation instruction configuration mismatch")
@@ -457,7 +513,9 @@ class ProjectGuideCompilationResult(BaseModel):
     )
     setup_notes: tuple[ModelProse, ...] = Field(default=(), max_length=MAXIMUM_COMPILATION_NOTES)
     agent_name: Literal["ProjectGuideCompilationAgent"] = "ProjectGuideCompilationAgent"
-    agent_version: str = Field(max_length=100, json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern})
+    agent_version: str = Field(
+        max_length=100, json_schema_extra={"pattern": _SAFE_IDENTIFIER.pattern}
+    )
     schema_version: Literal["project_guide_compilation_result.v1"] = (
         "project_guide_compilation_result.v1"
     )
@@ -487,10 +545,11 @@ def validate_project_guide_compilation_result(
     result: ProjectGuideCompilationResult,
 ) -> None:
     """Fail closed when an untrusted result diverges from canonical capability truth."""
-    if project_guide_compilation_result_storage_bytes(result) > MAXIMUM_COMPILATION_RESULT_STORAGE_BYTES:
+    if (
+        project_guide_compilation_result_storage_bytes(result)
+        > MAXIMUM_COMPILATION_RESULT_STORAGE_BYTES
+    ):
         raise ValueError("compilation result exceeds storage byte limit")
-    if not context.pre_submission_capabilities.available:
-        raise ValueError("pre-submit capability projection is unavailable")
     requirements = {item.requirement_id: item for item in result.requirements}
     if len(requirements) != len(result.requirements):
         raise ValueError("compilation requirements must be unique")
@@ -502,18 +561,16 @@ def validate_project_guide_compilation_result(
     elif result.submission_artifact_policy is None:
         raise ValueError("draft-ready compilation requires artifact policy")
 
+    capabilities = ExternalCheckerCapabilityProjection.model_validate(context.checker_capabilities)
     pre_definitions = {
-        definition.stable_id: definition
-        for definition in context.pre_submission_capabilities.definitions
+        (definition.capability_id, definition.capability_version): definition
+        for definition in capabilities.definitions
+        if definition.phase == "pre_submit"
     }
-    post_capabilities = context.post_submission_capabilities
-    post_capabilities = PostSubmitCatalogue.model_validate(post_capabilities)
-    if any(
-        item.platform_default and item.state != "enabled" for item in post_capabilities.definitions
-    ):
-        raise ValueError("post-submit capability projection is unavailable")
     post_definitions = {
-        definition.capability_id: definition for definition in post_capabilities.definitions
+        (definition.capability_id, definition.capability_version): definition
+        for definition in capabilities.definitions
+        if definition.phase == "post_submit"
     }
     _validate_platform_coverage(result.requirements, pre_definitions, post_definitions)
     _validate_evidence_lineage(context, result)
@@ -523,7 +580,7 @@ def validate_project_guide_compilation_result(
         pre_definitions,
         "pre_submit",
     )
-    post_bound_requirements = validate_post_submission_bindings(result, post_capabilities)
+    post_bound_requirements = validate_post_submission_bindings(result, capabilities)
     expected_pre = {
         item.requirement_id
         for item in result.requirements
@@ -539,23 +596,29 @@ def validate_project_guide_compilation_result(
 
 
 def validate_post_submission_bindings(
-    result: ProjectGuideCompilationResult, catalogue: PostSubmitCatalogue,
+    result: ProjectGuideCompilationResult,
+    capabilities: ExternalCheckerCapabilityProjection,
 ) -> set[str]:
-    """Validate the same post-stage requirement/configuration rules at both boundaries."""
+    """Validate POST bindings against the immutable external registry projection."""
     result = ProjectGuideCompilationResult.model_validate_json(result.model_dump_json())
-    catalogue = PostSubmitCatalogue.model_validate(catalogue)
+    capabilities = ExternalCheckerCapabilityProjection.model_validate(capabilities)
     requirements = {item.requirement_id: item for item in result.requirements}
     if len(requirements) != len(result.requirements):
         raise ValueError("compilation requirements must be unique")
     _validate_status_consistency(result)
-    if any(item.platform_default and item.state != "enabled" for item in catalogue.definitions):
-        raise ValueError("post-submit capability projection is unavailable")
     bound = _validate_bindings(
-        result.post_submit_bindings, requirements,
-        {item.capability_id: item for item in catalogue.definitions}, "post_submit",
+        result.post_submit_bindings,
+        requirements,
+        {
+            (item.capability_id, item.capability_version): item
+            for item in capabilities.definitions
+            if item.phase == "post_submit"
+        },
+        "post_submit",
     )
     if bound != {
-        item.requirement_id for item in result.requirements
+        item.requirement_id
+        for item in result.requirements
         if item.disposition is RequirementDisposition.SUPPORTED_POST_SUBMIT
     }:
         raise ValueError("supported compilation requirements must have one binding")
@@ -564,8 +627,11 @@ def validate_post_submission_bindings(
 
 def project_guide_compilation_result_storage_bytes(result: ProjectGuideCompilationResult) -> int:
     """Measure the default SQLAlchemy PostgreSQL JSON representation, not hash encoding."""
-    return len(json.dumps(result.model_dump(mode="json"), ensure_ascii=True,
-                          allow_nan=False).encode("utf-8"))
+    return len(
+        json.dumps(result.model_dump(mode="json"), ensure_ascii=True, allow_nan=False).encode(
+            "utf-8"
+        )
+    )
 
 
 def _validate_capability_suggestions(
@@ -577,13 +643,18 @@ def _validate_capability_suggestions(
         RequirementDisposition.PRE_SUBMIT_CAPABILITY_GAP: CompilationStage.PRE_SUBMIT,
         RequirementDisposition.POST_SUBMIT_CAPABILITY_GAP: CompilationStage.POST_SUBMIT,
     }
-    gaps = {key: stages[item.disposition] for key, item in requirements.items()
-            if item.disposition in stages}
+    gaps = {
+        key: stages[item.disposition]
+        for key, item in requirements.items()
+        if item.disposition in stages
+    }
     seen: set[str] = set()
     for suggestion in suggestions:
-        if (suggestion.requirement_id in seen
-                or gaps.get(suggestion.requirement_id) != suggestion.stage
-                or not suggestion.evidence_refs):
+        if (
+            suggestion.requirement_id in seen
+            or gaps.get(suggestion.requirement_id) != suggestion.stage
+            or not suggestion.evidence_refs
+        ):
             raise ValueError("compilation capability suggestion is invalid")
         seen.add(suggestion.requirement_id)
     if seen != set(gaps):
@@ -593,15 +664,12 @@ def _validate_capability_suggestions(
 def _validate_status_consistency(result: ProjectGuideCompilationResult) -> None:
     """Require ready and blocked status to match findings and dispositions."""
     has_blocker = any(finding.severity == "blocking_gap" for finding in result.findings) or any(
-        requirement.disposition
-        in {
-            RequirementDisposition.GUIDE_BLOCKER,
-            RequirementDisposition.PRE_SUBMIT_CAPABILITY_GAP,
-            RequirementDisposition.POST_SUBMIT_CAPABILITY_GAP,
-        }
+        requirement.disposition is RequirementDisposition.GUIDE_BLOCKER
         for requirement in result.requirements
     )
-    has_warning = any(finding.severity == "warning" for finding in result.findings)
+    has_warning = any(finding.severity == "warning" for finding in result.findings) or bool(
+        result.capability_suggestions
+    )
     if result.status == "guide_blocked" and not has_blocker:
         raise ValueError("blocked compilation requires blocking evidence")
     if result.status != "guide_blocked" and has_blocker:
@@ -614,8 +682,8 @@ def _validate_status_consistency(result: ProjectGuideCompilationResult) -> None:
 
 def _validate_platform_coverage(
     requirements: tuple[AtomicGuideRequirement, ...],
-    pre_definitions: dict[str, PreSubmissionCapabilityDefinition],
-    post_definitions: dict[str, PostSubmitDefinition],
+    pre_definitions: dict[tuple[str, str], ExternalCheckerCapabilityDefinition],
+    post_definitions: dict[tuple[str, str], ExternalCheckerCapabilityDefinition],
 ) -> None:
     """Resolve platform coverage only against eligible phase-owner truth."""
     for requirement in requirements:
@@ -627,24 +695,16 @@ def _validate_platform_coverage(
         if coverage is None:
             raise ValueError("platform-covered requirement requires canonical proof")
         if coverage.stage is CompilationStage.PRE_SUBMIT:
-            definition = pre_definitions.get(coverage.capability_id)
+            definition = pre_definitions.get((coverage.capability_id, coverage.capability_version))
             valid = (
                 definition is not None
-                and definition.version == coverage.capability_version
-                and definition.dispatch_kind == "platform_capability"
-                and definition.state == "enabled"
-                and definition.classification != "advisory"
+                and definition.capability_id == "workstream.default"
                 and not definition.selectable
             )
         else:
-            post_definition = post_definitions.get(coverage.capability_id)
-            valid = (
-                post_definition is not None
-                and post_definition.capability_version == coverage.capability_version
-                and post_definition.state == "enabled"
-                and post_definition.platform_default
-                and not post_definition.selectable
-            )
+            # Workstream owns exactly one built-in default checker and it runs
+            # before admission. POST capabilities are project-selected images.
+            valid = False
         if not valid:
             raise ValueError("platform coverage does not resolve to canonical truth")
 
@@ -680,7 +740,7 @@ def _validate_evidence_lineage(
 def _validate_bindings(
     bindings: tuple[PreSubmissionBindingProposal | PostSubmissionBindingProposal, ...],
     requirements: dict[str, AtomicGuideRequirement],
-    definitions: dict[str, PreSubmissionCapabilityDefinition | PostSubmitDefinition],
+    definitions: dict[tuple[str, str], ExternalCheckerCapabilityDefinition],
     expected_stage: Literal["pre_submit", "post_submit"],
 ) -> set[str]:
     """Validate exact stage, version, selectability, and parameter ownership."""
@@ -692,7 +752,11 @@ def _validate_bindings(
     )
     for binding in bindings:
         requirement = requirements.get(binding.requirement_id)
-        definition = definitions.get(binding.capability_id)
+        definition = definitions.get((binding.capability_id, binding.capability_version))
+        if definition is None and any(
+            capability_id == binding.capability_id for capability_id, _ in definitions
+        ):
+            raise ValueError("compilation capability version is stale")
         if (
             requirement is None
             or requirement.disposition is not expected_disposition
@@ -702,22 +766,13 @@ def _validate_bindings(
             or binding.stage.value != expected_stage
         ):
             raise ValueError("compilation capability binding is invalid")
-        version = (
-            definition.version
-            if isinstance(definition, PreSubmissionCapabilityDefinition)
-            else definition.capability_version
+        if definition.registry_entry is None:
+            raise ValueError("compilation capability binding is invalid")
+        definition.registry_entry.configuration_schema.validate_instance(
+            {item.name: item.model_dump(mode="json")["value"] for item in binding.parameters}
         )
-        if binding.capability_version != version:
-            raise ValueError("compilation capability version is stale")
-        if isinstance(definition, PostSubmitDefinition):
-            if not isinstance(binding, PostSubmissionBindingProposal):
-                raise ValueError("compilation capability binding is invalid")
-            definition.validate_configuration(
-                {item.name: item.value for item in binding.parameters}
-            )
         seen_requirements.add(binding.requirement_id)
     return seen_requirements
-
 
 
 class ProjectAgentRuntimeError(ExternalServiceAdapterError):

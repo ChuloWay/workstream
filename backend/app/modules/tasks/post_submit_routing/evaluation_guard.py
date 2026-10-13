@@ -6,10 +6,34 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable
-from app.modules.checkers.api.post_submit import PostSubmissionEvaluationRequest
+from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
 from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest, SubmittedBundleUnavailable
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.submitted_bundle import SubmittedBundleReader
+
+
+def _context_matches(request: PostSubmissionExecutionRequest, context: object) -> bool:
+    """Compare selected request lineage with exact retained TASK facts."""
+    observed = asdict(context)
+    return request.expected_context.model_dump() == {
+        "guide_version": observed["guide_version"],
+        "source_id": observed["source_id"],
+        "source_hash": observed["source_hash"],
+        "effective_policy_id": observed["effective_policy_id"],
+        "effective_policy_hash": observed["effective_policy_hash"],
+        "pre_policy_id": observed["pre_policy_id"],
+        "pre_policy_hash": observed["pre_policy_hash"],
+        "post_policy_id": observed["post_policy_id"],
+        "post_policy_version": observed["post_policy_version"],
+        "post_policy_hash": observed["post_policy_hash"],
+        "review_policy_id": observed["review_policy_id"],
+        "review_generation": observed["review_generation"],
+        "review_hash": observed["review_hash"],
+        "revision_policy_id": observed["revision_policy_id"],
+        "revision_generation": observed["revision_generation"],
+        "revision_hash": observed["revision_hash"],
+    } and observed["selected_post_policy_hash"] == request.expected_context.post_policy_hash \
+      and observed["selected_post_policy_body"] == request.policy.model_dump(mode="json")
 
 
 class TaskEvaluationGuard:
@@ -19,7 +43,7 @@ class TaskEvaluationGuard:
         self._repository = TaskRepository(session)
         self._submitted = SubmittedBundleReader(session)
 
-    async def lock_evaluation_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+    async def lock_evaluation_scope(self, request: PostSubmissionExecutionRequest) -> bool:
         """Return new-generation eligibility after exact Task/Assignment/Submission locks."""
         task = await self._repository.lock_project_task(request.project_id, request.task_id)
         if task is None:
@@ -52,7 +76,7 @@ class TaskEvaluationGuard:
             and facts.contributor_id == UUID(assignment.contributor_id)
             and facts.binding_id == request.binding_id
             and facts.content_id == request.content_id
-            and asdict(facts.context) == request.expected_context.model_dump()
+            and _context_matches(request, facts.context)
         ):
             raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
         if task.status in {"accepted", "rejected"}:
@@ -63,7 +87,7 @@ class TaskEvaluationGuard:
             raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
         return True
 
-    async def lock_terminal_retry_scope(self, request: PostSubmissionEvaluationRequest) -> None:
+    async def lock_terminal_retry_scope(self, request: PostSubmissionExecutionRequest) -> None:
         """New recovery must target an active and unrouted evaluation-pending task."""
         if not await self.lock_evaluation_scope(request):
             raise CheckerExecutionUnavailable("checker_retry_scope_unavailable")
@@ -71,7 +95,7 @@ class TaskEvaluationGuard:
         if task is None or task.status != "evaluation_pending":
             raise CheckerExecutionUnavailable("checker_retry_scope_unavailable")
 
-    async def lock_retry_replay_scope(self, request: PostSubmissionEvaluationRequest) -> None:
+    async def lock_retry_replay_scope(self, request: PostSubmissionExecutionRequest) -> None:
         """Replay retains exact historical owners even after accepted completion."""
         task = await self._repository.lock_project_task(request.project_id, request.task_id)
         if task is None:
@@ -103,6 +127,6 @@ class TaskEvaluationGuard:
             and facts.contributor_id == UUID(assignment.contributor_id)
             and facts.binding_id == request.binding_id
             and facts.content_id == request.content_id
-            and asdict(facts.context) == request.expected_context.model_dump()
+            and _context_matches(request, facts.context)
         ):
             raise CheckerExecutionUnavailable("checker_retry_replay_unavailable")

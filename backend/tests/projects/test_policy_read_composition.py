@@ -41,11 +41,12 @@ async def test_policy_read_binds_exact_target_facts(action: ActionId) -> None:
     """Bind the exact returned row to all authorization resource facts."""
     repository = _PolicyReadRepository()
     authorization = SimpleNamespace(require=AsyncMock())
-    checker = (
-        repository.checker
-        if action is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ else None
+    checker = repository.checker
+    target = (
+        checker
+        if action is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
+        else repository.effective
     )
-    target = checker if checker is not None else repository.effective
 
     result = await _read(repository, authorization, action)
 
@@ -60,7 +61,11 @@ async def test_policy_read_binds_exact_target_facts(action: ActionId) -> None:
         "guide_id": repository.guide_id,
         "guide_version": "v1",
         "guide_status": "active",
-        "target_kind": "pre_submit_checker_policy" if checker is not None else "effective_policy",
+        "target_kind": (
+            "pre_submit_checker_policy"
+            if action is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
+            else "effective_policy"
+        ),
         "project_exists": True,
         "project_status": "active",
         "guide_exists": True,
@@ -70,9 +75,21 @@ async def test_policy_read_binds_exact_target_facts(action: ActionId) -> None:
         "effective_policy_id": repository.effective.id,
         "effective_policy_hash": repository.effective.effective_policy_hash,
         "effective_policy_status": "approved",
-        "checker_policy_id": checker.id if checker is not None else None,
-        "checker_policy_status": "compiled" if checker is not None else None,
-        "checker_bundle_hash": checker.compiled_bundle_hash if checker is not None else None,
+        "checker_policy_id": (
+            checker.id
+            if action is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
+            else None
+        ),
+        "checker_policy_status": (
+            "compiled"
+            if action is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
+            else None
+        ),
+        "checker_bundle_hash": (
+            checker.compiled_bundle_hash
+            if action is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ
+            else None
+        ),
     }
 
 
@@ -89,10 +106,11 @@ async def test_policy_read_binds_exact_digest(action: ActionId) -> None:
             repository.effective.id, repository.effective.effective_policy_hash, "approved",
         ],
         "submission": [repository.submission.id, repository.submission.policy_hash],
-        "checker": (
-            [repository.checker.id, "compiled", repository.checker.compiled_bundle_hash]
-            if action is ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ else None
-        ),
+        "checker": [
+            repository.checker.id,
+            "compiled",
+            repository.checker.compiled_bundle_hash,
+        ],
     })
 
     await _read(repository, authorization, action)
@@ -135,6 +153,52 @@ async def test_policy_read_rejects_changed_lineage(row: str, field: str, action:
 
 
 @pytest.mark.asyncio
+async def test_policy_read_rejects_generic_hash_valid_checker_bundle() -> None:
+    """A canonical hash cannot turn an obsolete checker body into a current policy."""
+    repository = _PolicyReadRepository()
+    authorization = SimpleNamespace(require=AsyncMock())
+    repository.checker.compiled_bundle = {"checkers": ["safe"]}
+    repository.checker.compiled_bundle_hash = canonical_json_hash(
+        repository.checker.compiled_bundle
+    )
+
+    with pytest.raises(RuntimeError, match="missing policy authorization unexpectedly allowed"):
+        await _read(
+            repository,
+            authorization,
+            ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
+        )
+
+    context = authorization.require.await_args.args[1]
+    assert context.target_exists is False
+    assert context.target_binding_digest is None
+
+
+@pytest.mark.asyncio
+async def test_effective_policy_read_conceals_chain_missing_current_pre_policy() -> None:
+    """The effective row is not readable without its current selected PRE policy."""
+    repository = _PolicyReadRepository()
+    repository.checker = None
+    authorization = SimpleNamespace(require=AsyncMock())
+
+    with pytest.raises(RuntimeError, match="missing policy authorization unexpectedly allowed"):
+        await _read(
+            repository,
+            authorization,
+            ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ,
+        )
+
+    authorization.require.assert_awaited_once()
+    action, context = authorization.require.await_args.args
+    assert action is ActionId.PROJECT_EFFECTIVE_SUBMISSION_ARTIFACT_POLICY_READ
+    assert context.target_kind == "effective_policy"
+    assert context.target_exists is False
+    assert context.target_binding_digest is None
+    assert context.checker_policy_id is None
+    assert context.checker_bundle_hash is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("action", POLICY_ACTIONS)
 async def test_policy_read_propagates_authorizer_exception(action: ActionId) -> None:
     """A valid target cannot be returned after the authorizer raises."""
@@ -170,5 +234,43 @@ def test_activation_readiness_normalizes_hash_valid_malformed_policy_body() -> N
             approval_custody=SimpleNamespace(
                 operation=SimpleNamespace(artifact_policy_id=repository.submission.id),
                 effective=repository.effective, pre=repository.checker,
+            ),
+        )
+
+
+def test_activation_readiness_rejects_hash_valid_obsolete_checker_bundle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _PolicyReadRepository()
+    repository.submission.derivation_source = "unified_compilation"
+    repository.checker.compiled_bundle = {"checkers": ["safe"]}
+    repository.checker.compiled_bundle_hash = canonical_json_hash(
+        repository.checker.compiled_bundle
+    )
+    service = ProjectService(cast(Any, None))
+    monkeypatch.setattr(
+        service,
+        "_merge_effective_submission_artifact_policy",
+        lambda _body: repository.effective.effective_policy,
+    )
+
+    with pytest.raises(
+        GuideActivationBlocked,
+        match="external pre-submit checker policy is required",
+    ):
+        service.validate_activation_ready(
+            repository.guide,
+            repository.snapshot,
+            repository.sufficiency,
+            repository.submission,
+            repository.effective,
+            repository.checker,
+            repository.post_submit,
+            repository.review,
+            repository.revision,
+            approval_custody=SimpleNamespace(
+                operation=SimpleNamespace(artifact_policy_id=repository.submission.id),
+                effective=repository.effective,
+                pre=repository.checker,
             ),
         )

@@ -27,6 +27,7 @@ CHECKER_OUTPUT_CUSTODY_API = (
 CHECKER_MATERIALIZATION_API = (
     APP_ROOT / "modules" / "checkers" / "api" / "materialization.py"
 )
+CHECKER_MATERIAL_API = APP_ROOT / "modules" / "checkers" / "api" / "material.py"
 RETIRED_ARTIFACT_MATERIALIZATION_API = (
     APP_ROOT / "modules" / "artifacts" / "api" / "submission_materialization.py"
 )
@@ -281,7 +282,19 @@ def test_project_domain_does_not_query_artifact_persistence_models() -> None:
     assert violations == []
 
 
-def test_concrete_adapter_construction_has_one_composition_path() -> None:
+@pytest.fixture(scope="module")
+def adapter_composition_inventory() -> tuple[tuple[Path, frozenset[str], tuple[str, ...]], ...]:
+    """Freeze complete-source imports and ordered calls, preserving multiplicity."""
+    inventory = []
+    for path in _python_files(APP_ROOT):
+        imports, calls = imported_symbols_and_calls(_tree(path))
+        inventory.append((path, frozenset(imports), tuple(calls)))
+    return tuple(inventory)
+
+
+def _assert_concrete_adapter_composition(
+    inventory: tuple[tuple[Path, frozenset[str], tuple[str, ...]], ...],
+) -> None:
     factory_calls: list[Path] = []
     adapter_calls: list[Path] = []
     concrete_imports: list[Path] = []
@@ -289,8 +302,7 @@ def test_concrete_adapter_construction_has_one_composition_path() -> None:
     agent_calls: list[Path] = []
     observability_imports: list[Path] = []
     observability_calls: list[Path] = []
-    for path in _python_files(APP_ROOT):
-        imports, calls = imported_symbols_and_calls(_tree(path))
+    for path, imports, calls in inventory:
         if imports & CONCRETE_ADAPTER_MODULES:
             concrete_imports.append(path)
         if AGENT_ADAPTER_MODULE in imports:
@@ -329,6 +341,10 @@ def test_concrete_adapter_construction_has_one_composition_path() -> None:
     assert observability_calls == [OBSERVABILITY_COMPOSITION_ROOT] * 3
 
 
+def test_concrete_adapter_construction_has_one_composition_path(adapter_composition_inventory) -> None:
+    _assert_concrete_adapter_composition(adapter_composition_inventory)
+
+
 @pytest.mark.parametrize("source", [
     "from app.interfaces.external_services import ExternalServiceAdapterFactory as factory\nfactory[object]('extra')\n",
     "from app.interfaces.external_services import ExternalServiceAdapterFactory\nfactory: object = ExternalServiceAdapterFactory\nfactory[object]('extra')\n",
@@ -336,15 +352,16 @@ def test_concrete_adapter_construction_has_one_composition_path() -> None:
     "from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime as runtime\nruntime(configuration)\n",
     "import app.adapters.project_agents.openai_agent_sdk as sdk\nsdk.OpenAIAgentSdkProjectGuideRuntime(configuration)\n",
 ])
-def test_composition_proof_rejects_aliased_factories_and_concrete_runtimes(tmp_path, monkeypatch, source):
-    import sys
-
-    paths = _python_files(APP_ROOT)
+def test_composition_proof_rejects_aliased_factories_and_concrete_runtimes(
+    tmp_path, adapter_composition_inventory, source,
+):
+    _assert_concrete_adapter_composition(adapter_composition_inventory)
     injected = tmp_path / "extra.py"
     injected.write_text(source)
-    monkeypatch.setattr(sys.modules[__name__], "_python_files", lambda *_: (*paths, injected))
+    imports, calls = imported_symbols_and_calls(_tree(injected))
+    injected_inventory = (*adapter_composition_inventory, (injected, frozenset(imports), tuple(calls)))
     with pytest.raises(AssertionError):
-        test_concrete_adapter_construction_has_one_composition_path()
+        _assert_concrete_adapter_composition(injected_inventory)
 
 
 def test_s3_adapter_exposes_only_required_immutable_object_operations() -> None:
@@ -616,12 +633,18 @@ def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> 
         "MaterializationFacts", "PreparedMaterialization", "MaterializationAuthorityPort",
         "PostSubmissionMaterializationUnavailable",
         "PostSubmissionMaterializationFailure",
-        "SubmissionMaterialEntry",
+        "ExternalCheckerGrantReference",
         "SubmissionMaterialView",
         "PostSubmissionMaterialConsumer",
         "PostSubmissionMaterializationResult",
         "PostSubmissionMaterializationPort",
     }
+    material_classes = {
+        node.name: node
+        for node in _tree(CHECKER_MATERIAL_API).body
+        if isinstance(node, ast.ClassDef)
+    }
+    assert set(material_classes) == {"SubmissionMaterialEntry"}
     assert {
         node.name
         for node in classes["PostSubmissionMaterializationPort"].body
@@ -631,8 +654,28 @@ def test_checker_materialization_contract_has_one_canonical_consumer_owner() -> 
     assert "Materialization" not in artifact_api.read_text(encoding="utf-8")
 
 
-def test_checker_custody_ports_have_exact_owner_and_art_consumers() -> None:
-    """Allow only named CHECKERS consumers and ART implementations of custody ports."""
+def _imported_modules(path: Path, tree: ast.Module) -> frozenset[str]:
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            package = ".".join(path.parent.relative_to(BACKEND_ROOT).parts)
+            module = resolve_name("." * node.level + (node.module or ""), package)
+            modules.add(module)
+            modules.update(f"{module}.{alias.name}" for alias in node.names)
+        elif isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+    return frozenset(modules)
+
+
+@pytest.fixture(scope="module")
+def checker_custody_import_inventory() -> tuple[tuple[Path, frozenset[str]], ...]:
+    """Freeze imports from every actual APP source without sharing mutable ASTs."""
+    return tuple((path, _imported_modules(path, _tree(path))) for path in _python_files(APP_ROOT))
+
+
+def _assert_checker_custody_consumers(
+    inventory: tuple[tuple[Path, frozenset[str]], ...],
+) -> None:
     expected = {
         "app.modules.checkers.api.output_custody": {
             "app/adapters/artifacts/__init__.py",
@@ -646,23 +689,17 @@ def test_checker_custody_ports_have_exact_owner_and_art_consumers() -> None:
         "app.modules.checkers.api.materialization": {
             "app/modules/authorization/domain/post_submit.py",
             "app/modules/authorization/post_submit_authorization.py",
-            "app/adapters/artifacts/__init__.py",
-            "app/modules/artifacts/post_submit_materialization.py",
-            "app/modules/artifacts/post_submit_selection.py",
-            "app/modules/checkers/execution.py",
-        },
+                "app/adapters/artifacts/__init__.py",
+                "app/modules/artifacts/post_submit_materialization.py",
+                "app/modules/artifacts/post_submit_selection.py",
+                "app/modules/artifacts/selected_pre_submit_admission.py",
+                "app/modules/checkers/default_checker.py",
+                "app/modules/checkers/execution.py",
+                "app/modules/checkers/selected_pre_submit_execution.py",
+            },
     }
     actual = {module: set() for module in expected}
-    for path in _python_files(APP_ROOT):
-        modules: set[str] = set()
-        for node in ast.walk(_tree(path)):
-            if isinstance(node, ast.ImportFrom):
-                package = ".".join(path.parent.relative_to(BACKEND_ROOT).parts)
-                module = resolve_name("." * node.level + (node.module or ""), package)
-                modules.add(module)
-                modules.update(f"{module}.{alias.name}" for alias in node.names)
-            elif isinstance(node, ast.Import):
-                modules.update(alias.name for alias in node.names)
+    for path, modules in inventory:
         for module in modules & expected.keys():
             actual[module].add(path.relative_to(BACKEND_ROOT).as_posix())
     assert actual == expected
@@ -685,12 +722,19 @@ def test_checker_custody_ports_have_exact_owner_and_art_consumers() -> None:
     }
 
 
+def test_checker_custody_ports_have_exact_owner_and_art_consumers(
+    checker_custody_import_inventory,
+) -> None:
+    """Allow only named CHECKERS consumers and ART implementations of custody ports."""
+    _assert_checker_custody_consumers(checker_custody_import_inventory)
+
+
 @pytest.mark.parametrize("port", ["output_custody", "materialization"])
 @pytest.mark.parametrize("form", ["symbol", "module", "parent", "relative", "relative_parent"])
-def test_checker_custody_inventory_rejects_unregistered_import(monkeypatch, port, form):
+def test_checker_custody_inventory_rejects_unregistered_import(
+    checker_custody_import_inventory, port, form,
+):
     """Alternate import spelling must not conceal an additional API consumer."""
-    import sys
-
     statement = {
         "symbol": f"from app.modules.checkers.api.{port} import AnyContract",
         "module": f"import app.modules.checkers.api.{port} as custody",
@@ -698,17 +742,18 @@ def test_checker_custody_inventory_rejects_unregistered_import(monkeypatch, port
         "relative": f"from .modules.checkers.api.{port} import AnyContract",
         "relative_parent": f"from .modules.checkers.api import {port} as custody",
     }[form]
-    original = _tree
-
-    def injected(path):
-        tree = original(path)
-        if path == APP_ROOT / "main.py":
-            tree.body.extend(ast.parse(statement).body)
-        return tree
-
-    monkeypatch.setattr(sys.modules[__name__], "_tree", injected)
+    _assert_checker_custody_consumers(checker_custody_import_inventory)
+    main = APP_ROOT / "main.py"
+    assert main in {path for path, _ in checker_custody_import_inventory}
+    injected_tree = _tree(main)
+    injected_tree.body.extend(ast.parse(statement).body)
+    injected_modules = _imported_modules(main, injected_tree)
+    injected_inventory = tuple(
+        (path, injected_modules if path == main else modules)
+        for path, modules in checker_custody_import_inventory
+    )
     with pytest.raises(AssertionError):
-        test_checker_custody_ports_have_exact_owner_and_art_consumers()
+        _assert_checker_custody_consumers(injected_inventory)
 
 
 def test_submission_preparation_http_request_never_carries_prepared_authority() -> None:

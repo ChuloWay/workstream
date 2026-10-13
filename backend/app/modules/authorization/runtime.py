@@ -36,6 +36,7 @@ from app.modules.authorization.domain.assignment_invalidation import AssignmentI
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.post_submit_routing import PostSubmitRoutingResourceContext
 from app.modules.authorization.domain.post_submit import PostSubmitResourceContext
+from app.modules.authorization.domain.pre_submit import PreSubmitResourceContext
 from app.modules.authorization.domain.guide_activation import ProjectGuideActivationResourceContext
 from app.modules.authorization.domain.lifecycle import ReviewLifecycleActivationContract
 from app.modules.authorization.service_actor_schemas import ServiceActorProvisionResourceContext
@@ -1064,6 +1065,7 @@ AuthorizationResourceContext = (
     | PostPolicyResourceContext
     | AssignmentInvalidationResourceContext
     | OutboxDispatchResourceContext
+    | PreSubmitResourceContext
     | PostSubmitResourceContext
     | PostSubmitRoutingResourceContext
     | ProjectSetupRunMutationResourceContext

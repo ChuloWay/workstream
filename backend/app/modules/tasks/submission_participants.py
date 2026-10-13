@@ -1,11 +1,12 @@
 """Private TASK composition ports; public TASK facts remain dependency-independent."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from typing import Protocol
 from uuid import UUID
 
-from app.modules.checkers.api import SubmissionPacketView
-from app.modules.checkers.api.post_submit import PostSubmissionEvaluationContent
+from app.modules.checkers.api.pre_submit_material import SubmissionPacketView
+from app.modules.checkers.api.external_policy import LockedExternalPostSubmitPolicy
+from app.modules.checkers.api.selected_post_submit import SelectedPostSubmissionContent
 from app.modules.projects.api import ProjectLockedPolicyContextFacts
 from app.modules.tasks.api import TaskSubmissionContextFacts
 
@@ -27,11 +28,21 @@ class SubmissionArtifactBindingFacts:
     binding_decision_id: UUID
     archive_sha256: str
     byte_count: int
+    selected_evaluation_content: SelectedPostSubmissionContent
 
 
 @dataclass(frozen=True, slots=True)
 class SubmissionArtifactAdmissionResult(SubmissionArtifactBindingFacts):
-    evaluation_content: PostSubmissionEvaluationContent
+    selected_post_submit_policy: LockedExternalPostSubmitPolicy = dataclass_field(kw_only=True)
+    selected_evaluation_content: SelectedPostSubmissionContent
+
+    def __post_init__(self) -> None:
+        """Bind the sole POST contract to the policy admitted by ART."""
+        if (
+            type(self.selected_evaluation_content) is not SelectedPostSubmissionContent
+            or self.selected_evaluation_content.policy != self.selected_post_submit_policy
+        ):
+            raise ValueError("external POST admission policy differs")
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +55,7 @@ class SubmissionArtifactReplayRequest:
     submission_id: UUID
     submission_version: int
     packet_sha256: str
+    task_context: TaskSubmissionContextFacts
 
 
 class SubmissionArtifactAdmissionPort(Protocol):

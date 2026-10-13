@@ -74,7 +74,8 @@ class SubmissionBindingResourceContext(BaseModel):
     resource_type: Literal["submission_binding"]
     resource_id: UUID
     admission_id: UUID
-    evidence_set_id: UUID
+    evidence_set_id: UUID | None
+    selected_pre_submit_run_id: UUID | None
     actor_profile_id: UUID
     identity_link_id: UUID
     project_id: UUID
@@ -110,6 +111,10 @@ class SubmissionBindingResourceContext(BaseModel):
             self.predecessor_submission_version is None
         ):
             raise ValueError("submission binding predecessor is incomplete")
+        if (self.evidence_set_id is None) == (
+            self.selected_pre_submit_run_id is None
+        ):
+            raise ValueError("submission binding PRE lineage is incomplete")
         if (self.predecessor_submission_id is None) != (
             self.checker_remediation_manifest_id is None
         ):

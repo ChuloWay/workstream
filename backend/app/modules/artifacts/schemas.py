@@ -99,9 +99,26 @@ class CheckerOutputAdmissionAuthority(Protocol):
 class SubmissionBundleArtifactAdmissionRequest:
     """One passing prepared bundle selected for durable provider intent."""
 
-    pre_submit_evidence_set_id: UUID
+    pre_submit_evidence_set_id: UUID | None
     custody: object
     replay_durable_intent_id: UUID | None
+    selected_pre_submit_run_id: UUID | None = None
+    selected_terminal_digest: str | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.pre_submit_evidence_set_id is not None
+            or self.selected_pre_submit_run_id is None
+            or self.selected_terminal_digest is None
+            or (
+                self.selected_terminal_digest is not None
+                and (
+                    len(self.selected_terminal_digest) != 71
+                    or not self.selected_terminal_digest.startswith("sha256:")
+                )
+            )
+        ):
+            raise ValueError("submission bundle admission lineage is invalid")
 
     @property
     def source(self) -> CommittedArtifactSource:
@@ -191,7 +208,7 @@ class SubmissionBundleDurableIntentAuthorityFacts:
     predecessor_submission_id: UUID | None
     predecessor_submission_version: int | None
     checker_remediation_manifest_id: UUID | None = field(default=None, kw_only=True)
-    pre_submit_evidence_set_id: UUID
+    pre_submit_evidence_set_id: UUID | None
     prepared_generation_id: UUID
     guide_id: UUID
     guide_version: str
@@ -204,12 +221,24 @@ class SubmissionBundleDurableIntentAuthorityFacts:
     effective_plan_sha256: str
     semantic_manifest_id: UUID
     semantic_manifest_sha256: str
+    semantic_manifest_body: dict[str, object]
+    packet_sha256: str
     archive_sha256: str
     archive_byte_count: int
     media_type: str
     storage_scheme: str
     operation_identity: str
     replay_durable_intent_id: UUID | None
+    selected_pre_submit_run_id: UUID | None = None
+    selected_terminal_digest: str | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            self.pre_submit_evidence_set_id is not None
+            or self.selected_pre_submit_run_id is None
+            or self.selected_terminal_digest is None
+        ):
+            raise ValueError("submission bundle authority lineage is invalid")
 
 
 class ArtifactInternalResourceType(StrEnum):

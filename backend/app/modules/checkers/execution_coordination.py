@@ -20,9 +20,12 @@ from app.modules.checkers.api.execution import (
     VerifiedMaterialFacts,
     VerifiedEvaluationCompletion,
 )
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmitCurrentResultReference,
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    validate_execution_request,
+)
+from app.modules.checkers.api.selected_post_submit import (
+    SelectedPostSubmitCurrentResultReference,
 )
 from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
@@ -50,10 +53,10 @@ class EvaluationCoordinator:
         self._tasks = tasks
 
     async def reserve_current_evaluation(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> EvaluationReservation:
         """Serialize initial creation, exact replay and the next current generation."""
-        request = PostSubmissionEvaluationRequest.model_validate(request)
+        request = validate_execution_request(request)
         with self._session.no_autoflush:
             can_create = await self._lock_task_scope(request)
             if not can_create:
@@ -64,7 +67,7 @@ class EvaluationCoordinator:
         return await self._reserve_after_task_lock(request)
 
     async def _reserve_after_task_lock(
-        self, request: PostSubmissionEvaluationRequest, *, terminal_source_id: UUID | None = None,
+        self, request: PostSubmissionExecutionRequest, *, terminal_source_id: UUID | None = None,
     ) -> EvaluationReservation:
         """Use the existing CHECKERS locks after the caller has retained TASK custody."""
         require_transaction(self._session)
@@ -128,8 +131,12 @@ class EvaluationCoordinator:
             supersedes_checker_run_id=prior.id if prior else None,
             locked_guide_version=context.guide_version,
             locked_post_submit_checker_policy_id=str(context.post_policy_id),
-            locked_post_submit_checker_policy_version=context.post_policy_version,
+            locked_post_submit_checker_policy_version=(
+                context.post_policy_version
+            ),
             locked_post_submit_checker_policy_hash=context.post_policy_hash,
+            selected_post_submit_policy_sha256=request.policy.policy_sha256,
+            selected_post_submit_policy_body=request.policy.model_dump(mode="json"),
             locked_review_policy_id=str(context.review_policy_id),
             locked_review_policy_generation=context.review_generation,
             locked_review_policy_hash=context.review_hash,
@@ -187,7 +194,7 @@ class EvaluationCoordinator:
             submission_id=submission_id, event_id=event_id,
         )
 
-    async def _lock_task_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+    async def _lock_task_scope(self, request: PostSubmissionExecutionRequest) -> bool:
         """Retain root-transaction TASK custody before any coordination fence lock."""
         require_transaction(self._session)
         connection = await self._session.connection()
@@ -205,7 +212,7 @@ class EvaluationCoordinator:
             raise CheckerExecutionUnavailable("checker_reservation_scope_unavailable")
         return can_create
 
-    async def _replay(self, request: PostSubmissionEvaluationRequest) -> CheckerRun | None:
+    async def _replay(self, request: PostSubmissionExecutionRequest) -> CheckerRun | None:
         """Read an exact stored envelope; never repair or restore its current fence."""
         replay = await self._session.scalar(select(CheckerRun).where(
             CheckerRun.evaluation_request_id == str(request.evaluation_request_id),
@@ -219,19 +226,19 @@ class EvaluationCoordinator:
         return replay
 
     async def read_current_result(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> CompletedEvaluation:
         """Return only a locked completed result matching the entire current request."""
-        request = PostSubmissionEvaluationRequest.model_validate(request)
+        request = validate_execution_request(request)
         with self._session.no_autoflush:
             await self._lock_task_scope(request)
             run = await ExecutionRepository(self._session).lock_current(request)
         if run.status != "completed":
             raise CheckerExecutionUnavailable("checker_current_result_unavailable")
         result = stored_result(run)
-        reference = PostSubmitCurrentResultReference(
+        reference = SelectedPostSubmitCurrentResultReference(
             **result.model_dump(
-                include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"}
+                include=set(SelectedPostSubmitCurrentResultReference.model_fields) - {"schema_version"}
             )
         )
         reference.validate_result(result)
@@ -316,7 +323,7 @@ class CurrentExecution:
 
 
 class CheckerOutputReservations:
-    """Current structural handlers have exactly zero output slots."""
+    """Selected evidence-only checker executions have no artifact output slots."""
 
     def __init__(self, session: AsyncSession):
         """Resolve output custody within the supplied CHECKERS session."""

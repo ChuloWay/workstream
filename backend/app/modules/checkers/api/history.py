@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict
 
 CheckerStatus = Literal["queued", "running", "completed", "infrastructure_failed"]
 CheckerResultStatus = Literal["passed", "warning", "failed"]
-CheckerSeverity = Literal["info", "low", "medium", "high", "critical"]
+CheckerSeverity = Literal["info", "low", "medium", "high", "critical", "error"]
 CheckerRoutingRecommendation = Literal["not_evaluated", "allow_review", "needs_revision", "task_setup_blocked"]
 CheckerOutcomeSource = Literal["none", "auto_checker"]
 

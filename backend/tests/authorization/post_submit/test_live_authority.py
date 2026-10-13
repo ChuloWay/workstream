@@ -103,7 +103,7 @@ async def test_revoked_after_consumer_cannot_publish(tmp_path, isolated_database
     async with material_fixture(tmp_path, isolated_database_env) as h:
         reserved = await reserve(h)
         entered, release = asyncio.Event(), asyncio.Event()
-        original = execution._StructuralConsumer.evaluate
+        original = execution._SelectedExternalConsumer.evaluate
         calls = []
 
         async def paused(consumer, request, material):
@@ -113,7 +113,7 @@ async def test_revoked_after_consumer_cannot_publish(tmp_path, isolated_database
             await release.wait()
             return value
 
-        monkeypatch.setattr(execution._StructuralConsumer, "evaluate", paused)
+        monkeypatch.setattr(execution._SelectedExternalConsumer, "evaluate", paused)
         operation = asyncio.create_task(live_executor(h).evaluate_post_submission(h.request))
         try:
             await asyncio.wait_for(entered.wait(), 15)
@@ -146,8 +146,7 @@ async def test_execution_identity_substitution_denies_before_material_access(tmp
                 reservation = reservation.model_copy(update={field: getattr(foreign.lease.reservation, field)})
             elif field == "project_id":
                 request = change_request(request, project_id=other.request.project_id,
-                    policy=other.request.policy, expected_context=other.request.expected_context,
-                    structural_input=other.request.structural_input)
+                    policy=other.request.policy, expected_context=other.request.expected_context)
             elif field == "evaluation_request_id":
                 request = change_request(request, evaluation_request_id=other.request.evaluation_request_id)
             else:

@@ -37,10 +37,9 @@ async def packet_source(
     database_url,
     *,
     lease_duration=timedelta(days=1),
-    completed_source_factory=completed_source,
     **source_options,
 ):
-    async with completed_source_factory(tmp_path, database_url, **source_options) as h:
+    async with completed_source(tmp_path, database_url, **source_options) as h:
         await prepare_packet(h, lease_duration=lease_duration)
         yield h
 

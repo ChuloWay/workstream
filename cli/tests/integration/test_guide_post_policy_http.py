@@ -15,6 +15,45 @@ SELECTORS = (PROJECT, GUIDE, COMPILATION, POLICY)
 LARGE = 9223372036854775808
 
 
+def schema(schema_id):
+    return {
+        "schema_id": schema_id,
+        "schema_version": "v1",
+        "document": {"type": "object", "additionalProperties": False},
+        "schema_sha256": HASH,
+    }
+
+
+def binding(requirement_id="quality_review", capability_id="acme.quality_review"):
+    return {
+        "requirement_id": requirement_id,
+        "stage": "post_submit",
+        "registry": {
+            "capability_id": capability_id,
+            "capability_version": "v1.2.3",
+            "phase": "post_submit",
+            "image_digest": HASH,
+            "configuration_schema": schema(f"{capability_id}.configuration"),
+            "input_schema": schema("external_checker_post_submit_input"),
+            "output_schema": schema("external_checker_result"),
+            "resources": {
+                "cpu_millis": 500,
+                "memory_bytes": 128 * 1024 * 1024,
+                "deadline_ms": 30_000,
+                "maximum_output_bytes": 32_768,
+            },
+            "registry_entry_id": POLICY,
+            "entry_digest": HASH,
+            "registration_operation_id": OTHER,
+            "registered_by_actor_profile_id": GUIDE,
+            "authorization_decision_event_id": SETUP,
+            "created_at": "2026-10-12T08:30:00Z",
+        },
+        "configuration": {},
+        "configuration_sha256": HASH,
+    }
+
+
 def package():
     source = proposal()
     source["target"].update(
@@ -40,26 +79,9 @@ def package():
             "predecessor_policy_id": None,
         },
         "policy": {
-            "schema_version": "post_submit_checker_policy",
-            "compiler_version": "workstream-post-submit-compiler",
-            "project_id": PROJECT,
-            "guide_version": source["target"]["guide_version"],
-            "catalogue_id": source["target"]["post_catalogue_id"],
-            "catalogue_source_version": "v0.1",
-            "catalogue_schema_version": source["target"][
-                "post_catalogue_schema_version"
-            ],
-            "catalogue_manifest_sha256": HASH,
-            "entries": [
-                {
-                    "checker_id": "content_required",
-                    "definition_version": "v0.1",
-                    "implementation_version": "content_required",
-                    "classification": "platform_default",
-                    "configuration": {},
-                }
-            ],
-            "blocking_severities": ["critical", "high"],
+            "schema_version": "external_post_submit_policy.v1",
+            "entries": [binding()],
+            "policy_sha256": HASH,
         },
         "proposal": source,
         "activation_context": {
@@ -119,18 +141,6 @@ def test_post_policy_exact_read_history_defaults_and_terminal_safety(cli):
         historical["proposal"].update(current=False, post_submit_policy_id=None)
         historical["target"]["predecessor_policy_id"] = GUIDE
         bodies.append(historical)
-        defaults = deepcopy(historical)
-        for key in (
-            "schema_version",
-            "compiler_version",
-            "catalogue_id",
-            "catalogue_source_version",
-            "catalogue_schema_version",
-        ):
-            del defaults["policy"][key]
-        del defaults["correction"]["status"]
-        del defaults["target"]["predecessor_policy_id"]
-        bodies.append(defaults)
         for value in bodies:
             response["body"] = json.dumps(value).encode()
             result = invoke(cli, origin)
@@ -166,33 +176,39 @@ def test_post_policy_rejects_valid_uuid_selected_policy_substitution(cli):
         assert len(requests) == 1
 
 
-def test_post_policy_rejects_duplicate_checkers_and_noncanonical_severity_floor(cli):
+def test_post_policy_rejects_removed_catalogue_shape_and_noncanonical_bindings(cli):
     with http_fixture() as (origin, response, requests):
         value = package()
-        value["policy"]["blocking_severities"] = [
-            "critical",
-            "high",
-            "medium",
-            "low",
-            "info",
-        ]
+        value["policy"]["entries"] = []
         response["body"] = json.dumps(value).encode()
         assert invoke(cli, origin).returncode == 0
         duplicate = package()
         duplicate["policy"]["entries"] *= 2
         response["body"] = json.dumps(duplicate).encode()
         assert_failure(invoke(cli, origin), "invalid_api_response")
-        for severities in (
-            ["low", "info"],
-            ["high", "critical"],
-            ["critical", "high", "high"],
-            ["critical", "high", "unknown"],
-        ):
-            value = package()
-            value["policy"]["blocking_severities"] = severities
-            response["body"] = json.dumps(value).encode()
-            assert_failure(invoke(cli, origin), "invalid_api_response")
-        assert len(requests) == 6
+        unordered = package()
+        unordered["policy"]["entries"] = [
+            binding("z_review", "z.review"),
+            binding("a_review", "a.review"),
+        ]
+        response["body"] = json.dumps(unordered).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+        removed = package()
+        removed["policy"] = {
+            "schema_version": "post_submit_checker_policy",
+            "compiler_version": "workstream-post-submit-compiler",
+            "project_id": PROJECT,
+            "guide_version": "v1",
+            "catalogue_id": "workstream.post_submission_checkers",
+            "catalogue_source_version": "v0.1",
+            "catalogue_schema_version": "post_submission_checker_capability_projection",
+            "catalogue_manifest_sha256": HASH,
+            "entries": [],
+            "blocking_severities": ["critical", "high"],
+        }
+        response["body"] = json.dumps(removed).encode()
+        assert_failure(invoke(cli, origin), "invalid_api_response")
+        assert len(requests) == 4
 
 
 def test_post_policy_rejects_incomplete_malformed_and_cross_resource_packages(cli):
@@ -205,23 +221,21 @@ def test_post_policy_rejects_incomplete_malformed_and_cross_resource_packages(cl
         (("target", "policy_hash"), "bad"),
         (("target", "upstream", "acknowledged_warning_hashes"), [None]),
         (("target", "proposal", "setup_generation"), 0),
-        (("policy", "project_id"), OTHER),
-        (("policy", "guide_version"), "wrong"),
-        (("policy", "catalogue_manifest_sha256"), "sha256:" + "b" * 64),
+        (("policy", "policy_sha256"), "sha256:" + "b" * 64),
         (("policy", "entries"), [None]),
+        (("policy", "entries", 0, "stage"), "pre_submit"),
+        (("policy", "entries", 0, "configuration"), []),
+        (("policy", "entries", 0, "configuration_sha256"), "bad"),
+        (("policy", "entries", 0, "registry", "phase"), "pre_submit"),
         (
-            ("policy", "entries"),
-            [
-                {
-                    "checker_id": "a",
-                    "definition_version": "v0.1",
-                    "implementation_version": "a",
-                    "classification": "platform_default",
-                    "configuration": {"unexpected": True},
-                }
-            ],
+            ("policy", "entries", 0, "registry", "registry_entry_id"),
+            "550e8400-e29b-41d4-a716-446655440000",
         ),
-        (("policy", "blocking_severities"), [None, "high"]),
+        (("policy", "entries", 0, "registry", "created_at"), "not-a-time"),
+        (("policy", "entries", 0, "registry", "input_schema", "schema_id"), "wrong"),
+        (("policy", "entries", 0, "registry", "output_schema", "document"), []),
+        (("policy", "entries", 0, "registry", "resources", "cpu_millis"), 99),
+        (("policy", "entries", 0, "registry", "resources", "deadline_ms"), True),
         (("policy", "schema_version"), None),
         (("activation_context", "guide_mutation_generation"), True),
         (
@@ -262,9 +276,27 @@ def test_post_policy_rejects_incomplete_malformed_and_cross_resource_packages(cl
             del value[field]
             response["body"] = json.dumps(value).encode()
             assert_failure(invoke(cli, origin), "invalid_api_response")
+        for path, field in (
+            (("policy",), "policy_sha256"),
+            (("policy", "entries", 0), "configuration_sha256"),
+            (("policy", "entries", 0, "registry"), "entry_digest"),
+            (("policy", "entries", 0, "registry", "input_schema"), "document"),
+            (("policy", "entries", 0, "registry", "resources"), "deadline_ms"),
+        ):
+            value = package()
+            node = value
+            for key in path:
+                node = node[key]
+            del node[field]
+            response["body"] = json.dumps(value).encode()
+            assert_failure(invoke(cli, origin), "invalid_api_response")
         for path in (
             ("target",),
             ("policy",),
+            ("policy", "entries", 0),
+            ("policy", "entries", 0, "registry"),
+            ("policy", "entries", 0, "registry", "input_schema"),
+            ("policy", "entries", 0, "registry", "resources"),
             ("activation_context",),
             ("proposal",),
             ("proposal", "target"),
@@ -282,7 +314,7 @@ def test_post_policy_rejects_incomplete_malformed_and_cross_resource_packages(cl
             .encode()
         )
         assert_failure(invoke(cli, origin), "invalid_api_response")
-        assert len(requests) == len(mutations) + len(package()) + 6
+        assert len(requests) == len(mutations) + len(package()) + 15
 
 
 def test_post_policy_local_selectors_and_transport_fail_closed(cli):

@@ -10,8 +10,8 @@ from sqlalchemy import func, insert, update
 from app.adapters.outbox import outbox_append
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import COMPLETION_EVENT, EvaluationCompletion
-from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
-from app.modules.checkers.api.post_submit_catalogue import canonical_post_submit_bytes
+from app.modules.checkers.api.selected_post_submit import SelectedPostSubmitCurrentResultReference
+from app.modules.checkers.api.canonical_values import canonical_checker_bytes
 from app.modules.checkers.execution_results import classify_result
 from app.modules.checkers.models import CheckerResult, CheckerRun
 from app.modules.outbox.api import OutboxAppendInput
@@ -40,19 +40,24 @@ async def stage_terminal(session, facts, material, evidence_id):
     request, result = facts.request, facts.result
     run = await session.get(CheckerRun, str(result.attempt_id))
     classification = classify_result(request, result)
-    for order, member in enumerate(result.member_results):
+    for member in result.execution.external_members if result.execution else ():
         await session.execute(insert(CheckerResult).values(
             id=str(new_record_id()), checker_run_id=run.id, task_id=run.task_id,
-            submission_id=run.submission_id, member_order=order, checker_name=member.checker_id,
-            definition_version=member.definition_version, implementation_version=member.implementation_version,
-            status=member.status, severity=member.severity, code=member.code,
-            failure_category=member.failure_category,
-            counters=[item.model_dump(mode="json") for item in member.counters],
+            submission_id=run.submission_id, member_order=member.order,
+            checker_name=member.requirement_id,
+            definition_version=member.result.schema_version,
+            implementation_version=member.registry_entry_digest,
+            status=member.result.verdict,
+            severity="info" if member.result.verdict == "passed" else "error",
+            code=("passed" if member.result.verdict == "passed" else
+                  member.result.findings[0].code if member.result.findings else "invalid_output"),
+            failure_category="none" if member.result.verdict == "passed" else "submission_structure",
+            counters=[],
         ))
     event_id = None
     if result.outcome == "completed":
-        reference = PostSubmitCurrentResultReference(**result.model_dump(
-            include=set(PostSubmitCurrentResultReference.model_fields) - {"schema_version"},
+        reference = SelectedPostSubmitCurrentResultReference(**result.model_dump(
+            include=set(SelectedPostSubmitCurrentResultReference.model_fields) - {"schema_version"},
         ))
         event = EvaluationCompletion(
             project_id=request.project_id, task_id=request.task_id, submission_id=request.submission_id,
@@ -72,7 +77,7 @@ async def stage_terminal(session, facts, material, evidence_id):
         .where(CheckerRun.id == run.id)
         .values(
             status=result.outcome,
-            result_json=canonical_post_submit_bytes(result, exclude={"result_digest"}).decode(),
+            result_json=canonical_checker_bytes(result, exclude={"result_digest"}).decode(),
             result_digest=result.result_digest,
             material_custody=material,
             finalize_evidence_id=str(evidence_id),

@@ -16,6 +16,7 @@ from app.modules.artifacts.submission_manifest import (
     SubmissionChangeFailureCode,
     SubmissionChangeOutcome,
     SubmissionChangeRejectedError,
+    bind_submission_change,
     build_submission_manifest,
     evaluate_submission_change,
 )
@@ -116,6 +117,16 @@ def test_exact_archive_and_semantically_unchanged_reject_distinctly() -> None:
         predecessor_exists=True,
         current_predecessor=semantic_predecessor,
     )
+
+    bound = bind_submission_change(
+        commitment=_commitment(),
+        manifest=manifest,
+        predecessor=semantic_predecessor,
+        predecessor_exists=True,
+        current_predecessor=semantic_predecessor,
+    )
+    assert bound.outcome is SubmissionChangeOutcome.UNCHANGED
+    assert bound.predecessor is semantic_predecessor
 
 
 def test_predecessor_advancement_rejects_stale_selector_before_comparison() -> None:

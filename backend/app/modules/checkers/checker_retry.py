@@ -17,9 +17,8 @@ from app.modules.checkers.api.execution import (
     CheckerRetryPreparation, CheckerRetryResult, CheckerRetrySource,
     CheckerRetrySuccessor, EvaluationTaskGuard,
 )
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest, make_post_submit_request,
-)
+from app.modules.checkers.api.evaluation_contract import PostSubmissionExecutionRequest
+from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_request
 from app.modules.checkers.execution_coordination import EvaluationCoordinator
 from app.modules.checkers.execution_repository import (
     require_transaction, stored_request, stored_result,
@@ -28,7 +27,7 @@ from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun
 from app.modules.outbox.api import OutboxAppendInput, OutboxAppendPort
 
 
-def _source_from_run(run: CheckerRun) -> tuple[PostSubmissionEvaluationRequest, CheckerRetrySource]:
+def _source_from_run(run: CheckerRun) -> tuple[PostSubmissionExecutionRequest, CheckerRetrySource]:
     """Require a real terminal result/finalization before any new Operator effect."""
     if (
         run.status != "infrastructure_failed" or run.finalize_evidence_id is None
@@ -168,13 +167,14 @@ class CheckerRetryService:
         )
         handle = await self._authorization.prepare(preparation)
         try:
-            next_request = make_post_submit_request(**{
+            request_fields = {
                 **source_request.model_dump(exclude={
                     "evaluation_request_id", "evaluation_generation", "request_sha256",
                 }),
                 "evaluation_request_id": new_record_id(),
                 "evaluation_generation": source.source_generation + 1,
-            })
+            }
+            next_request = make_selected_post_submit_request(**request_fields)
             reserved = await self._evaluations._reserve_after_task_lock(
                 next_request, terminal_source_id=source.source_run_id,
             )

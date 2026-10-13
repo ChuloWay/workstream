@@ -153,7 +153,15 @@ async def compilation_and_projections(
         ProjectGuideCompilationExecutionCommand, ProjectGuideCompilationExecutionClassification,
     )
     runtime = _Runtime(outcome)
-    receipt = await _port(factory, runtime).execute(
+    receipt = await _port(
+        factory,
+        runtime,
+        checker_capabilities=(
+            compilation_context.checker_capabilities
+            if compilation_context.checker_capabilities.definitions
+            else None
+        ),
+    ).execute(
         ProjectGuideCompilationExecutionCommand(attempt_id=requested.attempt_id)
     )
     assert receipt.classification is ProjectGuideCompilationExecutionClassification.PERSISTED

@@ -24,6 +24,8 @@ class PermissionId(StrEnum):
     ACTOR_IDENTITY_LINK_REACTIVATE = "actor.identity_link.reactivate"
     TASK_ASSIGNMENT_AUTHORITY_RECONCILE = "task.assignment.authority_reconcile"
     TASK_POST_SUBMIT_ROUTE = "task.post_submit.route"
+    CHECKER_PRE_SUBMIT_EXECUTE = "checker.pre_submit.execute"
+    CHECKER_PRE_SUBMIT_FINALIZE = "checker.pre_submit.finalize"
     CHECKER_POST_SUBMIT_EXECUTE = "checker.post_submit.execute"
     CHECKER_POST_SUBMIT_FINALIZE = "checker.post_submit.finalize"
     OUTBOX_DISPATCH = "outbox.dispatch"
@@ -143,6 +145,8 @@ class ActionId(StrEnum):
     ACTOR_IDENTITY_LINK_REACTIVATE = "actor.identity_link.reactivate"
     TASK_ASSIGNMENT_AUTHORITY_RECONCILE = "task.assignment.authority_reconcile"
     TASK_POST_SUBMIT_ROUTE = "task.post_submit.route"
+    CHECKER_PRE_SUBMIT_EXECUTE = "checker.pre_submit.execute"
+    CHECKER_PRE_SUBMIT_FINALIZE = "checker.pre_submit.finalize"
     CHECKER_POST_SUBMIT_EXECUTE = "checker.post_submit.execute"
     CHECKER_POST_SUBMIT_FINALIZE = "checker.post_submit.finalize"
     OUTBOX_DISPATCH = "outbox.dispatch"
@@ -675,6 +679,8 @@ ACTION_DEFINITIONS = (
         PermissionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
         ActionOwner.AUTH_ART_02D_INTERNAL,
     ),
+    _active(ActionId.CHECKER_PRE_SUBMIT_EXECUTE, PermissionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionOwner.PILOT_04),
+    _active(ActionId.CHECKER_PRE_SUBMIT_FINALIZE, PermissionId.CHECKER_PRE_SUBMIT_FINALIZE, ActionOwner.PILOT_04),
     _active(ActionId.CHECKER_POST_SUBMIT_EXECUTE, PermissionId.CHECKER_POST_SUBMIT_EXECUTE, ActionOwner.ARCH_04D2),
     _active(ActionId.CHECKER_POST_SUBMIT_FINALIZE, PermissionId.CHECKER_POST_SUBMIT_FINALIZE, ActionOwner.ARCH_04D2),
     _active(
@@ -740,6 +746,8 @@ NEW_PERMISSION_IDS = frozenset(
     {
         PermissionId.CHECKER_POST_SUBMIT_EXECUTE,
         PermissionId.CHECKER_POST_SUBMIT_FINALIZE,
+        PermissionId.CHECKER_PRE_SUBMIT_EXECUTE,
+        PermissionId.CHECKER_PRE_SUBMIT_FINALIZE,
         PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE,
         PermissionId.OUTBOX_DISPATCH,
         PermissionId.PROJECT_SETUP_DIAGNOSTIC_READ,
@@ -774,9 +782,9 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 78 or len(ACTION_IDS) != 150:
+    if len(PERMISSION_IDS) != 80 or len(ACTION_IDS) != 152:
         raise RuntimeError("authorization catalogue count mismatch")
-    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 29:
+    if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 31:
         raise RuntimeError("authorization permission boundary mismatch")
 
 
@@ -861,8 +869,7 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         ActionId.PROJECT_ROLE_GRANT_READ,
         ActionId.PROJECT_ROLE_GRANT_ISSUE,
         ActionId.PROJECT_ROLE_GRANT_REVOKE,
-        ActionId.PROJECT_CREATE,
-        ActionId.PROJECT_GUIDE_CREATE,
+        ActionId.PROJECT_CREATE, ActionId.PROJECT_GUIDE_CREATE,
         ActionId.PROJECT_GUIDE_UPDATE,
         ActionId.PROJECT_GUIDE_SOURCE_SNAPSHOT_CREATE,
         ActionId.PROJECT_GUIDE_COMPILATION_REQUEST,
@@ -897,8 +904,8 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         ActionId.ARTIFACT_PUT_ATTEMPT_RESOLVE,
         ActionId.ARTIFACT_PRE_SUBMIT_CHECKER_INPUT_MATERIALIZE,
         ActionId.ARTIFACT_POST_SUBMIT_CHECKER_INPUT_MATERIALIZE,
-        ActionId.CHECKER_POST_SUBMIT_EXECUTE,
-        ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+        ActionId.CHECKER_POST_SUBMIT_EXECUTE, ActionId.CHECKER_POST_SUBMIT_FINALIZE,
+        ActionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionId.CHECKER_PRE_SUBMIT_FINALIZE,
         ActionId.COMPENSATION_ADAPTER_BINDING_READ,
         ActionId.COMPENSATION_ADAPTER_BINDING_CREATE,
         ActionId.COMPENSATION_ADAPTER_BINDING_SUSPEND,
@@ -930,6 +937,7 @@ ACTION_BY_ID = _index_actions(ACTION_DEFINITIONS)
 
 _SERVICE_ACTIONS = {
     ServiceIdentity.TASK_POST_SUBMIT_ROUTER: frozenset({ActionId.TASK_POST_SUBMIT_ROUTE}),
+    ServiceIdentity.CHECKER_PRE_SUBMIT: frozenset({ActionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionId.CHECKER_PRE_SUBMIT_FINALIZE}),
     ServiceIdentity.CHECKER_POST_SUBMIT: frozenset({ActionId.CHECKER_POST_SUBMIT_EXECUTE, ActionId.CHECKER_POST_SUBMIT_FINALIZE}),
     ServiceIdentity.TASK_ASSIGNMENT_RECONCILER: frozenset({ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE}),
     ServiceIdentity.OUTBOX_DISPATCHER: frozenset({ActionId.OUTBOX_DISPATCH}),
@@ -982,6 +990,8 @@ _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
     (identity, action)
     for identity, action in (
         (ServiceIdentity.TASK_POST_SUBMIT_ROUTER, ActionId.TASK_POST_SUBMIT_ROUTE),
+        (ServiceIdentity.CHECKER_PRE_SUBMIT, ActionId.CHECKER_PRE_SUBMIT_EXECUTE),
+        (ServiceIdentity.CHECKER_PRE_SUBMIT, ActionId.CHECKER_PRE_SUBMIT_FINALIZE),
         (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_POST_SUBMIT_EXECUTE),
         (ServiceIdentity.CHECKER_POST_SUBMIT, ActionId.CHECKER_POST_SUBMIT_FINALIZE),
         (ServiceIdentity.TASK_ASSIGNMENT_RECONCILER, ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE),
@@ -1026,6 +1036,8 @@ _EXPECTED_SERVICE_ACTION_MEMBERSHIPS = frozenset(
 
 
 _ACTIVE_SERVICE_ACTIONS = {
+    ActionId.CHECKER_PRE_SUBMIT_EXECUTE,
+    ActionId.CHECKER_PRE_SUBMIT_FINALIZE,
     ActionId.TASK_POST_SUBMIT_ROUTE,
     ActionId.CHECKER_POST_SUBMIT_EXECUTE,
     ActionId.CHECKER_POST_SUBMIT_FINALIZE,
@@ -1052,6 +1064,8 @@ def _index_service_actions(
 ) -> MappingProxyType[ServiceIdentity, frozenset[ActionId]]:
     expected_metadata = {
         ActionId.TASK_POST_SUBMIT_ROUTE: (PermissionId.TASK_POST_SUBMIT_ROUTE, ActionOwner.ARCH_04E2),
+        ActionId.CHECKER_PRE_SUBMIT_EXECUTE: (PermissionId.CHECKER_PRE_SUBMIT_EXECUTE, ActionOwner.PILOT_04),
+        ActionId.CHECKER_PRE_SUBMIT_FINALIZE: (PermissionId.CHECKER_PRE_SUBMIT_FINALIZE, ActionOwner.PILOT_04),
         ActionId.CHECKER_POST_SUBMIT_EXECUTE: (PermissionId.CHECKER_POST_SUBMIT_EXECUTE, ActionOwner.ARCH_04D2),
         ActionId.CHECKER_POST_SUBMIT_FINALIZE: (PermissionId.CHECKER_POST_SUBMIT_FINALIZE, ActionOwner.ARCH_04D2),
         ActionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE: (PermissionId.TASK_ASSIGNMENT_AUTHORITY_RECONCILE, ActionOwner.ARCH_03C1),

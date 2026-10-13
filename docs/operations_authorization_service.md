@@ -1311,14 +1311,19 @@ closes SQL before publishing event/project selectors. Failed publication is
 rediscovered; expired claims are recovered even if their handler was removed.
 Each delivery phase uses fresh AUTH/PREP and retains its exact decision reference.
 Unknown invoked effects remain terminal for reconciliation. The production
-registry contains only `TaskAssignmentAuthorityInvalidationRequested` version 1,
-with its separate exact feature authority. Unregistered event types stay unclaimed.
+registry contains assignment invalidation and the selected post-submit request
+and completion events, each with its separate exact feature authority.
+Unregistered event types stay unclaimed.
 Celery worker retries cover infrastructure failure with at most three retries and a
 30-second exponential delay; they never authorize repeating an invocation.
 
-Delivery requires Celery's prefork process pool. `deliver_event` has a 300-second
-hard execution limit, independent of its 240-second handler timeout and covering
-async shutdown as well. The prefork parent acknowledges a hard timeout instead
+Delivery requires Celery's prefork process pool. `deliver_event` has an exact
+3,660-second hard execution limit, covering the maximum 3,600-second delivery
+lease plus a fixed 60-second process-shutdown margin. Selected post-submit
+requests have a 3,520-second handler timeout; completion and assignment
+invalidation retain their 240-second handler timeout and 300-second lease.
+Task or broker-message overrides that change the hard limit are refused before
+SQL. This process limit also contains cancellation-resistant async shutdown. The prefork parent acknowledges a hard timeout instead
 of requeuing that timed-out invocation. A committed UNKNOWN remains terminal;
 if termination interrupts finalization, the existing expired-invocation recovery
 records UNKNOWN without calling the handler again. Ordinary Celery worker-loss

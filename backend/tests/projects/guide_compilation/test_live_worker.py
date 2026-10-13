@@ -116,7 +116,10 @@ def test_stale_coordinator_error_is_rejected_without_transport_retry(worker, mon
             raise ProjectGuideCompilationDeliveryError()
 
     monkeypatch.setattr(worker, "get_database_url", lambda: "postgresql+asyncpg://localhost/unit_test")
-    monkeypatch.setattr(worker, "_coordinator", lambda sessions: Coordinator())
+    async def coordinator(_sessions):
+        return Coordinator()
+
+    monkeypatch.setattr(worker, "_coordinator", coordinator)
 
     def forbidden(**kwargs):
         pytest.fail("stale delivery reached transport retry")

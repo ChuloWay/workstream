@@ -76,24 +76,57 @@ struct GrantReference {
     binding_digest: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 struct GrantManifest {
     protocol_version: String,
     grant_id: String,
     request_digest: String,
-    prepared_generation_id: String,
-    attempt_id: String,
-    attempt_request_digest: String,
-    archive_sha256: String,
-    archive_byte_count: u64,
-    semantic_manifest_sha256: String,
+    #[serde(flatten)]
+    identity: GrantIdentity,
     directories: Vec<String>,
     files: Vec<GrantFile>,
     binding_digest: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(tag = "phase", deny_unknown_fields)]
+enum GrantIdentity {
+    #[serde(rename = "pre_submit")]
+    PreSubmit {
+        prepared_generation_id: String,
+        attempt_id: String,
+        attempt_request_digest: String,
+        archive_sha256: String,
+        archive_byte_count: u64,
+        semantic_manifest_sha256: String,
+    },
+    #[serde(rename = "post_submit")]
+    PostSubmit {
+        submission_id: String,
+        submission_version: u64,
+        evaluation_request_id: String,
+        evaluation_request_digest: String,
+        evaluation_generation: u64,
+        attempt_id: String,
+        result_id: String,
+        lease_id: String,
+        lease_generation: u64,
+        lease_expires_at: String,
+        binding_id: String,
+        content_id: String,
+        replica_id: String,
+        content_sha256: String,
+        byte_count: u64,
+        evidence_id: String,
+        verification_receipt_id: String,
+        verification_job_id: String,
+        verification_generation: u64,
+        namespace_fingerprint: String,
+        semantic_manifest_sha256: String,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct GrantFile {
     normalized_path: String,
@@ -572,9 +605,6 @@ fn verify_grant(
 }
 
 fn grant_matches_request(manifest: &GrantManifest, request: &ValidatedRequest) -> bool {
-    if request.phase != "pre_submit" {
-        return false;
-    }
     let Some(identity) = request.value.get("identity").and_then(Value::as_object) else {
         return false;
     };
@@ -583,23 +613,124 @@ fn grant_matches_request(manifest: &GrantManifest, request: &ValidatedRequest) -
     };
     let Some(archive) = materials.iter().find_map(|item| {
         let object = item.as_object()?;
-        (object.get("role")?.as_str()? == "submission_archive").then_some(object)
+        (object.get("phase")?.as_str()? == request.phase
+            && object.get("role")?.as_str()? == "submission_archive")
+            .then_some(object)
     }) else {
         return false;
     };
     let semantic_manifest_sha256 = semantic_manifest_hash(manifest).ok();
-    identity
-        .get("prepared_generation_id")
-        .and_then(Value::as_str)
-        == Some(&manifest.prepared_generation_id)
-        && identity.get("attempt_id").and_then(Value::as_str) == Some(&manifest.attempt_id)
-        && identity
-            .get("attempt_request_digest")
-            .and_then(Value::as_str)
-            == Some(&manifest.attempt_request_digest)
-        && archive.get("sha256").and_then(Value::as_str) == Some(&manifest.archive_sha256)
-        && archive.get("byte_count").and_then(Value::as_u64) == Some(manifest.archive_byte_count)
-        && semantic_manifest_sha256.as_deref() == Some(&manifest.semantic_manifest_sha256)
+    match &manifest.identity {
+        GrantIdentity::PreSubmit {
+            prepared_generation_id,
+            attempt_id,
+            attempt_request_digest,
+            archive_sha256,
+            archive_byte_count,
+            semantic_manifest_sha256: expected_manifest,
+        } => {
+            request.phase == "pre_submit"
+                && identity
+                    .get("prepared_generation_id")
+                    .and_then(Value::as_str)
+                    == Some(prepared_generation_id)
+                && identity.get("attempt_id").and_then(Value::as_str) == Some(attempt_id)
+                && identity
+                    .get("attempt_request_digest")
+                    .and_then(Value::as_str)
+                    == Some(attempt_request_digest)
+                && archive
+                    .get("prepared_generation_id")
+                    .and_then(Value::as_str)
+                    == Some(prepared_generation_id)
+                && archive.get("attempt_id").and_then(Value::as_str) == Some(attempt_id)
+                && archive
+                    .get("attempt_request_digest")
+                    .and_then(Value::as_str)
+                    == Some(attempt_request_digest)
+                && archive.get("archive_sha256").and_then(Value::as_str) == Some(archive_sha256)
+                && archive.get("archive_byte_count").and_then(Value::as_u64)
+                    == Some(*archive_byte_count)
+                && archive
+                    .get("semantic_manifest_sha256")
+                    .and_then(Value::as_str)
+                    == Some(expected_manifest)
+                && semantic_manifest_sha256.as_deref() == Some(expected_manifest)
+        }
+        GrantIdentity::PostSubmit {
+            submission_id,
+            submission_version,
+            evaluation_request_id,
+            evaluation_request_digest,
+            evaluation_generation,
+            attempt_id,
+            result_id,
+            lease_id,
+            lease_generation,
+            lease_expires_at,
+            binding_id,
+            content_id,
+            replica_id,
+            content_sha256,
+            byte_count,
+            evidence_id,
+            verification_receipt_id,
+            verification_job_id,
+            verification_generation,
+            namespace_fingerprint,
+            semantic_manifest_sha256: expected_manifest,
+        } => {
+            request.phase == "post_submit"
+                && identity.get("submission_id").and_then(Value::as_str) == Some(submission_id)
+                && identity.get("submission_version").and_then(Value::as_u64)
+                    == Some(*submission_version)
+                && identity
+                    .get("evaluation_request_id")
+                    .and_then(Value::as_str)
+                    == Some(evaluation_request_id)
+                && identity
+                    .get("evaluation_request_digest")
+                    .and_then(Value::as_str)
+                    == Some(evaluation_request_digest)
+                && identity
+                    .get("evaluation_generation")
+                    .and_then(Value::as_u64)
+                    == Some(*evaluation_generation)
+                && identity.get("attempt_id").and_then(Value::as_str) == Some(attempt_id)
+                && identity.get("result_id").and_then(Value::as_str) == Some(result_id)
+                && identity.get("lease_id").and_then(Value::as_str) == Some(lease_id)
+                && identity.get("lease_generation").and_then(Value::as_u64)
+                    == Some(*lease_generation)
+                && identity.get("lease_expires_at").and_then(Value::as_str)
+                    == Some(lease_expires_at)
+                && archive.get("submission_id").and_then(Value::as_str) == Some(submission_id)
+                && archive.get("submission_version").and_then(Value::as_u64)
+                    == Some(*submission_version)
+                && archive.get("binding_id").and_then(Value::as_str) == Some(binding_id)
+                && archive.get("content_id").and_then(Value::as_str) == Some(content_id)
+                && archive.get("replica_id").and_then(Value::as_str) == Some(replica_id)
+                && archive.get("content_sha256").and_then(Value::as_str) == Some(content_sha256)
+                && archive.get("byte_count").and_then(Value::as_u64) == Some(*byte_count)
+                && archive.get("evidence_id").and_then(Value::as_str) == Some(evidence_id)
+                && archive
+                    .get("verification_receipt_id")
+                    .and_then(Value::as_str)
+                    == Some(verification_receipt_id)
+                && archive.get("verification_job_id").and_then(Value::as_str)
+                    == Some(verification_job_id)
+                && archive
+                    .get("verification_generation")
+                    .and_then(Value::as_u64)
+                    == Some(*verification_generation)
+                && archive.get("namespace_fingerprint").and_then(Value::as_str)
+                    == Some(namespace_fingerprint)
+                && archive
+                    .get("semantic_manifest_sha256")
+                    .and_then(Value::as_str)
+                    == Some(expected_manifest)
+                && semantic_manifest_sha256.as_deref() == Some(expected_manifest)
+        }
+    }
 }
 
 fn semantic_manifest_hash(manifest: &GrantManifest) -> Result<String, String> {
@@ -1605,62 +1736,176 @@ mod tests {
             protocol_version: GRANT_PROTOCOL.into(),
             grant_id: "extract_0123456789abcdef0123456789abcdef".into(),
             request_digest: request.request_digest.clone(),
-            prepared_generation_id: request.value["identity"]["prepared_generation_id"]
-                .as_str()
-                .unwrap()
-                .into(),
-            attempt_id: request.value["identity"]["attempt_id"]
-                .as_str()
-                .unwrap()
-                .into(),
-            attempt_request_digest: request.value["identity"]["attempt_request_digest"]
-                .as_str()
-                .unwrap()
-                .into(),
-            archive_sha256: request.value["materials"][0]["sha256"]
-                .as_str()
-                .unwrap()
-                .into(),
-            archive_byte_count: request.value["materials"][0]["byte_count"]
-                .as_u64()
-                .unwrap(),
-            semantic_manifest_sha256: String::new(),
+            identity: GrantIdentity::PreSubmit {
+                prepared_generation_id: request.value["identity"]["prepared_generation_id"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+                attempt_id: request.value["identity"]["attempt_id"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+                attempt_request_digest: request.value["identity"]["attempt_request_digest"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+                archive_sha256: request.value["materials"][0]["archive_sha256"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+                archive_byte_count: request.value["materials"][0]["archive_byte_count"]
+                    .as_u64()
+                    .unwrap(),
+                semantic_manifest_sha256: String::new(),
+            },
             directories: Vec::new(),
             files: Vec::new(),
             binding_digest: format!("sha256:{}", "9".repeat(64)),
         };
-        manifest.semantic_manifest_sha256 = semantic_manifest_hash(&manifest).unwrap();
+        let semantic = semantic_manifest_hash(&manifest).unwrap();
+        let GrantIdentity::PreSubmit {
+            semantic_manifest_sha256,
+            ..
+        } = &mut manifest.identity
+        else {
+            unreachable!()
+        };
+        *semantic_manifest_sha256 = semantic;
+        request.value["materials"][0]["semantic_manifest_sha256"] =
+            Value::String(semantic_manifest_sha256.clone());
         assert!(grant_matches_request(&manifest, &request));
         for field in 0..6 {
-            let original = (
-                manifest.prepared_generation_id.clone(),
-                manifest.attempt_id.clone(),
-                manifest.attempt_request_digest.clone(),
-                manifest.archive_sha256.clone(),
-                manifest.archive_byte_count,
-                manifest.semantic_manifest_sha256.clone(),
-            );
-            match field {
-                0 => {
-                    manifest.prepared_generation_id = "00000000-0000-4000-8000-000000000000".into()
+            let original = manifest.identity.clone();
+            if let GrantIdentity::PreSubmit {
+                prepared_generation_id,
+                attempt_id,
+                attempt_request_digest,
+                archive_sha256,
+                archive_byte_count,
+                semantic_manifest_sha256,
+            } = &mut manifest.identity
+            {
+                match field {
+                    0 => *prepared_generation_id = "00000000-0000-4000-8000-000000000000".into(),
+                    1 => *attempt_id = "00000000-0000-4000-8000-000000000000".into(),
+                    2 => *attempt_request_digest = format!("sha256:{}", "8".repeat(64)),
+                    3 => *archive_sha256 = format!("sha256:{}", "8".repeat(64)),
+                    4 => *archive_byte_count += 1,
+                    _ => *semantic_manifest_sha256 = format!("sha256:{}", "8".repeat(64)),
                 }
-                1 => manifest.attempt_id = "00000000-0000-4000-8000-000000000000".into(),
-                2 => manifest.attempt_request_digest = format!("sha256:{}", "8".repeat(64)),
-                3 => manifest.archive_sha256 = format!("sha256:{}", "8".repeat(64)),
-                4 => manifest.archive_byte_count += 1,
-                _ => manifest.semantic_manifest_sha256 = format!("sha256:{}", "8".repeat(64)),
             }
             assert!(!grant_matches_request(&manifest, &request));
-            (
-                manifest.prepared_generation_id,
-                manifest.attempt_id,
-                manifest.attempt_request_digest,
-                manifest.archive_sha256,
-                manifest.archive_byte_count,
-                manifest.semantic_manifest_sha256,
-            ) = original;
+            manifest.identity = original;
         }
         request.phase = "post_submit".into();
+        assert!(!grant_matches_request(&manifest, &request));
+    }
+
+    #[test]
+    fn grant_lineage_matches_every_normalized_post_submit_fact() {
+        let digest = |byte: char| format!("sha256:{}", byte.to_string().repeat(64));
+        let id = |byte: char| format!("{0}{0}{0}{0}{0}{0}{0}{0}-0000-4000-8000-000000000000", byte);
+        let identity = serde_json::json!({
+            "phase": "post_submit", "project_id": id('1'), "task_id": id('2'),
+            "assignment_id": id('3'), "submission_id": id('4'), "submission_version": 2,
+            "evaluation_request_id": id('5'), "evaluation_request_digest": digest('5'),
+            "evaluation_generation": 3, "attempt_id": id('6'), "result_id": id('7'),
+            "lease_id": id('8'), "lease_generation": 4,
+            "lease_expires_at": "2026-10-11T12:00:00+00:00"
+        });
+        let material = serde_json::json!({
+            "phase": "post_submit", "role": "submission_archive",
+            "submission_id": identity["submission_id"], "submission_version": 2,
+            "binding_id": id('9'), "content_id": "aaaaaaaa-0000-4000-8000-000000000000",
+            "replica_id": "bbbbbbbb-0000-4000-8000-000000000000",
+            "content_sha256": digest('c'), "byte_count": 0, "media_type": "application/zip",
+            "evidence_id": "cccccccc-0000-4000-8000-000000000000",
+            "verification_receipt_id": "dddddddd-0000-4000-8000-000000000000",
+            "verification_job_id": "eeeeeeee-0000-4000-8000-000000000000",
+            "verification_generation": 5, "namespace_fingerprint": digest('d'),
+            "semantic_manifest_sha256": ""
+        });
+        let mut manifest = GrantManifest {
+            protocol_version: GRANT_PROTOCOL.into(),
+            grant_id: "extract_0123456789abcdef0123456789abcdef".into(),
+            request_digest: digest('f'),
+            identity: GrantIdentity::PostSubmit {
+                submission_id: identity["submission_id"].as_str().unwrap().into(),
+                submission_version: 2,
+                evaluation_request_id: identity["evaluation_request_id"].as_str().unwrap().into(),
+                evaluation_request_digest: digest('5'),
+                evaluation_generation: 3,
+                attempt_id: identity["attempt_id"].as_str().unwrap().into(),
+                result_id: identity["result_id"].as_str().unwrap().into(),
+                lease_id: identity["lease_id"].as_str().unwrap().into(),
+                lease_generation: 4,
+                lease_expires_at: identity["lease_expires_at"].as_str().unwrap().into(),
+                binding_id: material["binding_id"].as_str().unwrap().into(),
+                content_id: material["content_id"].as_str().unwrap().into(),
+                replica_id: material["replica_id"].as_str().unwrap().into(),
+                content_sha256: digest('c'),
+                byte_count: 0,
+                evidence_id: material["evidence_id"].as_str().unwrap().into(),
+                verification_receipt_id: material["verification_receipt_id"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+                verification_job_id: material["verification_job_id"].as_str().unwrap().into(),
+                verification_generation: 5,
+                namespace_fingerprint: digest('d'),
+                semantic_manifest_sha256: String::new(),
+            },
+            directories: Vec::new(),
+            files: Vec::new(),
+            binding_digest: digest('9'),
+        };
+        let semantic = semantic_manifest_hash(&manifest).unwrap();
+        let GrantIdentity::PostSubmit {
+            semantic_manifest_sha256,
+            ..
+        } = &mut manifest.identity
+        else {
+            unreachable!()
+        };
+        *semantic_manifest_sha256 = semantic.clone();
+        let encoded = serde_json::to_vec(&manifest).unwrap();
+        let decoded: GrantManifest = serde_json::from_slice(&encoded).unwrap();
+        assert!(matches!(decoded.identity, GrantIdentity::PostSubmit { .. }));
+        let mut substituted = serde_json::to_value(&manifest).unwrap();
+        substituted["unexpected"] = Value::Bool(true);
+        assert!(serde_json::from_value::<GrantManifest>(substituted).is_err());
+        let mut material = material;
+        material["semantic_manifest_sha256"] = Value::String(semantic);
+        let request = ValidatedRequest {
+            value: serde_json::json!({"identity": identity, "materials": [material]}),
+            request_digest: manifest.request_digest.clone(),
+            registry_entry_id: id('f'),
+            registry_entry_digest: digest('1'),
+            image_digest: digest('2'),
+            phase: "post_submit".into(),
+            cpu_millis: 1,
+            memory_bytes: 1,
+            deadline_ms: 100,
+            maximum_output_bytes: 256,
+        };
+        assert!(grant_matches_request(&manifest, &request));
+
+        let original = manifest.identity.clone();
+        if let GrantIdentity::PostSubmit {
+            verification_generation,
+            ..
+        } = &mut manifest.identity
+        {
+            *verification_generation += 1;
+        }
+        assert!(!grant_matches_request(&manifest, &request));
+        manifest.identity = original;
+        manifest.files.push(GrantFile {
+            normalized_path: "foreign.txt".into(),
+            byte_count: 0,
+            sha256: digest('a'),
+            executable: false,
+        });
         assert!(!grant_matches_request(&manifest, &request));
     }
 }
