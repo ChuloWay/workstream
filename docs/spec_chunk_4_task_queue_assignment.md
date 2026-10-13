@@ -92,12 +92,43 @@ locked guide/policy identities, creator identity or server provenance fields.
 PILOT-02A supplies usable authorized declaration, upload, status and verified
 download through the [ART source custody contract](spec_artifact_storage_service.md#task-import-source-custody).
 These operations create no Tasks. Failed or abandoned declarations remain
-retained source records with no batch/task success claim. A later bounded
-PILOT-02 operation must import a verified source into DRAFT atomically, enforce
-project/external-ID uniqueness and replay/conflict rules, and bind exact ART
-and AUTH custody. Explicit screen and release, their existing locked-guide
-prerequisites and normal transitions remain unchanged. No public batch import,
-batch screen/release or CLI conversion is delivered by source custody alone.
+retained source records with no batch/task success claim. The separate atomic JSON-to-DRAFT import contract is below. Source custody alone
+still supplies no batch screen/release or CLI conversion.
+
+### Atomic JSON-to-DRAFT import contract
+
+`POST /api/v1/projects/{project_id}/task-import-batches` accepts only a native
+`source_id` and the shared UUID `Idempotency-Key`. A covered Project Manager's
+first import reads and verifies actual provider bytes, parses the retained JSON,
+then creates one immutable native batch and every DRAFT Task in one root. Each
+row uses the normal authorized Task creation and `TaskCreated` evidence; a
+later row, audit, binding or uniqueness failure rolls back the complete batch.
+Case-sensitive project/external-ID uniqueness covers all non-NULL Task external
+IDs, including normal creation. Existing arbitrary `import_batch_id` strings
+remain metadata; only immutable native membership supplies batch custody.
+
+The server stamps `json_import`, `task-import-source:<source UUID>`, the actual
+received-file SHA and the native batch UUID spelling. Normal manual TaskCreate
+cannot select `json_import`; row input cannot supply these labels or other
+provenance. Published difficulty values through 80 characters are preserved.
+The response retains original document order, optional display label and original
+Task creation facts; it does not transition or assign any Task.
+
+After commit, same-key replay and a new key selecting the same actual project/
+SHA/byte-count recover the original batch and Task IDs after fresh batch/source
+authority, even after Tasks advance. This recovery uses immutable native
+source/verification/acknowledgement receipts and performs no provider read or
+reparsing. A different source needs its own actual verified receipt; a claimed
+SHA alone cannot recover. Reusing the original key with a changed source selector
+conflicts even if both verified sources contain identical bytes.
+
+`GET /api/v1/projects/{project_id}/task-import-batches/{batch_id}` returns original
+creation facts separately from current states selected by ordered native
+membership. Missing, foreign and revoked status access is concealed. Explicit
+batch screen/release, normal locked-guide prerequisites and CLI/client CSV
+conversion remain separate chunks. The bounded implementation and required
+native proof are recorded in the
+[atomic-import change record](../.commitrail/changes/pilot02-atomic-json-draft-import.md).
 
 ## Transitions and locked lineage
 

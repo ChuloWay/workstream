@@ -21,13 +21,18 @@ from tests.authorization.catalogue_fixtures import AUDIT_ALLOWED_ACTION_VALUES
 from tests.test_audit import _authority_input
 
 
-def test_task_import_source_decision_and_exact_audit_target_are_closed() -> None:
+@pytest.mark.parametrize("action,resource_type", [
+    (ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE, "task_import_source"),
+    (ActionId.PROJECT_TASK_IMPORT, "task_import_batch"),
+    (ActionId.PROJECT_TASK_IMPORT_BATCH_READ, "task_import_batch"),
+])
+def test_task_import_source_decision_and_exact_audit_target_are_closed(action, resource_type) -> None:
     source_id, project_id, grant_id = uuid4(), uuid4(), uuid4()
     digest = "sha256:" + "a" * 64
     decision = AuthorizationDecision(
-        decision_id=uuid4(), action_id=ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE,
+        decision_id=uuid4(), action_id=action,
         permission_id=PermissionId.PROJECT_TASK_MANAGE, allowed=True, denial_code=None,
-        resource_type="task_import_source", resource_id=source_id,
+        resource_type=resource_type, resource_id=source_id,
         resource_context_digest=digest, matched_authority_kind=MatchedAuthorityKind.ADMIN_ROLE_GRANT,
         matched_grant_id=grant_id, matched_scope_project_id=project_id,
         revalidated=True, request_id=uuid4(), correlation_id=uuid4(),
@@ -42,7 +47,7 @@ def test_task_import_source_decision_and_exact_audit_target_are_closed() -> None
         after_facts={"allowed": True, "resource_context_digest": digest},
     )
     assert (event.resource_type, event.resource_id, event.target_ref_kind, event.target_ref_id) == (
-        "task_import_source", str(source_id), "task_import_source", str(source_id),
+        resource_type, str(source_id), resource_type, str(source_id),
     )
     with pytest.raises(ValidationError):
         AuthorizationDecision.model_validate(decision.model_dump() | {"resource_type": "unknown_source"})
