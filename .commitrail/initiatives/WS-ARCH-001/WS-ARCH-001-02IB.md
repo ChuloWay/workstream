@@ -89,6 +89,11 @@ or production readiness before live worker composition and the realistic drill.
   `backend/tests/tasks/submission_dispatch/{test_rollback.py,test_replay.py}`
   may assert the TASK-facing typed error while retaining exact ART owner cause
   and rollback proof.
+  `backend/tests/authorization/task_authority/{test_task_commands.py,test_public_surface.py}`
+  and `backend/tests/test_api_controls.py` may replace assertions that the
+  canonical POST is absent with old client-packet denial, exact protected
+  public route declarations and the expanded API inventory. Existing authority
+  gates and retained-route inventory checks remain enforced.
   Register the
   new test module in `backend/scripts/test_lane_catalogue.py` and
   `backend/tests/test_ci_lane_catalogue.py` if required to register the new
