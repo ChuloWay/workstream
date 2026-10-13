@@ -570,12 +570,46 @@ custody validation. Historical evidence above remains correctly attributed to
 the then-installed `0034_task_import_batches`; it is not relabeled as current
 head proof.
 
-The combined selected-checker-plus-atomic fingerprint must be measured from a
-fresh owned PostgreSQL 16 database after the graph resolves; neither the current
-main fingerprint nor the older atomic-only fingerprint may be assumed. The
-first controlled setup therefore retains the current-main expected value only
-to emit the exact combined digest, after which the migration owner binds that
-measured value and reruns the affected schema/graph proof. No application,
-model, AUTH, workflow, cap, predecessor fixture or compatibility code changes
-are allowed in this migration reconciliation. The separate bulk transition
-migration follows as `0038` only after this atomic boundary is frozen.
+The first controlled setup on reconciled head `728148626` installed `0037` and
+refused the retained current-main fingerprint as intended, measuring the exact
+combined PostgreSQL 16 schema digest
+`5abd992592eea9b00ce1f2b4330ff0e121577ff7c8ab34fc76fa9e71a8d336d5`.
+The runner exited at that deliberate setup boundary with database, role, bucket
+and prefix cleanup all true; raw evidence is in
+`/tmp/pilot02-takeover-first-native.log` and its adjacent JSON metadata. This
+record binds that measured value without claiming an affected-test pass; the
+schema/graph and atomic public cases still require their frozen-head replay. No
+application, model, AUTH, workflow, cap, predecessor fixture or compatibility
+code changes are allowed in this migration reconciliation. The separate bulk
+transition migration follows as `0038` only after this atomic boundary is
+frozen.
+
+### Response timestamp custody finding
+
+Independent source review found the pending-to-committed SQL closure did not
+bind response `created_at` to the authoritative native batch timestamp. Extend
+the existing counterfeit test by shifting only the staged response timestamp;
+the exact failing-before run at `da23ea0a8` returned 201 instead of the expected
+503 (1 failed in 178.08 seconds), proving both staged response copies could carry
+the same forged header while the native batch timestamp remained unchanged.
+Database, role, bucket and prefix cleanup all completed; raw evidence is
+`/tmp/pilot02-takeover-timestamp-repro.log` with adjacent JSON metadata. The
+minimal migration repair compares the parsed response timestamp with
+`task_import_batches.created_at` in the existing response-custody closure; the
+application owner supplies the matching replay check. Preserve all prior native
+checks, add one real foreign-project public selector control, and execute
+existing invalid-upload controls on the reconciled source. The first full native
+module at `057a2a581` timed out after 900s and is not a pass; all owned resources
+cleaned up. Its next focused metadata membership control passed (1 case, 136.27s),
+including actual call33.56s/setup13.34s, with no observed lock hang. Use targeted
+timed runs and complete hosted evidence for closure; this repair requires a new
+measured combined schema fingerprint and affected native replay before any pass
+claim.
+
+The three additive import modules use the existing four project lanes, preserving
+every main module assignment and execution cap. The merged-main Task C lane used
+1099.091 of 1200 seconds; project lanes have more measured headroom. The import
+source, project authority and native batch proofs belong together there. Matching
+closed catalogue expectations move with the modules; final hosted timing remains
+required. The application membership validator also compares the original
+response timestamp with the authoritative batch timestamp.

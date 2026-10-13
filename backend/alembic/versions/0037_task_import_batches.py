@@ -370,6 +370,7 @@ begin
     or (b.response::jsonb->>'row_count')::integer is distinct from b.row_count
     or b.response::jsonb->>'schema_version' is distinct from b.schema_version
     or b.response::jsonb->>'mapping_version' is distinct from b.mapping_version
+    or (b.response::jsonb->>'created_at')::timestamptz is distinct from b.created_at
     or b.response::jsonb->'label' is distinct from coalesce(to_jsonb(b.metadata_label),'null'::jsonb)
     or pg_catalog.jsonb_array_length(b.response::jsonb->'tasks')<>b.row_count then
   raise exception 'task import batch response custody invalid' using errcode='23514';
