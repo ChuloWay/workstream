@@ -67,8 +67,9 @@ it is not an authoritative native-UUID batch relationship.
   `audit/schemas.py`; preserve every existing type and canonical event owner.
 - One coordinated successor migration and its graph/reset/fingerprint consumers,
   authored solely by the delegated migration owner after final schema handoff.
-  The delegated owner authored `0034_task_import_batches` after merged `0033`;
-  this worktree consumes that handoff without authoring DDL.
+  The delegated owner originally authored `0034_task_import_batches` after
+  `0033`; the current handoff is linearized as `0037_task_import_batches` after
+  merged `0036_selected_checker_flow`, with the reviewed timestamp repair.
 
 ### Not allowed
 
@@ -246,7 +247,7 @@ ancestry never change. Members are append-only and committed headers cannot be
 reopened or deleted. Native reset restores these guards through the canonical
 owned reset helper, without leaving them disabled for product writes. The sole migration author reviews native
 constraints, deferred closure and exact owner representations before DDL work;
-the consumed sole-author `0034` installs the reviewed constraints and guards.
+the linearized sole-author `0037` installs the reviewed constraints and guards.
 
 ### Concrete non-DDL schema handoff
 
@@ -510,34 +511,22 @@ the lead retains independent SQL and final full-evidence review.
 
 ## Reconciliation
 
-- Current-source reconciliation: this preparation branch incorporates source
-  prerequisite PR520 and merged main `e31e1777c47b794b1d4d8240192608e4fff4f536`,
-  retaining its ten-lane CI, hidden materialization/completion/failure/feedback
-  owners, contribution export and CLI approval/correction contracts. The additive
-  AUTH union retains all 152 actions (116 active and 36 planned), all 78
-  permissions, both contribution-read audit arms and the reviewed atomic import
-  classifications. Shared metadata retains every incoming assignment and lane;
-  the selected MCP context contract is recaptured from clean backend commit
-  `13c0313334d20acbaecd6ea76c54b3573336a40d` after the owner union.
-  Main guide-activation integration at `89c18c78` changes only incoming CLI/docs
-  files; all backend source, tests and migration blobs are byte-identical to
-  exact native-proven `09570d3a` (`git diff --exit-code 09570d3a -- backend`).
-  The native proof remains attributed to `09570d3a`, not relabeled to the merge.
-  The required structural guard then identified `_index_actions` at 101 lines
-  after adding the two closed import actions. One adjacent Task action declaration
-  line is consolidated, preserving its entire AST and returning the function
-  to 100 lines; no debt entry, policy limit or authority assertion is relaxed.
-  Canonical Task creation shares caller-root phases with its normal public
-  wrapper, and public atomic import/status use the consumed sole-author `0034`.
-  No deployed or main-delivered atomic import capability is claimed before merge.
-- Next usable boundary: complete required local guards, independent SQL/final
-  review and exact-head hosted CI for this atomic JSON-to-DRAFT slice. Native
-  public acceptance is proven at `09570d3a`; integration includes sole-author
-  `0034` after actual merged `0033`. Explicit batch screen/release and CLI
-  project/source/batch commands with client CSV conversion are implemented on a
-  separate coordinated lane; its public/native aggregate journey remains pending.
-- Remaining risks: source prerequisite and current required CI/actual external
-  review remain separate; no deployed import capability or whole Issue 489 claim.
+- Current source includes main `cdfdebd749ed0a12df4017f267170d5db2713e3d`,
+  including the selected external-checker flow and Finance CLI inspection.
+  The closed AUTH union contains 154 actions (119 active, 35 planned) and
+  80 permissions, retaining both contribution-read audit arms and the additive
+  atomic import classifications. Existing lane and ownership assignments remain
+  intact; the selected MCP context fragment was recaptured from `65803bad7`.
+- Public atomic import/status use `0037_task_import_batches` after merged
+  `0036_selected_checker_flow`. Canonical Task creation shares caller-root phases
+  with the existing public wrapper. The timestamp guard binds immutable response
+  facts to the native batch header.
+- Current focused native evidence is the four-case repair run at `679079394`,
+  detailed below. The earlier 26-case run at `09570d3a` used the historical
+  `0034` stack; it is not current-head full-suite evidence. Complete hosted
+  execution and latest external review remain necessary for merge readiness.
+- Explicit batch screen/release and CLI/CSV are the separate coordinated slice.
+  Neither deployment nor completion of all Issue 489 acceptance is claimed here.
 
 ## Current-main takeover reconciliation
 
@@ -563,10 +552,10 @@ migration to `0037_task_import_batches`, setting its predecessor to merged
 `0036_selected_checker_flow`, registering that single linear head in
 `backend/alembic/env.py`, and updating the exact graph, reset/TRUNCATE ownership
 and measured schema fingerprint consumers in `backend/tests/test_alembic.py` and
-`backend/tests/conftest.py`. This block is the only additional record scope. The
-SQL body remains byte-identical to the final `af82b1fe0` handoff apart from the
-revision identity and predecessor, including the `d0020ffd8` once-per-root
-custody validation. Historical evidence above remains correctly attributed to
+`backend/tests/conftest.py`. This block is the only additional record scope. The initial
+linearization preserved the final `af82b1fe0` SQL body apart from revision
+identity and predecessor, including `d0020ffd8` once-per-root custody validation.
+The later timestamp guard repair is recorded below. Historical evidence above remains correctly attributed to
 the then-installed `0034_task_import_batches`; it is not relabeled as current
 head proof.
 
@@ -645,3 +634,20 @@ for the AUTH catalogue and CI lane catalogue after reconciliation. Each now
 appears once with its existing owner; the authoritative eligible-target set and
 validator are unchanged. The structure check passes after the import formatting
 repair. No declaration is omitted to satisfy either check.
+
+Hosted run `38363822275` at head `8205c01a1` completed nine backend lanes
+successfully; Task B failed only `test_committed_receipt_is_immutable_through_sql`.
+The new native membership FK causes bare TRUNCATE to stop at PostgreSQL's
+FK check before the existing immutability trigger. Move the already-reviewed
+bulk probe into this prerequisite: use `TRUNCATE ... CASCADE` to reach that
+guard, retain its exact IntegrityError/message assertion, and compare every
+retained receipt row after each refusal. No production guard or exception
+expectation is weakened. Authenticated lane artifact `11796506646` has SHA-256
+`da7a4634a64f7517b694bd25a6882fa52895822933c61e2b3a5006c35170f0ef`.
+
+The repaired receipt probe passed on exact source
+`03024fc1be2e8c211889a64c642fb062b64df266` (1 case, 90.05 seconds),
+using native PostgreSQL `0037` and the canonical isolated runner. Raw evidence
+is `/tmp/pilot02-atomic-receipt-fixed.{log,json}`; database, role, bucket and
+prefix cleanup completed. This focused result repairs the sole observed hosted
+failure; a complete hosted run on the final pushed head remains required.
