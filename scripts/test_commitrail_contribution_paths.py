@@ -105,6 +105,17 @@ class ContributionPathTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertIn("STANDALONE_INITIATIVE_INVALID", output)
 
+        # Also reject a malformed later record; validating only the first
+        # sorted path must not satisfy this regression.
+        self.write(other, self.record() + "\nCorrected next boundary.\n")
+        self.write(self.initiative, (self.root / self.initiative).read_text().replace(
+            "Durable disposition: Complete", "Durable disposition: Invalid",
+        ))
+        self.commit()
+        result, output = self.run_gate(base)
+        self.assertEqual(result, 1)
+        self.assertIn("COMMITRAIL_DISPOSITION_INVALID", output)
+
     def test_two_new_records_still_fail_with_a_known_base(self) -> None:
         self.git("init")
         base = self.commit()
