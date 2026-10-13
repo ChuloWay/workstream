@@ -700,3 +700,13 @@ not a bulk test pass; the migration owner must bind the measured combined value
 before affected schema and public bulk proof. No application, model, AUTH,
 workflow, cap, predecessor fixture or compatibility code is part of this
 migration reconciliation.
+
+### Measured placement of new batch proofs
+
+The authenticated main Backend run `38352326348` leaves aggregate TASK headroom
+986.284s under unchanged 1200s caps, versus historical atomic+bulk native totals
+1546.46s from different sources. Existing PROJECT headroom is 1856.320s.
+Place only the five new project/source/batch proof modules in the existing four-way
+PROJECT partition, preserving every main module, node and execution kind. This
+is a placement rationale, not a passing-time prediction. Actual final hosted
+execution remains required, especially the concentrated 500-member journey.

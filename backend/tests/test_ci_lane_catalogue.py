@@ -131,6 +131,11 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         set(catalogue.CHECKER_DELIVERY_MODULES)
         | set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
         | {
+            "tests/tasks/test_task_import_batch_contract.py",
+            "tests/tasks/test_task_import_batch_bindings.py",
+            "tests/tasks/test_task_import_batches.py",
+            "tests/tasks/test_task_batch_transition_contract.py",
+            "tests/tasks/test_task_batch_transitions.py",
             "tests/contributions/test_export_csv.py",
             "tests/contributions/test_export_projection.py",
             "tests/authorization/test_contribution_read_scope.py",
@@ -321,11 +326,6 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_task_import_contract.py",
             "tests/test_task_import_sources.py",
             "tests/test_submission_predecessor_custody.py",
-            "tests/tasks/test_task_batch_transition_contract.py",
-            "tests/tasks/test_task_batch_transitions.py",
-            "tests/tasks/test_task_import_batch_contract.py",
-            "tests/tasks/test_task_import_batch_bindings.py",
-            "tests/tasks/test_task_import_batches.py",
             "tests/authorization/task_queues/test_authority.py",
             "tests/authorization/task_queues/test_contracts.py",
             "tests/authorization/task_queues/test_transactions.py",

@@ -161,9 +161,11 @@ The CLI keeps local CSV conversion, source declaration/upload/status, import,
 batch status, screening and release explicit. UTF-8 quoted CSV and semicolon skill
 fields produce validated canonical JSON; its exact bytes supply the uploaded
 SHA/count. The server retains those JSON bytes, with no claim to retaining the
-original CSV. Native aggregate DDL and the public 200/500-member journey remain
-pending in the [bulk/CLI change record](../.commitrail/changes/pilot02-bulk-transitions-cli.md);
-this contract does not establish delivered bulk readiness.
+original CSV. Native aggregate DDL and the public 200/500-member journey are
+implemented in the [bulk/CLI change record](../.commitrail/changes/pilot02-bulk-transitions-cli.md).
+Its historical native proofs name their exact sources; current-source verification
+and full hosted evidence are recorded separately in the PR. This contract does
+not claim deployment.
 
 ## Transitions and locked lineage
 
