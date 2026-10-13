@@ -130,6 +130,28 @@ async def test_public_source_import_screen_release_complete_journey(import_sourc
     assert all(row.status == "ready" for row in facts[0])
 
 
+async def test_reason_limit_matches_canonical_transition_without_partial_effects(import_source_client):
+    """Reject oversized reasons before effects and preserve the exact allowed boundary."""
+    client = import_source_client
+    project, batch = await _import(client)
+    before = await _success_facts(project)
+    for operation in ("screen", "release"):
+        refused = await client.post(_path(project, batch, operation), headers=auth_headers(),
+                                    json={"reason": "é" * 1001})
+        assert refused.status_code == 422, refused.text
+        assert await _success_facts(project) == before
+    reason = "é" * 1000
+    for operation in ("screen", "release"):
+        admitted = await client.post(_path(project, batch, operation), headers=auth_headers(),
+                                     json={"reason": reason})
+        assert admitted.status_code == 200, admitted.text
+    async with db_session.get_session_factory()() as session:
+        reasons = list(await session.scalars(select(TaskBatchTransitionReceipt.reason).where(
+            TaskBatchTransitionReceipt.project_id == project,
+        )))
+        assert reasons == [reason, reason]
+
+
 async def test_missing_active_guide_refuses_whole_batch_without_success_effects(import_source_client):
     """Actual unscreenable project imports DRAFTs but cannot bypass guide admission."""
     client = import_source_client

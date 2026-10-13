@@ -718,3 +718,18 @@ native `0038` at `6f6bc1c1fed5ce825e1a4f01ad5ff3a46f02f4fe` measured
 catalogue query extracted verbatim and executed against the isolated migrated
 PostgreSQL database. All database/role/MinIO cleanup completed. This proves
 schema installation and fingerprint only; behavior execution remains required.
+
+Independent QA found two remaining contract mismatches: the CSV standard-library
+reader normalizes quoted CRLF despite exact instruction preservation, and new
+batch reason bounds permit 4000 characters while canonical TASK/AUDIT permit
+1000. Repair scope retains the standard CSV validator and recovers original
+quoted contents; all new bulk request/CLI/model/DDL bounds must match canonical
+1000 without enlarging existing owners. Add exact CRLF/LF and Unicode boundary
+regressions, including public 1001 rejection without effects and 1000 admission.
+
+At `c743c3135`, the 200-row public native journey passed, but its four-case
+group timed out at 900 seconds during the next case. This is not a full pass.
+All owned cleanup completed. The isolated rollback case at `38a6bcae8` then
+passed in 72.53 seconds (39.32-second call), with all cleanup complete; it did
+not reproduce a lock hang. Raw evidence: `/tmp/pilot02-bulk-current-native4`
+and `/tmp/pilot02-bulk-rollback-diagnostic` `.log`/`.json` pairs.
