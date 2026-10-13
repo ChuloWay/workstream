@@ -36,7 +36,7 @@ from app.modules.actors.api.service_identities import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.checkers.models import CheckerRun, SelectedPreSubmitRun
 from app.modules.checkers.execution_repository import stored_result
-from app.modules.outbox.models import OutboxEvent
+from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
 from app.modules.artifacts.service import artifact_storage_namespace_spec
 from app.modules.projects.models import ProjectGuide
 from app.modules.tasks.models import Submission, SubmissionDispatch, WorkstreamTask
@@ -209,6 +209,67 @@ async def _deliver(factory, event_id: UUID, project_id: UUID) -> None:
     raise RuntimeError("outbox event was not acknowledged by prefork worker")
 
 
+async def _deliver_known_retry(factory, event_id: UUID, project_id: UUID,
+                               task_id: str, submission_id: str) -> None:
+    from app.workers.outbox import deliver_event
+
+    await asyncio.to_thread(
+        deliver_event.apply_async, args=(str(event_id), str(project_id)),
+    )
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        async with factory() as session:
+            event = await session.get(OutboxEvent, event_id)
+            if event.delivery_state == "retryable":
+                attempt = await session.get(
+                    OutboxDeliveryAttempt, (event_id, event.attempt_count)
+                )
+                receipt = json.loads(attempt.outcome_json)
+                _require(event.attempt_count == 1
+                         and event.last_error_code == "RETRY_REQUESTED"
+                         and receipt["delivery_state"] == "retryable"
+                         and receipt["error_code"] == "RETRY_REQUESTED"
+                         and receipt["invocation_unknown"] is False
+                         and event.next_attempt_at is not None,
+                         "non-live completion did not record one known safe retry")
+                task = await session.get(WorkstreamTask, task_id)
+                submission = await session.get(Submission, submission_id)
+                _require(task.status == "evaluation_pending"
+                         and submission.status == "submitted",
+                         "non-live completion changed Task or Submission")
+                for table in ("task_post_submit_routing_requests",
+                              "task_post_submit_routing_manifests", "final_acceptances",
+                              "contribution_records", "compensation_awards", "reviews"):
+                    count = await session.scalar(text(
+                        f"SELECT count(*) FROM public.{table} WHERE project_id=:project"
+                    ), {"project": str(project_id)})
+                    _require(count == 0, "non-live retry committed governed effects")
+                _require(await session.scalar(text(
+                    "SELECT count(*) FROM public.audit_events "
+                    "WHERE project_id=:project AND action_id='task.post_submit.route'"
+                ), {"project": str(project_id)}) == 0,
+                         "non-live retry retained routing authorization")
+                return
+            if event.delivery_state in {"acknowledged", "dead_letter", "cancelled"}:
+                raise RuntimeError("non-live completion escaped the safe retry path")
+        await asyncio.sleep(0.3)
+    raise RuntimeError("non-live completion did not settle into retryable")
+
+
+async def _wait_outbox_due(factory, event_id: UUID) -> None:
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        async with factory() as session:
+            due = await session.scalar(text(
+                "SELECT clock_timestamp() >= next_attempt_at "
+                "FROM public.outbox_events WHERE event_id=:event"
+            ), {"event": str(event_id)})
+        if due:
+            return
+        await asyncio.sleep(0.2)
+    raise RuntimeError("known safe outbox retry did not become due")
+
+
 async def _ready_admission(client, factory, task_id: str, assignment_id: str,
                            contributor_token: str, archive: bytes, summary: str,
                            attestation: str, predecessor_id: str | None = None) -> str:
@@ -265,7 +326,8 @@ async def _submit(client, factory, *, task_id: str, assignment_id: str,
 
 async def _complete_post(factory, *, submission_id: str,
                          project_id: UUID, recommendation: str,
-                         finding_code: str | None = None) -> tuple[str, UUID]:
+                         finding_code: str | None = None,
+                         deliver_completion: bool = True) -> tuple[str, UUID]:
     async with factory() as session:
         dispatch = await session.get(SubmissionDispatch, submission_id)
         _require(dispatch is not None, "atomic Submission dispatch is absent")
@@ -287,7 +349,8 @@ async def _complete_post(factory, *, submission_id: str,
         _require(findings == ([finding_code] if finding_code else []),
                  "selected POST finding differs from fixture rule")
         completion_id = run.completion_event_id
-    await _deliver(factory, completion_id, project_id)
+    if deliver_completion:
+        await _deliver(factory, completion_id, project_id)
     return str(attempt_id), completion_id
 
 
@@ -396,7 +459,8 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
         return counts | {"task_status": task.status}
 
 
-async def _one_mode(client, factory, namespace, image, env, *, human_review_required: bool) -> dict:
+async def _one_mode(client, factory, namespace, image, env, *,
+                    human_review_required: bool, operator_id: UUID) -> dict:
     from app.workers.outbox import deliver_event
 
     awards = () if human_review_required else ("project_points",)
@@ -550,6 +614,7 @@ async def _one_mode(client, factory, namespace, image, env, *, human_review_requ
             project_id=compilation.project_id,
             recommendation="needs_revision" if human_review_required else "allow_review",
             finding_code="probe.post_rule_failed" if human_review_required else None,
+            deliver_completion=human_review_required,
         )
         attempt_id = first_attempt_id
         if human_review_required:
@@ -574,6 +639,20 @@ async def _one_mode(client, factory, namespace, image, env, *, human_review_requ
                 factory, submission_id=saved["submission_id"],
                 project_id=compilation.project_id, recommendation="allow_review",
             )
+        else:
+            await _deliver_known_retry(
+                factory, completion_id, compilation.project_id,
+                task_id, first_submission_id,
+            )
+            from tests.reviews.lifecycle.transition_support import command_for, transition
+            await transition(await command_for(operator_id, "live"))
+            await _wait_outbox_due(factory, completion_id)
+            await _deliver(factory, completion_id, compilation.project_id)
+            async with factory() as session:
+                event = await session.get(OutboxEvent, completion_id)
+                _require(event.delivery_state == "acknowledged"
+                         and event.attempt_count == 2,
+                         "known safe retry did not commit once after authorized live transition")
         outcome = await _assert_outcome(
             factory, project_id=compilation.project_id, task_id=task_id,
             submission_id=saved["submission_id"], initial_submission_id=first_submission_id,
@@ -731,7 +810,6 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         operator, _ = await seed_review_actor(factory, None, role="operator", scope="system")
         from tests.reviews.lifecycle.transition_support import command_for, transition
         await transition(await command_for(operator.actor_profile_id, "shadow"))
-        await transition(await command_for(operator.actor_profile_id, "live"))
 
         rust = _start_service(service_binary, config_path, socket_path)
         await _wait_service(rust, socket_path)
@@ -754,9 +832,11 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         await _wait_worker(worker, hostname)
         async with httpx.AsyncClient(base_url=origin, timeout=90) as client:
             true = await _one_mode(client, factory, namespace, image, env,
-                                   human_review_required=True)
+                                   human_review_required=True,
+                                   operator_id=operator.actor_profile_id)
             false = await _one_mode(client, factory, namespace, image, env,
-                                    human_review_required=False)
+                                    human_review_required=False,
+                                    operator_id=operator.actor_profile_id)
         _require(api.poll() is None and worker.poll() is None,
                  "API or prefork worker exited during public journey")
         return {"tree_sha": subprocess.check_output(

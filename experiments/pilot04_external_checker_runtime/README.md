@@ -49,7 +49,11 @@ failure from both Workstream defaults and the selected external PRE image,
 verified immutable admission, a selected POST failure routed to
 `needs_revision` and an exact public replacement, and passing POST routing under
 both locked review modes. It checks exact false-mode FinalAcceptance and
-submitter contribution/award evidence and replay. The phase-aware
+submitter contribution/award evidence and replay. The false-mode completion
+first runs while the acceptance lifecycle is legitimately in shadow, requiring
+one known safe OUTBOX retry with no governed effects; an Operator then uses the
+owner lifecycle transition to live and the same event succeeds when due. The
+phase-aware
 `post-rejected.txt` rule lives only in this small checker fixture. The drill
 must keep guide activation guards and database triggers
 enabled. PostgreSQL, MinIO, Redis, the digest registry, Rust checker service,
