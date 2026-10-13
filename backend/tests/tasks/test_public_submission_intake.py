@@ -237,8 +237,8 @@ async def test_public_initial_submission_replays_and_recovers_ready_upload(
                 profile.suspended_at = datetime.now(UTC)
                 profile.suspension_reason = "test suspension"
             revoked = await client.post(route, json=_payload(h.creation, h.admission_id))
-            assert revoked.status_code == 403, revoked.text
-            assert revoked.json()["error"]["code"] == "actor_suspended"
+            assert revoked.status_code == 404, revoked.text
+            assert revoked.json()["error"]["code"] == "submission_unavailable"
 
         async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(Submission)) == 1
