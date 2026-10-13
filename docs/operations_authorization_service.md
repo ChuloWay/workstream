@@ -124,7 +124,8 @@ approved and frozen policy checks.
 Task claim/start/work-context require current canonical authority and the applicable
 exact project grant. Token claims and eligibility rows are not authority.
 Public ZIP preparation and admission-backed Submission creation extend that
-journey. The complete public API and durable-worker drill remains pending.
+journey. The bounded local public API and durable-worker drill passed under
+scripted approved-guide preconditions.
 
 ## Request And Error Context
 

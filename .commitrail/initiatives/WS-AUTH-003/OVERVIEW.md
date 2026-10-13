@@ -22,11 +22,11 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: follow the [first contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone):
+- Current boundary: follow the [first contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone):
   atomic Submission/dispatch, exact AUTH outcome custody and selected production
   request/completion registration are delivered. Public admission-backed entry
-  and supported false-guide activation are delivered; the real public/worker
-  drill remains. CON-07/shared acceptance foundations
+  and supported false-guide activation are delivered; the bounded local
+  public/worker drill passed under scripted approved-guide preconditions. CON-07/shared acceptance foundations
   and scoped lifecycle control are delivered.
   Submission/checker history uses canonical authority; the alternate gate lifecycle
   is removed. Continue shrinking the canonical import ledger as implementation

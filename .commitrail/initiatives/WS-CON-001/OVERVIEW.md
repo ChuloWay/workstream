@@ -20,7 +20,7 @@ operation so an exact current contributor-correctable result reaches
 ContributionRecord or award. 04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; neither creates a contribution or award.
 Selected production composition, ARCH-02I-B public entry and ARCH-04E3-B
 supported false-guide activation are delivered. False/pass still needs LIVE REV;
-the complete public/worker contribution drill remains. Setup-fault handling,
+the bounded local public/worker contribution drill passed. Setup-fault handling,
 human review/revision and payment delivery remain later work.
 
 Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
@@ -73,8 +73,10 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [CON-07](WS-CON-001-07.md) adds hidden source-neutral submitter participation
   and complete frozen award-set staging/replay; no recognition route or
   fulfillment operation is live.
-- Next usable boundary: first-layer public/worker drill proving the exact
-  FinalAcceptance, submitter ContributionRecord and frozen awards.
+- Local proof: the first-layer public/worker drill produced one exact
+  FinalAcceptance, submitter ContributionRecord and project-points award under
+  scripted approved-guide preconditions. Next usable boundary: reproduce the
+  path with intended hosted identity and infrastructure.
   Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: `docs/spec_contribution_compensation.md`,

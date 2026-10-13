@@ -76,7 +76,8 @@ PreSubmitCheckerPolicy =
 Failed preparation returns `pre_submission_checker_failed` with ART's exact
 ordered bounded results through the public authorized ZIP preparation route published in OpenAPI. POL-07B connects
 the internal checker phase service and removes the standalone JSON precheck. ARCH-02I-B exposes admission-backed Submission creation for initial
-work and exact checker remediation; the complete public API and Celery service drill remains pending. Pre-submit failures do not create durable
+work and exact checker remediation; the bounded local public API and Celery
+service drill passed under scripted approved-guide preconditions. Pre-submit failures do not create durable
 `CheckerRun` records and do not return review decision values: `accept`,
 `needs_revision`, or `reject`.
 

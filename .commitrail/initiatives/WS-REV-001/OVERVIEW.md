@@ -21,7 +21,7 @@ CON effect. 04F3 hidden exact-cause replacement intake and 04F4 hidden Operator 
 supported false-guide activation are delivered. The reviewed manifest describes
 selected production routing; new false/pass effects still require LIVE REV.
 Known pre-effect non-live refusal has bounded OUTBOX retry, with exhaustion
-dead-lettered. The public/worker drill remains; setup-fault handling, live human
+dead-lettered. The bounded local public/worker drill passed; setup-fault handling, live human
 review/revision and payment delivery are later work.
 
 Current upstream dependency: [ARCH-04E canonical `allow_review`](../WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md).
@@ -50,8 +50,10 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: first-layer public/worker drill across the delivered
-  entry, supported false-guide activation and selected production manifest.
+- Local proof: the first-layer public/worker drill passed across public entry,
+  supported false-guide activation and selected production manifest under
+  scripted approved-guide preconditions. Next usable boundary: intended
+  hosted identity and infrastructure operation.
   Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: `docs/spec_review_lifecycle.md`,
@@ -129,8 +131,8 @@ proof. No adjudication setting or behavior is included.
    hidden FinalAcceptance/TASK/CON composition are delivered. 04E2-B now requires
    the actual routing AUTH event on the same strict input and supplies database
    complete-set closure and shared audit/outbox. ARCH-04E3-B corrects the
-   selected-production lifecycle manifest; the complete public/worker drill
-   remains. This foundation
+   selected-production lifecycle manifest; the bounded local public/worker
+   drill passed. This foundation
    can precede human runtime: ARCH-04E uses it for false/pass acceptance without
    live queues, leases or decisions. REV-12A4A extends the same REV-12A1
    controller with scoped Operator transitions. Root/ordinal/cutoff custody is

@@ -20,8 +20,10 @@ operation so an exact current contributor-correctable result reaches
 04F3 hidden exact-cause replacement intake, 04F4 hidden Operator retry, selected
 production composition and ARCH-02I-B public entry are delivered. ARCH-04E3-B
 admits complete false guides with supported approved checks and no `human_review`
-disposition under matching Python/PostgreSQL custody. The public/worker drill
-remains; setup-fault handling and live human review/revision are later work.
+disposition under matching Python/PostgreSQL custody. The bounded local
+public/worker drill passed using scripted approved-guide facts; it did not
+exercise live setup inference. Setup-fault handling and live human review/revision
+are separate work.
 
 Latest completed POL behavior: [POL-07B checker phase service](WS-POL-003-07B.md),
 building on [POL-07A pre-submit attempt recovery](WS-POL-003-07A.md),
@@ -95,8 +97,11 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: first-layer public/worker drill across the delivered
-  guide activation, Submission entry and selected completion route.
+- Local proof: the first-layer public/worker drill passed across Submission
+  entry and selected completion under scripted approved-guide preconditions.
+  Next usable boundary: exercise the existing connected setup/activation and
+  intake flow with its configured provider, then reproduce the path with
+  intended hosted identity and infrastructure.
   Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: project-guide specifications, authorization and

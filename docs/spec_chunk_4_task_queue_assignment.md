@@ -12,7 +12,7 @@ queues with exact project authority. ARCH-03C5 delivers distinct Contributor and
 Manager task detail and requirements. ARCH-03C6 exposes the three distinct
 locked-context reads with exact current grants. ARCH-02I-B exposes public ZIP
 preparation and admission-backed initial/checker-remediation Submission creation.
-The complete public API and Celery service drill remains pending; the
+The bounded local public API and Celery service drill has passed; the
 [capability ledger](roadmap_status.md) tracks that proof.
 
 Task responses and immutable command receipts contain no task-local payment
@@ -776,8 +776,8 @@ The true branch never observes REV generation or enters CON. Both request and
 completion handlers are registered by PILOT-04. ARCH-02I-B exposes initial and
 exact-cause checker-remediation intake over the 04F3 owner. New false/pass
 effects require a live REV generation; a typed pre-effect non-live refusal
-rolls back and uses bounded OUTBOX retry. The complete public API and Celery
-service drill remains pending; manager-visible setup-fault hold is separate
+rolls back and uses bounded OUTBOX retry. The local public API and Celery
+service drill has passed under scripted approved-guide preconditions; manager-visible setup-fault hold is separate
 safety work. ARCH-04F4 supplies separate hidden Operator retry of a known terminal
 `infrastructure_failed` checker run through the existing request handler.
 Fresh-authorized historical replay does not require the old run to remain current.
@@ -793,9 +793,11 @@ stored source, receipt and complete outcome and returns their identities without
 repeating effects. Existing acceptance consumers admit only `allow_review`.
 
 The operation adds no route or contributor response schema. Contributors use the
-existing bounded Submission/checker-history reads above. ARCH-04F3 originally supplied hidden exact-cause replacement Submission
-intake through the same writer; ARCH-02I-B now exposes it for exact checker
-remediation. Manager-visible setup-fault hold and the complete public API/Celery
-service drill remain separate work. The hold retains the
-Submission and locked rules without contributor penalty; changing or
+existing bounded Submission/checker-history reads above. ARCH-04F3 supplies
+the exact-cause replacement Submission owner used by ARCH-02I-B public intake.
+PILOT-04 registers the request and completion handlers. The local public
+API/Celery drill has passed under scripted approved-guide preconditions;
+manager-visible setup-fault hold remains separate work.
+The planned hold will retain the Submission and locked rules without
+contributor penalty; changing or
 re-screening submitted-task rules is deferred.

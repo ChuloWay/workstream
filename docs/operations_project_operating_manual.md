@@ -275,8 +275,8 @@ Output-file authority remains unavailable. B7 supplies hidden request delivery a
 04E2-B supplies complete hidden authorized outcomes. B8 supplies hidden completion
 delivery; PILOT-04 registers the selected request and completion handlers in
 production composition. ARCH-02I-B exposes public ZIP preparation and admission-backed
-initial/checker-remediation Submission creation. The complete public API and
-Celery service drill remains pending. ARCH-04F4 supplies hidden reason-bound Operator retry of an exact terminal
+initial/checker-remediation Submission creation. The bounded local public API
+and Celery service drill passed under scripted approved-guide preconditions. ARCH-04F4 supplies hidden reason-bound Operator retry of an exact terminal
 checker infrastructure failure; it has no public retry route.
 
 The intended unified flow uses one compilation result for sufficiency and
@@ -484,7 +484,7 @@ uploads one ZIP to `POST /api/v1/tasks/{task_id}/submission-bundle-preparations`
 after ART returns a ready admission,
 `POST /api/v1/tasks/{task_id}/submissions` consumes it through the canonical
 atomic writer and creates the immutable Submission and initial evaluation
-request event. The complete public API and Celery service drill remains pending;
+request event. The bounded local public API and Celery service drill passed;
 live human-review revision is separate. The obsolete client-owned packet POST
 is removed.
 

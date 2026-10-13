@@ -21,9 +21,11 @@
   an Operator-authorized LIVE REV generation. A known pre-effect non-live
   refusal retries within the existing OUTBOX budget; exhaustion dead-letters
   without automatic reopen. The default-true handoff remains independent of REV.
-- Next usable boundary: a realistic public API and durable-worker drill must
-  prove the complete first journey and exact contribution evidence before
-  claiming it usable. See the [current delivery
+- Local proof: the public API and durable-worker drill passed at `d5703d9c6`
+  through both policy branches, restart, revocation and exact contribution
+  evidence under scripted approved-guide preconditions and local Flow-compatible
+  auth. Next usable boundary: reproduce and operate that path with intended
+  hosted identity and infrastructure. See the [current delivery
   plan](planning/PLAN.md#first-complete-contributor-milestone) and [change
   map](planning/CHUNK_MAP.md).
 - Later scope: live human review/revision, payment fulfillment, external
@@ -31,7 +33,7 @@
   classifier emits `allow_review`, `needs_revision` or `not_evaluated`; selected
   completion rejects `task_setup_blocked`. A future setup-fault path must retain
   the Submission and locked rules without contributor penalty, but it is not a
-  prerequisite to the current first-layer drill.
+  prerequisite to the proven local first-layer drill.
 - Governing sources: `docs/architecture_lockdown.md`, accepted ADRs, current
   code, migrations, tests and the [capability ledger](../../../docs/roadmap_status.md).
 - Preserve: exact AUTH receipts, locked lineage, immutable evidence, atomic

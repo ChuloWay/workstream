@@ -6,7 +6,8 @@ The goal remains **claim -> upload ZIP -> pre-submit feedback or immutable
 Submission -> automatic post-submit checking -> outcome**. For an eligible
 project with locked `human_review_required=false`, the outcome includes shared
 FinalAcceptance, the submitter ContributionRecord and applicable award facts.
-This journey is not yet publicly usable end to end.
+The bounded local public API and durable-worker journey passed under scripted
+approved-guide preconditions; hosted operation and human review remain separate.
 
 ### Delivered foundations
 
@@ -26,14 +27,15 @@ ready-admission recovery and the canonical Submission POST for initial work and
 exact checker remediation. [ARCH-04E3-B](../WS-ARCH-001-04E3B.md) admits a
 complete false-policy guide only when its approved requirements have supported
 exact checks, with matching Python and PostgreSQL custody. It corrects REV's
-selected-production manifest. Registration and focused tests do not prove the
-complete public worker journey.
+selected-production manifest. The integrated public API and durable-worker
+drill passed at `d5703d9c6` under scripted approved-guide preconditions and
+local Flow-compatible auth.
 
-### Remaining proof
+### Bounded local proof and remaining release boundary
 
 | Boundary | Current gap | Required proof |
 | --- | --- | --- |
-| First-layer integration drill | Public entry and false-guide activation have focused owner proof, but their complete journey has not passed through public APIs and durable workers together | Real PostgreSQL, S3-compatible storage and broker/worker journey from approved guide and claim through ZIP intake, PRE/POST, remediation or governed outcome, including bounded retry, restart, revocation and exact ContributionRecord evidence |
+| First-layer integration drill | Passed at `d5703d9c6`: public claim/ZIP intake, PRE/POST, remediation, both locked policy outcomes, worker restart, late authority revocation and exact ContributionRecord/award evidence over PostgreSQL, MinIO, Redis, prefork Celery and Beat | Reproduce and operate with intended hosted identity and infrastructure. The local run used scripted approved-guide facts, a Flow-compatible local signer and development containers; live setup inference, human review, payment fulfillment and deployment remain separate |
 
 Guide activation itself does not start REV. False/pass still needs the existing
 Operator-authorized LIVE REV generation at execution time. A known pre-effect
@@ -128,9 +130,9 @@ public Submission entry.
 | [ARCH-04E1B-B6](../WS-ARCH-001-04E1BB6.md) | B3/B4/B5 plus existing TASK/ART/AUTH/CHECKERS/outbox owners | Complete: atomic new Submission, exact creation/binding receipts, generation-one request and shared event; fresh-authorized select-only replay; selected production handlers are registered by PILOT-04 |
 | [ARCH-04E1B-B7](../WS-ARCH-001-04E1BB7.md) | B6 plus existing execution/authorization/outbox owners | Complete: hidden request handler, exact committed invocation and per-phase fencing; UNKNOWN never automatically repeats execution; selected production registration is delivered by PILOT-04 |
 | [ARCH-04E1B-B8](../WS-ARCH-001-04E1BB8.md) | Complete ARCH-04E2-B authorized outcome operation and CON-02B; delivered B7 already supplies request handling | Complete: consumes the receipt-bound operation with exact typed result and commit-before-ACK; proves replay, uncertainty and generation/finalization races. PILOT-04 supplies selected production registration |
-| [REV-12A4A scoped controller](../../WS-REV-001/WS-REV-001-12A4A.md) | Same REV-12A1 fence and REV-04C participants | Complete: internal Operator transitions, immutable AUTH/history custody and current-generation participant gates. 04E2-B supplies exact source custody; ARCH-04E3-B corrects the selected production manifest. B8 completion delivery, 04F2 remediation, 04F3 replacement and 04F4 Operator retry are delivered; complete public/worker drill remains. |
+| [REV-12A4A scoped controller](../../WS-REV-001/WS-REV-001-12A4A.md) | Same REV-12A1 fence and REV-04C participants | Complete: internal Operator transitions, immutable AUTH/history custody and current-generation participant gates. 04E2-B supplies exact source custody; ARCH-04E3-B corrects the selected production manifest. B8 completion delivery, 04F2 remediation, 04F3 replacement and 04F4 Operator retry are delivered; bounded local public/worker drill passed. |
 | [ARCH-04E2-B](../WS-ARCH-001-04E2B.md) | Exact source preparation and REV-12A4A generation | Complete: mandatory actual AUTH receipt, database complete-set enforcement, shared audit/outbox and atomic true/false outcomes; B8 supplies hidden completion delivery; selected production registration is delivered by PILOT-04 |
-| ARCH-04E3 | ARCH-04E2, ARCH-04D2, AUTH-OUTBOX-02; shared acceptance proof for false | PILOT-04 registers selected production request/completion delivery; 04E3-B admits supported false-policy guides and corrects the REV manifest. Public/worker drill remains |
+| ARCH-04E3 | ARCH-04E2, ARCH-04D2, AUTH-OUTBOX-02; shared acceptance proof for false | PILOT-04 registers selected production request/completion delivery; 04E3-B admits supported false-policy guides and corrects the REV manifest. Bounded local public/worker drill passed |
 | ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
 | [ARCH-04F1](../WS-ARCH-001-04F1.md) | Existing CHECKERS completion read | Complete: verified retained failure evidence and current contributor-remediation input; its historical setup-failure read does not mean selected production emits `task_setup_blocked`; no TASK mutation |
 | [ARCH-04F2](../WS-ARCH-001-04F2.md) | 04F1 and required hidden 04E result/handler contracts; no live false-branch prerequisite | Hidden exact current checker-remediation TASK/AUTH handoff under both policy modes; no REV/CON, replacement intake or recovery |

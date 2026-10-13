@@ -66,8 +66,9 @@ The automated-acceptance branch is implemented in the selected backend
 composition: supported false-policy guides can activate, and selected completion
 routing uses the shared FinalAcceptance/TASK/CON operation. New false/pass effects
 require an Operator-authorized live REV generation; a typed pre-effect non-live
-refusal rolls back and uses bounded OUTBOX retry. This is not a deployment or
-complete public drill claim. Adjudication is excluded.
+refusal rolls back and uses bounded OUTBOX retry. The bounded local public API
+and Celery service drill passed under scripted approved-guide preconditions;
+this is not a deployment claim. Adjudication is excluded.
 
 The stage describes the purpose and lifecycle boundary, not a promise that all
 checks are deterministic. Deterministic compilation and policy routing do not
@@ -187,7 +188,8 @@ Passing true-policy results reach `review_pending`; eligible false-policy result
 invoke shared authorized acceptance atomically after an Operator-authorized LIVE
 REV generation. ARCH-02I-B exposes public admission-backed Submission entry,
 and ARCH-04E3-B admits complete false-policy guides with supported approved
-checks. The full public API and Celery worker journey still needs its integration drill.
+checks. The bounded local public API and Celery service journey passed its
+integration drill under scripted approved-guide preconditions.
 Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
 unified setup agent. Accepted originals are PDF, DOCX, PPTX and byte-preserved
@@ -245,7 +247,8 @@ ARCH-02I-B exposes public initial and checker-remediation intake, and
 ARCH-04E3-B admits supported false-policy guides with exact Python/PostgreSQL
 custody. A known pre-effect refusal while REV is non-live retries within the
 existing OUTBOX attempt budget; exhaustion dead-letters without automatic
-reopen. The real public API and Celery worker drill remains.
+reopen. The bounded local public API and Celery service drill passed under
+scripted approved-guide preconditions.
 
 Active work stays on that first contribution path. Live human review/revision,
 reviewer participation and fulfillment delivery follow separately.
@@ -779,8 +782,8 @@ committed approvals; duplicate delivery retains one policy and receipt.
 Hidden post-submission execution and completion custody are implemented.
 ARCH-04D2 supplies exact service authority and ARCH-04E1A supplies source-only
 facts/types. PILOT-04 registers selected production request/completion routing;
-ARCH-04E3-B activates supported false-policy guides. The complete public
-durable-runtime drill remains pending.
+ARCH-04E3-B activates supported false-policy guides. The bounded local public
+durable-runtime drill passed under scripted approved-guide preconditions.
 The local Celery command above includes Beat; start it before creating guide sources.
 
 The Beat scheduler must run alongside the Celery execution processes so
@@ -928,7 +931,7 @@ ARCH-02I-B exposes public admission-backed entry; ARCH-04E3-B activates
 supported false-policy guides, with new acceptance effects still gated on a
 LIVE REV generation. A known pre-effect non-live refusal retries only within
 the existing OUTBOX budget; exhausted delivery dead-letters without automatic
-reopen. The real public API and Celery worker drill remains. A future setup-fault hold must
+reopen. The bounded local public API and Celery service drill passed. A future setup-fault hold must
 retain the Submission and locked rules without contributor penalty; changing
 submitted-work rules remains deferred.
 Real manager activation now supplies the false-policy lineage when the approved

@@ -918,19 +918,21 @@ active AdminRoleGrant-backed administrative mutations, the three active fixed
 ART foundation service actions, Project Manager
 `artifact.guide_source.ingest`, and the fixed-service
 `artifact.guide_source.read`
-action, contributor `artifact.submission_bundle.prepare` and
+action, contributor `artifact.submission_bundle.prepare`, human
 `submission.create`, and fixed-service `artifact.submission.binding.create`.
 REV-12A4A additionally issues PREP for internal
 `review.lifecycle.activation.manage`, the sole active review exception. Human
-review and generic artifact-read remain planned and issue no handle. The
-controller activates no public review route or human decision, acceptance or
-payment delivery.
+review and generic artifact-read remain planned and issue no handle. ARCH-02I-B
+exposes public ZIP preparation and initial/checker-remediation Submission entry.
+The controller activates no public review route or human decision, acceptance
+or payment delivery.
 ARCH-04E1B-B6 retains the exact creation and binding decision IDs in their owner
 receipts. Fresh PREP authority validates those immutable events on replay,
 including exact actor/service, action, permission, project, resource and canonical
 context digest. The retained event keeps its original request/correlation IDs and
 grant provenance; fresh transport IDs do not create another allow. Missing or
-inconsistent receipts make replay unavailable. No public route is added.
+inconsistent receipts make replay unavailable. B6 adds no separate replay route;
+ARCH-02I-B exposes the existing creation operation, including exact replay.
 
 Actor-self preparation locks the exact caller
 profile and then its exact identity link. Administrative preparation locks

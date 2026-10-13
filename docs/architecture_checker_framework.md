@@ -48,8 +48,8 @@ or oversized output cannot become a silent pass. This contract and the
 immutable registry are consumed by selected hidden PRE/POST owners through an
 explicit Rust service adapter. Production request/completion handlers are
 registered; ARCH-02I-B exposes public contributor ZIP preparation and
-admission-backed initial/checker-remediation Submission creation. The complete
-public API and Celery service drill remains pending.
+admission-backed initial/checker-remediation Submission creation. The bounded
+local public API and Celery service drill passed under scripted approved-guide preconditions.
 
 Both executable catalogues, their runtime factories and their request/result
 decoders are removed. Requests use the default-plus-external PRE contract and
@@ -382,8 +382,8 @@ pass/fail/warning results. The public authorized ZIP preparation route returns
 `pre_submission_checker_failed` with those exact ordered bounded results in the
 same request. ARCH-02I-B publishes it in OpenAPI with admission-backed
 Submission creation. A passing ready admission can be consumed by the public
-Submission operation. The complete public API and Celery service drill remains
-pending. POL-07B removes the standalone JSON precheck and its exclusive
+Submission operation. The bounded local public API and Celery service drill
+passed under scripted approved-guide preconditions. POL-07B removes the standalone JSON precheck and its exclusive
 implementation. This result is not a review decision value.
 Pre-submit results do not create durable `CheckerRun` records, do not move a
 task to `review_pending`, and do not return review decision values: `accept`,
@@ -497,8 +497,9 @@ terminal infrastructure failure only after cleanup and fresh finalization
 authorization; it does not route the task. Exact replay does not reread storage.
 Denied material access and unexpected failures remain nonterminal. ARCH-04F adds
 implemented hidden exact-cause replacement intake and reason-bound Operator
-retry after the remediation handoff. The complete public durable-runtime drill
-remains a separate prerequisite for claiming the first journey usable.
+retry after the remediation handoff. The bounded local public durable-runtime
+drill passed under scripted approved-guide preconditions; hosted operation
+remains a separate readiness boundary.
 ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered
 with output-file authority unavailable; exact input authority is implemented.
 The flow below is not a claim that the complete journey is live in production.
@@ -557,8 +558,8 @@ The direct CHECKERS-to-TASK mutation, fabricated system actor and alternate
 Celery gate are removed. Hidden durable execution and exact service authority are implemented; selected automatic
 request/completion delivery is registered. ARCH-04E2-B supplies the hidden authorized
 outcome operation; B8 supplies completion delivery; ARCH-04F2 extends that
-operation with remediation. Manager-visible setup-fault hold and the complete
-public durable-runtime drill remain pending.
+operation with remediation. The bounded local public durable-runtime drill
+passed; manager-visible setup-fault hold remains pending.
 
 `review_pending` marks readiness for the separately owned WS-REV lifecycle.
 WS-REV alone creates `ReviewPacketManifest`, review queues, reviewer leases,

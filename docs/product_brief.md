@@ -65,8 +65,8 @@ complete authorized outcome over it. Selected request and completion handlers ar
 registered in production composition. A complete supported false guide can
 activate when its approved inventory contains no `human_review` disposition; new
 false/pass effects require an Operator-authorized live REV generation. ARCH-02I-B exposes public ZIP preparation and admission-backed
-initial/checker-remediation Submission creation. The complete public API and
-Celery service drill remains pending.
+initial/checker-remediation Submission creation. The bounded local public API
+and Celery service drill passed under scripted approved-guide preconditions.
 See the [checker framework](architecture_checker_framework.md) and
 [current capability ledger](roadmap_status.md) for supported boundaries.
 

@@ -9,7 +9,8 @@ after required post-submit checks pass. Authorized success outcomes and their
 AUTH/database custody are delivered, selected request/completion handlers are
 registered in production composition, and supported false-policy guides can
 activate. New false/pass effects still require a live REV generation. This is
-not a deployment or complete public drill claim.
+not a deployment claim; the bounded local public drill is recorded in the
+[capability ledger](roadmap_status.md).
 
 ```text
 DRAFT

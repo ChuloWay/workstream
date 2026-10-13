@@ -39,8 +39,8 @@ activate when its approved inventory contains no `human_review` disposition.
 Eligible false-policy success uses shared authorized FinalAcceptance and
 submitter ContributionRecord without a synthetic Review or reviewer contribution.
 New false/pass effects require an Operator-authorized live REV generation;
-checker success alone cannot authorize acceptance. The complete public API and
-Celery service drill remains pending. The [capability ledger](../roadmap_status.md)
+checker success alone cannot authorize acceptance. The bounded local public API
+and Celery service drill passed under scripted approved-guide preconditions. The [capability ledger](../roadmap_status.md)
 owns current status; the retained PDF predates this source.
 
 v0.1 is focused on proving the internal lifecycle:
@@ -133,7 +133,7 @@ checker/job boundary.
 | --- | --- |
 | React + Vite operations UI | Planned internal operations dashboard for project, task, submission, review, and compensation fulfillment workflows. Reputation UI remains deferred. |
 | FastAPI backend | API contracts, workflow rules, auth dependency, lifecycle guards, module orchestration, and audit writes. |
-| Celery worker boundary | Durable project setup and registered post-submit checker request/completion handlers. The complete public API and Celery service drill remains pending. FastAPI background tasks are not the Workstream product-job boundary. |
+| Celery worker boundary | Durable project setup and registered post-submit checker request/completion handlers. The bounded local public API and Celery service drill passed under scripted approved-guide preconditions. FastAPI background tasks are not the Workstream product-job boundary. |
 | CHECKERS | Delivered retained-history reads, durable selected PRE/POST execution and recovery, and exact service authority; selected request/completion handlers are registered. |
 | Storage interface | Keeps file/evidence semantics stable while local storage and the hosted AWS S3 profile implement the same provider-neutral port. |
 | Postgres | Durable record database for the full Workstream lifecycle. |
@@ -169,8 +169,8 @@ public ZIP preparation and admission-backed initial/checker-remediation
 Submission creation are delivered. Durable post-submit execution/recovery has
 exact input, execute and finalize service authority, and selected
 request/completion handlers are registered in production composition. The
-complete public API and Celery service drill remains pending; this is not a
-deployment claim.
+bounded local public API and Celery service drill passed under scripted
+approved-guide preconditions; this is not a deployment claim.
 Retained history does not execute checkers or authorize acceptance.
 
 <div class="diagram sequence">
