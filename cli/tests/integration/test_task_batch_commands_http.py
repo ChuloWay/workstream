@@ -397,7 +397,9 @@ def test_invalid_selectors_keys_and_release_reasons_make_zero_requests(cli):
         assert invoke(cli, origin, "release", reason=" \n").returncode == 2
         for operation in ("screen", "release"):
             for count in (1001, 4001):
-                assert invoke(cli, origin, operation, reason="é" * count).returncode == 2
+                assert (
+                    invoke(cli, origin, operation, reason="é" * count).returncode == 2
+                )
         assert requests == []
 
 
