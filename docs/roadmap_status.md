@@ -423,10 +423,11 @@ cannot be reused as post-submission review-gate evidence. See the
   Historical exact-source PostgreSQL/MinIO proofs cover 200/500-member
   import-screen-release journeys, fresh replay, rollback, native waits, revocation
   and immutable custody, plus the built-CLI 200-row socket journey and equivalent
-  verified-source recovery. Final-source native journeys, timing, independent
-  review and complete hosted CI remain pending after the current context-reuse
-  repairs. These historical results do not establish final-source readiness.
-  Issue 489 stays open.
+  verified-source recovery. [PR #543](https://github.com/Flow-Research/workstream/pull/543)
+  delivered the context-reuse repairs and final native/hosted verification;
+  [issue #489](https://github.com/Flow-Research/workstream/issues/489) is closed.
+  Correctness and completeness passed; the diagnostic CI timing target remains
+  unmet. These results do not claim deployment or complete submission/review support.
   [CLI manager task browsing](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-04.md)
   adds one-page task discovery and exact task detail through existing manager
   reads, with server-owned live authority and opaque continuation.
