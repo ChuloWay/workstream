@@ -224,7 +224,9 @@ retained historical versions. Backend selection and current Finance authority
 remain decisive; PM-only permission does not suffice. CLI draft creation, complete
 rule replacement, publication and retirement now use the existing public Finance
 operations with explicit retry keys and immutable receipts. Guide activation is
-separate. Contribution-evidence CLI commands remain later work.
+separate. CLI contribution-evidence commands now provide self and authorized
+project reads, including exact server CSV downloads. Fixed-membership pagination
+remains separate work.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
