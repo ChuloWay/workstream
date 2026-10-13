@@ -99,7 +99,7 @@ def _create_tables() -> None:
             "row_count between 1 and 500", name="ck_task_batch_transition_receipts_bounds"
         ),
         sa.CheckConstraint(
-            "reason is null or length(reason)<=4000",
+            "reason is null or length(reason)<=1000",
             name="ck_task_batch_transition_receipts_reason_bounds",
         ),
         sa.CheckConstraint(
