@@ -620,3 +620,22 @@ After the timestamp guard, fresh native `0037` schema measurement at
 The expected old fingerprint refused setup as designed; raw evidence is
 `/tmp/pilot02-timestamp-schema-measure.{log,json}`, with all database/role and
 MinIO cleanup complete. This is schema measurement, not a passing behavior test.
+
+Current repair proof: at `6790793942f39d1cc817c633ef290ff691cc0c05`,
+`/tmp/pilot02-timestamp-fixed-native.{log,json}` records four passing native cases
+in 217.74 seconds: forged timestamp rejection, cross-project selectors, original
+replay after advancement, and native artifact binding. All owned database/role
+and MinIO cleanup completed. Main `cdfdebd749ed0a12df4017f267170d5db2713e3d`
+then reconciled cleanly; it adds Finance CLI inspection, with no backend delta.
+The source structure check identified the additive audit selector as 102 lines;
+two single-symbol imports now use ordinary single-line spelling, preserving
+identical imports and behavior without changing policy or the debt ledger.
+
+The takeover reapplies the reviewed atomic delta from `e31e1777` through
+`af82b1fe0` onto the selected-checker main, because their historical merge bases
+otherwise remove valid import implementation. A tree-preserving ancestry merge
+of `af82b1fe0` records that manually reconciled source so the existing PR branch
+can advance normally. It does not select the historical tree or restore retired
+checker fixtures. Independent owner reviews inspect the reconciled implementation.
+The selected MCP fragment was recaptured from `65803bad7`; its contents and
+canonical digest match, and its producer metadata now names that source.
