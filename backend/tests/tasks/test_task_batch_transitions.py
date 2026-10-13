@@ -340,10 +340,20 @@ async def test_revoked_manager_cannot_replay_a_successful_bulk_write(import_sour
         assert len(denials) == 1 and denials[0].denial_code == "permission_not_granted"
 
 
-async def test_same_key_concurrent_roots_observe_native_wait_then_one_success(import_source_client, monkeypatch):
+@pytest.mark.parametrize("operation", ["screen", "release"])
+async def test_same_key_concurrent_roots_observe_native_wait_then_one_success(
+    import_source_client, monkeypatch, operation,
+):
     """An observed PostgreSQL blocker proves aggregate reservation serialization."""
     client = import_source_client
     project, batch = await _import(client)
+    if operation == "release":
+        screened = await client.post(
+            _path(project, batch, "screen"), headers=auth_headers(),
+            json={"reason": "Prepare concurrent release"},
+        )
+        assert screened.status_code == 200, screened.text
+    before = await _success_facts(project)
     original = TaskBatchTransitionCommands._reserve
     reserved, entered, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
     pids, calls = [], 0
@@ -363,11 +373,11 @@ async def test_same_key_concurrent_roots_observe_native_wait_then_one_success(im
 
     monkeypatch.setattr(TaskBatchTransitionCommands, "_reserve", gated)
     key, payload = auth_headers(), {"reason": "Concurrent exact request"}
-    first = asyncio.create_task(client.post(_path(project, batch, "screen"), headers=key, json=payload))
+    first = asyncio.create_task(client.post(_path(project, batch, operation), headers=key, json=payload))
     second = None
     try:
         await asyncio.wait_for(reserved.wait(), timeout=30)
-        second = asyncio.create_task(client.post(_path(project, batch, "screen"), headers=key, json=payload))
+        second = asyncio.create_task(client.post(_path(project, batch, operation), headers=key, json=payload))
         await asyncio.wait_for(entered.wait(), timeout=30)
         deadline = asyncio.get_running_loop().time() + 10
         async with db_session.get_session_factory()() as observer:
@@ -380,7 +390,10 @@ async def test_same_key_concurrent_roots_observe_native_wait_then_one_success(im
         assert all(response.status_code == 200 for response in responses), [response.text for response in responses]
         assert responses[0].json() == responses[1].json()
         facts = await _success_facts(project)
-        assert len(facts[1]) == 1 and all(len(values) == 2 for values in facts[2:5]) and len(facts[-1]) == 4
+        assert len(facts[1]) - len(before[1]) == 1
+        assert all(len(facts[index]) - len(before[index]) == 2 for index in range(2, 5))
+        assert len(facts[-1]) - len(before[-1]) == 4
+        assert all(row.status == ("screening" if operation == "screen" else "ready") for row in facts[0])
     finally:
         release.set()
         for pending in (first, second):

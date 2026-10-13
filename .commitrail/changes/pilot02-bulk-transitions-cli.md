@@ -862,3 +862,23 @@ native controls collect, including genuine v1/v2 contexts in one batch. A wider
 locked-context selection produced 22 passing cases and six setup errors solely
 because no `WORKSTREAM_TEST_DATABASE_URL` was supplied; no database behavior is
 claimed from that local selection. Exact native execution remains root-owned.
+
+At `abc3cbf58`, five of six native context controls passed. The cross-project
+case failed before reaching its guard because both setup projects used the same
+slug. After giving the second project a distinct slug, that case passed at
+`527c671e0` in 69.86 seconds. Both isolated runs confirmed database, role and
+MinIO cleanup. These runs cover transaction lifetime, cross-project refusal,
+changed stamps, Unicode reasons, distinct historical generations and rollback;
+they are not a full-suite or performance claim.
+
+The final acceptance mapping also requires the observed PostgreSQL wait control
+to exercise RELEASE, not only SCREEN. Parameterize the existing control over
+both operations, using a genuine initial SCREEN for RELEASE and comparing the
+exact incremental root, member, receipt, lifecycle and fresh AUTH counts. Keep
+the intermediate blocker observation and final task-state assertions.
+
+The real CLI diagnostic at `6230ef664` failed at source upload's unchanged
+12-second client deadline before any bulk operation ran. The host was under
+memory pressure with another native run active; this is not evidence of either
+success or failure of the context-reuse repair. Cleanup completed. Current-source
+public journey and hosted timing proof remain required.
