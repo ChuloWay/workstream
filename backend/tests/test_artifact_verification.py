@@ -222,6 +222,13 @@ def test_eager_internal_tasks_use_lazy_process_runtime(
         "ArtifactStorageOrchestrator",
         Mock(return_value=orchestrator),
     )
+    task_contexts = Mock()
+    task_adapters = importlib.import_module("app.adapters.tasks")
+    monkeypatch.setattr(
+        task_adapters,
+        "task_submission_context_port",
+        Mock(return_value=task_contexts),
+    )
     monkeypatch.setattr(
         worker_module,
         "run_artifact_internal_operation",
@@ -236,7 +243,10 @@ def test_eager_internal_tasks_use_lazy_process_runtime(
 
     assert initialize.await_count == 2
     orchestrator.resolve_put_attempt.assert_awaited_once_with(attempt_id)
-    orchestrator.verify_object.assert_awaited_once_with(job_id)
+    orchestrator.verify_object.assert_awaited_once_with(
+        job_id,
+        submission_task_contexts=task_contexts,
+    )
     continuation_delay.assert_called_once_with(str(attempt_id))
     celery_module = importlib.import_module("app.workers.celery_app")
     worker_module = importlib.import_module("app.workers.artifacts")

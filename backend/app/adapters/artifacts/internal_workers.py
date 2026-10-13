@@ -158,7 +158,12 @@ async def run_artifact_internal_operation(kind: str, resource_id: UUID) -> str:
                     if kind == "put":
                         return await orchestrator.resolve_put_attempt(resource_id)
                     elif kind == "verification":
-                        return await orchestrator.verify_object(resource_id)
+                        from app.adapters.tasks import task_submission_context_port
+
+                        return await orchestrator.verify_object(
+                            resource_id,
+                            submission_task_contexts=task_submission_context_port(session),
+                        )
     raise AssertionError("artifact internal operation did not return")
 
 

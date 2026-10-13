@@ -680,7 +680,12 @@ class ArtifactStorageOrchestrator:
             observed=True,
         )
 
-    async def verify_object(self, job_id: UUID) -> str:
+    async def verify_object(
+        self,
+        job_id: UUID,
+        *,
+        submission_task_contexts: TaskSubmissionContextPort | None = None,
+    ) -> str:
         """Run one deadline-bounded complete-object verification claim."""
         async with self._session.begin():
             candidate = await self._repo.lock_verification_job(str(job_id))
@@ -778,7 +783,13 @@ class ArtifactStorageOrchestrator:
                 relationship_conflict = False
         if relationship_conflict:
             return await self._complete_verification(
-                claimed, executor_id, facts, "conflict", None, None
+                claimed,
+                executor_id,
+                facts,
+                "conflict",
+                None,
+                None,
+                submission_task_contexts=submission_task_contexts,
             )
         try:
             observed_sha256, observed_size = await self._read_complete(
@@ -786,13 +797,25 @@ class ArtifactStorageOrchestrator:
             )
         except ArtifactObjectMissingError:
             return await self._complete_verification(
-                claimed, executor_id, facts, "missing", None, None
+                claimed,
+                executor_id,
+                facts,
+                "missing",
+                None,
+                None,
+                submission_task_contexts=submission_task_contexts,
             )
         except (ArtifactStoreUnavailableError, TimeoutError):
             return await self._record_verification_unavailable(claimed, executor_id, facts)
         except ArtifactStoreError:
             return await self._complete_verification(
-                claimed, executor_id, facts, "conflict", None, None
+                claimed,
+                executor_id,
+                facts,
+                "conflict",
+                None,
+                None,
+                submission_task_contexts=submission_task_contexts,
             )
         outcome = (
             "verified"
@@ -801,7 +824,13 @@ class ArtifactStorageOrchestrator:
             else "integrity_mismatch"
         )
         return await self._complete_verification(
-            claimed, executor_id, facts, outcome, observed_sha256, observed_size
+            claimed,
+            executor_id,
+            facts,
+            outcome,
+            observed_sha256,
+            observed_size,
+            submission_task_contexts=submission_task_contexts,
         )
 
     async def _read_complete(self, provider_object_ref: str) -> tuple[str, int]:
@@ -1282,8 +1311,26 @@ class ArtifactStorageOrchestrator:
         outcome: str,
         observed_sha256: str | None,
         observed_size: int | None,
+        *,
+        submission_task_contexts: TaskSubmissionContextPort | None = None,
     ) -> str:
+        from app.modules.artifacts.submission_admission import (
+            SubmissionBundleAdmissionPublicationError,
+            SubmissionBundleAdmissionPublisher,
+        )
+
+        publisher = SubmissionBundleAdmissionPublisher(self._session)
+        retained_parents = None
+        publication_conflict = False
         async with self._session.begin():
+            if outcome == "verified":
+                try:
+                    retained_parents = await publisher.lock_retained_submission_parents(
+                        verification_job_id=claimed.id,
+                        task_contexts=submission_task_contexts,
+                    )
+                except SubmissionBundleAdmissionPublicationError:
+                    publication_conflict = True
             await self._authority.prepare(
                 service_identity=ServiceIdentity.ARTIFACT_VERIFIER,
                 action_id=ActionId.ARTIFACT_VERIFICATION_EXECUTE,
@@ -1359,15 +1406,15 @@ class ArtifactStorageOrchestrator:
                 )
             )
             if outcome == "verified":
-                from app.modules.artifacts.submission_admission import (
-                    SubmissionBundleAdmissionPublicationError,
-                    SubmissionBundleAdmissionPublisher,
-                )
-
                 try:
-                    await SubmissionBundleAdmissionPublisher(self._session).publish_verified(
+                    if publication_conflict:
+                        raise SubmissionBundleAdmissionPublicationError(
+                            "submission admission retained identity is invalid"
+                        )
+                    await publisher.publish_verified(
                         verification_job_id=job.id,
                         verification_receipt_id=verification_receipt.id,
+                        retained_parents=retained_parents,
                     )
                 except SubmissionBundleAdmissionPublicationError:
                     # Valid bytes can still have permanently inadmissible

@@ -8,6 +8,7 @@ from sqlalchemy import select
 from starlette.requests import Request
 
 from app.adapters.artifacts import get_submission_bundle_preparation_command
+from app.adapters.tasks import task_submission_context_port
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.actors.api.service_identities import ServiceIdentity
 from app.modules.artifacts.authorization import (
@@ -56,6 +57,14 @@ async def _seed_services(factory):
 
 async def _verified_admission(factory, store, namespace, settings, context, request):
     """Run the real ART command and independent verifier, returning its ready admission."""
+    put_attempt_id = await _prepare_put_attempt(factory, settings, context, request)
+    return await _verify_put_attempt(
+        factory, store, namespace, settings, put_attempt_id
+    )
+
+
+async def _prepare_put_attempt(factory, settings, context, request):
+    """Run the real ART preparation command while leaving verification pending."""
     http = Request(
         {
             "type": "http",
@@ -77,9 +86,7 @@ async def _verified_admission(factory, store, namespace, settings, context, requ
             PreparedSubmissionBundlePreparationAuthorization(session, context),
         ).prepare(request)
         assert result.put_attempt_id is not None
-    return await _verify_put_attempt(
-        factory, store, namespace, settings, result.put_attempt_id
-    )
+    return result.put_attempt_id
 
 
 async def _verify_put_attempt(factory, store, namespace, settings, put_attempt_id):
@@ -101,7 +108,10 @@ async def _verify_put_attempt(factory, store, namespace, settings, put_attempt_i
         assert (
             await ArtifactStorageOrchestrator(
                 session, store, namespace, settings, verifier
-            ).verify_object(UUID(job_id))
+            ).verify_object(
+                UUID(job_id),
+                submission_task_contexts=task_submission_context_port(session),
+            )
             == "verified"
         )
     async with factory() as session:
