@@ -8,6 +8,7 @@ from datetime import datetime
 from uuid import UUID
 from app.api.deps.authorization import get_task_commands, get_task_import_batch_commands, enforce_human_authorization_read
 from app.modules.tasks.queue_router import router as queue_router
+from app.modules.tasks.task_batch_transition_router import router as batch_transition_router
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api import TaskAuthorityOperation, ContributorTaskDetail, ManagementTaskDetail
 from typing import Annotated
@@ -46,6 +47,7 @@ from app.modules.tasks.api.submission_history import (
 router = APIRouter(tags=["tasks"])
 # Static queue routes precede the project-scoped task UUID route.
 router.include_router(queue_router)
+router.include_router(batch_transition_router)
 
 TASK_IDEMPOTENCY_PARAMETER = {
     "name": "Idempotency-Key", "in": "header", "required": True,

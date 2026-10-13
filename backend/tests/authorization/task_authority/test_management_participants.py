@@ -13,6 +13,7 @@ from app.modules.actors.models import ActorIdentityLink
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
 from app.modules.tasks.api.authorization import TaskAuthorityOperation
 from app.modules.tasks.models import AuditEvent, TaskCommandReceipt, WorkstreamTask
+from app.modules.tasks.service import TaskValidationError
 from tests.authorization.task_authority.test_concurrency import actor_context
 from tests.test_tasks import (
     task_database_env as task_database_env,
@@ -64,6 +65,96 @@ async def test_transition_preparation_cannot_cross_roots(task_client, phase):
             assert await session.get(AuditEvent, str(decision.decision_id)) is None
             current = await session.get(WorkstreamTask, task["id"])
             assert current.status == "draft" and current.locked_guide_version is None
+
+
+async def test_transition_context_cannot_cross_roots(task_client):
+    project = await create_active_project(task_client)
+    task = await create_draft_task(task_client, project["id"])
+    context = await manager_context()
+    async with db_session.get_session_factory()() as session:
+        owner = commands(session, context)
+        async with session.begin():
+            original = await owner.prepare_transition(
+                UUID(task["id"]), TaskAuthorityOperation.SCREEN, "Canonical screening",
+                idempotency_key=uuid4(), project_id=UUID(project["id"]),
+            )
+            await owner.authorize_transition(original)
+            transition_context = await owner.prepare_transition_context(original)
+            await session.rollback()
+        async with session.begin():
+            prepared = await owner.prepare_transition(
+                UUID(task["id"]), TaskAuthorityOperation.SCREEN, "Canonical screening",
+                idempotency_key=uuid4(), project_id=UUID(project["id"]),
+            )
+            decision = await owner.authorize_transition(prepared)
+            with pytest.raises(RuntimeError, match="original caller transaction"):
+                await owner.stage_transition(
+                    prepared, decision, transition_context=transition_context,
+                )
+            await session.rollback()
+        async with session.begin():
+            current = await session.get(WorkstreamTask, task["id"])
+            assert current.status == "draft" and current.locked_guide_version is None
+
+
+async def test_transition_context_cannot_cross_projects(task_client):
+    task_project = await create_active_project(task_client)
+    other_project = await create_active_project(task_client, slug="other-context-project")
+    task = await create_draft_task(task_client, task_project["id"])
+    other_task = await create_draft_task(task_client, other_project["id"])
+    context = await manager_context()
+    async with db_session.get_session_factory()() as session:
+        owner = commands(session, context)
+        async with session.begin():
+            prepared = await owner.prepare_transition(
+                UUID(task["id"]), TaskAuthorityOperation.SCREEN, "Canonical screening",
+                idempotency_key=uuid4(), project_id=UUID(task_project["id"]),
+            )
+            decision = await owner.authorize_transition(prepared)
+            other = await owner.prepare_transition(
+                UUID(other_task["id"]), TaskAuthorityOperation.SCREEN, "Other screening",
+                idempotency_key=uuid4(), project_id=UUID(other_project["id"]),
+            )
+            await owner.authorize_transition(other)
+            transition_context = await owner.prepare_transition_context(other)
+            with pytest.raises(TaskValidationError, match="transition context changed"):
+                await owner.stage_transition(
+                    prepared, decision, transition_context=transition_context,
+                )
+            await session.rollback()
+        async with session.begin():
+            current = await session.get(WorkstreamTask, task["id"])
+            assert current.status == "draft" and current.locked_guide_version is None
+
+
+async def test_release_context_refuses_changed_task_stamps(task_client):
+    project = await create_active_project(task_client)
+    task = await create_draft_task(task_client, project["id"])
+    context = await manager_context()
+    async with db_session.get_session_factory()() as session:
+        owner = commands(session, context)
+        async with session.begin():
+            screened = await owner.prepare_transition(
+                UUID(task["id"]), TaskAuthorityOperation.SCREEN, "Canonical screening",
+                idempotency_key=uuid4(), project_id=UUID(project["id"]),
+            )
+            await owner.stage_transition(screened, await owner.authorize_transition(screened))
+        async with session.begin():
+            prepared = await owner.prepare_transition(
+                UUID(task["id"]), TaskAuthorityOperation.RELEASE, "Canonical release",
+                idempotency_key=uuid4(), project_id=UUID(project["id"]),
+            )
+            decision = await owner.authorize_transition(prepared)
+            transition_context = await owner.prepare_transition_context(prepared)
+            prepared.task.locked_post_submit_checker_policy_body = {"schema_version": "changed"}
+            with pytest.raises(TaskValidationError, match="transition preparation changed"):
+                await owner.stage_transition(
+                    prepared, decision, transition_context=transition_context,
+                )
+            await session.rollback()
+        async with session.begin():
+            current = await session.get(WorkstreamTask, task["id"])
+            assert current.status == "screening"
 
 
 async def test_two_task_transition_late_failure_rolls_back_complete_root(task_client, monkeypatch):

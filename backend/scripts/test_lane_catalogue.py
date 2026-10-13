@@ -258,9 +258,12 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    # Project-bound batch custody uses measured four-way project headroom.
     "tests/tasks/test_task_import_batch_contract.py",
     "tests/tasks/test_task_import_batch_bindings.py",
     "tests/tasks/test_task_import_batches.py",
+    "tests/tasks/test_task_batch_transition_contract.py",
+    "tests/tasks/test_task_batch_transitions.py",
     "tests/contributions/test_export_csv.py",
     "tests/contributions/test_export_projection.py",
     "tests/authorization/test_contribution_read_scope.py",

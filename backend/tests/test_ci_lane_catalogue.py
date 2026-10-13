@@ -131,6 +131,8 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         set(catalogue.CHECKER_DELIVERY_MODULES)
         | set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
         | {
+            "tests/tasks/test_task_batch_transition_contract.py",
+            "tests/tasks/test_task_batch_transitions.py",
             "tests/contributions/test_export_csv.py",
             "tests/tasks/test_task_import_batch_contract.py",
             "tests/tasks/test_task_import_batch_bindings.py",
