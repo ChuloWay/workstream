@@ -11,6 +11,7 @@ from app.modules.reviews.acceptance.repository import FinalAcceptanceRepository
 from app.modules.reviews.api.acceptance import FinalAcceptanceConflict
 from app.modules.reviews.api.lifecycle import JointLifecycleUnavailable
 from app.modules.reviews.lifecycle.models import JointLifecycleReleaseControl
+from app.modules.tasks.api.routing_outcome import TaskRoutingLifecycleDeferred
 from tests.tasks.post_submit_routing.outcome_support import authorized_routing_source, apply_outcome
 from tests.reviews.acceptance.participation_support import (
     stored_effects,
@@ -74,7 +75,7 @@ async def test_current_generation_cannot_admit_new_effects_when_stopped(
         for phase in ("draining", "disabled", "shadow"):
             receipt = await transition(await command_for(access.target.id, phase))
             async with h.factory() as session:
-                with pytest.raises(FinalAcceptanceConflict):
+                with pytest.raises(TaskRoutingLifecycleDeferred, match="routing lifecycle is not live"):
                     async with session.begin():
                         await apply_outcome(session, h, receipt.generation)
             async with h.factory() as session:
@@ -168,7 +169,7 @@ async def test_committed_transition_fences_waiting_acceptance(
                     await asyncio.wait_for(writer, 10)
                 # A fresh generation is still not permission for stopped effects.
                 async with h.factory() as session, session.begin():
-                    with pytest.raises(FinalAcceptanceConflict):
+                    with pytest.raises(TaskRoutingLifecycleDeferred, match="routing lifecycle is not live"):
                         await apply_outcome(session, h, stopped.generation)
             finally:
                 await stopper.rollback()
@@ -184,7 +185,7 @@ async def test_generation_zero_cannot_create_acceptance(tmp_path, isolated_datab
         async with h.factory() as session:
             before = await stored_effects(session, h.request.task_id)
         async with h.factory() as session, session.begin():
-            with pytest.raises(FinalAcceptanceConflict):
+            with pytest.raises(TaskRoutingLifecycleDeferred, match="routing lifecycle is not live"):
                 await apply_outcome(session, h, 0)
         async with h.factory() as session:
             assert await stored_effects(session, h.request.task_id) == before

@@ -83,7 +83,25 @@ async def test_live_authority_denial_preserves_draft(clean_postgres_database, au
 
 @pytest.mark.parametrize("human_review_required", [True, False])
 async def test_live_activation_keeps_product_readiness_guards(clean_postgres_database, human_review_required):
-    async with activation_case(clean_postgres_database, human_review_required=human_review_required) as (factory, command, actor, _, _, _):
+    compilation_outcome = None
+    if not human_review_required:
+        from app.interfaces.project_agents import AtomicGuideRequirement
+        from tests.projects.guide_compilation.helpers import result
+
+        proposal = result()
+        compilation_outcome = proposal.model_copy(update={"requirements": (
+            AtomicGuideRequirement(
+                requirement_id="human_quality",
+                statement="An authorized reviewer must assess the final quality.",
+                disposition="human_review",
+                evidence_refs=proposal.findings[0].evidence_refs,
+            ),
+        )})
+    async with activation_case(
+        clean_postgres_database,
+        human_review_required=human_review_required,
+        compilation_outcome=compilation_outcome,
+    ) as (factory, command, actor, _, _, _):
         before = await activation_state(factory)
         variants = [command] if not human_review_required else [
             command.model_copy(update={"guide_mutation_generation": command.guide_mutation_generation + 1}),
@@ -94,7 +112,10 @@ async def test_live_activation_keeps_product_readiness_guards(clean_postgres_dat
             command.model_copy(update={"contribution_policy_version_id": uuid4()}),
         ]
         for variant in variants:
-            with pytest.raises(GuideProposalError):
+            with pytest.raises(
+                GuideProposalError,
+                match="approval_blocked" if not human_review_required else None,
+            ):
                 await activate(factory, actor, variant)
             assert await activation_state(factory) == before
         if human_review_required:

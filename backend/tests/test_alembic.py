@@ -79,7 +79,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
     script = ScriptDirectory.from_config(config)
     revisions = list(script.walk_revisions())
 
-    assert [revision.revision for revision in revisions] == [HEAD_REVISION, "0035_checker_retry", "0034_checker_replacement", "0033_contribution_reads", "0032_checker_remediation", "0031_task_import_source", "0030_routing_outcomes", "0029_external_checker_registry", "0028_lifecycle_transitions", "0027_markdown_guide_media", "0026_task_guide_read", "0025_submission_dispatch", "0024_require_second_review_false", "0023_remove_task_payment_policy", "0022_submission_packet_custody", "0021_submission_manifest", "0020_review_admission_lock_order", "0019_submitter_awards", "0018_task_routing_request", "0017_acceptance_source_contracts", "0016_review_lifecycle_fence", "0015_contribution_awards", "0014_final_acceptance", "0013_review_source", "0012_review_packet", "0011_task_routing_source", "0010_post_submit_authority", "0009_checker_material_lineage", "0008_checker_execution", "0007_checker_output_custody", "0006_history_read_authority", "0005_task_evidence_authority", "0004_task_context_authority", "0003_task_read_authority", "0002_task_queue_authority", BASELINE_REVISION]
+    assert [revision.revision for revision in revisions] == [HEAD_REVISION, "0036_selected_checker_flow", "0035_checker_retry", "0034_checker_replacement", "0033_contribution_reads", "0032_checker_remediation", "0031_task_import_source", "0030_routing_outcomes", "0029_external_checker_registry", "0028_lifecycle_transitions", "0027_markdown_guide_media", "0026_task_guide_read", "0025_submission_dispatch", "0024_require_second_review_false", "0023_remove_task_payment_policy", "0022_submission_packet_custody", "0021_submission_manifest", "0020_review_admission_lock_order", "0019_submitter_awards", "0018_task_routing_request", "0017_acceptance_source_contracts", "0016_review_lifecycle_fence", "0015_contribution_awards", "0014_final_acceptance", "0013_review_source", "0012_review_packet", "0011_task_routing_source", "0010_post_submit_authority", "0009_checker_material_lineage", "0008_checker_execution", "0007_checker_output_custody", "0006_history_read_authority", "0005_task_evidence_authority", "0004_task_context_authority", "0003_task_read_authority", "0002_task_queue_authority", BASELINE_REVISION]
     assert revisions[-1].down_revision is None
     assert script.get_heads() == [HEAD_REVISION]
 
@@ -202,6 +202,27 @@ def test_repeated_upgrade_head_preserves_current_database(
         command.upgrade(config, "head")
         after = asyncio.run(_database_snapshot(isolated_database_env))
     assert after == before
+
+
+def test_preceding_head_upgrades_to_current_without_recreation(
+    isolated_database_env: str, migration_lock
+) -> None:
+    """A database at 0036 remains an authorized upgrade source for 0037."""
+    config = _alembic_config()
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, "0036_selected_checker_flow")
+        before = asyncio.run(_database_snapshot(isolated_database_env))
+        assert before["versions"] == ["0036_selected_checker_flow"]
+        command.upgrade(config, HEAD_REVISION)
+        after = asyncio.run(_database_snapshot(isolated_database_env))
+        command.upgrade(config, "head")
+        repeated = asyncio.run(_database_snapshot(isolated_database_env))
+    assert after["versions"] == [HEAD_REVISION]
+    assert after["reference_rows"] == before["reference_rows"]
+    assert repeated == after
 
 
 def test_current_head_installs_selected_only_checker_custody(
