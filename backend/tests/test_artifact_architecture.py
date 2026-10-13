@@ -150,17 +150,28 @@ def test_retired_contributor_intake_has_no_runtime_declaration_or_reference() ->
     assert "artifact_upload_items" not in Base.metadata.tables
 
 
-def test_no_retired_or_replacement_contributor_intake_route_is_composed() -> None:
-    paths = set(create_app().openapi()["paths"])
+def test_only_canonical_admission_backed_contributor_intake_routes_are_composed() -> None:
+    paths = create_app().openapi()["paths"]
     forbidden_fragments = (
         "artifact-upload",
         "artifact_upload",
         "upload-session",
         "upload_session",
-        "submission-bundle",
         "submission_bundle",
     )
     assert not {path for path in paths if any(fragment in path for fragment in forbidden_fragments)}
+    preparation_path = "/api/v1/tasks/{task_id}/submission-bundle-preparations"
+    assert {path for path in paths if "submission-bundle" in path} == {preparation_path}
+    preparation = paths[preparation_path]["post"]
+    assert preparation["security"]
+    assert preparation["x-workstream-action-id"] == "artifact.submission_bundle.prepare"
+
+    creation_path = "/api/v1/tasks/{task_id}/submissions"
+    assert {path for path, operations in paths.items()
+            if path.endswith("/submissions") and "post" in operations} == {creation_path}
+    creation = paths[creation_path]["post"]
+    assert creation["security"]
+    assert creation["x-workstream-action-id"] == "submission.create"
 
 
 def test_product_api_and_workers_cannot_import_or_inject_raw_artifact_types() -> None:
