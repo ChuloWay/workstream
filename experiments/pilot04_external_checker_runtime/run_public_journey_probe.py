@@ -549,6 +549,19 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
     os.environ.pop("OPENAI_API_KEY", None)
     get_settings.cache_clear()
     runtime_settings = get_settings()
+    issuer, audience, flow_secret = flow_settings(env)
+    _require(runtime_settings.database_url == database_url,
+             "API/worker database differs from isolated fixture")
+    _require(runtime_settings.flow_auth_issuer == issuer
+             and runtime_settings.flow_auth_audience == audience
+             and runtime_settings.flow_auth_local_hmac_secret == flow_secret,
+             "API Flow verifier differs from local test signer")
+    _require(runtime_settings.api_rate_limit_key_secret is not None
+             and runtime_settings.pagination_cursor_hmac_secret is not None,
+             "API rate/cursor signing configuration is absent")
+    _require(runtime_settings.celery_broker_url == broker_url
+             and runtime_settings.celery_task_always_eager is False,
+             "worker broker configuration is not durable")
     for field in (
         "artifact_store_backend", "artifact_s3_provider_profile", "artifact_s3_region",
         "artifact_s3_endpoint_url", "artifact_s3_bucket", "artifact_s3_private_prefix",
