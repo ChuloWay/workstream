@@ -77,7 +77,9 @@ async def import_source_client(task_database_env, monkeypatch, tmp_path):
     settings = get_settings()
     bootstrap = create_artifact_store_bootstrap(settings)
     try:
-        await validate_artifact_storage_namespace_at_startup(bootstrap, settings)
+        await validate_artifact_storage_namespace_at_startup(
+            bootstrap, settings, db_session.get_session_factory()
+        )
     finally:
         bootstrap.close()
     async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://testserver") as client:
