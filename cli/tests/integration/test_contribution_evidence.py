@@ -68,7 +68,9 @@ def evidence():
 
 
 def csv_bytes(value):
-    return contribution_csv(ContributionExportResponse.model_validate_json(json.dumps(value)))
+    return contribution_csv(
+        ContributionExportResponse.model_validate_json(json.dumps(value))
+    )
 
 
 def test_contributions_exact_self_project_filters_and_text(cli):
@@ -98,9 +100,12 @@ def test_contributions_exact_self_project_filters_and_text(cli):
                 "-o",
                 "json",
             )
-            assert result.returncode == 0 and json.loads(result.stdout) == value, result.stderr
+            assert result.returncode == 0 and json.loads(result.stdout) == value, (
+                result.stderr
+            )
             assert all(
-                control not in result.stdout for control in ("\u009b", "\u202e", "\U000e0001")
+                control not in result.stdout
+                for control in ("\u009b", "\u202e", "\U000e0001")
             )
             method, target, bearer = requests[-1]
             assert method == "GET" and bearer == "Bearer " + TOKEN
@@ -189,14 +194,17 @@ def test_contributions_refuse_wrong_scope_shape_lineage_and_duplicate_identity(c
             del value["items"][0][field]
             response["body"] = json.dumps(value).encode()
             assert_failure(
-                cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+                cli(origin, TOKEN, "contributions", "-o", "json"),
+                "invalid_api_response",
             )
         duplicate = deepcopy(original)
         duplicate["items"].append(deepcopy(duplicate["items"][0]))
         duplicate["items"][1]["contribution_id"] = identity(3).replace("-", "")
         duplicate["items"][1]["awards"] = []
         response["body"] = json.dumps(duplicate).encode()
-        assert_failure(cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response")
+        assert_failure(
+            cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+        )
         response["body"] = json.dumps(original).encode()
         for flags in (
             ("--type", "completed_review"),
@@ -204,7 +212,8 @@ def test_contributions_refuse_wrong_scope_shape_lineage_and_duplicate_identity(c
             ("--recorded-from", "2026-10-02T00:00:00Z"),
         ):
             assert_failure(
-                cli(origin, TOKEN, "contributions", *flags, "-o", "json"), "invalid_api_response"
+                cli(origin, TOKEN, "contributions", *flags, "-o", "json"),
+                "invalid_api_response",
             )
 
 
@@ -215,7 +224,15 @@ def test_contribution_csv_exact_bytes_private_no_overwrite_and_symlink(cli, tmp_
         response["headers"] = {"Content-Type": "text/csv; charset=utf-8"}
         output = tmp_path / "earned.csv"
         result = cli(
-            origin, TOKEN, "project", "contributions", PROJECT, "--csv", str(output), "-o", "json"
+            origin,
+            TOKEN,
+            "project",
+            "contributions",
+            PROJECT,
+            "--csv",
+            str(output),
+            "-o",
+            "json",
         )
         assert result.returncode == 0 and json.loads(result.stdout) == {
             "format": "csv",
@@ -227,7 +244,9 @@ def test_contribution_csv_exact_bytes_private_no_overwrite_and_symlink(cli, tmp_
         for target in (output, tmp_path / "link.csv"):
             if target != output:
                 target.symlink_to(output)
-            result = cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json")
+            result = cli(
+                origin, TOKEN, "contributions", "--csv", str(target), "-o", "json"
+            )
             assert_failure(result, "invalid_arguments", 2)
             assert output.read_bytes() == body
         assert not list(tmp_path.glob(".workstream-contributions-*"))
@@ -254,7 +273,9 @@ def test_contribution_csv_refuses_malformed_foreign_and_unsafe_rows(cli, tmp_pat
                 "json",
             )
             assert_failure(result, "invalid_api_response")
-            assert not target.exists() and not list(tmp_path.glob(".workstream-contributions-*"))
+            assert not target.exists() and not list(
+                tmp_path.glob(".workstream-contributions-*")
+            )
 
         refused(body.replace(PROJECT.encode(), identity(99).encode()))
         refused(
@@ -286,7 +307,8 @@ def test_contributions_redaction_and_failure_never_publish(cli, tmp_path):
             value["items"][0]["task_title"] = token
             response["body"] = json.dumps(value).encode()
             assert_failure(
-                cli(origin, token, "contributions", "-o", "json"), "invalid_api_response"
+                cli(origin, token, "contributions", "-o", "json"),
+                "invalid_api_response",
             )
             response["body"] = csv_bytes(value)
             response["headers"] = {"Content-Type": "text/csv"}
@@ -302,9 +324,13 @@ def test_contributions_redaction_and_failure_never_publish(cli, tmp_path):
             (422, "contribution_export_too_large"),
             (503, "contribution_export_unavailable"),
         ):
-            response.update(status=status, body=json.dumps({"error": {"code": code}}).encode())
+            response.update(
+                status=status, body=json.dumps({"error": {"code": code}}).encode()
+            )
             target = tmp_path / "failed.csv"
-            result = cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json")
+            result = cli(
+                origin, TOKEN, "contributions", "--csv", str(target), "-o", "json"
+            )
             assert_failure(result, code)
             assert not target.exists()
 
@@ -322,13 +348,20 @@ def test_contributions_human_acceptance_and_leading_zero_quantities(cli, tmp_pat
     with http_fixture() as (origin, response, _):
         response["body"] = json.dumps(value).encode()
         result = cli(origin, TOKEN, "contributions", "-o", "json")
-        assert result.returncode == 0 and json.loads(result.stdout) == value, result.stderr
+        assert result.returncode == 0 and json.loads(result.stdout) == value, (
+            result.stderr
+        )
         response["body"] = csv_bytes(value)
         response["headers"] = {"Content-Type": "text/csv"}
         target = tmp_path / "human.csv"
         saved = cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json")
-        assert saved.returncode == 0 and target.read_bytes() == response["body"], saved.stderr
-        assert b'"000001.2300"' in target.read_bytes() and b'"00012"' in target.read_bytes()
+        assert saved.returncode == 0 and target.read_bytes() == response["body"], (
+            saved.stderr
+        )
+        assert (
+            b'"000001.2300"' in target.read_bytes()
+            and b'"00012"' in target.read_bytes()
+        )
         response["headers"] = {"Content-Type": "application/json"}
         for patch in (
             {"acceptance_review_id": None},
@@ -338,22 +371,29 @@ def test_contributions_human_acceptance_and_leading_zero_quantities(cli, tmp_pat
             bad["items"][0].update(patch)
             response["body"] = json.dumps(bad).encode()
             assert_failure(
-                cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+                cli(origin, TOKEN, "contributions", "-o", "json"),
+                "invalid_api_response",
             )
 
 
-def test_contributions_json_and_csv_size_caps_reject_valid_oversized_exports(cli, tmp_path):
+def test_contributions_json_and_csv_size_caps_reject_valid_oversized_exports(
+    cli, tmp_path
+):
     value = evidence()
     value["items"][0]["task_title"] = "x" * (32 * 1024 * 1024)
     with http_fixture() as (origin, response, _):
         response["body"] = json.dumps(value).encode()
-        assert_failure(cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response")
+        assert_failure(
+            cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+        )
         response["headers"] = {"Content-Type": "text/csv"}
         response["body"] = csv_bytes(value)
         target = tmp_path / "oversized.csv"
         result = cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json")
         assert_failure(result, "invalid_api_response")
-        assert not target.exists() and not list(tmp_path.glob(".workstream-contributions-*"))
+        assert not target.exists() and not list(
+            tmp_path.glob(".workstream-contributions-*")
+        )
 
 
 def test_contributions_complete_limit_order_and_unique_awards(cli, tmp_path):
@@ -366,27 +406,42 @@ def test_contributions_complete_limit_order_and_unique_awards(cli, tmp_path):
         assert cli(origin, TOKEN, "contributions", "-o", "json").returncode == 0
         for value in (
             {"exported_at": STAMP, "items": [second, first]},
-            {"exported_at": STAMP, "items": [first, second | {"awards": first["awards"]}]},
+            {
+                "exported_at": STAMP,
+                "items": [first, second | {"awards": first["awards"]}],
+            },
             {"exported_at": STAMP, "items": None},
             valid | {"extra": "undocumented"},
         ):
             response["body"] = json.dumps(value).encode()
             assert_failure(
-                cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+                cli(origin, TOKEN, "contributions", "-o", "json"),
+                "invalid_api_response",
             )
-        items = [second | {"contribution_id": identity(100 + index)} for index in range(1000)]
+        items = [
+            second | {"contribution_id": identity(100 + index)} for index in range(1000)
+        ]
         response["body"] = json.dumps({"exported_at": STAMP, "items": items}).encode()
         result = cli(origin, TOKEN, "contributions", "-o", "json")
-        assert result.returncode == 0 and len(json.loads(result.stdout)["items"]) == 1000
+        assert (
+            result.returncode == 0 and len(json.loads(result.stdout)["items"]) == 1000
+        )
         items.append(second | {"contribution_id": identity(1100)})
         response["body"] = json.dumps({"exported_at": STAMP, "items": items}).encode()
-        assert_failure(cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response")
+        assert_failure(
+            cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+        )
         response["headers"] = {"Content-Type": "text/csv; charset=utf-8"}
         for index, value in enumerate(
-            ({"exported_at": STAMP, "items": []}, {"exported_at": STAMP, "items": [second]})
+            (
+                {"exported_at": STAMP, "items": []},
+                {"exported_at": STAMP, "items": [second]},
+            )
         ):
             body = csv_bytes(value)
             response["body"] = body
             target = tmp_path / f"empty-{index}.csv"
-            result = cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json")
+            result = cli(
+                origin, TOKEN, "contributions", "--csv", str(target), "-o", "json"
+            )
             assert result.returncode == 0 and target.read_bytes() == body, result.stderr

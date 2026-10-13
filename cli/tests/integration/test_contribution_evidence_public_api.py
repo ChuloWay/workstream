@@ -34,7 +34,9 @@ from tests.contributions.records.support import authorized_submitter_source, row
 # authored for its auto-mode root. Keep their actual bodies and dependencies.
 signed_access = pytest_asyncio.fixture(_signed_access.__wrapped__)
 admin_access = pytest_asyncio.fixture(_admin_access.__wrapped__)
-live_acceptance_lifecycle = pytest_asyncio.fixture(_live_acceptance_lifecycle.__wrapped__)
+live_acceptance_lifecycle = pytest_asyncio.fixture(
+    _live_acceptance_lifecycle.__wrapped__
+)
 
 
 @pytest.mark.asyncio
@@ -57,7 +59,9 @@ async def test_contribution_evidence_real_socket_exact_export_and_fresh_authorit
         manager = await signed.actor("cli-evidence-manager")
         finance = await signed.actor("cli-evidence-finance")
         stranger = await signed.actor("cli-evidence-stranger")
-        await signed.grant(admin_access.admin, manager, role="project_manager", project_id=project)
+        await signed.grant(
+            admin_access.admin, manager, role="project_manager", project_id=project
+        )
         finance_grant = await signed.grant(
             admin_access.admin, finance, role="finance_authority", project_id=project
         )
@@ -82,7 +86,9 @@ async def test_contribution_evidence_real_socket_exact_export_and_fresh_authorit
                     await asyncio.sleep(0.01)
 
             async def call(actor, *args, status=None):
-                result = await asyncio.to_thread(cli, origin, actor.token, "-o", "json", *args)
+                result = await asyncio.to_thread(
+                    cli, origin, actor.token, "-o", "json", *args
+                )
                 if status is not None:
                     assert result.returncode == 1 and result.stdout == "", result.stderr
                     assert json.loads(result.stderr)["error"]["status"] == status
@@ -93,7 +99,9 @@ async def test_contribution_evidence_real_socket_exact_export_and_fresh_authorit
             spec = (await signed.client.get("/openapi.json")).json()["paths"]
             assert "get" in spec["/api/v1/actors/me/contributions"]
             assert "get" in spec["/api/v1/projects/{project_id}/contributions/export"]
-            own = await call(owner, "contributions", "--project", str(project).replace("-", ""))
+            own = await call(
+                owner, "contributions", "--project", str(project).replace("-", "")
+            )
             direct = await signed.client.get(
                 "/api/v1/actors/me/contributions", headers=owner.headers
             )
@@ -101,10 +109,15 @@ async def test_contribution_evidence_real_socket_exact_export_and_fresh_authorit
             (item,) = own["items"]
             assert item["contribution_id"] == str(h.submitter_record.id)
             assert item["source_final_acceptance_id"] == str(h.acceptance.id)
-            assert {award["instrument"] for award in item["awards"]} == {"money", "project_points"}
+            assert {award["instrument"] for award in item["awards"]} == {
+                "money",
+                "project_points",
+            }
             empty = await call(stranger, "contributions")
             assert empty["items"] == []
-            excluded = await call(owner, "contributions", "--recorded-before", item["recorded_at"])
+            excluded = await call(
+                owner, "contributions", "--recorded-before", item["recorded_at"]
+            )
             assert excluded["items"] == []
             for actor in (manager, finance):
                 exported = await call(
@@ -117,11 +130,18 @@ async def test_contribution_evidence_real_socket_exact_export_and_fresh_authorit
             ):
                 output = tmp_path / f"{actor.id}.csv"
                 await call(actor, *args, "--csv", str(output))
-                path = "/api/v1/actors/me/contributions" if actor == owner else export_path(project)
+                path = (
+                    "/api/v1/actors/me/contributions"
+                    if actor == owner
+                    else export_path(project)
+                )
                 direct_csv = await signed.client.get(
                     path, headers=actor.headers, params={"format": "csv"}
                 )
-                assert direct_csv.status_code == 200 and output.read_bytes() == direct_csv.content
+                assert (
+                    direct_csv.status_code == 200
+                    and output.read_bytes() == direct_csv.content
+                )
                 assert output.stat().st_mode & 0o777 == 0o600
             await call(stranger, "project", "contributions", str(project), status=404)
             await call(finance, "project", "contributions", str(foreign), status=404)
