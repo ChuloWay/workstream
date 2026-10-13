@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
+import pytest
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.api_controls import StructuredHTTPException
 from app.core.config import Settings, get_settings
 from app.core.identifiers import new_record_id
 from app.api.deps.rate_controls import get_rate_control_service
@@ -18,6 +23,8 @@ from app.modules.checkers.models import CheckerRun, SelectedPreSubmitRun
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import Submission
 from app.modules.tasks.models import WorkstreamTask
+from app.modules.tasks.router import create_admission_backed_submission
+from app.modules.tasks.schemas import AdmissionBackedSubmissionCreate
 from app.modules.api_controls.service import AUTHORIZATION_READ_SCOPE, RateControlService
 from app.modules.actors.models import ActorProfile
 from tests.tasks.test_submission_lineage import _prepared_packet
@@ -106,6 +113,25 @@ def _payload(request, admission_id):
     }
 
 
+async def test_public_submission_infrastructure_error_is_retryable_only_for_sql():
+    """A broken command composition must not be reported as transient storage."""
+    actor = SimpleNamespace(actor_profile_id=new_record_id())
+    payload = AdmissionBackedSubmissionCreate(
+        admission_id=new_record_id(), assignment_id=new_record_id(),
+        summary="test", contributor_attestation="test",
+    )
+    command = SimpleNamespace(create=AsyncMock(side_effect=SQLAlchemyError("database unavailable")))
+    with pytest.raises(StructuredHTTPException) as failure:
+        await create_admission_backed_submission(new_record_id(), payload, actor, command)
+    assert failure.value.status_code == 503
+    assert failure.value.error_code == "submission_infrastructure_unavailable"
+    assert failure.value.retryable is True
+
+    command.create.side_effect = RuntimeError("invalid composition")
+    with pytest.raises(RuntimeError, match="invalid composition"):
+        await create_admission_backed_submission(new_record_id(), payload, actor, command)
+
+
 async def test_public_initial_submission_replays_and_recovers_ready_upload(
     isolated_database_env, tmp_path, monkeypatch,
 ):
@@ -175,7 +201,8 @@ async def test_public_initial_submission_replays_and_recovers_ready_upload(
             uncaused = _payload(h.creation, h.admission_id)
             uncaused["predecessor_submission_id"] = str(new_record_id())
             denied_predecessor = await client.post(route, json=uncaused)
-            assert denied_predecessor.status_code in {404, 409}, denied_predecessor.text
+            assert denied_predecessor.status_code == 409, denied_predecessor.text
+            assert denied_predecessor.json()["error"]["code"] == "task_submission_predecessor_changed"
 
             client_owned = _payload(h.creation, h.admission_id)
             client_owned["package_uri"] = "s3://caller-controlled/bundle.zip"
@@ -196,7 +223,8 @@ async def test_public_initial_submission_replays_and_recovers_ready_upload(
             changed = _payload(h.creation, h.admission_id)
             changed["summary"] += " changed"
             denied = await client.post(route, json=changed)
-            assert denied.status_code in {404, 409}, denied.text
+            assert denied.status_code == 404, denied.text
+            assert denied.json()["error"]["code"] == "submission_unavailable"
 
             history = await client.get(f"/api/v1/tasks/{h.task_id}/submissions")
             assert history.status_code == 200, history.text
@@ -209,7 +237,8 @@ async def test_public_initial_submission_replays_and_recovers_ready_upload(
                 profile.suspended_at = datetime.now(UTC)
                 profile.suspension_reason = "test suspension"
             revoked = await client.post(route, json=_payload(h.creation, h.admission_id))
-            assert revoked.status_code in {403, 404}, revoked.text
+            assert revoked.status_code == 403, revoked.text
+            assert revoked.json()["error"]["code"] == "actor_suspended"
 
         async with h.factory() as session:
             assert await session.scalar(select(func.count()).select_from(Submission)) == 1
@@ -241,7 +270,8 @@ async def test_public_checker_remediation_uses_exact_predecessor(
             wrong = _payload(request, admission_id)
             wrong["predecessor_submission_id"] = str(new_record_id())
             denied = await client.post(route, json=wrong)
-            assert denied.status_code in {404, 409}, denied.text
+            assert denied.status_code == 409, denied.text
+            assert denied.json()["error"]["code"] == "task_submission_predecessor_changed"
 
             created = await client.post(route, json=_payload(request, admission_id))
             assert created.status_code == 201, created.text

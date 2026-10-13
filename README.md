@@ -62,11 +62,13 @@ submitter ContributionRecord, with no reviewer contribution.
 The separate `requires_second_review` policy field is [fixed to `false`](.commitrail/changes/enforce-requires-second-review-false.md)
 at input, immutable lineage, and database boundaries; second-review and
 adjudication behavior remain deferred.
-The automated-acceptance branch is not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
+The [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is implemented for configuration, and the hidden submitter participant can
-stage or exactly replay its complete frozen award set. Shared acceptance, TASK
-terminal effects, authority/source custody, routing activation and public
-composition remain pending. Adjudication is excluded.
+stage or exactly replay its complete frozen award set. Selected production
+completion invokes shared authorized acceptance atomically for eligible locked
+false-policy facts, with the corresponding TASK effects and authority/source
+custody. False-guide activation/readiness and the complete public API/Celery
+journey remain pending. Adjudication is excluded.
 
 The stage describes the purpose and lifecycle boundary, not a promise that all
 checks are deterministic. Deterministic compilation and policy routing do not
