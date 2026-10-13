@@ -60,7 +60,7 @@ def compose_hidden_submission_creation_command(
     request_id: UUID,
     correlation_id: UUID,
 ):
-    """Wire the active hidden TASK/ART transaction without exposing a route."""
+    """Wire the sole admission-backed TASK/ART transaction for internal and HTTP callers."""
     from app.adapters.artifacts import submission_admission_consumption_port
     from app.adapters.tasks import TransactionalSubmissionCreationCommand
     from app.modules.authorization.prepared import (
@@ -188,6 +188,23 @@ async def get_authorization_actor_identity(
             else PublicActorKind.HUMAN
         ),
         service_identity=service_identity,
+    )
+
+
+async def get_submission_creation_command(
+    request: Request,
+    resolved: Annotated[ResolvedActor, Depends(get_authorization_actor)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+):
+    """Bind the existing atomic writer after actor resolution releases its read root."""
+    request_id, correlation_id = (UUID(value) for value in request_ids(request))
+    context = _authorization_context(resolved, request_id, correlation_id)
+    await session.rollback()
+    return compose_hidden_submission_creation_command(
+        session,
+        context,
+        request_id=request_id,
+        correlation_id=correlation_id,
     )
 
 

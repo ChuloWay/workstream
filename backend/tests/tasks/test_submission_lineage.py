@@ -12,16 +12,13 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.api.deps.authorization import compose_hidden_submission_creation_command
-from app.modules.artifacts.api import (
-    SubmissionBundlePreparationRequest,
-    SubmissionAdmissionConsumptionError,
-)
+from app.modules.artifacts.api import SubmissionBundlePreparationRequest, SubmissionAdmissionConsumptionError
 from app.modules.artifacts.models import (
     SubmissionBundleAdmission,
     ArtifactBinding,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.api import SubmissionCreationAdmissionError, SubmissionCreationRequest
 from app.modules.tasks.models import AuditEvent, Submission, TaskAssignment, WorkstreamTask
 from tests.selected_policy_fixtures import approved_selected_policy_fixture
 from tests.submission_preparation_auth_helpers import install_submitter_grant
@@ -67,6 +64,7 @@ async def _prepared_packet(isolated_database_env, tmp_path):
             )
             await seed_started_task_for_artifact_test(connection, params)
             await install_submitter_grant(connection, params)
+        archive_bytes = _archive(evidence_path=policy["evidence_path"])
         request = SubmissionBundlePreparationRequest(
             actor=ActorIdentityFacts(
                 context.actor_profile_id, context.identity_link_id, ActorKind.HUMAN
@@ -81,7 +79,7 @@ async def _prepared_packet(isolated_database_env, tmp_path):
             contributor_attestation="I confirm no confidential client data, credentials, or copied source material is included in this submission; rights_confirmed. "
             + " ".join(policy["attestation_terms"]),
             media_type="application/zip",
-            byte_source=_bytes(_archive(evidence_path=policy["evidence_path"])),
+            byte_source=_bytes(archive_bytes),
         )
         admission_id = await _verified_admission(
             factory, store, namespace, settings, context, request
@@ -98,6 +96,7 @@ async def _prepared_packet(isolated_database_env, tmp_path):
         yield SimpleNamespace(
             factory=factory, context=context, task_id=task_id, assignment_id=assignment_id,
             admission_id=admission_id, creation=creation,
+            preparation_request=request, archive_bytes=archive_bytes, settings=settings,
         )
     finally:
         bootstrap.close()
@@ -114,13 +113,15 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
         # ART rejection occurs after TASK insertion; the command must roll the
         # entire root transaction back without stranding a staged Submission.
         async with factory() as session:
-            with pytest.raises(SubmissionAdmissionConsumptionError):
+            with pytest.raises(SubmissionCreationAdmissionError) as denied:
                 await compose_hidden_submission_creation_command(
                     session,
                     context,
                     request_id=new_record_id(),
                     correlation_id=new_record_id(),
                 ).create(replace(creation, admission_id=new_record_id()))
+            assert denied.value.code == "submission_bundle_admission_unavailable"
+            assert isinstance(denied.value.__cause__, SubmissionAdmissionConsumptionError)
         async with factory() as session:
             assert await session.scalar(select(func.count()).select_from(Submission)) == 0
             admission = await session.get(SubmissionBundleAdmission, str(admission_id))
@@ -141,7 +142,7 @@ async def test_real_zip_admission_and_hidden_creation_copy_exact_assignment(
         # Each field is independently bound to the packet that actually passed.
         for field in ("summary", "contributor_attestation"):
             async with factory() as session:
-                with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
+                with pytest.raises(SubmissionCreationAdmissionError, match="submission_bundle_admission_unavailable"):
                     await compose_hidden_submission_creation_command(
                         session, context, request_id=new_record_id(), correlation_id=new_record_id(),
                     ).create(replace(creation, **{field: getattr(creation, field) + " Changed."}))

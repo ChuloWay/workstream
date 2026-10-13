@@ -1,4 +1,4 @@
-"""Hidden delivery surface for ART-owned contributor bundle preparation."""
+"""Contributor ZIP preparation through ART-owned selected intake and custody."""
 
 from typing import Annotated
 from uuid import UUID
@@ -6,12 +6,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.artifacts import (
     get_submission_bundle_preparation_actor,
     get_submission_bundle_preparation_command,
 )
-from app.core.api_controls import error_response, request_ids
+from app.core.api_controls import StructuredHTTPException, error_response, request_ids
+from app.db.session import get_db_session
 from app.modules.artifacts.api import (
     SubmissionBundlePreparationCheckFailed,
     SubmissionBundlePreparationCommand,
@@ -26,8 +28,20 @@ from app.modules.authorization.api import ActorIdentityFacts
 router = APIRouter(tags=["tasks"])
 
 
+def require_single_preparation_headers(request: Request) -> None:
+    """Reject ambiguous custody selectors before resolving actor or product rows."""
+    for name in ("X-Task-Assignment-Id", "Idempotency-Key"):
+        if len(request.headers.getlist(name)) != 1:
+            raise StructuredHTTPException(
+                status_code=422,
+                detail="Submission preparation headers invalid",
+                error_code="submission_preparation_headers_invalid",
+                error_message="Submission preparation headers invalid",
+            )
+
+
 class SubmissionBundlePreparationResponse(BaseModel):
-    """Bounded hidden operation state without provider or scratch coordinates."""
+    """Bounded preparation state without provider or scratch coordinates."""
 
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
@@ -41,7 +55,20 @@ class SubmissionBundlePreparationResponse(BaseModel):
     "/tasks/{task_id}/submission-bundle-preparations",
     response_model=SubmissionBundlePreparationResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    include_in_schema=False,
+    dependencies=[Depends(require_single_preparation_headers)],
+    openapi_extra={
+        "x-workstream-action-id": "artifact.submission_bundle.prepare",
+        "requestBody": {
+            "required": True,
+            "content": {"application/zip": {"schema": {"type": "string", "format": "binary"}}},
+        },
+    },
+    responses={
+        404: {"description": "Task or contributor authority unavailable"},
+        409: {"description": "Preparation context or replay conflicts"},
+        422: {"description": "Invalid ZIP or bounded pre-submission checker feedback"},
+        503: {"description": "Preparation custody or infrastructure unavailable"},
+    },
 )
 async def prepare_submission_bundle(
     task_id: str,
@@ -51,8 +78,9 @@ async def prepare_submission_bundle(
         SubmissionBundlePreparationCommand,
         Depends(get_submission_bundle_preparation_command),
     ],
-    assignment_id: Annotated[str | None, Header(alias="X-Task-Assignment-Id")] = None,
-    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+    assignment_id: Annotated[str, Header(alias="X-Task-Assignment-Id")],
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key")],
     summary: Annotated[str | None, Header(alias="X-Submission-Summary")] = None,
     contributor_attestation: Annotated[
         str | None, Header(alias="X-Contributor-Attestation")
@@ -61,10 +89,7 @@ async def prepare_submission_bundle(
         str | None, Header(alias="X-Predecessor-Submission-Id")
     ] = None,
 ) -> SubmissionBundlePreparationResponse | JSONResponse:
-    """Run the hidden continuous ZIP preparation surface; AUTH remains fail closed."""
-    if None in (assignment_id, idempotency_key):
-        raise HTTPException(status_code=404, detail="Task not found")
-    assert assignment_id is not None and idempotency_key is not None
+    """Run continuous ZIP preparation under fresh contributor authority."""
     try:
         identifiers = (
             UUID(task_id),
@@ -75,6 +100,8 @@ async def prepare_submission_bundle(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail="Task not found") from exc
     try:
+        # Actor resolution may have opened a read root; ART owns its preparation roots.
+        await session.rollback()
         request_id, correlation_id = (UUID(value) for value in request_ids(request))
         result = await command.prepare(
             SubmissionBundlePreparationRequest(

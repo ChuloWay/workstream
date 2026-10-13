@@ -3,13 +3,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Literal, Protocol, get_args
 from uuid import UUID
 
 from app.modules.tasks.api.submission_context import TaskSubmissionContextFacts
 
 class SubmissionCreationUnavailable(RuntimeError):
-    """Conceal the unavailable hidden Submission creation capability."""
+    """Conceal an unavailable admission-backed Submission creation capability."""
+
+
+SubmissionCreationAdmissionFailure = Literal[
+    "submission_bundle_admission_unavailable",
+    "submission_bundle_admission_already_consumed",
+    "submission_bundle_admission_context_changed",
+    "submission_bundle_admission_stale",
+]
+
+
+class SubmissionCreationAdmissionError(RuntimeError):
+    """Stable TASK-facing rejection of an ART admission consumption request."""
+
+    def __init__(self, code: SubmissionCreationAdmissionFailure) -> None:
+        if code not in get_args(SubmissionCreationAdmissionFailure):
+            raise ValueError("submission admission failure code is invalid")
+        super().__init__(code)
+        self.code = code
 
 
 @dataclass(frozen=True, slots=True)

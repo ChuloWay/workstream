@@ -9,11 +9,13 @@ from uuid import UUID
 from app.modules.artifacts.api import (
     SubmissionAdmissionConsumptionPort,
     SubmissionAdmissionConsumptionRequest,
+    SubmissionAdmissionConsumptionError,
 )
 from app.modules.tasks.api import (
     SubmissionCreationAuthorizationPort,
     SubmissionCreationRequest,
     SubmissionCreationResult,
+    SubmissionCreationAdmissionError,
     TaskSubmissionContextPort,
     TaskSubmissionContextRequest,
 )
@@ -292,16 +294,19 @@ class TransactionalSubmissionCreationCommand:
         from app.adapters.checkers import evaluation_coordinator
         from app.adapters.outbox import outbox_append
 
-        async with self._session.begin():
-            return await TaskSubmissionCreationService(
-                self._session,
-                contexts=task_service(self._session, settings=self._settings),
-                submission_contexts=task_submission_context_port(self._session),
-                authorization=self._authorization,
-                admissions=_ArtifactAdmissionAdapter(self._admissions),
-                evaluations=evaluation_coordinator(self._session),
-                events=outbox_append(self._session),
-            ).create(request)
+        try:
+            async with self._session.begin():
+                return await TaskSubmissionCreationService(
+                    self._session,
+                    contexts=task_service(self._session, settings=self._settings),
+                    submission_contexts=task_submission_context_port(self._session),
+                    authorization=self._authorization,
+                    admissions=_ArtifactAdmissionAdapter(self._admissions),
+                    evaluations=evaluation_coordinator(self._session),
+                    events=outbox_append(self._session),
+                ).create(request)
+        except SubmissionAdmissionConsumptionError as exc:
+            raise SubmissionCreationAdmissionError(exc.code) from exc
 
 
 def assignment_invalidation_targets(session: AsyncSession):

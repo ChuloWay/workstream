@@ -7,8 +7,8 @@ external-image outcomes; this is not a deployment/provider conformance proof.
 """
 
 from uuid import UUID
+from types import SimpleNamespace
 from tests.retained_material_fixtures import retained_admission
-
 
 from sqlalchemy import select
 
@@ -16,7 +16,6 @@ from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink
 from app.modules.tasks.models import EvidenceItem, Submission, TaskAssignment, WorkstreamTask
-from app.modules.tasks.schemas import SubmissionCreate
 from app.modules.tasks.submission_composition import build_submission
 from datetime import UTC, datetime
 
@@ -25,7 +24,8 @@ async def seed_retained_submission(
     task_id: str, payload: dict, *, predecessor_id: str | None = None,
 ) -> str:
     """Seed a retained locked packet with guards enabled; not an intake proof."""
-    packet = SubmissionCreate.model_validate(payload)
+    # Historical private evidence is fixture input, not a public intake DTO.
+    packet = SimpleNamespace(**payload)
     async with db_session.get_session_factory()() as session:
         task = await session.get(WorkstreamTask, task_id)
         assert task is not None
@@ -48,8 +48,8 @@ async def seed_retained_submission(
         admission_id = await retained_admission(
             db_session.get_session_factory(), task, assignment, link, packet, predecessor_id,
         )
-        # Retained history includes private packet fields absent from the hidden
-        # input DTO. Seed those fixture-only values before the real atomic writer
+        # Retained history includes private packet fields absent from public
+        # intake. Seed those fixture-only values before the real atomic writer
         # seals the row; all ownership, authority and dispatch guards stay enabled.
         from unittest.mock import patch
         from app.api.deps.authorization import compose_hidden_submission_creation_command
@@ -79,11 +79,11 @@ async def seed_retained_submission(
             identifier = values["submission_id"]
             return build_submission(
                 **values, package_uri=packet.package_uri, package_hash=packet.package_hash,
-                artifact_hash_manifest=[entry.model_dump() for entry in packet.artifact_hash_manifest],
+                artifact_hash_manifest=packet.artifact_hash_manifest,
                 evidence_items=[EvidenceItem(
-                    id=str(new_record_id()), submission_id=identifier, type=item.type,
-                    label=item.label, uri=item.uri, hash=item.hash,
-                    size_bytes=item.size_bytes, metadata_json=item.metadata,
+                    id=str(new_record_id()), submission_id=identifier, type=item["type"],
+                    label=item["label"], uri=item.get("uri"), hash=item.get("hash"),
+                    size_bytes=item.get("size_bytes"), metadata_json=item.get("metadata", {}),
                     locked_at=datetime.now(UTC),
                 ) for item in packet.evidence_items],
             )
