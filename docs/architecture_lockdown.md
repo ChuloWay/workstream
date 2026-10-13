@@ -279,8 +279,9 @@ In v0.1, this is enforced through:
 - contributor attestation
 - immutable submission versions
 - checker results bound to artifact hashes
-- human review before acceptance when the locked policy requires it; the
-  planned false branch requires separately authorized acceptance evidence
+- human review before acceptance when the locked policy requires it; the false
+  branch requires separately authorized acceptance evidence and a live REV
+  generation for new effects
 - immutable Review, finding, response, and resolution history on the human branch
 
 An explicit owner-agent execution workspace is later work.
@@ -330,8 +331,8 @@ old request/result decoders are removed.
 
 Contributor feedback contains bounded default/image findings and eligibility.
 It conceals scratch state, provider coordinates, credentials and raw checker
-output. The hidden preparation flow is implemented; public contributor
-upload/finalize and CLI submit/status remain PILOT-12 work.
+output. Public ZIP preparation and admission-backed Submission creation expose
+the contributor intake path. CLI submit/status remains later work.
 
 ### Contribution Records
 
@@ -341,12 +342,12 @@ On the human branch, every valid recorded human Review creates an immutable revi
 FinalAcceptance only for `accept`; that fact, not direct inspection of
 `Review.decision`, sources one submitter `accepted_submission` contribution
 record. `needs_revision`, `reject`, and automated checker outcomes create no
-FinalAcceptance or submitter contribution by themselves. On the planned false
+FinalAcceptance or submitter contribution by themselves. On the false
 branch, an authorized automated decision creates FinalAcceptance and the
 submitter contribution through the shared atomic participant, never a reviewer
 contribution. The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
-defines both triggers and their source/authority constraints. Runtime proof is
-required before activation; it is not a checker-owned write or fabricated Review.
+defines both triggers and their source/authority constraints. It is not a
+checker-owned write or fabricated Review.
 
 Contribution records are separate from compensation status. Each record freezes
 its exact review, submission, actor, policy, and artifact-hash lineage.

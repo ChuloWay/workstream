@@ -4,9 +4,9 @@
 
 Human review and revision lanes below are the planned v0.1 operating contract.
 Their routes and jobs remain unavailable until the owning REV chunks, exact
-AUTH activation, and REV-13 joint release complete. Hidden checker-remediation
-replacement is implemented through the existing intake and writer; its public
-route remains pending.
+AUTH activation, and REV-13 joint release complete. Checker-remediation
+replacement is implemented through the public preparation and admission-backed
+Submission operations; it does not make human revision available.
 
 ## Purpose
 

@@ -251,8 +251,10 @@ reviewer award. Checker output remains evidence, not a human decision.
 
 Correctable checker failures follow ARCH-04F under the locked attempt context;
 infrastructure/setup uncertainty never accepts or invents a human revision.
-This false branch is planned, not currently enabled. Fulfillment remains
-post-commit for either trigger and cannot change accepted work.
+The selected backend composition enables this branch only under an
+Operator-authorized live REV generation; a typed pre-effect non-live refusal
+rolls back and uses bounded retry. The complete public drill remains pending.
+Fulfillment remains post-commit for either trigger and cannot change accepted work.
 
 Acceptance:
 

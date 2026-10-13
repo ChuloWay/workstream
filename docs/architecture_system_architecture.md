@@ -290,9 +290,10 @@ hosted v0.1 uses AWS S3 and local/CI integration uses MinIO without changing
 submission or evidence semantics.
 
 Submission artifacts are hash-locked during successful submission creation.
-Automatic post-submit execution is a pending integration boundary; the removed
-alternate checker worker is not dispatched. Any changed artifact requires a new
-submission version instead of mutating the old one.
+Selected automatic post-submit request and completion handlers are registered in
+production composition with exact service authority. This is not a deployment or
+complete public drill claim. Any changed artifact requires a new submission
+version instead of mutating the old one.
 
 Every important lifecycle action creates an append-only audit event. State is readable from current records, and audit history explains how the system got there.
 

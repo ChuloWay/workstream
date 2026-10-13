@@ -62,11 +62,12 @@ submitter ContributionRecord, with no reviewer contribution.
 The separate `requires_second_review` policy field is [fixed to `false`](.commitrail/changes/enforce-requires-second-review-false.md)
 at input, immutable lineage, and database boundaries; second-review and
 adjudication behavior remain deferred.
-The automated-acceptance branch is not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
-is implemented for configuration, and the hidden submitter participant can
-stage or exactly replay its complete frozen award set. Shared acceptance, TASK
-terminal effects, authority/source custody, routing activation and public
-composition remain pending. Adjudication is excluded.
+The automated-acceptance branch is implemented in the selected backend
+composition: supported false-policy guides can activate, and selected completion
+routing uses the shared FinalAcceptance/TASK/CON operation. New false/pass effects
+require an Operator-authorized live REV generation; a typed pre-effect non-live
+refusal rolls back and uses bounded OUTBOX retry. This is not a deployment or
+complete public drill claim. Adjudication is excluded.
 
 The stage describes the purpose and lifecycle boundary, not a promise that all
 checks are deterministic. Deterministic compilation and policy routing do not
@@ -768,15 +769,15 @@ committed approvals; duplicate delivery retains one policy and receipt.
 Hidden post-submission execution and completion custody are implemented.
 ARCH-04D2 supplies exact service authority and ARCH-04E1A supplies source-only
 facts/types. PILOT-04 registers selected production request/completion routing;
-ARCH-04E3-B activates supported false-policy guides. The real public API and
-Celery worker drill remains pending.
+ARCH-04E3-B activates supported false-policy guides. The complete public
+durable-runtime drill remains pending.
 The local Celery command above includes Beat; start it before creating guide sources.
 
 The Beat scheduler must run alongside the Celery execution processes so
 artifact pending-work, verified guide-continuation and post-policy approval scans can recover
 publication failures automatically.
 
-The hidden submission-bundle preparation flow reserves an exact pre-submit
+The public submission-bundle preparation flow reserves an exact pre-submit
 attempt before invoking checks. Completed retries recover the original evidence
 without rerunning checks or issuing a new upload capability. An uncertain attempt
 cannot execute again under the same key. POL-07B connects the internal
@@ -786,7 +787,7 @@ canonical evidence ownership. The obsolete checker worker, manual execution and
 submission-finalize repair routes are removed. `evaluate_post_submission` now
 uses hidden durable execution with exact ARCH-04D2 service authority. ARCH-04E1A
 retains route-neutral source evidence. REV-04C uses its bounded exact-source
-verifier and hidden FinalAcceptance/TASK/CON participant. The authorized TASK
+verifier and shared FinalAcceptance/TASK/CON participant. The authorized TASK
 outcome owner publishes exact routing sources under CHECKERS current-run custody.
 B7 implements hidden
 request delivery with invocation fencing. B8 adds hidden completion routing with commit-before-ACK. Production
