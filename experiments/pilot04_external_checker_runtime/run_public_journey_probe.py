@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from contextlib import nullcontext
+from datetime import UTC, datetime
 from decimal import Decimal
 import hashlib
 import hmac
@@ -33,6 +34,7 @@ from app.adapters.artifacts import (
 )
 from app.core.config import get_settings
 from app.core.identifiers import new_record_id
+from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.actors.api.service_identities import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.checkers.models import CheckerRun, SelectedPreSubmitRun
@@ -273,6 +275,25 @@ async def _provision_runtime_services(factory) -> None:
                 issuer="workstream.internal", subject=identity.value,
                 subject_kind="service", status="active", linked_by="workstream:system:bootstrap",
             ))
+
+
+async def _seed_contributor(factory) -> ActorIdentityFacts:
+    """Create a Flow-linked human without an administrator role grant."""
+    actor = ActorIdentityFacts(new_record_id(), new_record_id(), ActorKind.HUMAN)
+    async with factory() as session, session.begin():
+        session.add(ActorProfile(
+            id=str(actor.actor_profile_id), actor_kind="human", status="active",
+            provisioning_method="automatic_first_access", created_by="public-probe-fixture",
+        ))
+        await session.flush()
+        session.add(ActorIdentityLink(
+            id=str(actor.identity_link_id), actor_profile_id=str(actor.actor_profile_id),
+            issuer="https://identity.flowresearch.tech",
+            subject=str(actor.actor_profile_id), subject_kind="human",
+            status="active", linked_by="public-probe-fixture",
+            last_verified_at=datetime.now(UTC),
+        ))
+    return actor
 
 
 async def _deliver(factory, event_id: UUID, project_id: UUID) -> None:
@@ -550,10 +571,9 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
         return counts | {"task_status": task.status}
 
 
-async def _one_mode(client, factory, namespace, image, env, *,
-                    human_review_required: bool, operator_id: UUID) -> dict:
-    from app.workers.outbox import deliver_event
-
+async def _one_mode(client, factory, database_url, namespace, image, env, *,
+                    human_review_required: bool, operator_id: UUID | None,
+                    bootstrap_only: bool = False) -> dict:
     awards = () if human_review_required else ("project_points",)
     proposal = SubmissionArtifactPolicyProposal(
         maximum_file_size_bytes=1_000_000,
@@ -562,7 +582,6 @@ async def _one_mode(client, factory, namespace, image, env, *,
         required_evidence=("results",),
         attestation_terms=("rights_confirmed",),
     )
-    database_url = os.environ["WORKSTREAM_TEST_DATABASE_URL"]
     async with source_case(
         database_url, namespace=namespace, artifact_proposal=proposal,
         pre_submit_registry_spec=_locked_spec("pre_submit", image),
@@ -588,9 +607,15 @@ async def _one_mode(client, factory, namespace, image, env, *,
             _require(draft is not None and draft.status == "draft"
                      and draft.activation_operation_id is None,
                      "guide setup did not leave a draft for public activation")
-        contributor, _ = await seed_review_actor(
-            factory, compilation.project_id, role="submitter"
-        )
+        contributor = await _seed_contributor(factory)
+        if bootstrap_only:
+            return {
+                "review_mode": "human" if human_review_required else "automatic",
+                "approved_draft": True,
+                "ordinary_contributor": contributor.actor_profile_id != manager.actor_profile_id,
+            }
+        from app.workers.outbox import deliver_event
+
         manager_token, contributor_token = _token(env, manager), _token(env, contributor)
         project_id = str(compilation.project_id)
         activation_path = f"/api/v1/projects/{project_id}/guides/{guide_id}/activate"
@@ -613,6 +638,34 @@ async def _one_mode(client, factory, namespace, image, env, *,
             headers=activation_headers, json=body,
         )
         _require(replay == activated, "public activation replay changed receipt")
+
+        admitted = await _json(client, "GET", "/api/v1/actors/me", contributor_token, 200)
+        _require(admitted["actor_profile_id"] == str(contributor.actor_profile_id),
+                 "Flow-linked contributor did not resolve to the stored human")
+        role_grant = await _json(
+            client, "POST", f"/api/v1/projects/{project_id}/role-grants",
+            manager_token, 201,
+            headers={"Idempotency-Key": str(uuid4())},
+            json={
+                "target_actor_profile_id": str(contributor.actor_profile_id),
+                "role": "submitter",
+                "qualification": {
+                    "skills_snapshot": {
+                        "availability": "unavailable", "reference_ids": [],
+                        "unavailable_reason": "no_record",
+                    },
+                    "reputation_snapshot": {
+                        "availability": "unavailable", "reference_ids": [],
+                        "unavailable_reason": "no_record",
+                    },
+                    "prior_project_work_refs": [], "external_expertise_refs": [],
+                },
+                "reason": "Assign this contributor to the public first-journey task",
+            },
+        )
+        _require(role_grant["role"] == "submitter"
+                 and role_grant["actor_profile_id"] == str(contributor.actor_profile_id),
+                 "public project submitter grant names another actor or role")
 
         from tests.test_tasks import complete_task_payload
 
@@ -931,10 +984,10 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         ], env=env, log=root / "worker.log")
         await _wait_worker(worker, hostname)
         async with httpx.AsyncClient(base_url=origin, timeout=90) as client:
-            true = await _one_mode(client, factory, namespace, image, env,
+            true = await _one_mode(client, factory, database_url, namespace, image, env,
                                    human_review_required=True,
                                    operator_id=operator.actor_profile_id)
-            false = await _one_mode(client, factory, namespace, image, env,
+            false = await _one_mode(client, factory, database_url, namespace, image, env,
                                     human_review_required=False,
                                     operator_id=operator.actor_profile_id)
         _require(api.poll() is None and worker.poll() is None,
@@ -953,17 +1006,46 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         await engine.dispose()
 
 
+async def _fixture_bootstrap_only(database_url: str) -> dict:
+    """Check both actual guide setup fixtures before the costly runtime launch."""
+    engine = create_async_engine(database_url)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        # Registry custody validates the digest shape; no image is executed here.
+        image = {"platform_manifest_digest": "sha256:" + "0" * 64}
+        true = await _one_mode(
+            None, factory, database_url, None, image, None,
+            human_review_required=True, operator_id=None, bootstrap_only=True,
+        )
+        false = await _one_mode(
+            None, factory, database_url, None, image, None,
+            human_review_required=False, operator_id=None, bootstrap_only=True,
+        )
+        _require(true["ordinary_contributor"] and false["ordinary_contributor"],
+                 "fixture contributor has manager identity")
+        return {"fixture_bootstrap_only": True, "human": true, "automatic": false}
+    finally:
+        await engine.dispose()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=os.environ.get("WORKSTREAM_TEST_DATABASE_URL"))
-    parser.add_argument("--image-reference", required=True)
-    parser.add_argument("--service-binary", required=True, type=Path)
-    parser.add_argument("--broker-url", required=True)
+    parser.add_argument("--image-reference")
+    parser.add_argument("--service-binary", type=Path)
+    parser.add_argument("--broker-url")
+    parser.add_argument("--fixture-bootstrap-only", action="store_true")
     parser.add_argument("--work-dir", type=Path,
                         help="Unique private directory retaining API and worker diagnostics")
     args = parser.parse_args()
     if not args.database_url:
         parser.error("isolated --database-url or WORKSTREAM_TEST_DATABASE_URL is required")
+    if args.fixture_bootstrap_only:
+        print(json.dumps(asyncio.run(_fixture_bootstrap_only(args.database_url)),
+                         sort_keys=True, separators=(",", ":")))
+        return 0
+    if not args.image_reference or not args.service_binary or not args.broker_url:
+        parser.error("full drill requires image, service binary, and broker URL")
     workspace = (nullcontext(args.work_dir) if args.work_dir else
                  tempfile.TemporaryDirectory(prefix="ws-pilot04-public-"))
     with workspace as directory:

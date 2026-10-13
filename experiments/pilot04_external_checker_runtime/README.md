@@ -42,7 +42,7 @@ registry digest. The tested human identities are stored actors with locally
 signed Flow-compatible tokens, not a hosted Flow Identity service.
 
 From that explicit precondition, the companion must use a live loopback API,
-the public manager guide activation and task lifecycle, contributor ZIP
+the public manager guide activation, project submitter grant, and task lifecycle, contributor ZIP
 preparation and canonical Submission POST, and a real Redis-backed prefork
 Celery worker for artifact and outbox delivery. It checks actionable intake
 failure from both Workstream defaults and the selected external PRE image,
@@ -60,3 +60,10 @@ enabled. PostgreSQL, MinIO, Redis, the digest registry, Rust checker service,
 and API/worker processes belong to one disposable local run; the isolated-test
 runner owns database/role/MinIO namespace cleanup. This still does not certify
 hosted gVisor, arbitrary checker quality, live human review, or deployment.
+
+`run_public_journey_probe.py --fixture-bootstrap-only` is a narrow setup
+diagnostic for both approved draft policy modes and an ordinary Flow-linked
+contributor. Run it only against its own disposable isolated PostgreSQL database.
+It uses a placeholder checker digest and local fixture artifact namespace, so
+its database cannot be reused for the real-image MinIO drill. It stops before
+public activation, project role grants, HTTP, broker, or checker execution.
