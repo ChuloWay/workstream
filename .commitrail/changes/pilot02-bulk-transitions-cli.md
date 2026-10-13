@@ -778,3 +778,9 @@ Unicode and six-byte JSON-escaped control characters, plus rejection above the
 and CSV packages pass `go test` and `go vet`. PostgreSQL schema
 measurement and the public high-escape SCREEN/RELEASE case remain deliberately
 unclaimed until the isolated commit is composed into the serialized native lane.
+
+The canonical fresh schema query on `6ba3e89658358b33b1f840f29a1ff5814ad682ab`
+measured `f136708ebc07371f20660345d64d427bfc947b9880434d3987b2c9b13e4f8995`
+after the manager-evidence bound repair. Raw measurement is
+`/tmp/pilot02-bulk-unicode-schema-measure.{log,json}`; all owned cleanup completed.
+This is schema measurement, with native Unicode behavior still pending.
