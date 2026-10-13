@@ -162,7 +162,7 @@ def _preflight_children(settings, env: dict[str, str], root: Path) -> None:
                     str(BACKEND.parent), str(BACKEND / "tests"), role,
                 ],
                 cwd=BACKEND, env=env, input=request, text=True,
-                stdout=subprocess.PIPE, stderr=errors, timeout=120, check=False,
+                stdout=subprocess.PIPE, stderr=errors, timeout=300, check=False,
             )
         _require(result.returncode == 0,
                  f"{role} configuration preflight failed; see private diagnostics")
