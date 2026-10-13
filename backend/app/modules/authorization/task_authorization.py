@@ -1,11 +1,16 @@
 """AUTH-owned adapter for exact prepared task operations."""
 
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.tasks.api import TaskAuthorityDenied, TaskAuthorityFacts
 from app.modules.tasks.api.authorization import TaskAuthorityDecision
+from app.modules.tasks.api.task_import import (
+    TaskImportBatchAction, TaskImportBatchAuthorityDenied, TaskImportBatchAuthorityFacts,
+)
 from app.modules.authorization.catalogue import ActionId
-from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext
+from app.modules.authorization.domain.task_authority import TaskAuthorityResourceContext, TaskImportBatchResourceContext
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import PreparedAuthorizationHandle, PreparedAuthorizationService
 from app.modules.authorization.repository import AdminAuthorizationRepository
@@ -116,7 +121,35 @@ class PreparedTaskAuthorization:
         if isinstance(handle, _TaskPrepared):
             handle.service.close()
 
-    async def restage_denial(self, error: TaskAuthorityDenied) -> bool:
+    async def authorize(self, action: TaskImportBatchAction, facts: TaskImportBatchAuthorityFacts) -> UUID:
+        """Bind the native batch/file result to current covered-manager authority."""
+        if type(facts) is not TaskImportBatchAuthorityFacts or facts.actor_profile_id != self._context.actor_profile_id:
+            raise TaskImportBatchAuthorityDenied("task import authority denied")
+        resource = TaskImportBatchResourceContext(
+            resource_id=facts.batch_id, scope_project_id=facts.project_id, source_id=facts.source_id,
+            actor_profile_id=facts.actor_profile_id, identity_link_id=self._context.identity_link_id,
+            sha256=facts.sha256, byte_count=facts.byte_count, row_count=facts.row_count,
+            manifest_digest=facts.manifest_digest, source_binding_digest=facts.source_binding_digest,
+            idempotency_key=facts.idempotency_key, request_digest=facts.request_digest,
+        )
+        service = PreparedAuthorizationService(self._session, self._context, self._kernel, self._repository)
+        caller_input = PreparedAuthorizationInput(idempotency_key=facts.idempotency_key,
+                                                  request_value=resource.model_dump(mode="json"))
+        try:
+            try:
+                handle = await service.prepare(ActionId(action.value), caller_input, PreparedAuthorityScope(
+                    kind=PreparedAuthorityScopeKind.PROJECT, project_id=facts.project_id,
+                ))
+            except PreparedAuthorizationUnsupported as exc:
+                await service.deny_unsupported(ActionId(action.value), caller_input, resource, exc)
+                raise
+            return (await service.consume(handle, ActionId(action.value), caller_input, resource)).decision_id
+        except AuthorizationDenied as exc:
+            raise TaskImportBatchAuthorityDenied("task import authority denied") from exc
+        finally:
+            service.close()
+
+    async def restage_denial(self, error: TaskAuthorityDenied | TaskImportBatchAuthorityDenied) -> bool:
         """Reuse the issuing kernel's exact pending evidence after rollback."""
         if isinstance(error.__cause__, AuthorizationDenied):
             await self._kernel.restage_denial(error.__cause__.decision)
