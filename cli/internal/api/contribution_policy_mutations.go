@@ -156,6 +156,9 @@ func validPolicyTransition(action string, v ContributionPolicyReceipt) bool {
 	if (prior == nil) != (number == nil) || (prior != nil && (!validUUID(*prior) || number.Sign() <= 0)) {
 		return false
 	}
+	if action != "retire" && prior != nil && (sameUUID(*prior, v.ContributionPolicyVersionID) || number.Cmp(v.VersionNumber) >= 0) {
+		return false
+	}
 	fromPolicy, fromVersion := "", ""
 	if v.FromPolicyStatus != nil {
 		fromPolicy = *v.FromPolicyStatus
@@ -163,15 +166,16 @@ func validPolicyTransition(action string, v ContributionPolicyReceipt) bool {
 	if v.FromVersionStatus != nil {
 		fromVersion = *v.FromVersionStatus
 	}
+	consistentPrior := (fromPolicy == "draft" && prior == nil) || (fromPolicy == "active" && prior != nil)
 	switch action {
 	case "create":
 		return v.EventType == "draft_created" && v.FromVersionStatus == nil && v.ToVersionStatus == "draft" &&
 			((v.FromPolicyStatus == nil && v.ToPolicyStatus == "draft" && prior == nil) ||
 				(fromPolicy == "active" && v.ToPolicyStatus == "active" && prior != nil))
 	case "update":
-		return v.EventType == "draft_updated" && (fromPolicy == "draft" || fromPolicy == "active") && v.ToPolicyStatus == fromPolicy && fromVersion == "draft" && v.ToVersionStatus == "draft"
+		return v.EventType == "draft_updated" && consistentPrior && v.ToPolicyStatus == fromPolicy && fromVersion == "draft" && v.ToVersionStatus == "draft"
 	case "publish":
-		return v.EventType == "published" && (fromPolicy == "draft" || fromPolicy == "active") && v.ToPolicyStatus == "active" && fromVersion == "draft" && v.ToVersionStatus == "published"
+		return v.EventType == "published" && consistentPrior && v.ToPolicyStatus == "active" && fromVersion == "draft" && v.ToVersionStatus == "published"
 	case "retire":
 		return v.EventType == "retired" && fromPolicy == "active" && v.ToPolicyStatus == "retired" && fromVersion == "published" && v.ToVersionStatus == "retired" &&
 			prior != nil && sameUUID(*prior, v.ContributionPolicyVersionID) && number.Cmp(v.VersionNumber) == 0

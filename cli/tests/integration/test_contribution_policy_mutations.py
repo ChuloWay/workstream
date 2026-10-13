@@ -129,6 +129,7 @@ def test_finance_decisions_exact_wire_and_complete_receipts(cli, tmp_path):
             assert result.returncode == 0 and json.loads(result.stdout) == value, (
                 result.stderr
             )
+
             assert len(requests) == before + 1
             path = f"/api/v1/projects/{PROJECT.replace('-', '')}/contribution-policies"
             path += (
@@ -323,6 +324,31 @@ def test_finance_receipts_bind_targets_events_and_nullable_history(cli, tmp_path
             assert result.returncode == 0 and json.loads(result.stdout) == value, (
                 result.stderr
             )
+
+            if action != "retire":
+                contradictory = [
+                    {"prior_current_version_id": VERSION.replace("-", "")},
+                    {"prior_current_version_number": value["version_number"]},
+                    {"prior_current_version_number": value["version_number"] + 1},
+                ]
+                if action in ("update", "publish"):
+                    contradictory += [
+                        {
+                            "prior_current_version_id": None,
+                            "prior_current_version_number": None,
+                        },
+                        {
+                            "from_policy_status": "draft",
+                            "to_policy_status": "draft"
+                            if action == "update"
+                            else "active",
+                        },
+                    ]
+                for change in contradictory:
+                    response["body"] = json.dumps(value | change).encode()
+                    result = invoke(cli, origin, action, file)
+                    assert_failure(result, "invalid_api_response")
+                    assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
 
 
 def test_finance_failures_preserve_uncertainty_and_credentials(cli, tmp_path):
