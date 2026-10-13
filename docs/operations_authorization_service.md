@@ -123,8 +123,8 @@ approved and frozen policy checks.
 
 Task claim/start/work-context require current canonical authority and the applicable
 exact project grant. Token claims and eligibility rows are not authority.
-The API drill ends its task journey at that supported public boundary; hidden
-submission creation has separate proof.
+Public ZIP preparation and admission-backed Submission creation extend that
+journey. The complete public API and durable-worker drill remains pending.
 
 ## Request And Error Context
 
@@ -617,16 +617,18 @@ AdminRoleGrant-backed administrative mutations, the three active fixed-service
 ART foundation actions, Project Manager `artifact.guide_source.ingest`, and the
 fixed-service `artifact.guide_source.binding.create` and
 `artifact.guide_source.read`, contributor `artifact.submission_bundle.prepare`,
-hidden human `submission.create`, and fixed-service
+public human `submission.create`, and fixed-service
 `artifact.submission.binding.create` actions. AUTH-12F4 also supports
 Project Manager `project.guide_compilation.review_package.read`,
 `project.submission_artifact_policy.approve`, and
 `project.guide_compilation.correction.request`; POL-05B exposes these with
 exact Project Manager authority and manual correction dispatch. REV-12A4A also
 supports the internal `review.lifecycle.activation.manage` action as the sole
-active review exception. Human review and generic artifact-read remain planned,
-as does the public Submission cutover. The controller activates no public
-review route, routing, acceptance or payment delivery. Callers begin and own one root
+active review exception. Human review and generic artifact-read remain planned;
+initial and exact checker-remediation Submission creation is public. The
+controller registers no handler or public review route: its live generation is
+required for new false/pass effects through the registered selected completion
+handler. Payment delivery remains unavailable. Callers begin and own one root
 transaction and follow their owner's lock contract for participant rows and
 `prepare`; REV-fenced operations acquire REV and any required TASK custody
 before preparation. They compose final locked facts and call `consume` with the
