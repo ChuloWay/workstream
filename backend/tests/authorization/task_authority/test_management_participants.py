@@ -99,7 +99,7 @@ async def test_transition_context_cannot_cross_roots(task_client):
 
 async def test_transition_context_cannot_cross_projects(task_client):
     task_project = await create_active_project(task_client)
-    other_project = await create_active_project(task_client)
+    other_project = await create_active_project(task_client, slug="other-context-project")
     task = await create_draft_task(task_client, task_project["id"])
     other_task = await create_draft_task(task_client, other_project["id"])
     context = await manager_context()
