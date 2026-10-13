@@ -424,6 +424,10 @@ creates a draft; separate `project task screen PROJECT_ID TASK_ID` and
 `project task release PROJECT_ID TASK_ID --reason TEXT` commands each require
 their own retry key. Workstream owns guide/policy locking and readiness; no
 command automatically prepares or releases work after another command.
+PILOT-02's `workstream project task-batch` commands add local CSV conversion,
+source declaration/upload/status, atomic import and separate whole-batch
+screen/release through public APIs. They share the same CLI; they neither
+replace individual-task commands nor form a prerequisite for evidence export.
 `workstream project role-grant issue PROJECT_ID --input FILE --idempotency-key UUID`
 and `project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID`
 send deliberate Submitter/Reviewer decisions with explicit qualification evidence
