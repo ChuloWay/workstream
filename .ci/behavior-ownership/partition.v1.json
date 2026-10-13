@@ -562,6 +562,14 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/catalogue.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/catalogue.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/checker_registry_authorization.py"
     },
     {
@@ -1658,6 +1666,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_import_membership.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/transition_audit.py"
     },
     {
@@ -1763,6 +1775,14 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/submitted_bundle.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_import_batches.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_import_membership.py"
     },
     {
       "group": "auth",
@@ -1906,6 +1926,14 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/test_lane_catalogue.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/scripts/test_lane_catalogue.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/test_structure_boundary.py"
     },
     {
@@ -1913,7 +1941,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "7282f1d9d49950a7252f895b27cb91a00008da1ce3c33be7e763f399366fbcdb",
-  "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
+  "authority_digest": "64d2303dc5a6f08c78c1cc9d3acec3c20a24252068c1e042c29675ac637f28fb",
+  "protected_base_commit": "6d64a6353fd619f5b917359da8b82c307d97d40d",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

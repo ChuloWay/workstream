@@ -711,6 +711,11 @@ PILOT_02A_IMPORT_SOURCE_TARGETS = frozenset({
     "backend/app/modules/authorization/task_import_sources.py",
     "backend/app/modules/tasks/api/task_import.py",
 })
+PILOT_02B_ATOMIC_IMPORT_TARGETS = frozenset({
+    "backend/app/modules/tasks/task_import_batches.py",
+    "backend/app/modules/tasks/task_import_membership.py",
+    "backend/app/modules/tasks/api/task_import_membership.py",
+})
 
 
 class BehaviorOwnershipError(RuntimeError):
@@ -964,6 +969,7 @@ def _validate_additive_partition_transition(
         | TASK_COMMAND_REPLAY_TARGETS
         | PILOT_13_GUIDE_READ_TARGETS
         | PILOT_02A_IMPORT_SOURCE_TARGETS
+        | PILOT_02B_ATOMIC_IMPORT_TARGETS
     )
     expected_additions = (approved_additions & additions) - set(trusted_targets)
     if POL_03A_DECLARATIVE_MODEL_TARGET in additions:

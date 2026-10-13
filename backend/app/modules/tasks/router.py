@@ -6,7 +6,7 @@ import json
 from collections.abc import AsyncIterator
 from datetime import datetime
 from uuid import UUID
-from app.api.deps.authorization import get_task_commands, enforce_human_authorization_read
+from app.api.deps.authorization import get_task_commands, get_task_import_batch_commands, enforce_human_authorization_read
 from app.modules.tasks.queue_router import router as queue_router
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api import TaskAuthorityOperation, ContributorTaskDetail, ManagementTaskDetail
@@ -27,6 +27,12 @@ from app.modules.tasks.schemas import (
     TaskWithAssignmentResponse,
 )
 from app.modules.tasks.service import TaskProjectNotReady, TaskServiceError, TaskNotFound
+from app.modules.tasks.task_import_batches import TaskImportBatchCommands
+from app.modules.tasks.api.task_import_membership import TaskImportBatchError
+from app.modules.tasks.api.task_import import TaskImportBatchAction
+from app.modules.tasks.schemas import TaskImportBatchRequest, TaskImportBatchResponse, TaskImportBatchStatus
+from app.interfaces.artifacts import ArtifactStoreError
+from pydantic import ValidationError
 from app.modules.tasks.api.audit_evidence import AuditTaskEvidenceRequest, AuditTaskEvidencePage, TaskEvidenceCursor
 
 from app.api.deps.history import HistoryReadOperation, get_history_reads
@@ -51,6 +57,55 @@ def require_task_command_key(request: Request) -> UUID:
     """Validate a single retry key before mutating actor resolution."""
     values = request.headers.getlist("Idempotency-Key")
     return parse_idempotency_key(values[0] if len(values) == 1 else "")
+
+
+def task_import_error(exc: Exception) -> StructuredHTTPException:
+    """Expose bounded parser/row failures and safe storage outcomes without coordinates."""
+    details = None
+    if isinstance(exc, TaskImportBatchError):
+        code, status_code = exc.code, exc.status_code
+        if isinstance(exc, TaskImportBatchError) and exc.row_indexes:
+            details = [{"loc": ["tasks", index, "external_task_id"], "type": "external_task_id_conflict"}
+                       for index in exc.row_indexes]
+    elif isinstance(exc, (ValidationError, ValueError)):
+        code, status_code = "task_import_json_invalid", 422
+        if isinstance(exc, ValidationError):
+            details = [{"loc": list(error["loc"]), "type": error["type"], "msg": error["msg"]}
+                       for error in exc.errors(include_input=False, include_context=False, include_url=False)]
+    else:
+        code, status_code = "task_import_source_unavailable", 503
+    return StructuredHTTPException(status_code=status_code, detail=details or code,
+                                   error_code=code, error_message=code.replace("_", " "), retryable=status_code == 503)
+
+
+@router.post("/projects/{project_id}/task-import-batches", response_model=TaskImportBatchResponse, status_code=201,
+             openapi_extra={"x-workstream-action-id": TaskImportBatchAction.IMPORT.value,
+                            "parameters": [TASK_IDEMPOTENCY_PARAMETER]})
+async def import_task_batch(
+    project_id: UUID, payload: TaskImportBatchRequest,
+    key: Annotated[UUID, Depends(require_task_command_key)],
+    commands: Annotated[TaskImportBatchCommands, Depends(get_task_import_batch_commands)],
+) -> TaskImportBatchResponse:
+    """Import every JSON row into DRAFT or recover the original immutable result."""
+    try:
+        return await commands.import_source(project_id, payload.source_id, idempotency_key=key)
+    except (TaskImportBatchError, ArtifactStoreError, ValidationError, ValueError) as exc:
+        raise task_import_error(exc) from exc
+
+
+@router.get("/projects/{project_id}/task-import-batches/{batch_id}", response_model=TaskImportBatchStatus,
+            dependencies=[Depends(enforce_human_authorization_read)],
+            openapi_extra={"x-workstream-action-id": TaskImportBatchAction.READ.value})
+async def read_task_batch(
+    request: Request, project_id: UUID, batch_id: UUID,
+    commands: Annotated[TaskImportBatchCommands, Depends(get_task_import_batch_commands)],
+) -> TaskImportBatchStatus:
+    """Read native membership and current states under fresh covered-manager authority."""
+    from app.core.api_controls import request_ids
+    try:
+        return await commands.status(project_id, batch_id, request_id=UUID(request_ids(request)[0]))
+    except TaskImportBatchError as exc:
+        raise task_import_error(exc) from exc
 
 
 CANONICAL_ERROR_OBJECT_SCHEMA = {"$ref": "#/components/schemas/ApiError"}

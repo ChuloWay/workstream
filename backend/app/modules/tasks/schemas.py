@@ -153,6 +153,13 @@ class TaskCreate(BaseModel):
     deadline_at: datetime | None = None
 
 
+class ImportedTaskCreate(TaskCreate):
+    """Server-stamped JSON creation values; not a public manual-create request."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    source_type: Literal["json_import"] = "json_import"
+
+
 class TaskTransitionRequest(BaseModel):
     """Optional request body for task lifecycle transitions."""
 
@@ -250,6 +257,76 @@ class TaskResponse(BaseModel):
     assigned_to: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class TaskImportBatchRequest(BaseModel):
+    """Select one native verified source; all Task provenance is server-stamped."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source_id: UUID
+
+
+class TaskImportBatchResponse(BaseModel):
+    """Immutable original ordered creation facts, also returned after Tasks advance."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    batch_id: UUID
+    project_id: UUID
+    source_id: UUID
+    sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    byte_count: int = Field(ge=1, le=8388608)
+    schema_version: Literal["workstream.task_import.v1"]
+    mapping_version: Literal["workstream.task_import.draft_mapping.v1"]
+    label: str | None = Field(default=None, min_length=1, max_length=255)
+    row_count: int = Field(ge=1, le=500)
+    created_at: datetime
+    tasks: tuple[TaskResponse, ...] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def original_creation_custody(self):
+        """Reject foreign, duplicate or relabelled original Task creation responses."""
+        if len(self.tasks) != self.row_count or len({task.id for task in self.tasks}) != self.row_count:
+            raise ValueError("batch creation result has invalid membership")
+        external_ids = {task.external_task_id for task in self.tasks}
+        if None in external_ids or len(external_ids) != self.row_count:
+            raise ValueError("batch creation result has invalid external IDs")
+        for task in self.tasks:
+            if (task.project_id != str(self.project_id) or task.status != "draft"
+                    or task.source_type != "json_import"
+                    or task.source_ref != f"task-import-source:{self.source_id}"
+                    or task.source_payload_hash != self.sha256 or task.import_batch_id != str(self.batch_id)):
+                raise ValueError("batch creation result differs from original custody")
+        return self
+
+
+class TaskImportBatchCurrentTask(BaseModel):
+    """Current lifecycle state selected solely by immutable native membership."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    task_id: UUID
+    row_index: int = Field(ge=0, le=499)
+    status: str = Field(pattern=r"^[a-z][a-z0-9_]{0,29}$")
+
+
+class TaskImportBatchStatus(BaseModel):
+    """Separate original creation facts from the current member lifecycle states."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    creation: TaskImportBatchResponse
+    current_tasks: tuple[TaskImportBatchCurrentTask, ...] = Field(min_length=1, max_length=500)
+
+    @model_validator(mode="after")
+    def exact_current_membership(self):
+        """Keep the current projection in the same original document row order."""
+        if (len(self.current_tasks) != self.creation.row_count
+                or any(row.row_index != index or str(row.task_id) != self.creation.tasks[index].id
+                       for index, row in enumerate(self.current_tasks))):
+            raise ValueError("current Task projection differs from native membership")
+        return self
 
 
 class RequiredArtifactRequirement(BaseModel):

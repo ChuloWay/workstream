@@ -1761,3 +1761,12 @@ the initial pre-byte context also denies a source mismatch before ZIP access.
 No AUTH action or permission is added for an uncaused `revision` path. The
 successor preserves the old failure evidence and creates no Review, acceptance,
 ContributionRecord or award merely by resubmission.
+
+
+PILOT-02B owns the distinct TASK actions `project.task.import` and
+`project.task.import_batch.read` under existing `project.task.manage`. They
+require an active human covering Project Manager grant and exact native batch,
+selected source, received-byte identity and original manifest facts. They do
+not enlarge the ART action custody table or grant screen/release authority.
+The [atomic import contract](spec_chunk_4_task_queue_assignment.md#atomic-json-to-draft-import-contract)
+separates immutable original creation facts from current member states.
