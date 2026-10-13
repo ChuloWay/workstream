@@ -10,6 +10,7 @@ from sqlalchemy.exc import DBAPIError
 
 from app.db.session import get_session_factory
 from app.modules.reviews.api.lifecycle import JointLifecycleUnavailable
+from app.modules.reviews.lifecycle.fence import PostgresJointLifecycleMutationFence
 from app.modules.reviews.lifecycle.models import JointLifecycleTransition
 from app.modules.tasks.models import AuditEvent
 from tests.reviews.lifecycle.transition_support import command_for, controller, snapshot, transition
@@ -65,7 +66,8 @@ async def test_previous_manifest_transition_replays_after_validator_update(
             await (await session.connection()).exec_driver_sql(current.replace(new, old))
         monkeypatch.setattr(lifecycle_service, "FIRST_CONTRIBUTION_MANIFEST_DIGEST", old)
         monkeypatch.setattr(transition_support, "FIRST_CONTRIBUTION_MANIFEST_DIGEST", old)
-        prior = await command_for(admin_access.target.id, "shadow")
+        await transition(await command_for(admin_access.target.id, "shadow"))
+        prior = await command_for(admin_access.target.id, "live")
         prior_receipt = await transition(prior)
         retained = await snapshot()
     finally:
@@ -76,11 +78,26 @@ async def test_previous_manifest_transition_replays_after_validator_update(
 
     assert await transition(prior) == prior_receipt
     assert await snapshot() == retained
-    successor = await command_for(admin_access.target.id, "live")
+    async with get_session_factory()() as session, session.begin():
+        facts = await PostgresJointLifecycleMutationFence(session).acquire(
+            prior_receipt.generation
+        )
+        assert facts.phase == "live"
+        assert facts.new_effects_enabled is False
+    successor = await command_for(admin_access.target.id, "draining")
     with pytest.raises(JointLifecycleUnavailable, match="lifecycle transition unavailable"):
         await transition(successor.model_copy(update={"reviewed_manifest_digest": old}))
     assert await snapshot() == retained
-    assert (await transition(successor)).generation == 2
+    await transition(successor)
+    await transition(await command_for(admin_access.target.id, "disabled"))
+    await transition(await command_for(admin_access.target.id, "shadow"))
+    current = await transition(await command_for(admin_access.target.id, "live"))
+    async with get_session_factory()() as session, session.begin():
+        facts = await PostgresJointLifecycleMutationFence(session).acquire(
+            current.generation
+        )
+        assert facts.phase == "live"
+        assert facts.new_effects_enabled is True
 
 
 async def test_invalid_edge_stale_generation_deadline_and_manifest_rollback(admin_access):

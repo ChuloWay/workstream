@@ -12,6 +12,10 @@ depends_on = None
 
 _SIGNATURE = "public.require_guide_activation_custody(uuid, boolean)"
 _LIFECYCLE_SIGNATURE = "public.joint_lifecycle_transition_valid(public.joint_lifecycle_transitions)"
+_ACCEPTANCE_SIGNATURE = (
+    "public.task_routing_acceptance_matches(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,bigint,boolean)"
+)
+_ROUTING_GUARD_SIGNATURE = "public.guard_task_routing_authority()"
 _OLD_MANIFEST = "sha256:f7385c3930e0a3fc60a55e4a35c67b00c1bd3056ffa89a1e09ecae4b736c3ab4"
 _NEW_MANIFEST = "sha256:3a6704c3c79c243f5a032f2db9c4f47080716dfef86928f53e0f20b4d6047273"
 _OLD = """OR NOT EXISTS(SELECT 1 FROM review_policies p WHERE p.id=g.selected_review_policy_id
@@ -40,6 +44,14 @@ _NEW = """OR NOT EXISTS(SELECT 1 FROM review_policies p WHERE p.id=g.selected_re
                         END
                     )
                   )))"""
+_OLD_ACCEPTANCE = """AND (NOT p_is_new OR (c.phase='live' AND m.authorized_lifecycle_generation=c.generation))"""
+_NEW_ACCEPTANCE = """AND (NOT p_is_new OR (m.authorized_lifecycle_generation=c.generation
+            AND public.joint_lifecycle_new_effects_enabled(c)))"""
+_OLD_ROUTING_GUARD = """IF NEW.routing_recommendation='allow_review' AND NOT NEW.human_review_required AND NOT EXISTS(SELECT 1 FROM public.joint_lifecycle_release_control c
+        WHERE c.singleton AND c.phase='live' AND c.generation=NEW.authorized_lifecycle_generation)"""
+_NEW_ROUTING_GUARD = """IF NEW.routing_recommendation='allow_review' AND NOT NEW.human_review_required AND NOT EXISTS(SELECT 1 FROM public.joint_lifecycle_release_control c
+        WHERE c.singleton AND c.generation=NEW.authorized_lifecycle_generation
+          AND public.joint_lifecycle_new_effects_enabled(c))"""
 
 
 def upgrade() -> None:
@@ -60,6 +72,38 @@ def upgrade() -> None:
     if lifecycle.count(_OLD_MANIFEST) != 2 or _NEW_MANIFEST in lifecycle:
         raise RuntimeError("review lifecycle manifest predecessor changed")
     op.execute(lifecycle.replace(_OLD_MANIFEST, _NEW_MANIFEST))
+    if op.get_bind().execute(sa.text(
+        "SELECT pg_catalog.to_regprocedure("
+        "'public.joint_lifecycle_new_effects_enabled(public.joint_lifecycle_release_control)')"
+    )).scalar_one() is not None:
+        raise RuntimeError("review lifecycle new-effect predicate already exists")
+    op.execute(f"""
+        CREATE FUNCTION public.joint_lifecycle_new_effects_enabled(
+          c public.joint_lifecycle_release_control
+        ) RETURNS boolean LANGUAGE sql STABLE
+        SET search_path=pg_catalog,public,pg_temp AS $$
+          SELECT c.singleton AND c.phase='live' AND c.generation>0
+            AND c.transition_id IS NOT NULL
+            AND EXISTS(
+              SELECT 1 FROM public.joint_lifecycle_transitions t
+              WHERE t.id=c.transition_id AND t.singleton_id=c.id
+                AND t.generation=c.generation AND t.phase=c.phase
+                AND t.facts_json->'command'->>'reviewed_manifest_digest'='{_NEW_MANIFEST}'
+            )
+        $$
+    """)
+    acceptance = op.get_bind().execute(sa.text(
+        "SELECT pg_catalog.pg_get_functiondef(CAST(:signature AS regprocedure))"
+    ), {"signature": _ACCEPTANCE_SIGNATURE}).scalar_one()
+    if acceptance.count(_OLD_ACCEPTANCE) != 1 or _NEW_ACCEPTANCE in acceptance:
+        raise RuntimeError("routing acceptance predecessor changed")
+    op.execute(acceptance.replace(_OLD_ACCEPTANCE, _NEW_ACCEPTANCE))
+    routing_guard = op.get_bind().execute(sa.text(
+        "SELECT pg_catalog.pg_get_functiondef(CAST(:signature AS regprocedure))"
+    ), {"signature": _ROUTING_GUARD_SIGNATURE}).scalar_one()
+    if routing_guard.count(_OLD_ROUTING_GUARD) != 1 or _NEW_ROUTING_GUARD in routing_guard:
+        raise RuntimeError("routing authority predecessor changed")
+    op.execute(routing_guard.replace(_OLD_ROUTING_GUARD, _NEW_ROUTING_GUARD))
 
 
 def downgrade() -> None:

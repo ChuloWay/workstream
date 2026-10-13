@@ -29,6 +29,7 @@ class JointLifecycleControlFacts(BaseModel):
     singleton_id: UUID
     phase: JointLifecyclePhase
     generation: int = Field(ge=0, le=9_223_372_036_854_775_807)
+    new_effects_enabled: bool
     created_at: AwareDatetime
 
     @model_validator(mode="after")
@@ -38,6 +39,10 @@ class JointLifecycleControlFacts(BaseModel):
             raise ValueError("lifecycle singleton must be UUIDv7")
         if self.generation == 0 and self.phase is not JointLifecyclePhase.DISABLED:
             raise ValueError("lifecycle generation zero must be disabled")
+        if self.new_effects_enabled and (
+            self.phase is not JointLifecyclePhase.LIVE or self.generation <= 0
+        ):
+            raise ValueError("new lifecycle effects require a positive live generation")
         return self
 
 

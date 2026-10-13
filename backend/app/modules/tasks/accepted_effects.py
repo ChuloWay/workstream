@@ -175,7 +175,7 @@ class TaskAcceptedEffectsParticipant:
             disposition = "replay"
         else:
             raise TaskAcceptedEffectsUnavailable("task_accepted_effects_unavailable")
-        if disposition == "new" and (lifecycle.phase != "live" or lifecycle.generation <= 0):
+        if disposition == "new" and not lifecycle.new_effects_enabled:
             raise TaskAcceptedEffectsUnavailable("lifecycle is not live")
         try:
             preparation = TaskAcceptedPreparation(
