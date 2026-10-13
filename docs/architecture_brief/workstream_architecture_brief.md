@@ -159,10 +159,12 @@ The backend component view zooms into the FastAPI container. It shows how the mo
 
 ## Lifecycle Sequence
 
-The sequence below shows the target v0.1 loop. Public manager guide activation is
-delivered, as is hidden durable post-submit execution/recovery with exact
-input, execute and finalize service authority. Automatic dispatch and routing
-remain pending. Retained history does not execute checkers or authorize acceptance.
+The sequence below shows the target v0.1 loop. Public manager guide activation,
+public ZIP preparation and admission-backed Submission creation are delivered.
+Durable post-submit execution/recovery has exact input, execute and finalize
+service authority, and selected request/completion handlers are registered in
+production composition. This is not a deployment or complete public drill claim.
+Retained history does not execute checkers or authorize acceptance.
 
 <div class="diagram sequence">
   <img src="images/task_lifecycle_sequence.png" alt="Workstream task lifecycle sequence diagram" />

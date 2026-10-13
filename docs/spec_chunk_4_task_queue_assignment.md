@@ -65,10 +65,11 @@ Audit Authority task history and removes the old unbounded task-only audit route
 
 There is no self-activation endpoint. A contributor cannot acquire permission
 by creating a worker profile, supplying skill tags, or presenting a token role.
-There is no public JSON-packet submission creation route. The existing
-`GET /api/v1/tasks/{task_id}/submissions` remains a read, not evidence that POST
-creation is usable. Admission-backed Submission creation stays hidden until
-its separate canonical public integration is complete.
+There is no public JSON-packet submission creation route. Contributors upload
+one ZIP through the public submission-bundle preparation route, then the public
+`POST /api/v1/tasks/{task_id}/submissions` operation consumes a fresh ready
+admission through the canonical writer. The corresponding GET remains a history
+read, not creation authority.
 
 ## Canonical Task-Import Sources
 
@@ -232,8 +233,9 @@ tokens and not the full planned workflow:
 - Claimed with the caller's exact active assignment: `start`.
 - Otherwise: no contributor command hint.
 - Management context does not advertise contributor commands.
-- No `submit` or pre-submit execution hint is advertised by this surface while
-  the canonical public submission integration remains hidden.
+- No `submit` or pre-submit execution hint is advertised by this work-context
+  surface; the separate public preparation and Submission operations perform
+  their own fresh authorization.
 
 Pre-submission intake failures prevent Submission creation. Post-submission
 evaluation concerns the submitted work and supplies evidence for
@@ -241,10 +243,11 @@ policy-governed routing; it does not own final acceptance.
 
 ARCH-04E1A persists that successful evidence in one immutable route-neutral
 TASK source table and exposes detached source facts plus a source-neutral,
-accepted-effects Protocol. REV-04C supplies the hidden FinalAcceptance/TASK/CON
-participant and uses the bounded exact-source verifier, but no general routing
-publication writer/reader, handler, current pointer, routing authority or live
-TASK transition.
+accepted-effects Protocol. REV-04C supplies the shared FinalAcceptance/TASK/CON
+participant and bounded exact-source verifier. ARCH-04E2-B supplies exact routing
+authority and complete-effect custody; B8 supplies completion delivery, and the
+selected request/completion handlers are registered in production composition.
+No general public routing writer or reader is exposed.
 ARCH-04E1B-B1 requires the existing CHECKERS coordinator to acquire TASK-owned
 Task/Assignment/latest Submission locks before reservation or current-result
 fences. Review admission INSERTs also take the project-qualified TASK lock
@@ -252,9 +255,9 @@ before checker fences and foreign-key custody. Exact locked owner lineage is rev
 SELECT-only exact reservation replay, never a new generation or fence change.
 The adapter supplies this required guard without a reverse module dependency.
 No TASK status transition or execution authority is added.
-Before either true human admission or false automatic acceptance is published,
-the remaining ARCH-04E work must harden the same table with mandatory exact
-routing and owner-receipt custody and reject retained pre-authority rows.
+True-policy success reaches `review_pending`; eligible false-policy success uses
+the shared acceptance operation only under a live REV generation. A typed
+pre-effect non-live refusal rolls back and uses bounded retry.
 
 ## Required verification
 

@@ -47,7 +47,8 @@ implementation or invalid-output codes. Missing images, crashes and malformed
 or oversized output cannot become a silent pass. This contract and the
 immutable registry are consumed by selected hidden PRE/POST owners through an
 explicit Rust service adapter. Production request/completion handlers are
-registered; public contributor intake remains PILOT-12 work.
+registered; public ZIP preparation and admission-backed Submission creation
+expose contributor intake.
 
 Both executable catalogues, their runtime factories and their request/result
 decoders are removed. Requests use the default-plus-external PRE contract and
@@ -251,8 +252,9 @@ Rust/MinIO proof uses runc/docker-dev and makes no deployed or gVisor claim.
   or invokes shared acceptance.
 
 Revision closure and task lifecycle movement remain owner guards, not generated
-checker names. Public false-policy guide activation is still blocked pending
-PILOT-08, and public contributor intake remains PILOT-12 work.
+checker names. Complete supported false-policy guides can activate when their
+approved inventory contains no `human_review` disposition, and public ZIP
+preparation plus admission-backed Submission creation expose contributor intake.
 
 ## Submission Artifact Policy And Pre-Submit Generation
 

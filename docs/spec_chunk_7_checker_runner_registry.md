@@ -144,11 +144,11 @@ For worker-fixable blocking structural failures after submission finalization, t
 
 Chunk 7 records the recommendation only. Chunk 9 applies the lifecycle transition.
 
-Blocking pre-submit failures occur before durable checker runs exist. Hidden
+Blocking pre-submit failures occur before durable checker runs exist. Public
 ZIP preparation reports `pre_submission_checker_failed`; it creates no Submission
 or durable post-submit run. ART retains bounded pass/fail/warning evidence.
 These results never use review decision values: `accept`, `needs_revision`, or
-`reject`. Structured public feedback remains pending.
+`reject`.
 
 ## Artifact Manifest Hash
 
