@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 from alembic import command as alembic_command
 from alembic.config import Config
+from pydantic import ValidationError
 from sqlalchemy import event, select, text
 from sqlalchemy.exc import DBAPIError
 
@@ -15,7 +16,15 @@ from app.db import session as db_session
 from app.db.session import get_session_factory
 from app.modules.reviews.acceptance.repository import FinalAcceptanceRepository
 from app.modules.reviews.api.acceptance import FinalAcceptanceConflict
-from app.modules.reviews.api.lifecycle import JointLifecycleUnavailable
+from app.modules.reviews.api.lifecycle import (
+    JointLifecycleControlFacts,
+    JointLifecyclePhase,
+    JointLifecycleUnavailable,
+)
+from app.modules.reviews.lifecycle.fence import (
+    JOINT_LIFECYCLE_LOCK_KEY,
+    PostgresJointLifecycleMutationFence,
+)
 from app.modules.reviews.lifecycle.models import JointLifecycleReleaseControl
 from app.modules.tasks.api.routing_outcome import TaskRoutingLifecycleDeferred
 from tests.tasks.post_submit_routing.outcome_support import authorized_routing_source, apply_outcome
@@ -75,6 +84,122 @@ async def _routing_acceptance_validity(session, manifest_id):
     )
 
 
+async def _reset_to_0038(isolated_database_env, migration_lock) -> None:
+    from tests.test_alembic import _execute
+
+    await db_session.dispose_engine()
+    with migration_lock():
+        await _execute(
+            isolated_database_env,
+            "drop schema public cascade; create schema public",
+        )
+        await asyncio.to_thread(
+            alembic_command.upgrade,
+            _migration_config(),
+            "0038_task_batch_transitions",
+        )
+    await db_session.dispose_engine()
+    async with get_session_factory()() as session:
+        assert await session.scalar(text("SELECT version_num FROM alembic_version")) == (
+            "0038_task_batch_transitions"
+        )
+        assert await session.scalar(
+            text(
+                "SELECT pg_catalog.to_regprocedure("
+                "'public.joint_lifecycle_new_effects_enabled("
+                "public.joint_lifecycle_release_control)') IS NULL"
+            )
+        ) is True
+
+
+async def _provision_0038_operator(admin_access):
+    from scripts.bootstrap_access_administrator import _run as run_bootstrap
+    from tests.authorization.admin_access.support import AdminAccess
+
+    admin = await admin_access.signed.actor("administrator", roles=("viewer",))
+    target = await admin_access.signed.actor("target", roles=("admin",))
+    code, bootstrap = await run_bootstrap(admin.id, execute=True)
+    assert code == 0 and bootstrap["result_code"] == "bootstrapped"
+    access = AdminAccess(
+        admin_access.signed,
+        admin,
+        target,
+        bootstrap["grant_id"],
+    )
+    await access.signed.grant(access.admin, access.target)
+    return access
+
+
+async def _predecessor_lock_controller(owner):
+    """Project only 0038's phase/generation fact while retaining its real locks."""
+    transaction = owner._session.get_transaction()
+    if (
+        transaction is None
+        or not transaction.is_active
+        or owner._session.in_nested_transaction()
+    ):
+        raise JointLifecycleUnavailable(
+            "lifecycle requires a root transaction and exact generation"
+        )
+    connection = await owner._session.connection()
+    if connection.in_nested_transaction():
+        raise JointLifecycleUnavailable("lifecycle requires a root database transaction")
+    try:
+        await owner._session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
+    except DBAPIError as exc:
+        if getattr(exc.orig, "sqlstate", None) != "25001":
+            raise
+        raise JointLifecycleUnavailable(
+            "lifecycle requires a root database transaction"
+        ) from exc
+    await owner._session.execute(
+        text("SELECT pg_catalog.pg_advisory_xact_lock(:key)"),
+        {"key": JOINT_LIFECYCLE_LOCK_KEY},
+    )
+    row = (
+        await owner._session.execute(
+            select(
+                JointLifecycleReleaseControl.id,
+                JointLifecycleReleaseControl.phase,
+                JointLifecycleReleaseControl.generation,
+                JointLifecycleReleaseControl.created_at,
+            )
+            .where(JointLifecycleReleaseControl.singleton.is_(True))
+            .with_for_update()
+        )
+    ).one_or_none()
+    if row is None:
+        raise JointLifecycleUnavailable(
+            "lifecycle controller missing or generation changed"
+        )
+    try:
+        return JointLifecycleControlFacts(
+            singleton_id=row.id,
+            phase=JointLifecyclePhase(row.phase),
+            generation=row.generation,
+            new_effects_enabled=row.phase == "live" and row.generation > 0,
+            created_at=row.created_at,
+        )
+    except (ValueError, ValidationError) as exc:
+        raise JointLifecycleUnavailable("lifecycle controller malformed") from exc
+
+
+def _set_runtime_manifest(monkeypatch, digest) -> None:
+    import app.modules.reviews.lifecycle.service as lifecycle_service
+    import tests.reviews.lifecycle.transition_support as transition_support
+
+    monkeypatch.setattr(
+        lifecycle_service,
+        "FIRST_CONTRIBUTION_MANIFEST_DIGEST",
+        digest,
+    )
+    monkeypatch.setattr(
+        transition_support,
+        "FIRST_CONTRIBUTION_MANIFEST_DIGEST",
+        digest,
+    )
+
+
 @pytest.mark.parametrize("instruments", [(), ("money",), ("money", "project_points")])
 async def test_stopped_terminal_replay_is_select_only(
     tmp_path,
@@ -126,133 +251,15 @@ async def test_0038_old_manifest_live_upgrade_denies_new_effects_until_renewed(
     monkeypatch,
 ):
     """Upgrade retains old facts/replay but requires current Operator review for new effects."""
-    import app.modules.reviews.lifecycle.service as lifecycle_service
-    import tests.reviews.lifecycle.transition_support as transition_support
-
-    from pydantic import ValidationError
-    from sqlalchemy import select
-
-    from app.modules.reviews.api.lifecycle import (
-        JointLifecycleControlFacts,
-        JointLifecyclePhase,
-        JointLifecycleUnavailable,
-    )
-    from app.modules.reviews.lifecycle.fence import (
-        JOINT_LIFECYCLE_LOCK_KEY,
-        PostgresJointLifecycleMutationFence,
-    )
-    from app.modules.reviews.lifecycle.models import JointLifecycleReleaseControl
-    from scripts.bootstrap_access_administrator import _run as run_bootstrap
-    from tests.authorization.admin_access.support import AdminAccess
-    from tests.test_alembic import _execute
-
     migration = _activation_migration()
-    await db_session.dispose_engine()
-    with migration_lock():
-        await _execute(
-            isolated_database_env,
-            "drop schema public cascade; create schema public",
-        )
-        await asyncio.to_thread(
-            alembic_command.upgrade,
-            _migration_config(),
-            "0038_task_batch_transitions",
-        )
-    await db_session.dispose_engine()
-    async with get_session_factory()() as session:
-        assert await session.scalar(text("SELECT version_num FROM alembic_version")) == (
-            "0038_task_batch_transitions"
-        )
-        assert await session.scalar(
-            text(
-                "SELECT pg_catalog.to_regprocedure("
-                "'public.joint_lifecycle_new_effects_enabled("
-                "public.joint_lifecycle_release_control)') IS NULL"
-            )
-        ) is True
-
-    admin = await admin_access.signed.actor("administrator", roles=("viewer",))
-    target = await admin_access.signed.actor("target", roles=("admin",))
-    code, bootstrap = await run_bootstrap(admin.id, execute=True)
-    assert code == 0 and bootstrap["result_code"] == "bootstrapped"
-    access = AdminAccess(
-        admin_access.signed,
-        admin,
-        target,
-        bootstrap["grant_id"],
-    )
-    await access.signed.grant(access.admin, access.target)
-
-    async def predecessor_lock_controller(owner):
-        """Emulate only 0038's phase/generation fact while retaining real locks."""
-        transaction = owner._session.get_transaction()
-        if (
-            transaction is None
-            or not transaction.is_active
-            or owner._session.in_nested_transaction()
-        ):
-            raise JointLifecycleUnavailable(
-                "lifecycle requires a root transaction and exact generation"
-            )
-        connection = await owner._session.connection()
-        if connection.in_nested_transaction():
-            raise JointLifecycleUnavailable(
-                "lifecycle requires a root database transaction"
-            )
-        try:
-            await owner._session.execute(text("SELECT pg_catalog.pg_export_snapshot()"))
-        except DBAPIError as exc:
-            if getattr(exc.orig, "sqlstate", None) != "25001":
-                raise
-            raise JointLifecycleUnavailable(
-                "lifecycle requires a root database transaction"
-            ) from exc
-        await owner._session.execute(
-            text("SELECT pg_catalog.pg_advisory_xact_lock(:key)"),
-            {"key": JOINT_LIFECYCLE_LOCK_KEY},
-        )
-        row = (
-            await owner._session.execute(
-                select(
-                    JointLifecycleReleaseControl.id,
-                    JointLifecycleReleaseControl.phase,
-                    JointLifecycleReleaseControl.generation,
-                    JointLifecycleReleaseControl.created_at,
-                )
-                .where(JointLifecycleReleaseControl.singleton.is_(True))
-                .with_for_update()
-            )
-        ).one_or_none()
-        if row is None:
-            raise JointLifecycleUnavailable(
-                "lifecycle controller missing or generation changed"
-            )
-        try:
-            return JointLifecycleControlFacts(
-                singleton_id=row.id,
-                phase=JointLifecyclePhase(row.phase),
-                generation=row.generation,
-                new_effects_enabled=row.phase == "live" and row.generation > 0,
-                created_at=row.created_at,
-            )
-        except (ValueError, ValidationError) as exc:
-            raise JointLifecycleUnavailable("lifecycle controller malformed") from exc
-
-    monkeypatch.setattr(
-        lifecycle_service,
-        "FIRST_CONTRIBUTION_MANIFEST_DIGEST",
-        migration._OLD_MANIFEST,
-    )
-    monkeypatch.setattr(
-        transition_support,
-        "FIRST_CONTRIBUTION_MANIFEST_DIGEST",
-        migration._OLD_MANIFEST,
-    )
+    await _reset_to_0038(isolated_database_env, migration_lock)
+    access = await _provision_0038_operator(admin_access)
+    _set_runtime_manifest(monkeypatch, migration._OLD_MANIFEST)
     with monkeypatch.context() as predecessor:
         predecessor.setattr(
             PostgresJointLifecycleMutationFence,
             "lock_controller",
-            predecessor_lock_controller,
+            _predecessor_lock_controller,
         )
         await transition(await command_for(access.target.id, "shadow"))
         old_live_command = await command_for(access.target.id, "live")
@@ -260,16 +267,7 @@ async def test_0038_old_manifest_live_upgrade_denies_new_effects_until_renewed(
     assert old_live_receipt.generation == 2
     retained_lifecycle = await snapshot()
 
-    monkeypatch.setattr(
-        lifecycle_service,
-        "FIRST_CONTRIBUTION_MANIFEST_DIGEST",
-        migration._NEW_MANIFEST,
-    )
-    monkeypatch.setattr(
-        transition_support,
-        "FIRST_CONTRIBUTION_MANIFEST_DIGEST",
-        migration._NEW_MANIFEST,
-    )
+    _set_runtime_manifest(monkeypatch, migration._NEW_MANIFEST)
     await db_session.dispose_engine()
     with migration_lock():
         await asyncio.to_thread(
