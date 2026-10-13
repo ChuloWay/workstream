@@ -25,37 +25,48 @@ class LightweightAgentGateTests(unittest.TestCase):
 
     def test_cli_full_contract_preserves_failure_and_timeout_exits(self) -> None:
         workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")
-        step = workflow.split(
-            "      - name: Exercise built CLI against HTTP boundaries and real public API\n",
-            1,
-        )[1]
-        script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        names = (
+            "Exercise built CLI against task HTTP and local file boundaries",
+            "Exercise existing guide HTTP contracts",
+            "Exercise existing native guide API callers",
+            "Exercise existing native CLI self-service caller",
+            "Exercise complete native CLI batch journey",
+        )
+        scripts = []
+        for name in names:
+            step = workflow.split("      - name: " + name + "\n", 1)[1].split("\n      - ", 1)[0]
+            script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+            self.assertIn("--timeout-seconds 300", script)
+            self.assertIn("python scripts/run_isolated_tests.py", script)
+            self.assertNotIn("|| true", script)
+            scripts.append(script)
+            for exit_code in (0, 1, 124):
+                with self.subTest(step=name, exit_code=exit_code):
+                    result = subprocess.run(
+                        ["bash", "-e", "-c", f"python() {{ return {exit_code}; }}\n" + script],
+                        cwd="backend",
+                        env=os.environ | {"RUNNER_TEMP": tempfile.gettempdir()},
+                        capture_output=True, text=True, check=False,
+                    )
+                    self.assertEqual(result.returncode, exit_code, result.stderr)
         self.assertEqual(
-            shlex.split(script.replace("\\\n", ""), comments=True),
+            shlex.split(scripts[0].replace("\\\n", ""), comments=True),
             [
                 "set", "-euo", "pipefail", "python", "scripts/run_isolated_tests.py",
                 "--metadata-json", "${RUNNER_TEMP}/workstream-cli-isolation.json",
                 "--timeout-seconds", "300", "--", "python", "-m", "pytest", "-q",
                 "../cli/tests/integration",
+                "--ignore-glob=../cli/tests/integration/*_public_api.py",
+                "--ignore-glob=../cli/tests/integration/test_guide*.py",
+                "--ignore=../cli/tests/integration/test_public_self_service.py",
             ],
         )
         self.assertNotIn("continue-on-error", workflow)
-        self.assertNotIn("|| true", script)
-        for exit_code in (0, 1, 124):
-            with self.subTest(exit_code=exit_code):
-                result = subprocess.run(
-                    [
-                        "bash",
-                        "-e",
-                        "-c",
-                        f"python() {{ return {exit_code}; }}\n" + script,
-                    ],
-                    env=os.environ | {"RUNNER_TEMP": tempfile.gettempdir()},
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                self.assertEqual(result.returncode, exit_code, result.stderr)
+        self.assertIn("timeout-minutes: 15", workflow)
+        self.assertIn("--ignore=../cli/tests/integration/test_public_self_service.py", scripts[0])
+        self.assertIn("test_task_batch_public_api.py", scripts[2])
+        self.assertIn("test_public_self_service.py", scripts[3])
+        self.assertIn("test_task_batch_public_api.py", scripts[4])
 
     def test_backend_redis_services_use_the_exact_official_image(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
@@ -230,9 +241,10 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("Require preflight, every semantic lane and CLI public contract", workflow)
-        self.assertIn(
-            "  cli-public-contract:\n    uses: ./.github/workflows/cli.yml", workflow
-        )
+        cli_job = workflow.split("\n  cli-public-contract:\n", 1)[1].split("\n  test:\n", 1)[0]
+        self.assertIn("    uses: ./.github/workflows/cli.yml\n", cli_job)
+        self.assertIn("    needs: minio-image\n", cli_job)
+        self.assertIn("      minio_artifact: ${{ needs.minio-image.outputs.artifact }}\n", cli_job)
         self.assertIn("python -m scripts.merge_test_lane_evidence", workflow)
         self.assertIn("scripts/validate_test_lane_evidence.py", workflow)
         self.assertIn(

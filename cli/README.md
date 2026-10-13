@@ -694,6 +694,93 @@ foreign projects and unauthenticated/unauthorized callers are also denied.
 Explicit worker application is not queued broker-delivery, live setup inference
 or deployment proof.
 
+## Prepare a task-import JSON source
+
+```sh
+workstream project task-batch convert-csv --input briefs.csv --out briefs.json --label 'Evaluation briefs' --output json
+workstream project task-batch source-declare PROJECT_ID --input briefs.json --idempotency-key SOURCE_UUID --output json
+workstream project task-batch source-upload PROJECT_ID SOURCE_ID --input briefs.json --output json
+workstream project task-batch source-status PROJECT_ID SOURCE_ID --output json
+```
+
+Conversion is local and needs no token or API configuration. It accepts quoted
+UTF-8 CSV, including embedded commas/newlines and one optional UTF-8 BOM. It
+requires 1..500 task rows and bounds both input CSV and generated JSON to 8MiB.
+Invalid input produces no JSON file. `--out` must name a new file; an existing
+file is never overwritten. The report names the SHA-256 and byte count of the
+complete generated JSON, including its final newline. Upload those exact bytes.
+Workstream retains the converted JSON source; this does not retain the original
+CSV. Retain that original separately if your own workflow requires it.
+
+| CSV header | JSON task field | Conversion |
+| --- | --- | --- |
+| `external_task_id` or `source_id` | `external_task_id` | Required exact, case-sensitive source identifier |
+| `title`, `description` | Same names | Required nonblank instruction text, preserved without trimming |
+| `task_type` or `category` | `task_type` | Optional category, preserved |
+| `skill_tags`, `languages`, `tools` | `skill_tags` | Semicolon segments concatenate in this order; trim segments and omit blank segments |
+| `difficulty`, `acceptance_criteria`, `rejection_criteria` | Same names | Optional text, preserved |
+| `estimated_time_minutes` | Same name | Optional whole minutes in 1..525600 |
+
+Unknown/duplicate headers, simultaneous alias/canonical headers, duplicate IDs,
+padded/control-character IDs, invalid UTF-8/NUL, malformed quoting and row/field
+limits are refused. No Task identities, guide locks or creator authority can be
+supplied through CSV. The canonical JSON contract is
+[`contracts/task-import.schema.json`](../contracts/task-import.schema.json).
+JSON files also receive bounded canonical validation before declaration/upload,
+including duplicate object members, strict field types and exact external IDs.
+Their original whitespace/bytes are preserved for the commitment and upload.
+
+Declaration, upload and status are separate operations under current covered-PM
+authority. Declaration sends only the exact JSON SHA/count with the caller's
+UUID key and returns a source ID. Upload sends one raw `application/json` PUT
+to that explicit project/source and carries no separate idempotency key; retained
+source custody controls its replay. Status reads the actual retained ART state.
+The CLI verifies returned selectors and, for writes, the exact file commitment.
+A returned source/status establishes byte custody only; it does not create,
+screen or release Tasks.
+
+Continue with explicit batch operations after source verification:
+
+```sh
+workstream project task-batch import PROJECT_ID SOURCE_ID --idempotency-key IMPORT_UUID --output json
+workstream project task-batch status PROJECT_ID BATCH_ID --output json
+workstream project task-batch screen PROJECT_ID BATCH_ID --idempotency-key SCREEN_UUID --reason 'Briefs meet the approved guide' --output json
+workstream project task-batch release PROJECT_ID BATCH_ID --idempotency-key RELEASE_UUID --reason 'All members are ready for work' --output json
+```
+
+Import returns the complete original ordered DRAFT creation facts. Status keeps
+those originals separate from the current member states. SCREEN and RELEASE
+select every member from immutable native membership and return ordered compact
+Task IDs, statuses and locked lineage. Normal guide/policy prerequisites still
+apply; release requires a nonblank reason. Each write requires its own retained
+caller UUID. No command combines upload/import/screen/release or chooses per-row
+retry keys. Responses are limited to 1..500 complete members: original/status
+JSON is bounded to 16MiB and compact transition JSON to 2MiB. Invalid, crossed,
+duplicate or partial responses are refused without partial output.
+
+A different verified source with identical SHA and byte count can recover the
+original batch with a new import key. The response retains the original source
+ID and rows; the CLI checks the selected source's public verified status before
+displaying it. Changing the source selector under an existing key conflicts.
+If the verification read fails after import, the write outcome remains unknown.
+
+Batch writes never retry automatically. An unknown outcome requires inspection
+of `status` as an observation, followed by manual replay of the unchanged project,
+source/batch, action, reason and key. SCREEN/RELEASE replay also requires every
+member to retain its original post-state, locked context and unassigned custody;
+later Task changes or revoked authority can prevent recovery with the same key.
+Import, SCREEN and RELEASE wait up to three minutes for their complete atomic
+response. Status and source operations retain the normal twelve-second deadline.
+These are request budgets; an interrupted or timed-out write can still require
+the same manual recovery above.
+
+Source writes never retry automatically, including after HTTP/2 GOAWAY. If a
+declaration outcome is unknown, manually replay only the unchanged project,
+JSON file bytes and caller key. For an uncertain upload, inspect `source-status`
+and then manually replay the unchanged project/source/file if appropriate.
+Server storage recovery can remain pending; inspect the actual returned status
+instead of treating every successful HTTP response as verified storage.
+
 ## Create a draft project shell
 
 ```sh
