@@ -90,10 +90,13 @@ or production readiness before live worker composition and the realistic drill.
   may assert the TASK-facing typed error while retaining exact ART owner cause
   and rollback proof.
   `backend/tests/authorization/task_authority/{test_task_commands.py,test_public_surface.py}`
-  and `backend/tests/test_api_controls.py` may replace assertions that the
+  `backend/tests/test_api_controls.py` and
+  `backend/tests/test_artifact_architecture.py` may replace assertions that the
   canonical POST is absent with old client-packet denial, exact protected
-  public route declarations and the expanded API inventory. Existing authority
-  gates and retained-route inventory checks remain enforced.
+  public route declarations and the expanded API inventory. The architecture
+  test retains obsolete upload-route denial and admits only the canonical
+  preparation/Submission operations. Existing authority gates and retained-route
+  inventory checks remain enforced.
   Register the
   new test module in `backend/scripts/test_lane_catalogue.py` and
   `backend/tests/test_ci_lane_catalogue.py` if required to register the new
