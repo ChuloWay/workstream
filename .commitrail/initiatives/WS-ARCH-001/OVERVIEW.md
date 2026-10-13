@@ -18,7 +18,9 @@
   checker-remediation Submission entry. [ARCH-04E3-B](WS-ARCH-001-04E3B.md)
   admits complete false-policy guides with supported approved checks and
   corrects REV's selected-production manifest. New false/pass effects require
-  an Operator-authorized LIVE REV generation. A known pre-effect non-live
+  an Operator-authorized LIVE REV generation bound to the current reviewed
+  manifest; an older live authorization requires renewed Operator transitions.
+  A known pre-effect non-live
   refusal retries within the existing OUTBOX budget; exhaustion dead-letters
   without automatic reopen. The default-true handoff remains independent of REV.
 - Local proof: the public API and durable-worker drill passed at `d5703d9c6`

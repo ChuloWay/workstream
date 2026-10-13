@@ -65,9 +65,11 @@ adjudication behavior remain deferred.
 The automated-acceptance branch is implemented in the selected backend
 composition: supported false-policy guides can activate, and selected completion
 routing uses the shared FinalAcceptance/TASK/CON operation. New false/pass effects
-require an Operator-authorized live REV generation; a typed pre-effect non-live
-refusal rolls back and uses bounded OUTBOX retry. The bounded local public API
-and Celery service drill passed under scripted approved-guide preconditions;
+require an Operator-authorized live REV generation whose immutable transition
+binds the current reviewed manifest. An older live authorization cannot enable
+expanded scope; a typed pre-effect refusal rolls back and uses bounded OUTBOX
+retry. The bounded local public API and Celery service drill passed under
+scripted approved-guide preconditions;
 this is not a deployment claim. Adjudication is excluded.
 
 The stage describes the purpose and lifecycle boundary, not a promise that all
@@ -929,7 +931,8 @@ hidden Operator retry for known terminal infrastructure failures with immutable
 source evidence. PILOT-04 registers selected production request/completion handlers.
 ARCH-02I-B exposes public admission-backed entry; ARCH-04E3-B activates
 supported false-policy guides, with new acceptance effects still gated on a
-LIVE REV generation. A known pre-effect non-live refusal retries only within
+LIVE REV generation bound to the current reviewed manifest. A known pre-effect
+refusal retries only within
 the existing OUTBOX budget; exhausted delivery dead-letters without automatic
 reopen. The bounded local public API and Celery service drill passed. A future setup-fault hold must
 retain the Submission and locked rules without contributor penalty; changing

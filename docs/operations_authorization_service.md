@@ -628,10 +628,14 @@ exact Project Manager authority and manual correction dispatch. REV-12A4A also
 supports the internal `review.lifecycle.activation.manage` action as the sole
 active review exception. Human review and generic artifact-read remain planned;
 initial and exact checker-remediation Submission creation is public. The
-controller registers no handler or public review route: its live generation is
-required for new false/pass effects through the registered selected completion
-handler. Payment delivery remains unavailable. Callers begin and own one root
-transaction and follow their owner's lock contract for participant rows and
+controller registers no handler or public review route: its live generation must
+bind the current reviewed manifest for new false/pass effects through the
+registered selected completion handler. An upgrade does not renew an earlier
+live authorization. An authorized Operator must use the existing live → draining
+→ disabled → shadow → live transitions with the current manifest before new
+effects can proceed. Original transition receipts and committed acceptance replay
+remain unchanged; no migration invents authorization. Payment delivery remains
+unavailable. Callers begin and own one root transaction and follow their owner's lock contract for participant rows and
 `prepare`; REV-fenced operations acquire REV and any required TASK custody
 before preparation. They compose final locked facts and call `consume` with the
 independently expected ActionId and the same strict request/idempotency input,
