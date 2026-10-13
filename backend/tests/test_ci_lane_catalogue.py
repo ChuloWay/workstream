@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 
@@ -17,6 +16,7 @@ import pytest
 import scripts.run_test_lanes as runner
 from scripts import test_lane_catalogue as catalogue
 from scripts.run_test_lanes import LANES, LaneError
+from scripts.select_ci_scope import ALL_LANES
 
 
 def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
@@ -410,6 +410,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/test_identifier_inventory.py",
         "tests/test_record_id_collection.py",
         "tests/test_ci_lane_catalogue.py",
+        "tests/test_ci_scope_selection.py",
         "tests/test_ci_test_lanes.py",
         "tests/test_test_lane_evidence.py",
         "tests/test_merge_test_lane_evidence.py",
@@ -718,10 +719,10 @@ def test_direct_runner_cli_remains_runnable(tmp_path: Path) -> None:
 
 def test_workflow_lane_inventory_matches_catalogue() -> None:
     source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
-    expected = Counter(lane.name for lane in LANES)
-    matrix = re.search(r"        lane:\n((?:          - [a-z_]+\n)+)", source)
-    assert matrix is not None
-    assert Counter(re.findall(r"- ([a-z_]+)", matrix[1])) == expected
+    assert ALL_LANES == tuple(lane.name for lane in LANES)
+    assert source.count(
+        "matrix: ${{ fromJSON(needs.scope.outputs.lane_matrix) }}"
+    ) == 1
     assert (
         source.count(
             "name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}"

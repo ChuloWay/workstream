@@ -216,34 +216,46 @@ class LightweightAgentGateTests(unittest.TestCase):
         )
 
         self.assertNotIn("pull_request_review:", workflow)
+        self.assertIn(
+            "types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]",
+            workflow,
+        )
         self.assertIn("cancel-in-progress: true", workflow)
-        self.assertEqual(len(re.findall(r"(?m)^      matrix:$", workflow)), 1)
-        matrix = re.search(r"(?m)^      matrix:\n((?: {8,}[^\n]*\n|\n)+)", workflow)
-        self.assertIsNotNone(matrix)
+        scope_job = workflow.split("\n  scope:\n", 1)[1].split(
+            "\n  minio-image:\n", 1
+        )[0]
+        self.assertIn("fetch-depth: 0", scope_job)
+        self.assertIn("python backend/scripts/select_ci_scope.py", scope_job)
+        self.assertIn("BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}", scope_job)
+        self.assertIn("PR_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft || false }}", scope_job)
+        self.assertIn("lane_matrix: ${{ steps.select.outputs.lane_matrix }}", scope_job)
         self.assertEqual(
-            matrix[1].strip(),
-            "lane:\n"
-            "          - shared_foundations_a\n"
-            "          - shared_foundations_b\n"
-            "          - schema_contracts\n"
-            "          - project_lifecycle_a\n"
-            "          - project_lifecycle_b\n"
-            "          - project_lifecycle_c\n"
-            "          - project_lifecycle_d\n"
-            "          - task_lifecycle_a\n"
-            "          - task_lifecycle_b\n"
-            "          - task_lifecycle_c",
+            workflow.count(
+                "matrix: ${{ fromJSON(needs.scope.outputs.lane_matrix) }}"
+            ),
+            1,
         )
         self.assertIn(
-            "  test:\n    if: ${{ always() }}\n"
-            "    needs: [auth-boundary-preflight, external-checker-runtime, "
+            "  full-suite:\n    if: >-\n"
+            "      ${{ always() && needs.scope.result == 'success' &&\n"
+            "          needs.scope.outputs.full_suite == 'true' }}\n"
+            "    needs: [scope, auth-boundary-preflight, external-checker-runtime, "
             "lanes, minio-image, cli-public-contract]",
             workflow,
         )
+        self.assertIn(
+            "  test:\n    if: ${{ always() }}\n"
+            "    needs: [scope, auth-boundary-preflight, external-checker-runtime, "
+            "lanes, minio-image, cli-public-contract, full-suite]",
+            workflow,
+        )
         self.assertIn("Require preflight, every semantic lane and CLI public contract", workflow)
-        cli_job = workflow.split("\n  cli-public-contract:\n", 1)[1].split("\n  test:\n", 1)[0]
+        self.assertIn("Require the selected draft scope or complete merge proof", workflow)
+        cli_job = workflow.split("\n  cli-public-contract:\n", 1)[1].split(
+            "\n  full-suite:\n", 1
+        )[0]
         self.assertIn("    uses: ./.github/workflows/cli.yml\n", cli_job)
-        self.assertIn("    needs: minio-image\n", cli_job)
+        self.assertIn("    needs: [scope, minio-image]\n", cli_job)
         self.assertIn("      minio_artifact: ${{ needs.minio-image.outputs.artifact }}\n", cli_job)
         self.assertIn("python -m scripts.merge_test_lane_evidence", workflow)
         self.assertIn("scripts/validate_test_lane_evidence.py", workflow)
@@ -329,7 +341,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertIn("/minio/health/live", image_job)
         self.assertIn("if-no-files-found: error", image_job)
         self.assertNotIn("continue-on-error", image_job)
-        for name, end in (("lanes", "test"), ("test", None)):
+        for name, end in (("lanes", "cli-public-contract"), ("full-suite", "test")):
             job = workflow.split(f"\n  {name}:\n", 1)[1]
             if end:
                 job = job.split(f"\n  {end}:\n", 1)[0]
@@ -362,7 +374,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         job_blocks = (
             workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split("\n  lanes:\n", 1)[0],
             workflow.split("\n  lanes:\n", 1)[1].split("\n  cli-public-contract:\n", 1)[0],
-            workflow.split("\n  test:\n", 1)[1],
+            workflow.split("\n  full-suite:\n", 1)[1].split("\n  test:\n", 1)[0],
         )
         for job in job_blocks:
             self.assertEqual(job.count("Restore exact backend pip downloads from trusted cache"), 1)
@@ -392,10 +404,27 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertNotIn("restore-keys:", workflow)
         self.assertNotIn(".venv", workflow)
 
+    def test_source_wide_static_checks_run_once_outside_semantic_lanes(self) -> None:
+        workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
+        preflight = workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split(
+            "\n  external-checker-runtime:\n", 1
+        )[0]
+        lanes = workflow.split("\n  lanes:\n", 1)[1].split(
+            "\n  cli-public-contract:\n", 1
+        )[0]
+
+        self.assertEqual(workflow.count("ruff check app tests scripts"), 1)
+        self.assertEqual(workflow.count("docstr-coverage --config .docstr.yaml"), 1)
+        self.assertIn("Lint and check docstring coverage once", preflight)
+        self.assertNotIn("ruff check app tests scripts", lanes)
+        self.assertNotIn("docstr-coverage", lanes)
+
     def test_parallel_preflight_and_lanes_fail_closed_at_fan_in(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
-        lanes = workflow.split("\n  lanes:\n", 1)[1].split("\n  test:\n", 1)[0]
-        self.assertRegex(lanes, r"(?m)^    needs: minio-image$")
+        lanes = workflow.split("\n  lanes:\n", 1)[1].split(
+            "\n  cli-public-contract:\n", 1
+        )[0]
+        self.assertRegex(lanes, r"(?m)^    needs: \[scope, minio-image\]$")
         self.assertNotIn("needs: auth-boundary-preflight", lanes)
         step = workflow.split(
             "      - name: Require preflight, every semantic lane and CLI public contract\n", 1
@@ -463,10 +492,95 @@ class LightweightAgentGateTests(unittest.TestCase):
                 )
                 self.assertNotEqual(result.returncode, 0)
 
+    def test_required_backend_status_accepts_only_the_exact_selected_scope(self) -> None:
+        workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
+        step = workflow.split(
+            "      - name: Require the selected draft scope or complete merge proof\n", 1
+        )[1]
+        guard = textwrap.dedent(step.split("        run: |\n", 1)[1])
+
+        def run_guard(**values: str) -> subprocess.CompletedProcess[bytes]:
+            defaults = {
+                "SCOPE_RESULT": "success",
+                "FULL_SUITE": "false",
+                "PREFLIGHT_EXPECTED": "false",
+                "PREFLIGHT_RESULT": "skipped",
+                "EXTERNAL_EXPECTED": "false",
+                "EXTERNAL_RESULT": "skipped",
+                "LANES_EXPECTED": "false",
+                "LANES_RESULT": "skipped",
+                "MINIO_EXPECTED": "false",
+                "MINIO_RESULT": "skipped",
+                "CLI_EXPECTED": "false",
+                "CLI_RESULT": "skipped",
+                "FULL_RESULT": "skipped",
+            }
+            return subprocess.run(
+                ["bash", "-e", "-c", guard],
+                env=defaults | values,
+                capture_output=True,
+                check=False,
+            )
+
+        self.assertEqual(run_guard().returncode, 0)
+        self.assertEqual(
+            run_guard(
+                LANES_EXPECTED="true",
+                LANES_RESULT="success",
+                MINIO_EXPECTED="true",
+                MINIO_RESULT="success",
+            ).returncode,
+            0,
+        )
+        self.assertEqual(
+            run_guard(FULL_SUITE="true", FULL_RESULT="success").returncode,
+            0,
+        )
+        component_pairs = (
+            ("PREFLIGHT_EXPECTED", "PREFLIGHT_RESULT"),
+            ("EXTERNAL_EXPECTED", "EXTERNAL_RESULT"),
+            ("LANES_EXPECTED", "LANES_RESULT"),
+            ("MINIO_EXPECTED", "MINIO_RESULT"),
+            ("CLI_EXPECTED", "CLI_RESULT"),
+        )
+        for expected_key, result_key in component_pairs:
+            with self.subTest(component=result_key, outcome="success"):
+                self.assertEqual(
+                    run_guard(
+                        **{expected_key: "true", result_key: "success"}
+                    ).returncode,
+                    0,
+                )
+            with self.subTest(component=result_key, outcome="unexpected_success"):
+                self.assertNotEqual(
+                    run_guard(**{result_key: "success"}).returncode,
+                    0,
+                )
+            for bad_result in ("failure", "cancelled", "skipped", "", "unknown"):
+                with self.subTest(component=result_key, outcome=bad_result):
+                    self.assertNotEqual(
+                        run_guard(
+                            **{expected_key: "true", result_key: bad_result}
+                        ).returncode,
+                        0,
+                    )
+        for values in (
+            {"SCOPE_RESULT": "failure"},
+            {"LANES_EXPECTED": "true", "LANES_RESULT": "skipped"},
+            {"LANES_EXPECTED": "false", "LANES_RESULT": "success"},
+            {"MINIO_EXPECTED": "true", "MINIO_RESULT": "failure"},
+            {"FULL_SUITE": "true", "FULL_RESULT": "failure"},
+            {"FULL_RESULT": "success"},
+        ):
+            with self.subTest(values=values):
+                self.assertNotEqual(run_guard(**values).returncode, 0)
+
     def test_postgres_storage_is_bounded_and_disk_contracts_remain(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
         lane_service = workflow.split("\n  lanes:\n", 1)[1].split("\n    steps:", 1)[0]
-        aggregate_service = workflow.split("\n  test:\n", 1)[1].split("\n    steps:", 1)[0]
+        aggregate_service = workflow.split("\n  full-suite:\n", 1)[1].split(
+            "\n    steps:", 1
+        )[0]
         self.assertIn(
             "${{ matrix.lane != 'schema_contracts' && "
             "'--tmpfs /var/lib/postgresql/data:rw,nosuid,nodev,noexec,size=2147483648' || '' }}",

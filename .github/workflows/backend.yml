@@ -2,6 +2,7 @@ name: Backend
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     branches:
       - main
@@ -18,7 +19,44 @@ env:
   MINIO_IMAGE: workstream-minio:source
 
 jobs:
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      full_suite: ${{ steps.select.outputs.full_suite }}
+      preflight: ${{ steps.select.outputs.preflight }}
+      external_checker: ${{ steps.select.outputs.external_checker }}
+      cli_contract: ${{ steps.select.outputs.cli_contract }}
+      minio_image: ${{ steps.select.outputs.minio_image }}
+      lanes_required: ${{ steps.select.outputs.lanes_required }}
+      lane_matrix: ${{ steps.select.outputs.lane_matrix }}
+      scope_reason: ${{ steps.select.outputs.scope_reason }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - id: select
+        name: Select draft feedback or complete merge proof
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft || false }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python backend/scripts/select_ci_scope.py \
+            --event-name "${EVENT_NAME}" \
+            --pull-request-draft "${PR_DRAFT}" \
+            --base-ref "${BASE_SHA}" \
+            --head-ref "${HEAD_SHA}" \
+            --github-output "${GITHUB_OUTPUT}"
+
   minio-image:
+    needs: scope
+    if: ${{ needs.scope.outputs.minio_image == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -90,6 +128,8 @@ jobs:
           retention-days: 7
 
   auth-boundary-preflight:
+    needs: scope
+    if: ${{ needs.scope.outputs.preflight == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -154,6 +194,14 @@ jobs:
             --ledger ../.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json
           python -m scripts.behavior_ownership validate
 
+      - name: Lint and check docstring coverage once
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          ruff check app tests scripts
+          docstr-coverage --config .docstr.yaml
+
       - name: Save verified backend pip downloads to trusted cache
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.pip-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
@@ -162,6 +210,8 @@ jobs:
           key: backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}
 
   external-checker-runtime:
+    needs: scope
+    if: ${{ needs.scope.outputs.external_checker == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -194,23 +244,16 @@ jobs:
           cargo test --workspace --locked
 
   lanes:
-    needs: minio-image
+    needs: [scope, minio-image]
+    if: >-
+      ${{ always() && needs.scope.result == 'success' &&
+          needs.scope.outputs.lanes_required == 'true' &&
+          needs.minio-image.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      matrix:
-        lane:
-          - shared_foundations_a
-          - shared_foundations_b
-          - schema_contracts
-          - project_lifecycle_a
-          - project_lifecycle_b
-          - project_lifecycle_c
-          - project_lifecycle_d
-          - task_lifecycle_a
-          - task_lifecycle_b
-          - task_lifecycle_c
+      matrix: ${{ fromJSON(needs.scope.outputs.lane_matrix) }}
 
     services:
       redis:
@@ -267,22 +310,12 @@ jobs:
           echo "tree_sha=${tree_sha}" >> "${GITHUB_OUTPUT}"
           echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"
 
-      - name: Install backend and exact Ruff
+      - name: Install backend
         working-directory: backend
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,agents]"
-          python -m pip install ruff==0.15.22
-          test "$(ruff --version)" = "ruff 0.15.22"
-
-      - name: Lint
-        working-directory: backend
-        run: ruff check app tests scripts
-
-      - name: Docstring coverage
-        working-directory: backend
-        run: docstr-coverage --config .docstr.yaml
 
       - name: Download source-pinned MinIO image
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -378,14 +411,20 @@ jobs:
           retention-days: 7
 
   cli-public-contract:
-    needs: minio-image
+    needs: [scope, minio-image]
+    if: >-
+      ${{ always() && needs.scope.result == 'success' &&
+          needs.scope.outputs.cli_contract == 'true' &&
+          needs.minio-image.result == 'success' }}
     uses: ./.github/workflows/cli.yml
     with:
       minio_artifact: ${{ needs.minio-image.outputs.artifact }}
 
-  test:
-    if: ${{ always() }}
-    needs: [auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract]
+  full-suite:
+    if: >-
+      ${{ always() && needs.scope.result == 'success' &&
+          needs.scope.outputs.full_suite == 'true' }}
+    needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract]
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -721,3 +760,48 @@ jobs:
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
+
+  test:
+    if: ${{ always() }}
+    needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, full-suite]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the selected draft scope or complete merge proof
+        env:
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          FULL_SUITE: ${{ needs.scope.outputs.full_suite }}
+          PREFLIGHT_EXPECTED: ${{ needs.scope.outputs.preflight }}
+          PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}
+          EXTERNAL_EXPECTED: ${{ needs.scope.outputs.external_checker }}
+          EXTERNAL_RESULT: ${{ needs.external-checker-runtime.result }}
+          LANES_EXPECTED: ${{ needs.scope.outputs.lanes_required }}
+          LANES_RESULT: ${{ needs.lanes.result }}
+          MINIO_EXPECTED: ${{ needs.scope.outputs.minio_image }}
+          MINIO_RESULT: ${{ needs.minio-image.result }}
+          CLI_EXPECTED: ${{ needs.scope.outputs.cli_contract }}
+          CLI_RESULT: ${{ needs.cli-public-contract.result }}
+          FULL_RESULT: ${{ needs.full-suite.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${SCOPE_RESULT}" = success
+          if [[ "${FULL_SUITE}" == true ]]; then
+            test "${FULL_RESULT}" = success
+            exit 0
+          fi
+          require_expected() {
+            local expected="$1"
+            local actual="$2"
+            if [[ "${expected}" == true ]]; then
+              test "${actual}" = success
+            else
+              test "${actual}" = skipped
+            fi
+          }
+          require_expected "${PREFLIGHT_EXPECTED}" "${PREFLIGHT_RESULT}"
+          require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_RESULT}"
+          require_expected "${LANES_EXPECTED}" "${LANES_RESULT}"
+          require_expected "${MINIO_EXPECTED}" "${MINIO_RESULT}"
+          require_expected "${CLI_EXPECTED}" "${CLI_RESULT}"
+          test "${FULL_RESULT}" = skipped

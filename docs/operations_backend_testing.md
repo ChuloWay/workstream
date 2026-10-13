@@ -111,17 +111,32 @@ If provisioning fails, confirm the local PostgreSQL provisioning credential can 
 
 ## Hosted semantic-lane full-suite proof
 
-The required GitHub check remains `Backend / test`. Ten matrix jobs each own a
-digest-pinned PostgreSQL service container, a pinned-source MinIO image,
-and exactly one dependency lane. A step-level curl health loop admits MinIO
-before collection. This is semantic fan-out, not arbitrary test-count sharding:
-lane ownership remains repository-defined and exact.
+The required GitHub check remains `Backend / test`. A ready pull request and
+every push to `main` run the complete proof: ten matrix jobs each own a
+digest-pinned PostgreSQL service container, a pinned-source MinIO image, and
+exactly one dependency lane. A step-level curl health loop admits MinIO before
+collection. This is semantic fan-out, not arbitrary test-count sharding: lane
+ownership remains repository-defined and exact.
+
+A draft pull request is not mergeable and runs conservative changed-scope
+feedback instead. Backend runtime or CI-runner changes select all semantic
+lanes; a test-only change selects every lane that owns nodes from the changed
+test module; CLI and external-checker changes select their independent
+contracts; unrelated MCP- or documentation-only changes start no heavy Backend
+component. Unknown backend test/support modules fail safe to all lanes. Marking
+a draft ready triggers the complete suite on the same head, and every later
+push while ready triggers it again. Draft feedback is not full-suite evidence
+and must never be cited as merge proof.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-Authorization preflight runs alongside the ten lanes. The final `test` job
-requires both preflight and every lane to succeed before validating evidence and
-coverage; failed, cancelled or skipped prerequisites remain blocking. This saves
-serial waiting on valid changes at the cost of lane work when preflight fails.
+Authorization preflight runs alongside the selected lanes. On complete runs,
+the internal `full-suite` job requires preflight and every lane to succeed before
+validating evidence and coverage; failed, cancelled or skipped prerequisites
+remain blocking. The stable final `test` job then requires that full aggregate
+to succeed. On draft runs it instead requires every component selected by the
+scope planner to succeed and requires unselected components to be skipped. This
+saves serial waiting on valid changes at the cost of lane work when preflight
+fails.
 Assertion-map validation analyzes each exact historical revision/module once per
 invocation, then checks every referenced node and assertion against that analysis.
 It does not cache current source or reuse analysis across validation calls.
@@ -163,10 +178,12 @@ partition exact node IDs from the remaining authorization, artifact, API, and
 infrastructure modules. Every collected test node, including each Alembic and
 shared-foundation node, belongs to exactly one lane.
 
-Each matrix job binds its checkout to `GITHUB_SHA`, installs and asserts exact
-Ruff `0.15.22`, runs lint and docstrings, and starts MinIO. The runner discovers,
-validates and collects the full canonical inventory before executing its one
-lane; the aggregate independently recollects and validates complete execution.
+Each matrix job binds its checkout to `GITHUB_SHA`, installs the backend and
+starts MinIO. Authorization preflight installs and asserts exact Ruff `0.15.22`,
+then runs source-wide lint and docstring checks once for the selected run. The
+runner discovers, validates and collects the full canonical inventory before
+executing its one lane; the complete aggregate independently recollects and
+validates complete execution.
 There is no duplicate standalone inventory pass in each matrix job.
 Each lane receives a distinct
 runner-created database and role plus a distinct MinIO prefix custody record.
@@ -179,18 +196,18 @@ nodes directly with the admin URL while stripping application database URLs;
 every ordinary node remains behind isolated-runner custody and never receives
 the admin credential.
 
-Backend and Agent Gates do not run on review-state events. Agent Gates runs
-the repository process and documentation checks for each PR head; protected-branch
-review rules independently enforce exact-head human approval.
-Superseded Agent Gates runs for the same PR are cancelled without repeating the
-full backend suite.
+Backend listens to `ready_for_review` and `converted_to_draft` so the required
+status changes between draft feedback and complete merge proof without an empty
+commit. Agent Gates remains independent and runs repository process and
+documentation checks for each PR head; protected-branch review rules enforce
+exact-head human approval. Superseded runs for the same PR are cancelled.
 
 Each matrix job uploads an artifact named for GitHub's checked-out PR merge-tree
 SHA, lane and numeric run attempt, containing its manifest, lane evidence,
-isolation record, and coverage data. The final `test`
-job runs with `if: always()`, downloads available diagnostic bundles, then
-rejects any failed, cancelled, or skipped matrix result before fan-in. Fan-in
-selects the highest numeric attempt available for each of the ten declared
+isolation record, and coverage data. On complete runs, the `full-suite` job
+runs with a fail-closed dependency guard, downloads available diagnostic
+bundles, then rejects any failed, cancelled, or skipped matrix result before
+fan-in. Fan-in selects the highest numeric attempt available for each of the ten declared
 lanes from separately downloaded artifact directories. It rejects malformed,
 foreign or future attempt names and never falls back from an incomplete or
 corrupt latest bundle to an older passing one. For the selected bundles it
@@ -203,8 +220,10 @@ It also binds the exact head, manifest, per-lane isolation metadata, evidence,
 and coverage-file SHA-256 digests. Only then are exactly ten regular,
 non-symlink coverage files copied byte-for-byte for one literal
 `coverage combine`. Percentages are diagnostic, with no global or subsystem
-floor. The real API contract drill remains a separate
-isolated invocation inside the final required job.
+floor. The real API contract drill remains a separate isolated invocation inside
+the complete aggregate. The stable required `test` status contains no database
+or artifact work; it accepts only the exact selected draft results or the
+complete aggregate result.
 
 ### Evidence bundle
 
