@@ -102,22 +102,23 @@ def _stop_process(process: subprocess.Popen | None) -> None:
 
 
 async def _wait_api(origin: str, process: subprocess.Popen) -> None:
+    deadline = time.monotonic() + 120
     async with httpx.AsyncClient(timeout=2) as client:
-        for _ in range(100):
+        while time.monotonic() < deadline:
             _require(process.poll() is None, "public API exited before readiness")
             try:
                 if (await client.get(origin + "/api/v1/health")).status_code == 200:
                     return
             except httpx.TransportError:
                 pass
-            await asyncio.sleep(0.1)
+            await asyncio.sleep(0.25)
     raise RuntimeError("public API did not become ready")
 
 
 async def _wait_worker(process: subprocess.Popen, hostname: str) -> None:
     from app.workers.celery_app import celery_app
 
-    deadline = time.monotonic() + 60
+    deadline = time.monotonic() + 120
     while time.monotonic() < deadline:
         _require(process.poll() is None, "prefork worker exited before readiness")
         pong = await asyncio.to_thread(
