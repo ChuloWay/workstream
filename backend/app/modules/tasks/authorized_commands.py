@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 from app.modules.contributions.api import LockedCompensationTermsPort
 from app.core.hashing import canonical_json_hash
 from app.db.errors import integrity_constraint_name
+from app.modules.projects.api.locked_policy import ProjectLockedPolicyContextFacts
 from app.modules.tasks.api.authorization import (
     TaskAuthorityDecision,
     TaskAuthorityFacts,
@@ -87,6 +88,16 @@ class TaskTransitionPreparation:
     batch_transition_receipt_id: UUID | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class TaskScreenContextPreparation:
+    """One active Project context locked inside the caller's transition root."""
+
+    project_id: UUID
+    facts: ProjectLockedPolicyContextFacts
+    transaction: AsyncSessionTransaction
+    owner: object
+
+
 class AuthorizedTaskCommands:
     """TASK owns state and assignment; AUTH owns permission and current grants."""
 
@@ -109,6 +120,7 @@ class AuthorizedTaskCommands:
         self._contexts = contexts
         self._guide_documents = guide_documents
         self._replay = TaskCommandReplay(session)
+        self._screen_context_owner = object()
 
     def _facts(
         self,
@@ -314,8 +326,50 @@ class AuthorizedTaskCommands:
         self._validate_transition_preparation(prepared)
         return await self._authorize_facts(prepared.facts)
 
+    async def prepare_screen_context(self, project_id: UUID) -> TaskScreenContextPreparation:
+        """Lock one active Project context after the caller locks and authorizes all Tasks."""
+        transaction = self._session.get_transaction()
+        if not isinstance(project_id, UUID):
+            raise ValueError("task screen context project is invalid")
+        if transaction is None or not transaction.is_active:
+            raise RuntimeError("task screen context requires the caller transaction")
+        facts = await self._contexts._load_active_policy_context(str(project_id))
+        if facts.project_id != project_id:
+            raise TaskValidationError("task screen context project changed")
+        return TaskScreenContextPreparation(
+            project_id,
+            facts,
+            transaction,
+            self._screen_context_owner,
+        )
+
+    def _screen_context(
+        self,
+        prepared: TaskTransitionPreparation,
+        context: TaskScreenContextPreparation,
+    ) -> ProjectLockedPolicyContextFacts:
+        transaction = self._session.get_transaction()
+        if (
+            type(context) is not TaskScreenContextPreparation
+            or context.owner is not self._screen_context_owner
+            or not prepared.reserved
+            or transaction is not context.transaction
+            or not context.transaction.is_active
+        ):
+            raise RuntimeError("task screen context requires its original caller transaction")
+        if (
+            context.project_id != UUID(prepared.task.project_id)
+            or context.facts.project_id != context.project_id
+        ):
+            raise TaskValidationError("task screen context project changed")
+        return context.facts
+
     async def stage_transition(
-        self, prepared: TaskTransitionPreparation, decision: TaskAuthorityDecision,
+        self,
+        prepared: TaskTransitionPreparation,
+        decision: TaskAuthorityDecision,
+        *,
+        screen_context: TaskScreenContextPreparation | None = None,
     ) -> TaskResponse:
         """Flush the normal transition, guide locks, audit and receipt in the caller root."""
         self._validate_transition_preparation(prepared)
@@ -331,10 +385,16 @@ class AuthorizedTaskCommands:
         target = "screening" if operation is TaskAuthorityOperation.SCREEN else "ready"
         self._contexts._ensure_transition_allowed(before, target)
         if operation is TaskAuthorityOperation.SCREEN:
-            context = await self._contexts._load_active_policy_context(task.project_id)
+            context = (
+                await self._contexts._load_active_policy_context(task.project_id)
+                if screen_context is None
+                else self._screen_context(prepared, screen_context)
+            )
             self._contexts._validate_task_contract_fields(task)
             self._contexts._stamp_locked_context(task, context)
         else:
+            if screen_context is not None:
+                raise ValueError("task screen context is restricted to SCREEN")
             if not reason or not reason.strip():
                 raise TaskValidationError("release decision reason is required")
             self._contexts._ensure_locked_context(task)

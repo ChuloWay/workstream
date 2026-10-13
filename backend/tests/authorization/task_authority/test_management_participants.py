@@ -13,6 +13,7 @@ from app.modules.actors.models import ActorIdentityLink
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
 from app.modules.tasks.api.authorization import TaskAuthorityOperation
 from app.modules.tasks.models import AuditEvent, TaskCommandReceipt, WorkstreamTask
+from app.modules.tasks.service import TaskValidationError
 from tests.authorization.task_authority.test_concurrency import actor_context
 from tests.test_tasks import (
     task_database_env as task_database_env,
@@ -62,6 +63,56 @@ async def test_transition_preparation_cannot_cross_roots(task_client, phase):
         async with session.begin():
             assert await session.get(TaskCommandReceipt, receipt_id) is None
             assert await session.get(AuditEvent, str(decision.decision_id)) is None
+            current = await session.get(WorkstreamTask, task["id"])
+            assert current.status == "draft" and current.locked_guide_version is None
+
+
+async def test_screen_context_cannot_cross_roots(task_client):
+    project = await create_active_project(task_client)
+    task = await create_draft_task(task_client, project["id"])
+    context = await manager_context()
+    async with db_session.get_session_factory()() as session:
+        owner = commands(session, context)
+        async with session.begin():
+            original = await owner.prepare_transition(
+                UUID(task["id"]), TaskAuthorityOperation.SCREEN, "Canonical screening",
+                idempotency_key=uuid4(), project_id=UUID(project["id"]),
+            )
+            await owner.authorize_transition(original)
+            screen_context = await owner.prepare_screen_context(UUID(project["id"]))
+            await session.rollback()
+        async with session.begin():
+            prepared = await owner.prepare_transition(
+                UUID(task["id"]), TaskAuthorityOperation.SCREEN, "Canonical screening",
+                idempotency_key=uuid4(), project_id=UUID(project["id"]),
+            )
+            decision = await owner.authorize_transition(prepared)
+            with pytest.raises(RuntimeError, match="original caller transaction"):
+                await owner.stage_transition(prepared, decision, screen_context=screen_context)
+            await session.rollback()
+        async with session.begin():
+            current = await session.get(WorkstreamTask, task["id"])
+            assert current.status == "draft" and current.locked_guide_version is None
+
+
+async def test_screen_context_cannot_cross_projects(task_client):
+    task_project = await create_active_project(task_client)
+    other_project = await create_active_project(task_client)
+    task = await create_draft_task(task_client, task_project["id"])
+    context = await manager_context()
+    async with db_session.get_session_factory()() as session:
+        owner = commands(session, context)
+        async with session.begin():
+            prepared = await owner.prepare_transition(
+                UUID(task["id"]), TaskAuthorityOperation.SCREEN, "Canonical screening",
+                idempotency_key=uuid4(), project_id=UUID(task_project["id"]),
+            )
+            decision = await owner.authorize_transition(prepared)
+            screen_context = await owner.prepare_screen_context(UUID(other_project["id"]))
+            with pytest.raises(TaskValidationError, match="screen context project changed"):
+                await owner.stage_transition(prepared, decision, screen_context=screen_context)
+            await session.rollback()
+        async with session.begin():
             current = await session.get(WorkstreamTask, task["id"])
             assert current.status == "draft" and current.locked_guide_version is None
 

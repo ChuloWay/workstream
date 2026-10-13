@@ -18,7 +18,7 @@ from app.modules.authorization.models import AdminRoleGrant
 from app.modules.authorization.runtime import ActorKind, ActorStatus, HumanAuthorizationContext, IdentityLinkStatus
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.models import AuditEvent, TaskCommandReceipt, WorkstreamTask
-from app.modules.tasks.service import TaskValidationError
+from app.modules.tasks.service import TaskService, TaskValidationError
 from app.modules.tasks.task_batch_transition.models import TaskBatchTransitionMember, TaskBatchTransitionReceipt
 from app.modules.tasks.task_batch_transitions import TaskBatchTransitionCommands
 from app.modules.tasks.task_batch_transitions import _membership_digest
@@ -71,7 +71,9 @@ async def _success_facts(project):
 
 
 @pytest.mark.parametrize("count", [200, 500])
-async def test_public_source_import_screen_release_complete_journey(import_source_client, count, record_property):
+async def test_public_source_import_screen_release_complete_journey(
+    import_source_client, count, record_property, monkeypatch,
+):
     """Every exact native member reaches READY with original ordered retained receipts."""
     client = import_source_client
     project, batch = await _import(client, count)
@@ -88,7 +90,15 @@ async def test_public_source_import_screen_release_complete_journey(import_sourc
         assert [row["row_index"] for row in original["tasks"]] == list(range(count))
         assert all(row["status"] == status and row["locked_guide_version"] for row in original["tasks"])
         before = await _success_facts(project)
-        replay = await client.post(_path(project, batch, operation), headers=key, json=payload)
+        if operation == "screen":
+            async def fail_current_policy_load(*_args, **_kwargs):
+                raise AssertionError("committed SCREEN replay read the current policy")
+
+            with monkeypatch.context() as replay_patch:
+                replay_patch.setattr(TaskService, "_load_active_policy_context", fail_current_policy_load)
+                replay = await client.post(_path(project, batch, operation), headers=key, json=payload)
+        else:
+            replay = await client.post(_path(project, batch, operation), headers=key, json=payload)
         assert replay.status_code == 200 and replay.json() == original, replay.text
         after = await _success_facts(project)
         assert before[:-1] == after[:-1] and len(after[-1] - before[-1]) == count
@@ -130,7 +140,7 @@ async def test_public_source_import_screen_release_complete_journey(import_sourc
     assert all(row.status == "ready" for row in facts[0])
 
 
-async def test_reason_limit_matches_canonical_transition_without_partial_effects(import_source_client):
+async def test_reason_limit_matches_canonical_transition_without_partial_effects(import_source_client, monkeypatch):
     """Reject oversized reasons before effects and preserve the exact allowed boundary."""
     client = import_source_client
     project, batch = await _import(client)
@@ -141,10 +151,20 @@ async def test_reason_limit_matches_canonical_transition_without_partial_effects
         assert refused.status_code == 422, refused.text
         assert await _success_facts(project) == before
     reasons = {"screen": "é" * 1000, "release": "\x01" * 1000}
+    original_load = TaskService._load_active_policy_context
+    active_context_loads = 0
+
+    async def count_active_policy_load(service, project_id):
+        nonlocal active_context_loads
+        active_context_loads += 1
+        return await original_load(service, project_id)
+
+    monkeypatch.setattr(TaskService, "_load_active_policy_context", count_active_policy_load)
     for operation, reason in reasons.items():
         admitted = await client.post(_path(project, batch, operation), headers=auth_headers(),
                                      json={"reason": reason})
         assert admitted.status_code == 200, admitted.text
+    assert active_context_loads == 1
     async with db_session.get_session_factory()() as session:
         retained = list(await session.scalars(select(TaskBatchTransitionReceipt.reason).where(
             TaskBatchTransitionReceipt.project_id == project,
@@ -188,9 +208,9 @@ async def test_late_staging_failure_and_partial_advance_replay_roll_back_whole_b
     before = await _success_facts(project)
     original_stage, calls = AuthorizedTaskCommands.stage_transition, 0
 
-    async def fail_after_second_write(commands, prepared, decision):
+    async def fail_after_second_write(commands, prepared, decision, **kwargs):
         nonlocal calls
-        response = await original_stage(commands, prepared, decision)
+        response = await original_stage(commands, prepared, decision, **kwargs)
         calls += 1
         if calls == 2:
             raise TaskValidationError("Injected late canonical failure")

@@ -783,4 +783,40 @@ The canonical fresh schema query on `6ba3e89658358b33b1f840f29a1ff5814ad682ab`
 measured `f136708ebc07371f20660345d64d427bfc947b9880434d3987b2c9b13e4f8995`
 after the manager-evidence bound repair. Raw measurement is
 `/tmp/pilot02-bulk-unicode-schema-measure.{log,json}`; all owned cleanup completed.
-This is schema measurement, with native Unicode behavior still pending.
+The subsequent native run at `b18e50fb97b5b75466dc819c0325df44020b8252`
+passed all three selected cases in 193.39 seconds: the Unicode reason boundary,
+revoked-manager replay refusal and an observed concurrent lock wait followed by
+one retained success. Raw evidence is `/tmp/pilot02-bulk-unicode-native3.{log,json}`;
+all owned cleanup completed. This predates the separate SCREEN reuse repair.
+
+### Fresh SCREEN context reuse
+
+The public 200-row CLI diagnostic at current bulk source completed import in
+59.729 seconds but the fresh SCREEN subprocess was terminated after 160.689
+seconds when the unchanged 300-second test bound expired. One PostgreSQL activity sample showed an idle transaction waiting for its
+client rather than a database lock; that sample alone is not a concurrency proof. Source tracing found each member reloaded and revalidated the same
+active Project, Guide, activation/finalization, external policy, review and
+revision graph after every Task had already been locked and freshly authorized.
+
+For a newly reserved SCREEN aggregate only, prepare that exact active context
+once after complete TASK/assignment locks, every fresh per-row AUTH decision and
+aggregate custody validation. Bind it to the current SQLAlchemy root transaction
+and exact project, then pass it through the canonical per-Task staging owner.
+Committed replay must still recover before any current-policy read; RELEASE keeps
+each Task's historical locked-context resolution. No global/session cache,
+authorization reuse, flush removal, lock-order change or new execution limit is
+allowed.
+
+Additional allowed files are
+`backend/app/modules/tasks/authorized_commands.py`,
+`backend/app/modules/tasks/task_batch_transitions.py`, the existing manager
+participant and batch-transition test modules, and this record. Required controls
+cover wrong transaction/project refusal, one active-context load for a fresh
+multi-member SCREEN, and committed replay with the active-context provider made
+unavailable. Root owns the final native 200-row timing proof.
+
+The four affected native controls collect from the isolated repair worktree:
+the ended-transaction and wrong-project guards, the 200-row public journey, and
+the canonical reason-boundary journey. Scoped Ruff, Python compilation and
+`git diff --check` pass. No PostgreSQL timing or behavior result is claimed from
+this source-only checkpoint.
