@@ -74,10 +74,10 @@ PreSubmitCheckerPolicy =
 ```
 
 Failed preparation returns `pre_submission_checker_failed` with ART's exact
-ordered bounded results through the mounted authorized hidden route. The route
-remains absent from OpenAPI, and public intake activation remains pending. POL-07B connects
-the internal checker phase service and removes the standalone JSON precheck. WS-ARCH-001-02I retains the broader Submission caller
-cutover. Pre-submit failures do not create durable
+ordered bounded results through the public submission-bundle preparation route. POL-07B connects
+the internal checker phase service and removes the standalone JSON precheck. The
+public admission-backed Submission operation consumes only a fresh ready admission.
+Pre-submit failures do not create durable
 `CheckerRun` records and do not return review decision values: `accept`,
 `needs_revision`, or `reject`.
 

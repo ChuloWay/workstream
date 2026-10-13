@@ -18,8 +18,10 @@ The review components and diagrams below describe the human branch. The versione
 existing ReviewPolicy boolean `human_review_required` defaults true; false
 permits separately authorized automated FinalAcceptance and submitter
 contribution, with no human queue/lease/Review or reviewer contribution. This
-does not make checker output acceptance authority. Its detailed source/CON
-runtime remains pending after the [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+does not make checker output acceptance authority. Selected production request
+and completion handlers route the false branch through the shared acceptance
+operation. New false/pass effects require an Operator-authorized live REV
+generation; a typed pre-effect non-live refusal rolls back and uses bounded retry.
 The separate ReviewPolicy field `requires_second_review` is fixed to `false` at
 typed input, locked lineage, and database boundaries. Second-review and
 adjudication behavior remain deferred.

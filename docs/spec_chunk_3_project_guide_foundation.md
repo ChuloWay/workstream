@@ -81,7 +81,9 @@ The canonical CP07 guide activation operation, exposed by AUTH-18, requires:
 - the exact pre-submit approval and compiled effective intake plan
 - a separate exact post-submit policy approval and supported catalogue selections
 - selected complete review/revision policy generations and hashes
-- `human_review_required=true`; automated acceptance remains unavailable
+- a complete supported ReviewPolicy; `human_review_required=false` additionally
+  requires the approved requirement inventory to contain no `human_review`
+  disposition
 - an explicitly selected current published ContributionPolicyVersion validated
   by CON, including its complete rules and binding eligibility
 - the exact expected prior active guide and generation, if replacing one

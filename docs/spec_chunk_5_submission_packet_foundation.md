@@ -97,13 +97,13 @@ context from changing silently after a submission has been recorded.
 
 ## API Contract
 
-POL-07B removes the standalone draft JSON precheck. Hidden ZIP preparation uses
+POL-07B removes the standalone draft JSON precheck. Public ZIP preparation uses
 one internal pre-submit phase command and ART-owned canonical evidence. The
-hidden route returns `pre_submission_checker_failed` for blocking failures;
-structured public intake feedback remains pending.
+route returns `pre_submission_checker_failed` with structured feedback for
+blocking failures.
 
-The former packet-creation POST is also removed. Canonical admission-backed
-Submission creation remains hidden until the broader WS-ARCH-001-02I cutover.
+The former packet-creation POST is also removed. The public admission-backed
+Submission operation consumes a fresh ready admission through the canonical writer.
 Clients cannot supply a manifest, checker result or policy pointer as a substitute
 for verified ART admission and locked Task lineage.
 

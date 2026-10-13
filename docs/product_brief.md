@@ -56,15 +56,17 @@ Pre-submission intake assesses package fitness before a Submission exists.
 Post-submission evaluation assesses the immutable work against locked project
 requirements and produces review-eligibility evidence. Evaluation can use
 deterministic rules or supported model-based checkers; the stage does not
-promise deterministic judgments. Neither stage replaces required human Review
-or independently authorizes acceptance. The versioned `human_review_required: true`
+promise deterministic judgments. Neither stage independently authorizes
+acceptance. The versioned `human_review_required: true`
 in the existing locked ReviewPolicy may be set false for authorized automated
-acceptance, without reviewer contribution. REV-04C supplies the hidden
-FinalAcceptance/TASK/CON transaction participant, but this is not live behavior; the
-[bounded handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
-provides configuration. ARCH-04E2-B now supplies the complete hidden authorized
-outcome over that participant. B8 supplies hidden completion delivery. Remediation and production
-composition remain before false-guide activation and public intake.
+acceptance, without reviewer contribution. REV-04C supplies the shared
+FinalAcceptance/TASK/CON transaction participant, and ARCH-04E2-B supplies the
+complete authorized outcome over it. Selected request and completion handlers are
+registered in production composition. A complete supported false guide can
+activate when its approved inventory contains no `human_review` disposition; new
+false/pass effects require an Operator-authorized live REV generation. Public ZIP
+preparation and admission-backed Submission creation expose intake. The complete
+public durable-runtime drill remains pending.
 See the [checker framework](architecture_checker_framework.md) and
 [current capability ledger](roadmap_status.md) for supported boundaries.
 

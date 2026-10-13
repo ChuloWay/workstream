@@ -65,10 +65,14 @@ authorized automated FinalAcceptance and submitter contribution after required
 post-submit checks pass, without human admission, a synthetic Review or a
 reviewer contribution. Its source/authority/CON design is defined in the
 [shared acceptance contract](spec_review_lifecycle.md#finalacceptance);
-REV-04C supplies its hidden FinalAcceptance/TASK/CON transaction participant,
+REV-04C supplies its FinalAcceptance/TASK/CON transaction participant,
 and ARCH-04E2-B binds actual routing authority, immutable evidence and complete
-atomic outcomes under currentness custody. B8 supplies hidden completion delivery. Remediation and
-production composition remain before false-guide activation and public intake.
+atomic outcomes under currentness custody. B8 supplies completion delivery;
+selected request/completion handlers and public ZIP preparation plus
+admission-backed Submission creation are registered. A complete supported false
+guide activates only when its approved requirement inventory contains no
+`human_review` disposition. New false/pass effects still require a live REV
+generation; a pre-effect non-live refusal rolls back and uses bounded retry.
 This amendment does not enable raw checker results to create acceptance or
 change the existing human branch's implementation contract.
 The ReviewPolicy field `requires_second_review` is fixed to `false` in v0.1.
@@ -193,10 +197,9 @@ rules changed. Missing summary or attestation produces warnings only. All
 project checks are approved, digest-pinned external images; there is no built-in
 project-rule catalogue or alternate checker runtime.
 
-Blocking pre-submit failures prevent submission creation. The mounted
-authorized hidden preparation route returns `pre_submission_checker_failed`
-with exact ordered bounded results in the same request. It remains absent from
-OpenAPI, and public intake activation remains pending. Failures create no submission
+Blocking pre-submit failures prevent submission creation. The public
+submission-bundle preparation route returns `pre_submission_checker_failed`
+with exact ordered bounded results in the same request. Failures create no submission
 row, no submission version, no task transition to `submitted`, and no
 submission-created audit event. ART constructs a bounded audit-ready projection;
 publication as a task event named `pre_submission_check_failed` remains pending.

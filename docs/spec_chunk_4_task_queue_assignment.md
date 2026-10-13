@@ -6,12 +6,12 @@ Workstream is developing its first, unreleased v0.1. This specification covers
 the existing task-record and assignment foundation, including the bounded
 [project-grant authorization replacement](../.commitrail/changes/task-project-grant-authorization.md).
 CP08 delivers exact contribution-policy lineage through task, assignment and
-hidden Submission creation. ARCH-03C2 delivers exact assignment-invalidation
+admission-backed Submission creation. ARCH-03C2 delivers exact assignment-invalidation
 publication and registered delivery. ARCH-03C4 delivers the three public task
 queues with exact project authority. ARCH-03C5 delivers distinct Contributor and
 Manager task detail and requirements. ARCH-03C6 exposes the three distinct
-locked-context reads with exact current grants. Public Submission cutover remains pending;
-the [capability ledger](roadmap_status.md) identifies its owner.
+locked-context reads with exact current grants. Public ZIP preparation and
+admission-backed Submission creation are exposed.
 
 Task responses and immutable command receipts contain no task-local payment
 amount, currency, payout type or guide-keyed payment-policy stamp. Compensation
@@ -146,13 +146,13 @@ draft -> screening -> ready -> claimed -> in_progress
 - Existing locked context remains tied to the attempt. A later guide or
   policy publication alone is not permission to rewrite that context.
 - The guide's ContributionPolicyVersion is locked before work becomes claimable
-  and copied through assignment and hidden Submission creation by CP08.
+  and copied through assignment and admission-backed Submission creation by CP08.
   Claim does not perform a fresh CON lookup.
 
 For claim/start, the actor/action/idempotency-key receipt is reserved first;
 task and assignment are then locked, followed by canonical actor, identity
-link and applicable grant revalidation and locking. This matches hidden
-Submission creation's lock order. Authorization consumes the exact locked
+link and applicable grant revalidation and locking. This matches
+admission-backed Submission creation's lock order. Authorization consumes the exact locked
 facts before writes. Product writes and their audit evidence commit or roll
 back together.
 
@@ -336,7 +336,8 @@ Only contributor context has `lifecycle`, with `assigned_to_current_actor` and
 `next_actions`. Unassigned READY advertises `claim`; own CLAIMED advertises
 `start`; other own-active states have no action hint. Task status appears only in
 `task.status`. Hints never authorize execution. There is no `can_submit` flag or
-precheck capability; hidden submission creation is not advertised as usable.
+precheck capability in the work-context response; the public preparation and
+Submission operations authorize independently.
 Contributor context also includes `guide_documents`: ordered document IDs,
 labels, media types, byte counts, SHA-256 and task-scoped authorized read references.
 It is empty for ready unassigned browsing and contains only exact locked originals
@@ -645,9 +646,9 @@ stamps creation time and forbids request update, deletion and truncation.
 This is preparation only: no source manifest, current routing pointer, outbox
 publication, TASK transition, Review, FinalAcceptance or ContributionRecord is
 created by that preparation alone. ARCH-04E2-B commits exact AUTH custody and
-complete governed success outcomes through the hidden operation; ARCH-04F2
+complete governed success outcomes through the canonical operation; ARCH-04F2
 extends that same operation with the exact contributor-remediation consequence.
-Production delivery remains unavailable. Atomic publication binds the
+Selected request and completion delivery is registered in production composition. Atomic publication binds the
 manifest to the reserved identity and verifies genuine immutable AUTH evidence.
 
 
@@ -658,8 +659,8 @@ verified completion with the existing reservation. A proposal contains semantic
 source facts only; the persisted manifest additionally requires its database
 creation time. No source INSERT or authority follows from constructing a proposal.
 B6 atomic Submission/dispatch sets `evaluation_pending` through the canonical
-operation. 04E2-B consumes that real lineage; production dispatch registration
-and public intake remain separate boundaries.
+operation. 04E2-B consumes that real lineage; selected dispatch registration and
+public intake are delivered.
 
 ### Checked packet custody at hidden creation
 
@@ -667,7 +668,8 @@ ARCH-04E1B-B4 forwards the canonical summary/attestation commitment from the
 actual Submission request to ART. Consumption rejects a different packet before
 binding or consumed replay. PostgreSQL also checks the final bound Submission
 against retained pre-submit evidence at commit, permitting the existing atomic
-insert-then-bind sequence. This does not activate dispatch or expose public intake.
+insert-then-bind sequence. Activation and exposure are supplied by the later
+registered composition and public route, not by this custody slice alone.
 
 
 ### Submission evaluation input facts
@@ -685,7 +687,9 @@ Submission, both exact AUTH decisions, the generation-one evaluation reservation
 TASK evaluation_pending and one shared request event. Admission-scoped replay
 validates the original immutable owners under live authority without reserve or
 append calls; it cannot reset a later generation. Every new predecessor-linked
-Submission uses the same writer. Public intake and delivery activation remain deferred.
+Submission uses the same writer. Public ZIP preparation and admission-backed
+Submission creation expose the intake path; selected request and completion
+handlers are registered in production composition.
 
 ARCH-04F3 names the supported predecessor-linked creation kind
 `checker_remediation`. TASK locks its task, assignment and latest Submission,
@@ -708,8 +712,8 @@ Terminal replay validates retained execute/finalize receipts without reopening
 bytes. Uncertain execution does not renew an expired lease or request a retry;
 shared UNKNOWN handling preserves it for later authorized recovery.
 
-The handler is unregistered. Completion routing, governed outcomes and public
-intake remain separate boundaries; this adds no Review or acceptance. B8 and
+The selected request handler is registered in production composition. Its
+execution adds no Review or acceptance by itself. B8 and
 04F2 now supply the hidden success/remediation completion operation described
 below.
 
@@ -726,9 +730,9 @@ invocations reject before owner entry; uncertain owner/commit failures remain
 shared OUTBOX UNKNOWN, never an automatic uncertain-effect retry. A still-current
 unfinalized invocation can replay the exact outcome with fresh authority.
 The true branch never observes REV generation or enters CON. Both request and
-completion handlers remain absent from production registration. Connected
-production readiness and authorized manager-visible setup-fault hold precede
-public intake; 04F3 supplies hidden exact-cause replacement intake. ARCH-04F4
+completion handlers are registered in production composition. New false/pass
+effects require a live REV generation; a typed pre-effect non-live refusal rolls
+back and uses bounded OUTBOX retry. 04F3 supplies exact-cause replacement intake. ARCH-04F4
 supplies separate hidden Operator retry of a known terminal
 `infrastructure_failed` checker run through the existing request handler.
 Fresh-authorized historical replay does not require the old run to remain current.
@@ -746,7 +750,7 @@ repeating effects. Existing acceptance consumers admit only `allow_review`.
 The operation adds no route or contributor response schema. Contributors use the
 existing bounded Submission/checker-history reads above. ARCH-04F3 supplies
 hidden exact-cause replacement Submission intake through the same writer.
-Manager-visible setup-fault hold, production handler registration, public intake
-and the first end-to-end drill remain separate work. The hold retains the
+Manager-visible setup-fault hold and the first end-to-end drill remain separate
+work. The hold retains the
 Submission and locked rules without contributor penalty; changing or
 re-screening submitted-task rules is deferred.

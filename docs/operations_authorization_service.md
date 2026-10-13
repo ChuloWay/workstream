@@ -1286,16 +1286,16 @@ locks project and policy resources. A nominal one-use handle binds the operation
 request, identity, session and root transaction. The complete CP07 facts digest is
 the exact digest saved in the allow event, mutation ledger and activation receipt.
 CP07 still owns complete-chain readiness, separate approvals, ContributionPolicy
-validation and atomic activation/supersession. `human_review_required=false`
-remains activation-blocked under the current capability guard.
+validation and atomic activation/supersession. A complete supported
+`human_review_required=false` guide activates only when its exact approved
+requirement inventory contains no `human_review` disposition.
 
 Exact replay acquires fresh live authority and validates the retained decision;
 it returns the original receipt without a second allow or activation. Supersession
 or later ContributionPolicy retirement does not rewrite that evidence. Revoked
 actor/link/grant authority denies replay. Composition without the explicit adapter
-continues to deny. CP08 delivers Task, Assignment and hidden Submission policy
-lineage. Public manager activation is delivered; approved-guide intake
-integration remains next.
+continues to deny. CP08 delivers Task, Assignment and Submission policy lineage.
+Public manager activation and approved-guide intake integration are delivered.
 
 ## Shared outbox dispatcher
 

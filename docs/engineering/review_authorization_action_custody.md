@@ -58,8 +58,8 @@ only, and every command prepares fresh authority inside its transaction.
 |---|---|---|---|
 | `artifact.review_packet.materialize` | `artifact.review_packet.materialize` | fixed ART materializer; exact active-lease packet | runtime `WS-XINT-002-07`; activation sub-wave `07A` |
 | `artifact.review_evidence.binding.create` | `artifact.binding.create` | future fixed ART binding service only | runtime catalogue custody `WS-XINT-002-07`; no approved activation wave |
-| `artifact.submission_bundle.prepare` | `submission.create` | assigned contributor; exact human-revision preparation | base availability `WS-ARCH-001-02G`; human-revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D before 02I |
-| `submission.create` | `submission.create` | assigned contributor; exact prepared human revision | base hidden availability `WS-ARCH-001-02H`; human-revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D before 02I |
+| `artifact.submission_bundle.prepare` | `submission.create` | assigned contributor; exact preparation | base public availability delivered; human-revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D |
+| `submission.create` | `submission.create` | assigned contributor; exact prepared admission | base public availability delivered; human-revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D |
 
 These actions are not XINT-003 custody. Generic artifact download, adjudication, automated routing, reputation, settlement, and agent workspace authority are out of scope.
 
@@ -149,8 +149,8 @@ phases without rewriting contribution or award facts.
 
 This is not acceptance authority. The initial manifest refuses retained
 pre-authority FinalAcceptance rows before entering live. ARCH-04E2-B supplies
-mandatory source receipts and complete atomic consequences in a hidden operation.
-B8 supplies hidden completion delivery. Production routing, human review and
-payment delivery remain unavailable.
+mandatory source receipts and complete atomic consequences in the canonical
+operation. B8 supplies completion delivery, and selected production routing is
+registered. Human review and payment delivery remain unavailable.
 Obligation roots, ordinals and cutoff/drain machinery are deferred until
 fulfillment activation; conditional awards remain atomic in the first path.

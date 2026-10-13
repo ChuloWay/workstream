@@ -227,7 +227,7 @@ PROJECTS context port. New work selects the active guide; frozen work keeps its
 exact guide and approved policy identities after a successor is activated.
 Retiring a contribution policy does not silently replace that binding. This is
 an internal contract, not a new manager API. Screening now records that exact
-contribution-policy version; claim and hidden Submission creation retain it through
+contribution-policy version; claim and admission-backed Submission creation retain it through
 the assignment. Screening and release check that the installed pre/post policies
 are supported; historical reads do not rerun availability. No superseded economic configuration is
 required. Task display now comes from detached values supplied by PROJECTS,
@@ -477,10 +477,12 @@ If the ready gate fails, the task remains `DRAFT`.
 
 ## Submission Intake Checklist
 
-This is the target contributor handoff. The obsolete public packet-creation POST
-has been removed; canonical admission-backed creation remains hidden and does
-not yet finalize or enqueue evaluation automatically. Do not use these intended
-steps as a public API availability claim.
+This contributor handoff is exposed through two public backend operations. A
+contributor uploads one ZIP to
+`POST /api/v1/tasks/{task_id}/submission-bundle-preparations`; after ART returns
+a ready admission, `POST /api/v1/tasks/{task_id}/submissions` consumes it through
+the canonical atomic writer and creates the immutable Submission and initial
+evaluation request event.
 
 Before locking a submission packet:
 
@@ -493,15 +495,15 @@ Before locking a submission packet:
 - effective project submission artifact policy is loaded
 - generated project pre-submit checker policy runs
 - failed preparation returns `pre_submission_checker_failed` with ART's exact
-  ordered bounded results through the mounted authorized hidden route; the route
-  remains absent from OpenAPI and public intake activation remains pending
-- POL-07B removes the standalone JSON precheck; the hidden preparation
+  ordered bounded results through the public ZIP preparation route
+- POL-07B removes the standalone JSON precheck; the preparation
   flow uses one internal pre-submit phase command with ART-owned evidence.
-  Broader public Submission caller migration remains WS-ARCH-001-02I
+- the public Submission operation consumes only a fresh ready admission
 - no submission row is created until blocking pre-submit checks pass
-- ARCH-04C implements hidden durable post-submit execution with exact ARCH-04D2
-  service authority. B6 commits the initial reservation and request event with
-  each hidden Submission; automatic request delivery and routing remain unavailable
+- ARCH-04C implements durable post-submit execution with exact ARCH-04D2 service
+  authority. B6 commits the initial reservation and request event with each
+  Submission; selected request and completion handlers are registered in the
+  production composition
 - the obsolete `/submissions/{submission_id}/finalize` repair and manual
   `POST /submissions/{submission_id}/checker-runs` routes are removed. Planned
   exact-authority recovery must not use them.

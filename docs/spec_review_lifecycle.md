@@ -735,9 +735,12 @@ Extract foundations from existing owner work, not a new initiative:
    acquires the existing REV fence before TASK and later AUTH; true acquires no
    REV/CON participant. Exact replay retains IDs and cannot repair partial facts.
    Pre-authority outcomes are refused on upgrade without rewriting them.
-   The hidden ARCH-04E1B-B8 completion handler consumes this operation and
-   acknowledges only after commit. Prove 04F remediation before 04E3 registers
-   the connected production runtime and enables false-guide readiness. Live
+   The ARCH-04E1B-B8 completion handler consumes this operation and acknowledges
+   only after commit. Remediation is delivered, selected request/completion
+   handlers are registered in production composition, and a complete supported
+   false guide can activate when its approved inventory contains no `human_review`
+   disposition. New false/pass effects require a live REV generation; a typed
+   pre-effect non-live refusal rolls back and uses bounded retry. Live
    human review/revision and fulfillment remain separate work.
 
 These are dependency slices of existing work, expanded into bounded records

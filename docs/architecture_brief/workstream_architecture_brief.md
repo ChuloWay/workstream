@@ -27,16 +27,16 @@ context, every Submission immutable artifact lineage, every valid human
 decision an attributable Review and reviewer contribution, and every accepted
 task an immutable FinalAcceptance before the submitter contribution.
 
-The diagrams depict target architecture, not a fully connected live lifecycle.
-Canonical retained submission/checker history and hidden durable post-submit
-execution with unfinished-attempt recovery are delivered. Exact service authority
-is implemented. B6 stores the initial checker reservation and request event with
-each hidden Submission; automatic request delivery/routing and authorized terminal
-repair remain unavailable. Removed execution and repair paths are not alternatives. The lifecycle sequence depicts the planned human-review branch. The versioned `human_review_required` defaults true in the existing locked
+The diagrams depict target architecture, not a deployed or fully drilled live
+lifecycle. Public ZIP preparation and admission-backed Submission creation,
+canonical retained submission/checker history, durable post-submit execution,
+unfinished-attempt recovery and selected request/completion handler registration
+are implemented. Removed execution and repair paths are not alternatives. The lifecycle sequence depicts the planned human-review branch. The versioned `human_review_required` defaults true in the existing locked
 ReviewPolicy; false uses an authorized automated acceptance source and shared
-CON participant without a reviewer contribution. That runtime remains pending,
-not enabled by checker success alone. The [product-builder handoff](../../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next)
-describes the delivered setting; the PDF and source present the same current boundary.
+CON participant without a reviewer contribution. A complete supported false guide
+can activate when its approved inventory contains no `human_review` disposition;
+new false/pass effects require an Operator-authorized live REV generation and are
+not enabled by checker success alone. The complete public durable-runtime drill remains pending.
 
 v0.1 is focused on proving the internal lifecycle:
 
@@ -129,7 +129,7 @@ checker/job boundary.
 | React + Vite operations UI | Planned internal operations dashboard for project, task, submission, review, and compensation fulfillment workflows. Reputation UI remains deferred. |
 | FastAPI backend | API contracts, workflow rules, auth dependency, lifecycle guards, module orchestration, and audit writes. |
 | Celery worker boundary | Durable project setup and registered background jobs; checker execution is a target boundary. FastAPI background tasks are not the Workstream product-job boundary. |
-| CHECKERS | Delivered retained-history reads and hidden durable post-submit execution/recovery; exact service authority is delivered; automatic request delivery and routing remain unavailable. |
+| CHECKERS | Delivered retained-history reads, durable post-submit execution/recovery and exact service authority; selected request/completion handlers are registered in production composition. |
 | Storage interface | Keeps file/evidence semantics stable while local storage and the hosted AWS S3 profile implement the same provider-neutral port. |
 | Postgres | Durable record database for the full Workstream lifecycle. |
 

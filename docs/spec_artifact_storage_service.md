@@ -1630,8 +1630,8 @@ with database-bound execute/finalize receipts. ARCH-04E2-B also retains the
 actual input-materialization decision through the ART result and terminal
 CHECKERS custody, and verifies it before publishing a routing source. Its hidden
 TASK operation commits the complete authorized outcome. Output write/bind
-authority remains unavailable; B8 supplies hidden completion delivery. Production
-routing registration remains pending.
+authority remains unavailable; B8 supplies completion delivery. Selected request
+and completion handlers are registered in production composition.
 
 Current ARCH-04C behavior records known post-authorization material failures as
 terminal, unroutable `material_unavailable`, after scratch cleanup and fresh
@@ -1829,7 +1829,8 @@ projection with real identities and the full request digest. ART consumption now
 retains an immutable admission/binding/decision receipt, required by a deferred
 database guard on each new consumed admission. Existing retained rows are not
 backfilled or deleted; absent receipt custody cannot use current consumed replay.
-The hidden caller transaction commits this receipt with the Submission and its
-initial evaluation request. ARCH-04E1B-B7 consumes that request through a hidden
-handler and the existing exact-byte materializer. Production delivery registration,
-completion routing authority and public intake remain separate pending work.
+The caller transaction commits this receipt with the Submission and its initial
+evaluation request. ARCH-04E1B-B7 consumes that request through the selected
+handler and existing exact-byte materializer. Selected request/completion handlers
+are registered in production composition, and public ZIP preparation plus
+admission-backed Submission creation expose intake.

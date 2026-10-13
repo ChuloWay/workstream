@@ -947,14 +947,11 @@ The generated checker order is deterministic:
 8. contributor attestation validation
 9. low-quality artifact warnings
 
-POL-07B removes the standalone JSON precheck and connects the internal
-checker phase service. Authoritative pre-submit checking
-already belongs to the preparation request owning the uploaded ZIP and bounded
-scratch. Broader Submission caller migration remains WS-ARCH-001-02I.
+POL-07B removes the standalone JSON precheck and connects the internal checker
+phase service. Authoritative pre-submit checking belongs to the preparation
+request owning the uploaded ZIP and bounded scratch.
 
-The existing mounted authorized hidden route returns the following structured
-same-request feedback. It remains absent from OpenAPI; public intake activation
-is still pending:
+The public route returns the following structured same-request feedback:
 
 ```text
 POST /api/v1/tasks/{id}/submission-bundle-preparations
@@ -970,14 +967,13 @@ POST /api/v1/tasks/{id}/submission-bundle-preparations
 }
 ```
 
-No independent precheck route remains. A client-owned manifest
-cannot reproduce the authoritative result. At the later public cutover,
-`POST /api/v1/tasks/{id}/submissions` will consume the verified ready admission
-without receiving scratch paths or rerunning the pre-submit plan. Canonical
-admission-backed creation remains hidden until then.
+No independent precheck route remains. A client-owned manifest cannot reproduce
+the authoritative result. `POST /api/v1/tasks/{id}/submissions` consumes the
+verified ready admission without receiving scratch paths or rerunning the
+pre-submit plan.
 
-Before that cutover, hidden pre-submit materialization establishes the execution boundary without
-exposing a route. The fixed materializer authorizes before any prepared-byte
+Pre-submit materialization keeps its internal execution boundary behind the
+public preparation route. The fixed materializer authorizes before any prepared-byte
 read or workspace reservation. One callback-scoped sealed tree is checked
 against the server commitment and semantic manifest. The locked project-policy phase extends that same
 callback to execute the locked project-policy phase and normalize every
@@ -1006,16 +1002,15 @@ ART-04C2 adds one `SubmissionBundleAdmission` only when the verifier's complete
 read produces a matching successful receipt. The row joins the exact durable
 intent and evidence to provider-neutral content, the verified replica, the
 verification receipt, and exactly one direct-put or observed-confirmed receipt.
-It starts in `ready`. The hidden ART admission-consumption capability may apply
+It starts in `ready`. The ART admission-consumption capability may apply
 `ready -> consumed|stale` only inside a caller-owned root transaction after
 exact TASK and ART lineage validation. A consumed admission records the exact
 Submission identifier and lifecycle version while its generic artifact binding
-uses its independent binding-chain version. The capability remains deny-only
-and route-unreachable until the later TASK composition and AUTH activation
-chunks.
-The hidden preparation route keeps scratch and prepared handles process-local,
-returns before durable verification finishes, and remains excluded from OpenAPI
-and crosses the active `artifact.submission_bundle.prepare` PREP boundary before durable intent.
+uses its independent binding-chain version. The public Submission operation
+invokes this capability through TASK composition and fresh AUTH.
+The preparation route keeps scratch and prepared handles process-local, returns
+before durable verification finishes, and crosses the active
+`artifact.submission_bundle.prepare` PREP boundary before durable intent.
 
 Blocking pre-submit failures prevent submission creation, create no submission
 row, no submission version, no task transition to `submitted`, and no
@@ -1518,9 +1513,9 @@ Fields:
 - `version`
 - `status`
 - `summary`
-- `submission_bundle_admission_id` (hidden canonical intake identity from WS-ARCH-001-02F; public cutover remains 02I)
-- `artifact_binding_id` (hidden canonical byte binding from WS-ARCH-001-02F; public cutover remains 02I)
-- `artifact_content_id` (hidden canonical immutable ART content identity from WS-ARCH-001-02F; public cutover remains 02I)
+- `submission_bundle_admission_id` (canonical intake identity consumed by the public admission-backed writer)
+- `artifact_binding_id` (canonical immutable byte-binding identity)
+- `artifact_content_id` (canonical immutable ART content identity)
 - `submission_bundle_manifest_id` (target server-generated manifest identity)
 - `pre_submit_evidence_set_id` (target checker evidence identity)
 - `package_uri` (legacy caller transport removed by WS-ARCH-001-02I, which implements the superseded WS-ART-001-05B cutover)
@@ -1775,21 +1770,15 @@ completion event and execute/finalize receipts, locked
 binding/content anchors and complete locked policy lineage; its sole
 recommendation is `allow_review`, which is evidence rather than permission.
 
-The table has no general routing publication writer/reader, current pointer,
-handler or routing authority. REV-04C uses its bounded exact-source verifier.
-`TaskAcceptedEffectsPort` is the source-neutral contract used
-by the REV-04C hidden FinalAcceptance/TASK/CON participant. That participant is
-not a complete authorized operation or live route. The valid storage graph is
-currently limited to true policy. False is proven only as a strict scalar DTO
-value because guide activation still rejects it.
-
-Before publication, ARCH-04E1B/04E2 must harden this same table with mandatory
-exact routing and owner-receipt custody. The migration must refuse every retained
-pre-authority row; it may not backfill, mutate or delete one, and no parallel
-manifest table is allowed. Later routing will publish the hardened source,
-current pointer and `review_pending` transition atomically after currentness and
-authority checks. Any submitted artifact change requires a new Submission and
-checker run.
+The table has no general public routing writer/reader. REV-04C uses its bounded
+exact-source verifier, and `TaskAcceptedEffectsPort` is the source-neutral
+contract used by its FinalAcceptance/TASK/CON participant. ARCH-04E1B/04E2 bind
+mandatory exact routing, owner-receipt and currentness custody; selected request
+and completion handlers are registered in production composition. True-policy
+success reaches `review_pending`; eligible false-policy success reaches the same
+shared acceptance operation only under a live REV generation. A typed pre-effect
+non-live refusal rolls back and uses bounded retry. Any submitted artifact change
+requires a new Submission and checker run.
 
 ## ReviewQueueEntry And ReviewLease
 
@@ -1872,9 +1861,9 @@ creation checks the lease deadline against PostgreSQL time; exact replay retains
 the stored identity after expiry or closure. The detached identity is
 `packet_manifest_id`, matching AUTH. This storage is delivered; the resolver,
 claim authority and byte capability remain future work. REV-04A immutable Review source storage, REV-04B FinalAcceptance persistence and
-REV-04C hidden acceptance/TASK/CON participation are delivered. Hidden routing
-handlers are next; exact authority, complete-effect custody and activation
-remain required before production use.
+REV-04C acceptance/TASK/CON participation, exact authority and complete-effect
+custody are delivered, and selected routing handlers are registered in production
+composition. This does not claim deployment or live human review.
 
 ## Review
 

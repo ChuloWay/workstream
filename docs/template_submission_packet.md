@@ -53,15 +53,14 @@ and TaskAssignment for this next attempt; publication or submission input alone
 cannot change it.
 
 Workstream runs the single effective pre-submission plan against the uploaded
-outer ZIP in bounded scratch before creating the submission. The mounted
-authorized hidden preparation route returns `pre_submission_checker_failed`
-with ART's exact ordered bounded results in the same request. It remains absent
-from OpenAPI, and public intake activation remains pending. Failed preparation creates no
+outer ZIP in bounded scratch before creating the submission. The public
+submission-bundle preparation route returns `pre_submission_checker_failed`
+with ART's exact ordered bounded results in the same request. Failed preparation creates no
 submission row, no submission version, and no submission-created audit event,
 and does not return review decision values: `accept`, `needs_revision`, or
 `reject`. POL-07B connects the internal checker phase service and removes the
-standalone JSON precheck. Broader public Submission caller migration remains
-WS-ARCH-001-02I.
+standalone JSON precheck. The public admission-backed Submission operation
+consumes only a fresh ready admission.
 
 The hidden default phase first validates ART's server-generated commitment,
 semantic manifest, change result, and one sealed scratch projection. Its
