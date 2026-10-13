@@ -37,6 +37,9 @@ from app.core.identifiers import new_record_id
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.actors.api.service_identities import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
+from app.modules.artifacts.models import (
+    ArtifactPutAttempt, ArtifactVerificationJob, SubmissionBundleAdmission,
+)
 from app.modules.checkers.models import CheckerRun, SelectedPreSubmitRun
 from app.modules.checkers.execution_repository import stored_result
 from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_CHECK_IDS
@@ -223,6 +226,25 @@ async def _wait_worker(process: subprocess.Popen, hostname: str) -> None:
     raise RuntimeError("prefork worker did not become ready")
 
 
+async def _scan_audit_count(factory) -> int:
+    async with factory() as session:
+        return await session.scalar(text(
+            "SELECT count(*) FROM public.audit_events "
+            "WHERE action_id='artifact.pending_work.scan'"
+        ))
+
+
+async def _wait_beat_scan(factory, process: subprocess.Popen, before: int) -> None:
+    """Require a real scheduled scanner audit before public intake begins."""
+    deadline = time.monotonic() + 300
+    while time.monotonic() < deadline:
+        _require(process.poll() is None, "Celery Beat exited before scheduled scan")
+        if await _scan_audit_count(factory) > before:
+            return
+        await asyncio.sleep(2)
+    raise RuntimeError("Celery Beat did not dispatch an authorized artifact scan")
+
+
 def _token(env: dict[str, str], actor) -> str:
     issuer, audience, secret = flow_settings(env)
     return issue_flow_token(
@@ -390,6 +412,25 @@ async def _outbox_snapshot(factory, event_id: UUID) -> tuple:
         )
 
 
+async def _artifact_task_state(factory, task_id: str) -> tuple[list[tuple], list[tuple]]:
+    """Read only this task's put and verification disposition, never artifact data."""
+    async with factory() as session:
+        puts = (await session.execute(
+            select(ArtifactPutAttempt.status, ArtifactPutAttempt.terminal_result_code)
+            .where(ArtifactPutAttempt.task_id == task_id,
+                   ArtifactPutAttempt.producer_request_type == "submission_bundle")
+        )).all()
+        jobs = (await session.execute(
+            select(ArtifactVerificationJob.id, ArtifactVerificationJob.status,
+                   ArtifactVerificationJob.terminal_result_code)
+            .join(ArtifactPutAttempt,
+                  ArtifactVerificationJob.originating_put_attempt_id == ArtifactPutAttempt.id)
+            .where(ArtifactPutAttempt.task_id == task_id,
+                   ArtifactPutAttempt.producer_request_type == "submission_bundle")
+        )).all()
+        return list(puts), list(jobs)
+
+
 async def _wait_outbox_due(factory, event_id: UUID) -> None:
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
@@ -407,7 +448,7 @@ async def _wait_outbox_due(factory, event_id: UUID) -> None:
 async def _ready_admission(client, factory, task_id: str, assignment_id: str,
                            contributor_token: str, archive: bytes, summary: str,
                            attestation: str, predecessor_id: str | None = None) -> str:
-    from app.workers.artifacts import scan_pending_work
+    from app.workers.artifacts import verify_object
 
     key = str(uuid4())
     headers = {
@@ -423,8 +464,7 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
     deadline = time.monotonic() + 180
     current_status = None
     status_since = time.monotonic()
-    last_scan_status = None
-    last_scan_at = 0.0
+    scans_before = await _scan_audit_count(factory)
     while time.monotonic() < deadline:
         result = await _json(
             client, "POST", route, contributor_token, 202,
@@ -433,7 +473,10 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
         status = result["submission_bundle_preparation_status"]
         if status == "ready":
             _require(result["admission_id"] is not None, "ready intake omitted admission")
-            return result["admission_id"]
+            if await _scan_audit_count(factory) > scans_before:
+                return result["admission_id"]
+            await asyncio.sleep(1)
+            continue
         _require(result["admission_id"] is None, "unverified admission was public")
         _require(status not in {
             "conflict", "integrity_mismatch", "missing", "absent_replay_required", "stale",
@@ -442,16 +485,33 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
             current_status = status
             status_since = time.monotonic()
         now = time.monotonic()
-        # A PUT can spawn verification work without changing the public PUT
-        # status. Observe one scan for ten seconds before a bounded rescan.
-        if status != "put_in_flight" and (
-            status != last_scan_status or now - last_scan_at >= 10
-        ):
-            await asyncio.to_thread(scan_pending_work.delay)
-            last_scan_status = status
-            last_scan_at = now
-        _require(now - status_since < 60,
-                 f"artifact preparation remained {status} after bounded worker scans")
+        if now - status_since >= 60:
+            puts, jobs = await _artifact_task_state(factory, task_id)
+            pending = [identifier for identifier, state, _ in jobs if state == "pending"]
+            if status == "object_confirmed" and len(pending) == 1:
+                verification = await asyncio.to_thread(
+                    verify_object.apply_async, args=(pending[0],),
+                    ignore_result=False,
+                )
+                try:
+                    await asyncio.to_thread(
+                        verification.get, timeout=90, propagate=True,
+                    )
+                except Exception as exc:
+                    raise RuntimeError(
+                        "artifact verifier task failed: "
+                        f"{type(exc).__name__}/{type(exc.__cause__).__name__}; "
+                        f"put_states={puts}; "
+                        f"job_states={[(state, code) for _, state, code in jobs]}"
+                    ) from None
+                finally:
+                    await asyncio.to_thread(verification.forget)
+                puts, jobs = await _artifact_task_state(factory, task_id)
+            raise RuntimeError(
+                f"artifact preparation remained {status} after bounded worker scans; "
+                f"put_states={puts}; "
+                f"job_states={[(state, code) for _, state, code in jobs]}"
+            )
         await asyncio.sleep(1)
     raise RuntimeError(f"artifact verification did not become ready from {current_status}")
 
@@ -555,12 +615,29 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
         _require(dispatch is not None, "governed Submission lost its atomic dispatch")
         if human_review_required:
             source = await session.get(Submission, initial_submission_id)
+            source_admission = await session.get(
+                SubmissionBundleAdmission, source.submission_bundle_admission_id
+            ) if source is not None else None
+            replacement_admission = await session.get(
+                SubmissionBundleAdmission, submission.submission_bundle_admission_id
+            )
             _require(source is not None and source.version == 1
                      and submission.version == 2
                      and submission.supersedes_submission_id == initial_submission_id
-                     and submission.package_hash != source.package_hash
+                     and source_admission is not None
+                     and source_admission.status == "consumed"
+                     and source_admission.consumed_by_submission_id == initial_submission_id
+                     and source_admission.consumed_by_submission_version == 1
+                     and replacement_admission is not None
+                     and replacement_admission.status == "consumed"
+                     and replacement_admission.consumed_by_submission_id == submission_id
+                     and replacement_admission.consumed_by_submission_version == 2
+                     and replacement_admission.predecessor_submission_id == initial_submission_id
+                     and replacement_admission.predecessor_submission_version == 1
+                     and source_admission.archive_sha256 != replacement_admission.archive_sha256
                      and dispatch.creation_kind == "checker_remediation"
-                     and dispatch.checker_remediation_manifest_id is not None,
+                     and dispatch.checker_remediation_manifest_id
+                     == replacement_admission.checker_remediation_manifest_id,
                      "replacement lost exact failed predecessor custody")
         counts = {}
         for name in ("submissions", "final_acceptances", "contribution_records",
@@ -970,6 +1047,7 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         "WORKSTREAM_CELERY_BROKER_URL": broker_url,
         "WORKSTREAM_CELERY_RESULT_BACKEND_URL": broker_url,
         "WORKSTREAM_CELERY_TASK_ALWAYS_EAGER": "false",
+        "WORKSTREAM_ARTIFACT_PENDING_WORK_SCAN_INTERVAL_SECONDS": "10",
         "WORKSTREAM_ARTIFACT_SCRATCH_ROOT": str(scratch),
         "WORKSTREAM_ARTIFACT_SCRATCH_MINIMUM_FREE_BYTES": "0",
         "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET": str(socket_path),
@@ -999,6 +1077,8 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
     _require(runtime_settings.celery_broker_url == broker_url
              and runtime_settings.celery_task_always_eager is False,
              "worker broker configuration is not durable")
+    _require(runtime_settings.artifact_pending_work_scan_interval_seconds == 10,
+             "Beat artifact scan interval differs from isolated drill")
     _require(runtime_settings.artifact_scratch_root == scratch
              and runtime_settings.artifact_scratch_minimum_free_bytes == 0
              and runtime_settings.external_checker_service_socket == socket_path
@@ -1029,7 +1109,7 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
 
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    rust = api = worker = None
+    rust = api = worker = beat = None
     try:
         await provision_material_services(factory, artifacts=True, checker=True)
         await provision_router(factory)
@@ -1058,6 +1138,13 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
             "--loglevel=ERROR",
         ], env=env, log=root / "worker.log")
         await _wait_worker(worker, hostname)
+        scans_before_beat = await _scan_audit_count(factory)
+        beat = _process([
+            sys.executable, "-m", "celery", "-A", "app.workers.celery_app",
+            "beat", "--loglevel=ERROR",
+            "--schedule", str(root / "beat-schedule"),
+        ], env=env, log=root / "beat.log")
+        await _wait_beat_scan(factory, beat, scans_before_beat)
         async with httpx.AsyncClient(base_url=origin, timeout=90) as client:
             true = await _one_mode(client, factory, database_url, namespace, image, env,
                                    human_review_required=True,
@@ -1065,15 +1152,19 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
             false = await _one_mode(client, factory, database_url, namespace, image, env,
                                     human_review_required=False,
                                     operator_id=operator.actor_profile_id)
-        _require(api.poll() is None and worker.poll() is None,
-                 "API or prefork worker exited during public journey")
+        _require(api.poll() is None and worker.poll() is None and beat.poll() is None,
+                 "API, prefork worker, or Beat exited during public journey")
         return {"tree_sha": subprocess.check_output(
             ["git", "rev-parse", "HEAD"], text=True, cwd=BACKEND
         ).strip(), "runtime": "runc/docker-dev", "image_digest": image["platform_manifest_digest"],
                 "public_api": True, "prefork_worker": True,
+                "scheduled_artifact_scans": True,
                 "scripted_approved_guide_precondition": True,
                 "human": true, "automatic": false}
     finally:
+        _stop_process(beat)
+        for schedule_file in root.glob("beat-schedule*"):
+            schedule_file.unlink()
         _stop_process(worker)
         _stop_process(api)
         if rust is not None:

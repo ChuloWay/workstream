@@ -44,7 +44,12 @@ signed Flow-compatible tokens, not a hosted Flow Identity service.
 From that explicit precondition, the companion must use a live loopback API,
 the public manager guide activation, project submitter grant, and task lifecycle, contributor ZIP
 preparation and canonical Submission POST, and a real Redis-backed prefork
-Celery worker for artifact and outbox delivery. It checks actionable intake
+Celery worker and Beat scheduler for artifact and outbox delivery. The isolated
+run sets the supported artifact scan interval to 10 seconds and requires a
+retained scheduler audit before public intake; no manual scanner dispatch can
+make a preparation ready. After a bounded timeout, the probe may publish the
+exact pending verifier for private diagnosis and then unconditionally fails.
+It checks actionable intake
 failure from both Workstream defaults and the selected external PRE image,
 verified immutable admission, a selected POST failure routed to
 `needs_revision` and an exact public replacement, and passing POST routing under
@@ -57,7 +62,7 @@ phase-aware
 `post-rejected.txt` rule lives only in this small checker fixture. The drill
 must keep guide activation guards and database triggers
 enabled. PostgreSQL, MinIO, Redis, the digest registry, Rust checker service,
-and API/worker processes belong to one disposable local run; the isolated-test
+and API/worker/Beat processes belong to one disposable local run; the isolated-test
 runner owns database/role/MinIO namespace cleanup. This still does not certify
 hosted gVisor, arbitrary checker quality, live human review, or deployment.
 
