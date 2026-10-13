@@ -169,7 +169,7 @@ infrastructure without narrowing the complete v0.1 lifecycle defined above.
 Workstream is under active v0.1 development. Progress is tracked by proven
 capabilities, not by calendar weeks or promised dates.
 
-Implemented foundations on `main` include external Flow-token verification,
+Implemented foundations include external Flow-token verification,
 canonical local actors and authorization, project guides and task records,
 submission packets, immutable artifact storage, pre-submit intake checks,
 and authorized retained submission/checker history. ARCH-04C implements hidden
@@ -180,8 +180,11 @@ new hidden Submission with its initial checker reservation and outbox request;
 selected production request/completion delivery now runs digest-pinned external
 images after the Workstream default checker and approved external PRE checks.
 Passing true-policy results reach `review_pending`; eligible false-policy results
-invoke shared authorized acceptance atomically. Public contributor intake and
-false-guide activation remain separate pilot work. Project-guide ingestion stores original documents,
+invoke shared authorized acceptance atomically after an Operator-authorized LIVE
+REV generation. ARCH-02I-B exposes public admission-backed Submission entry,
+and ARCH-04E3-B admits complete false-policy guides with supported approved
+checks. The full public worker journey still needs its integration drill.
+Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
 unified setup agent. Accepted originals are PDF, DOCX, PPTX and byte-preserved
 UTF-8 Markdown (`.md`); HTML and documentation sites are not guide inputs. Guide
@@ -233,9 +236,12 @@ and request handler, with exact AUTH, audit and outbox custody. Fresh-authorized
 replay validates the historical request. The current selected completion classifier has no `task_setup_blocked` path.
 A future setup-fault hold must preserve the Submission and locked rules without
 contributor penalty; changing or re-screening submitted-task rules remains
-deferred. PILOT-04 already registers selected production request/completion
-delivery. Public admission-backed entry and false-guide activation/readiness are
-planned independently before the first real end-to-end drill.
+deferred. PILOT-04 registers selected production request/completion delivery.
+ARCH-02I-B exposes public initial and checker-remediation intake, and
+ARCH-04E3-B admits supported false-policy guides with exact Python/PostgreSQL
+custody. A known pre-effect refusal while REV is non-live retries within the
+existing OUTBOX attempt budget; exhaustion dead-letters without automatic
+reopen. The real public/worker drill remains.
 
 Active work stays on that first contribution path. Live human review/revision,
 reviewer participation and fulfillment delivery follow separately.
@@ -865,7 +871,8 @@ locked-context reads with exact current grants. ARCH-03C7 exposes bounded task
 history only to covered Audit Authority and removes the old payload-bearing
 task-only audit route. AUTH-18 delivers public manager guide activation;
 ARCH-03D connects hidden intake through final durable intent to canonical TASK/PROJECTS
-ports, preserving historical guide selection. Public intake remains deferred. ARCH-04B supplies hidden exact verified Submission
+ports, preserving historical guide selection. ARCH-02I-B exposes its
+admission-backed public Submission entry. ARCH-04B supplies hidden exact verified Submission
 input with scoped async file access and cleanup. ARCH-04B2 adds hidden typed
 checker-output storage, byte-free recovery and flush-only verified binding over
 the generic ART put/verification path. ARCH-04C supplies hidden durable execution,
@@ -876,8 +883,9 @@ remains in the live flow. ARCH-04D1 validates retained terminal material against
 ART lineage. ARCH-04D2 supplies fixed-service input, execute and finalize authority,
 with PostgreSQL enforcement of exact execution/finalization receipts. ARCH-04E1A
 adds immutable source storage and detached contracts. PILOT-04 composes selected
-hidden dispatch and production routing; public contributor intake and supported
-false-guide activation remain separate pilot work. The hidden
+hidden dispatch and production routing; ARCH-02I-B exposes public intake and
+ARCH-04E3-B admits complete false-policy guides with supported approved
+requirements. The hidden
 [ARCH-04E2-B operation](.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E2B.md)
 consumes canonical fixed-router authorization and commits the actual receipt
 with its exact source and complete consequence. Locked true moves TASK to
@@ -894,13 +902,16 @@ handoff without Review, acceptance, contribution or award effects. 04F3 supplies
 hidden exact-cause replacement intake through the canonical Submission writer;
 it neither creates failure economics nor activates human revision. 04F4 adds
 hidden Operator retry for known terminal infrastructure failures with immutable
-source evidence. PILOT-04 registers selected production request/completion handlers. Public
-admission-backed entry and false-guide activation/readiness remain planned
-connections before the real public/worker drill. A future setup-fault hold must
+source evidence. PILOT-04 registers selected production request/completion handlers.
+ARCH-02I-B exposes public admission-backed entry; ARCH-04E3-B activates
+supported false-policy guides, with new acceptance effects still gated on a
+LIVE REV generation. A known pre-effect non-live refusal retries only within
+the existing OUTBOX budget; exhausted delivery dead-letters without automatic
+reopen. The real public/worker drill remains. A future setup-fault hold must
 retain the Submission and locked rules without contributor penalty; changing
 submitted-work rules remains deferred.
-The hidden false-path proof uses explicitly seeded valid policy lineage;
-normal guide activation still rejects false until the runtime is ready.
+Real manager activation now supplies the false-policy lineage when the approved
+requirements are supported; a `human_review` disposition still blocks that mode.
 Conditional awards stay atomic; payment delivery and fulfillment-root machinery
 remain deferred until fulfillment is enabled.
 

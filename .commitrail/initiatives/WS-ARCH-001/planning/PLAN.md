@@ -21,25 +21,25 @@ using the Workstream default and approved digest-pinned external PRE/POST images
 The old executable catalogues are removed. Passing true-policy completion moves
 TASK to `review_pending`; eligible false-policy completion invokes the shared
 FinalAcceptance/TASK/CON operation atomically. Neither completion path creates a
-human Review. Registration does not prove deployed worker readiness or a public
-end-to-end journey.
+human Review. [ARCH-02I-B](../WS-ARCH-001-02IB.md) exposes public ZIP preparation,
+ready-admission recovery and the canonical Submission POST for initial work and
+exact checker remediation. [ARCH-04E3-B](../WS-ARCH-001-04E3B.md) admits a
+complete false-policy guide only when its approved requirements have supported
+exact checks, with matching Python and PostgreSQL custody. It corrects REV's
+selected-production manifest. Registration and focused tests do not prove the
+complete public worker journey.
 
-### Remaining connections and proof
-
-ARCH-02I-B exposes the existing ZIP preparation and canonical admission-backed
-Submission POST for initial work and exact checker remediation. Focused public
-HTTP/PostgreSQL proof covers ready replay, immutable creation, history and
-authority denial. The complete PostgreSQL/MinIO worker journey remains a
-separate integration proof.
+### Remaining proof
 
 | Boundary | Current gap | Required proof |
 | --- | --- | --- |
-| ARCH-04E3-B false-guide activation | The canonical Python and PostgreSQL guide guards still refuse locked `human_review_required=false`; REV's manifest does not yet describe selected production routing | Real manager-authorized false activation with supported exact checks, Python/SQL disposition parity, live REV generation and atomic false/pass contribution evidence; preserve the default-true branch |
-| First-layer integration drill | Public entry and false-guide activation have not been exercised together through public APIs and durable workers | Real PostgreSQL, S3-compatible storage and broker/worker journey from approved guide and claim through ZIP intake, PRE/POST, remediation or governed outcome, including retry, restart, revocation and exact ContributionRecord evidence |
+| First-layer integration drill | Public entry and false-guide activation have focused owner proof, but their complete journey has not passed through public APIs and durable workers together | Real PostgreSQL, S3-compatible storage and broker/worker journey from approved guide and claim through ZIP intake, PRE/POST, remediation or governed outcome, including bounded retry, restart, revocation and exact ContributionRecord evidence |
 
-Public entry and false-guide activation are independent. Their merge order does
-not grant acceptance authority: false/pass still needs the existing
-Operator-authorized LIVE REV generation at execution time. Public entry covers initial submission and
+Guide activation itself does not start REV. False/pass still needs the existing
+Operator-authorized LIVE REV generation at execution time. A known pre-effect
+non-live refusal returns bounded OUTBOX retry after transaction rollback;
+attempt exhaustion dead-letters without automatic reopen. All other uncertain
+handler failures retain UNKNOWN custody. Public entry covers initial submission and
 checker remediation only. Human-review revision waits for its own live authority
 and reuses the canonical intake operation. The true success branch stops at
 `review_pending`; a live human queue and decision runtime remain later work.
@@ -128,9 +128,9 @@ public Submission entry.
 | [ARCH-04E1B-B6](../WS-ARCH-001-04E1BB6.md) | B3/B4/B5 plus existing TASK/ART/AUTH/CHECKERS/outbox owners | Complete: atomic new Submission, exact creation/binding receipts, generation-one request and shared event; fresh-authorized select-only replay; selected production handlers are registered by PILOT-04 |
 | [ARCH-04E1B-B7](../WS-ARCH-001-04E1BB7.md) | B6 plus existing execution/authorization/outbox owners | Complete: hidden request handler, exact committed invocation and per-phase fencing; UNKNOWN never automatically repeats execution; selected production registration is delivered by PILOT-04 |
 | [ARCH-04E1B-B8](../WS-ARCH-001-04E1BB8.md) | Complete ARCH-04E2-B authorized outcome operation and CON-02B; delivered B7 already supplies request handling | Complete: consumes the receipt-bound operation with exact typed result and commit-before-ACK; proves replay, uncertainty and generation/finalization races. PILOT-04 supplies selected production registration |
-| [REV-12A4A scoped controller](../../WS-REV-001/WS-REV-001-12A4A.md) | Same REV-12A1 fence and REV-04C participants | Complete: internal Operator transitions, immutable AUTH/history custody and current-generation participant gates. The initial manifest refuses pre-authority acceptance rows; 04E2-B supplies exact source custody; B8 completion delivery and the 04F2 policy-independent remediation handoff are implemented. 04F3 replacement and 04F4 retry are hidden; false-guide activation readiness and public entry remain separate work. |
+| [REV-12A4A scoped controller](../../WS-REV-001/WS-REV-001-12A4A.md) | Same REV-12A1 fence and REV-04C participants | Complete: internal Operator transitions, immutable AUTH/history custody and current-generation participant gates. 04E2-B supplies exact source custody; ARCH-04E3-B corrects the selected production manifest. B8 completion delivery, 04F2 remediation, 04F3 replacement and 04F4 Operator retry are delivered; complete public/worker drill remains. |
 | [ARCH-04E2-B](../WS-ARCH-001-04E2B.md) | Exact source preparation and REV-12A4A generation | Complete: mandatory actual AUTH receipt, database complete-set enforcement, shared audit/outbox and atomic true/false outcomes; B8 supplies hidden completion delivery; selected production registration is delivered by PILOT-04 |
-| ARCH-04E3 | ARCH-04E2, ARCH-04D2, AUTH-OUTBOX-02; shared acceptance proof for false | PILOT-04 registers selected production request/completion delivery; 04E3-B false-guide activation and REV manifest readiness remain planned |
+| ARCH-04E3 | ARCH-04E2, ARCH-04D2, AUTH-OUTBOX-02; shared acceptance proof for false | PILOT-04 registers selected production request/completion delivery; 04E3-B admits supported false-policy guides and corrects the REV manifest. Public/worker drill remains |
 | ARCH-04E | ARCH-04E3 | Completed coordination boundary consumed by downstream REV |
 | [ARCH-04F1](../WS-ARCH-001-04F1.md) | Existing CHECKERS completion read | Complete: verified retained failure evidence and current contributor-remediation input; its historical setup-failure read does not mean selected production emits `task_setup_blocked`; no TASK mutation |
 | [ARCH-04F2](../WS-ARCH-001-04F2.md) | 04F1 and required hidden 04E result/handler contracts; no live false-branch prerequisite | Hidden exact current checker-remediation TASK/AUTH handoff under both policy modes; no REV/CON, replacement intake or recovery |
@@ -138,10 +138,12 @@ public Submission entry.
 | [ARCH-04F4](../WS-ARCH-001-04F4.md) | Delivered 04F1/04F2/04F3 and existing CHECKERS coordinator/request handler | Complete: hidden reason-bound Operator retry of exact current terminal infrastructure failure, immutable receipt/AUTH/audit/outbox and historical replay. That chunk added no public route or production registration; PILOT-04 later registered selected delivery |
 | ARCH-04F future setup-fault handling | Delivered 04F1/04F2/04F3/04F4 | No current `task_setup_blocked` production classifier; a future hold must retain submitted work and locked rules without contributor penalty |
 
-False guide activation additionally requires shared acceptance, exact AUTH and
-the planned 04E3-B readiness/REV manifest correction. New false/pass effects
-require a valid generation through the delivered REV-12A4A controller at
-execution time. PILOT-04 already registers selected production delivery. The setup-fault hold is future work
+False guide activation now requires approved exact supported checks and matching
+Python/PostgreSQL custody. New false/pass effects require a valid generation
+through the delivered REV-12A4A controller at execution time. PILOT-04 registers
+selected production delivery; 04E3-B corrects the reviewed manifest. A known
+pre-effect non-live refusal retries within the existing OUTBOX budget, and
+exhaustion dead-letters without automatic reopen. The setup-fault hold is future work
 because no current production result classifies to `task_setup_blocked`.
 The true handoff remains independent of CON and the REV lifecycle. Neither
 route invents a new acceptance subsystem.

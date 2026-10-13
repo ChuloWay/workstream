@@ -25,8 +25,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Next usable boundary: follow the [first contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone):
   atomic Submission/dispatch, exact AUTH outcome custody and selected production
   request/completion registration are delivered. Public admission-backed entry
-  and false-guide activation/readiness remain separate planned connections; the
-  real public/worker drill follows both. CON-07/shared acceptance foundations
+  and supported false-guide activation are delivered; the real public/worker
+  drill remains. CON-07/shared acceptance foundations
   and scoped lifecycle control are delivered.
   Submission/checker history uses canonical authority; the alternate gate lifecycle
   is removed. Continue shrinking the canonical import ledger as implementation

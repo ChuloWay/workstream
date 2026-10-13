@@ -17,10 +17,12 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 [ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either policy mode, without a Review, FinalAcceptance or
-CON effect. 04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; neither creates a Review or acceptance. Selected production composition is delivered. Public entry, false-guide activation
-and the first-layer drill remain; setup-fault handling is future safety work.
-False-guide activation, live human review/revision and payment delivery remain
-unavailable.
+CON effect. 04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; neither creates a Review or acceptance. Selected production composition, ARCH-02I-B public entry and ARCH-04E3-B
+supported false-guide activation are delivered. The reviewed manifest describes
+selected production routing; new false/pass effects still require LIVE REV.
+Known pre-effect non-live refusal has bounded OUTBOX retry, with exhaustion
+dead-lettered. The public/worker drill remains; setup-fault handling, live human
+review/revision and payment delivery are later work.
 
 Current upstream dependency: [ARCH-04E canonical `allow_review`](../WS-ARCH-001/planning/chunks/WS-ARCH-001-04E-canonical-allow-review.md).
 This is the pre-review admission fact, not REV activation or implementation
@@ -48,8 +50,8 @@ of review/revision behavior. The downstream owner contracts remain separate.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: public admission-backed entry and false-guide activation/readiness as
-  independent connections, followed by the first-layer public/worker drill.
+- Next usable boundary: first-layer public/worker drill across the delivered
+  entry, supported false-guide activation and selected production manifest.
   Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: `docs/spec_review_lifecycle.md`,
@@ -60,8 +62,8 @@ of review/revision behavior. The downstream owner contracts remain separate.
 
 REV-12A4A supplies scoped lifecycle transitions on the existing REV fence.
 04E2-B supplies exact source AUTH custody and complete database/effect closure.
-PILOT-04 selected production composition is delivered; false-guide activation
-remains planned.
+PILOT-04 selected production composition and ARCH-04E3-B supported
+false-guide activation are delivered; complete public/worker proof remains.
 
 This is delivery priority, not a prerequisite of true human admission. Both
 routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → delivered authorized outcomes 04E2-B → completion delivery 04E1B-B → PILOT-04 selected production registration; true routing
@@ -109,8 +111,8 @@ The [versioned policy setting](../../changes/pre-review-plan-reconciliation.md#d
 is available for draft configuration. ARCH-04E2-B supplies mandatory routing
 authority and atomic CON participation; B8 supplies hidden completion delivery,
 and 04F2 supplies the zero-REV/CON remediation handoff. 04F3 supplies hidden
-exact-cause replacement intake. Infrastructure retry is delivered. False-guide activation and REV manifest
-readiness remain planned; a setup-fault hold is future safety work. The automated branch must not depend on
+exact-cause replacement intake. Infrastructure retry, supported false-guide activation and the reviewed
+selected-production manifest are delivered; a setup-fault hold is future safety work. The automated branch must not depend on
 live human queues, ReviewLeases or decision endpoints. Human lifecycle work
 remains required for v0.1, but need not delay the first automated end-to-end
 proof. No adjudication setting or behavior is included.
@@ -126,8 +128,9 @@ proof. No adjudication setting or behavior is included.
    ARCH-04E2-A exact source preparation, CON-07 hidden participation and REV-04C
    hidden FinalAcceptance/TASK/CON composition are delivered. 04E2-B now requires
    the actual routing AUTH event on the same strict input and supplies database
-   complete-set closure and shared audit/outbox. Production readiness for the
-   scoped lifecycle manifest remains a later gate. This foundation
+   complete-set closure and shared audit/outbox. ARCH-04E3-B corrects the
+   selected-production lifecycle manifest; the complete public/worker drill
+   remains. This foundation
    can precede human runtime: ARCH-04E uses it for false/pass acceptance without
    live queues, leases or decisions. REV-12A4A extends the same REV-12A1
    controller with scoped Operator transitions. Root/ordinal/cutoff custody is

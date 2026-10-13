@@ -17,9 +17,11 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 [ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either locked ReviewPolicy mode, with no REV/CON effect.
-04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; selected production composition is delivered. Public entry, false-guide
-activation and the first-layer drill remain; setup-fault handling is future work.
-False-guide activation and live human review/revision remain unavailable.
+04F3 hidden exact-cause replacement intake, 04F4 hidden Operator retry, selected
+production composition and ARCH-02I-B public entry are delivered. ARCH-04E3-B
+admits complete false guides with supported approved checks and no `human_review`
+disposition under matching Python/PostgreSQL custody. The public/worker drill
+remains; setup-fault handling and live human review/revision are later work.
 
 Latest completed POL behavior: [POL-07B checker phase service](WS-POL-003-07B.md),
 building on [POL-07A pre-submit attempt recovery](WS-POL-003-07A.md),
@@ -61,8 +63,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   accepted-effects contracts follow
   [ARCH-04D2](../WS-ARCH-001/WS-ARCH-001-04D2.md) exact input, execute and
   finalize authority. REV-04C supplies the hidden acceptance-effects participant,
-  and 04E2-B supplies hidden authorized outcomes. No public route or false-guide
-  activation support is added.
+  and 04E2-B supplies hidden authorized outcomes. Those chunks did not expose
+  public entry or false-guide activation; ARCH-02I-B and ARCH-04E3-B now do.
   Output-file authority remains unavailable for the zero-output catalogue.
   [AUTH-18](../WS-AUTH-001/WS-AUTH-001-18.md) delivers
   public manager activation context and exact guide activation.
@@ -87,13 +89,14 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   and completed AUTH-12B2.
   Earlier development schemas require no backward-compatibility paths.
   The existing ReviewPolicy boolean is delivered; false has hidden authorized-outcome proof against explicitly seeded valid lineage.
-  Public false-guide activation remains unavailable; selected completion
-  can invoke hidden authorized acceptance for valid locked false-policy facts.
+  ARCH-04E3-B supports public false-guide activation only when the complete
+  approved requirements are covered by exact registered checks and contain no
+  `human_review` disposition. New false/pass effects still require LIVE REV.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: public admission-backed entry and false-guide activation/readiness as
-  independent connections, followed by the first-layer public/worker drill.
+- Next usable boundary: first-layer public/worker drill across the delivered
+  guide activation, Submission entry and selected completion route.
   Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: project-guide specifications, authorization and
@@ -104,8 +107,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 
 REV-12A4A supplies scoped lifecycle transitions on the existing REV fence.
 04E2-B supplies exact source AUTH custody and complete database/effect closure.
-PILOT-04 selected production composition is delivered; false-guide activation
-remains planned.
+PILOT-04 selected production composition and ARCH-04E3-B supported
+false-guide activation are delivered; complete public/worker proof remains.
 
 This is delivery priority, not a prerequisite of true human admission. Both
 routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → delivered authorized outcomes 04E2-B → completion delivery 04E1B-B → PILOT-04 selected production registration; true routing
