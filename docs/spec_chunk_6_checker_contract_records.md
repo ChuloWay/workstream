@@ -199,7 +199,7 @@ Normalization rules:
 ## Pre-Submit Intake Evidence Contract
 
 Pre-submit checks run against the uploaded ZIP before a Submission exists.
-Hidden preparation invokes the internal phase service under ART custody.
+Public ZIP preparation invokes the internal phase service under ART custody.
 ART retains bounded results tied to the exact task/assignment, locked guide
 and policy hashes, verified ZIP commitment, semantic manifest, prepared
 generation and execution attempt. Completed replay returns the canonical

@@ -970,13 +970,13 @@ POST /api/v1/tasks/{id}/submission-bundle-preparations
 ```
 
 No independent precheck route remains. A client-owned manifest
-cannot reproduce the authoritative result. At the later public cutover,
-`POST /api/v1/tasks/{id}/submissions` will consume the verified ready admission
-without receiving scratch paths or rerunning the pre-submit plan. Canonical
-admission-backed creation remains hidden until then.
+cannot reproduce the authoritative result. The public
+`POST /api/v1/tasks/{id}/submissions` consumes the verified ready admission
+without receiving scratch paths or rerunning the pre-submit plan. ARCH-02I-B
+exposes this operation for initial work and exact checker remediation.
 
-Before that cutover, hidden pre-submit materialization establishes the execution boundary without
-exposing a route. The fixed materializer authorizes before any prepared-byte
+Internal pre-submit materialization establishes the execution boundary behind
+the public preparation route. The fixed materializer authorizes before any prepared-byte
 read or workspace reservation. One callback-scoped sealed tree is checked
 against the server commitment and semantic manifest. The locked project-policy phase extends that same
 callback to execute the locked project-policy phase and normalize every

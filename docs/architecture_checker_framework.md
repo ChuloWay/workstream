@@ -313,7 +313,7 @@ immutable selected run/evidence custody; ART owns verified bytes and admission.
 PRE results remain separate from post-submit CheckerRuns.
 
 The earlier POL-07B phase facade composes two internal commands, `evaluate_pre_submission` and
-`evaluate_post_submission`. Hidden preparation calls the pre command once after
+`evaluate_post_submission`. Public ZIP preparation calls the internal pre command once after
 reservation commits, including completed replay. The composition passes the
 same opaque reservation through canonical selected custody; it clears the consumed
 prepared authorization and opens no transaction before ART's existing executor

@@ -447,7 +447,8 @@ cannot be reused as post-submission review-gate evidence. See the
   [CLI contributor context](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-07.md)
   adds the governing guide, exact policy selectors, server hints and locked
   intake requirements through public reads. Hints are not authority; no files
-  are fetched, no policy is evaluated locally and hidden submission remains hidden.
+  are fetched and no policy is evaluated locally. This CLI command does not
+  invoke the now-public Submission intake operations.
   [CLI project creation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-08.md)
   creates a draft shell through the public POST, with exact 201 response,
   caller-owned replay custody and explicit uncertain outcomes. It does not upload,
@@ -494,11 +495,11 @@ cannot be reused as post-submission review-gate evidence. See the
   manager activation operation and validates its complete immutable receipt.
   Readiness, contribution-policy publication, fresh replay authority and
   supersession remain backend-owned. This command does not enable false-review
-  guide activation or expose hidden submission work.
+  guide activation or add CLI submission commands.
   [CLI manager preparation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-19.md)
   adds separate public draft creation, policy-locking screening and deliberate
   release with full management receipts and current-authority manual replay.
-  Bulk import and hidden submission remain separate; the retained contributor
+  Bulk import and CLI submission commands remain separate; the retained contributor
   journey proves the prepared ready task can be claimed and started.
   [CLI contributor role decisions](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-20.md)
   issue/revoke exact-project Submitter/Reviewer grants through public AUTH POSTs,
@@ -904,7 +905,9 @@ verification reuse, and flush-only immutable verified binding. Controlled
 nonempty slots originally proved ART mechanics only. Selected external
 images return bounded schema-validated JSON results; generated output-file
 write/binding authority remains unavailable. ARCH-04C supplies CHECKERS reservation/currentness; ARCH-04D2 supplies
-execute/finalize authority. Public intake is not activated.
+execute/finalize authority. ARCH-02I-B exposes public ZIP preparation and
+admission-backed Submission creation; the complete public API and Celery
+worker journey remains to be proved.
 
 ## Critical Dependency Map
 
@@ -914,7 +917,7 @@ Delivered foundations (not a claim of full public integration)
   automatic unified setup + separate manager pre/post approvals
   public Finance ContributionPolicy administration + exact selected-version validation
   public manager activation context + exact guide activation/binding
-  task/assignment/Submission lineage + hidden intake/creation
+  task/assignment/Submission lineage + public admission-backed intake/creation
   ARCH-03D exact approved historical guide through durable intake handoff
   ARCH-04B hidden verified Submission input
   ARCH-04B2 hidden checker output store/recovery/binding (authority deny-only)
@@ -974,7 +977,7 @@ Delivered foundations (not a claim of full public integration)
 Remaining integration
   ARCH-04E3-B false-policy guide activation + REV manifest readiness
     (precedes the complete public API and Celery service drill)
-  -> public trigger for the implemented selected completion outcomes
+  -> prove public triggers reach the implemented selected completion outcomes
        |
        +-- contributor-correctable failure -> TASK needs_revision (no REV/CON)
        |                                    -> exact-cause replacement intake
@@ -1013,8 +1016,9 @@ and award history never changes.
 v0.1 is not ready until all of the following are true:
 
 - Prove the public activation-to-intake journey: the public manager activation
-  boundary and hidden intake handoff are delivered; public integration must consume its complete approved
-  guide and policy identities/hashes, including ContributionPolicyVersion.
+  boundary and public admission-backed intake are delivered. The complete
+  API/Celery drill must prove their connected use of approved guide and policy
+  identities/hashes, including ContributionPolicyVersion.
 - A task cannot enter `READY` without that complete locked context.
 - A contributor can claim and prepare one ZIP under the locked pre-submit
   policy. Blocking intake failures return feedback and create no Submission;

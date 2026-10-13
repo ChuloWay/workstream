@@ -372,7 +372,8 @@ contributor writes through existing public APIs, with server-owned authority,
 explicit caller retry keys and uncertain-outcome reporting without automatic retries.
 `workstream task context TASK_ID` and `task requirements TASK_ID` inspect the
 governing guide/policy selectors, server action hints and locked intake rules.
-Hints do not grant authority; requirements do not expose hidden submission upload.
+Hints do not grant authority; these CLI reads do not invoke the separate public
+submission upload and creation operations.
 `workstream task guide TASK_ID [--download DIR]` lists or downloads the original
 documents of the task's locked guide for its currently authorized assignee.
 Downloaded bytes are verified against their retained hash and size; task examples
@@ -780,7 +781,7 @@ The Beat scheduler must run alongside the Celery execution processes so
 artifact pending-work, verified guide-continuation and post-policy approval scans can recover
 publication failures automatically.
 
-The hidden submission-bundle preparation flow reserves an exact pre-submit
+The public submission-bundle preparation flow reserves an exact pre-submit
 attempt before invoking checks. Completed retries recover the original evidence
 without rerunning checks or issuing a new upload capability. An uncertain attempt
 cannot execute again under the same key. POL-07B connects the internal
@@ -836,8 +837,8 @@ Managers obtain those selectors without Finance privileges, then submit the exac
 selection with one UUID `Idempotency-Key`. Save the body and key for receipt replay;
 the draft context is not an active-guide replay endpoint. Response validation,
 authority evidence and activation effects commit together. ARCH-03D connects the
-hidden intake handoff to the exact activated guide. Public intake and controlled
-revision integration remain separate.
+intake handoff to the exact activated guide. ARCH-02I-B exposes public initial
+and checker-remediation intake; controlled human-review revision remains separate.
 
 ARCH-03A completes the existing internal PROJECTS context port. New work selects
 one active activated guide; existing work resolves its exact frozen guide and

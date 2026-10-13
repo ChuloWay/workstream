@@ -472,19 +472,20 @@ If the ready gate fails, the task remains `DRAFT`.
 
 ## Submission Intake Checklist
 
-This is the target contributor handoff. The obsolete public packet-creation POST
-has been removed; canonical admission-backed creation remains hidden and does
-not yet finalize or enqueue evaluation automatically. Do not use these intended
-steps as a public API availability claim.
+Public ZIP preparation and canonical admission-backed Submission creation are
+available for initial work and exact checker remediation. Creation atomically
+records the Submission and its initial evaluation request. The complete public
+API and Celery service journey remains to be proved; live human-review revision is
+separate. The obsolete client-owned packet-creation POST is removed.
 
 Before locking a submission packet:
 
 - task is assigned to submitter
-- summary exists
+- summary is optional; missing text produces a default-check warning
 - exactly one outer ZIP is uploaded through submission-bundle preparation
 - every project-required output/evidence file exists inside that ZIP
-- contributor attestation exists
-- revision replay exists when task was previously `NEEDS_REVISION`
+- contributor attestation is optional; missing text produces a default-check warning
+- checker-remediation replacement binds the exact authorized predecessor; human-review revision remains separate
 - effective project submission artifact policy is loaded
 - generated project pre-submit checker policy runs
 - failed preparation returns `pre_submission_checker_failed` with ART's exact
