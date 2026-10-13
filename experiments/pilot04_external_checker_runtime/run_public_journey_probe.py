@@ -39,6 +39,7 @@ from app.modules.actors.api.service_identities import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.checkers.models import CheckerRun, SelectedPreSubmitRun
 from app.modules.checkers.execution_repository import stored_result
+from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_CHECK_IDS
 from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
 from app.modules.artifacts.service import artifact_storage_namespace_spec
 from app.modules.projects.models import ProjectGuide
@@ -194,7 +195,7 @@ def _stop_process(process: subprocess.Popen | None) -> None:
 
 
 async def _wait_api(origin: str, process: subprocess.Popen) -> None:
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + 300
     async with httpx.AsyncClient(timeout=2) as client:
         while time.monotonic() < deadline:
             _require(process.poll() is None, "public API exited before readiness")
@@ -210,7 +211,7 @@ async def _wait_api(origin: str, process: subprocess.Popen) -> None:
 async def _wait_worker(process: subprocess.Popen, hostname: str) -> None:
     from app.workers.celery_app import celery_app
 
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + 300
     while time.monotonic() < deadline:
         _require(process.poll() is None, "prefork worker exited before readiness")
         pong = await asyncio.to_thread(
@@ -366,6 +367,27 @@ async def _deliver_known_retry(factory, event_id: UUID, project_id: UUID,
                 raise RuntimeError("non-live completion escaped the safe retry path")
         await asyncio.sleep(0.3)
     raise RuntimeError("non-live completion did not settle into retryable")
+
+
+async def _outbox_snapshot(factory, event_id: UUID) -> tuple:
+    """Capture exact retained delivery facts around a duplicate broker message."""
+    async with factory() as session:
+        event = await session.get(OutboxEvent, event_id)
+        _require(event is not None and event.delivery_state == "acknowledged",
+                 "completion event is not acknowledged before duplicate delivery")
+        attempts = (await session.scalars(
+            select(OutboxDeliveryAttempt).where(
+                OutboxDeliveryAttempt.event_id == event_id
+            ).order_by(OutboxDeliveryAttempt.claim_generation)
+        )).all()
+        _require(len(attempts) == event.attempt_count,
+                 "completion attempt history is incomplete")
+        return (
+            tuple(getattr(event, column.name) for column in OutboxEvent.__table__.columns),
+            tuple(tuple(getattr(attempt, column.name)
+                        for column in OutboxDeliveryAttempt.__table__.columns)
+                  for attempt in attempts),
+        )
 
 
 async def _wait_outbox_due(factory, event_id: UUID) -> None:
@@ -735,6 +757,24 @@ async def _one_mode(client, factory, database_url, namespace, image, env, *,
         )
         _require(bad["error"]["code"] == "pre_submission_checker_failed",
                  "public intake did not return checker feedback")
+        default_details = bad["error"]["details"]
+        default_results = [item for item in default_details["results"]
+                           if item["source"] == "workstream_default"]
+        _require(
+            default_details["eligible_to_submit"] is False
+            and [item["check_id"] for item in default_results]
+            == list(WORKSTREAM_DEFAULT_CHECK_IDS)
+            and [
+                (item["status"], item["failure_code"], item["finding_count"])
+                for item in default_results
+            ] == [
+                ("passed", None, 0),
+                ("passed", None, 0),
+                ("failed", "high_confidence_secret_detected", 1),
+                ("passed", None, 0),
+            ],
+            "public default PRE feedback did not identify the injected private key",
+        )
         external_bad = await _json(
             client, "POST", f"/api/v1/tasks/{task_id}/submission-bundle-preparations",
             contributor_token, 422,
@@ -839,10 +879,24 @@ async def _one_mode(client, factory, database_url, namespace, image, env, *,
                      and [(award["instrument"], award["unit"], Decimal(award["quantity"]))
                      for award in item["awards"]] == [("project_points", "PTS", Decimal("7"))],
                      "public contribution source or award set differs")
-        # Retained outbox outcome must be stable after a duplicate real broker delivery.
-        await asyncio.to_thread(deliver_event.apply_async,
-                                args=(str(completion_id), project_id))
-        await asyncio.sleep(0.5)
+        # A result for this one probe publish proves the prefork child consumed
+        # the duplicate; the production task still ignores results by default.
+        before_delivery = await _outbox_snapshot(factory, completion_id)
+        duplicate = await asyncio.to_thread(
+            deliver_event.apply_async,
+            args=(str(completion_id), project_id),
+            ignore_result=False,
+        )
+        try:
+            duplicate_result = await asyncio.to_thread(
+                duplicate.get, timeout=120, propagate=True,
+            )
+        finally:
+            await asyncio.to_thread(duplicate.forget)
+        _require(duplicate_result == {"status": "delivery_unavailable"},
+                 "prefork child did not refuse duplicate completion delivery")
+        _require(await _outbox_snapshot(factory, completion_id) == before_delivery,
+                 "duplicate completion changed retained OUTBOX custody")
         again = await _assert_outcome(
             factory, project_id=compilation.project_id, task_id=task_id,
             submission_id=saved["submission_id"], initial_submission_id=first_submission_id,
