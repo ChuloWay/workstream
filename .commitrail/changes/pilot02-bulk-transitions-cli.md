@@ -739,3 +739,10 @@ reproduced an actual HTTP 500 for a 1001-character reason instead of the expecte
 422 (`/tmp/pilot02-bulk-reason-before.{log,json}`, one failed in 93.96 seconds,
 all cleanup true). New DTO, CLI, ORM and sole-author DDL bounds now use the
 canonical 1000-character limit; the existing canonical owner is unchanged.
+
+Fresh `0038` with the canonical reason bound at `eaa05062e730fc9d1c114474b76a3af245c8dedf`
+measured `30b58a8fbe81d015950f23fce11069048beab466571405b7cf872c9aa84ba831`
+using the unchanged schema-object query. Raw measurement and all-cleanup proof:
+`/tmp/pilot02-bulk-reason-schema-measure.{log,json}`. The CLI zero-request
+regression also fails against the pre-fix binary (exit1/unknown instead of local
+exit2), confirming the oversized reason previously reached HTTP.
