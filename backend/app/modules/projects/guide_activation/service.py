@@ -5,6 +5,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from app.core.identifiers import new_record_id
 
+from app.interfaces.project_agents import RequirementDisposition
 from app.modules.authorization.api import ActorKind
 from app.modules.checkers.api.external_policy import (
     validate_stored_external_checker_policies,
@@ -253,6 +254,11 @@ class GuideActivationService:
                     for item in locked.result.capability_suggestions
                 ),
             )
+        if not review.human_review_required and any(
+            item.disposition is RequirementDisposition.HUMAN_REVIEW
+            for item in locked.result.requirements
+        ):
+            raise GuideProposalError("approval_blocked")
         ProjectService(self.session).validate_activation_ready(
             locked.view.guide,
             locked.view.snapshot,

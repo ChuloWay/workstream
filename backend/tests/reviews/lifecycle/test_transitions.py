@@ -43,6 +43,46 @@ async def test_operator_transitions_and_response_loss_replay(admin_access):
             assert event.after_facts == {"allowed": True, "resource_context_digest": row.resource_context_digest}
 
 
+async def test_previous_manifest_transition_replays_after_validator_update(
+    admin_access, monkeypatch,
+):
+    """Retained old commands replay; a fresh transition uses only the current manifest."""
+    import app.modules.reviews.lifecycle.service as lifecycle_service
+    import tests.reviews.lifecycle.transition_support as transition_support
+
+    old = "sha256:f7385c3930e0a3fc60a55e4a35c67b00c1bd3056ffa89a1e09ecae4b736c3ab4"
+    new = lifecycle_service.FIRST_CONTRIBUTION_MANIFEST_DIGEST
+    signature = "public.joint_lifecycle_transition_valid(public.joint_lifecycle_transitions)"
+    assert old != new
+    await admin_access.signed.grant(admin_access.admin, admin_access.target)
+    async with get_session_factory()() as session:
+        current = await session.scalar(text(
+            "SELECT pg_catalog.pg_get_functiondef(CAST(:signature AS regprocedure))"
+        ), {"signature": signature})
+    assert current.count(new) == 2
+    try:
+        async with get_session_factory()() as session, session.begin():
+            await (await session.connection()).exec_driver_sql(current.replace(new, old))
+        monkeypatch.setattr(lifecycle_service, "FIRST_CONTRIBUTION_MANIFEST_DIGEST", old)
+        monkeypatch.setattr(transition_support, "FIRST_CONTRIBUTION_MANIFEST_DIGEST", old)
+        prior = await command_for(admin_access.target.id, "shadow")
+        prior_receipt = await transition(prior)
+        retained = await snapshot()
+    finally:
+        async with get_session_factory()() as session, session.begin():
+            await (await session.connection()).exec_driver_sql(current)
+        monkeypatch.setattr(lifecycle_service, "FIRST_CONTRIBUTION_MANIFEST_DIGEST", new)
+        monkeypatch.setattr(transition_support, "FIRST_CONTRIBUTION_MANIFEST_DIGEST", new)
+
+    assert await transition(prior) == prior_receipt
+    assert await snapshot() == retained
+    successor = await command_for(admin_access.target.id, "live")
+    with pytest.raises(JointLifecycleUnavailable, match="lifecycle transition unavailable"):
+        await transition(successor.model_copy(update={"reviewed_manifest_digest": old}))
+    assert await snapshot() == retained
+    assert (await transition(successor)).generation == 2
+
+
 async def test_invalid_edge_stale_generation_deadline_and_manifest_rollback(admin_access):
     await admin_access.signed.grant(admin_access.admin, admin_access.target)
     original = await command_for(admin_access.target.id, "shadow")

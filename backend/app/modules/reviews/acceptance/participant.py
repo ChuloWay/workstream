@@ -15,7 +15,8 @@ from app.modules.contributions.api import (
 )
 from app.modules.reviews.acceptance.repository import FinalAcceptanceRepository
 from app.modules.reviews.api.acceptance import (
-    FinalAcceptanceConflict, FinalAcceptanceRequest, FinalAcceptanceResult,
+    FinalAcceptanceConflict, FinalAcceptanceNotLive, FinalAcceptanceRequest,
+    FinalAcceptanceResult,
 )
 from app.modules.reviews.api.lifecycle import JointLifecycleMutationFence
 from app.modules.reviews.lifecycle.fence import PostgresJointLifecycleMutationFence
@@ -146,7 +147,7 @@ class _PreparedFinalAcceptance:
             raise FinalAcceptanceConflict("acceptance preparation is closed")
         lifecycle = await self._held.acquire(self.generation)
         if lifecycle.phase != "live" or lifecycle.generation <= 0:
-            raise FinalAcceptanceConflict("lifecycle is not live")
+            raise FinalAcceptanceNotLive("lifecycle is not live")
 
     async def participate(self, request: FinalAcceptanceRequest) -> FinalAcceptanceResult:
         """Reject closed or changed generations before staging shared acceptance."""

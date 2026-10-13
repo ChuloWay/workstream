@@ -69,11 +69,16 @@ remaining setup/activation work:
 - each task locks the guide snapshot, effective project submission artifact policy hash, and pre-submit checker bundle hash before entering `READY`
 
 The existing versioned ReviewPolicy setting `human_review_required` defaults
-true. False may be configured in draft, but CP07 currently rejects false guide
-activation: automated acceptance is unavailable. B8 connects hidden completion delivery to the authorized FinalAcceptance/CON
-operation. Supporting false activation still requires remediation, production
-readiness and adequate configured checks.
-The setting is never silently switched to true. See the [implementation handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+true. False can activate when the approved guide has supported exact PRE/POST
+checkers and no `human_review` requirement disposition. The selected production
+completion route uses the authorized FinalAcceptance/CON operation after passing
+required checks; new economic effects require an Operator-authorized live REV
+generation. Activation itself does not start REV or silently switch the setting
+to true.
+Make REV live before false-policy production completion. A known non-live refusal
+before routing effects uses the shared OUTBOX bounded retry after rollback;
+attempt exhaustion dead-letters and has no automatic reopening. Other uncertain
+delivery failures remain UNKNOWN.
 
 Guide creation freezes the declared document set internally; there is no separate
 public source-snapshot creation step. The internal guide source snapshot freezes the declared document metadata and

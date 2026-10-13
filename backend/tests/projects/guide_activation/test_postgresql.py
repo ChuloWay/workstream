@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from app.modules.projects.api.guide_proposals import GuideProposalError
 from app.modules.projects.guide_activation.custody import load_guide_activation
@@ -187,6 +188,102 @@ async def test_complete_activation_and_exact_replay(clean_postgres_database):
             )
 
 
+async def test_registered_post_checker_activates_false_guide_with_real_authority(
+    clean_postgres_database,
+):
+    """Public manager activation binds an exact registered POST requirement."""
+    from tests.checkers.external.support import registry_spec
+    from tests.projects.guide_compilation.proposals.public_support import proposal_client
+
+    async with activation_case(
+        clean_postgres_database,
+        human_review_required=False,
+        post_submit_registry_spec=registry_spec("post_submit"),
+    ) as (factory, command, actor, _, _, _):
+        target = command.target.proposal
+        path = f"/api/v1/projects/{target.project_id}/guides/{target.guide_id}/activate"
+        async with proposal_client(factory, actor) as client:
+            response = await client.post(
+                path,
+                json=command.model_dump(mode="json", exclude={"idempotency_key"}),
+                headers={"Idempotency-Key": str(command.idempotency_key)},
+            )
+            assert response.status_code == 200, response.text
+            receipt = response.json()
+            replay = await client.post(
+                path,
+                json=command.model_dump(mode="json", exclude={"idempotency_key"}),
+                headers={"Idempotency-Key": str(command.idempotency_key)},
+            )
+            assert replay.status_code == 200 and replay.json() == receipt
+        async with factory() as session:
+            guide = await session.get(ProjectGuide, str(command.target.proposal.guide_id))
+            assert guide.status == "active"
+            assert str(guide.activation_operation_id) == receipt["operation_id"]
+            result = await session.scalar(text(
+                "SELECT canonical_result::jsonb FROM project_guide_compilations "
+                "WHERE id=:id"
+            ), {"id": command.target.proposal.compilation_id})
+            assert [item["disposition"] for item in result["requirements"]] == [
+                "supported_post_submit"
+            ]
+            assert await session.scalar(text(
+                "SELECT human_review_required FROM review_policies WHERE id=:id"
+            ), {"id": command.review.policy_id}) is False
+
+
+@pytest.mark.parametrize("pinned", [True, False])
+async def test_activation_custody_ignores_temporary_relation_shadows(
+    clean_postgres_database, monkeypatch, pinned,
+):
+    """A stored search path, rather than a caller path, protects deferred custody."""
+    from app.modules.projects.guide_mutation_repository import GuideMutationRepository
+
+    original = GuideMutationRepository.complete
+
+    async def shadow_after_complete(self, record, **kwargs):
+        await original(self, record, **kwargs)
+        if not pinned:
+            # Sensitivity probe: roll back this DDL with the rejected activation.
+            await self._session.execute(text(
+                "ALTER FUNCTION public.require_guide_activation_custody(uuid, boolean) "
+                "RESET search_path"
+            ))
+        # This leaves real authority, new-binding custody, and all triggers on.
+        await self._session.execute(text(
+            "CREATE TEMP TABLE review_policies (LIKE public.review_policies) ON COMMIT DROP"
+        ))
+        await self._session.execute(text(
+            "CREATE TEMP TABLE project_guide_compilations "
+            "(LIKE public.project_guide_compilations) ON COMMIT DROP"
+        ))
+        await self._session.execute(text("SET LOCAL search_path=pg_temp,public"))
+
+    async with activation_case(clean_postgres_database, human_review_required=False) as (
+        factory, command, actor, grant, _, _,
+    ):
+        monkeypatch.setattr(GuideMutationRepository, "complete", shadow_after_complete)
+        if pinned:
+            async with factory() as session, session.begin():
+                receipt = await activation_service(session, actor, command, grant).activate(
+                    command, actor=actor, request_id=uuid4()
+                )
+        else:
+            with pytest.raises(DBAPIError, match="guide activation approved generation unavailable"):
+                async with factory() as session, session.begin():
+                    await activation_service(session, actor, command, grant).activate(
+                        command, actor=actor, request_id=uuid4()
+                    )
+        async with factory() as session:
+            guide = await session.get(ProjectGuide, str(command.target.proposal.guide_id))
+            if pinned:
+                assert guide.status == "active"
+                assert guide.activation_operation_id == receipt.operation_id
+            else:
+                assert guide.status == "draft"
+                assert guide.activation_operation_id is None
+
+
 async def test_activation_default_authority_is_unavailable(clean_postgres_database):
     async with activation_case(clean_postgres_database) as (factory, command, actor, grant, _, _):
         async with factory() as session, session.begin():
@@ -244,7 +341,9 @@ async def test_checker_registration_requires_corrected_approval_before_activatio
         )
         await _register_external_checker_fixture(factory, registry_spec("pre_submit"))
         _, policy = await publish_policy(factory, initial.project_id)
-        await seed_selected_review_revision_inputs(factory, initial, actor)
+        await seed_selected_review_revision_inputs(
+            factory, initial, actor, human_review_required=False
+        )
         stale = await _activation_inputs(factory, initial, first, actor, grant, values, policy)
         async with factory() as session, session.begin():
             before = await _activation_effects(session)
