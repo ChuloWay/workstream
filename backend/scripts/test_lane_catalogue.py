@@ -421,7 +421,7 @@ PROJECT_INTAKE_MODULES = (
 )
 
 # Checker delivery shares project dispatch ownership and the existing
-# three-way partition; exclusive placement exceeded the hosted execution cap.
+# four-way partition; exclusive placement exceeded the hosted execution cap.
 CHECKER_DELIVERY_MODULES = (
     "tests/checkers/external/test_contracts.py",
     "tests/checkers/external/test_runtime.py",
@@ -564,7 +564,7 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
-# Routing PREP proofs share the three-way project-policy partition.
+# Routing PREP proofs share the four-way project-policy partition.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
     "tests/authorization/post_submit_routing/test_prepared.py",
