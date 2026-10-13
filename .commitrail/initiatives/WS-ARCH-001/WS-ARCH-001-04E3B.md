@@ -20,7 +20,7 @@ The canonical `require_guide_activation_custody(operation, true)` PostgreSQL fun
 
 - `backend/app/modules/projects/service.py` and `backend/app/modules/projects/guide_activation/service.py`: replace the false-policy blanket refusal with exact false-only denial of approved `human_review` dispositions; retain all other source, policy, selected registry, approval, authority and capability checks.
 - `backend/app/modules/projects/locked_policy_projection.py`: recheck that the same immutable approved result contains no `human_review` disposition when resolving a false-policy locked context for TASK execution; fail closed through the existing PROJECTS context port without adding another policy or TASK-owned project query.
-- `backend/alembic/versions/0039_false_guide_activation.py`: follow merged `0038_task_batch_transitions` without editing that main migration. Change only `public.require_guide_activation_custody(uuid, boolean)`'s new-binding ReviewPolicy predicate and persist a protected function search path. Use a counted known-clause replacement of the installed definition, qualify the new compilation lookup, preserve all other clauses and existing receipts, and admit a false policy only when its exact approved compilation is bound and has zero `human_review` dispositions. Replace exactly two old reviewed-manifest digest references in `public.joint_lifecycle_transition_valid(public.joint_lifecycle_transitions)` so PostgreSQL agrees with the corrected fixed REV manifest; retain the function's other custody clauses. Do not edit historical migrations or rewrite retained rows.
+- `backend/alembic/versions/0039_false_guide_activation.py`: follow merged `0038_task_batch_transitions` without editing that main migration. Change `public.require_guide_activation_custody(uuid, boolean)`'s new-binding ReviewPolicy predicate and persist a protected function search path. Use a counted known-clause replacement of the installed definition, qualify the new compilation lookup, preserve all other clauses and existing receipts, and admit a false policy only when its exact approved compilation is bound and has zero `human_review` dispositions. Replace exactly two old reviewed-manifest digest references in `public.joint_lifecycle_transition_valid(public.joint_lifecycle_transitions)` so PostgreSQL agrees with the corrected fixed REV manifest; retain the function's other custody clauses. Add the canonical `public.joint_lifecycle_new_effects_enabled` predicate and bind it into `public.task_routing_acceptance_matches` only for new effects and `public.guard_task_routing_authority` for new false-policy routing inserts. Preserve historical select-only replay. Do not edit historical migrations or rewrite retained rows.
 - `backend/alembic/env.py` and `backend/tests/test_alembic.py`: admit installed 0039 as the current migration head while retaining 0036, merged 0037 and merged 0038 as authorized upgrade predecessors and preserving fail-closed rejection of unknown revisions; keep exact graph, direct 0038→0039 upgrade, repeated-upgrade and downgrade-no-mutation proof aligned with the new head.
 - `backend/app/modules/reviews/lifecycle/service.py`: correct the fixed reviewed manifest inventory for the already registered selected production routing writer, keeping human review, fulfillment and payment unavailable. The existing Operator-authorized adjacent transitions and current-generation fence remain the sole runtime enablement.
 - `backend/app/modules/reviews/api/acceptance.py`, `backend/app/modules/reviews/acceptance/participant.py`, `backend/app/adapters/tasks/routing_acceptance.py`, `backend/app/modules/tasks/api/routing_outcome.py`, and `backend/app/modules/tasks/evaluation_completion_delivery.py`: carry one typed pre-effect non-live refusal from the held REV fence through TASK. After the routing root transaction rolls back, return shared OUTBOX `RETRY` only for that known no-effect refusal. All other handler exceptions remain UNKNOWN; do not change OUTBOX policy or invent redrive.
@@ -101,9 +101,58 @@ The integrated broker drill exposed a separate worker lifetime defect: synchrono
 - [x] Omitted review mode continues to mean true; a supported true guide activates and successful completion reaches `review_pending` without REV/CON effects.
 - [x] Under an authorized live REV generation, false/pass production request/completion delivery commits one routing manifest, one FinalAcceptance and exact submitter ContributionRecord with applicable frozen awards, no Review or reviewer record; redelivery is exact and no duplicate effect occurs.
 - [x] False/pass new effects are denied while REV is disabled, shadow or draining; a known pre-effect non-live refusal rolls back, returns OUTBOX `RETRY`, and completes after authorized live transition within the existing bounded attempt budget. Exhaustion still dead-letters; all other uncertain handler effects remain UNKNOWN. Correctable failures and infrastructure failures retain their existing distinct outcomes.
-- [x] Migration from the preceding revision changes the canonical activation-custody predicate and its stored search path plus exactly two fixed REV manifest digest references in the canonical lifecycle transition validator. It retains existing activation receipts, true-policy behavior and prior Operator transition facts with exact original-command replay; fresh transitions require the corrected digest and reject the old digest. Direct SQL without exact same-transaction authority or through a shadowed temporary relation is denied. A negative test bypasses only Python's new disposition check while retaining real activation authority and enabled triggers; PostgreSQL independently rejects an approved false `human_review` inventory at commit.
+- [ ] Migration from the preceding revision changes the canonical activation-custody predicate and its stored search path plus exactly two fixed REV manifest digest references in the canonical lifecycle transition validator. The upgrade repair additionally installs the shared manifest-bound new-effect predicate and uses it in the new-effect branches of both routing SQL guards; replay-only validation remains unchanged. It retains existing activation receipts, true-policy behavior and prior Operator transition facts with exact original-command replay; fresh transitions require the corrected digest and reject the old digest. Direct SQL without exact same-transaction authority or through a shadowed temporary relation is denied. A negative test bypasses only Python's new disposition check while retaining real activation authority and enabled triggers; PostgreSQL independently rejects an approved false `human_review` inventory at commit.
 - [x] Real PostgreSQL sequential synchronous initialization followed by two empty pending-work scans completes with canonical scheduler authority and without resetting or disposing a global pool between boundaries. Each worker invocation disposes its private factory on success, failure and cancellation; a separate no-global-getter guard proves the namespace helper requires an explicit factory.
 - [x] The actual broker/worker public drill passes through nonempty artifact verification, PRE/POST delivery and exact contribution evidence with the same provider lease and authority boundaries.
+
+- [ ] An upgraded old-manifest live generation denies new acceptance and routing effects until renewed Operator authorization binds the current manifest; original transition and acceptance replay remain select-only and unchanged.
+
+### Upgrade authorization repair
+
+An existing live generation can retain an immutable transition reviewed against
+an earlier manifest that excluded production routing. Changing the digest for
+future transitions must not expand that retained authorization. New effects
+must additionally match the current reviewed manifest through the controller's
+exact immutable transition identity, singleton, generation and phase. Historical
+select-only replay and existing evidence remain valid; the migration must not
+fabricate an Operator transition or relabel an old receipt.
+
+Use the existing REV fence and canonical database routing guards, not a second
+controller. A single REV-owned SQL predicate will bind that exact current
+transition and manifest for new effects. The predicate uses a protected `pg_catalog,public,pg_temp` search path and
+fully qualified references, fails closed on any missing exact binding, and
+acquires no locks. Evaluate it under the existing advisory/controller custody;
+the controller-before-TASK lock order stays unchanged. The locked fence reports
+the strict mechanical `new_effects_enabled` boolean to existing REV/TASK/CON
+new-effect checks; stopped and historical replay
+reads remain available. Do not re-run the transition validator as a runtime
+permission check: it contains live Operator authority and observation checks
+that belong to transition issuance, not continued operation. Renewal follows
+the existing authorized live → draining → disabled → shadow → live edges with
+the current manifest; no new transition or implicit activation is introduced.
+
+Additional affected files: `backend/app/modules/reviews/api/lifecycle.py`,
+`backend/app/modules/reviews/lifecycle/fence.py`,
+`backend/app/modules/tasks/api/accepted_effects.py`,
+`backend/app/modules/tasks/accepted_effects.py`,
+`backend/app/modules/contributions/api/participation.py`,
+`backend/app/modules/contributions/records/participant.py`, existing REV
+lifecycle/acceptance and TASK/CON fixture/tests that construct fence facts,
+`backend/tests/reviews/lifecycle/test_transitions.py`, and existing migration
+upgrade tests. Extend this PR's unmerged migration 0039 to enforce the same
+predicate in new routing/acceptance SQL guards; preserve earlier migrations.
+Measure and update the schema fingerprint in the existing test fixture.
+Update the existing operating runbook and affected roadmap limitation together.
+
+Required proof: legitimate old-manifest shadow/live transitions survive the
+actual upgrade unchanged; a new-effect gate denies without effect writes;
+old transition replay still returns its original receipt; renewed current-
+manifest Operator transitions permit new effects. Add discriminating Python
+and direct-SQL checks, with a guard-removal probe failing at the intended
+assertion. Preserve current-manifest success, stopped states, true-policy
+independence and select-only historical acceptance replay. Run focused real
+PostgreSQL tests, schema verification, boundaries and fresh hosted CI; obtain
+focused architecture/security and QA/test-delta review of the repaired head.
 
 ## Risk and review routing
 
