@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 
 class TaskRoutingLifecycleDeferred(RuntimeError):
-    """Known pre-effect non-live REV refusal; the caller may retry after rollback."""
+    """Known pre-effect REV enablement refusal; the caller may retry after rollback."""
 
 
 class RoutingAuthorityFacts(BaseModel):
