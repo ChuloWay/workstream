@@ -17,7 +17,7 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 [ARCH-04F2](../WS-ARCH-001/WS-ARCH-001-04F2.md) extends the same hidden TASK/AUTH
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either locked ReviewPolicy mode, with no REV/CON effect.
-04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; selected production composition is delivered. Public entry, false-guide
+04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; selected production composition and ARCH-02I-B public entry are delivered. False-guide
 activation and the first-layer drill remain; setup-fault handling is future work.
 False-guide activation and live human review/revision remain unavailable.
 
@@ -92,8 +92,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: public admission-backed entry and false-guide activation/readiness as
-  independent connections, followed by the first-layer public/worker drill.
+- Next usable boundary: public admission-backed entry is delivered by ARCH-02I-B;
+  false-guide activation/readiness and the first-layer public/worker drill remain.
   Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: project-guide specifications, authorization and

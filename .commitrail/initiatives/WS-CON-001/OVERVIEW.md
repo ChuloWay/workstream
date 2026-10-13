@@ -18,8 +18,8 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either policy mode, with no Review, FinalAcceptance,
 ContributionRecord or award. 04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; neither creates a contribution or award.
-Selected production composition is delivered. Public entry, false-guide activation
-and the first-layer drill remain; setup-fault handling is future safety work. False-guide activation, live human review/revision
+Selected production composition and ARCH-02I-B public entry are delivered. False-guide activation
+and the first-layer drill remain; setup-fault handling is future safety work. Live human review/revision
 and payment delivery remain unavailable.
 
 Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
@@ -72,8 +72,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [CON-07](WS-CON-001-07.md) adds hidden source-neutral submitter participation
   and complete frozen award-set staging/replay; no recognition route or
   fulfillment operation is live.
-- Next usable boundary: public admission-backed entry and false-guide activation/readiness as
-  independent connections, followed by the first-layer public/worker drill.
+- Next usable boundary: public admission-backed entry is delivered by ARCH-02I-B;
+  false-guide activation/readiness and the first-layer public/worker drill remain.
   Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: `docs/spec_contribution_compensation.md`,

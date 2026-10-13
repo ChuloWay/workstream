@@ -1,7 +1,7 @@
 # ARCH-02I-B — Public admission-backed Submission entry
 
 - Initiative: `WS-ARCH-001`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: an authorized contributor can upload one ZIP through the existing preparation operation, recover a retained ready admission through exact same-key replay after a lost response, consume that admission through the canonical `POST /api/v1/tasks/{task_id}/submissions`, and read the resulting immutable Submission and checker history for initial work or exact checker remediation.
 
 ## Intent
@@ -164,23 +164,23 @@ owner-port extension for review, not an approved or implemented part of 02I-B.
 
 ## Acceptance criteria
 
-- [ ] OpenAPI describes the real mounted ZIP preparation operation, exact
+- [x] OpenAPI describes the real mounted ZIP preparation operation, exact
       required headers and binary body, 202 response and bounded failed-intake
       feedback. The route remains backed by the current ART command.
-- [ ] A normal contributor bearer with an exact active Submitter grant can
+- [x] A normal contributor bearer with an exact active Submitter grant can
       claim/start, upload a passing ZIP, receive a ready admission, then call
       `POST /tasks/{task_id}/submissions` and read its immutable Submission and
       checker reservation/history through public APIs.
-- [ ] After an exact current checker result routes the task to
+- [x] After an exact current checker result routes the task to
       `needs_revision`, the same preparation and creation operations accept
       only the immediate predecessor and the existing checker-remediation
       cause. They produce version two under the same locked lineage. An
       uncaused predecessor and a human-review revision context are denied;
       neither gains a permissive public path.
-- [ ] The POST derives the contributor identity from AUTH and accepts no
+- [x] The POST derives the contributor identity from AUTH and accepts no
       caller-owned contributor, package URI/hash/manifest, checker outcome,
       locked policy or reviewer decision. Server-generated result IDs are stable.
-- [ ] Exact creation replay after lost response returns the same Submission,
+- [x] Exact creation replay after lost response returns the same Submission,
       binding and evaluation request without duplicate effects. Concurrent
       requests preserve one winner. A changed packet, foreign actor, crossed
       task/assignment, wrong predecessor, non-ready/stale admission, an
@@ -188,19 +188,20 @@ owner-port extension for review, not an approved or implemented part of 02I-B.
       revoked grant and malformed selectors fail closed with no new product
       effects. Exact historical replay of the matching consumed admission
       returns the retained result under fresh authority.
-- [ ] A failed PRE returns actionable bounded feedback and creates no ready
+- [x] A failed PRE returns actionable bounded feedback and creates no ready
       admission or Submission; infrastructure failure remains distinct and
       recoverable. A non-ready preparation response cannot be submitted.
-- [ ] Exact same-key POST replay after a lost ready response returns the same
+- [x] Exact same-key POST replay after a lost ready response returns the same
       admission without a second selected checker run, provider PUT, ready
       admission or product effect. Replay requires the original ZIP and packet;
       changed bytes/packet/selectors fail closed. A missing durable intent or
       unresolved run returns the existing 503 and cannot be finalized.
-- [ ] Real public HTTP and durable-worker drill covers PostgreSQL and MinIO,
-      first-pass correction, immutable creation, post-submit result and governed
-      outcome before the complete first journey is claimed. This chunk's focused
-      proof must establish the HTTP entry and leave downstream worker/outcome
-      proof with the coordinated first-layer drill.
+
+The coordinated first-layer integration drill remains separate proof. It must
+exercise real public HTTP, PostgreSQL, MinIO and durable workers through
+first-pass correction, immutable creation, post-submit result and governed
+outcome before the complete first journey is claimed. This chunk's focused
+proof establishes the HTTP entry, not that combined outcome.
 
 ## Risk and review routing
 

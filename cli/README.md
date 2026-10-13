@@ -35,6 +35,10 @@ context/intake requirements:
 | `workstream project role-grant show PROJECT_ID GRANT_ID` | `GET /api/v1/projects/PROJECT_ID/role-grants/GRANT_ID` |
 | `workstream project contribution-policy current PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contribution-policies/current` |
 | `workstream project contribution-policy show PROJECT_ID POLICY_ID [--version UUID]` | `GET /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID` with optional `version_id` |
+| `workstream project contribution-policy create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/drafts` |
+| `workstream project contribution-policy update PROJECT_ID POLICY_ID VERSION_ID --input FILE --idempotency-key UUID` | `PUT /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID` |
+| `workstream project contribution-policy publish PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/publication` |
+| `workstream project contribution-policy retire PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/retirement` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
@@ -232,6 +236,47 @@ valid observations, not readiness. JSON preserves the API object; complete text
 escapes terminal controls. Missing, null, unknown, duplicate, substituted or
 credential-reflecting facts fail with empty stdout. These commands never publish,
 retire, pay, activate a guide or authorize a later write.
+
+## Manage contribution policies
+
+Finance Authority can make four separate decisions:
+
+```sh
+workstream project contribution-policy create PROJECT_ID --input name.json --idempotency-key CREATE_UUID
+workstream project contribution-policy update PROJECT_ID POLICY_ID VERSION_ID --input rules.json --idempotency-key UPDATE_UUID
+workstream project contribution-policy publish PROJECT_ID POLICY_ID VERSION_ID --idempotency-key PUBLISH_UUID
+workstream project contribution-policy retire PROJECT_ID POLICY_ID VERSION_ID --idempotency-key RETIRE_UUID
+```
+
+`name.json` contains `{"name":"Project contributions"}`. A successor draft keeps
+the aggregate's existing name. `rules.json` replaces the complete draft graph:
+
+```json
+{"rules":[
+  {"contribution_type":"accepted_submission","compensation_mode":"unpaid","definitions":[]},
+  {"contribution_type":"completed_review","compensation_mode":"unpaid","definitions":[]}
+]}
+```
+
+For a compensated rule, each definition contains `instrument_type` (`money` or
+`project_points`), `unit_code`, exact string `quantity`, and `adapter_binding_id`.
+Workstream checks currency/unit registration, binding eligibility and the complete
+graph. The CLI preserves supplied quantities without rounding. Omitted
+`definitions` retains the API's empty default. Input files are limited to 1 MiB;
+unknown fields and malformed types fail before dispatch.
+
+Use selectors from the returned receipt or an explicit policy read. Publication
+replaces the previously published version; retirement ends the selected current
+policy. Guide activation remains a separate manager decision. Each command sends
+one request and requires current backend authority. No command automatically
+fetches selectors, retries, activates a guide or issues payment.
+
+Save the action, exact selectors, input contents and key together. If the outcome
+is unknown, manually replay only that unchanged request. Reusing a key for changed
+intent conflicts. Replay returns the original immutable event, even after later
+publication/retirement, subject to current authorization. Both output formats
+retain all receipt fields; malformed or mismatched success is an unknown outcome,
+and a subsequent read cannot prove rollback.
 
 Native proof extends the existing public guide-activation journey with empty
 drafts, unpaid publication, simultaneous published/draft selection, exact history,

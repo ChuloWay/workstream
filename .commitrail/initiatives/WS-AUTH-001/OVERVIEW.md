@@ -18,8 +18,8 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either policy mode, with no REV/CON effect. ARCH-04F3
 binds that exact current cause through hidden ART preparation, binding and TASK
-creation AUTH resources. ARCH-04F4 activates the separate hidden reason-bound system-Operator checker retry action with exact prepared/decision/audit and historical replay custody. Selected production composition is delivered. Public entry, false-guide activation
-and the first-layer drill remain; setup-fault handling is future safety work. False-guide activation, live
+creation AUTH resources. ARCH-04F4 activates the separate hidden reason-bound system-Operator checker retry action with exact prepared/decision/audit and historical replay custody. Selected production composition and ARCH-02I-B public entry are delivered. False-guide activation
+and the first-layer drill remain; setup-fault handling is future safety work. Live
 human review/revision and payment delivery remain unavailable.
 
 Latest completed activation: [AUTH-18 public manager activation](WS-AUTH-001-18.md),
@@ -82,8 +82,8 @@ Historical pre-cutover work records: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Next usable boundary: public entry and false-guide activation/readiness as independent
-  connections, followed by the first-layer public/worker drill. Setup-fault
+- Next usable boundary: ARCH-02I-B public entry is delivered; false-guide
+  activation/readiness and the first-layer public/worker drill remain. Setup-fault
   handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing source: `docs/spec_authorization_service.md`, authorization code,
@@ -133,5 +133,5 @@ manager proposal review, pre-submit approval and manual correction dispatch.
    AUTH-OUTBOX-01/02 bracket hidden CON-02B dispatch; ARCH-04E2 activates only
    the proven TASK routing handler before ARCH-04E3 live composition.
    TASK queue/read exposure is complete through ARCH-03C7. AUTH-18 public
-   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority, ARCH-04E1A source-only facts/types and ARCH-04E2-A hidden strict preparation are delivered. 04E2-B authorized outcomes, B8 completion delivery and the 04F2 hidden remediation handoff are delivered; 04F3 hidden replacement intake and 04F4 hidden Operator retry are delivered; selected production delivery is registered; false-guide activation and public entry remain. Shared acceptance foundations additionally gate false routing, not true admission.
+   manager guide activation/context is delivered; ARCH-03D hidden intake, hidden exact post-submit materialization and ARCH-04B2 output custody are delivered; ARCH-04C hidden execution is delivered; ARCH-04D1 canonical material custody is delivered; ARCH-04D2 exact input/execution/finalization authority, ARCH-04E1A source-only facts/types and ARCH-04E2-A hidden strict preparation are delivered. 04E2-B authorized outcomes, B8 completion delivery and the 04F2 hidden remediation handoff are delivered; 04F3 hidden replacement intake and 04F4 hidden Operator retry are delivered; selected production delivery is registered and ARCH-02I-B public entry is exposed; false-guide activation remains. Shared acceptance foundations additionally gate false routing, not true admission.
    Remaining work must use its exact owner, not the superseded broad designs.
