@@ -474,8 +474,9 @@ those decisions to immutable delivery receipts and supplies Celery delivery and
 bounded recovery scans. ARCH-03C2 registers exact assignment invalidation,
 with atomic publication from supported authority mutations and separate fixed
 feature authority. The selected checker request and completion handlers are
-registered in production composition; public admission-backed Submission entry remains ARCH-02I-B
-work. Registration does not establish deployed sandbox readiness.
+registered in production composition. ARCH-02I-B exposes ZIP preparation and
+admission-backed Submission creation for initial work and checker remediation
+through public backend APIs. Registration does not establish deployed sandbox readiness.
 Delivery consumes `workstream.outbox` only under a validated non-eager prefork
 Celery process; other queues can use their appropriate execution pool.
 
@@ -775,7 +776,8 @@ outcome owner publishes exact routing sources under CHECKERS current-run custody
 B7 implements hidden
 request delivery with invocation fencing. B8 adds hidden completion routing with commit-before-ACK. Production
 request/completion registration is supplied by the selected PILOT-04 composition;
-public admission-backed Submission entry remains ARCH-02I-B work.
+ARCH-02I-B exposes the existing admission-backed writer through the public
+Submission POST for initial work and checker remediation.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no

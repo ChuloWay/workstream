@@ -107,8 +107,9 @@ Identity, authorization, guide ingestion, automatic unified compilation and
 public manager proposal/approval operations and terminal guide activation are
 implemented. Managers discover exact activation selections through the authorized
 draft post-policy read; Finance publication remains separate. Task policy
-lineage, contributor artifact preparation and immutable Submission creation have
-tested foundations; their complete public integration remains unfinished. TASK
+lineage, public ZIP preparation and admission-backed immutable Submission creation
+are implemented for initial work and exact checker remediation. Their complete
+public worker journey remains unfinished. TASK
 now reserves and replays exact post-submit routing requests internally. Hidden
 AUTH binds those requests to exact source and branch consequences through
 canonical PREP. The hidden authorized outcome operation commits source custody
@@ -118,7 +119,7 @@ contributor-correctable result through the existing TASK/AUTH operation to
 `needs_revision` under either locked ReviewPolicy mode. 04F3 adds hidden
 exact-cause replacement intake through the canonical ART/TASK writer, preserving
 the predecessor, locked policy and checker source while atomically creating the
-successor Submission and evaluation request. ARCH-04F4 adds hidden reason-bound Operator retry for an exact current terminal `infrastructure_failed` run through the existing CHECKERS coordinator and request handler, with immutable source, AUTH/audit/outbox custody and fresh-authorized historical replay. PILOT-04 registers selected request and completion handlers in production composition. The callable preparation route remains outside OpenAPI and no public Submission POST is mounted. Current completion classification has no `task_setup_blocked` path, so a manager-visible setup-fault hold is future safety work rather than a first-journey prerequisite.
+successor Submission and evaluation request. ARCH-04F4 adds hidden reason-bound Operator retry for an exact current terminal `infrastructure_failed` run through the existing CHECKERS coordinator and request handler, with immutable source, AUTH/audit/outbox custody and fresh-authorized historical replay. PILOT-04 registers selected request and completion handlers in production composition. ARCH-02I-B publishes ZIP preparation and the canonical admission-backed Submission POST in OpenAPI. Current completion classification has no `task_setup_blocked` path, so a manager-visible setup-fault hold is future safety work rather than a first-journey prerequisite.
 
 Exact assignment-invalidation authority, atomic originating publication and
 production delivery with enforced prefork topology are implemented. Manager task
@@ -142,8 +143,8 @@ byte-free recovery and flush-only verified binding over generic ART
 put/verification. ARCH-04C supplies hidden durable evaluation, immutable ordered
 results, database-timed execution leases and atomic completion events. ARCH-04D2 supplies exact fixed-service input, execute and finalize authority
 and database-bound receipts; output-file authority remains unavailable. ARCH-04D1 enforces canonical
-ART material lineage for all terminal results retaining material; public intake remains deferred to
-the later cutover prerequisites. ARCH-04E1A adds one immutable route-neutral
+ART material lineage for all terminal results retaining material; ARCH-02I-B
+subsequently exposes public intake. ARCH-04E1A adds one immutable route-neutral
 TASK source table, detached source facts and source-neutral accepted-effects
 contracts. Required success branches on the locked ReviewPolicy: the hidden
 operation stages the TASK human-review handoff for true and shared authorized
@@ -288,17 +289,17 @@ cannot be reused as post-submission review-gate evidence. See the
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
 | Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; exact run-scoped setup reads and assigned-task locked-original reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and public exact-authorized CP07 activation | Public activation-to-intake drill after evaluation/remediation prerequisites; prove each enabled document reader |
-| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | Public intake cutover after evaluation/remediation prerequisites |
-| Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors; immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | Public intake cutover after evaluation/remediation prerequisites |
-| Task readiness and claim | **Foundation with grant-backed manager and contributor commands** | Task records, assignments and locked work context; guide-bound ContributionPolicyVersion locked before `READY` and copied to TaskAssignment; detached project/guide display; public project-scoped ready, management and operational queues with distinct current grant authority and signed bounded live pagination; public contributor/management detail with exact project and assignment authority; separate current live work-context projections with exact receipt-selected review/revision/ContributionPolicy identities and no obsolete economic fields; explicit management/operational/audit locked-context projections using one historical resolver, with separate public manager, system-Operator and Audit Authority access; immutable contributor/management requirements using one historical translator, with public exact Contributor and Manager authority; bounded public Audit Authority lifecycle evidence with atomic project/task scoping and exact transition references; public manager create/screen/release use exact covered Project Manager authority, atomic audit and replay; claim/start/contributor context use exact-project Submitter grants; assigned context lists documents only and distinct `task.guide.read` verifies locked originals before delivery; separate manager context and system-Operator start; durable claim/start retry receipts with fresh authority and exact assignment checks; hidden exact-assignment invalidation with committed cause verification, delivery fencing, exact fixed-service authority and decision-bound immutable release evidence; atomic authority-loss publication and registered prefork delivery; PILOT-14 exposes both locked contribution types in ready rows and Contributor detail for active exact-project Submitters or Reviewers as unpaid or exact instrument/unit/quantity awards, without Finance binding facts; claim/start remain Submitter-only | Public intake cutover follows evaluation/remediation prerequisites |
+| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | Complete the public worker journey after false-policy activation |
+| Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors; immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | Complete the public worker journey after false-policy activation |
+| Task readiness and claim | **Foundation with grant-backed manager and contributor commands** | Task records, assignments and locked work context; guide-bound ContributionPolicyVersion locked before `READY` and copied to TaskAssignment; detached project/guide display; public project-scoped ready, management and operational queues with distinct current grant authority and signed bounded live pagination; public contributor/management detail with exact project and assignment authority; separate current live work-context projections with exact receipt-selected review/revision/ContributionPolicy identities and no obsolete economic fields; explicit management/operational/audit locked-context projections using one historical resolver, with separate public manager, system-Operator and Audit Authority access; immutable contributor/management requirements using one historical translator, with public exact Contributor and Manager authority; bounded public Audit Authority lifecycle evidence with atomic project/task scoping and exact transition references; public manager create/screen/release use exact covered Project Manager authority, atomic audit and replay; claim/start/contributor context use exact-project Submitter grants; assigned context lists documents only and distinct `task.guide.read` verifies locked originals before delivery; separate manager context and system-Operator start; durable claim/start retry receipts with fresh authority and exact assignment checks; hidden exact-assignment invalidation with committed cause verification, delivery fencing, exact fixed-service authority and decision-bound immutable release evidence; atomic authority-loss publication and registered prefork delivery; PILOT-14 exposes both locked contribution types in ready rows and Contributor detail for active exact-project Submitters or Reviewers as unpaid or exact instrument/unit/quantity awards, without Finance binding facts; claim/start remain Submitter-only | Complete the public worker journey after false-policy activation |
 | Bulk task source custody | **Public backend source foundation delivered** | PILOT-02A provides covered-PM project-bound declaration, canonical 1..500-row JSON upload with exact SHA/count, fresh-authority replay, source status and independently verified download using existing ART custody; linear migration and public-route PostgreSQL/MinIO custody, rollback, concurrency and recovery tests pass | Atomic DRAFT import, separate explicit batch screen/release and CLI conversion; issue 489 remains open |
-| Contributor artifact preparation | **Hidden and proven** | One outer ZIP; bounded scratch inspection; canonical manifest; shared evaluation-content capacity and exact locked-policy checks before attempts or durable intent; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission; hidden final handoff validates the exact activated historical guide through owner ports | Complete the later public admission-only cutover |
-| Pre-submission intake checking | **Selected hidden flow with approved-guide lineage and bounded feedback** | One versioned Workstream default checker enforces safe ZIP/resource bounds, independently verified digest/manifest, high-confidence secret rejection and unchanged-work rejection. Missing summary/attestation produces warnings only. Approved project PRE checks are immutable digest-pinned images run by the Rust service on verified read-only ART material. Durable selected custody takes TASK before CHECKERS; only a complete pass grants admission to the existing atomic Submission transaction. Both executable catalogues are removed | Public admission-backed Submission entry remains ARCH-02I-B; CLI submit/status is later work. Work findings create no Submission and preserve in_progress; infrastructure failures retain recoverable outcomes. Local Rust/MinIO proof uses runc/docker-dev; hosted gVisor integration and representative limits remain |
-| Immutable Submission creation | **Hidden foundation; public packet creation retired** | Contributor preparation authority; durable pre-submit reservation and exact completed-evidence recovery without rerunning checks; atomic admission consumption; TASK-owned admission-backed creation with exact assignment ContributionPolicyVersion, locked policy lineage and service/database checked-packet custody; fixed-service artifact binding; replay/concurrency/rollback proof | Finish downstream evaluation and the canonical public integration. The retained submission-list GET is not a usable creation POST |
-| Post-submission evaluation and governed outcome | **Selected hidden external execution and production completion routing** | Immutable approved image bindings, Rust service/SDK and typed ART callback grants; exact verified input custody, bounded normalized JSON results and phase authority. Production outbox request/completion handlers run selected images and preserve exact restart/replay. True-policy success reaches review_pending; false-policy success invokes shared authorized FinalAcceptance and atomically creates the submitter ContributionRecord and complete frozen award set. Contributor-correctable failures retain exact remediation causes; Operator retry retains fresh authority and no spent contributor round | Public Submission entry remains ARCH-02I-B; live human review and contributor revision surfaces remain separate. Uncovered required guide capabilities block activation; registration alone cannot repair an approved generation. True handoff has no REV/CON prerequisite. No deployed runtime or exhaustive public journey claim |
+| Contributor artifact preparation | **Public initial and checker-remediation entry** | One outer ZIP through the published preparation route; bounded scratch inspection; canonical manifest; shared evaluation-content capacity and exact locked-policy checks before attempts or durable intent; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission; final handoff validates the exact activated historical guide through owner ports; same-key ready replay does not repeat checker or PUT | Complete the public worker journey; CLI submit/status is later work |
+| Pre-submission intake checking | **Public selected entry with approved-guide lineage and bounded feedback** | One versioned Workstream default checker enforces safe ZIP/resource bounds, independently verified digest/manifest, high-confidence secret rejection and unchanged-work rejection. Missing summary/attestation produces warnings only. Approved project PRE checks are immutable digest-pinned images run by the Rust service on verified read-only ART material. Durable selected custody takes TASK before CHECKERS; only a complete pass grants admission to the existing atomic Submission transaction. Both executable catalogues are removed | Complete the public worker drill; CLI submit/status is later work. Work findings create no Submission and preserve in_progress; infrastructure failures retain recoverable outcomes. Local Rust/MinIO proof uses runc/docker-dev; hosted gVisor integration and representative limits remain |
+| Immutable Submission creation | **Public admission-backed entry** | Canonical POST derives contributor identity and consumes a ready admission for initial work or exact checker remediation; durable pre-submit reservation and same-key ready recovery without rerunning checks or PUT; TASK-owned atomic creation with exact assignment ContributionPolicyVersion, locked policy lineage and service/database checked-packet custody; fixed-service artifact binding; exact replay, authority, concurrency and rollback proof | Complete the public worker drill and later live human-review revision; CLI consumption remains separate |
+| Post-submission evaluation and governed outcome | **Selected external execution and production completion routing** | Immutable approved image bindings, Rust service/SDK and typed ART callback grants; exact verified input custody, bounded normalized JSON results and phase authority. Production outbox request/completion handlers run selected images and preserve exact restart/replay. True-policy success reaches review_pending; false-policy success invokes shared authorized FinalAcceptance and atomically creates the submitter ContributionRecord and complete frozen award set. Contributor-correctable failures retain exact remediation causes; Operator retry retains fresh authority and no spent contributor round | False-policy guide activation and the complete public worker drill remain; live human review and contributor revision surfaces are separate. Uncovered required guide capabilities block activation; registration alone cannot repair an approved generation. True handoff has no REV/CON prerequisite. No deployed runtime or exhaustive public journey claim |
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts; ART-07A1 metadata-only packet contract and REV-03B immutable normalized packet persistence with live ingest custody; REV-04A Review/finding/resolution and completed request storage | Future resolver proof; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
 | Review decision and revision | **Hidden acceptance core; runtime planned** | Review/revision policy identities and mutation authority, with `requires_second_review` fixed false through typed and database boundaries; REV-04A immutable Review storage; REV-04B source storage; REV-04C hidden source-neutral FinalAcceptance/TASK/CON participant; approved same-task revision-rebase semantics | ARCH-04E2-B supplies mandatory source AUTH and complete database/audit/outbox closure for hidden automated outcomes. Human decision authority/composition, revision preparation, replay and recovery remain |
-| Contribution and compensation truth | **Hidden shared participant plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage; obsolete guide-keyed payment storage and task-local payment fields removed; CON-07 source-neutral submitter participant and complete award sets; REV-04C composes it with FinalAcceptance/TASK effects in the caller transaction; 04F2 checker remediation creates no contribution or award | ARCH-04E2-B supplies exact routing authority/evidence, complete-set database closure and audit/outbox under REV-12A4A. Selected production request/completion delivery, 04F3 exact-cause replacement and 04F4 hidden retry are implemented; false-guide activation, public entry and the complete public journey remain. Only actual Reviews create reviewer records. Obligation/root/ordinal custody remains deferred until fulfillment activation; no public recognition or fulfillment route is live |
+| Contribution and compensation truth | **Hidden shared participant plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage; obsolete guide-keyed payment storage and task-local payment fields removed; CON-07 source-neutral submitter participant and complete award sets; REV-04C composes it with FinalAcceptance/TASK effects in the caller transaction; 04F2 checker remediation creates no contribution or award | ARCH-04E2-B supplies exact routing authority/evidence, complete-set database closure and audit/outbox under REV-12A4A. Selected production request/completion delivery, 04F3 exact-cause replacement and 04F4 hidden retry are implemented; false-guide activation and the complete public journey remain. Only actual Reviews create reviewer records. Obligation/root/ordinal custody remains deferred until fulfillment activation; no public recognition or fulfillment route is live |
 | Contribution evidence reads | **Public bounded backend reads** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities; one fresh repeatable-read response with one narrowly bounded serialization-conflict retry and fresh authority, complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV; 1,000-contribution maximum refuses excess without truncation | CLI consumption and stable fixed-membership paginated list remain separate; no recognition mutation, fulfillment, payout or deployed-service claim |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove diagnostics during the release drill; no deployed monitoring claim |
@@ -697,15 +698,16 @@ Exact post-submit service authority and the hidden 04E2-B authorized outcome
 operation are implemented. 04F2 adds the hidden policy-independent remediation handoff, 04F3 adds
 hidden exact-cause replacement intake and 04F4 adds hidden Operator retry. PILOT-04
 registers selected request and completion delivery in production composition; passing
-false-policy results use the shared atomic acceptance operation. Public admission-backed Submission
-entry remains ARCH-02I-B work.
+false-policy results use the shared atomic acceptance operation. ARCH-02I-B
+publishes admission-backed initial and checker-remediation Submission entry.
 Live setup does not wait for downstream task/checker execution.
 
 The [first complete contributor milestone](../.commitrail/initiatives/WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone)
 records the delivered checked-input, capacity and atomic Submission/request
-steps, hidden authorized outcomes and B8 completion delivery. Two independent connections remain: public admission-backed Submission entry
-and false-guide activation/readiness. A real public API and durable-worker drill follows both. A setup-fault hold is future safety work because the current
-completion classifier has no `task_setup_blocked` outcome. Human review/revision
+steps, public admission-backed entry, hidden authorized outcomes and B8
+completion delivery. False-guide activation/readiness and a real public API
+and durable-worker drill remain. A setup-fault hold is future safety work
+because the current completion classifier has no `task_setup_blocked` outcome. Human review/revision
 runtime follows that milestone. Initial public intake covers initial submissions
 and checker remediation; the historical requirement to complete human-review
 revisions before any public intake is not adopted. The delivered remediation path stays independent of an already-live false branch.
@@ -748,7 +750,8 @@ The broader v0.1 sequence below retains later scope:
    hidden request execution. 04F1 supplies verified failure evidence and 04F2
    supplies the exact current TASK/AUTH remediation handoff under either policy
    mode. 04F3 adds hidden exact-cause replacement intake and 04F4 hidden
-   Operator retry. PILOT-04 selected production registration is delivered; public entry and false-guide activation remain next.
+   Operator retry. PILOT-04 selected production registration and ARCH-02I-B
+   public entry are delivered; false-guide activation and the complete drill remain.
    True routing may proceed after its own prerequisites to publish the exact TASK
    manifest and move `evaluation_pending -> review_pending` when no blocking
    failure exists; this does not write the REV queue. The delivered shared
@@ -783,16 +786,16 @@ The broader v0.1 sequence below retains later scope:
    operation; they do not establish public activation. The milestone creates the
    submitter contribution and applicable awards without inventing a Review or
    reviewer contribution. Live human queues/leases/decisions remain later work.
-3. **Complete public intake and admission integration for claimable work.**
+3. **Prove public intake through durable workers.**
    CP08 already locks the complete guide and policy context before `READY`.
    Claim copies it to TaskAssignment without selecting another ContributionPolicy;
-   hidden admission-backed Submission creation already copies that exact lineage.
-   ARCH-03D connects the hidden final handoff to the approved unified-guide
-   intake plan. The public cutover can consume the delivered evaluation/remediation
-   contracts independently of false-guide activation. Preparation returns
-   correction feedback for blocking intake failures and publishes ready admission
-   only after the required preparation/custody checks; the existing TASK creation
-   operation consumes that admission with the assignment's locked lineage.
+   ARCH-02I-B's public admission-backed creation copies that exact lineage.
+   ARCH-03D connects the final handoff to the approved unified-guide intake.
+   The published preparation route returns correction feedback for blocking
+   failures and a replayable ready admission after required checks; the canonical
+   POST consumes it. Exercise those APIs with the selected durable PRE/POST
+   workers, false-policy activation, remediation, retries and exact contribution
+   evidence in one realistic drill.
 4. **Start the live REV path.** Reuse the packet, Review and FinalAcceptance
    storage completed before the automated path. Admit only canonical
    `allow_review`; claim a bounded lease and
@@ -850,13 +853,13 @@ ARCH-04D2 supplies exact service authority; 04E/B8 supply hidden authorized
 routing and completion delivery, 04F2 supplies the hidden remediation branch,
 04F3 supplies exact-cause hidden replacement intake, and 04F4 supplies hidden
 Operator retry of terminal infrastructure failure.
-PILOT-04 registers the selected request and completion handlers in production composition; this does not expose public intake.
+PILOT-04 registers the selected request and completion handlers in production composition; ARCH-02I-B separately exposes public intake.
 
 ARCH-04B adds hidden exact Submission materialization through TASK's immutable
 read port and ART's consumed admission. Local/MinIO input is independently reread,
 verified and projected through canonical bounded scratch. ARCH-04D2 supplies exact leased input authority before and after I/O.
-Public intake remains unavailable; selected hidden Submission creation durably
-dispatches the initial post-check request.
+The public admission-backed Submission POST uses the same TASK-owned creation
+and durable initial post-check dispatch.
 
 ARCH-04B2 adds hidden typed checker-output `store` and byte-free
 `recover(selector)` operations, per-slot preparation caps, generic put and
@@ -922,6 +925,7 @@ Delivered foundations (not a claim of full public integration)
   ARCH-04E3A hidden ART Celery child lease + per-invocation scratch
   PILOT-04 selected default + exact external PRE/POST images; both catalogues removed
     production request/completion handlers -> true review_pending or hidden false acceptance
+  ARCH-02I-B public initial/checker-remediation ZIP preparation and admitted Submission
 
   PILOT-10A public bounded evidence reads over existing immutable CON/awards
     active human self or covering PM / exact-project Finance -> JSON or CSV
@@ -929,9 +933,8 @@ Delivered foundations (not a claim of full public integration)
 
 Remaining integration
   PILOT-02 separately scoped atomic DRAFT import -> explicit batch screen/release
-  ARCH-02I-B public initial/checker-remediation ZIP intake -> admitted Submission
   ARCH-04E3-B false-policy guide activation + REV manifest readiness
-    (independent connections; both precede the real public/worker drill)
+    (precedes the complete public/worker drill)
   -> public trigger for the implemented selected completion outcomes
        |
        +-- contributor-correctable failure -> TASK needs_revision (no REV/CON)
@@ -1057,8 +1060,8 @@ not clear an approved compilation's gap. Corrected compilation and approval
 must bind the registered image. Production completion routes true-policy success to review_pending
 and false-policy success through shared atomic acceptance. Default failures prevent
 Submission creation; infrastructure failures retain recoverable outcomes. Local
-Rust/MinIO integration evidence uses runc/docker-dev, not gVisor, and the contributor
-public Submission entry remains ARCH-02I-B work; CLI consumption is later. The spike proves only the included small Linux fixture;
+Rust/MinIO integration evidence uses runc/docker-dev, not gVisor. ARCH-02I-B
+delivers public Submission entry; CLI consumption is later. The spike proves only the included small Linux fixture;
 representative task sizing, hosted hardening and macOS fallback evidence
 remain.
 
@@ -1108,8 +1111,10 @@ remaining trace sequence is:
   locked-context reads; ARCH-03C7 exposes bounded Audit Authority history. Current authority is checked
   on every request.
 - Hidden intake: [ARCH-03D](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-03D.md)
-  removes the private TASK/PROJECTS lookup at final durable handoff. No public
-  preparation or Submission endpoint is activated.
+  removes the private TASK/PROJECTS lookup at final durable handoff.
+  [ARCH-02I-B public entry](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-02IB.md)
+  subsequently exposes ZIP preparation and canonical admission-backed
+  Submission creation for initial work and checker remediation.
 - Post-submit admission: after delivered `POL-07B` and `ARCH-03C`, delivered hidden
   [ARCH-04B input materialization](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04B.md)
   and [ARCH-04B2 output custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04B2.md)
@@ -1155,7 +1160,8 @@ remaining trace sequence is:
   closure and atomic success outcomes. B8 supplies hidden completion delivery;
   04F2 extends the same operation with exact checker remediation under both policy
   modes. 04F3 adds hidden replacement intake and 04F4 hidden Operator retry;
-  false-guide activation, public entry and the complete public intake journey remain.
+  ARCH-02I-B supplies public entry, while false-guide activation and the complete
+  public intake journey remain.
   A dispatcher cannot authorize TASK or CHECKERS mutations. A future supported
   setup-fault path must retain the Submission and locked rules without contributor
   penalty; it is not a public cutover prerequisite.
@@ -1182,20 +1188,20 @@ ARCH-04E1B-B3 proof: [verified ZIP metadata custody](../.commitrail/initiatives/
 
 ARCH-04E1B-B6 proof: [atomic Submission, exact receipts and initial request custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB6.md).
 
-ARCH-04E1B-B7 proof: [hidden request delivery and invocation custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB7.md). B8 supplied hidden completion routing; PILOT-04 adds selected production composition, while public intake remains unavailable.
+ARCH-04E1B-B7 proof: [hidden request delivery and invocation custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB7.md). B8 supplied hidden completion routing; PILOT-04 adds selected production composition and ARCH-02I-B adds public intake.
 
-REV-12A4A proof: [scoped lifecycle control and payment-delivery deferral](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A4A.md). ARCH-04E2-B supplies exact source receipts; B8 completion delivery, the 04F2 zero-REV/CON remediation handoff, 04F3 hidden replacement intake and 04F4 hidden Operator retry are implemented. False-guide activation, public entry and the complete public journey remain; setup-fault handling is later safety work.
+REV-12A4A proof: [scoped lifecycle control and payment-delivery deferral](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A4A.md). ARCH-04E2-B supplies exact source receipts; B8 completion delivery, the 04F2 zero-REV/CON remediation handoff, 04F3 hidden replacement intake and 04F4 hidden Operator retry are implemented. ARCH-02I-B supplies public entry; false-guide activation and the complete public journey remain. Setup-fault handling is later safety work.
 
 ARCH-04E2-B proof: [hidden authorized outcome custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E2B.md). B8 supplies hidden completion delivery; selected production composition is implemented, while false-guide activation remains unavailable.
 
-ARCH-04E1B-B8 proof: [hidden completion delivery](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB8.md). Both policy branches commit before acknowledgment; closed UNKNOWN invocations never automatically repeat effects. PILOT-04 adds selected production request/completion composition; no public intake is supplied.
+ARCH-04E1B-B8 proof: [hidden completion delivery](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB8.md). Both policy branches commit before acknowledgment; closed UNKNOWN invocations never automatically repeat effects. PILOT-04 adds selected production request/completion composition; ARCH-02I-B separately exposes public intake.
 
 ARCH-04F1 proof: [verified checker failure evidence](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04F1.md). The completion reader verifies retained contributor/setup failure facts. That historical read does not establish a selected production `task_setup_blocked` result; the chunk itself supplied no routing, replacement intake or recovery authority.
 
 ARCH-04F2 delivered boundary: [authorized checker remediation handoff](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04F2.md). The existing hidden TASK/AUTH operation retains the exact current recommendation, manifest and actual decision receipt while moving TASK to `needs_revision` under either policy mode. It creates no Review, FinalAcceptance, contribution or award and adds no public API or production registration. 04F3 supplies hidden replacement intake and 04F4 hidden Operator retry. PILOT-04 later registers selected delivery; the public drill remains.
 
-ARCH-04F3 intended merged boundary: [exact-cause checker-remediation replacement](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04F3.md). Existing hidden ART intake and TASK creation admit a changed full ZIP only from the exact current authorized remediation source under either policy mode. The successor Submission, binding, AUTH decisions and generation-one request commit atomically; old evidence stays immutable. Uncaused `revision` runtime/replay is removed, and migration `0034_checker_remediation_replacement` refuses retained unprovable revision rows without deleting them. 04F4 adds hidden terminal-failure Operator retry; public intake and the complete public drill remain; setup-fault handling is future safety work.
+ARCH-04F3 intended merged boundary: [exact-cause checker-remediation replacement](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04F3.md). Existing hidden ART intake and TASK creation admit a changed full ZIP only from the exact current authorized remediation source under either policy mode. The successor Submission, binding, AUTH decisions and generation-one request commit atomically; old evidence stays immutable. Uncaused `revision` runtime/replay is removed, and migration `0034_checker_remediation_replacement` refuses retained unprovable revision rows without deleting them. 04F4 adds hidden terminal-failure Operator retry; ARCH-02I-B adds public initial and remediation intake, while the complete public drill remains. Setup-fault handling is future safety work.
 
 ARCH-04F4 intended merged boundary: [hidden Operator checker retry](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04F4.md). An active system Operator can request a reason-bound new CHECKERS generation only for the exact current terminal `infrastructure_failed` run. The existing coordinator and request handler retain a new immutable retry receipt, AUTH decision, audit and request event while preserving the failed run; fresh-authorized same-key replay validates historical ownership and the original closure without creating another run. This 04F4 chunk supplies no public route, selected production registration, setup-fault hold or contributor penalty; PILOT-04 later registers selected delivery.
 
-ARCH-04E3A proof: [hidden invocation-scoped ART materialization](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E3A.md) leases the existing Celery child provider and closes bounded scratch for hidden request delivery. PILOT-04 adds selected production request/completion composition; no public intake is supplied.
+ARCH-04E3A proof: [hidden invocation-scoped ART materialization](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E3A.md) leases the existing Celery child provider and closes bounded scratch for hidden request delivery. PILOT-04 adds selected production request/completion composition; ARCH-02I-B separately exposes public intake.

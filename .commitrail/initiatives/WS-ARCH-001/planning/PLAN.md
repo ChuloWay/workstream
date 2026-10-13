@@ -26,15 +26,20 @@ end-to-end journey.
 
 ### Remaining connections and proof
 
+ARCH-02I-B exposes the existing ZIP preparation and canonical admission-backed
+Submission POST for initial work and exact checker remediation. Focused public
+HTTP/PostgreSQL proof covers ready replay, immutable creation, history and
+authority denial. The complete PostgreSQL/MinIO worker journey remains a
+separate integration proof.
+
 | Boundary | Current gap | Required proof |
 | --- | --- | --- |
-| ARCH-02I-B public entry | The ZIP preparation route is callable but absent from OpenAPI; no public Submission POST consumes its ready admission | Authorized initial and exact checker-remediation Submission creation through the existing ART/TASK writer, with failed intake, replay, isolation, rollback and exact lineage proof |
 | ARCH-04E3-B false-guide activation | The canonical Python and PostgreSQL guide guards still refuse locked `human_review_required=false`; REV's manifest does not yet describe selected production routing | Real manager-authorized false activation with supported exact checks, Python/SQL disposition parity, live REV generation and atomic false/pass contribution evidence; preserve the default-true branch |
-| First-layer integration drill | The connections above have not been exercised together through public APIs and durable workers | Real PostgreSQL, S3-compatible storage and broker/worker journey from approved guide and claim through ZIP intake, PRE/POST, remediation or governed outcome, including retry, restart, revocation and exact ContributionRecord evidence |
+| First-layer integration drill | Public entry and false-guide activation have not been exercised together through public APIs and durable workers | Real PostgreSQL, S3-compatible storage and broker/worker journey from approved guide and claim through ZIP intake, PRE/POST, remediation or governed outcome, including retry, restart, revocation and exact ContributionRecord evidence |
 
-The two connections can proceed independently. Their merge order does not grant
-acceptance authority: false/pass still needs the existing Operator-authorized
-LIVE REV generation at execution time. Public entry remains initial submission and
+Public entry and false-guide activation are independent. Their merge order does
+not grant acceptance authority: false/pass still needs the existing
+Operator-authorized LIVE REV generation at execution time. Public entry covers initial submission and
 checker remediation only. Human-review revision waits for its own live authority
 and reuses the canonical intake operation. The true success branch stops at
 `review_pending`; a live human queue and decision runtime remain later work.
@@ -64,8 +69,8 @@ their original evidence; they do not restart superseded work. The stop point
 of this reconciliation is canonical `allow_review`; downstream REV execution
 is not redesigned here. The [shared acceptance extension](../../../../docs/spec_review_lifecycle.md#finalacceptance)
 adds the locked false/pass outcome to the same routing handler without changing
-the human review/revision design. 04F supplies the hidden checker-remediation boundary consumed by the planned
-public Submission cutover.
+the human review/revision design. 04F supplies the hidden checker-remediation boundary consumed by the
+public Submission entry.
 
 | Boundary | Hard predecessors | Sole output owner |
 |---|---|---|
@@ -103,7 +108,7 @@ public Submission cutover.
 | [ARCH-03C7](../WS-ARCH-001-03C7.md) | ARCH-03C6 and hidden TASK owner contracts | Complete: bounded Audit Authority history access; public guide activation, ARCH-03D hidden intake, hidden post-submit materialization, ARCH-04B2 output custody, ARCH-04C execution, ARCH-04D1/04D2 custody/authority and ARCH-04E1A source-only facts/types delivered |
 | [CP05A](../WS-ARCH-001-CP05A.md) | CP05, existing policy owners | Complete: public Finance policy administration and selector recovery; public manager activation, ARCH-03D hidden intake, hidden post-submit materialization, ARCH-04B2 output custody, ARCH-04C execution, ARCH-04D1/04D2 custody/authority and ARCH-04E1A source-only facts/types delivered |
 | Physical economic cleanup (Complete; historical CP09 grouping) | [Migration 0023 cleanup](../../../changes/remove-obsolete-task-payment-policy.md) removes unused storage and remaining consumers with retained-data refusal | No repeated removal or public 02I prerequisite; acceptance and fulfillment activation remain separate |
-| [ARCH-03D](../WS-ARCH-001-03D.md) | AUTH-18, ARCH-03A, CP08 and merged ART preparation | Complete: hidden durable intake uses exact historical TASK/PROJECTS ports; public cutover remains ARCH-02I |
+| [ARCH-03D](../WS-ARCH-001-03D.md) | AUTH-18, ARCH-03A, CP08 and merged ART preparation | Complete: hidden durable intake uses exact historical TASK/PROJECTS ports; public cutover is ARCH-02I-B |
 | ARCH-04B | ARCH-04A, POL-07, ARCH-03C, merged ARCH-02H | Complete: ART hidden verified Submission input; exact live authority is delivered by ARCH-04D2 |
 | [ARCH-04B2](../WS-ARCH-001-04B2.md) | ARCH-04A and merged ART admission/verification/binding foundations | Complete: hidden bounded checker-output store/recovery and verified binding, no routing or live reservation |
 | ARCH-04C | ARCH-04A, ARCH-04B, delivered ARCH-04B2, POL-07 | Complete hidden CHECKERS execution/result/currentness and worker recovery, including exact empty output sets |
