@@ -1670,3 +1670,19 @@ partition tests remain mandatory. Lead CI-integrity and independent peer
 test-delta review inspect the frozen scope and evidence; a fresh complete hosted
 run is required for capacity and merge readiness. No new native proof is needed
 because test sources and runtime owners are unchanged.
+
+
+At clean `8219b30bb`, the existing catalogue/runner modules passed all 63 tests
+in 19.34 seconds, including exact membership, exhaustive/disjoint selection and
+negative partition controls. Actual canonical collection at clean `1eafd2ce4`
+and `8219b30bb` each retained 8,776 unique nodes in ten lanes with zero skips or
+deselections. Applying both catalogues to one identical actual collected list
+changes exactly the six completion-evidence lane assignments and leaves 8,770
+rows unchanged; all six remain ordinary isolated execution. The collector seeds
+UUID parameter values from HEAD, so this same-list comparison isolates catalogue
+effects. Cross-head comparisons separately normalize only those existing UUID
+parameter spellings; no collector or selection algorithm changed. Test source
+AST comparison confirms only the expected-module literals were relocated. Ruff
+and diff checks pass, and lead independent source/test-delta review found no
+issue. Fresh complete hosted execution is still required; the measured capacity
+qualification above does not guarantee a green run or authorize merging.
