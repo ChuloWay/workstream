@@ -53,7 +53,9 @@ Additional allowed files are `backend/app/modules/tasks/api/submission_context.p
 `backend/tests/tasks/test_submission_lineage.py`, and
 `backend/tests/tasks/submission_lineage_support.py`, and
 `backend/tests/checkers/external/test_selected_pre_submit.py`, and
-`backend/tests/retained_material_fixtures.py`; the already listed ART
+`backend/tests/retained_material_fixtures.py`, and
+`experiments/pilot04_external_checker_runtime/run_selected_end_to_end_probe.py`
+for its existing direct submission verifier call; the already listed ART
 service, worker composition, verification tests and TASK lineage fixture may
 change for the same bounded repair. Extend the existing TASK context port with
 retained-parent locking, using immutable project/task/assignment/contributor
