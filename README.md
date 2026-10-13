@@ -430,6 +430,11 @@ and fresh-authorized replay; receipts are observations, not cached permission.
 page; `project role-grant show PROJECT_ID GRANT_ID` inspects complete public
 qualification/provenance and revocation history. Pagination is explicit and
 fresh authority is backend-owned; a read never authorizes a later write.
+`project contribution-policy current PROJECT_ID` discovers the published and
+open-draft selectors; `project contribution-policy show PROJECT_ID POLICY_ID
+[--version UUID]` inspects backend-selected or exact historical policy versions,
+including complete rules and exact quantities. These require current Finance
+Authority, not PM-only permission; they do not edit, publish, retire or pay.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
