@@ -26,6 +26,8 @@ from app.modules.artifacts.models import ArtifactTaskImportSource, ArtifactPutAt
 from app.modules.artifacts.models import ArtifactReplica
 from app.modules.artifacts.models import ArtifactVerificationJob
 from app.modules.artifacts.authorization import PreparedArtifactInternalAuthority
+from app.modules.artifacts.service import validate_artifact_storage_namespace_at_startup
+from app.adapters.artifacts import create_artifact_store_bootstrap
 from app.adapters.artifacts.s3_compatible import S3CompatibleArtifactStore
 from app.interfaces.artifacts import ArtifactStoreUnavailableError
 from app.modules.authorization.models import AdminRoleGrant
@@ -70,6 +72,14 @@ async def import_source_client(task_database_env, monkeypatch, tmp_path):
             await provider.create_bucket(Bucket=bucket)
         except ClientError as error:
             assert error.response["Error"]["Code"] in {"BucketAlreadyExists", "BucketAlreadyOwnedByYou"}
+    # ASGITransport omits lifespan startup. Claim the actual singleton before
+    # scripted guide prerequisites reuse it; no guide provider bytes are proved.
+    settings = get_settings()
+    bootstrap = create_artifact_store_bootstrap(settings)
+    try:
+        await validate_artifact_storage_namespace_at_startup(bootstrap, settings)
+    finally:
+        bootstrap.close()
     async with AsyncClient(transport=ASGITransport(app=create_app()), base_url="http://testserver") as client:
         admitted = await client.get("/api/v1/actors/me", headers=auth_headers())
         assert admitted.status_code == 200, admitted.text

@@ -132,6 +132,9 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         | set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
         | {
             "tests/contributions/test_export_csv.py",
+            "tests/tasks/test_task_import_batch_contract.py",
+            "tests/tasks/test_task_import_batch_bindings.py",
+            "tests/tasks/test_task_import_batches.py",
             "tests/contributions/test_export_projection.py",
             "tests/authorization/test_contribution_read_scope.py",
             "tests/authorization/test_contribution_read_kernel.py",
@@ -370,6 +373,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
     assert "tests/tasks/evaluation_delivery/test_worker_materialization.py" in shared_a
     assert "tests/artifacts/test_review_packet_contract.py" in shared_a
+    assert "tests/authorization/task_authority/test_management_participants.py" in shared_a
     assert {
         "tests/authorization/post_submit/test_atomicity.py",
         "tests/authorization/post_submit/test_concurrency.py",

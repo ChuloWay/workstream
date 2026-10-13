@@ -23,7 +23,7 @@ from scripts.run_isolated_tests import LOOPBACK, NAME_RE, ROLE_RE
 DDL_LOCK_DIRECTORY = Path("/tmp")
 # Match the PostgreSQL 16 engine used by Backend CI. Catalog identity rendering
 # differs across major versions; regenerate only after comparing actual objects.
-EXPECTED_PUBLIC_SCHEMA_SHA256 = "669bf7e570e2d2e881bc166354d403b828b97479118affc6f826a2034d51ad20"
+EXPECTED_PUBLIC_SCHEMA_SHA256 = "747a4fb7780e9517b377527cb6e05a933fa55adce04912ddaae8366ac3754bfd"
 PROTECTED_TEST_TABLES = (
     "actor_profile_migration_state",
     "alembic_version",
@@ -132,6 +132,9 @@ RESETTABLE_TEST_TABLES = (
     "submission_bundle_durable_intents",
     "submissions",
     "task_assignments",
+    "task_import_batch_command_receipts",
+    "task_import_batch_members",
+    "task_import_batches",
     "task_command_receipts",
     "task_post_submit_routing_manifests",
     "task_post_submit_routing_requests",
@@ -149,6 +152,9 @@ TRUNCATE_GUARDED_TABLES = (
     "checker_submission_fences",
     "checker_results",
     "task_command_receipts",
+    "task_import_batch_command_receipts",
+    "task_import_batch_members",
+    "task_import_batches",
     "task_post_submit_routing_manifests",
     "task_post_submit_routing_requests",
     "checker_policies",

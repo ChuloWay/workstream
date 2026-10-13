@@ -167,6 +167,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/authorization/task_authority/test_lifecycle_races.py",
     "tests/authorization/task_authority/test_task_commands.py",
     "tests/authorization/task_authority/test_management_commands.py",
+    "tests/authorization/task_authority/test_management_participants.py",
     "tests/authorization/task_authority/test_management_concurrency.py",
     "tests/authorization/task_authority/test_management_authority.py",
     "tests/authorization/task_authority/test_management_contracts.py",
@@ -257,6 +258,9 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
+    "tests/tasks/test_task_import_batch_contract.py",
+    "tests/tasks/test_task_import_batch_bindings.py",
+    "tests/tasks/test_task_import_batches.py",
     "tests/contributions/test_export_csv.py",
     "tests/contributions/test_export_projection.py",
     "tests/authorization/test_contribution_read_scope.py",

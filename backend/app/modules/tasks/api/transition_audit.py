@@ -44,7 +44,7 @@ class TaskTransitionFacts:
     from_status: str | None
     to_status: str
     reason: str | None
-    source_type: Literal["manual", "markdown_import", "csv_import"] | None = None
+    source_type: Literal["manual", "markdown_import", "csv_import", "json_import"] | None = None
     locked_lineage: TaskPolicyLineage | None = None
     authority: TaskAuthorityDecision | None = None
 
