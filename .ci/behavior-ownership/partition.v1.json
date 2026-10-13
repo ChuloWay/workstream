@@ -562,14 +562,6 @@
     },
     {
       "group": "auth",
-      "target": "backend/app/modules/authorization/catalogue.py"
-    },
-    {
-      "group": "auth",
-      "target": "backend/app/modules/authorization/catalogue.py"
-    },
-    {
-      "group": "auth",
       "target": "backend/app/modules/authorization/checker_registry_authorization.py"
     },
     {
@@ -1919,14 +1911,6 @@
     {
       "group": "shared",
       "target": "backend/scripts/schema_baseline_sql.py"
-    },
-    {
-      "group": "shared",
-      "target": "backend/scripts/test_lane_catalogue.py"
-    },
-    {
-      "group": "shared",
-      "target": "backend/scripts/test_lane_catalogue.py"
     },
     {
       "group": "shared",

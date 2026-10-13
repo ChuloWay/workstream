@@ -639,3 +639,9 @@ can advance normally. It does not select the historical tree or restore retired
 checker fixtures. Independent owner reviews inspect the reconciled implementation.
 The selected MCP fragment was recaptured from `65803bad7`; its contents and
 canonical digest match, and its producer metadata now names that source.
+
+Shared-owner verification also caught duplicated identical partition entries
+for the AUTH catalogue and CI lane catalogue after reconciliation. Each now
+appears once with its existing owner; the authoritative eligible-target set and
+validator are unchanged. The structure check passes after the import formatting
+repair. No declaration is omitted to satisfy either check.
