@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import UTC, datetime
 from threading import Event, Thread
 from types import SimpleNamespace
@@ -35,6 +35,14 @@ from app.modules.artifacts.service import (
 from app.modules.authorization.catalogue import ACTION_BY_ID, ActionAvailability, ActionId
 from app.modules.authorization.runtime import AuthorizationDenied
 from tests.artifact_store_helpers import artifact_admission_limit_settings
+
+
+def _scoped_worker_database(session_factory):
+    @asynccontextmanager
+    async def database():
+        yield session_factory
+
+    return database
 
 
 @pytest.mark.asyncio
@@ -71,21 +79,13 @@ async def test_guide_continuation_query_supports_native_uuid_postgresql(
     isolated_database_env, monkeypatch,
 ) -> None:
     """Execute the actual query: PostgreSQL 16 does not provide min(uuid)."""
-    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-    engine = create_async_engine(isolated_database_env)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-    monkeypatch.setattr(internal_worker_adapter, "get_session_factory", lambda: factory)
     published = []
 
     async def publish(identifier):
         published.append(identifier)
 
-    try:
-        assert await internal_worker_adapter.scan_guide_setup_continuations(publish) == 0
-        assert published == []
-    finally:
-        await engine.dispose()
+    assert await internal_worker_adapter.scan_guide_setup_continuations(publish) == 0
+    assert published == []
 
 
 @pytest.mark.asyncio
@@ -112,7 +112,11 @@ async def test_guide_continuation_scan_uses_its_own_bound_and_direct_callback(
         guide_setup_continuation_scan_page_size=2,
     )
     monkeypatch.setattr(internal_worker_adapter, "get_settings", lambda: settings)
-    monkeypatch.setattr(internal_worker_adapter, "get_session_factory", lambda: Session)
+    monkeypatch.setattr(
+        internal_worker_adapter,
+        "_artifact_worker_database",
+        _scoped_worker_database(Session),
+    )
     published: list[str] = []
 
     async def publish_continuation(job_id: str) -> None:
@@ -123,6 +127,46 @@ async def test_guide_continuation_scan_uses_its_own_bound_and_direct_callback(
     assert count == 2
     assert published == ["put-1", "put-2"]
     assert observed == {"job_limit": 2}
+
+
+@pytest.mark.asyncio
+async def test_worker_database_disposes_after_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = Mock()
+    engine.dispose = AsyncMock()
+    session_factory = Mock()
+    create_engine = Mock(return_value=engine)
+    create_sessions = Mock(return_value=session_factory)
+    monkeypatch.setattr(internal_worker_adapter, "get_database_url", lambda: "postgresql+asyncpg://db")
+    monkeypatch.setattr(internal_worker_adapter, "create_async_engine", create_engine)
+    monkeypatch.setattr(internal_worker_adapter, "async_sessionmaker", create_sessions)
+
+    async with internal_worker_adapter._artifact_worker_database() as yielded:
+        assert yielded is session_factory
+
+    create_engine.assert_called_once_with("postgresql+asyncpg://db", pool_pre_ping=True)
+    create_sessions.assert_called_once_with(engine, expire_on_commit=False)
+    engine.dispose.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("error_type", [RuntimeError, asyncio.CancelledError])
+async def test_worker_database_disposes_after_failure_or_cancellation(
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[BaseException],
+) -> None:
+    engine = Mock()
+    engine.dispose = AsyncMock()
+    monkeypatch.setattr(internal_worker_adapter, "get_database_url", lambda: "postgresql+asyncpg://db")
+    monkeypatch.setattr(internal_worker_adapter, "create_async_engine", Mock(return_value=engine))
+    monkeypatch.setattr(internal_worker_adapter, "async_sessionmaker", Mock(return_value=Mock()))
+
+    with pytest.raises(error_type):
+        async with internal_worker_adapter._artifact_worker_database():
+            raise error_type("stop")
+
+    engine.dispose.assert_awaited_once_with()
 
 
 def test_eager_internal_tasks_use_lazy_process_runtime(
@@ -136,7 +180,7 @@ def test_eager_internal_tasks_use_lazy_process_runtime(
     initialize = AsyncMock(return_value=None)
     monkeypatch.setattr(
         internal_worker_adapter,
-        "initialize_artifact_internal_runtime",
+        "_initialize_artifact_internal_runtime",
         initialize,
     )
 
@@ -156,8 +200,8 @@ def test_eager_internal_tasks_use_lazy_process_runtime(
 
     monkeypatch.setattr(
         internal_worker_adapter,
-        "get_session_factory",
-        Mock(return_value=Mock(return_value=SessionContext())),
+        "_artifact_worker_database",
+        _scoped_worker_database(Mock(return_value=SessionContext())),
     )
     orchestrator = Mock()
     orchestrator.resolve_put_attempt = AsyncMock(return_value="resolved")
@@ -258,6 +302,12 @@ async def test_internal_artifact_store_is_initialized_once_per_process(
         "validate_artifact_storage_namespace_at_startup",
         AsyncMock(return_value=Mock()),
     )
+    session_factory = Mock()
+    monkeypatch.setattr(
+        internal_worker_adapter,
+        "_artifact_worker_database",
+        _scoped_worker_database(session_factory),
+    )
     first_namespace = Mock()
     monkeypatch.setattr(
         internal_worker_adapter,
@@ -335,6 +385,11 @@ async def test_process_runtime_uses_concrete_bootstrap_namespace(
         "validate_artifact_storage_namespace_at_startup",
         AsyncMock(return_value=claim),
     )
+    monkeypatch.setattr(
+        internal_worker_adapter,
+        "_artifact_worker_database",
+        _scoped_worker_database(Mock()),
+    )
 
     try:
         await internal_worker_adapter.initialize_artifact_internal_runtime()
@@ -372,6 +427,11 @@ async def test_process_runtime_shutdown_waits_for_active_lease(
         internal_worker_adapter,
         "validate_artifact_storage_namespace_at_startup",
         AsyncMock(return_value=Mock()),
+    )
+    monkeypatch.setattr(
+        internal_worker_adapter,
+        "_artifact_worker_database",
+        _scoped_worker_database(Mock()),
     )
     await internal_worker_adapter.initialize_artifact_internal_runtime()
     shutdown_started, shutdown_finished = Event(), Event()
@@ -419,6 +479,11 @@ async def test_process_runtime_closes_bootstrap_when_namespace_claim_fails(
         internal_worker_adapter,
         "validate_artifact_storage_namespace_at_startup",
         AsyncMock(side_effect=RuntimeError("claim failed")),
+    )
+    monkeypatch.setattr(
+        internal_worker_adapter,
+        "_artifact_worker_database",
+        _scoped_worker_database(Mock()),
     )
 
     with pytest.raises(RuntimeError, match="claim failed"):
@@ -468,6 +533,11 @@ async def test_process_runtime_closes_losing_concurrent_bootstrap(
         "validate_artifact_storage_namespace_at_startup",
         AsyncMock(side_effect=claim_namespace),
     )
+    monkeypatch.setattr(
+        internal_worker_adapter,
+        "_artifact_worker_database",
+        _scoped_worker_database(Mock()),
+    )
 
     initializers = [
         asyncio.create_task(internal_worker_adapter.initialize_artifact_internal_runtime())
@@ -491,7 +561,7 @@ async def test_internal_operation_rejects_kind_and_restages_denial(
 
     monkeypatch.setattr(
         internal_worker_adapter,
-        "initialize_artifact_internal_runtime",
+        "_initialize_artifact_internal_runtime",
         AsyncMock(return_value=None),
     )
 
@@ -521,8 +591,8 @@ async def test_internal_operation_rejects_kind_and_restages_denial(
 
     monkeypatch.setattr(
         internal_worker_adapter,
-        "get_session_factory",
-        Mock(return_value=Mock(return_value=SessionContext())),
+        "_artifact_worker_database",
+        _scoped_worker_database(Mock(return_value=SessionContext())),
     )
     authority = PreparedArtifactInternalAuthority(
         session, service_identity=ServiceIdentity.ARTIFACT_PUT_RESOLVER,
@@ -578,8 +648,8 @@ async def test_pending_scan_returns_count_and_restages_denial(
 
     monkeypatch.setattr(
         internal_worker_adapter,
-        "get_session_factory",
-        Mock(return_value=Mock(return_value=SessionContext())),
+        "_artifact_worker_database",
+        _scoped_worker_database(Mock(return_value=SessionContext())),
     )
     monkeypatch.setattr(internal_worker_adapter, "get_settings", Mock(return_value=Mock()))
     authority = PreparedArtifactInternalAuthority(

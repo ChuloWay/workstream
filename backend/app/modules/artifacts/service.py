@@ -12,12 +12,11 @@ from datetime import datetime, timedelta
 from uuid import UUID
 from app.core.identifiers import new_record_id
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.exc import IntegrityError
 
 from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
-from app.db.session import get_session_factory
 from app.interfaces.artifacts import (
     ArtifactStore,
     ArtifactCommitment,
@@ -2797,10 +2796,11 @@ def _clear_job_fence(job: ArtifactVerificationJob) -> None:
 async def validate_artifact_storage_namespace_at_startup(
     store: ArtifactStoreBootstrap,
     settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
 ) -> ArtifactStoreNamespaceClaim:
     """Claim one pinned namespace and return its exact initialization proof."""
     namespace = artifact_storage_namespace_spec(settings, store)
-    async with get_session_factory()() as session:
+    async with session_factory() as session:
         async with session.begin():
             await _claim_and_validate_storage_namespace(
                 ArtifactRepository(session),

@@ -24,12 +24,10 @@ def _worker_port(h, monkeypatch):
     """Keep the real child runtime on the fixture's exact claimed namespace."""
     import app.adapters.artifacts as artifact_adapter
     import app.core.config as config
-    import app.modules.artifacts.service as artifact_service
 
     assert internal_workers._runtime is None
     monkeypatch.setattr(config, "get_settings", lambda: h.settings)
     monkeypatch.setattr(internal_workers, "get_settings", lambda: h.settings)
-    monkeypatch.setattr(artifact_service, "get_session_factory", lambda: h.factory)
     h.worker_scratch_managers = []
     original_create = artifact_adapter.create_artifact_scratch_manager
 

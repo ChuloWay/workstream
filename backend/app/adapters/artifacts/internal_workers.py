@@ -2,20 +2,21 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager, contextmanager
 from threading import Condition
 from typing import Iterator
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.adapters.artifacts import (
     create_artifact_store_bootstrap,
     require_artifact_runtime_eligible,
 )
-from app.core.config import get_settings
-from app.db.session import get_session_factory
+from app.core.config import Settings, get_settings
+from app.db.session import get_database_url
 from app.interfaces.artifacts import ArtifactStore, ArtifactStoreBootstrap
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.authorization import PreparedArtifactInternalAuthority
@@ -41,20 +42,46 @@ _runtime_active_operations = 0
 _runtime_shutting_down = False
 
 
+@asynccontextmanager
+async def _artifact_worker_database() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """Own SQLAlchemy resources for exactly one worker event loop."""
+    engine = create_async_engine(get_database_url(), pool_pre_ping=True)
+    try:
+        yield async_sessionmaker(engine, expire_on_commit=False)
+    finally:
+        await engine.dispose()
+
+
 async def initialize_artifact_internal_runtime() -> None:
     """Initialize one provider store for this Celery child process."""
-    global _runtime, _runtime_shutting_down
     with _runtime_condition:
         if _runtime is not None and not _runtime_shutting_down:
             return
     settings = get_settings()
     if settings.artifact_store_backend == "disabled":
         return
+    async with _artifact_worker_database() as session_factory:
+        await _initialize_artifact_internal_runtime(settings, session_factory)
+
+
+async def _initialize_artifact_internal_runtime(
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Initialize the provider using the current worker loop's SQL resources."""
+    global _runtime, _runtime_shutting_down
+    with _runtime_condition:
+        if _runtime is not None and not _runtime_shutting_down:
+            return
     require_artifact_runtime_eligible(settings)
     bootstrap = create_artifact_store_bootstrap(settings)
     try:
         namespace = artifact_storage_namespace_spec(settings, bootstrap)
-        claim = await validate_artifact_storage_namespace_at_startup(bootstrap, settings)
+        claim = await validate_artifact_storage_namespace_at_startup(
+            bootstrap,
+            settings,
+            session_factory,
+        )
         store = bootstrap.initialize_after_namespace_claim(claim)
     except BaseException:
         bootstrap.close()
@@ -109,28 +136,29 @@ async def run_artifact_internal_operation(kind: str, resource_id: UUID) -> str:
     except KeyError as exc:
         raise ValueError("unsupported artifact internal operation") from exc
     settings = get_settings()
-    await initialize_artifact_internal_runtime()
-    with _artifact_internal_runtime() as (store, namespace):
-        async with get_session_factory()() as session:
-            request_id = uuid4()
-            authority = PreparedArtifactInternalAuthority(
-                session,
-                service_identity=service_identity,
-                request_id=request_id,
-                correlation_id=request_id,
-            )
-            orchestrator = ArtifactStorageOrchestrator(
-                session,
-                store,
-                namespace,
-                settings,
-                authority,
-            )
-            async with authority.denial_boundary():
-                if kind == "put":
-                    return await orchestrator.resolve_put_attempt(resource_id)
-                elif kind == "verification":
-                    return await orchestrator.verify_object(resource_id)
+    async with _artifact_worker_database() as session_factory:
+        await _initialize_artifact_internal_runtime(settings, session_factory)
+        with _artifact_internal_runtime() as (store, namespace):
+            async with session_factory() as session:
+                request_id = uuid4()
+                authority = PreparedArtifactInternalAuthority(
+                    session,
+                    service_identity=service_identity,
+                    request_id=request_id,
+                    correlation_id=request_id,
+                )
+                orchestrator = ArtifactStorageOrchestrator(
+                    session,
+                    store,
+                    namespace,
+                    settings,
+                    authority,
+                )
+                async with authority.denial_boundary():
+                    if kind == "put":
+                        return await orchestrator.resolve_put_attempt(resource_id)
+                    elif kind == "verification":
+                        return await orchestrator.verify_object(resource_id)
     raise AssertionError("artifact internal operation did not return")
 
 
@@ -141,18 +169,19 @@ async def continue_guide_setup_after_stored_document(put_attempt_id: UUID) -> No
     from app.modules.projects.models import GuideSourceSnapshotItem
     from app.modules.projects.guide_setup_continuation import continue_setup_after_stored_guide_item
 
-    async with get_session_factory()() as session:
-        snapshot_id = await session.scalar(select(GuideSourceSnapshotItem.source_snapshot_id)
-            .join(ArtifactPutAttempt, ArtifactPutAttempt.guide_source_item_id == GuideSourceSnapshotItem.id)
-            .where(ArtifactPutAttempt.id == str(put_attempt_id),
-                   ArtifactPutAttempt.producer_request_type == "guide",
-                   ArtifactPutAttempt.status == "object_confirmed",
-                   ArtifactPutAttempt.terminal_result_code.in_(("document_stored", "document_stored_observed"))))
-    if snapshot_id is not None:
-        await continue_setup_after_stored_guide_item(
-            UUID(snapshot_id), session_factory=get_session_factory(),
-            manifest_factory=guide_document_manifest_port,
-        )
+    async with _artifact_worker_database() as session_factory:
+        async with session_factory() as session:
+            snapshot_id = await session.scalar(select(GuideSourceSnapshotItem.source_snapshot_id)
+                .join(ArtifactPutAttempt, ArtifactPutAttempt.guide_source_item_id == GuideSourceSnapshotItem.id)
+                .where(ArtifactPutAttempt.id == str(put_attempt_id),
+                       ArtifactPutAttempt.producer_request_type == "guide",
+                       ArtifactPutAttempt.status == "object_confirmed",
+                       ArtifactPutAttempt.terminal_result_code.in_(("document_stored", "document_stored_observed"))))
+        if snapshot_id is not None:
+            await continue_setup_after_stored_guide_item(
+                UUID(snapshot_id), session_factory=session_factory,
+                manifest_factory=guide_document_manifest_port,
+            )
 
 
 async def scan_artifact_pending_work(
@@ -161,22 +190,23 @@ async def scan_artifact_pending_work(
 ) -> int:
     """Compose and authorize one bounded pending-work scan."""
     settings = get_settings()
-    async with get_session_factory()() as session:
-        request_id = uuid4()
-        authority = PreparedArtifactInternalAuthority(
-            session,
-            service_identity=ServiceIdentity.ARTIFACT_SCHEDULER,
-            request_id=request_id,
-            correlation_id=request_id,
-        )
-        async with authority.denial_boundary():
-            return await ArtifactPendingWorkScanner(
+    async with _artifact_worker_database() as session_factory:
+        async with session_factory() as session:
+            request_id = uuid4()
+            authority = PreparedArtifactInternalAuthority(
                 session,
-                settings,
-                authority,
-                publish_put_attempt,
-                publish_verification_job,
-            ).scan()
+                service_identity=ServiceIdentity.ARTIFACT_SCHEDULER,
+                request_id=request_id,
+                correlation_id=request_id,
+            )
+            async with authority.denial_boundary():
+                return await ArtifactPendingWorkScanner(
+                    session,
+                    settings,
+                    authority,
+                    publish_put_attempt,
+                    publish_verification_job,
+                ).scan()
 
 
 async def scan_guide_setup_continuations(publish_continuation: Callable[[str], Awaitable[None]]) -> int:
@@ -212,27 +242,28 @@ async def scan_guide_setup_continuations(publish_continuation: Callable[[str], A
     missing = select(missing_item.id).where(
         missing_item.source_snapshot_id == ProjectSetupRun.source_snapshot_id, ~committed,
     ).exists()
-    async with get_session_factory()() as session:
-        ids = list(await session.scalars(
-            # PostgreSQL 16 has UUID ordering but no min(uuid) aggregate.
-            # This representative is published as a canonical string, as before.
-            select(func.min(cast(ArtifactPutAttempt.id, String)))
-            .join(GuideSourceSnapshotItem, GuideSourceSnapshotItem.id == ArtifactPutAttempt.guide_source_item_id)
-            .join(ProjectSetupRun, ProjectSetupRun.source_snapshot_id == GuideSourceSnapshotItem.source_snapshot_id)
-            .join(GuideSourceSnapshot, GuideSourceSnapshot.id == ProjectSetupRun.source_snapshot_id)
-            .join(ProjectGuide, ProjectGuide.id == ProjectSetupRun.guide_id)
-            .where(retryable_compilation_dispatch_predicate(), ~missing, ~stale_run, ~stale_snapshot,
-                   ProjectGuide.status == "draft", ProjectGuide.version == ProjectSetupRun.guide_version,
-                   GuideSourceSnapshot.project_id == ProjectSetupRun.project_id,
-                   GuideSourceSnapshot.guide_id == ProjectGuide.id,
-                   GuideSourceSnapshot.guide_version == ProjectGuide.version,
-                   GuideSourceSnapshot.bundle_hash == ProjectSetupRun.source_snapshot_hash,
-                   ArtifactPutAttempt.producer_request_type == "guide",
-                   ArtifactPutAttempt.status == "object_confirmed",
-                   ArtifactPutAttempt.terminal_result_code.in_(("document_stored", "document_stored_observed")))
-            .group_by(ProjectSetupRun.id).order_by(func.min(ArtifactPutAttempt.terminal_at), ProjectSetupRun.id)
-            .limit(get_settings().guide_setup_continuation_scan_page_size)
-        ))
-    for identifier in ids:
-        await publish_continuation(identifier)
-    return len(ids)
+    async with _artifact_worker_database() as session_factory:
+        async with session_factory() as session:
+            ids = list(await session.scalars(
+                # PostgreSQL 16 has UUID ordering but no min(uuid) aggregate.
+                # This representative is published as a canonical string, as before.
+                select(func.min(cast(ArtifactPutAttempt.id, String)))
+                .join(GuideSourceSnapshotItem, GuideSourceSnapshotItem.id == ArtifactPutAttempt.guide_source_item_id)
+                .join(ProjectSetupRun, ProjectSetupRun.source_snapshot_id == GuideSourceSnapshotItem.source_snapshot_id)
+                .join(GuideSourceSnapshot, GuideSourceSnapshot.id == ProjectSetupRun.source_snapshot_id)
+                .join(ProjectGuide, ProjectGuide.id == ProjectSetupRun.guide_id)
+                .where(retryable_compilation_dispatch_predicate(), ~missing, ~stale_run, ~stale_snapshot,
+                       ProjectGuide.status == "draft", ProjectGuide.version == ProjectSetupRun.guide_version,
+                       GuideSourceSnapshot.project_id == ProjectSetupRun.project_id,
+                       GuideSourceSnapshot.guide_id == ProjectGuide.id,
+                       GuideSourceSnapshot.guide_version == ProjectGuide.version,
+                       GuideSourceSnapshot.bundle_hash == ProjectSetupRun.source_snapshot_hash,
+                       ArtifactPutAttempt.producer_request_type == "guide",
+                       ArtifactPutAttempt.status == "object_confirmed",
+                       ArtifactPutAttempt.terminal_result_code.in_(("document_stored", "document_stored_observed")))
+                .group_by(ProjectSetupRun.id).order_by(func.min(ArtifactPutAttempt.terminal_at), ProjectSetupRun.id)
+                .limit(get_settings().guide_setup_continuation_scan_page_size)
+            ))
+        for identifier in ids:
+            await publish_continuation(identifier)
+        return len(ids)
