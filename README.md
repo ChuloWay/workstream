@@ -235,8 +235,8 @@ replay validates the historical request. The current selected completion classif
 A future setup-fault hold must preserve the Submission and locked rules without
 contributor penalty; changing or re-screening submitted-task rules remains
 deferred. PILOT-04 already registers selected production request/completion
-delivery. Public admission-backed entry and false-guide activation/readiness are
-planned independently before the first real end-to-end drill.
+delivery. ARCH-02I-B exposes public admission-backed entry; false-guide
+activation/readiness and the real public API and Celery service drill remain.
 
 Active work stays on that first contribution path. Live human review/revision,
 reviewer participation and fulfillment delivery follow separately.
