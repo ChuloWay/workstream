@@ -26,6 +26,7 @@
   [WS-CLI-001-19](WS-CLI-001-19.md), separate manager draft creation, screening and release;
   [WS-CLI-001-20](WS-CLI-001-20.md), explicit exact-project Submitter/Reviewer issuance and revocation;
   [WS-CLI-001-21](WS-CLI-001-21.md), filtered grant browsing and exact qualification/revocation history;
+  [WS-CLI-001-22](WS-CLI-001-22.md), Finance current policy discovery and exact retained-version inspection;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download.
 
 ## Current boundary
@@ -111,6 +112,12 @@ owned; no role cache, automatic grant or AdminRole command is added.
 explicit opaque continuation; `project role-grant show PROJECT_ID GRANT_ID`
 observes exact public qualification, provenance and revocation history. Neither
 read grants authority or verifies permission for a later write.
+`project contribution-policy current PROJECT_ID` and
+`project contribution-policy show PROJECT_ID POLICY_ID [--version UUID]` expose
+the complete authorized Finance policy graph and current selectors. The backend
+selects the published version ahead of an open draft unless explicitly overridden
+by a version selector; current Finance authority governs historical reads too.
+PM-only authority does not suffice. These reads never publish, retire or pay.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -203,11 +210,15 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 21. **WS-CLI-001-21:** Filtered project-grant pagination and exact grant history
    through public GETs, complete qualification/provenance disclosure and fresh
    authority on each call. No actor discovery or automatic decisions.
-22. **Later governed-work commands:** Add further project setup, submission,
+22. **WS-CLI-001-22:** Current Finance policy discovery and backend-selected or
+   exact retained-version inspection, including empty drafts and complete award
+   definitions. No Finance mutation, publication or local readiness decisions.
+23. **Later governed-work commands:** Add explicit Finance policy editing,
+   publication/retirement and contribution-evidence reads, then submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-23. **Optional TUI:** Add a focused public queue/evidence view after its API
+24. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof
