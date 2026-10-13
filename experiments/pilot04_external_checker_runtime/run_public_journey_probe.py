@@ -10,6 +10,8 @@ import argparse
 import asyncio
 from contextlib import nullcontext
 from decimal import Decimal
+import hashlib
+import hmac
 from io import BytesIO
 import json
 import os
@@ -27,7 +29,6 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.artifacts import (
-    create_artifact_scratch_manager,
     create_artifact_store_bootstrap,
 )
 from app.core.config import get_settings
@@ -80,6 +81,95 @@ from api_contract_e2e import (  # noqa: E402
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
+
+
+def _settings_digests(settings, nonce: bytes) -> dict[str, str]:
+    """Compare every resolved setting across processes without exposing values."""
+    values = settings.model_dump(mode="json")
+    for name in (
+        "api_rate_limit_key_secret", "pagination_cursor_hmac_secret",
+        "artifact_s3_access_key_id", "artifact_s3_secret_access_key",
+        "artifact_s3_session_token",
+    ):
+        secret = getattr(settings, name)
+        values[name] = None if secret is None else secret.get_secret_value()
+    return {
+        name: hmac.new(
+            nonce, json.dumps(value, sort_keys=True, separators=(",", ":")).encode(),
+            hashlib.sha256,
+        ).hexdigest()
+        for name, value in values.items()
+    }
+
+
+def _celery_config_mismatches(settings) -> list[str]:
+    from app.workers.celery_app import celery_app
+
+    expected = {
+        "celery_broker_url": settings.celery_broker_url,
+        "celery_result_backend_url": settings.celery_result_backend_url,
+        "celery_task_always_eager": settings.celery_task_always_eager,
+    }
+    actual = {
+        "celery_broker_url": celery_app.conf.broker_url,
+        "celery_result_backend_url": celery_app.conf.result_backend,
+        "celery_task_always_eager": celery_app.conf.task_always_eager,
+    }
+    return [name for name in expected if expected[name] != actual[name]]
+
+
+def _verify_child_configuration(role: str) -> int:
+    """Import the same API or worker entry point and report only mismatched keys."""
+    request = json.load(sys.stdin)
+    nonce = bytes.fromhex(request["nonce"])
+    if role == "api":
+        from app.main import app
+
+        actual = app.state.settings
+    else:
+        from app.workers.celery_app import celery_app  # noqa: F401
+
+        actual = get_settings()
+    observed = _settings_digests(actual, nonce)
+    expected = request["expected"]
+    mismatches = sorted(
+        name for name in expected.keys() | observed.keys()
+        if expected.get(name) != observed.get(name)
+    )
+    if role == "worker":
+        mismatches.extend(_celery_config_mismatches(actual))
+    print(json.dumps(sorted(set(mismatches)), separators=(",", ":")))
+    return 0
+
+
+def _preflight_children(settings, env: dict[str, str], root: Path) -> None:
+    """Reject API/worker drift before starting real services or public requests."""
+    nonce = os.urandom(32)
+    request = json.dumps({
+        "nonce": nonce.hex(), "expected": _settings_digests(settings, nonce),
+    })
+    for role in ("api", "worker"):
+        with (root / f"preflight-{role}.log").open("wb") as errors:
+            result = subprocess.run(
+                [
+                    sys.executable, "-c",
+                    "import sys; sys.path.extend(sys.argv[1:3]); "
+                    "from experiments.pilot04_external_checker_runtime."
+                    "run_public_journey_probe import _verify_child_configuration; "
+                    "raise SystemExit(_verify_child_configuration(sys.argv[3]))",
+                    str(BACKEND.parent), str(BACKEND / "tests"), role,
+                ],
+                cwd=BACKEND, env=env, input=request, text=True,
+                stdout=subprocess.PIPE, stderr=errors, timeout=120, check=False,
+            )
+        _require(result.returncode == 0,
+                 f"{role} configuration preflight failed; see private diagnostics")
+        try:
+            mismatches = json.loads(result.stdout)
+        except ValueError as exc:
+            raise RuntimeError(f"{role} configuration preflight returned invalid evidence") from exc
+        _require(not mismatches,
+                 f"{role} configuration differs from parent: {', '.join(mismatches)}")
 
 
 def _process(command: list[str], *, env: dict[str, str], log: Path) -> subprocess.Popen:
@@ -730,7 +820,6 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         "external_checker_material_root": scratch,
         "external_checker_service_timeout_seconds": 90.0,
     })
-    create_artifact_scratch_manager(settings).close()
     bootstrap = create_artifact_store_bootstrap(settings)
     namespace = artifact_storage_namespace_spec(settings, bootstrap)
     bootstrap.close()
@@ -782,6 +871,11 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
     _require(runtime_settings.celery_broker_url == broker_url
              and runtime_settings.celery_task_always_eager is False,
              "worker broker configuration is not durable")
+    _require(runtime_settings.artifact_scratch_root == scratch
+             and runtime_settings.artifact_scratch_minimum_free_bytes == 0
+             and runtime_settings.external_checker_service_socket == socket_path
+             and runtime_settings.external_checker_material_root == scratch,
+             "API/worker scratch or checker service configuration differs from fixture")
     for field in (
         "artifact_store_backend", "artifact_s3_provider_profile", "artifact_s3_region",
         "artifact_s3_endpoint_url", "artifact_s3_bucket", "artifact_s3_private_prefix",
@@ -799,6 +893,11 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         runtime_bootstrap.close()
     _require(runtime_namespace.namespace_fingerprint == namespace.namespace_fingerprint,
              "API/worker artifact namespace differs from approved fixture")
+    parent_celery_mismatches = _celery_config_mismatches(runtime_settings)
+    _require(not parent_celery_mismatches,
+             "parent broker configuration differs from resolved Settings: "
+             + ", ".join(parent_celery_mismatches))
+    _preflight_children(runtime_settings, env, root)
 
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
