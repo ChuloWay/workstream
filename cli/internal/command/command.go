@@ -113,6 +113,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	addProjectCreate(project, client, &output, stdout)
 	addProjectRoleMutations(project, client, &output, stdout)
 	addContributionPolicyReads(project, client, &output, stdout)
+	addContributionEvidence(root, project, client, &output, stdout)
 	addGuideCreate(project, client, &output, stdout)
 	project.AddCommand(&cobra.Command{
 		Use:   "show PROJECT_ID",
@@ -178,6 +179,9 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 		writeFailure(stderr, output, api.Failure{Code: usage.code})
 		if output != "json" {
 			fmt.Fprintln(stderr, usage.message)
+		}
+		if usage.code == "file_io_error" {
+			return 1
 		}
 		return 2
 	default:

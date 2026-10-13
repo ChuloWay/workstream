@@ -1,8 +1,14 @@
 # PILOT-02B — Import one verified JSON source into DRAFT Tasks atomically
 
 - Initiative: `None`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: A covered Project Manager imports one verified project-bound JSON source into one immutable batch and its DRAFT Tasks, with exact replay and complete rollback.
+
+Current outcome: delivered by [PR #542](https://github.com/Flow-Research/workstream/pull/542).
+The subsequent [PILOT-02C work](pilot02-bulk-transitions-cli.md) supplies batch
+screen/release and CLI conversion; issue #489 is closed. Earlier source-specific
+pending checks, failures and repair instructions below are retained execution
+history, not current unfinished work. Deployment remains a separate claim.
 
 ## Intent
 
@@ -10,7 +16,8 @@ Issue [489](https://github.com/Flow-Research/workstream/issues/489) requires a
 real 200-row file to produce 200 DRAFT Tasks before separate screen and release.
 PILOT-02A provides exact source custody but creates no Tasks. This chunk supplies
 that missing JSON-to-DRAFT operation and a covered-manager batch-status read.
-Issue #489 remains open after this chunk; batch transitions and CLI remain.
+This import-only boundary did not include batch transitions or CLI; those were
+subsequently delivered by PILOT-02C without changing ART/TASK ownership.
 
 ## Baseline before this chunk
 
@@ -528,7 +535,7 @@ the lead retains independent SQL and final full-evidence review.
 - Explicit batch screen/release and CLI/CSV are the separate coordinated slice.
   Neither deployment nor completion of all Issue 489 acceptance is claimed here.
 
-## Current-main takeover reconciliation
+## Historical main-takeover reconciliation
 
 Reconcile this atomic import slice with merged main `6d64a6353`: preserve the
 selected external-checker flow, current authority inventory and retained data.

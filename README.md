@@ -424,6 +424,10 @@ creates a draft; separate `project task screen PROJECT_ID TASK_ID` and
 `project task release PROJECT_ID TASK_ID --reason TEXT` commands each require
 their own retry key. Workstream owns guide/policy locking and readiness; no
 command automatically prepares or releases work after another command.
+PILOT-02's `workstream project task-batch` commands add local CSV conversion,
+source declaration/upload/status, atomic import and separate whole-batch
+screen/release through public APIs. They share the same CLI; they neither
+replace individual-task commands nor form a prerequisite for evidence export.
 `workstream project role-grant issue PROJECT_ID --input FILE --idempotency-key UUID`
 and `project role-grant revoke PROJECT_ID GRANT_ID --input FILE --idempotency-key UUID`
 send deliberate Submitter/Reviewer decisions with explicit qualification evidence
@@ -442,6 +446,11 @@ The `create`, `update`, `publish` and `retire` commands in that same group expos
 separate Finance decisions with explicit idempotency keys and exact version
 selectors. They return immutable event receipts; guide activation stays separate.
 All support human-readable and JSON output, using the caller's Flow token.
+`workstream contributions [--project UUID]` reads the caller's contribution
+evidence; `workstream project contributions PROJECT_ID` exports one authorized
+project. Both support recorded-time/type filters and `--csv FILE` for the exact
+server export, saved privately without overwrite. Earned awards are not proof
+of payment; these reads do not activate unfinished lifecycle writers.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
 

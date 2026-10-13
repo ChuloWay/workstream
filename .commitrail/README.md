@@ -36,7 +36,12 @@ Use a lowercase kebab-case standalone filename, for example
 `changes/fix-guide-validation.md` and declare `- Initiative: None` exactly once.
 Standalone records need no initiative overview
 or index row. Changes belonging to an existing initiative keep its record layout.
-Exactly one change record is used per implementation PR across both layouts.
+Use one bounded change record per implementation PR across both layouts.
+When reconciling related merged work, one new record may accompany corrections
+to records already present at the PR's merge base. Every edited record still
+receives full validation. Multiple new records are rejected; multiple edited
+records require a known base and exactly one new record. This is not permission
+to combine unrelated implementation changes.
 
 The validator requires a record for changes under `backend/`, `frontend/src/`,
 `scripts/`, `.agents/skills/`, `.codex/agents/`, `.ci/`, `.github/workflows/`,

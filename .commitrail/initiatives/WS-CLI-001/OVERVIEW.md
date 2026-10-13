@@ -28,7 +28,10 @@
   [WS-CLI-001-21](WS-CLI-001-21.md), filtered grant browsing and exact qualification/revocation history;
   [WS-CLI-001-22](WS-CLI-001-22.md), Finance current policy discovery and exact retained-version inspection;
   [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
-  [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download.
+  [WS-CLI-001-24](WS-CLI-001-24.md), self/project contribution evidence and exact private CSV export;
+  [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
+  [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
+  source custody, atomic import, batch status and whole-batch screen/release.
 
 ## Current boundary
 
@@ -123,6 +126,13 @@ PM-only authority does not suffice. These reads never publish, retire or pay.
 separate public Finance mutations with exact selectors and explicit retry keys.
 Original event receipts survive later lifecycle changes, with current authority
 required on replay. Guide activation remains a separate manager operation.
+`project task-batch` provides PILOT-02's separate local CSV conversion, source
+declaration/upload/status, atomic DRAFT import, batch status and explicit atomic
+screen/release. It shares this binary and public API client, not a second CLI.
+Batch writes use their own bounded request budget; ordinary contribution reads
+retain their existing read deadline. `contributions` and `project contributions`
+read existing authorized evidence and optionally save exact private server CSV;
+neither requires batch-origin Tasks or activates a lifecycle writer.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -221,10 +231,14 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 23. **WS-CLI-001-23:** Finance draft creation, complete rule replacement,
    publication and retirement through existing public operations, with explicit
    caller keys, immutable event receipts and no automatic retries.
-24. **Later governed-work commands:** Add contribution-evidence reads, then submission,
-   review, revision, and contribution reads/writes only as their actual public
-   contracts and authority boundaries become available. Split by user journey,
-   not one PR per endpoint or one giant catalogue PR.
+24. **WS-CLI-001-24:** Self and authorized project contribution-evidence reads,
+   exact decimals, recorded-time/type filters and private server CSV export.
+   No local recognition, payment decision or lifecycle activation.
+   Remaining commands are selected only from currently public, usable API
+   contracts not already owned by another initiative. PILOT-02 batch CLI is
+   delivered in this package; reuse it rather than duplicate it.
+   Submission awaits its public contract; unfinished
+   review/revision is not current CLI implementation scope.
 25. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
