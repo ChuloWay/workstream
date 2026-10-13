@@ -634,3 +634,13 @@ for the AUTH catalogue and CI lane catalogue after reconciliation. Each now
 appears once with its existing owner; the authoritative eligible-target set and
 validator are unchanged. The structure check passes after the import formatting
 repair. No declaration is omitted to satisfy either check.
+
+Hosted run `38363822275` at head `8205c01a1` completed nine backend lanes
+successfully; Task B failed only `test_committed_receipt_is_immutable_through_sql`.
+The new native membership FK causes bare TRUNCATE to stop at PostgreSQL's
+FK check before the existing immutability trigger. Move the already-reviewed
+bulk probe into this prerequisite: use `TRUNCATE ... CASCADE` to reach that
+guard, retain its exact IntegrityError/message assertion, and compare every
+retained receipt row after each refusal. No production guard or exception
+expectation is weakened. Authenticated lane artifact `11796506646` has SHA-256
+`da7a4634a64f7517b694bd25a6882fa52895822933c61e2b3a5006c35170f0ef`.
