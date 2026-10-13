@@ -435,6 +435,9 @@ open-draft selectors; `project contribution-policy show PROJECT_ID POLICY_ID
 [--version UUID]` inspects backend-selected or exact historical policy versions,
 including complete rules and exact quantities. These require current Finance
 Authority, not PM-only permission; they do not edit, publish, retire or pay.
+The `create`, `update`, `publish` and `retire` commands in that same group expose
+separate Finance decisions with explicit idempotency keys and exact version
+selectors. They return immutable event receipts; guide activation stays separate.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
