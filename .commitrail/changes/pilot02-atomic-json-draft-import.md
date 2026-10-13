@@ -644,3 +644,10 @@ guard, retain its exact IntegrityError/message assertion, and compare every
 retained receipt row after each refusal. No production guard or exception
 expectation is weakened. Authenticated lane artifact `11796506646` has SHA-256
 `da7a4634a64f7517b694bd25a6882fa52895822933c61e2b3a5006c35170f0ef`.
+
+The repaired receipt probe passed on exact source
+`03024fc1be2e8c211889a64c642fb062b64df266` (1 case, 90.05 seconds),
+using native PostgreSQL `0037` and the canonical isolated runner. Raw evidence
+is `/tmp/pilot02-atomic-receipt-fixed.{log,json}`; database, role, bucket and
+prefix cleanup completed. This focused result repairs the sole observed hosted
+failure; a complete hosted run on the final pushed head remains required.
