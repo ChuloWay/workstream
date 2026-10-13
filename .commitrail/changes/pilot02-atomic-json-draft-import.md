@@ -583,3 +583,16 @@ application, model, AUTH, workflow, cap, predecessor fixture or compatibility
 code changes are allowed in this migration reconciliation. The separate bulk
 transition migration follows as `0038` only after this atomic boundary is
 frozen.
+
+### Response timestamp custody finding
+
+Independent source review found the pending-to-committed SQL closure did not
+bind response `created_at` to the authoritative native batch timestamp. Extend
+the existing counterfeit test by shifting only the staged response timestamp;
+reproduce before adding the SQL equality and the owner replay mirror. Preserve
+all prior native checks, add one real foreign-project public selector control,
+and execute existing invalid-upload controls on the reconciled source. The
+first full native module at `057a2a581` timed out after 900s and is not a pass;
+all owned resources cleaned up. Its next focused metadata membership control
+passed (1 case, 136.27s), including actual call33.56s/setup13.34s, with no observed
+lock hang. Use targeted timed runs and complete hosted evidence for closure.

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import timedelta
 from uuid import uuid4
 
 import pytest
@@ -262,6 +263,23 @@ async def test_matching_metadata_label_never_adds_native_membership(import_sourc
     assert status.status_code == 200 and status.json()["creation"] == batch
     assert [row["task_id"] for row in status.json()["current_tasks"]] == [batch["tasks"][0]["id"]]
     assert await _counts(project) == (1, 1, 1, 2, 2, 2)
+
+
+async def test_foreign_project_batch_and_source_selectors_are_concealed(import_source_client):
+    """A manager covering both projects cannot transplant a stored batch or source."""
+    client = import_source_client
+    project, other = await _project(client), await _project(client)
+    source = await _verified_source(client, project, document())
+    imported = await client.post(_batch_path(project), headers=auth_headers(), json={"source_id": source["source_id"]})
+    assert imported.status_code == 201, imported.text
+    before = await _counts(project)
+    hidden = await client.get(_batch_path(other) + "/" + imported.json()["batch_id"], headers=auth_headers())
+    assert hidden.status_code == 404 and hidden.json()["error"]["code"] == "task_import_batch_not_found", hidden.text
+    refused = await client.post(_batch_path(other), headers=auth_headers(), json={"source_id": source["source_id"]})
+    assert refused.status_code == 404 and refused.json()["error"]["code"] == "task_import_source_not_found", refused.text
+    for response in (hidden, refused):
+        assert source["source_id"] not in response.text and source["sha256"] not in response.text
+    assert await _counts(project) == before and await _counts(other) == (0, 0, 0, 0, 0, 0)
 
 
 @pytest.mark.parametrize("authority", ["ungranted_actor", "revoked_original"])
@@ -533,7 +551,7 @@ async def test_normal_create_takes_common_authority_before_competing_external_id
         await asyncio.gather(*(pending for pending in (first, second) if pending is not None), return_exceptions=True)
 
 
-@pytest.mark.parametrize("substitution", ["foreign_verification", "foreign_task", "pending_header"])
+@pytest.mark.parametrize("substitution", ["foreign_verification", "foreign_task", "pending_header", "forged_created_at"])
 async def test_native_commit_refuses_partial_or_foreign_custody(import_source_client, monkeypatch, substitution):
     """Native closure rejects corruption after genuine ART and CREATE validation."""
     client = import_source_client
@@ -560,6 +578,8 @@ async def test_native_commit_refuses_partial_or_foreign_custody(import_source_cl
 
     async def corrupt(commands, batch, parsed, prepared):
         result = await original(commands, batch, parsed, prepared)
+        if substitution == "forged_created_at":
+            return result.model_copy(update={"created_at": result.created_at + timedelta(seconds=1)})
         if substitution == "foreign_task":
             # Corrupt the final, not-yet-flushed member INSERT so an existing
             # append-only UPDATE guard cannot mask a missing initial binding.
