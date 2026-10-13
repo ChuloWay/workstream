@@ -191,6 +191,17 @@ def contributor_task_repository(session: AsyncSession) -> TaskRepository:
     return TaskRepository(session, compensation_terms=locked_compensation_terms_port(session))
 
 
+def task_batch_transition_commands(
+    session: AsyncSession, *, tasks: AuthorizedTaskCommands,
+    actor_profile_id: UUID, identity_link_id: UUID,
+):
+    """Bind the batch root to the same canonical Task authority and participants."""
+    from app.modules.tasks.task_batch_transitions import TaskBatchTransitionCommands
+    return TaskBatchTransitionCommands(
+        session, tasks=tasks, actor_profile_id=actor_profile_id, identity_link_id=identity_link_id,
+    )
+
+
 def task_submission_context_port(session: AsyncSession) -> TaskSubmissionContextPort:
     """Bind every intake caller to TASK's current-source composite."""
     from app.adapters.checkers import evaluation_coordinator

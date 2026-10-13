@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 from app.modules.contributions.api import LockedCompensationTermsPort
 from app.core.hashing import canonical_json_hash
 from app.db.errors import integrity_constraint_name
+from app.modules.projects.api.locked_policy import ProjectLockedPolicyContextFacts
 from app.modules.tasks.api.authorization import (
     TaskAuthorityDecision,
     TaskAuthorityFacts,
@@ -84,6 +85,19 @@ class TaskTransitionPreparation:
     reserved: bool
     facts: TaskAuthorityFacts
     transaction: AsyncSessionTransaction
+    batch_transition_receipt_id: UUID | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TaskTransitionContextPreparation:
+    """One immutable Project context locked inside the caller's transition root."""
+
+    project_id: UUID
+    operation: TaskAuthorityOperation
+    locked_context_hash: str
+    facts: ProjectLockedPolicyContextFacts
+    transaction: AsyncSessionTransaction
+    owner: object
 
 
 class AuthorizedTaskCommands:
@@ -108,6 +122,7 @@ class AuthorizedTaskCommands:
         self._contexts = contexts
         self._guide_documents = guide_documents
         self._replay = TaskCommandReplay(session)
+        self._transition_context_owner = object()
 
     def _facts(
         self,
@@ -264,6 +279,7 @@ class AuthorizedTaskCommands:
     async def prepare_transition(
         self, task_id: UUID, operation: TaskAuthorityOperation, reason: str | None,
         *, idempotency_key: UUID, project_id: UUID | None = None,
+        batch_transition_receipt_id: UUID | None = None,
     ) -> TaskTransitionPreparation:
         """Reserve canonical retry custody and lock TASK before the caller takes AUTH."""
         if operation not in {TaskAuthorityOperation.SCREEN, TaskAuthorityOperation.RELEASE}:
@@ -273,6 +289,7 @@ class AuthorizedTaskCommands:
             raise RuntimeError("task transition preparation requires the caller transaction")
         receipt, digest, reserved = await self._replay.reserve(
             self._actor_id, operation, idempotency_key, task_id, reason,
+            batch_transition_receipt_id=batch_transition_receipt_id,
         )
         task = (await self._repo.lock_project_task(project_id, task_id) if project_id is not None
                 else await self._repo.get_task(str(task_id), for_update=True))
@@ -284,7 +301,7 @@ class AuthorizedTaskCommands:
             replay_command_id=self._replay.manager_replay(receipt, operation, task_id, self._actor_id, idempotency_key),
         )
         return TaskTransitionPreparation(task, assignment, operation, reason, receipt, digest,
-                                         reserved, facts, transaction)
+                                         reserved, facts, transaction, batch_transition_receipt_id)
 
     def _validate_transition_preparation(self, prepared: TaskTransitionPreparation) -> None:
         if (self._session.get_transaction() is not prepared.transaction or not prepared.transaction.is_active
@@ -298,8 +315,12 @@ class AuthorizedTaskCommands:
                 prepared.facts.idempotency_key,
             ),
         )
+        values = {"task_id": prepared.task.id, "reason": prepared.reason}
+        if prepared.batch_transition_receipt_id is not None:
+            values["batch_transition_receipt_id"] = str(prepared.batch_transition_receipt_id)
         if (current != prepared.facts
-                or prepared.request_digest != canonical_json_hash({"task_id": prepared.task.id, "reason": prepared.reason})):
+                or prepared.receipt.batch_transition_receipt_id != prepared.batch_transition_receipt_id
+                or prepared.request_digest != canonical_json_hash(values)):
             raise TaskValidationError("task transition preparation changed")
 
     async def authorize_transition(self, prepared: TaskTransitionPreparation) -> TaskAuthorityDecision:
@@ -307,8 +328,64 @@ class AuthorizedTaskCommands:
         self._validate_transition_preparation(prepared)
         return await self._authorize_facts(prepared.facts)
 
+    async def prepare_transition_context(
+        self, prepared: TaskTransitionPreparation,
+    ) -> TaskTransitionContextPreparation:
+        """Resolve one immutable Project context after caller locks and authorizes all Tasks."""
+        self._validate_transition_preparation(prepared)
+        transaction = self._session.get_transaction()
+        project_id = prepared.facts.project_id
+        if (
+            not prepared.reserved
+            or transaction is not prepared.transaction
+            or not prepared.transaction.is_active
+        ):
+            raise RuntimeError("task transition context requires the caller transaction")
+        if prepared.operation is TaskAuthorityOperation.SCREEN:
+            facts = await self._contexts._load_active_policy_context(str(project_id))
+        else:
+            self._contexts._ensure_locked_context(prepared.task)
+            facts = (await self._contexts._load_locked_task_context(prepared.task)).facts
+        if facts.project_id != project_id:
+            raise TaskValidationError("task transition context project changed")
+        return TaskTransitionContextPreparation(
+            project_id,
+            prepared.operation,
+            prepared.facts.locked_context_hash,
+            facts,
+            transaction,
+            self._transition_context_owner,
+        )
+
+    def _transition_context(
+        self,
+        prepared: TaskTransitionPreparation,
+        context: TaskTransitionContextPreparation,
+    ) -> ProjectLockedPolicyContextFacts:
+        transaction = self._session.get_transaction()
+        if (
+            type(context) is not TaskTransitionContextPreparation
+            or context.owner is not self._transition_context_owner
+            or not prepared.reserved
+            or transaction is not context.transaction
+            or not context.transaction.is_active
+            or context.operation is not prepared.operation
+        ):
+            raise RuntimeError("task transition context requires its original caller transaction")
+        if (
+            context.project_id != prepared.facts.project_id
+            or context.facts.project_id != context.project_id
+            or context.locked_context_hash != prepared.facts.locked_context_hash
+        ):
+            raise TaskValidationError("task transition context changed")
+        return context.facts
+
     async def stage_transition(
-        self, prepared: TaskTransitionPreparation, decision: TaskAuthorityDecision,
+        self,
+        prepared: TaskTransitionPreparation,
+        decision: TaskAuthorityDecision,
+        *,
+        transition_context: TaskTransitionContextPreparation | None = None,
     ) -> TaskResponse:
         """Flush the normal transition, guide locks, audit and receipt in the caller root."""
         self._validate_transition_preparation(prepared)
@@ -324,14 +401,24 @@ class AuthorizedTaskCommands:
         target = "screening" if operation is TaskAuthorityOperation.SCREEN else "ready"
         self._contexts._ensure_transition_allowed(before, target)
         if operation is TaskAuthorityOperation.SCREEN:
-            context = await self._contexts._load_active_policy_context(task.project_id)
+            context = (
+                await self._contexts._load_active_policy_context(task.project_id)
+                if transition_context is None
+                else self._transition_context(prepared, transition_context)
+            )
             self._contexts._validate_task_contract_fields(task)
             self._contexts._stamp_locked_context(task, context)
         else:
             if not reason or not reason.strip():
                 raise TaskValidationError("release decision reason is required")
             self._contexts._ensure_locked_context(task)
-            context = await self._contexts._load_locked_task_context(task)
+            context = (
+                await self._contexts._load_locked_task_context(task)
+                if transition_context is None
+                else self._contexts._validate_locked_task_context(
+                    task, self._transition_context(prepared, transition_context)
+                )
+            )
             self._contexts._validate_installed_plans(context.facts)
         task.status = target
         await self._session.flush()

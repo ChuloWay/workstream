@@ -58,10 +58,11 @@ func (f *Failure) Error() string {
 }
 
 type Client struct {
-	origin    string
-	token     string
-	http      *http.Client
-	guideHTTP *http.Client
+	origin        string
+	token         string
+	http          *http.Client
+	guideHTTP     *http.Client
+	taskBatchHTTP *http.Client
 }
 
 type Profile struct {
@@ -125,7 +126,11 @@ func New(origin, token string) (*Client, error) {
 	guideHTTP := *client
 	guideHTTP.Transport = guideTransport
 	guideHTTP.Timeout = 10 * time.Minute
-	return &Client{origin: normalized, token: token, http: client, guideHTTP: &guideHTTP}, nil
+	// Complete 1..500-member writes include fresh per-Task authorization and one
+	// atomic commit. Keep their measured budget separate from ordinary requests.
+	taskBatchHTTP := *client
+	taskBatchHTTP.Timeout = 3 * time.Minute
+	return &Client{origin: normalized, token: token, http: client, guideHTTP: &guideHTTP, taskBatchHTTP: &taskBatchHTTP}, nil
 }
 
 func validateOrigin(raw string) (string, error) {
@@ -343,8 +348,12 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 }
 
 func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
+	return c.requestWithClientAndResponseLimit(ctx, c.http, method, path, query, body, key, successStatus, responseLimit)
+}
+
+func (c *Client) requestWithClientAndResponseLimit(ctx context.Context, requestClient *http.Client, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
 	mutation := method == http.MethodPatch || method == http.MethodPost || method == http.MethodPut
-	response, err := c.openRequest(ctx, c.http, method, path, query, body, key, "application/json")
+	response, err := c.openRequest(ctx, requestClient, method, path, query, body, key, "application/json")
 	if err != nil {
 		return nil, err
 	}

@@ -716,6 +716,13 @@ PILOT_02B_ATOMIC_IMPORT_TARGETS = frozenset({
     "backend/app/modules/tasks/task_import_membership.py",
     "backend/app/modules/tasks/api/task_import_membership.py",
 })
+PILOT_02C_BULK_TRANSITION_TARGETS = frozenset({
+    "backend/app/api/deps/task_batch_transitions.py",
+    "backend/app/modules/tasks/api/task_batch_transition.py",
+    "backend/app/modules/tasks/task_batch_transition/models.py",
+    "backend/app/modules/tasks/task_batch_transition_router.py",
+    "backend/app/modules/tasks/task_batch_transitions.py",
+})
 
 
 class BehaviorOwnershipError(RuntimeError):
@@ -970,6 +977,7 @@ def _validate_additive_partition_transition(
         | PILOT_13_GUIDE_READ_TARGETS
         | PILOT_02A_IMPORT_SOURCE_TARGETS
         | PILOT_02B_ATOMIC_IMPORT_TARGETS
+        | PILOT_02C_BULK_TRANSITION_TARGETS
     )
     expected_additions = (approved_additions & additions) - set(trusted_targets)
     if POL_03A_DECLARATIVE_MODEL_TARGET in additions:
