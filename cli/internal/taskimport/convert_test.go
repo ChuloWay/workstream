@@ -13,7 +13,7 @@ import (
 
 func TestQuotedUnicodeCSVCommitment(t *testing.T) {
 	input := "\ufeffsource_id,title,description,category,skill_tags,languages,tools,estimated_time_minutes,acceptance_criteria\r\n" +
-		"brief-É,\"Caption, français\",\"First line\nSecond line: 日本語\",caption,\" review ; ;accuracy\",fr;ja,editor,30,Usable caption\r\n"
+		"brief-É,\"Caption, français\",\"First line\r\nSecond line: 日本語\",caption,\" review ; ;accuracy\",fr;ja,editor,30,Usable caption\r\n"
 	result, err := ConvertCSV(strings.NewReader(input), "Multilingual briefs")
 	if err != nil {
 		t.Fatal(err)
@@ -26,7 +26,7 @@ func TestQuotedUnicodeCSVCommitment(t *testing.T) {
 		t.Fatalf("unexpected document metadata: %#v", value)
 	}
 	task := value.Tasks[0]
-	if task.ExternalTaskID != "brief-É" || task.Title != "Caption, français" || task.Description != "First line\nSecond line: 日本語" || task.TaskType != "caption" || strings.Join(task.SkillTags, ";") != "review;accuracy;fr;ja;editor" || task.EstimatedTimeMinutes == nil || *task.EstimatedTimeMinutes != 30 {
+	if task.ExternalTaskID != "brief-É" || task.Title != "Caption, français" || task.Description != "First line\r\nSecond line: 日本語" || task.TaskType != "caption" || strings.Join(task.SkillTags, ";") != "review;accuracy;fr;ja;editor" || task.EstimatedTimeMinutes == nil || *task.EstimatedTimeMinutes != 30 {
 		t.Fatalf("CSV instructions were mapped incorrectly: %#v", task)
 	}
 	sum := sha256.Sum256(result.Bytes)
@@ -36,6 +36,34 @@ func TestQuotedUnicodeCSVCommitment(t *testing.T) {
 	again, err := ConvertCSV(strings.NewReader(input), "Multilingual briefs")
 	if err != nil || string(again.Bytes) != string(result.Bytes) {
 		t.Fatal("unchanged conversion did not produce identical bytes")
+	}
+}
+
+func TestQuotedFieldNewlinesArePreservedExactly(t *testing.T) {
+	input := "external_task_id,title,description\r\n" +
+		"one,\"Title, \"\"quoted\"\"\",\"First\r\nSecond 日本語\"\r\n" +
+		"\r\n" +
+		"two,T,\"Alpha\nBeta\"\n" +
+		"three,T,\"Carriage\r\nand LF\nend\""
+	result, err := ConvertCSV(strings.NewReader(input), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var value document
+	if err := json.Unmarshal(result.Bytes, &value); err != nil {
+		t.Fatal(err)
+	}
+	if result.RowCount != 3 || len(value.Tasks) != 3 {
+		t.Fatalf("blank physical lines must not create tasks: %#v", value.Tasks)
+	}
+	if value.Tasks[0].Title != "Title, \"quoted\"" || value.Tasks[0].Description != "First\r\nSecond 日本語" {
+		t.Fatalf("escaped punctuation or CRLF changed: %#v", value.Tasks[0])
+	}
+	if value.Tasks[1].Description != "Alpha\nBeta" {
+		t.Fatalf("LF changed: %#v", value.Tasks[1])
+	}
+	if value.Tasks[2].Description != "Carriage\r\nand LF\nend" {
+		t.Fatalf("mixed newlines or final record changed: %#v", value.Tasks[2])
 	}
 }
 

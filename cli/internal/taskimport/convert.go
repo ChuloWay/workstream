@@ -87,8 +87,10 @@ func ConvertCSV(input io.Reader, label string) (Conversion, error) {
 	if label != "" && !validText(label, 255, true) {
 		return Conversion{}, invalid(0, "label", "invalid_label")
 	}
-	reader := csv.NewReader(bytes.NewReader(bytes.TrimPrefix(body, []byte{0xef, 0xbb, 0xbf})))
+	csvBody := bytes.TrimPrefix(body, []byte{0xef, 0xbb, 0xbf})
+	reader := csv.NewReader(bytes.NewReader(csvBody))
 	reader.FieldsPerRecord = -1
+	lineOffsets := csvLineOffsets(csvBody)
 	header, err := reader.Read()
 	if err != nil {
 		return Conversion{}, invalid(0, "header", "invalid_csv_header")
@@ -111,6 +113,9 @@ func ConvertCSV(input io.Reader, label string) (Conversion, error) {
 			return Conversion{}, invalid(index, "tasks", "maximum_500_rows")
 		}
 		if readErr != nil || len(values) != len(header) {
+			return Conversion{}, invalid(index, "row", "invalid_csv_row")
+		}
+		if !preserveQuotedFields(csvBody, lineOffsets, reader, values) {
 			return Conversion{}, invalid(index, "row", "invalid_csv_row")
 		}
 		value, parseErr := parseRow(values, columns, index)
@@ -136,6 +141,61 @@ func ConvertCSV(input io.Reader, label string) (Conversion, error) {
 	}
 	sum := sha256.Sum256(encoded)
 	return Conversion{Bytes: encoded, SHA256: "sha256:" + hex.EncodeToString(sum[:]), ByteCount: len(encoded), RowCount: len(doc.Tasks)}, nil
+}
+
+func csvLineOffsets(body []byte) []int {
+	starts := []int{0}
+	for index, value := range body {
+		if value == '\n' {
+			starts = append(starts, index+1)
+		}
+	}
+	return starts
+}
+
+// preserveQuotedFields restores accepted quoted values from their exact source
+// spans. encoding/csv remains the syntax authority, but intentionally normalizes
+// CRLF inside quoted fields to LF; task instructions must retain those bytes.
+func preserveQuotedFields(body []byte, lineOffsets []int, reader *csv.Reader, values []string) bool {
+	recordEnd := int(reader.InputOffset())
+	for index := range values {
+		line, column := reader.FieldPos(index)
+		if line < 1 || line > len(lineOffsets) || column < 1 {
+			return false
+		}
+		start := lineOffsets[line-1] + column - 1
+		if start < 0 || start > recordEnd || start > len(body) {
+			return false
+		}
+		// A final unquoted empty field may start exactly at EOF.
+		if start == recordEnd || start == len(body) || body[start] != '"' {
+			continue
+		}
+		value, ok := exactQuotedField(body[start:recordEnd], len(values[index]))
+		if !ok {
+			return false
+		}
+		values[index] = value
+	}
+	return true
+}
+
+func exactQuotedField(source []byte, normalizedLength int) (string, bool) {
+	value := make([]byte, 0, normalizedLength)
+	for index := 1; index < len(source); {
+		if source[index] != '"' {
+			value = append(value, source[index])
+			index++
+			continue
+		}
+		if index+1 < len(source) && source[index+1] == '"' {
+			value = append(value, '"')
+			index += 2
+			continue
+		}
+		return string(value), true
+	}
+	return "", false
 }
 
 func headers(values []string) (map[string]int, error) {
