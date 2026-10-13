@@ -307,8 +307,53 @@ def test_contributions_redaction_and_failure_never_publish(cli, tmp_path):
             result = cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json")
             assert_failure(result, code)
             assert not target.exists()
-        response.update(status=200, body=b" " * (32 * 1024 * 1024 + 1))
+
+
+def test_contributions_human_acceptance_and_leading_zero_quantities(cli, tmp_path):
+    value = evidence()
+    item = value["items"][0]
+    item.update(
+        acceptance_source="human_review",
+        acceptance_review_id=identity(40),
+        acceptance_routing_manifest_id=None,
+    )
+    item["awards"][0]["quantity"] = "000001.2300"
+    item["awards"][1]["quantity"] = "00012"
+    with http_fixture() as (origin, response, _):
+        response["body"] = json.dumps(value).encode()
+        result = cli(origin, TOKEN, "contributions", "-o", "json")
+        assert result.returncode == 0 and json.loads(result.stdout) == value, result.stderr
+        response["body"] = csv_bytes(value)
+        response["headers"] = {"Content-Type": "text/csv"}
+        target = tmp_path / "human.csv"
+        saved = cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json")
+        assert saved.returncode == 0 and target.read_bytes() == response["body"], saved.stderr
+        assert b'"000001.2300"' in target.read_bytes() and b'"00012"' in target.read_bytes()
+        response["headers"] = {"Content-Type": "application/json"}
+        for patch in (
+            {"acceptance_review_id": None},
+            {"acceptance_routing_manifest_id": identity(41)},
+        ):
+            bad = deepcopy(value)
+            bad["items"][0].update(patch)
+            response["body"] = json.dumps(bad).encode()
+            assert_failure(
+                cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+            )
+
+
+def test_contributions_json_and_csv_size_caps_reject_valid_oversized_exports(cli, tmp_path):
+    value = evidence()
+    value["items"][0]["task_title"] = "x" * (32 * 1024 * 1024)
+    with http_fixture() as (origin, response, _):
+        response["body"] = json.dumps(value).encode()
         assert_failure(cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response")
+        response["headers"] = {"Content-Type": "text/csv"}
+        response["body"] = csv_bytes(value)
+        target = tmp_path / "oversized.csv"
+        result = cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json")
+        assert_failure(result, "invalid_api_response")
+        assert not target.exists() and not list(tmp_path.glob(".workstream-contributions-*"))
 
 
 def test_contributions_complete_limit_order_and_unique_awards(cli, tmp_path):

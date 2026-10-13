@@ -503,7 +503,7 @@ cannot be reused as post-submission review-gate evidence. See the
   [CLI contribution evidence](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-24.md)
   adds human self and authorized project reads with type/time filters, complete
   source/award projections and exact private CSV downloads. Earned award facts
-  are not payment status; reading records does not activate lifecycle writers.
+  are not proof of external payment; reading records does not activate lifecycle writers.
   [PILOT-13 assigned-guide access](../.commitrail/changes/pilot13-assigned-task-guide-documents.md)
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads
