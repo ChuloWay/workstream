@@ -117,8 +117,8 @@ class AdmissionBackedSubmissionCreate(BaseModel):
     admission_id: UUID
     assignment_id: UUID
     predecessor_submission_id: UUID | None = None
-    summary: str = Field(min_length=1)
-    contributor_attestation: str = Field(min_length=1)
+    summary: str | None = None
+    contributor_attestation: str | None = None
 
 
 class AdmissionBackedSubmissionResponse(BaseModel):

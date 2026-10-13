@@ -65,10 +65,9 @@ Audit Authority task history and removes the old unbounded task-only audit route
 
 There is no self-activation endpoint. A contributor cannot acquire permission
 by creating a worker profile, supplying skill tags, or presenting a token role.
-There is no public JSON-packet submission creation route. The existing
-`GET /api/v1/tasks/{task_id}/submissions` remains a read, not evidence that POST
-creation is usable. Admission-backed Submission creation stays hidden until
-its separate canonical public integration is complete.
+There is no public JSON-packet submission creation route. ARCH-02I-B exposes
+the separate canonical admission-backed `POST /api/v1/tasks/{task_id}/submissions`
+for initial work and exact checker remediation; the existing GET remains a read.
 
 ## Canonical Task-Import Sources
 
@@ -373,7 +372,8 @@ Only contributor context has `lifecycle`, with `assigned_to_current_actor` and
 `next_actions`. Unassigned READY advertises `claim`; own CLAIMED advertises
 `start`; other own-active states have no action hint. Task status appears only in
 `task.status`. Hints never authorize execution. There is no `can_submit` flag or
-precheck capability; hidden submission creation is not advertised as usable.
+precheck capability; the public submission command performs its own fresh
+authority and admission checks.
 Contributor context also includes `guide_documents`: ordered document IDs,
 labels, media types, byte counts, SHA-256 and task-scoped authorized read references.
 It is empty for ready unassigned browsing and contains only exact locked originals

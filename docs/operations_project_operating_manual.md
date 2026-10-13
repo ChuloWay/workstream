@@ -222,7 +222,7 @@ PROJECTS context port. New work selects the active guide; frozen work keeps its
 exact guide and approved policy identities after a successor is activated.
 Retiring a contribution policy does not silently replace that binding. This is
 an internal contract, not a new manager API. Screening now records that exact
-contribution-policy version; claim and hidden Submission creation retain it through
+contribution-policy version; claim and public admission-backed Submission creation retain it through
 the assignment. Screening and release check that the installed pre/post policies
 are supported; historical reads do not rerun availability. No superseded economic configuration is
 required. Task display now comes from detached values supplied by PROJECTS,
@@ -267,9 +267,10 @@ authority. Hidden ARCH-04B2 output storage, recovery and verified binding are
 delivered. ARCH-04C adds hidden durable execution and exact zero-slot reservations.
 ARCH-04D2 supplies exact execution/finalization authority and durable receipts.
 Output-file authority remains unavailable. B7 supplies hidden request delivery and
-04E2-B supplies complete hidden authorized outcomes. B8 supplies hidden completion
-delivery; production registration remains pending. Public intake remains deferred
-to ARCH-02I after evaluation and remediation prerequisites.
+04E2-B supplies complete hidden authorized outcomes. B8 supplies hidden completion delivery, and selected production handlers are
+registered. ARCH-02I-B exposes public ZIP preparation and admission-backed
+initial/checker-remediation Submission creation. False-guide activation and
+the complete public API and Celery service drill remain pending.
 
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,
@@ -487,15 +488,17 @@ Before locking a submission packet:
 - effective project submission artifact policy is loaded
 - generated project pre-submit checker policy runs
 - failed preparation returns `pre_submission_checker_failed` with ART's exact
-  ordered bounded results through the mounted authorized hidden route; the route
-  remains absent from OpenAPI and public intake activation remains pending
-- POL-07B removes the standalone JSON precheck; the hidden preparation
-  flow uses one internal pre-submit phase command with ART-owned evidence.
-  Broader public Submission caller migration remains WS-ARCH-001-02I
+  ordered bounded results through the public authorized ZIP preparation route published in OpenAPI
+- POL-07B removes the standalone JSON precheck; public ZIP preparation
+  uses one internal pre-submit phase command with ART-owned evidence.
+  ARCH-02I-B exposes admission-backed Submission creation; the complete
+  public API and Celery service drill remains pending
 - no submission row is created until blocking pre-submit checks pass
 - ARCH-04C implements hidden durable post-submit execution with exact ARCH-04D2
   service authority. B6 commits the initial reservation and request event with
-  each hidden Submission; automatic request delivery and routing remain unavailable
+  each admitted Submission; selected production request/completion delivery
+  is registered, while false-policy guide activation and the complete public
+  Celery service drill remains pending
 - the obsolete `/submissions/{submission_id}/finalize` repair and manual
   `POST /submissions/{submission_id}/checker-runs` routes are removed. Planned
   exact-authority recovery must not use them.

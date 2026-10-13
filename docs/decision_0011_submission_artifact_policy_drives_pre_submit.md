@@ -233,26 +233,24 @@ tests, sandboxed execution, no network, no shell, no secrets, no database access
 covered Project Manager approval of the exact code hash after those checks
 pass, and a locked code hash.
 
-Blocking pre-submit failures prevent submission creation. The mounted authorized
-hidden route returns the failure code with ART's exact ordered bounded results
-in the same request. Public OpenAPI activation and TASK audit publication remain
-pending:
+Blocking pre-submit failures prevent submission creation. The public authorized ZIP preparation route returns the failure code
+with ART's exact ordered bounded results in the same request and is published
+in OpenAPI. TASK audit publication remains pending:
 
 - no `Submission` row is created
 - no submission version is assigned
 - no task transition to `submitted` occurs
 - no submission-created audit event is written
 - a planned task audit event named `pre_submission_check_failed` remains pending
-  and is not written by the current hidden route
+  and is not written by the public preparation route
 - the response does not use review decision values: `accept`, `needs_revision`, or `reject`
 
 POL-07B removes the standalone JSON precheck contract and connects the internal
-checker phase service. WS-ARCH-001-02I retains the broader
-Submission caller cutover. Authoritative intake checks run inside continuous
+checker phase service. ARCH-02I-B exposes admission-backed public Submission
+creation for initial work and checker remediation. Authoritative intake checks run inside continuous
 submission-bundle preparation against the exact uploaded ZIP in bounded scratch.
-The mounted authorized hidden route now returns the structured response below
-in the same request. It remains absent from OpenAPI; canonical public intake
-activation is still pending:
+The public authorized ZIP preparation route returns the structured response
+below in the same request and is published in OpenAPI:
 
 ```text
 POST /api/v1/tasks/{id}/submission-bundle-preparations

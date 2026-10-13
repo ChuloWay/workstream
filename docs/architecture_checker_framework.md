@@ -47,7 +47,8 @@ implementation or invalid-output codes. Missing images, crashes and malformed
 or oversized output cannot become a silent pass. This contract and the
 immutable registry are consumed by selected hidden PRE/POST owners through an
 explicit Rust service adapter. Production request/completion handlers are
-registered; public contributor intake remains PILOT-12 work.
+registered; ARCH-02I-B exposes public contributor ZIP preparation and
+admission-backed Submission creation. The complete public API and Celery service drill remains pending.
 
 Both executable catalogues, their runtime factories and their request/result
 decoders are removed. Requests use the default-plus-external PRE contract and
@@ -230,7 +231,8 @@ isolation receipts. F-020 requires corrected approved generation after missing
 capability registration; registration alone never clears the old warning.
 Production completion routes true-policy success to review_pending and eligible
 locked false-policy success through shared acceptance. Public false-guide
-activation remains PILOT-08 work; public intake remains PILOT-12 work. Local
+activation remains pending; ARCH-02I-B exposes public ZIP preparation and
+admission-backed Submission creation. Local
 Rust/MinIO proof uses runc/docker-dev and makes no deployed or gVisor claim.
 
 ## Gate Mapping
@@ -290,15 +292,13 @@ Workstream default submission artifact rules require:
 - contributor attestation metadata, with absence warning-only
 - safe relative artifact paths
 - production artifact hashes shaped as `sha256:<64 lowercase hex>`
-- pre-cutover only: validated caller-supplied storage references and manifest;
-  the superseded `WS-ART-001-05B` contract is implemented by
-  `WS-ARCH-001-02I` for the broader Submission caller cutover, including its
-  internal Submission guard and the caller-owned `package_uri`,
-  `package_hash`, and `artifact_hash_manifest` fields together so checkers
-  consume Workstream artifact bindings only; the transitional `artifact_hash`
-  column is handled separately by a schema-removal migration after every
-  reader uses exact binding/content identity. POL-07B removes the standalone
-  caller-owned JSON precheck and connects the internal checker phase service
+- ARCH-02I-B public intake consumes verified ART admission and a server-generated
+  manifest. The former caller-owned `package_uri`, `package_hash`, and
+  `artifact_hash_manifest` inputs are removed; checkers consume Workstream
+  artifact bindings. The transitional `artifact_hash` column is handled by a
+  separate schema removal after readers use exact binding/content identity.
+  POL-07B removes the standalone JSON precheck and connects the internal
+  checker phase service
 - no credentials, signed URLs, query strings, raw local filesystem paths, or token-bearing references
 - narrowly high-confidence sensitive-file exclusions such as `.env`, `.git`,
   exact known credential/private-key files, `.pem`, and `.key`; broad
@@ -375,12 +375,11 @@ bundle hash and locked to the effective project submission artifact policy befor
 contributor pipeline. Tasks lock references to the shared project's compiled checker
 bundle hash. It runs inside continuous submission-bundle preparation before
 Workstream creates a submission. ART retains bounded status, eligibility and
-pass/fail/warning results. The mounted authorized hidden route returns
+pass/fail/warning results. The public authorized ZIP preparation route returns
 `pre_submission_checker_failed` with those exact ordered bounded results in the
-same request. The route remains absent from OpenAPI, and public intake remains
-pending. The standalone JSON precheck and its exclusive implementation are removed
-by POL-07B. Broader
-Submission caller migration remains WS-ARCH-001-02I; this result is not a review decision value.
+same request. ARCH-02I-B publishes it in OpenAPI with admission-backed
+Submission creation; the complete public API and Celery service drill remains pending. The standalone JSON precheck and its exclusive implementation are removed
+by POL-07B. This result is not a review decision value.
 Pre-submit results do not create durable `CheckerRun` records, do not move a
 task to `review_pending`, and do not return review decision values: `accept`,
 `needs_revision`, or `reject`.
@@ -545,14 +544,15 @@ FinalAcceptance, ContributionRecord or award in either ReviewPolicy mode. Exact
 replay returns the retained outcome without repeating effects. Contributors
 continue to receive only the existing bounded checker-history projection; no new
 public API is added. Exact-cause replacement and Operator retry are implemented hidden owners;
-manager-visible setup-fault hold and public intake remain before public cutover; selected production
-composition is implemented.
+manager-visible setup-fault hold and false-policy guide activation remain;
+public initial and checker-remediation intake and selected production
+composition are implemented.
 The direct CHECKERS-to-TASK mutation, fabricated system actor and alternate
 Celery gate are removed. Hidden durable execution and exact service authority are implemented; selected automatic
 request/completion delivery is registered. ARCH-04E2-B supplies the hidden authorized
 outcome operation; B8 supplies hidden completion delivery; ARCH-04F2 extends
-that operation with remediation. Manager-visible setup-fault hold, public intake and public false-guide activation
-remain pending.
+that operation with remediation. Manager-visible setup-fault hold and public false-guide activation
+remain pending; ARCH-02I-B exposes public initial and checker-remediation intake.
 
 `review_pending` marks readiness for the separately owned WS-REV lifecycle.
 WS-REV alone creates `ReviewPacketManifest`, review queues, reviewer leases,

@@ -97,6 +97,7 @@ async def _prepared_packet(isolated_database_env, tmp_path):
             factory=factory, context=context, task_id=task_id, assignment_id=assignment_id,
             admission_id=admission_id, creation=creation,
             preparation_request=request, archive_bytes=archive_bytes, settings=settings,
+            store=store, namespace=namespace,
         )
     finally:
         bootstrap.close()
