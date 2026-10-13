@@ -544,7 +544,7 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
-# Routing PREP proofs share the three-way project-policy partition.
+# Routing PREP proofs share the four-way project-policy partition.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
     "tests/authorization/post_submit_routing/test_prepared.py",

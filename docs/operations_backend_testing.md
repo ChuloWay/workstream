@@ -111,7 +111,7 @@ If provisioning fails, confirm the local PostgreSQL provisioning credential can 
 
 ## Hosted semantic-lane full-suite proof
 
-The required GitHub check remains `Backend / test`. Nine matrix jobs each own a
+The required GitHub check remains `Backend / test`. Ten matrix jobs each own a
 digest-pinned PostgreSQL service container, a pinned-source MinIO image,
 and exactly one dependency lane. A step-level curl health loop admits MinIO
 before collection. This is semantic fan-out, not arbitrary test-count sharding:
@@ -126,7 +126,7 @@ Assertion-map validation analyzes each exact historical revision/module once per
 invocation, then checks every referenced node and assertion against that analysis.
 It does not cache current source or reuse analysis across validation calls.
 
-The eight ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
+The nine ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
 to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
 data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
 before tests. Real SQL, transaction, lock, isolation, and full hosted behavior
@@ -140,17 +140,21 @@ The `project_lifecycle_a`, `project_lifecycle_b`, `project_lifecycle_c`, and
 `project_lifecycle_d` lanes
 partition PROJECT nodes, checker execution, materialization, evaluation capacity,
 output custody and routing AUTH preparation beside initial dispatch/delivery.
-All use the existing exact-node hash across four lanes. A retained three-lane
+All use the existing exact-node hash across four lanes. The
+[measurement record](../.commitrail/changes/backend-ci-measured-lane-balance.md)
+records the rejected seed-rebalance experiment: two hosted runs did not establish
+a repeatable speedup, so allocation remains unchanged. A retained three-lane
 run exhausted project C's 1,200-second cap with 92 nodes unfinished; prior passing
 runs had little remaining headroom. The fourth project lane increases execution
 capacity without changing the cap or canonical test union. Placing the entire
 checker delivery group exclusively on project A previously exhausted its cap.
 Two measured broad owners, `tests/test_projects.py` and
 `tests/test_guide_document_intake.py`, instead partition their nodes only across
-project A and C. Retained runs measured capacity across that pair and a project B
-timeout when the modules used all three lanes. The lane logs retain the 25 slowest
-pytest phases for diagnosis without letting unbounded diagnostic output consume
-the execution deadline after all nodes finish.
+project C and D. The lane logs retain all setup/call/teardown phase durations,
+including phases below five milliseconds, for performance diagnosis. This output
+is bounded by the selected test inventory and remains diagnostic only: it cannot
+select tests or override completeness, cleanup or the unchanged execution deadline.
+Measure final-report overhead alongside test execution when comparing allocations.
 `task_lifecycle_a`, `task_lifecycle_b`, and `task_lifecycle_c` use the same
 deterministic partition mechanism for the remaining TASK and checker nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
 isolated-runner contracts. The
