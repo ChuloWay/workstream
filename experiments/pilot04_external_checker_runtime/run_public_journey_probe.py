@@ -398,19 +398,40 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
     if predecessor_id is not None:
         headers["X-Predecessor-Submission-Id"] = predecessor_id
     route = f"/api/v1/tasks/{task_id}/submission-bundle-preparations"
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + 180
+    current_status = None
+    status_since = time.monotonic()
+    last_scan_status = None
+    last_scan_at = 0.0
     while time.monotonic() < deadline:
         result = await _json(
             client, "POST", route, contributor_token, 202,
             headers=headers, content=archive,
         )
-        if result["submission_bundle_preparation_status"] == "ready":
+        status = result["submission_bundle_preparation_status"]
+        if status == "ready":
             _require(result["admission_id"] is not None, "ready intake omitted admission")
             return result["admission_id"]
         _require(result["admission_id"] is None, "unverified admission was public")
-        await asyncio.to_thread(scan_pending_work.delay)
-        await asyncio.sleep(0.5)
-    raise RuntimeError("artifact verification did not produce a ready admission")
+        _require(status not in {
+            "conflict", "integrity_mismatch", "missing", "absent_replay_required", "stale",
+        }, f"artifact preparation ended {status}")
+        if status != current_status:
+            current_status = status
+            status_since = time.monotonic()
+        now = time.monotonic()
+        # A PUT can spawn verification work without changing the public PUT
+        # status. Observe one scan for ten seconds before a bounded rescan.
+        if status != "put_in_flight" and (
+            status != last_scan_status or now - last_scan_at >= 10
+        ):
+            await asyncio.to_thread(scan_pending_work.delay)
+            last_scan_status = status
+            last_scan_at = now
+        _require(now - status_since < 60,
+                 f"artifact preparation remained {status} after bounded worker scans")
+        await asyncio.sleep(1)
+    raise RuntimeError(f"artifact verification did not become ready from {current_status}")
 
 
 async def _submit(client, factory, *, task_id: str, assignment_id: str,
