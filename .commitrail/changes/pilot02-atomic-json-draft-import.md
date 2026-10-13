@@ -570,12 +570,16 @@ custody validation. Historical evidence above remains correctly attributed to
 the then-installed `0034_task_import_batches`; it is not relabeled as current
 head proof.
 
-The combined selected-checker-plus-atomic fingerprint must be measured from a
-fresh owned PostgreSQL 16 database after the graph resolves; neither the current
-main fingerprint nor the older atomic-only fingerprint may be assumed. The
-first controlled setup therefore retains the current-main expected value only
-to emit the exact combined digest, after which the migration owner binds that
-measured value and reruns the affected schema/graph proof. No application,
-model, AUTH, workflow, cap, predecessor fixture or compatibility code changes
-are allowed in this migration reconciliation. The separate bulk transition
-migration follows as `0038` only after this atomic boundary is frozen.
+The first controlled setup on reconciled head `728148626` installed `0037` and
+refused the retained current-main fingerprint as intended, measuring the exact
+combined PostgreSQL 16 schema digest
+`5abd992592eea9b00ce1f2b4330ff0e121577ff7c8ab34fc76fa9e71a8d336d5`.
+The runner exited at that deliberate setup boundary with database, role, bucket
+and prefix cleanup all true; raw evidence is in
+`/tmp/pilot02-takeover-first-native.log` and its adjacent JSON metadata. This
+record binds that measured value without claiming an affected-test pass; the
+schema/graph and atomic public cases still require their frozen-head replay. No
+application, model, AUTH, workflow, cap, predecessor fixture or compatibility
+code changes are allowed in this migration reconciliation. The separate bulk
+transition migration follows as `0038` only after this atomic boundary is
+frozen.
