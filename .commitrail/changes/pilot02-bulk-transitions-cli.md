@@ -746,3 +746,35 @@ using the unchanged schema-object query. Raw measurement and all-cleanup proof:
 `/tmp/pilot02-bulk-reason-schema-measure.{log,json}`. The CLI zero-request
 regression also fails against the pre-fix binary (exit1/unknown instead of local
 exit2), confirming the oversized reason previously reached HTTP.
+
+### Canonical Unicode transition reasons
+
+The public single-Task and batch-transition contracts both admit at most 1000
+Unicode characters. The AUDIT manager-facts validator previously measured
+Python's ASCII-escaped default JSON while PostgreSQL measured canonical UTF-8,
+so 1000 valid `é` characters failed before audit persistence. The closed
+15-field manager envelope is 669 canonical bytes without reason content; its
+largest API-valid 1000-character JSON representation is 6669 bytes when every
+character requires a six-byte JSON control escape. Use the existing 8192-byte
+bounded-evidence class for canonical compact UTF-8 in both AUDIT and the native
+task-management audit guard. This keeps every admitted 1000-character reason
+representable without making the evidence unbounded.
+
+Allowed files for this repair are
+`backend/app/modules/audit/schemas.py`,
+`backend/alembic/versions/0038_task_batch_transitions.py`, focused AUDIT and
+bulk-transition tests, `cli/internal/api/task_import_batch.go`,
+`cli/internal/command/task_batch_commands.go` and their focused tests, plus this
+record. No other AUTH semantics, audit shape, migration graph,
+table schema, task transition state, CLI retry behavior or execution cap may
+change. Fresh PostgreSQL schema fingerprint and public SCREEN/RELEASE boundary
+proof remain required after integration; this isolated source batch does not
+claim either.
+
+Focused source verification passes: 34 AUDIT tests and 15 batch-contract tests
+validate the canonical manager envelope, including 1000 accent, four-byte
+Unicode and six-byte JSON-escaped control characters, plus rejection above the
+8192-byte evidence bound; scoped Ruff checks pass. The affected Go API, command
+and CSV packages pass `go test` and `go vet`. PostgreSQL schema
+measurement and the public high-escape SCREEN/RELEASE case remain deliberately
+unclaimed until the isolated commit is composed into the serialized native lane.

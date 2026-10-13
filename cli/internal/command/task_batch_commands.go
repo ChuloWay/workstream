@@ -95,7 +95,7 @@ func addTaskBatchCommands(batch *cobra.Command, client func() (*api.Client, erro
 			},
 		}
 		command.Flags().StringVar(&key, "idempotency-key", "", "Required caller UUID; manual unchanged-key replay requires every member still matches its original post-state")
-		command.Flags().StringVar(&reason, "reason", "", "At most 4000 UTF-8 characters; release requires a nonblank decision reason")
+		command.Flags().StringVar(&reason, "reason", "", "At most 1000 UTF-8 characters; release requires a nonblank decision reason")
 		batch.AddCommand(command)
 	}
 }

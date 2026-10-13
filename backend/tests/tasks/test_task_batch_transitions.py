@@ -140,16 +140,28 @@ async def test_reason_limit_matches_canonical_transition_without_partial_effects
                                     json={"reason": "é" * 1001})
         assert refused.status_code == 422, refused.text
         assert await _success_facts(project) == before
-    reason = "é" * 1000
-    for operation in ("screen", "release"):
+    reasons = {"screen": "é" * 1000, "release": "\x01" * 1000}
+    for operation, reason in reasons.items():
         admitted = await client.post(_path(project, batch, operation), headers=auth_headers(),
                                      json={"reason": reason})
         assert admitted.status_code == 200, admitted.text
     async with db_session.get_session_factory()() as session:
-        reasons = list(await session.scalars(select(TaskBatchTransitionReceipt.reason).where(
+        retained = list(await session.scalars(select(TaskBatchTransitionReceipt.reason).where(
             TaskBatchTransitionReceipt.project_id == project,
         )))
-        assert reasons == [reason, reason]
+        assert len(retained) == 2 and set(retained) == set(reasons.values())
+        task_ids = list(await session.scalars(select(WorkstreamTask.id).where(
+            WorkstreamTask.project_id == project,
+        )))
+        lifecycle = list(await session.scalars(select(AuditEvent).where(
+            AuditEvent.entity_id.in_(task_ids),
+            AuditEvent.event_type.in_(("TaskScreened", "TaskReleased")),
+        )))
+        assert len(lifecycle) == 4
+        assert {event.reason for event in lifecycle} == set(reasons.values())
+        assert {
+            event.event_payload["manager_authority_facts"]["reason"] for event in lifecycle
+        } == set(reasons.values())
 
 
 async def test_missing_active_guide_refuses_whole_batch_without_success_effects(import_source_client):

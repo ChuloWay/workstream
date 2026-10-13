@@ -28,6 +28,15 @@ def _replace_function(signature: str, old: str, new: str) -> None:
     op.execute(body.replace(old, new))
 
 
+def _align_task_reason_evidence_bound() -> None:
+    """Keep the native audit envelope aligned with the 1000-character API contract."""
+    _replace_function(
+        "public.guard_task_management_audit()",
+        "octet_length(convert_to(project_guide_projection_canonical_json(facts),'UTF8'))<=4096",
+        "octet_length(convert_to(project_guide_projection_canonical_json(facts),'UTF8'))<=8192",
+    )
+
+
 def _create_tables() -> None:
     op.create_table(
         "task_batch_transition_receipts",
@@ -457,6 +466,7 @@ def upgrade() -> None:
         "lock table public.task_command_receipts, public.task_import_batches, "
         "public.task_import_batch_members, public.audit_events in access exclusive mode"
     )
+    _align_task_reason_evidence_bound()
     _create_tables()
     _alter_command_receipts()
     _create_custody()
