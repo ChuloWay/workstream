@@ -528,6 +528,9 @@ async def test_each_owner_rejects_manifest_disabled_live_facts(
         async with h.factory() as session, session.begin():
             contribution = contribution_participant(session)
             contribution._fence = ManifestDisabledFence()
+            contribution._repository.get_frozen_rule = AsyncMock(
+                side_effect=AssertionError("CON reached repository")
+            )
             with pytest.raises(
                 ContributionParticipationUnavailable,
                 match="lifecycle is not live",
@@ -549,6 +552,7 @@ async def test_each_owner_rejects_manifest_disabled_live_facts(
                         expected_generation=2,
                     )
                 )
+            contribution._repository.get_frozen_rule.assert_not_awaited()
         async with h.factory() as session, session.begin():
             tasks = SimpleNamespace(
                 lock_accepted_effects=AsyncMock(
@@ -558,7 +562,8 @@ async def test_each_owner_rejects_manifest_disabled_live_facts(
                             request.acceptance.policy_context_ref
                         ),
                     )
-                )
+                ),
+                require_routing_source=AsyncMock(),
             )
             owner = FinalAcceptanceParticipant(
                 session,
@@ -617,10 +622,14 @@ async def test_each_owner_independently_rejects_new_effects(
                 with pytest.raises(TaskAcceptedEffectsUnavailable, match="lifecycle is not live"):
                     await task.lock_accepted_effects(request.task_effects, expected_generation=generation)
             async with h.factory() as session, session.begin():
+                contribution = contribution_participant(session)
+                contribution._repository.get_frozen_rule = AsyncMock(
+                    side_effect=AssertionError("CON reached repository")
+                )
                 with pytest.raises(
                     ContributionParticipationUnavailable, match="lifecycle is not live"
                 ):
-                    await contribution_participant(session).participate_submitter(
+                    await contribution.participate_submitter(
                         SubmitterParticipationRequest(
                             acceptance_disposition="new",
                             project_id=request.acceptance.project_id,
@@ -635,12 +644,19 @@ async def test_each_owner_independently_rejects_new_effects(
                             expected_generation=generation,
                         )
                     )
+                contribution._repository.get_frozen_rule.assert_not_awaited()
             async with h.factory() as session, session.begin():
                 # Isolate REV's own check: TASK supplies a correctly shaped new
                 # preparation; neither TASK nor CON can mask a missing REV gate.
-                tasks = SimpleNamespace(lock_accepted_effects=AsyncMock(return_value=TaskAcceptedPreparation(
-                    disposition="new", locked_review_policy_id=request.acceptance.policy_context_ref,
-                )))
+                tasks = SimpleNamespace(
+                    lock_accepted_effects=AsyncMock(
+                        return_value=TaskAcceptedPreparation(
+                            disposition="new",
+                            locked_review_policy_id=request.acceptance.policy_context_ref,
+                        )
+                    ),
+                    require_routing_source=AsyncMock(),
+                )
                 owner = FinalAcceptanceParticipant(
                     session,
                     tasks=lambda held: tasks,
