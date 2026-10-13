@@ -10,6 +10,8 @@ context/intake requirements:
 |---|---|
 | `workstream whoami` | `GET /api/v1/actors/me` |
 | `workstream profile update` | `PATCH /api/v1/actors/me` |
+| `workstream contributions [--project UUID]` | `GET /api/v1/actors/me/contributions` |
+| `workstream project contributions PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/contributions/export` |
 | `workstream project access PROJECT_ID` | `GET /api/v1/actors/me/authorization-context?project_id=PROJECT_ID` |
 | `workstream project show PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID` |
 | `workstream project create --name TEXT --slug TEXT --idempotency-key UUID` | `POST /api/v1/projects` |
@@ -51,6 +53,49 @@ Workstream verifies the caller's Flow bearer and owns identity resolution,
 authorization and lifecycle decisions. Reading a profile can admit a first-time
 caller and update server-owned last-seen/audit data. Project access is a current
 snapshot; each later API operation must independently authorize the caller.
+
+## Read and export contribution evidence
+
+```sh
+workstream contributions --output json
+workstream contributions --project PROJECT_ID --type accepted_submission
+workstream project contributions PROJECT_ID --recorded-from 2026-01-01T00:00:00Z --recorded-before 2027-01-01T00:00:00Z --output json
+workstream project contributions PROJECT_ID --csv earned.csv
+```
+
+Self reads bind the current human on the server; there is no actor selector.
+Project exports require a covering Project Manager or exact-project Finance
+Authority. Every invocation calls the public API with fresh authority; owning a
+Submitter/Reviewer grant alone does not authorize project export.
+
+Both commands accept `--type accepted_submission|completed_review` and aware
+RFC3339 `--recorded-from` (inclusive) / `--recorded-before` (exclusive) filters.
+Times are normalized to UTC microsecond precision before dispatch. Omitted
+filters select all authorized records. The server refuses selections above
+1,000 contributions: narrow the filters; the CLI never truncates or paginates.
+
+Text and JSON retain every public source/acceptance identity and award, including
+exact decimal strings and unpaid empty award sets. These are **earned facts,
+not payment status**. A completed-review record is evidence of an actual Review;
+reading existing records does not activate unfinished review/revision workflows.
+
+`--csv FILE` requests the server's formula-neutralized CSV, one row per award
+or one row for an unpaid contribution. It preserves those exact bytes after
+validation, writes a new 0600 file in an existing directory and refuses existing
+files or destination symlinks. It never writes raw CSV to the terminal or
+reconstructs CSV from a separate JSON read. `--output json` with `--csv` returns
+only `{"format":"csv","saved":true}` after successful publication. Failures
+leave no published or temporary export. Keep exported personal data private.
+
+Responses are bounded at 32 MiB with the existing 12-second read deadline.
+Oversized, malformed, wrong-scope or credential-reflecting responses are errors,
+not partial exports. Backend authorization errors and over-limit refusals remain
+distinct from client response validation failures.
+
+The table above is the delivered command inventory. Batch conversion/import/
+screen/release belongs to PILOT-02 and is not implemented by this change.
+Submission commands require their usable public backend contracts first;
+unfinished review/revision APIs are not current CLI implementation scope.
 
 ## Build and use
 

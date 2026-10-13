@@ -112,6 +112,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	addProjectCreate(project, client, &output, stdout)
 	addProjectRoleMutations(project, client, &output, stdout)
 	addContributionPolicyReads(project, client, &output, stdout)
+	addContributionEvidence(root, project, client, &output, stdout)
 	addGuideCreate(project, client, &output, stdout)
 	project.AddCommand(&cobra.Command{
 		Use:   "show PROJECT_ID",

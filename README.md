@@ -439,6 +439,11 @@ The `create`, `update`, `publish` and `retire` commands in that same group expos
 separate Finance decisions with explicit idempotency keys and exact version
 selectors. They return immutable event receipts; guide activation stays separate.
 All support human-readable and JSON output, using the caller's Flow token.
+`workstream contributions [--project UUID]` reads the caller's contribution
+evidence; `workstream project contributions PROJECT_ID` exports one authorized
+project. Both support recorded-time/type filters and `--csv FILE` for the exact
+server export, saved privately without overwrite. Earned awards are not proof
+of payment; these reads do not activate unfinished lifecycle writers.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
 
