@@ -882,3 +882,15 @@ The real CLI diagnostic at `6230ef664` failed at source upload's unchanged
 memory pressure with another native run active; this is not evidence of either
 success or failure of the context-reuse repair. Cleanup completed. Current-source
 public journey and hosted timing proof remain required.
+
+The final-head hosted CLI suite at `e5a666312` passed all 189 cases, including
+both native batch cases in 27.05 seconds. The Task C lane exposed a historical
+migration assertion that compared the predecessor receipt's complete column
+set against head without accounting for the new nullable
+`batch_transition_receipt_id`. Extend only
+`backend/tests/tasks/test_payment_policy_migration.py` to assert that this exact
+new column exists and is null on every retained receipt, then retain full
+equality of every predecessor field. Preserve literal historical fixtures,
+all payment-fact refusal checks, row counts and schema custody; no adapting seed
+writer or production change is needed. Native replay of this migration proof
+and the final hosted suite remain required.
