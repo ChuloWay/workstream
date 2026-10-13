@@ -11,7 +11,8 @@ separate all-or-nothing screening and release after canonical JSON import.
 PILOT-02A supplies ART source custody; PILOT-02B supplies immutable native batch
 membership and canonical CREATE participation. Normal single-Task SCREEN/RELEASE
 already own guide locks, validation, per-Task authority, audit and retry receipts.
-Their current root transaction prevents composition across a complete batch.
+Their standalone transaction ownership required extraction before complete-batch
+composition.
 
 ## Bounded change
 
@@ -113,15 +114,16 @@ Their current root transaction prevents composition across a complete batch.
   verify/build commands. Partition the old mixed integration run into controlled
   task/local HTTP checks, guide HTTP checks and existing native public API callers,
   each with the unchanged
-  240-second isolated-run cap. Select existing native `*_public_api.py` files
+  300-second isolated-run cap. Select existing native `*_public_api.py` files
   automatically, excluding only the owned bulk file. Existing
   `test_public_self_service.py` and the owned bulk file each have a separate
-  240-second isolated run. HTTP/local selection is
+  300-second isolated run. HTTP/local selection is
   the exact complementary file set: guide `test_guide*.py` files excluding native
   files, and remaining HTTP/local files. Refuse empty native or guide arrays.
   Every test stays selected once, the fifteen-minute job cap and aggregate
   required CLI result remain unchanged, and no skips or fallback providers are
-  introduced. Preserve the separate PILOT-10 export-native partition at union.
+  introduced. Preserve every current native CLI file, including Finance journey
+  extensions and the separately selected self-service caller.
   CI integrity review remains required before readiness.
 - Native participant lifetime/composition proof is owned in
   `backend/tests/authorization/task_authority/test_management_participants.py`;
@@ -129,8 +131,9 @@ Their current root transaction prevents composition across a complete batch.
 - Closed response proof is `tests/tasks/test_task_batch_transition_contract.py`;
   actual public native journeys/rollback/revocation/wait proof is
   `tests/tasks/test_task_batch_transitions.py`. These two modules require exact
-  TASK lane/inventory registration after coordinated atomic/current-main union.
-- Exact metadata hunks are two TASK catalogue registrations and their unchanged
+  PROJECT four-way lane/inventory registration after coordinated
+  atomic/current-main union.
+- Exact metadata hunks are two PROJECT catalogue registrations and their updated
   exact-set assertion in `backend/tests/test_ci_lane_catalogue.py`, plus five
   explicit `PILOT_02C_BULK_TRANSITION_TARGETS` paths and additive partition
   regeneration. Preserve all atomic/source and ten-lane entries, retained
@@ -141,11 +144,9 @@ Their current root transaction prevents composition across a complete batch.
   Preserve atomic POST/GET and both retained-route hashes unchanged. The real
   OpenAPI check at `932412232` failed on the missing two-route registration;
   this updates the closed expected inventory rather than weakening a gate.
-- Current-main reconciliation preserves both the atomic import and merged P10
-  AUTH arms/action registries. Update the exact closed catalogue count and its
-  assertion to their 152-action union, preserving permissions and evaluators;
-  reconcile only the selected MCP authorization-context enum digest/provenance.
-  No bulk AUTH actions are introduced.
+- Current-main reconciliation preserves the merged atomic/P10 AUTH arms, action
+  registries, permissions and evaluators. No bulk AUTH action or catalogue-count
+  change is introduced; retain the selected MCP authorization-context capture.
 - Current TASK/AUTH/ART and CLI contracts, README, affected roadmap sections,
   this record, and exact coordinated owner/lane/selected-contract metadata.
 - Required schema/receipt changes only through the sole migration author after
@@ -342,6 +343,9 @@ case-sensitive external IDs are preserved. One optional UTF-8 BOM is accepted.
   locking/rollback and explicit CLI write semantics.
 
 ## Evidence
+
+The checkpoints in this section name historical source targets and then-installed
+schemas and limits. Their passing counts do not establish current-source readiness.
 
 The exact `34256da51b5041561877b797affb4f4b5189cdd8` full native batch ended
 at the unchanged 1800-second runner limit (exit 124), with database, role and
@@ -566,7 +570,10 @@ This uses existing schema through source0031 and canonical seeded project
 prerequisites; it proves Task/AUTH transactions, not new batch DDL, provider bytes,
 live setup inference or a complete 200-member public bulk journey.
 
-## Reconciliation
+## Historical reconciliation
+
+The following checkpoints predate the selected-checker takeover and merged
+atomic prerequisite. Their counts and pending boundaries describe those sources.
 
 The native journey's AUTH assertions use canonical manager audit projection:
 `resource_type=project` and the exact project resource ID. The retained Task
@@ -662,17 +669,20 @@ that stronger observation and the larger journeys before any readiness claim.
 - Next usable boundary: Complete the separate explicit bulk/CLI journey under
   issue 489; whole-issue completion requires every agreed acceptance criterion.
 - Remaining risks: The installed aggregate receipt/currentness contract has the
-  recorded native 200/500, rollback, concurrency and direct-SQL proof. The atomic
-  owner must consume the sole-authored 0034 correction before its human merge;
-  bulk must not edit an already deployed predecessor migration. Required final
-  independent reviews and complete hosted CI remain. Local bounded CLI
-  partitions pass; hosted job-level timing remains unproved.
+  recorded historical native 200/500, rollback, concurrency and direct-SQL proof.
+  The atomic prerequisite is now merged as `0037`; bulk adds only its `0038`
+  successor and does not edit merged predecessor migrations. Required final
+  independent reviews and complete hosted CI remain. Historical bounded CLI
+  partitions passed; final-source native journeys and job-level timing remain
+  unproved after the context-reuse repairs.
 
 ## Current-main takeover reconciliation
 
-Reconcile bulk/CLI against the root atomic import slice and merged main
-`6d64a6353`. Allowed paths are the existing scoped bulk/CLI paths above, additive
-metadata, current roadmap and exact CI contract assertions. The sole migration
+The initial takeover reconciled bulk/CLI against the root atomic import slice and
+selected-checker main `6d64a6353`. The current baseline is merged main
+`42fd31b8f723246eec775250b8ff3f6dbad8ea8f`, including atomic import `0037` and
+Finance CLI management. Allowed paths are the existing scoped bulk/CLI paths
+above, additive metadata, current roadmap and exact CI contract assertions. The sole migration
 owner places bulk after reconciled atomic `0037`, preserving the current selected
 checker flow and all merged migrations. Do not restore historical schema seed
 adaptors removed by PILOT-04; retained literal fixtures remain canonical.
@@ -684,10 +694,11 @@ architecture/security, QA/test delta and CI integrity; no deployment or merge.
 
 ### Migration-owner linearization
 
-The migration-only reconciliation renames the unchanged aggregate-custody
-migration to `0038_task_batch_transitions` and places it directly after
-`0037_task_import_batches`. The migration body remains byte-identical to the
-final `e1b813db` handoff apart from its revision identity and predecessor. The
+The initial migration-only reconciliation renamed the aggregate-custody
+migration to `0038_task_batch_transitions` and placed it directly after
+`0037_task_import_batches`. The initial linearization preserved the
+final `e1b813db` body apart from revision identity and predecessor; later reason
+and Unicode evidence-bound repairs are recorded below. The
 linear graph and reset/TRUNCATE inventories preserve merged selected-checker
 tables, all three atomic-import tables and both bulk-transition tables. Alembic
 recognizes each installed revision through the single `0038` head.
@@ -798,12 +809,13 @@ client rather than a database lock; that sample alone is not a concurrency proof
 active Project, Guide, activation/finalization, external policy, review and
 revision graph after every Task had already been locked and freshly authorized.
 
-For a newly reserved SCREEN aggregate only, prepare that exact active context
-once after complete TASK/assignment locks, every fresh per-row AUTH decision and
-aggregate custody validation. Bind it to the current SQLAlchemy root transaction
-and exact project, then pass it through the canonical per-Task staging owner.
-Committed replay must still recover before any current-policy read; RELEASE keeps
-each Task's historical locked-context resolution. No global/session cache,
+For a newly reserved aggregate, prepare each distinct exact project/context-hash
+group once after complete TASK/assignment locks, every fresh per-row AUTH decision
+and aggregate custody validation. SCREEN resolves the active context; RELEASE
+resolves each distinct historical frozen context. Bind preparations to the current
+SQLAlchemy root transaction and exact project, then pass them through the canonical
+per-Task staging owner with each Task's stamp validation. Committed replay recovers
+before any provider read. No global/session cache,
 authorization reuse, flush removal, lock-order change or new execution limit is
 allowed.
 
@@ -837,7 +849,8 @@ a changed locked body/hash, multiple frozen groups, RELEASE replay with the
 provider unavailable, and unchanged fresh per-row authority consumption. Root
 owns the serialized native and CLI timing proof.
 
-The completed diagnostic at root source `453` measured one active-context load
+The completed diagnostic at root source
+`453eba1b2f3c518bb817d6cdac20e2b2f521f390` measured one active-context load
 in 1.48 seconds for SCREEN and 142 historical-context calls consuming 126.67
 seconds before RELEASE was cancelled. Import took 97.917 seconds, SCREEN and its
 replay completed in 108.265 and 64.723 seconds, and RELEASE exceeded its unchanged
