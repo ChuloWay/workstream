@@ -710,3 +710,11 @@ Place only the five new project/source/batch proof modules in the existing four-
 PROJECT partition, preserving every main module, node and execution kind. This
 is a placement rationale, not a passing-time prediction. Actual final hosted
 execution remains required, especially the concentrated 500-member journey.
+
+After the atomic timestamp repair and current-main CLI reconciliation, fresh
+native `0038` at `6f6bc1c1fed5ce825e1a4f01ad5ff3a46f02f4fe` measured
+`1178d7b70c17bfb3a6f55737a771834c7798f535d39ac96a488cd7cde2cb869d`.
+`/tmp/pilot02-bulk-schema-measure.{log,json}` uses the unchanged conftest
+catalogue query extracted verbatim and executed against the isolated migrated
+PostgreSQL database. All database/role/MinIO cleanup completed. This proves
+schema installation and fingerprint only; behavior execution remains required.
