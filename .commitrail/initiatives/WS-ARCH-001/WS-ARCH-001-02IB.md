@@ -13,7 +13,9 @@ backend APIs. This is the entry portion of the current
 within its ARCH-02I public intake group. It does not claim the complete journey
 or production readiness before live worker composition and the realistic drill.
 
-## Current behavior
+## Planning baseline at `cdfdebd74`
+
+The following describes the source state before this bounded public-entry change.
 
 - `POST /api/v1/tasks/{task_id}/submission-bundle-preparations` is mounted in
   `backend/app/api/routes/artifact_submissions.py`. It streams an outer ZIP to
@@ -108,7 +110,7 @@ or production readiness before live worker composition and the realistic drill.
 - This change record and current-capability reconciliation in `README.md`,
   `docs/roadmap_status.md`, `.commitrail/INDEX.md`,
   `.commitrail/initiatives/WS-ARCH-001/{OVERVIEW.md,planning/PLAN.md,planning/CHUNK_MAP.md}`,
-  and the affected `WS-AUTH-001`, `WS-AUTH-003`, `WS-CON-001`, `WS-POL-003`
+  and the affected `WS-ART-001`, `WS-AUTH-001`, `WS-AUTH-003`, `WS-CON-001`, `WS-POL-003`
   and `WS-REV-001` initiative overviews. These describe public entry as the
   intended merge outcome while preserving planned false-guide activation and
   complete public API/Celery service drill. The lead coordinates final PR and
@@ -250,6 +252,12 @@ was absent and a foreign-actor assertion that allowed either 403 or concealed
 404. The affected tests now require old client-packet denial, both protected
 action declarations and exact 404 `submission_unavailable` for a second active
 same-project Submitter without the assignment.
+External PR review at `9e49f4057` found that the new POST also mapped command
+composition `RuntimeError` to retryable infrastructure failure. The route now
+reserves retryable 503 for SQLAlchemy failures, while focused proof requires
+composition errors to propagate. Public denial tests now require exact
+predecessor, packet and suspended-actor codes; the planning baseline and ART
+next-boundary prose are reconciled with delivered entry.
 
 ## Reconciliation
 

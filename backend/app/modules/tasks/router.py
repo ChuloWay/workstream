@@ -626,7 +626,7 @@ async def create_admission_backed_submission(
         ) from exc
     except TaskServiceError as exc:
         raise task_http_error(exc) from exc
-    except (SQLAlchemyError, RuntimeError) as exc:
+    except SQLAlchemyError as exc:
         raise StructuredHTTPException(
             status_code=503, detail="Submission unavailable",
             error_code="submission_infrastructure_unavailable",

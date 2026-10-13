@@ -6,8 +6,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 - Disposition: Planned
 - Intent: preserve exact artifact identity, verified bytes, provider-neutral
   storage, and bounded private processing scratch.
-- Current boundary: ready-admission publication and hidden preparation,
-  consumption, and binding dependencies are merged through ARCH-02H.
+- Current boundary: ready-admission publication, public ZIP preparation and
+  admission-backed Submission creation are delivered through ARCH-02I-B; the
+  underlying ART consumption and binding dependencies remain the single writer.
 - Completed boundary: ARCH-04B hidden input materialization and hidden
   [ARCH-04B2 checker-output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md).
   The CHECKERS zero-slot reservation reader is implemented; checker-output
