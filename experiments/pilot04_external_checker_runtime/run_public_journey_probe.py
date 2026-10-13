@@ -668,13 +668,21 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
                      and dispatch.checker_remediation_manifest_id
                      == replacement_admission.checker_remediation_manifest_id,
                      "replacement lost exact failed predecessor custody")
+        admission = await session.get(
+            SubmissionBundleAdmission, submission.submission_bundle_admission_id
+        )
+        _require(admission is not None and admission.status == "consumed"
+                 and admission.consumed_by_submission_id == submission_id,
+                 "governed Submission lost its consumed admission")
         counts = {}
         for name in ("submissions", "final_acceptances", "contribution_records",
                      "compensation_awards", "reviews"):
             counts[name] = await session.scalar(text(
+                "SELECT count(*) FROM public.submissions s "
+                "JOIN public.workstream_tasks t ON t.id=s.task_id "
+                "WHERE t.project_id=:project"
+                if name == "submissions" else
                 f"SELECT count(*) FROM public.{name} WHERE project_id=:project"
-                if name != "reviews" else
-                "SELECT count(*) FROM public.reviews WHERE project_id=:project"
             ), {"project": str(project_id)})
         _require(counts == {
             "submissions": expected_submissions,
@@ -697,7 +705,7 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
                 and row.source_review_id is None
                 and row.source_final_acceptance_id is not None
                 and row.source_task_assignment_id is not None
-                and row.artifact_hash == submission.package_hash
+                and row.artifact_hash == admission.archive_sha256
                 and str(row.contribution_policy_version_id) == str(submission.contribution_policy_version_id)
                 and row.acceptance_source == "task_post_submit_route",
                 "submitter ContributionRecord lost its exact source or artifact lineage",
