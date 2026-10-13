@@ -613,3 +613,10 @@ source, project authority and native batch proofs belong together there. Matchin
 closed catalogue expectations move with the modules; final hosted timing remains
 required. The application membership validator also compares the original
 response timestamp with the authoritative batch timestamp.
+
+After the timestamp guard, fresh native `0037` schema measurement at
+`f10ca4ea27d02c59587107e1bedc9326cc14fe3a` produced
+`02247196425434baffe1922f229ff65b8c36c058a82680daea303f0508720399`.
+The expected old fingerprint refused setup as designed; raw evidence is
+`/tmp/pilot02-timestamp-schema-measure.{log,json}`, with all database/role and
+MinIO cleanup complete. This is schema measurement, not a passing behavior test.
