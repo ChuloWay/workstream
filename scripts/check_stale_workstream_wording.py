@@ -235,7 +235,8 @@ UNIMPLEMENTED_CURRENT_RUNTIME_COMPENSATION_PATTERNS = (
     re.compile(r"\bContributionAwardDefinition\b"),
     re.compile(r"\bProjectCompensationAdapterBinding\b"),
     re.compile(r"\bReviewLease\b"),
-    re.compile(r"\bContributionRecord\b"),
+    # Shared selected false-policy acceptance writes the submitter record.
+    # Public false-guide activation and complete journey proof remain separate.
     re.compile(r"\bCompensationAward\b"),
     re.compile(r"\bCompensationFulfillmentReceipt\b"),
     re.compile(r"\bCompensationStatusProjection\b"),

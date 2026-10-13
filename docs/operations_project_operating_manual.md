@@ -478,21 +478,24 @@ If the ready gate fails, the task remains `DRAFT`.
 
 ## Submission Intake Checklist
 
-This contributor handoff is exposed through two public backend operations. A
-contributor uploads one ZIP to
-`POST /api/v1/tasks/{task_id}/submission-bundle-preparations`; after ART returns
-a ready admission, `POST /api/v1/tasks/{task_id}/submissions` consumes it through
-the canonical atomic writer and creates the immutable Submission and initial
-evaluation request event.
+Public ZIP preparation and canonical admission-backed Submission creation
+are available for initial work and exact checker remediation. A contributor
+uploads one ZIP to `POST /api/v1/tasks/{task_id}/submission-bundle-preparations`;
+after ART returns a ready admission,
+`POST /api/v1/tasks/{task_id}/submissions` consumes it through the canonical
+atomic writer and creates the immutable Submission and initial evaluation
+request event. The complete public API and Celery service drill remains pending;
+live human-review revision is separate. The obsolete client-owned packet POST
+is removed.
 
 Before locking a submission packet:
 
 - task is assigned to submitter
-- summary exists
+- summary is optional; missing text produces a default-check warning
 - exactly one outer ZIP is uploaded through submission-bundle preparation
 - every project-required output/evidence file exists inside that ZIP
-- contributor attestation exists
-- revision replay exists when task was previously `NEEDS_REVISION`
+- contributor attestation is optional; missing text produces a default-check warning
+- checker-remediation replacement binds the exact authorized predecessor; human-review revision remains separate
 - effective project submission artifact policy is loaded
 - generated project pre-submit checker policy runs
 - failed preparation returns `pre_submission_checker_failed` with ART's exact

@@ -184,7 +184,7 @@ Worker responses must not expose:
 - Alembic upgrade/downgrade creates and removes checker tables
 - checker ORM models are registered in Alembic metadata
 - partial unique index allows one current run per submission
-- hidden pre-submit ZIP checks retain ART evidence without durable post-submit checker rows
+- public ZIP preparation retains ART pre-submit evidence without creating durable post-submit checker rows
 - blocking preparation returns `pre_submission_checker_failed`, creates no submission row or version, and does not transition the task or publish a submission-created event
 - no standalone JSON precheck route or schema remains
 - durable checker run works through real authenticated API calls

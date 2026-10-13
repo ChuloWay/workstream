@@ -125,7 +125,7 @@ The following describes the source state before this bounded public-entry change
 - Reconcile affected current contract documentation in
   `docs/architecture_brief/{README.md,workstream_architecture_brief.md}`;
   `docs/engineering/review_authorization_action_custody.md`; and
-  `docs/{architecture_checker_framework.md,architecture_data_model.md,architecture_lockdown.md,current_system_data_flow.html,decision_0011_submission_artifact_policy_drives_pre_submit.md,glossary.md,operations_authorization_service.md,operations_project_operating_manual.md,product_brief.md,spec_artifact_storage_service.md,spec_authorization_service.md,spec_chunk_4_task_queue_assignment.md,spec_chunk_5_submission_packet_foundation.md,spec_chunk_6_checker_contract_records.md,spec_chunk_7_checker_runner_registry.md,spec_week2_checker_framework.md,template_checker_policy.md,template_submission_artifact_policy.md,template_submission_packet.md}`.
+  `docs/{architecture_checker_framework.md,architecture_data_model.md,architecture_system_architecture.md,architecture_lockdown.md,current_system_data_flow.html,decision_0011_submission_artifact_policy_drives_pre_submit.md,glossary.md,operations_authorization_service.md,operations_project_operating_manual.md,product_brief.md,spec_artifact_storage_service.md,spec_authorization_service.md,spec_chunk_4_task_queue_assignment.md,spec_chunk_5_submission_packet_foundation.md,spec_chunk_6_checker_contract_records.md,spec_chunk_7_checker_runner_registry.md,spec_week2_checker_framework.md,template_checker_policy.md,template_submission_artifact_policy.md,template_submission_packet.md}`.
 
 ### Not allowed
 
@@ -312,3 +312,15 @@ DTO rejection and the former TASK nonempty guard when restored separately.
 - Remaining risks: a crash before selected PRE reservation leaves no durable
   lookup target, and a passing PRE run without durable intent may need a
   narrower retryable recovery path. Neither can be represented as `ready`.
+
+### Current-contract correction
+
+Current contract prose, the dependency map and static lifecycle diagram describe
+public ZIP preparation and admission-backed initial/checker-remediation entry.
+They preserve separate false-guide activation and full API/Celery proof. The
+allowed documentation reconciliation includes
+`scripts/check_stale_workstream_wording.py`: remove only its obsolete blanket
+`ContributionRecord` prohibition for the current-flow diagram, since selected
+shared acceptance already writes the submitter record. Retain all other stale
+patterns, deferred fulfillment checks and workflow invocations. This changes no
+product behavior, test selection, required checks or execution evidence.
