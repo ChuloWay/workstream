@@ -179,6 +179,9 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 		if output != "json" {
 			fmt.Fprintln(stderr, usage.message)
 		}
+		if usage.code == "file_io_error" {
+			return 1
+		}
 		return 2
 	default:
 		writeFailure(stderr, output, api.Failure{Code: "invalid_arguments"})

@@ -4,6 +4,9 @@ from copy import deepcopy
 import csv
 from io import StringIO
 import json
+import os
+import subprocess
+import sys
 from urllib.parse import parse_qs, urlsplit
 
 from test_http_boundary import ACTOR, PROJECT, TOKEN, assert_failure, http_fixture
@@ -250,6 +253,58 @@ def test_contribution_csv_exact_bytes_private_no_overwrite_and_symlink(cli, tmp_
             assert_failure(result, "invalid_arguments", 2)
             assert output.read_bytes() == body
         assert not list(tmp_path.glob(".workstream-contributions-*"))
+
+
+def test_contribution_csv_reports_usage_and_real_write_failure(cli, tmp_path):
+    with http_fixture() as (origin, response, requests):
+        empty = cli(origin, TOKEN, "contributions", "--csv", "")
+        assert empty.returncode == 2 and not empty.stdout and not requests
+        assert "explicit filters and CSV path must not be empty" in empty.stderr
+        response["body"] = csv_bytes(evidence())
+        response["headers"] = {"Content-Type": "text/csv"}
+        existing = tmp_path / "existing.csv"
+        existing.write_bytes(b"keep")
+        rejected = cli(origin, TOKEN, "contributions", "--csv", str(existing))
+        assert rejected.returncode == 2 and not rejected.stdout
+        assert "CSV destination exists or is inaccessible" in rejected.stderr
+        assert existing.read_bytes() == b"keep"
+
+        # Apply a real file-size limit in a separate launcher process, not a
+        # mocked Go writer or a preexec callback in this threaded HTTP fixture.
+        target = tmp_path / "limited.csv"
+        launcher = (
+            "import os,resource,signal,sys; "
+            "signal.signal(signal.SIGXFSZ,signal.SIG_IGN); "
+            "resource.setrlimit(resource.RLIMIT_FSIZE,(1,1)); "
+            "os.execv(sys.argv[1],sys.argv[1:])"
+        )
+        for output in ("text", "json"):
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-c",
+                    launcher,
+                    os.environ["WORKSTREAM_CLI_EXECUTABLE"],
+                    "contributions",
+                    "--csv",
+                    str(target),
+                    "-o",
+                    output,
+                ],
+                env={"WORKSTREAM_API_URL": origin, "WORKSTREAM_TOKEN": TOKEN},
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20,
+            )
+            assert result.returncode == 1 and not result.stdout, result.stderr
+            assert TOKEN not in result.stderr and str(target) not in result.stderr
+            if output == "json":
+                assert json.loads(result.stderr)["error"]["code"] == "file_io_error"
+            else:
+                assert "cannot write contribution CSV" in result.stderr
+            assert not target.exists()
+            assert not list(tmp_path.glob(".workstream-contributions-*"))
 
 
 def test_contribution_csv_refuses_malformed_foreign_and_unsafe_rows(cli, tmp_path):

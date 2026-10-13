@@ -3,7 +3,6 @@ package command
 import (
 	"crypto/rand"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -34,7 +33,7 @@ func addContributionEvidence(root, project *cobra.Command, client func() (*api.C
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
 			for _, flag := range []string{"project", "type", "recorded-from", "recorded-before", "csv"} {
 				if f := cmd.Flags().Lookup(flag); f != nil && f.Changed && f.Value.String() == "" {
-					return errors.New("explicit filters and CSV path must not be empty")
+					return commandError{"invalid_arguments", "explicit filters and CSV path must not be empty"}
 				}
 			}
 			if scoped {
@@ -93,31 +92,31 @@ func addContributionEvidence(root, project *cobra.Command, client func() (*api.C
 func publishContributionCSV(destination string, body []byte) error {
 	root, err := os.OpenRoot(filepath.Dir(destination))
 	if err != nil {
-		return errors.New("cannot open CSV destination directory")
+		return commandError{"invalid_arguments", "cannot open CSV destination directory"}
 	}
 	defer root.Close()
 	name := filepath.Base(destination)
 	if _, err := root.Lstat(name); !os.IsNotExist(err) {
-		return errors.New("CSV destination exists or is inaccessible")
+		return commandError{"invalid_arguments", "CSV destination exists or is inaccessible"}
 	}
 	temporary := ".workstream-contributions-" + rand.Text()
 	file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
-		return errors.New("cannot create private contribution CSV")
+		return commandError{"file_io_error", "cannot create private contribution CSV"}
 	}
 	defer root.Remove(temporary)
 	defer file.Close()
 	if _, err := file.Write(body); err != nil {
-		return errors.New("cannot write contribution CSV")
+		return commandError{"file_io_error", "cannot write contribution CSV"}
 	}
 	if err := file.Sync(); err != nil {
-		return errors.New("cannot persist contribution CSV")
+		return commandError{"file_io_error", "cannot persist contribution CSV"}
 	}
 	if err := file.Close(); err != nil {
-		return errors.New("cannot close contribution CSV")
+		return commandError{"file_io_error", "cannot close contribution CSV"}
 	}
 	if err := root.Link(temporary, name); err != nil {
-		return errors.New("cannot publish contribution CSV without overwrite")
+		return commandError{"file_io_error", "cannot publish contribution CSV without overwrite"}
 	}
 	return nil
 }

@@ -86,6 +86,9 @@ files or destination symlinks. It never writes raw CSV to the terminal or
 reconstructs CSV from a separate JSON read. `--output json` with `--csv` returns
 only `{"format":"csv","saved":true}` after successful publication. Failures
 leave no published or temporary export. Keep exported personal data private.
+Invalid destinations or empty explicit flags exit 2 (`invalid_arguments`);
+local file creation/write/persistence/publication failures exit 1
+(`file_io_error`). Text errors explain the failure without echoing paths.
 
 Responses are bounded at 32 MiB with the existing 12-second read deadline.
 Oversized, malformed, wrong-scope or credential-reflecting responses are errors,
