@@ -441,8 +441,12 @@ fresh authority is backend-owned; a read never authorizes a later write.
 `project contribution-policy current PROJECT_ID` discovers the published and
 open-draft selectors; `project contribution-policy show PROJECT_ID POLICY_ID
 [--version UUID]` inspects backend-selected or exact historical policy versions,
-including complete rules and exact quantities. These require current Finance
-Authority, not PM-only permission; they do not edit, publish, retire or pay.
+including complete rules and exact quantities. These read commands require
+current Finance Authority, not PM-only permission; they do not edit, publish,
+retire or pay.
+The `create`, `update`, `publish` and `retire` commands in that same group expose
+separate Finance decisions with explicit idempotency keys and exact version
+selectors. They return immutable event receipts; guide activation stays separate.
 All support human-readable and JSON output, using the caller's Flow token.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
@@ -873,8 +877,9 @@ locked-context reads with exact current grants. ARCH-03C7 exposes bounded task
 history only to covered Audit Authority and removes the old payload-bearing
 task-only audit route. AUTH-18 delivers public manager guide activation;
 ARCH-03D connects hidden intake through final durable intent to canonical TASK/PROJECTS
-ports, preserving historical guide selection. ARCH-02I-B exposes its
-admission-backed public Submission entry. ARCH-04B supplies hidden exact verified Submission
+ports, preserving historical guide selection. ARCH-02I-B exposes public ZIP
+preparation and canonical admission-backed Submission creation. ARCH-04B supplies
+hidden exact verified Submission
 input with scoped async file access and cleanup. ARCH-04B2 adds hidden typed
 checker-output storage, byte-free recovery and flush-only verified binding over
 the generic ART put/verification path. ARCH-04C supplies hidden durable execution,

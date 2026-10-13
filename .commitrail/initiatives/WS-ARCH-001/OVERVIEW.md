@@ -3,8 +3,9 @@
 - Disposition: Planned
 - Intent: keep product modules behind explicit ports, exact owner authority and
   one canonical transaction for each business outcome.
-- Delivered first-layer boundary: hidden ART preparation and TASK-owned atomic
-  Submission/dispatch; [ARCH-04F1](WS-ARCH-001-04F1.md), [04F2](WS-ARCH-001-04F2.md),
+- Delivered first-layer boundary: public admission-backed ZIP preparation and
+  TASK-owned atomic Submission/dispatch through
+  [ARCH-02I-B](WS-ARCH-001-02IB.md); [ARCH-04F1](WS-ARCH-001-04F1.md), [04F2](WS-ARCH-001-04F2.md),
   [04F3](WS-ARCH-001-04F3.md) and [04F4](WS-ARCH-001-04F4.md) supply verified failure
   evidence, exact checker remediation, replacement intake and Operator retry;
   [ARCH-04E2-B](WS-ARCH-001-04E2B.md) authorized true/false outcomes; and

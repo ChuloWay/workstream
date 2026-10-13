@@ -169,7 +169,8 @@ async def test_public_initial_submission_replays_and_recovers_ready_upload(
                     subject=f"human-{foreign_context.actor_profile_id}"
                 ) as foreign:
                     denied_actor = await foreign.post(route, json=_payload(h.creation, h.admission_id))
-                    assert denied_actor.status_code in {403, 404}, denied_actor.text
+                    assert denied_actor.status_code == 404, denied_actor.text
+                    assert denied_actor.json()["error"]["code"] == "submission_unavailable"
 
             uncaused = _payload(h.creation, h.admission_id)
             uncaused["predecessor_submission_id"] = str(new_record_id())

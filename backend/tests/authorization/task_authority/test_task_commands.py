@@ -35,10 +35,10 @@ from tests.authorization.task_authority.test_lifecycle_races import (
 
 
 @pytest.mark.parametrize("packet", ["complete", "forged_context", "empty"])
-async def test_retired_packet_post_cannot_mutate_an_authorized_assignment(
+async def test_client_owned_packet_cannot_mutate_an_authorized_assignment(
     task_client, task_database_env, monkeypatch, packet,
 ):
-    """Even a current assigned Submitter cannot invoke the retired packet writer."""
+    """The canonical admission route rejects the old client-owned packet."""
     project = await create_active_project(task_client)
     task = await create_started_task(task_client, project["id"], monkeypatch)
     before = await _read_task_contributor_race_snapshot(task_database_env, task["id"])
@@ -48,8 +48,8 @@ async def test_retired_packet_post_cannot_mutate_an_authorized_assignment(
     response = await task_client.post(
         f"/api/v1/tasks/{task['id']}/submissions", headers=auth_headers(), json=payload,
     )
-    assert response.status_code == 405, response.text
-    assert "POST" not in response.headers["allow"]
+    assert response.status_code == 422, response.text
+    assert response.json()["error"]["code"] == "invalid_request"
     assert await _read_task_contributor_race_snapshot(task_database_env, task["id"]) == before
     retained_read = await task_client.get(
         f"/api/v1/tasks/{task['id']}/submissions", headers=auth_headers(),
