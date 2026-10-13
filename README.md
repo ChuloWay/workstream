@@ -902,7 +902,7 @@ it neither creates failure economics nor activates human revision. 04F4 adds
 hidden Operator retry for known terminal infrastructure failures with immutable
 source evidence. PILOT-04 registers selected production request/completion handlers;
 ARCH-02I-B exposes public admission-backed entry. False-guide activation/readiness
-and the real public/worker drill remain. A future setup-fault hold must
+and the complete public API and Celery service drill remain. A future setup-fault hold must
 retain the Submission and locked rules without contributor penalty; changing
 submitted-work rules remains deferred.
 The hidden false-path proof uses explicitly seeded valid policy lineage;

@@ -102,8 +102,14 @@ or production readiness before live worker composition and the realistic drill.
   `experiments/pilot04_external_checker_runtime/` is owned by the runtime
   worker and uses these canonical entry routes with PostgreSQL and MinIO
   without editing product modules in this change.
-- This change record. The lead owns shared roadmap, architecture/operations
-  documentation, sheet-export, initiative-navigation and final PR reconciliation.
+- This change record and current-capability reconciliation in `README.md`,
+  `docs/roadmap_status.md`, `.commitrail/INDEX.md`,
+  `.commitrail/initiatives/WS-ARCH-001/{OVERVIEW.md,planning/PLAN.md,planning/CHUNK_MAP.md}`,
+  and the affected `WS-AUTH-001`, `WS-AUTH-003`, `WS-CON-001`, `WS-POL-003`
+  and `WS-REV-001` initiative overviews. These describe public entry as the
+  intended merge outcome while preserving planned false-guide activation and
+  complete public API/Celery service drill. The lead coordinates final PR and
+  integrated-branch reconciliation; no local sheet export is present.
 
 ### Not allowed
 
@@ -218,9 +224,10 @@ proof establishes the HTTP entry, not that combined outcome.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Existing operation and gap | Inspect `artifact_submissions.py`, `compose_hidden_submission_creation_command`, `TransactionalSubmissionCreationCommand`, `TaskSubmissionCreationService`, and mounted routes | Confirmed at `cdfdebd74`: preparation was mounted but hidden from OpenAPI; no creation POST was mounted. This change closes that public boundary. | Complete worker/outcome drill remains separate |
-| Public HTTP entry and recovery | `/tmp/ws-entry-02ib-final-focused.json`: 53 tests passed across public routes, owner replay/rollback, and history. `/tmp/ws-entry-02ib-final-initial.json`: corrected initial case passed after a validated-settings/rate-control preflight, including authorized history GET and suspended-actor denial | Passed; both isolated runners cleaned their PostgreSQL databases and MinIO buckets | Focused route fixture uses local artifact bytes; the companion public drill owns live MinIO transport |
+| Public HTTP entry and recovery | Earlier focused run passed 53 public-route, owner replay/rollback and history tests; its metadata identified the pre-edit base and is supporting diagnostic evidence only. The corrected public initial/history case passed at `9bfc5b589` after validated-settings/rate-control preflight. At clean merged head `b932bf3c4`, `/tmp/ws-entry-b932-qa-pg.json` records four focused PostgreSQL tests, including exact foreign-assignment concealment and all old client-packet denials. | Passed; exact-head runner records Alembic 0036, MinIO probe, and PostgreSQL/MinIO cleanup | Focused route fixture uses local artifact bytes; the companion public drill owns live MinIO transport |
 | Closed authority and packet | The initial case proves a second active same-project Submitter without the assignment cannot consume the original actor's valid admission; uncaused predecessor, changed packet and caller `package_uri` are denied. Checker-remediation version two/replay and owner rollback pass | Passed | Existing owner tests retain concurrency and consumed-admission matching receipt proof |
 | Published contracts and boundaries | Full `create_app().openapi()` check verified binary ZIP prep and the five-field extra-forbid canonical POST; `scripts.module_boundaries validate --protected-base cdfdebd74` | Passed | Full CI and implementation review remain pending |
+| Protected route inventory | Published route/action inventory counts both new secured POST operations and preserves the hash of all other retained routes; old client-owned packet returns `422 invalid_request` without a Submission. `test_public_surface` and `test_openapi_documents_request_error_and_response_context` passed locally. | Passed | Hosted CI must run against the final PR head |
 | Full journey | Real API plus broker/worker drain through current checker/outcome and contribution reads | Coordinated companion first-layer drill pending | Local route proof uses real PostgreSQL and local artifact bytes; companion public drill establishes MinIO transport |
 
 ## Review findings
@@ -235,15 +242,23 @@ product SQL. The module-boundary validator found a TASK→ART cyclic public edge
 from the draft router's direct ART error import; the existing composition
 adapter now translates only the four closed ART admission codes to a TASK-owned
 error. No parallel composer or new metadata read is introduced.
+Implementation QA found stale tests that assumed the canonical Submission POST
+was absent and a foreign-actor assertion that allowed either 403 or concealed
+404. The affected tests now require old client-packet denial, both protected
+action declarations and exact 404 `submission_unavailable` for a second active
+same-project Submitter without the assignment.
 
 ## Reconciliation
 
-- Current-source reconciliation: `cdfdebd74` has hidden ART preparation,
+- Current-source reconciliation: `cdfdebd74` had hidden ART preparation,
   atomic TASK/ART creation and public history reads, but no public creation
-  POST or OpenAPI exposure for ZIP preparation. Its intervening CLI policy-read
-  merge does not change these owners. Live worker composition and the realistic
-  drill remain necessary before claiming a complete public false-policy journey.
-- Next usable boundary: outcome access and the complete real public/worker
+  POST or OpenAPI exposure for ZIP preparation. This change exposes those
+  existing owners. Main through `07f5655ac` adds CLI Finance policy management
+  without changing the entry owners or adding CLI submit/status. False-guide
+  activation and the realistic Celery service drill remain necessary before
+  claiming a complete public false-policy journey.
+- Next usable boundary: false-guide activation/readiness, outcome access and the
+  complete real public API and Celery service
   drill; metadata-only preparation status only if the actual drill requires it.
 - Remaining risks: a crash before selected PRE reservation leaves no durable
   lookup target, and a passing PRE run without durable intent may need a
