@@ -287,7 +287,6 @@ async def test_guide_activation_public_socket_replay_and_fresh_authority(
                 assert approved.status_code == 200, approved.text
                 (
                     published,
-                    version_path,
                     inspect_retired_policy,
                 ) = await publish_with_policy_reads(
                     direct,
@@ -303,6 +302,7 @@ async def test_guide_activation_public_socket_replay_and_fresh_authority(
                     token(outsider),
                     token(foreign_finance),
                     admin,
+                    tmp_path,
                 )
                 response = await direct.get(policy_path, headers=headers)
                 assert response.status_code == 200, response.text
@@ -369,15 +369,6 @@ async def test_guide_activation_public_socket_replay_and_fresh_authority(
                 path.write_text(json.dumps(body))
                 denied(call(replay_key=str(uuid4())), (404, 409))
                 # Published-policy retirement cannot rewrite a retained activation.
-                retired = await direct.post(
-                    version_path + "/retirement",
-                    headers={
-                        "Authorization": "Bearer " + token(finance),
-                        "Idempotency-Key": str(uuid4()),
-                    },
-                    json={},
-                )
-                assert retired.status_code == 200, retired.text
                 await inspect_retired_policy()
                 assert success(call()) == saved
                 suspended = await direct.post(

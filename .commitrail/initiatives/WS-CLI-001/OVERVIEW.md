@@ -27,6 +27,7 @@
   [WS-CLI-001-20](WS-CLI-001-20.md), explicit exact-project Submitter/Reviewer issuance and revocation;
   [WS-CLI-001-21](WS-CLI-001-21.md), filtered grant browsing and exact qualification/revocation history;
   [WS-CLI-001-22](WS-CLI-001-22.md), Finance current policy discovery and exact retained-version inspection;
+  [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download.
 
 ## Current boundary
@@ -118,6 +119,10 @@ the complete authorized Finance policy graph and current selectors. The backend
 selects the published version ahead of an open draft unless explicitly overridden
 by a version selector; current Finance authority governs historical reads too.
 PM-only authority does not suffice. These reads never publish, retire or pay.
+`project contribution-policy create`, `update`, `publish` and `retire` provide
+separate public Finance mutations with exact selectors and explicit retry keys.
+Original event receipts survive later lifecycle changes, with current authority
+required on replay. Guide activation remains a separate manager operation.
 All have text/JSON
 output and built-binary integration proof. Mutations preserve omitted/null
 semantics and explicitly report uncertain outcomes without automatic retries.
@@ -213,12 +218,14 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
 22. **WS-CLI-001-22:** Current Finance policy discovery and backend-selected or
    exact retained-version inspection, including empty drafts and complete award
    definitions. No Finance mutation, publication or local readiness decisions.
-23. **Later governed-work commands:** Add explicit Finance policy editing,
-   publication/retirement and contribution-evidence reads, then submission,
+23. **WS-CLI-001-23:** Finance draft creation, complete rule replacement,
+   publication and retirement through existing public operations, with explicit
+   caller keys, immutable event receipts and no automatic retries.
+24. **Later governed-work commands:** Add contribution-evidence reads, then submission,
    review, revision, and contribution reads/writes only as their actual public
    contracts and authority boundaries become available. Split by user journey,
    not one PR per endpoint or one giant catalogue PR.
-24. **Optional TUI:** Add a focused public queue/evidence view after its API
+25. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof

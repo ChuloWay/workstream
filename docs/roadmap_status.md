@@ -215,8 +215,10 @@ discovery, role cache or automatic decisions are added.
 CLI contribution-policy current/exact-version reads now expose the authorized
 Finance policy graph, including empty drafts, published/open-draft selectors and
 retained historical versions. Backend selection and current Finance authority
-remain decisive; PM-only permission does not suffice. Explicit policy editing,
-publication/retirement and contribution-evidence CLI consumption remain separate.
+remain decisive; PM-only permission does not suffice. CLI draft creation, complete
+rule replacement, publication and retirement now use the existing public Finance
+operations with explicit retry keys and immutable receipts. Guide activation is
+separate. Contribution-evidence CLI commands remain later work.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -492,6 +494,11 @@ cannot be reused as post-submission review-gate evidence. See the
   Real API proof covers unpaid policy history, current Finance authority,
   suspension/revocation and project/version isolation; compensated precision is
   process-boundary proof. Reads do not publish, activate, pay or infer readiness.
+  [CLI Finance decisions](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-23.md)
+  add explicit draft creation, complete rule replacement, publication and
+  retirement, preserving exact selectors and caller retry keys. Original event
+  replay requires current authority; publication remains separate from guide
+  activation. The native unpaid journey verifies stored events and denied writes.
   [PILOT-13 assigned-guide access](../.commitrail/changes/pilot13-assigned-task-guide-documents.md)
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads
