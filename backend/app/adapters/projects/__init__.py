@@ -1,27 +1,32 @@
 """PROJECT-owned composition adapters."""
 
 from app.modules.projects.api.guide_activation import (
-    GuideActivationAuthorizationPort, GuideActivationPort, GuideContributionPolicyPort,
+    GuideActivationAuthorizationPort,
+    GuideActivationPort,
+    GuideContributionPolicyPort,
 )
 
 
 from app.modules.projects.api.guide_documents import ProjectGuideDocumentScopePort
-from app.modules.projects.api.guide_proposals import GuideProposalOperationsPort, GuideCorrectionDispatchPort
+from app.modules.projects.api.guide_proposals import (
+    GuideProposalOperationsPort,
+    GuideCorrectionDispatchPort,
+)
 from app.modules.authorization.api.guide_proposal_review import GuideProposalAuthorizationPort
 from app.modules.authorization.api import ProjectGuideCompilationAuthorizationPort
 from uuid import UUID
 from collections.abc import Callable
 from app.modules.authorization.api.post_policy import PostPolicyAuthorizationPort
 from app.modules.projects.api.post_policy import PostPolicyOperationsPort, PostPolicyDeliveryPort
-from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
 from app.modules.projects.post_policy.delivery import PostPolicyServiceAuthority
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from app.modules.projects.api.guide_documents import GuideDocumentManifestPort, GuideDocumentAccessFactory
+from app.modules.projects.api.guide_documents import (
+    GuideDocumentManifestPort,
+    GuideDocumentAccessFactory,
+)
 from app.interfaces.project_agents import ProjectGuideAgentRuntime
 from app.interfaces.project_guide_runtime import ProjectGuideRuntimeConfiguration
-from app.modules.checkers.api.pre_submit_catalogue import PreSubmissionCapabilityProjection
-from app.modules.checkers.api.post_submit_catalogue import PostSubmitCatalogue
-from app.modules.checkers.api.policy_compilation import PreSubmissionPolicyCompilationPort
+from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
 from app.modules.authorization.api import (
     ActorIdentityFacts,
     GuideSufficiencyProjectionAuthorizationPort,
@@ -64,8 +69,7 @@ def project_guide_compilation_delivery_port(
     *,
     material_factory: Callable[[AsyncSession], GuideDocumentManifestPort],
     document_access_factory: GuideDocumentAccessFactory,
-    pre_capabilities: PreSubmissionCapabilityProjection,
-    post_capabilities: PostSubmitCatalogue,
+    checker_capabilities: ExternalCheckerCapabilityProjection,
     request_authority: RequestAuthority,
     execution_authority: GuideCompilationAuthorizationContext,
     configuration_factory: Callable[[], ProjectGuideRuntimeConfiguration],
@@ -84,15 +88,13 @@ def project_guide_compilation_delivery_port(
     return LiveGuideCompilationCoordinator(
         session_factory,
         material_factory=material_factory,
-        pre_capabilities=pre_capabilities,
-        post_capabilities=post_capabilities,
+        checker_capabilities=checker_capabilities,
         request_authority=request_authority,
         configuration_factory=configuration_factory,
         execution=project_guide_compilation_execution_port(
             session_factory,
             material_factory=material_factory,
-            pre_submission_capabilities=pre_capabilities,
-            post_submission_capabilities=post_capabilities,
+            checker_capabilities=checker_capabilities,
             authorization_context=execution_authority,
             runtime_factory=runtime_factory,
             document_access_factory=document_access_factory,
@@ -110,7 +112,8 @@ def project_guide_compilation_delivery_port(
 async def cleanup_project_guide_runtime_resources(session_factory, *, runtime_factory):
     """Compose exact retained cleanup scopes without source grants or inference admission."""
     from app.modules.projects.guide_compilation.runtime_resources import (
-        SqlAlchemyGuideRuntimeCleanupCustody, pending_runtime_resource_cleanup,
+        SqlAlchemyGuideRuntimeCleanupCustody,
+        pending_runtime_resource_cleanup,
     )
 
     async with session_factory() as session:
@@ -123,7 +126,10 @@ async def cleanup_project_guide_runtime_resources(session_factory, *, runtime_fa
             if runtime.identity != configuration.adapter_identity:
                 raise ValueError("cleanup runtime identity mismatch")
             custody = SqlAlchemyGuideRuntimeCleanupCustody(
-                session_factory, attempt_id, manifest_sha256, configuration.runtime_key,
+                session_factory,
+                attempt_id,
+                manifest_sha256,
+                configuration.runtime_key,
             )
             completed += bool(await runtime.cleanup_resources(custody))
         except Exception:
@@ -137,57 +143,75 @@ async def cleanup_project_guide_runtime_resources(session_factory, *, runtime_fa
 
 def project_guide_document_scope_port(session: AsyncSession) -> ProjectGuideDocumentScopePort:
     """Bind PROJECTS current document scope independently from ART storage."""
-    from app.modules.projects.guide_compilation.document_scope import SqlAlchemyProjectGuideDocumentScope
+    from app.modules.projects.guide_compilation.document_scope import (
+        SqlAlchemyProjectGuideDocumentScope,
+    )
+
     return SqlAlchemyProjectGuideDocumentScope(session)
 
 
 def project_guide_proposal_service(
-    session: AsyncSession, authorization: GuideProposalAuthorizationPort,
+    session: AsyncSession,
+    authorization: GuideProposalAuthorizationPort,
 ) -> GuideProposalOperationsPort[
-    ActorIdentityFacts, GuideDocumentManifestPort, PreSubmissionCapabilityProjection,
-    PostSubmitCatalogue, PreSubmissionPolicyCompilationPort,
+    ActorIdentityFacts,
+    GuideDocumentManifestPort,
+    ExternalCheckerCapabilityProjection,
 ]:
     """Compose the sole proposal owner with explicit authority."""
+    from app.adapters.checkers import external_checker_registry_reader
     from app.modules.projects.guide_compilation.proposal_service import GuideProposalService
 
-    return GuideProposalService(session, authorization)
+    return GuideProposalService(session, authorization, external_checker_registry_reader(session))
 
 
 def project_guide_correction_dispatch(
-    session: AsyncSession, authorization: ProjectGuideCompilationAuthorizationPort, *,
-    material: GuideDocumentManifestPort, pre: PreSubmissionCapabilityProjection,
-    post: PostSubmitCatalogue, configuration: ProjectGuideRuntimeConfiguration,
+    session: AsyncSession,
+    authorization: ProjectGuideCompilationAuthorizationPort,
+    *,
+    material: GuideDocumentManifestPort,
+    capabilities: ExternalCheckerCapabilityProjection,
+    configuration: ProjectGuideRuntimeConfiguration,
 ) -> GuideCorrectionDispatchPort[ActorIdentityFacts]:
     """Compose human correction admission and existing queue dispatch without inference."""
-    from app.modules.projects.guide_compilation.correction_dispatch import GuideCorrectionDispatchService
+    from app.modules.projects.guide_compilation.correction_dispatch import (
+        GuideCorrectionDispatchService,
+    )
     from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
 
     return GuideCorrectionDispatchService(
-        session, authorization, CompilationRequestInputs(material, pre, post, configuration),
+        session,
+        authorization,
+        CompilationRequestInputs(material, capabilities, configuration),
     )
 
 
 def project_post_policy_service(
-    session: AsyncSession, authorization: PostPolicyAuthorizationPort, catalogue: PostSubmitCatalogue,
-) -> PostPolicyOperationsPort[ActorIdentityFacts, GuideProposalAuthorizationPort, CompiledPostSubmitPolicy]:
+    session: AsyncSession,
+    authorization: PostPolicyAuthorizationPort,
+) -> PostPolicyOperationsPort[ActorIdentityFacts, GuideProposalAuthorizationPort, object]:
     """Compose the canonical post-policy owner with explicitly supplied authority."""
     from app.modules.projects.post_policy.service import PostPolicyService
 
-    return PostPolicyService(session, authorization, catalogue)
+    return PostPolicyService(session, authorization)
 
 
 def project_post_policy_delivery_port(
-    session_factory: async_sessionmaker[AsyncSession], *,
-    authority: PostPolicyServiceAuthority, catalogue: PostSubmitCatalogue,
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    authority: PostPolicyServiceAuthority,
 ) -> PostPolicyDeliveryPort:
     """Compose deterministic delivery without document or agent capabilities."""
     from app.modules.projects.post_policy.delivery import PostPolicyDeliveryService
 
-    return PostPolicyDeliveryService(session_factory, authority=authority, catalogue=catalogue)
+    return PostPolicyDeliveryService(session_factory, authority=authority)
 
 
 async def pending_post_policy_approvals(
-    session_factory: async_sessionmaker[AsyncSession], *, after: UUID | None, limit: int,
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    after: UUID | None,
+    limit: int,
 ) -> list[UUID]:
     """Read only pending immutable approval identifiers for a bounded internal scan."""
     from app.modules.projects.post_policy.delivery import pending_approval_ids
@@ -204,14 +228,18 @@ async def dispatch_post_policy_derivation_after_commit(approval_operation_id: UU
 
 
 def project_guide_activation_port(
-    session: AsyncSession, *, contribution: GuideContributionPolicyPort, planner: PreSubmissionPolicyCompilationPort,
-    pre_catalogue: PreSubmissionCapabilityProjection, post_catalogue: PostSubmitCatalogue,
+    session: AsyncSession,
+    *,
+    contribution: GuideContributionPolicyPort,
     authorization: GuideActivationAuthorizationPort | None = None,
 ) -> GuideActivationPort[ActorIdentityFacts]:
     """Compose canonical activation with explicit CON validation and authority."""
+    from app.adapters.checkers import external_checker_registry_reader
     from app.modules.projects.guide_activation.service import GuideActivationService
 
     return GuideActivationService(
-        session, contribution=contribution, planner=planner, pre_catalogue=pre_catalogue,
-        post_catalogue=post_catalogue, authorization=authorization,
+        session,
+        contribution=contribution,
+        authorization=authorization,
+        registry=external_checker_registry_reader(session),
     )

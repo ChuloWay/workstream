@@ -182,14 +182,26 @@ class DatabaseAuthorization:
 
 
 @asynccontextmanager
-async def database_case(url, *, classification="draft_ready", project=True, guide_version="v1", outcome=None):
+async def database_case(
+    url,
+    *,
+    classification="draft_ready",
+    project=True,
+    guide_version="v1",
+    outcome=None,
+    checker_capabilities=None,
+):
     values = await seed_database(url, guide_version=guide_version)
     engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         command = await compilation_and_projections(
             url, factory, values, classification=classification, project=project,
-            compilation_context=context(values, guide_version=guide_version),
+            compilation_context=context(
+                values,
+                guide_version=guide_version,
+                checker_capabilities=checker_capabilities,
+            ),
             outcome=outcome
         )
         yield values, factory, command

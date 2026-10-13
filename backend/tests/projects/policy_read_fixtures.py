@@ -8,6 +8,35 @@ from typing import Any
 from uuid import uuid4
 
 from app.core.hashing import canonical_json_hash
+from app.modules.checkers.api.external_policy import (
+    LockedExternalPostSubmitPolicy,
+    LockedExternalPreSubmitPolicy,
+    LockedWorkstreamDefault,
+)
+
+
+def _empty_external_pre_policy() -> LockedExternalPreSubmitPolicy:
+    default = LockedWorkstreamDefault()
+    payload = {
+        "schema_version": "external_pre_submit_policy.v1",
+        "workstream_default": default.model_dump(mode="json"),
+        "entries": [],
+    }
+    return LockedExternalPreSubmitPolicy(
+        **payload,
+        policy_sha256=canonical_json_hash(payload),
+    )
+
+
+def _empty_external_post_policy() -> LockedExternalPostSubmitPolicy:
+    payload = {
+        "schema_version": "external_post_submit_policy.v1",
+        "entries": [],
+    }
+    return LockedExternalPostSubmitPolicy(
+        **payload,
+        policy_sha256=canonical_json_hash(payload),
+    )
 
 
 class _PolicyReadRepository:
@@ -60,7 +89,8 @@ class _PolicyReadRepository:
     def _initialize_intake(self) -> None:
         submission_body = {"allowed": ["zip"]}
         effective_body = {"allowed": ["zip"], "max_bytes": 10}
-        checker_bundle = {"checkers": ["safe"]}
+        checker_policy = _empty_external_pre_policy()
+        checker_bundle = checker_policy.model_dump(mode="json")
         self.effective = types.SimpleNamespace(
             id=str(uuid4()),
             project_id=self.project_id,
@@ -85,7 +115,7 @@ class _PolicyReadRepository:
             effective_policy_hash=self.effective.effective_policy_hash,
             lifecycle_status="compiled",
             compiled_bundle=checker_bundle,
-            compiled_bundle_hash=canonical_json_hash(checker_bundle),
+            compiled_bundle_hash=checker_policy.policy_sha256,
         )
         self.submission = types.SimpleNamespace(
             id=self.effective.submission_artifact_policy_id,
@@ -115,7 +145,8 @@ class _PolicyReadRepository:
             warnings_acknowledged_at=None,
             warnings_acknowledged_by_role=None,
         )
-        post_body = {"required_checkers": ["safe"]}
+        post_policy = _empty_external_post_policy()
+        post_body = post_policy.model_dump(mode="json")
         self.post_submit = types.SimpleNamespace(
             id=str(uuid4()),
             project_id=self.project_id,
@@ -132,7 +163,7 @@ class _PolicyReadRepository:
             projection_operation_id=uuid4(),
             approved_at=datetime.now(UTC),
             policy_body=post_body,
-            policy_hash=canonical_json_hash(post_body),
+            policy_hash=post_policy.policy_sha256,
         )
         self.review = types.SimpleNamespace(
             id=str(uuid4()),

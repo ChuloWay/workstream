@@ -15,11 +15,6 @@ from app.modules.authorization.runtime import (
     HumanAuthorizationContext,
     IdentityLinkStatus,
 )
-from app.modules.checkers.catalogue import (
-    build_pre_submission_checker_catalogue,
-    project_guide_pre_submission_capabilities,
-)
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.api.guide_proposals import (
     GuideProposalApproval,
     GuideProposalCorrection,
@@ -52,9 +47,15 @@ async def service(factory, actor):
             correlation_id=uuid4(),
         )
         try:
+            from app.adapters.checkers import external_checker_registry_reader
+
             yield (
                 session,
-                GuideProposalService(session, GuideProposalAuthorizationAdapter(session, context)),
+                GuideProposalService(
+                    session,
+                    GuideProposalAuthorizationAdapter(session, context),
+                    external_checker_registry_reader(session),
+                ),
                 request,
             )
         except GuideProposalError as exc:
@@ -78,15 +79,14 @@ async def mutate(factory, actor, payload):
     async with service(factory, actor) as (session, owner, request):
         if isinstance(payload, GuideProposalCorrection):
             return await owner.request_correction(payload, actor=actor, request_id=request)
-        planner = build_pre_submission_checker_catalogue()
+        from app.adapters.checkers import external_checker_capability_projection
+
         return await owner.approve(
             payload,
             actor=actor,
             request_id=request,
             material=guide_document_manifest_port(session),
-            pre_capabilities=project_guide_pre_submission_capabilities(planner),
-            post_capabilities=current_post_submit_catalogue(),
-            planner=planner,
+            capabilities=await external_checker_capability_projection(session),
         )
 
 

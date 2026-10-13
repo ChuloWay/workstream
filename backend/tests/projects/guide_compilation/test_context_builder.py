@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
-
 from tests.projects.guide_compilation.helpers import runtime_configuration
 
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
@@ -17,9 +15,6 @@ from app.adapters.artifacts import (
     guide_document_manifest_port,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from app.modules.checkers.catalogue import (
-    build_pre_submission_checker_catalogue,
-)
 from app.modules.projects.guide_compilation.context import (
     build_project_guide_compilation_context,
 )
@@ -30,7 +25,6 @@ from app.modules.projects.guide_compilation.repository import (
 from app.modules.projects.guide_compilation.service import (
     load_compilation_execution_state,
 )
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 
 from .helpers import context, identity, seed_database, DOCUMENT_VERSION_ID, PUT_ATTEMPT_ID
 from .test_authorized_request_service import _authorized_service, _request, _seed_human
@@ -61,10 +55,7 @@ async def test_context_rebuilds_the_exact_authorized_art_backed_identity(
                 session,
                 state=state,
                 material=guide_document_manifest_port(session),
-                pre_submission_capabilities=project_guide_pre_submission_capabilities(
-                    build_pre_submission_checker_catalogue()
-                ),
-                post_submission_capabilities=current_post_submit_catalogue(),
+                checker_capabilities=context(values).checker_capabilities,
             )
 
         assert rebuilt == context(values)
@@ -95,20 +86,16 @@ async def test_context_drift_fails_before_dispatch(
             )
         async with factory() as session:
             state = await load_compilation_execution_state(session, request.attempt_id)
-        default_catalogue = build_pre_submission_checker_catalogue()
-        drifted_catalogue = build_pre_submission_checker_catalogue(
-            disabled_entry_ids={default_catalogue.entries[0].stable_id}
-        )
+        from tests.checkers.external.support import capability_projection, registry_entry
+
+        drifted_capabilities = capability_projection(registry_entry("pre_submit"))
         async with factory() as session:
             with pytest.raises(GuideCompilationIntegrityError, match="identity mismatch"):
                 await build_project_guide_compilation_context(
                     session,
                     state=state,
                     material=guide_document_manifest_port(session),
-                    pre_submission_capabilities=project_guide_pre_submission_capabilities(
-                        drifted_catalogue
-                    ),
-                    post_submission_capabilities=(current_post_submit_catalogue()),
+                    checker_capabilities=drifted_capabilities,
                 )
     finally:
         await engine.dispose()
@@ -134,18 +121,14 @@ async def test_context_requires_fresh_session_and_current_lineage(
             )
         async with factory() as session:
             state = await load_compilation_execution_state(session, request.attempt_id)
-        capabilities = project_guide_pre_submission_capabilities(
-            build_pre_submission_checker_catalogue()
-        )
-        post_capabilities = current_post_submit_catalogue()
+        capabilities = context(values).checker_capabilities
         async with factory() as session, session.begin():
             with pytest.raises(GuideCompilationIntegrityError, match="fresh root"):
                 await build_project_guide_compilation_context(
                     session,
                     state=state,
                     material=guide_document_manifest_port(session),
-                    pre_submission_capabilities=capabilities,
-                    post_submission_capabilities=post_capabilities,
+                    checker_capabilities=capabilities,
                 )
         missing = replace(
             state,
@@ -157,8 +140,7 @@ async def test_context_requires_fresh_session_and_current_lineage(
                     session,
                     state=missing,
                     material=guide_document_manifest_port(session),
-                    pre_submission_capabilities=capabilities,
-                    post_submission_capabilities=post_capabilities,
+                    checker_capabilities=capabilities,
                 )
     finally:
         await engine.dispose()
@@ -196,16 +178,13 @@ async def test_context_enforces_the_canonical_prompt_limit(
                     session,
                     state=state,
                     material=guide_document_manifest_port(session),
-                    pre_submission_capabilities=project_guide_pre_submission_capabilities(
-                        build_pre_submission_checker_catalogue()
-                    ),
-                    post_submission_capabilities=(current_post_submit_catalogue()),
+                    checker_capabilities=context(values).checker_capabilities,
                 )
     finally:
         await engine.dispose()
 
 
-@pytest.mark.parametrize('fault', ['manifest_lineage', 'missing_examples', 'changed_examples'])
+@pytest.mark.parametrize("fault", ["manifest_lineage", "missing_examples", "changed_examples"])
 def test_context_constructor_rejects_input_drift_after_valid_control(fault):
     from types import SimpleNamespace
     from app.modules.projects.guide_compilation.context import compilation_context_from_material
@@ -213,31 +192,45 @@ def test_context_constructor_rejects_input_drift_after_valid_control(fault):
     from .helpers import ids
 
     expected = context(ids())
-    examples = [item.model_dump(mode='json') for item in expected.task_examples]
-    guide = SimpleNamespace(id=str(expected.material.guide_id),
-        project_id=str(expected.material.project_id), version=expected.material.guide_version,
-        task_examples=examples, task_examples_hash=task_examples_hash(expected.task_examples))
-    snapshot = SimpleNamespace(id=str(expected.material.source_snapshot_id),
+    examples = [item.model_dump(mode="json") for item in expected.task_examples]
+    guide = SimpleNamespace(
+        id=str(expected.material.guide_id),
+        project_id=str(expected.material.project_id),
+        version=expected.material.guide_version,
+        task_examples=examples,
+        task_examples_hash=task_examples_hash(expected.task_examples),
+    )
+    snapshot = SimpleNamespace(
+        id=str(expected.material.source_snapshot_id),
         bundle_hash=expected.material.source_snapshot_hash,
-        manifest_json={'task_examples_hash': guide.task_examples_hash,
-                       'task_examples_count': len(examples)})
-    values = dict(guide=guide, snapshot=snapshot, loaded=expected.material,
-        setup_run_id=expected.setup_run_id, setup_generation=expected.setup_generation,
-        pre_submission_capabilities=expected.pre_submission_capabilities,
-        post_submission_capabilities=expected.post_submission_capabilities,
-        runtime_configuration=expected.runtime_configuration)
+        manifest_json={
+            "task_examples_hash": guide.task_examples_hash,
+            "task_examples_count": len(examples),
+        },
+    )
+    values = dict(
+        guide=guide,
+        snapshot=snapshot,
+        loaded=expected.material,
+        setup_run_id=expected.setup_run_id,
+        setup_generation=expected.setup_generation,
+        checker_capabilities=expected.checker_capabilities,
+        runtime_configuration=expected.runtime_configuration,
+    )
     assert compilation_context_from_material(**values) == expected
-    if fault == 'manifest_lineage':
+    if fault == "manifest_lineage":
         snapshot.id = str(uuid4())
-        message = 'manifest lineage mismatch'
+        message = "manifest lineage mismatch"
     else:
-        guide.task_examples = None if fault == 'missing_examples' else [{'content': 'Changed task'}]
-        message = 'task examples are unavailable'
+        guide.task_examples = None if fault == "missing_examples" else [{"content": "Changed task"}]
+        message = "task examples are unavailable"
     with pytest.raises(GuideCompilationIntegrityError, match=message):
         compilation_context_from_material(**values)
 
 
-async def test_setup_repository_reads_preserve_scope_without_fabricating_policy(clean_postgres_database):
+async def test_setup_repository_reads_preserve_scope_without_fabricating_policy(
+    clean_postgres_database,
+):
     from app.modules.projects.repository import ProjectRepository
 
     values = await seed_database(clean_postgres_database)
@@ -246,14 +239,33 @@ async def test_setup_repository_reads_preserve_scope_without_fabricating_policy(
     try:
         async with sessions() as session, session.begin():
             repository = ProjectRepository(session)
-            setup = await repository.get_project_setup_run(str(values['setup_1']))
+            setup = await repository.get_project_setup_run(str(values["setup_1"]))
             assert setup is not None
-            assert await repository.get_latest_project_setup_run(str(values['project']), str(values['guide'])) is setup
-            assert await repository.get_latest_project_setup_run(str(uuid4()), str(values['guide'])) is None
-            assert await repository.next_project_setup_generation(str(values['guide'])) == setup.setup_generation + 1
+            assert (
+                await repository.get_latest_project_setup_run(
+                    str(values["project"]), str(values["guide"])
+                )
+                is setup
+            )
+            assert (
+                await repository.get_latest_project_setup_run(str(uuid4()), str(values["guide"]))
+                is None
+            )
+            assert (
+                await repository.next_project_setup_generation(str(values["guide"]))
+                == setup.setup_generation + 1
+            )
             assert await repository.get_project_setup_run(str(uuid4())) is None
-            assert await repository.get_pre_submit_checker_policy_for_effective_policy(str(uuid4())) is None
+            assert (
+                await repository.get_pre_submit_checker_policy_for_effective_policy(str(uuid4()))
+                is None
+            )
             assert await repository.lock_compiled_pre_submit_checker_policy(str(uuid4())) is None
-            assert await repository.lock_post_submit_checker_policy_for_guide(str(values['project']), setup.guide_version) is None
+            assert (
+                await repository.lock_post_submit_checker_policy_for_guide(
+                    str(values["project"]), setup.guide_version
+                )
+                is None
+            )
     finally:
         await engine.dispose()

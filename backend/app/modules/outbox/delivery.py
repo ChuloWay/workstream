@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 import json
+from types import MappingProxyType
 from uuid import UUID, uuid4
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -152,13 +153,24 @@ class OutboxDelivery:
         authorization_factory: Callable[[AsyncSession], OutboxDispatchAuthorizationPort],
         registry: HandlerRegistry,
         options: DeliveryOptions,
+        event_options: Mapping[tuple[str, int], DeliveryOptions] | None = None,
     ) -> None:
         """Require explicit AUTH composition and bounded handler registration."""
         self._sessions = session_factory
         self._authorization = authorization_factory
         self._registry = registry
         self._options = DeliveryOptions.model_validate(options.model_dump())
+        overrides = {}
+        for key, value in (event_options or {}).items():
+            if key not in registry.keys or type(value) is not DeliveryOptions:
+                raise ValueError("outbox event delivery options are invalid")
+            overrides[key] = DeliveryOptions.model_validate(value.model_dump())
+        self._event_options = MappingProxyType(overrides)
         self._running_handlers: set[asyncio.Task] = set()
+
+    def _options_for(self, event_type: str, event_version: int) -> DeliveryOptions:
+        """Resolve one registered event's immutable limits or the shared defaults."""
+        return self._event_options.get((event_type, event_version), self._options)
 
     @asynccontextmanager
     async def _authority(self, session, **selectors):
@@ -195,12 +207,17 @@ class OutboxDelivery:
         async with self._sessions() as session:
             event = await DeliveryRepository(session).event(event_id, project_id)
             now = await database_time(session)
+            options = (
+                self._options_for(event.event_type, event.event_version)
+                if event is not None
+                else self._options
+            )
             if (
                 event is None
                 or self._registry.get(event.event_type, event.event_version) is None
                 or event.delivery_state not in ("pending", "retryable")
                 or event.next_attempt_at > now
-                or event.claim_generation >= self._options.max_attempts
+                or event.claim_generation >= options.max_attempts
             ):
                 return None
             claim = OutboxClaim(
@@ -210,7 +227,7 @@ class OutboxDelivery:
                 claim_generation=event.claim_generation + 1,
                 claim_owner=owner,
                 claimed_at=now,
-                claim_expires_at=now + timedelta(seconds=self._options.lease_seconds),
+                claim_expires_at=now + timedelta(seconds=options.lease_seconds),
             )
         facts = _facts(claim, OutboxDispatchPhase.CLAIM)
         async with self._sessions() as session, session.begin():
@@ -309,15 +326,16 @@ class OutboxDelivery:
             return None
         annotate_current_span(outbox_correlation_id=envelope.correlation_id)
         handler = self._registry.get(envelope.event_type, envelope.event_version)
+        options = self._options_for(envelope.event_type, envelope.event_version)
         cause = FinalizationCause.UNKNOWN
         task = None
         try:
             loop = asyncio.get_running_loop()
-            deadline = loop.time() + self._options.handler_timeout_seconds
+            deadline = loop.time() + options.handler_timeout_seconds
             task = asyncio.create_task(handler(envelope))
             self._running_handlers.add(task)
             task.add_done_callback(self._handler_done)
-            done, _ = await asyncio.wait((task,), timeout=self._options.handler_timeout_seconds)
+            done, _ = await asyncio.wait((task,), timeout=options.handler_timeout_seconds)
             if done and loop.time() < deadline and not task.cancelled():
                 result = task.result()
                 if type(result) is HandlerOutcome:
@@ -335,15 +353,18 @@ class OutboxDelivery:
         """Authorize the exact outcome; response loss replays original delivery facts."""
         claim = _checked_claim(claim)
         async with self._sessions() as session:
-            attempt = await DeliveryRepository(session).attempt(claim)
-            if attempt is None or claim_from_attempt(attempt) != claim:
+            repository = DeliveryRepository(session)
+            event = await repository.event(claim.event_id, claim.project_id)
+            attempt = await repository.attempt(claim)
+            if event is None or attempt is None or claim_from_attempt(attempt) != claim:
                 raise DeliveryUnavailable("outbox_delivery_unavailable")
+            options = self._options_for(event.event_type, event.event_version)
             now = await database_time(session)
             if attempt.stage == "completed":
                 now = datetime.fromisoformat(
                     json.loads(attempt.outcome_json)["receipt_completed_at"]
                 )
-            value = _outcome(claim, attempt.invoked_at, cause, now, self._options)
+            value = _outcome(claim, attempt.invoked_at, cause, now, options)
             proposed = DeliveryReceipt(
                 claim=claim, outcome_json=_encode(value), outcome_digest=canonical_json_hash(value)
             )
@@ -356,7 +377,7 @@ class OutboxDelivery:
                 attempt.invoked_at,
                 cause,
                 datetime.fromisoformat(stored["receipt_completed_at"]),
-                self._options,
+                options,
             )
             if _encode(expected) != completed.receipt.outcome_json:
                 raise DeliveryUnavailable("outbox_delivery_unavailable") from None
@@ -382,6 +403,7 @@ class OutboxDelivery:
                 now = await database_time(session)
                 if event is None or attempt is None or claim_from_attempt(attempt) != claim:
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
+                options = self._options_for(event.event_type, event.event_version)
                 if attempt.stage == "completed":
                     if _receipt(claim, attempt) != receipt:
                         raise _CompletedDuringFinalization(_receipt(claim, attempt))
@@ -397,7 +419,7 @@ class OutboxDelivery:
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
                 value = json.loads(receipt.outcome_json)
                 completed = datetime.fromisoformat(value["receipt_completed_at"])
-                expected = _outcome(claim, attempt.invoked_at, cause, completed, self._options)
+                expected = _outcome(claim, attempt.invoked_at, cause, completed, options)
                 if (
                     completed > now
                     or _encode(expected) != receipt.outcome_json

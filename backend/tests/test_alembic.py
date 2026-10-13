@@ -79,7 +79,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
     script = ScriptDirectory.from_config(config)
     revisions = list(script.walk_revisions())
 
-    assert [revision.revision for revision in revisions] == [HEAD_REVISION, "0034_checker_replacement", "0033_contribution_reads", "0032_checker_remediation", "0031_task_import_source", "0030_routing_outcomes", "0029_external_checker_registry", "0028_lifecycle_transitions", "0027_markdown_guide_media", "0026_task_guide_read", "0025_submission_dispatch", "0024_require_second_review_false", "0023_remove_task_payment_policy", "0022_submission_packet_custody", "0021_submission_manifest", "0020_review_admission_lock_order", "0019_submitter_awards", "0018_task_routing_request", "0017_acceptance_source_contracts", "0016_review_lifecycle_fence", "0015_contribution_awards", "0014_final_acceptance", "0013_review_source", "0012_review_packet", "0011_task_routing_source", "0010_post_submit_authority", "0009_checker_material_lineage", "0008_checker_execution", "0007_checker_output_custody", "0006_history_read_authority", "0005_task_evidence_authority", "0004_task_context_authority", "0003_task_read_authority", "0002_task_queue_authority", BASELINE_REVISION]
+    assert [revision.revision for revision in revisions] == [HEAD_REVISION, "0035_checker_retry", "0034_checker_replacement", "0033_contribution_reads", "0032_checker_remediation", "0031_task_import_source", "0030_routing_outcomes", "0029_external_checker_registry", "0028_lifecycle_transitions", "0027_markdown_guide_media", "0026_task_guide_read", "0025_submission_dispatch", "0024_require_second_review_false", "0023_remove_task_payment_policy", "0022_submission_packet_custody", "0021_submission_manifest", "0020_review_admission_lock_order", "0019_submitter_awards", "0018_task_routing_request", "0017_acceptance_source_contracts", "0016_review_lifecycle_fence", "0015_contribution_awards", "0014_final_acceptance", "0013_review_source", "0012_review_packet", "0011_task_routing_source", "0010_post_submit_authority", "0009_checker_material_lineage", "0008_checker_execution", "0007_checker_output_custody", "0006_history_read_authority", "0005_task_evidence_authority", "0004_task_context_authority", "0003_task_read_authority", "0002_task_queue_authority", BASELINE_REVISION]
     assert revisions[-1].down_revision is None
     assert script.get_heads() == [HEAD_REVISION]
 
@@ -202,6 +202,135 @@ def test_repeated_upgrade_head_preserves_current_database(
         command.upgrade(config, "head")
         after = asyncio.run(_database_snapshot(isolated_database_env))
     assert after == before
+
+
+def test_current_head_installs_selected_only_checker_custody(
+    isolated_database_env: str, migration_lock
+) -> None:
+    """Current writers reject missing schemas and contain no executable catalogue tail."""
+    config = _alembic_config()
+    with migration_lock():
+        asyncio.run(
+            _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        )
+        command.upgrade(config, HEAD_REVISION)
+
+    async def installed_functions() -> dict[str, str]:
+        from tests.conftest import _assert_canonical_test_schema
+
+        connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+        transaction = connection.transaction()
+        await transaction.start()
+        try:
+            await connection.execute("set local check_function_bodies = true")
+            installed = await connection.fetch(
+                "select p.oid,p.oid::regprocedure::text as identity "
+                "from pg_proc p join pg_namespace n on n.oid=p.pronamespace "
+                "join pg_language l on l.oid=p.prolang "
+                "where n.nspname='public' and l.lanname='plpgsql' order by p.oid"
+            )
+            assert installed
+            for row in installed:
+                try:
+                    await connection.fetchval(
+                        "select pg_catalog.plpgsql_validator($1::oid)", row["oid"]
+                    )
+                except asyncpg.PostgresError as error:
+                    raise AssertionError(
+                        f"installed function does not compile: {row['identity']}"
+                    ) from error
+            rows = await connection.fetch(
+                "select p.proname,pg_get_functiondef(p.oid) as definition "
+                "from pg_proc p join pg_namespace n on n.oid=p.pronamespace "
+                "where n.nspname='public' and p.proname=any($1::text[])",
+                [
+                    "protect_checker_run_custody",
+                    "protect_checker_result_custody",
+                    "validate_checker_terminal_custody",
+                    "submission_dispatch_valid",
+                    "external_checker_locked_policies_valid",
+                    "require_guide_proposal_approval",
+                    "require_post_policy_operation",
+                    "guard_pre_submit_attempt",
+                    "guard_pre_submit_evidence_set_creation",
+                    "guard_pre_submit_evidence_result_membership",
+                    "require_pre_submit_attempt_evidence",
+                    "require_pre_submit_result_reconstruction",
+                ],
+            )
+            await _assert_canonical_test_schema(connection)
+            return {row["proname"]: row["definition"] for row in rows}
+        finally:
+            await transaction.rollback()
+            await connection.close()
+
+    definitions = asyncio.run(installed_functions())
+    assert set(definitions) == {
+        "protect_checker_run_custody",
+        "protect_checker_result_custody",
+        "validate_checker_terminal_custody",
+        "submission_dispatch_valid",
+        "external_checker_locked_policies_valid",
+        "require_guide_proposal_approval",
+        "require_post_policy_operation",
+        "guard_pre_submit_attempt",
+        "guard_pre_submit_evidence_set_creation",
+        "guard_pre_submit_evidence_result_membership",
+        "require_pre_submit_attempt_evidence",
+        "require_pre_submit_result_reconstruction",
+    }
+    for name in (
+        "protect_checker_run_custody",
+        "protect_checker_result_custody",
+        "validate_checker_terminal_custody",
+    ):
+        assert "schema_version' IS DISTINCT FROM" in definitions[name]
+    assert "check_submission_packet" not in definitions["protect_checker_result_custody"]
+    assert "member_results' IS DISTINCT FROM members" not in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "workstream.selected_post_submit_request.v1" in definitions[
+        "submission_dispatch_valid"
+    ]
+    assert "selected_pre_submit_run_id IS NOT NULL" in definitions[
+        "submission_dispatch_valid"
+    ]
+    assert "external_plan" not in definitions["require_guide_proposal_approval"]
+    assert "->'catalogue'" not in definitions["require_guide_proposal_approval"]
+    assert "catalogue_manifest_sha256" not in definitions["require_post_policy_operation"]
+    assert "external_post_submit_policy.v1" in definitions[
+        "require_post_policy_operation"
+    ]
+    assert "checker terminal selected policy differs" in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "result_registry_entry_id" in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "platform_manifest_digest" in definitions[
+        "validate_checker_terminal_custody"
+    ]
+    assert "is distinct from 'external_checker_policies.v1'" in definitions[
+        "external_checker_locked_policies_valid"
+    ].lower()
+    retired = {
+        "guard_pre_submit_attempt": "retained pre-submit attempts are immutable",
+        "guard_pre_submit_evidence_set_creation": (
+            "retained pre-submit evidence is immutable"
+        ),
+        "guard_pre_submit_evidence_result_membership": (
+            "retained pre-submit evidence results are immutable"
+        ),
+        "require_pre_submit_attempt_evidence": (
+            "retained pre-submit evidence is immutable"
+        ),
+        "require_pre_submit_result_reconstruction": (
+            "retained pre-submit evidence results are immutable"
+        ),
+    }
+    for name, message in retired.items():
+        assert message in definitions[name]
+        assert " select " not in definitions[name].lower()
 
 
 def test_current_head_installs_submission_lineage_contract(

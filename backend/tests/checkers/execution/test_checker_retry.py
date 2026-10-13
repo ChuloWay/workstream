@@ -893,7 +893,7 @@ async def test_running_source_reaches_valid_task_guard_then_refuses_terminal_ret
         await _assert_nonterminal_source_reaches_guard(h, monkeypatch, "running")
 
 
-@pytest.mark.parametrize("recommendation", ["allow_review", "task_setup_blocked"])
+@pytest.mark.parametrize("recommendation", ["allow_review", "needs_revision"])
 async def test_completed_source_reaches_valid_task_guard_then_refuses_terminal_retry(
     tmp_path, isolated_database_env, monkeypatch, recommendation,
 ):
@@ -910,12 +910,18 @@ async def test_expired_unfinished_transport_reclaims_same_run_without_retry_rece
     async with material_fixture(tmp_path, isolated_database_env) as h:
         await reserve(h)
         executor = live_executor(h)
-        monkeypatch.setattr(execution, "LEASE_SECONDS", 1)
-        first, replay = await executor._claim(h.request)
+        with monkeypatch.context() as patch:
+            patch.setattr(executor, "_execution_budget_seconds", lambda _request: 1)
+            patch.setattr(execution, "SELECTED_POST_FINALIZATION_MARGIN_MS", 9_000)
+            first, replay = await executor._claim(h.request)
         assert replay is None
         async with h.factory() as session:
-            await session.execute(text("select pg_sleep(1.05)"))
-        monkeypatch.setattr(execution, "LEASE_SECONDS", 300)
+            await session.execute(text(
+                "SELECT pg_sleep(GREATEST(EXTRACT(EPOCH FROM "
+                "CAST(:expiry AS timestamptz)-clock_timestamp()),0)+0.05)"
+            ), {"expiry": first.expires_at})
+            assert await session.scalar(text("SELECT clock_timestamp()>=:expiry"),
+                                        {"expiry": first.expires_at})
         second, replay = await executor._claim(h.request)
         assert replay is None
         assert second.reservation == first.reservation

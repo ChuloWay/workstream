@@ -475,7 +475,9 @@ def test_sdk_output_schema_has_one_intake_configuration_and_separate_post_parame
     pre = schema["$defs"]["PreSubmissionBindingProposal"]
     post = schema["$defs"]["PostSubmissionBindingProposal"]
     assert pre["additionalProperties"] is False
-    assert "parameters" not in pre["properties"]
+    assert "parameters" in pre["properties"]
+    assert pre["properties"]["parameters"]["maxItems"] == 50
+    assert post["properties"]["parameters"]["maxItems"] == 50
     assert "parameters" in post["properties"]
     parameter_values = schema["$defs"]["CapabilityParameter"]["properties"]["value"]["anyOf"]
     array = next(item for item in parameter_values if item.get("type") == "array")

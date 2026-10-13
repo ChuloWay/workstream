@@ -8,23 +8,28 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.core.identifiers import new_record_id
 from app.modules.artifacts.api import SubmissionBundlePreparationRequest
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
-from tests.pre_submit_test_helpers import approved_pre_submit_fixture
+from tests.selected_policy_fixtures import approved_selected_policy_fixture
 from tests.submission_preparation_auth_helpers import install_submitter_grant
 from tests.tasks.lineage_fixtures import seed_started_task_for_artifact_test
 from tests.tasks.submission_lineage_support import _seed_services
 from tests.test_artifact_admission import _settings, _namespace, _local_store, _context, _seed_human_actor
-from tests.test_default_pre_submit_execution import _archive, _bytes
+from tests.archive_fixtures import byte_source as _bytes, submission_archive as _archive
 
 
 @asynccontextmanager
 async def capacity_fixture(database_url, tmp_path):
     engine = create_async_engine(database_url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
-    settings = _settings(tmp_path, maximum_bytes=1024 * 1024)
+    settings = _settings(tmp_path, maximum_bytes=1024 * 1024).model_copy(
+        update={"external_checker_service_socket": tmp_path / "checker.sock",
+                "external_checker_material_root": tmp_path / "scratch"}
+    )
     namespace = _namespace(settings)
     bootstrap, store = _local_store(settings, namespace)
     try:
-        plan, policy = await approved_pre_submit_fixture(factory, namespace, guide_version="v1")
+        plan, policy = await approved_selected_policy_fixture(
+            factory, namespace, guide_version="v1"
+        )
         context = _context()
         await _seed_services(factory)
         task_id, assignment_id = new_record_id(), new_record_id()

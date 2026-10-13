@@ -104,7 +104,7 @@ async def _role_race(tmp_path, database_url, monkeypatch, operation):
     from app.modules.authorization.submission_creation_authorization import PreparedSubmissionCreationAuthorization
     from app.modules.tasks.models import WorkstreamTask
     from tests.test_artifact_admission import _context, _seed_human_actor
-    from tests.test_pre_submit_role_issue_lock_order import _issue_body, _issue_runtime
+    from tests.project_role_issue_fixtures import issue_body, issue_runtime
 
     async def writer(factory, context, request):
         manager = _context()
@@ -135,10 +135,12 @@ async def _role_race(tmp_path, database_url, monkeypatch, operation):
                 ).create(request)
         async def mutate():
             async with role_factory() as session:
-                prepared, resolved = await _issue_runtime(session, manager.actor_profile_id, manager.identity_link_id)
+                prepared, resolved = await issue_runtime(
+                    session, manager.actor_profile_id, manager.identity_link_id
+                )
                 if operation == "issue":
                     return await router.issue_project_role_grant(
-                        project_id=project_id, payload=_issue_body(context.actor_profile_id),
+                        project_id=project_id, payload=issue_body(context.actor_profile_id),
                         idempotency_key=new_record_id(), resolved=resolved, prepared=prepared, session=session,
                     )
                 return await router.revoke_project_role_grant(

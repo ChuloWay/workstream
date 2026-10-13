@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import Uuid
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -224,6 +225,13 @@ class CheckerRun(Base):
         ForeignKeyConstraint(["task_id", "project_id"], ["workstream_tasks.id", "workstream_tasks.project_id"],
                              name="fk_checker_runs_task_project"),
         CheckConstraint("phase = 'post_submission'", name="phase"),
+        CheckConstraint(
+            "(selected_post_submit_policy_sha256 is null and "
+            "selected_post_submit_policy_body is null) or "
+            "(selected_post_submit_policy_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "jsonb_typeof(selected_post_submit_policy_body)='object')",
+            name="selected_post_submit_policy",
+        ),
         CheckConstraint("evaluation_generation > 0 and worker_lease_generation >= 0", name="generations"),
         CheckConstraint("status in ('queued','running','completed','infrastructure_failed')", name="state"),
         CheckConstraint("octet_length(request_json) <= 1048576 and request_digest = 'sha256:' || encode(sha256(convert_to(request_json, 'UTF8')), 'hex')", name="request_digest"),
@@ -286,6 +294,8 @@ class CheckerRun(Base):
         nullable=False,
     )
     locked_post_submit_checker_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
+    selected_post_submit_policy_sha256: Mapped[str | None] = mapped_column(String(71))
+    selected_post_submit_policy_body: Mapped[dict | None] = mapped_column(JSONB)
     locked_review_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_review_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_review_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
@@ -406,3 +416,124 @@ class CheckerRetryReceipt(Base):
     resource_digest: Mapped[str] = mapped_column(String(71), nullable=False)
     resource_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class SelectedPreSubmitRun(Base):
+    """Durable selected PRE lease and terminal facts before any Submission exists."""
+
+    __tablename__ = "selected_pre_submit_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and "
+            "(get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
+        ForeignKeyConstraint(
+            ["task_id", "project_id"],
+            ["workstream_tasks.id", "workstream_tasks.project_id"],
+            name="fk_selected_pre_run_task_project",
+        ),
+        ForeignKeyConstraint(
+            ["assignment_id", "task_id", "actor_profile_id"],
+            ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"],
+            name="fk_selected_pre_run_assignment",
+        ),
+        ForeignKeyConstraint(
+            ["identity_link_id", "actor_profile_id"],
+            ["actor_identity_links.id", "actor_identity_links.actor_profile_id"],
+            name="fk_selected_pre_run_actor_link",
+        ),
+        CheckConstraint(
+            "status in ('queued','running','completed','infrastructure_failed')",
+            name="status",
+        ),
+        CheckConstraint(
+            "request_digest ~ '^sha256:[0-9a-f]{64}$' and "
+            "policy_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "default_behavior_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "default_input_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "archive_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "semantic_manifest_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "(terminal_digest is null or terminal_digest ~ '^sha256:[0-9a-f]{64}$')",
+            name="digests",
+        ),
+        CheckConstraint("archive_byte_count > 0", name="archive_size"),
+        CheckConstraint(
+            "execution_budget_ms between 100 and 14400000",
+            name="execution_budget",
+        ),
+        CheckConstraint("lease_generation >= 0", name="lease_generation"),
+        CheckConstraint(
+            "(status='queued' and lease_id is null and lease_expires_at is null "
+            "and terminal_json is null and terminal_digest is null and eligible is null "
+            "and started_at is null and completed_at is null "
+            "and execute_evidence_id is null and finalize_evidence_id is null) or "
+            "(status='running' and lease_id is not null and lease_generation > 0 "
+            "and lease_expires_at is not null and terminal_json is null "
+            "and terminal_digest is null and eligible is null and started_at is not null "
+            "and completed_at is null "
+            "and execute_evidence_id is not null and finalize_evidence_id is null) or "
+            "(status='completed' and lease_id is not null and lease_generation > 0 "
+            "and lease_expires_at is not null and terminal_json is not null "
+            "and terminal_digest is not null and eligible is not null "
+            "and started_at is not null and completed_at is not null "
+            "and execute_evidence_id is not null and finalize_evidence_id is not null) or "
+            "(status='infrastructure_failed' and lease_id is not null "
+            "and lease_generation > 0 and lease_expires_at is not null "
+            "and terminal_json is not null and terminal_digest is not null "
+            "and eligible is null and started_at is not null and completed_at is not null "
+            "and execute_evidence_id is not null and finalize_evidence_id is not null)",
+            name="lifecycle",
+        ),
+        CheckConstraint(
+            "jsonb_typeof(request_json)='object' and "
+            "(terminal_json is null or jsonb_typeof(terminal_json)='object')",
+            name="json_objects",
+        ),
+        UniqueConstraint("request_digest", name="request_digest"),
+        UniqueConstraint(
+            "actor_profile_id",
+            "idempotency_key",
+            name="uq_selected_pre_run_actor_key",
+        ),
+        Index("ix_selected_pre_runs_task", "task_id"),
+        Index("ix_selected_pre_runs_status", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    actor_profile_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    identity_link_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    project_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    assignment_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    prepared_generation_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    request_json: Mapped[dict] = mapped_column(JSONB(), nullable=False)
+    request_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    default_behavior_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    default_input_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    archive_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    archive_byte_count: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    semantic_manifest_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
+    execution_budget_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    lease_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
+    lease_generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    execute_evidence_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False),
+        ForeignKey("audit_events.id", ondelete="RESTRICT"),
+    )
+    finalize_evidence_id: Mapped[str | None] = mapped_column(
+        Uuid(as_uuid=False),
+        ForeignKey("audit_events.id", ondelete="RESTRICT"),
+    )
+    terminal_json: Mapped[dict | None] = mapped_column(JSONB())
+    terminal_digest: Mapped[str | None] = mapped_column(String(71))
+    eligible: Mapped[bool | None] = mapped_column(Boolean)
+    queued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

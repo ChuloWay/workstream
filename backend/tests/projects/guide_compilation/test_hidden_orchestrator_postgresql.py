@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
-
 from tests.projects.guide_compilation.helpers import runtime_configuration
 
 from app.modules.authorization.api import ProjectGuideCompilationRequestOrigin
@@ -43,10 +41,7 @@ from app.modules.projects.guide_compilation.orchestrator import (
     SqlAlchemyGuideCompilationExecutionBackend,
     project_guide_compilation_execution_port,
 )
-from app.modules.checkers.catalogue import (
-    build_pre_submission_checker_catalogue,
-)
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from tests.checkers.external.support import capability_projection
 
 from .helpers import context, identity, result, seed_database
 from .runtime_fixtures import document_access, record_scripted_document_access
@@ -112,23 +107,17 @@ def _backend(factory):
         factory,
         material_factory=guide_document_manifest_port,
         document_access_factory=document_access,
-        pre_submission_capabilities=project_guide_pre_submission_capabilities(
-            build_pre_submission_checker_catalogue()
-        ),
-        post_submission_capabilities=current_post_submit_catalogue(),
+        checker_capabilities=capability_projection(),
         authorization_context=_fixed_service_authorization,
     )
 
 
-def _port(factory, runtime):
+def _port(factory, runtime, *, checker_capabilities=None):
     return project_guide_compilation_execution_port(
         factory,
         material_factory=guide_document_manifest_port,
         document_access_factory=document_access,
-        pre_submission_capabilities=project_guide_pre_submission_capabilities(
-            build_pre_submission_checker_catalogue()
-        ),
-        post_submission_capabilities=current_post_submit_catalogue(),
+        checker_capabilities=checker_capabilities or capability_projection(),
         authorization_context=_fixed_service_authorization,
         runtime_factory=lambda configuration: runtime,
     )
@@ -552,11 +541,8 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
         port = project_guide_compilation_execution_port(
             factory,
             material_factory=guide_document_manifest_port,
-        document_access_factory=document_access,
-            pre_submission_capabilities=project_guide_pre_submission_capabilities(
-                build_pre_submission_checker_catalogue()
-            ),
-            post_submission_capabilities=current_post_submit_catalogue(),
+            document_access_factory=document_access,
+            checker_capabilities=capability_projection(),
             authorization_context=_unavailable_service_authorization,
             runtime_factory=lambda configuration: runtime,
         )
@@ -573,11 +559,19 @@ async def test_unavailable_authority_returns_only_the_safe_public_code(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kind, failure_code", [
-    ("malformed", "schema_invalid"), ("schema", "schema_invalid"), ("unsafe", "schema_invalid"),
-])
+@pytest.mark.parametrize(
+    "kind, failure_code",
+    [
+        ("malformed", "schema_invalid"),
+        ("schema", "schema_invalid"),
+        ("unsafe", "schema_invalid"),
+    ],
+)
 async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
-    clean_postgres_database, monkeypatch, kind, failure_code,
+    clean_postgres_database,
+    monkeypatch,
+    kind,
+    failure_code,
 ):
     """Real SDK rejection persists its exact terminal class and replay makes no call."""
     import json
@@ -586,6 +580,7 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
     from app.adapters.project_agents.openai_agent_sdk import OpenAIAgentSdkProjectGuideRuntime
 
     from agents import _debug
+
     monkeypatch.setattr(_debug, "DONT_LOG_MODEL_DATA", True)
     monkeypatch.setenv("OPENAI_API_KEY", "unit-test-only")
     payload = result().model_dump(mode="json")
@@ -616,7 +611,8 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
             await self.capabilities.documents.close()
 
     monkeypatch.setattr(
-        "app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace", ScriptedWorkspace,
+        "app.adapters.project_agents.openai_agent_sdk.OpenAIGuideWorkspace",
+        ScriptedWorkspace,
     )
     values = await seed_database(clean_postgres_database)
     requested = await _authorized_attempt(clean_postgres_database, values)
@@ -626,15 +622,22 @@ async def test_sdk_parser_rejection_persists_terminal_without_reinvocation(
     try:
         port = _port(factory, OpenAIAgentSdkProjectGuideRuntime(runtime_configuration()))
         first = await port.execute(command)
-        assert first.classification is ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL
+        assert (
+            first.classification is ProjectGuideCompilationExecutionClassification.INVALID_TERMINAL
+        )
         assert await port.execute(command) == first
         assert calls == [1]
         async with factory() as session:
-            row = (await session.execute(text(
-                "select status,failure_code,canonical_result, "
-                "(select count(*) from project_guide_compilations) "
-                "from project_guide_compilation_attempts where id=:id"
-            ), {"id": requested.attempt_id})).one()
+            row = (
+                await session.execute(
+                    text(
+                        "select status,failure_code,canonical_result, "
+                        "(select count(*) from project_guide_compilations) "
+                        "from project_guide_compilation_attempts where id=:id"
+                    ),
+                    {"id": requested.attempt_id},
+                )
+            ).one()
         assert row == ("compilation_invalid_terminal", failure_code, None, 0)
     finally:
         await engine.dispose()

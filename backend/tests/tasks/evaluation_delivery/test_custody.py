@@ -30,15 +30,23 @@ async def test_expired_execution_is_not_renewed(tmp_path, isolated_database_env,
     async with material_fixture(tmp_path, isolated_database_env) as h:
         d = await delivery_fixture(h)
         envelope = await invoked(h, d)
+        executor = d.handler._executor(envelope, h.request)
         with monkeypatch.context() as patch:
-            patch.setattr(execution, "LEASE_SECONDS", 1)
-            lease, replay = await d.handler._executor(envelope, h.request)._claim(h.request)
+            patch.setattr(executor, "_execution_budget_seconds", lambda _request: 1)
+            patch.setattr(execution, "SELECTED_POST_FINALIZATION_MARGIN_MS", 9_000)
+            lease, replay = await executor._claim(h.request)
         assert replay is None and lease.lease_generation == 1
         before = await state(h)
         async with h.factory() as session:
+            assert await session.scalar(text(
+                "SELECT EXTRACT(EPOCH FROM worker_lease_expires_at-started_at) "
+                "FROM public.checker_runs WHERE id=:id"
+            ), {"id": lease.reservation.attempt_id}) == 10
             await session.execute(text("select pg_sleep(greatest(0, extract(epoch from "
                                        "(:deadline - clock_timestamp()))) + 0.02)"),
                                   {"deadline": lease.expires_at})
+            assert await session.scalar(text("SELECT clock_timestamp()>=:expiry"),
+                                        {"expiry": lease.expires_at})
         with pytest.raises(CheckerExecutionUnavailable, match="checker_delivery_execution_unavailable"):
             await d.handler(envelope)
         assert await state(h) == before and not h.store.opens and not h.preparation._active

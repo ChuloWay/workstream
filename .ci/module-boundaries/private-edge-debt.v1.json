@@ -164,12 +164,6 @@
       "repair_owner": "WS-ARCH-001-04"
     },
     {
-      "source_file": "backend/app/main.py",
-      "target_module": "checkers",
-      "imported_private_path": "app.modules.checkers.catalogue",
-      "repair_owner": "WS-ARCH-001-04"
-    },
-    {
       "source_file": "backend/app/modules/actors/service.py",
       "target_module": "audit",
       "imported_private_path": "app.modules.audit.schemas",
@@ -240,24 +234,6 @@
       "target_module": "tasks",
       "imported_private_path": "app.modules.tasks.models",
       "repair_owner": "WS-ARCH-001-03"
-    },
-    {
-      "source_file": "backend/app/modules/checkers/pre_submit_execution.py",
-      "target_module": "artifacts",
-      "imported_private_path": "app.modules.artifacts.sources",
-      "repair_owner": "WS-ARCH-001-04"
-    },
-    {
-      "source_file": "backend/app/modules/checkers/pre_submit_execution.py",
-      "target_module": "artifacts",
-      "imported_private_path": "app.modules.artifacts.submission_archive",
-      "repair_owner": "WS-ARCH-001-04"
-    },
-    {
-      "source_file": "backend/app/modules/checkers/pre_submit_execution.py",
-      "target_module": "artifacts",
-      "imported_private_path": "app.modules.artifacts.submission_manifest",
-      "repair_owner": "WS-ARCH-001-04"
     },
     {
       "source_file": "backend/app/modules/projects/create_router.py",

@@ -1,6 +1,6 @@
 """Explicit composition of the shared delivery owner; feature registration is separate."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.modules.authorization.api.outbox_dispatch import OutboxDispatchAuthorizationPort
@@ -21,6 +21,7 @@ def outbox_delivery(
     authorization_factory: Callable[[AsyncSession], OutboxDispatchAuthorizationPort],
     registry: HandlerRegistry,
     options: DeliveryOptions,
+    event_options: Mapping[tuple[str, int], DeliveryOptions] | None = None,
 ) -> OutboxDelivery:
     """No default authority, installed handler, worker or runtime discovery."""
     return OutboxDelivery(
@@ -28,23 +29,67 @@ def outbox_delivery(
         authorization_factory=authorization_factory,
         registry=registry,
         options=options,
+        event_options=event_options,
     )
 
 
 def production_outbox_delivery(session_factory):
-    """Install the exact assignment handler with separate dispatcher and feature authority."""
-    from app.adapters.auth import outbox_dispatch_authorization, assignment_invalidation_authorization
-    from app.adapters.tasks import TransactionalAssignmentInvalidationHandler
+    """Install exact assignment and selected evaluation handlers."""
+    from app.adapters.artifacts import worker_post_submission_materialization
+    from app.adapters.auth import (
+        outbox_dispatch_authorization,
+        assignment_invalidation_authorization,
+    )
+    from app.adapters.tasks import (
+        TransactionalAssignmentInvalidationHandler,
+        evaluation_completion_handler,
+        evaluation_request_handler,
+    )
+    from app.modules.checkers.api.execution import COMPLETION_EVENT, REQUEST_EVENT
+    from app.modules.checkers.api.external_policy import (
+        SELECTED_POST_DELIVERY_LEASE_SECONDS,
+        SELECTED_POST_HANDLER_TIMEOUT_SECONDS,
+    )
     from app.modules.tasks.api.assignment_invalidation import ASSIGNMENT_INVALIDATION_EVENT
 
     return outbox_delivery(
-        session_factory, authorization_factory=outbox_dispatch_authorization,
-        registry=HandlerRegistry([(ASSIGNMENT_INVALIDATION_EVENT, 1,
-            TransactionalAssignmentInvalidationHandler(
-                session_factory, observer=CommittedInvocationReader(session_factory),
-                authorization_factory=assignment_invalidation_authorization,
-            ),
-        )]), options=DeliveryOptions(),
+        session_factory,
+        authorization_factory=outbox_dispatch_authorization,
+        registry=HandlerRegistry(
+            [
+                (
+                    ASSIGNMENT_INVALIDATION_EVENT,
+                    1,
+                    TransactionalAssignmentInvalidationHandler(
+                        session_factory,
+                        observer=CommittedInvocationReader(session_factory),
+                        authorization_factory=assignment_invalidation_authorization,
+                    ),
+                ),
+                (
+                    REQUEST_EVENT,
+                    1,
+                    evaluation_request_handler(
+                        sessions=session_factory,
+                        materialization=worker_post_submission_materialization(
+                            sessions=session_factory
+                        ),
+                    ),
+                ),
+                (
+                    COMPLETION_EVENT,
+                    1,
+                    evaluation_completion_handler(sessions=session_factory),
+                ),
+            ]
+        ),
+        options=DeliveryOptions(),
+        event_options={
+            (REQUEST_EVENT, 1): DeliveryOptions(
+                lease_seconds=SELECTED_POST_DELIVERY_LEASE_SECONDS,
+                handler_timeout_seconds=SELECTED_POST_HANDLER_TIMEOUT_SECONDS,
+            )
+        },
     )
 
 

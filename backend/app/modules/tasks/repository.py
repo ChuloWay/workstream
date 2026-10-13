@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
-from app.modules.checkers.api.post_submit_catalogue import CompiledPostSubmitPolicy
+from app.modules.checkers.api.external_policy import validate_stored_external_post_policy
 from uuid import UUID
 
 from sqlalchemy import Row, Select, and_, or_, select, tuple_
@@ -16,10 +16,15 @@ from app.modules.contributions.api import LockedCompensationTermsPort
 
 from app.modules.audit.repository import AuditRepository
 from app.modules.tasks.api import (
-    AuditTaskEvidence, AuditTaskEvidencePage, AuditTaskEvidenceRequest,
-    TaskEvidenceCursor, TaskEvidenceInvalid,
-    ContributorTaskDetail, ContributorTaskDetailRequest,
-    ManagementTaskDetail, ManagementTaskDetailRequest,
+    AuditTaskEvidence,
+    AuditTaskEvidencePage,
+    AuditTaskEvidenceRequest,
+    TaskEvidenceCursor,
+    TaskEvidenceInvalid,
+    ContributorTaskDetail,
+    ContributorTaskDetailRequest,
+    ManagementTaskDetail,
+    ManagementTaskDetailRequest,
     ManagementTaskPage,
     ManagementTaskSummary,
     OperationalTaskPage,
@@ -39,7 +44,8 @@ from app.modules.tasks.api import (
     TaskSubmissionContextUnavailable,
 )
 from app.modules.tasks.api.assignment_invalidation import (
-    AssignmentInvalidationTarget, AssignmentInvalidationTargetsRequest,
+    AssignmentInvalidationTarget,
+    AssignmentInvalidationTargetsRequest,
     AssignmentInvalidationTargetsPage,
 )
 from app.modules.tasks.models import (
@@ -54,9 +60,14 @@ from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingMa
 def _unassigned_ready_task():
     """Shared ready visibility for queue discovery and contributor detail."""
     task = WorkstreamTask
-    active_assignment = select(TaskAssignment.id).where(
-        TaskAssignment.task_id == task.id, TaskAssignment.status == "active",
-    ).exists()
+    active_assignment = (
+        select(TaskAssignment.id)
+        .where(
+            TaskAssignment.task_id == task.id,
+            TaskAssignment.status == "active",
+        )
+        .exists()
+    )
     return and_(task.status == "ready", task.assigned_to.is_(None), ~active_assignment)
 
 
@@ -64,10 +75,20 @@ def _task_detail_columns():
     """Fixed common detail projection; never select a task ORM entity."""
     task = WorkstreamTask
     return (
-        task.id.label("task_id"), task.project_id, task.title, task.description,
-        task.task_type, task.difficulty, task.skill_tags, task.estimated_time_minutes,
-        task.status, task.acceptance_criteria, task.rejection_criteria,
-        task.deadline_at, task.created_at, task.updated_at,
+        task.id.label("task_id"),
+        task.project_id,
+        task.title,
+        task.description,
+        task.task_type,
+        task.difficulty,
+        task.skill_tags,
+        task.estimated_time_minutes,
+        task.status,
+        task.acceptance_criteria,
+        task.rejection_criteria,
+        task.deadline_at,
+        task.created_at,
+        task.updated_at,
     )
 
 
@@ -127,20 +148,33 @@ class TaskRepository:
         return mapped
 
     async def read_assignment_invalidation_targets_page(
-        self, request: AssignmentInvalidationTargetsRequest,
+        self,
+        request: AssignmentInvalidationTargetsRequest,
     ) -> AssignmentInvalidationTargetsPage:
         """Nonlocking fixed projection; AUTH owns serialization and the root transaction."""
         request = AssignmentInvalidationTargetsRequest.model_validate(request.model_dump())
         assignment, task = TaskAssignment, WorkstreamTask
-        statement = select(
-            assignment.id, assignment.task_id, assignment.project_id, assignment.contributor_id,
-        ).join(task, and_(task.id == assignment.task_id, task.project_id == assignment.project_id)).where(
-            assignment.contributor_id == str(request.contributor_id),
-            assignment.status == "active", assignment.released_at.is_(None),
-            assignment.assigned_at <= request.invalidated_at,
-            task.status.in_(("claimed", "in_progress")), task.assigned_to == assignment.contributor_id,
-            assignment.submitter_contribution_policy_version_id == task.locked_contribution_policy_version_id,
-            ~select(Submission.id).where(Submission.task_id == task.id).exists(),
+        statement = (
+            select(
+                assignment.id,
+                assignment.task_id,
+                assignment.project_id,
+                assignment.contributor_id,
+            )
+            .join(
+                task, and_(task.id == assignment.task_id, task.project_id == assignment.project_id)
+            )
+            .where(
+                assignment.contributor_id == str(request.contributor_id),
+                assignment.status == "active",
+                assignment.released_at.is_(None),
+                assignment.assigned_at <= request.invalidated_at,
+                task.status.in_(("claimed", "in_progress")),
+                task.assigned_to == assignment.contributor_id,
+                assignment.submitter_contribution_policy_version_id
+                == task.locked_contribution_policy_version_id,
+                ~select(Submission.id).where(Submission.task_id == task.id).exists(),
+            )
         )
         if request.project_id is not None:
             statement = statement.where(assignment.project_id == str(request.project_id))
@@ -149,11 +183,16 @@ class TaskRepository:
         with self._session.no_autoflush:
             rows = (await self._session.execute(statement.order_by(assignment.id).limit(101))).all()
         return AssignmentInvalidationTargetsPage(
-            items=tuple(AssignmentInvalidationTarget(
-                project_id=UUID(row.project_id), task_id=UUID(row.task_id), assignment_id=UUID(row.id),
-                contributor_id=UUID(row.contributor_id),
-                authority_invalidation_event_id=request.invalidation_event_id,
-            ) for row in rows[:100]),
+            items=tuple(
+                AssignmentInvalidationTarget(
+                    project_id=UUID(row.project_id),
+                    task_id=UUID(row.task_id),
+                    assignment_id=UUID(row.id),
+                    contributor_id=UUID(row.contributor_id),
+                    authority_invalidation_event_id=request.invalidation_event_id,
+                )
+                for row in rows[:100]
+            ),
             next_after=UUID(rows[99].id) if len(rows) > 100 else None,
         )
 
@@ -165,8 +204,14 @@ class TaskRepository:
         """
         task = WorkstreamTask
         statement = select(
-            task.id, task.project_id, task.title, task.task_type, task.difficulty,
-            task.skill_tags, task.estimated_time_minutes, task.created_at,
+            task.id,
+            task.project_id,
+            task.title,
+            task.task_type,
+            task.difficulty,
+            task.skill_tags,
+            task.estimated_time_minutes,
+            task.created_at,
             task.locked_contribution_policy_version_id,
         ).where(_unassigned_ready_task())
         rows, continuation = await self._read_task_queue_rows(request, statement)
@@ -176,9 +221,13 @@ class TaskRepository:
         )
         items = tuple(
             ReadyTaskSummary(
-                task_id=UUID(row.id), project_id=UUID(row.project_id), title=row.title,
-                task_type=row.task_type, difficulty=row.difficulty,
-                skill_tags=tuple(row.skill_tags), estimated_time_minutes=row.estimated_time_minutes,
+                task_id=UUID(row.id),
+                project_id=UUID(row.project_id),
+                title=row.title,
+                task_type=row.task_type,
+                difficulty=row.difficulty,
+                skill_tags=tuple(row.skill_tags),
+                estimated_time_minutes=row.estimated_time_minutes,
                 created_at=row.created_at,
                 compensation=compensation[row.locked_contribution_policy_version_id],
             )
@@ -189,33 +238,69 @@ class TaskRepository:
     async def read_management_tasks(self, request: TaskQueueRequest) -> ManagementTaskPage:
         """Return all project tasks with fixed planning fields and no work content."""
         task = WorkstreamTask
-        rows, cursor = await self._read_task_queue_rows(request, select(
-            task.id, task.project_id, task.title, task.task_type, task.difficulty,
-            task.skill_tags, task.estimated_time_minutes, task.status, task.deadline_at,
-            task.created_at, task.updated_at,
-        ))
-        items = tuple(ManagementTaskSummary(
-            task_id=UUID(row.id), project_id=UUID(row.project_id), title=row.title,
-            task_type=row.task_type, difficulty=row.difficulty, skill_tags=tuple(row.skill_tags),
-            estimated_time_minutes=row.estimated_time_minutes, status=row.status,
-            deadline_at=row.deadline_at, created_at=row.created_at, updated_at=row.updated_at,
-        ) for row in rows)
+        rows, cursor = await self._read_task_queue_rows(
+            request,
+            select(
+                task.id,
+                task.project_id,
+                task.title,
+                task.task_type,
+                task.difficulty,
+                task.skill_tags,
+                task.estimated_time_minutes,
+                task.status,
+                task.deadline_at,
+                task.created_at,
+                task.updated_at,
+            ),
+        )
+        items = tuple(
+            ManagementTaskSummary(
+                task_id=UUID(row.id),
+                project_id=UUID(row.project_id),
+                title=row.title,
+                task_type=row.task_type,
+                difficulty=row.difficulty,
+                skill_tags=tuple(row.skill_tags),
+                estimated_time_minutes=row.estimated_time_minutes,
+                status=row.status,
+                deadline_at=row.deadline_at,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        )
         return ManagementTaskPage(request.project_id, items, cursor)
 
     async def read_operational_tasks(self, request: TaskQueueRequest) -> OperationalTaskPage:
         """Select status-only columns, without loading private task content."""
         task = WorkstreamTask
-        rows, cursor = await self._read_task_queue_rows(request, select(
-            task.id, task.project_id, task.status, task.created_at, task.updated_at,
-        ))
-        items = tuple(OperationalTaskSummary(
-            task_id=UUID(row.id), project_id=UUID(row.project_id), status=row.status,
-            created_at=row.created_at, updated_at=row.updated_at,
-        ) for row in rows)
+        rows, cursor = await self._read_task_queue_rows(
+            request,
+            select(
+                task.id,
+                task.project_id,
+                task.status,
+                task.created_at,
+                task.updated_at,
+            ),
+        )
+        items = tuple(
+            OperationalTaskSummary(
+                task_id=UUID(row.id),
+                project_id=UUID(row.project_id),
+                status=row.status,
+                created_at=row.created_at,
+                updated_at=row.updated_at,
+            )
+            for row in rows
+        )
         return OperationalTaskPage(request.project_id, items, cursor)
 
     async def _read_task_queue_rows(
-        self, request: TaskQueueRequest, statement: Select,
+        self,
+        request: TaskQueueRequest,
+        statement: Select,
     ) -> tuple[Sequence[Row], TaskQueueCursor | None]:
         """Apply one exact project and live position before the bounded query.
 
@@ -228,34 +313,49 @@ class TaskRepository:
         statement = statement.where(task.project_id == str(request.project_id))
         if request.after is not None:
             statement = statement.where(
-                tuple_(task.created_at, task.id) > tuple_(
-                    request.after.created_at, request.after.task_id,
+                tuple_(task.created_at, task.id)
+                > tuple_(
+                    request.after.created_at,
+                    request.after.task_id,
                 ),
             )
         statement = statement.order_by(task.created_at, task.id).limit(request.limit + 1)
         with self._session.no_autoflush:
             rows = (await self._session.execute(statement)).all()
         continuation = (
-            TaskQueueCursor(request.project_id, rows[request.limit - 1].created_at, UUID(rows[request.limit - 1].id))
-            if len(rows) > request.limit else None
+            TaskQueueCursor(
+                request.project_id,
+                rows[request.limit - 1].created_at,
+                UUID(rows[request.limit - 1].id),
+            )
+            if len(rows) > request.limit
+            else None
         )
-        return rows[:request.limit], continuation
+        return rows[: request.limit], continuation
 
-    async def read_contributor_task_detail(self, request: ContributorTaskDetailRequest) -> ContributorTaskDetail | None:
+    async def read_contributor_task_detail(
+        self, request: ContributorTaskDetailRequest
+    ) -> ContributorTaskDetail | None:
         """Read visible work facts in one scoped query; caller supplies authority."""
         if type(request) is not ContributorTaskDetailRequest:
             raise ValueError("task detail request is invalid")
         task, assignment = WorkstreamTask, TaskAssignment
-        own_assignment = select(assignment.id).where(
-            assignment.task_id == task.id,
-            assignment.project_id == task.project_id,
-            assignment.status == "active",
-            assignment.contributor_id == str(request.contributor_id),
-        ).exists()
-        statement = select(*_task_detail_columns()).where(or_(
-            _unassigned_ready_task(),
-            and_(task.assigned_to == str(request.contributor_id), own_assignment),
-        ))
+        own_assignment = (
+            select(assignment.id)
+            .where(
+                assignment.task_id == task.id,
+                assignment.project_id == task.project_id,
+                assignment.status == "active",
+                assignment.contributor_id == str(request.contributor_id),
+            )
+            .exists()
+        )
+        statement = select(*_task_detail_columns()).where(
+            or_(
+                _unassigned_ready_task(),
+                and_(task.assigned_to == str(request.contributor_id), own_assignment),
+            )
+        )
         statement = statement.add_columns(task.locked_contribution_policy_version_id)
         values = await self._read_task_detail_values(request, statement)
         if values is None:
@@ -269,36 +369,53 @@ class TaskRepository:
         if type(request) is not ContributorTaskDetailRequest:
             raise ValueError("task detail request is invalid")
         task, assignment = WorkstreamTask, TaskAssignment
-        own_assignment = select(assignment.id).where(
-            assignment.task_id == task.id,
-            assignment.project_id == task.project_id,
-            assignment.status == "active",
-            assignment.contributor_id == str(request.contributor_id),
-        ).exists()
-        statement = select(task.id).where(or_(
-            _unassigned_ready_task(),
-            and_(task.assigned_to == str(request.contributor_id), own_assignment),
-        ))
+        own_assignment = (
+            select(assignment.id)
+            .where(
+                assignment.task_id == task.id,
+                assignment.project_id == task.project_id,
+                assignment.status == "active",
+                assignment.contributor_id == str(request.contributor_id),
+            )
+            .exists()
+        )
+        statement = select(task.id).where(
+            or_(
+                _unassigned_ready_task(),
+                and_(task.assigned_to == str(request.contributor_id), own_assignment),
+            )
+        )
         statement = statement.where(
-            task.project_id == str(request.project_id), task.id == str(request.task_id),
+            task.project_id == str(request.project_id),
+            task.id == str(request.task_id),
         )
         with self._session.no_autoflush:
             return await self._session.scalar(statement) is not None
 
-    async def read_management_task_detail(self, request: ManagementTaskDetailRequest) -> ManagementTaskDetail | None:
+    async def read_management_task_detail(
+        self, request: ManagementTaskDetailRequest
+    ) -> ManagementTaskDetail | None:
         """Read exact-project management facts without broad ORM loading."""
         if type(request) is not ManagementTaskDetailRequest:
             raise ValueError("task detail request is invalid")
         task = WorkstreamTask
         statement = select(
-            *_task_detail_columns(), task.source_type, task.source_ref, task.source_payload_hash,
-            task.import_batch_id, task.external_task_id, task.created_by, task.assigned_to,
+            *_task_detail_columns(),
+            task.source_type,
+            task.source_ref,
+            task.source_payload_hash,
+            task.import_batch_id,
+            task.external_task_id,
+            task.created_by,
+            task.assigned_to,
         )
         values = await self._read_task_detail_values(request, statement)
         return ManagementTaskDetail(**values) if values is not None else None
 
     async def _read_task_detail_values(
-        self, request: ContributorTaskDetailRequest | ManagementTaskDetailRequest, statement: Select,
+        self,
+        request: ContributorTaskDetailRequest | ManagementTaskDetailRequest,
+        statement: Select,
     ) -> dict | None:
         """Keep exact scope, one query and transaction behavior common to both reads."""
         statement = statement.where(
@@ -310,16 +427,21 @@ class TaskRepository:
         if row is None:
             return None
         return dict(row) | {
-            "task_id": UUID(row["task_id"]), "project_id": UUID(row["project_id"]),
+            "task_id": UUID(row["task_id"]),
+            "project_id": UUID(row["project_id"]),
             "skill_tags": tuple(row["skill_tags"]),
         }
 
-    async def read_audit_task_evidence(self, request: AuditTaskEvidenceRequest) -> AuditTaskEvidencePage | None:
+    async def read_audit_task_evidence(
+        self, request: AuditTaskEvidenceRequest
+    ) -> AuditTaskEvidencePage | None:
         """Map one AUDIT-owned scoped statement into immutable TASK evidence."""
         if type(request) is not AuditTaskEvidenceRequest:
             raise ValueError("task evidence request is invalid")
         rows = await self._audit_repository.read_task_evidence_rows(
-            request.project_id, request.task_id, request.limit,
+            request.project_id,
+            request.task_id,
+            request.limit,
             request.after.created_at if request.after else None,
             request.after.event_id if request.after else None,
         )
@@ -327,10 +449,17 @@ class TaskRepository:
             return None
         if rows[0].event_id is None:
             return AuditTaskEvidencePage(request.project_id, request.task_id, (), None)
-        items = tuple(self._task_evidence_item(row, request) for row in rows[:request.limit])
-        cursor = TaskEvidenceCursor(
-            request.project_id, request.task_id, items[-1].created_at, items[-1].event_id,
-        ) if len(rows) > request.limit else None
+        items = tuple(self._task_evidence_item(row, request) for row in rows[: request.limit])
+        cursor = (
+            TaskEvidenceCursor(
+                request.project_id,
+                request.task_id,
+                items[-1].created_at,
+                items[-1].event_id,
+            )
+            if len(rows) > request.limit
+            else None
+        )
         return AuditTaskEvidencePage(request.project_id, request.task_id, items, cursor)
 
     @staticmethod
@@ -338,7 +467,15 @@ class TaskRepository:
         """Require exact transition references without exposing stored diagnostics."""
         assignment_id = decision_id = None
         try:
-            if row.event_type in {"TaskCreated", "TaskScreened", "TaskReleased", "TaskClaimed", "TaskStarted", "TaskStartOverridden", "TaskAssignmentAuthorityRevoked"}:
+            if row.event_type in {
+                "TaskCreated",
+                "TaskScreened",
+                "TaskReleased",
+                "TaskClaimed",
+                "TaskStarted",
+                "TaskStartOverridden",
+                "TaskAssignmentAuthorityRevoked",
+            }:
                 if (
                     UUID(row.reference_project_id) != request.project_id
                     or UUID(row.reference_task_id) != request.task_id
@@ -351,8 +488,14 @@ class TaskRepository:
                     assignment_id = UUID(row.assignment_id)
                 decision_id = UUID(row.authorization_decision_id)
             return AuditTaskEvidence(
-                UUID(row.event_id), row.event_type, row.from_status, row.to_status,
-                row.actor_id, row.created_at, assignment_id, decision_id,
+                UUID(row.event_id),
+                row.event_type,
+                row.from_status,
+                row.to_status,
+                row.actor_id,
+                row.created_at,
+                assignment_id,
+                decision_id,
             )
         except (TypeError, ValueError, AttributeError):
             raise TaskEvidenceInvalid("task audit evidence is invalid") from None
@@ -389,18 +532,19 @@ class TaskRepository:
         statement = select(WorkstreamTask).where(WorkstreamTask.id == task_id)
         if for_update:
             statement = statement.with_for_update()
-        return await self._session.scalar(
-            statement.execution_options(populate_existing=True)
-        )
+        return await self._session.scalar(statement.execution_options(populate_existing=True))
 
     async def lock_project_task(self, project_id: UUID, task_id: UUID) -> WorkstreamTask | None:
         """Conceal foreign tasks before taking their lock or resolving policy custody."""
         with self._session.no_autoflush:
             return await self._session.scalar(
-                select(WorkstreamTask).where(
+                select(WorkstreamTask)
+                .where(
                     WorkstreamTask.project_id == str(project_id),
                     WorkstreamTask.id == str(task_id),
-                ).with_for_update().execution_options(populate_existing=True)
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
             )
 
     async def lock_accepted_assignment(
@@ -413,11 +557,14 @@ class TaskRepository:
         """Lock only the requested project/task assignment after its Task lock."""
         with self._session.no_autoflush:
             return await self._session.scalar(
-                select(TaskAssignment).where(
+                select(TaskAssignment)
+                .where(
                     TaskAssignment.id == str(assignment_id),
                     TaskAssignment.task_id == str(task_id),
                     TaskAssignment.project_id == str(project_id),
-                ).with_for_update().execution_options(populate_existing=True)
+                )
+                .with_for_update()
+                .execution_options(populate_existing=True)
             )
 
     async def read_routing_manifest(
@@ -476,27 +623,32 @@ class TaskRepository:
         )
         if for_update:
             statement = statement.with_for_update()
-        result = await self._session.execute(
-            statement.execution_options(populate_existing=True)
-        )
+        result = await self._session.execute(statement.execution_options(populate_existing=True))
         return result.scalar_one_or_none()
 
     async def lock_invalidation_assignment(self, target) -> TaskAssignment | None:
         """Lock the event's original assignment, never a replacement active claim."""
         return await self._session.scalar(
-            select(TaskAssignment).where(
+            select(TaskAssignment)
+            .where(
                 TaskAssignment.id == str(target.assignment_id),
                 TaskAssignment.task_id == str(target.task_id),
                 TaskAssignment.project_id == str(target.project_id),
                 TaskAssignment.contributor_id == str(target.contributor_id),
-            ).with_for_update().execution_options(populate_existing=True)
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
 
     async def has_submission(self, task_id: UUID) -> bool:
         """Any retained Submission excludes ordinary pre-submit release."""
-        return bool(await self._session.scalar(select(
-            select(Submission.id).where(Submission.task_id == str(task_id)).exists(),
-        )))
+        return bool(
+            await self._session.scalar(
+                select(
+                    select(Submission.id).where(Submission.task_id == str(task_id)).exists(),
+                )
+            )
+        )
 
     async def select_submission_context(
         self,
@@ -596,12 +748,12 @@ class TaskRepository:
                 for key in TaskPolicyLineage.model_fields
                 for value in (getattr(task, key),)
             }))
-            post_policy = CompiledPostSubmitPolicy.model_validate_json(
-                json.dumps(task.locked_post_submit_checker_policy_body),
-            )
-            if (post_policy.policy_hash != locked_policy.locked_post_submit_checker_policy_hash
-                    or post_policy.project_id != UUID(task.project_id)
-                    or post_policy.guide_version != locked_policy.locked_guide_version):
+            post_body = task.locked_post_submit_checker_policy_body
+            selected_post = validate_stored_external_post_policy(post_body)
+            if (
+                selected_post.policy_sha256
+                != locked_policy.locked_post_submit_checker_policy_hash
+            ):
                 raise ValueError("task post-submit policy body differs from locked identity")
             locked_project_context = TaskLockedProjectContextReferences(
                 project_id=UUID(task.project_id),
@@ -637,13 +789,16 @@ class TaskRepository:
                 locked_policy=locked_policy,
                 acceptance_criteria=task.acceptance_criteria,
                 submitter_contribution_policy_version_id=assignment.submitter_contribution_policy_version_id,
-                checker_remediation_manifest_id=remediation.id if remediation is not None else None,
+                checker_remediation_manifest_id=(
+                    UUID(str(remediation.id)) if remediation is not None else None
+                ),
             )
             return facts, remediation
         except (TypeError, ValueError) as exc:
             raise TaskSubmissionContextUnavailable(
                 "task_submission_context_invalid"
             ) from exc
+
 
     async def add_submission(self, submission: Submission) -> Submission:
         """Persist a submission packet and its evidence items.
@@ -658,7 +813,6 @@ class TaskRepository:
         await self._session.flush()
         await self._session.refresh(submission)
         return submission
-
 
     async def get_latest_submission_for_task(
         self,
@@ -707,7 +861,6 @@ class TaskRepository:
                 .with_for_update(of=Submission)
                 .execution_options(populate_existing=True)
             )
-
 
     async def add_audit_event(self, event: AuditEvent) -> AuditEvent:
         """Persist an audit event.

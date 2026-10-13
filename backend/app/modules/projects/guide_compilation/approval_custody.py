@@ -17,6 +17,9 @@ from app.modules.projects.models import (
     SubmissionPolicyMutationIdempotencyRecord,
     SubmissionArtifactPolicy,
 )
+from app.modules.checkers.api.external_policy import (
+    validate_stored_external_checker_policies,
+)
 
 from .custody_payloads import policy_digest
 from .models import ProjectGuideProposalApproval
@@ -84,20 +87,16 @@ async def load_approval_custody(session, policy_id: str | None) -> ApprovalCusto
     return ApprovalCustody(operation, reservation, effective, pre, successor)
 
 
-def approved_projection_digest(view) -> str:
-    """Return the original digest only after proving the exact approved transition."""
-    custody = view.approval_custody
-    policy = view.policy
-    if custody is None or policy is None:
-        raise ValueError("approval custody is unavailable")
+def _approval_projection_matches(
+    view, custody, target, receipt, policy, external_policies
+) -> bool:
+    """Compare every immutable target, receipt, reservation and policy fact."""
     operation, reservation, effective, pre = (
         custody.operation,
         custody.reservation,
         custody.effective,
         custody.pre,
     )
-    target = GuideProposalTarget.model_validate(operation.target_json)
-    receipt = GuideProposalApprovalReceipt.model_validate(operation.receipt_json)
     if (
         target.digest != operation.target_digest
         or target.compilation_id != view.compilation.id
@@ -138,14 +137,36 @@ def approved_projection_digest(view) -> str:
         or effective.effective_policy_hash != receipt.effective_policy_hash
         or canonical_json_hash(effective.effective_policy) != receipt.effective_policy_hash
         or pre.compiled_bundle_hash != receipt.pre_submit_bundle_hash
-        or canonical_json_hash(pre.compiled_bundle) != receipt.pre_submit_bundle_hash
+        or external_policies.pre_submit.policy_sha256 != receipt.pre_submit_bundle_hash
         or effective.submission_artifact_policy_id != policy.id
         or effective.submission_artifact_policy_hash != policy.policy_hash
         or pre.effective_policy_id != effective.id
         or pre.effective_policy_hash != effective.effective_policy_hash
         or operation.effective_pre_submit_plan_hash != receipt.effective_pre_submit_plan_hash
-        or canonical_json_hash(operation.effective_pre_submit_plan)
-        != receipt.effective_pre_submit_plan_hash
+        or external_policies.policies_sha256 != receipt.effective_pre_submit_plan_hash
+    ):
+        return False
+    return True
+
+
+def approved_projection_digest(view) -> str:
+    """Return the original digest only after proving the exact approved transition."""
+    custody = view.approval_custody
+    policy = view.policy
+    if custody is None or policy is None:
+        raise ValueError("approval custody is unavailable")
+    operation, effective, pre = (
+        custody.operation,
+        custody.effective,
+        custody.pre,
+    )
+    target = GuideProposalTarget.model_validate(operation.target_json)
+    receipt = GuideProposalApprovalReceipt.model_validate(operation.receipt_json)
+    external_policies = validate_stored_external_checker_policies(
+        operation.effective_pre_submit_plan
+    )
+    if not _approval_projection_matches(
+        view, custody, target, receipt, policy, external_policies
     ):
         raise ValueError("approved proposal custody mismatch")
     lifecycle = (policy.lifecycle_status, effective.lifecycle_status, pre.lifecycle_status)
@@ -184,28 +205,11 @@ def _require_plan_and_provenance(view, custody, target) -> None:
         custody.pre,
         view.policy,
     )
-    expected_lineage = {
-        "project_id": str(target.project_id),
-        "guide_id": str(target.guide_id),
-        "guide_version": target.guide_version,
-        "source_snapshot_id": str(target.source_snapshot_id),
-        "source_snapshot_hash": target.source_snapshot_hash,
-        "effective_policy_id": effective.id,
-        "effective_policy_hash": effective.effective_policy_hash,
-        "pre_submit_policy_id": pre.id,
-        "pre_submit_policy_bundle_hash": pre.compiled_bundle_hash,
-    }
-    expected_catalogue = {
-        "id": target.pre_catalogue_id,
-        "version": target.pre_catalogue_version,
-        "schema_version": target.pre_catalogue_schema_version,
-        "manifest_sha256": target.pre_catalogue_manifest_hash,
-    }
-    if (
-        operation.effective_pre_submit_plan.get("lineage") != expected_lineage
-        or operation.effective_pre_submit_plan.get("catalogue") != expected_catalogue
-    ):
-        raise ValueError("approved proposal plan lineage mismatch")
+    policies = validate_stored_external_checker_policies(
+        operation.effective_pre_submit_plan
+    )
+    if policies.pre_submit.model_dump(mode="json") != pre.compiled_bundle:
+        raise ValueError("approved external checker policy mismatch")
     for name in (
         "pre_catalogue_id",
         "pre_catalogue_version",

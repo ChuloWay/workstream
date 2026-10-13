@@ -183,6 +183,15 @@ class GuideProposalCorrectionReceipt(BaseModel):
         return self
 
 
+class MissingCheckerCapability(BaseModel):
+    """Bounded manager feedback from the approved compilation's missing checks."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, revalidate_instances="always")
+    requirement_id: str = Field(pattern=r"^[a-z][a-z0-9_.-]{0,99}$", strict=True)
+    stage: Literal["pre_submit", "post_submit"]
+    title: str = Field(min_length=1, max_length=1000, strict=True)
+
+
 class GuideProposalError(RuntimeError):
     """Bounded failure; the caller must roll back its root transaction."""
 
@@ -196,36 +205,55 @@ class GuideProposalError(RuntimeError):
             "operation_conflict",
             "storage_unavailable",
         ],
+        *,
+        missing_capabilities: tuple[MissingCheckerCapability, ...] = (),
     ) -> None:
+        if (
+            type(missing_capabilities) is not tuple
+            or len(missing_capabilities) > 200
+            or (missing_capabilities and code != "approval_blocked")
+        ):
+            raise ValueError("invalid missing capability refusal")
+        self.missing_capabilities = tuple(
+            MissingCheckerCapability.model_validate(item) for item in missing_capabilities
+        )
         self.code = code
         super().__init__(code)
-
-
 
 
 # Composition binds external capabilities; the public PROJECTS contract imports no other owner.
 _ActorT = TypeVar("_ActorT", contravariant=True)
 _MaterialT = TypeVar("_MaterialT", contravariant=True)
-_PreCapabilitiesT = TypeVar("_PreCapabilitiesT", contravariant=True)
-_PostCapabilitiesT = TypeVar("_PostCapabilitiesT", contravariant=True)
-_PlannerT = TypeVar("_PlannerT", contravariant=True)
+_CapabilitiesT = TypeVar("_CapabilitiesT", contravariant=True)
 
 
-class GuideProposalOperationsPort(Protocol[_ActorT, _MaterialT, _PreCapabilitiesT, _PostCapabilitiesT, _PlannerT]):
+class GuideProposalOperationsPort(Protocol[_ActorT, _MaterialT, _CapabilitiesT]):
     """Caller-owned transaction for exact finalized proposal operations."""
 
     async def review_package(
-        self, selection: GuideProposalSelection, *, actor: _ActorT, request_id: UUID,
+        self,
+        selection: GuideProposalSelection,
+        *,
+        actor: _ActorT,
+        request_id: UUID,
     ) -> "GuideProposalReviewPackage": ...
 
     async def approve(
-        self, command: GuideProposalApproval, *, actor: _ActorT, request_id: UUID,
-        material: _MaterialT, pre_capabilities: _PreCapabilitiesT,
-        post_capabilities: _PostCapabilitiesT, planner: _PlannerT,
+        self,
+        command: GuideProposalApproval,
+        *,
+        actor: _ActorT,
+        request_id: UUID,
+        material: _MaterialT,
+        capabilities: _CapabilitiesT,
     ) -> GuideProposalApprovalReceipt: ...
 
     async def request_correction(
-        self, command: GuideProposalCorrection, *, actor: _ActorT, request_id: UUID,
+        self,
+        command: GuideProposalCorrection,
+        *,
+        actor: _ActorT,
+        request_id: UUID,
     ) -> GuideProposalCorrectionReceipt: ...
 
 
@@ -233,6 +261,9 @@ class GuideCorrectionDispatchPort(Protocol[_ActorT]):
     """Own human correction admission and publication after commit."""
 
     async def dispatch(
-        self, selection: GuideProposalSelection, correction_operation_id: UUID, *,
+        self,
+        selection: GuideProposalSelection,
+        correction_operation_id: UUID,
+        *,
         actor: _ActorT,
     ) -> GuideProposalDispatchResponse: ...

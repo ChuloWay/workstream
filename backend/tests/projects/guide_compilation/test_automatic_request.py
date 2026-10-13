@@ -14,11 +14,9 @@ from app.adapters.artifacts import (
     guide_document_manifest_port,
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind, AuthorizationDenied
-from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
-from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
 from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
 from app.modules.projects.models import ProjectSetupRun
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+from tests.checkers.external.support import capability_projection
 
 from tests.projects.client_fixtures import (
     project_client as project_client,
@@ -78,8 +76,7 @@ def acknowledge_automatic_setup(setup):
 def automatic_service(session, actor):
     inputs = CompilationRequestInputs(
         guide_document_manifest_port(session),
-        project_guide_pre_submission_capabilities(build_pre_submission_checker_catalogue()),
-        current_post_submit_catalogue(),
+        capability_projection(),
         runtime_configuration=runtime_configuration(),
     )
     return _execution_service(session, actor, request_inputs=inputs)
@@ -93,7 +90,9 @@ async def test_automatic_source_requires_documents_then_persists_one_request_and
     from app.modules.projects.guide_compilation.repository import GuideCompilationIntegrityError
 
     async with factory() as session:
-        with pytest.raises(GuideCompilationIntegrityError, match="automatic compilation setup unavailable"):
+        with pytest.raises(
+            GuideCompilationIntegrityError, match="automatic compilation setup unavailable"
+        ):
             await automatic_service(session, actor).request_automatic(
                 actor=actor, setup_run_id=setup_id
             )
@@ -252,9 +251,9 @@ async def test_sql_origin_rejects_each_missing_lineage_selector(automatic_source
     factory, actor, setup_id, snapshot = automatic_source
     await create_committed_document_fixture(snapshot["id"])
     async with factory() as session, session.begin():
-        facts, _identity, origin = await automatic_service(
-            session, actor
-        )._request_inputs.resolve(session, setup_id)
+        facts, _identity, origin = await automatic_service(session, actor)._request_inputs.resolve(
+            session, setup_id
+        )
     async with factory() as session:
         changed = replace(
             facts, **{field: facts.setup_generation + 1 if field == "setup_generation" else uuid4()}
@@ -482,7 +481,9 @@ async def test_concurrent_request_recovery_rechecks_current_authority(
     ],
 )
 async def test_stored_foreign_source_is_rejected_by_repository_and_insert(
-    automatic_source, project_client, field  # noqa: F811
+    automatic_source,
+    project_client,
+    field,  # noqa: F811
 ):
     from dataclasses import replace
     from sqlalchemy.exc import IntegrityError
@@ -557,9 +558,7 @@ async def test_stored_foreign_source_is_rejected_by_repository_and_insert(
             if field in origin.__dataclass_fields__
             else getattr(changed_facts, field)
         )
-        stored_facts = replace(
-            changed_facts, operation_id=UUID(str(values["operation_id"]))
-        )
+        stored_facts = replace(changed_facts, operation_id=UUID(str(values["operation_id"])))
         forged = {
             **values,
             field: replacement if field.endswith("operation_id") else str(replacement),
@@ -640,8 +639,6 @@ async def test_direct_insert_checks_exact_authority_digest(automatic_source, eve
             )
             == 1
         )
-
-
 
 
 @pytest.mark.asyncio

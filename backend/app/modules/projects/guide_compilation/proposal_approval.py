@@ -15,12 +15,12 @@ from app.modules.authorization.api.guide_proposal_review import (
     GuideProposalAuthorizationLocator,
     PreparedGuideProposalOperation,
 )
-from app.modules.checkers.api.policy_compilation import (
-    CompiledPreSubmitCheckerPolicy, PreSubmissionPolicyCompilationPort,
-)
-from app.modules.checkers.api.pre_submit import (
-    EffectivePreSubmissionPlanLineage,
-    EffectivePreSubmissionExecutionPlan,
+from app.modules.checkers.api.policy_custody import CompiledPreSubmitCheckerPolicy
+from app.modules.checkers.api.external import ExternalCheckerRegistryPort
+from app.modules.checkers.api.external import ExternalCheckerCapabilityProjection
+from app.modules.checkers.api.external_policy import (
+    LockedExternalCheckerPolicies,
+    compile_external_checker_policy_bundle,
 )
 from app.modules.projects.api.guide_proposals import (
     GuideProposalApprovalReceipt,
@@ -62,15 +62,12 @@ async def approve_proposal(
     actor,
     request_id,
     material,
-    pre_capabilities,
-    post_capabilities,
-    planner: PreSubmissionPolicyCompilationPort,
+    capabilities: ExternalCheckerCapabilityProjection,
+    registry: ExternalCheckerRegistryPort,
 ) -> GuideProposalApprovalReceipt:
     """Compile and persist in the caller transaction after exact authority closes."""
     target = command.target
-    selector_id = approval_authorization_selector(
-        actor.actor_profile_id, command.idempotency_key
-    )
+    selector_id = approval_authorization_selector(actor.actor_profile_id, command.idempotency_key)
     locator = GuideProposalAuthorizationLocator(
         project_id=target.project_id,
         guide_id=target.guide_id,
@@ -103,8 +100,7 @@ async def approve_proposal(
             locked,
             package,
             command,
-            pre_capabilities,
-            post_capabilities,
+            capabilities,
         )
         outputs = await _compile_approval(
             session,
@@ -112,9 +108,8 @@ async def approve_proposal(
             command,
             new_record_id(),
             material,
-            pre_capabilities,
-            post_capabilities,
-            planner,
+            capabilities,
+            registry,
         )
         receipt = outputs.receipt
         facts = _facts(locator, target, request_digest, receipt, command)
@@ -172,13 +167,12 @@ async def _validate_new_approval(
     locked,
     package,
     command,
-    pre_capabilities,
-    post_capabilities,
+    capabilities,
 ):
     """Validate current proposal and predecessor facts before compiling outputs."""
     if not locked.current:
         raise GuideProposalError("proposal_stale")
-    require_catalogues(command.target, pre_capabilities, post_capabilities)
+    require_capabilities(command.target, capabilities)
     if (
         locked.result.status == "guide_blocked"
         or locked.view.policy is None
@@ -187,15 +181,12 @@ async def _validate_new_approval(
         raise GuideProposalError("approval_blocked")
     if (
         locked.view.policy.lifecycle_status != "draft"
-        or package.current_approval_operation_id
-        != command.expected_previous_approval_operation_id
+        or package.current_approval_operation_id != command.expected_previous_approval_operation_id
         or package.current_approval_output_digest
         != command.expected_previous_approval_output_digest
     ):
         raise GuideProposalError("proposal_stale")
-    return await _previous_outputs(
-        session, command.expected_previous_approval_operation_id
-    )
+    return await _previous_outputs(session, command.expected_previous_approval_operation_id)
 
 
 @dataclass(frozen=True)
@@ -204,7 +195,7 @@ class _CompiledApproval:
 
     effective_body: dict
     compiled: CompiledPreSubmitCheckerPolicy
-    plan: EffectivePreSubmissionExecutionPlan
+    policies: LockedExternalCheckerPolicies
     receipt: GuideProposalApprovalReceipt
 
 
@@ -214,15 +205,13 @@ async def _compile_approval(
     command,
     operation_id,
     material,
-    pre_capabilities,
-    post_capabilities,
-    planner,
+    capabilities,
+    registry,
 ) -> _CompiledApproval:
     target = command.target
     inputs = CompilationRequestInputs(
         material,
-        pre_capabilities,
-        post_capabilities,
+        capabilities,
         ProjectGuideRuntimeConfiguration.model_validate(locked.view.attempt.runtime_configuration),
     )
     context = await inputs.context_for_setup(session, locked.view.setup)
@@ -231,41 +220,21 @@ async def _compile_approval(
         locked.view.policy.policy_body,
     )
     effective_hash = canonical_json_hash(effective_body)
-    compiled = planner.compile_policy_bundle(
-        effective_policy=effective_body, effective_policy_hash=effective_hash,
+    policies = await compile_external_checker_policy_bundle(locked.result, registry)
+    external_pre = policies.pre_submit
+    compiled = CompiledPreSubmitCheckerPolicy(
+        compiler_version="external_checker_policy.v1",
+        compiled_bundle=external_pre.model_dump(mode="json"),
+        compiled_bundle_hash=external_pre.policy_sha256,
+        checker_names=[
+            external_pre.workstream_default.checker_id,
+            *(entry.registry.capability_id for entry in external_pre.entries),
+        ],
+        checker_configs={
+            entry.requirement_id: entry.configuration for entry in external_pre.entries
+        },
     )
     effective_id, pre_id = new_record_id(), new_record_id()
-    version = target.guide_version
-    plan = planner.compile_effective_plan(
-        lineage=EffectivePreSubmissionPlanLineage(
-            project_id=target.project_id,
-            guide_id=target.guide_id,
-            guide_version=version,
-            source_snapshot_id=target.source_snapshot_id,
-            source_snapshot_hash=target.source_snapshot_hash,
-            effective_policy_id=effective_id,
-            effective_policy_hash=effective_hash,
-            pre_submit_policy_id=pre_id,
-            pre_submit_policy_bundle_hash=compiled.compiled_bundle_hash,
-        ),
-        effective_policy=effective_body,
-        compiled_bundle=compiled.compiled_bundle,
-    )
-    if plan.catalogue_manifest_sha256 != target.pre_catalogue_manifest_hash:
-        raise GuideProposalError("approval_blocked")
-    # Catalogue-valid intent is not enforcement: optional policy primitives are
-    # emitted only when the actual merged policy configures them. CHECKERS owns
-    # that configuration validation; reconcile selections with its resulting plan.
-    enforced = {
-        (entry.definition_id, entry.definition_version)
-        for entry in plan.entries
-        if entry.checker_definition_state == "enabled"
-    }
-    if any(
-        (binding.capability_id, binding.capability_version) not in enforced
-        for binding in locked.result.pre_submit_bindings
-    ):
-        raise GuideProposalError("approval_blocked")
     receipt = GuideProposalApprovalReceipt(
         operation_id=operation_id,
         target_digest=target.digest,
@@ -274,10 +243,10 @@ async def _compile_approval(
         effective_policy_hash=effective_hash,
         pre_submit_policy_id=pre_id,
         pre_submit_bundle_hash=compiled.compiled_bundle_hash,
-        effective_pre_submit_plan_hash=plan.plan_sha256,
+        effective_pre_submit_plan_hash=policies.policies_sha256,
         acknowledged_warning_hashes=command.acknowledged_warning_hashes,
     )
-    return _CompiledApproval(effective_body, compiled, plan, receipt)
+    return _CompiledApproval(effective_body, compiled, policies, receipt)
 
 
 async def _persist_approval(
@@ -356,23 +325,29 @@ def _facts(locator, target, request_digest, receipt, command):
     )
 
 
-def require_catalogues(target, pre, post):
+def require_capabilities(target, capabilities):
+    """Bind approval to the exact registry-backed compiler input snapshot."""
+    capabilities = ExternalCheckerCapabilityProjection.model_validate(capabilities)
     if (
-        not pre.available
-        or (pre.catalogue_id, pre.version, pre.schema_version, pre.manifest_sha256)
-        != (
-            target.pre_catalogue_id,
-            target.pre_catalogue_version,
-            target.pre_catalogue_schema_version,
-            target.pre_catalogue_manifest_hash,
-        )
-        or (post.catalogue_id, post.source_version, post.schema_version, post.manifest_sha256)
-        != (
-            target.post_catalogue_id,
-            target.post_catalogue_version,
-            target.post_catalogue_schema_version,
-            target.post_catalogue_manifest_hash,
-        )
+        "workstream.external_checker_capabilities",
+        "v1",
+        capabilities.schema_version,
+        capabilities.manifest_sha256,
+    ) != (
+        target.pre_catalogue_id,
+        target.pre_catalogue_version,
+        target.pre_catalogue_schema_version,
+        target.pre_catalogue_manifest_hash,
+    ) or (
+        "workstream.external_checker_capabilities",
+        "v1",
+        capabilities.schema_version,
+        capabilities.manifest_sha256,
+    ) != (
+        target.post_catalogue_id,
+        target.post_catalogue_version,
+        target.post_catalogue_schema_version,
+        target.post_catalogue_manifest_hash,
     ):
         raise GuideProposalError("proposal_stale")
 
@@ -505,7 +480,7 @@ async def _commit_provenance(
     session, replay_repository, command, actor, outputs, facts, authority, policy, effective, pre
 ):
     """Commit the existing reservation and its immutable approval provenance together."""
-    target, receipt, plan = command.target, outputs.receipt, outputs.plan
+    target, receipt = command.target, outputs.receipt
     operation_id, request_digest = receipt.operation_id, facts.request_digest
     await replay_repository.complete(
         operation_id,
@@ -538,8 +513,8 @@ async def _commit_provenance(
             effective_policy_id=effective.id,
             pre_submit_policy_id=pre.id,
             approved_policy_output_digest=policy_digest(policy),
-            effective_pre_submit_plan=plan.as_dict(),
-            effective_pre_submit_plan_hash=plan.plan_sha256,
+            effective_pre_submit_plan=outputs.policies.model_dump(mode="json"),
+            effective_pre_submit_plan_hash=outputs.policies.policies_sha256,
             prior_approval_operation_id=command.expected_previous_approval_operation_id,
             actor_profile_id=str(actor.actor_profile_id),
             identity_link_id=str(actor.identity_link_id),

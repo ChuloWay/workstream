@@ -73,6 +73,9 @@ def complete_context(locked, post_policy, post_custody, receipt, review, revisio
         activation_receipt=receipt,
         artifact_policy=CanonicalJsonObject.from_mapping(view.policy.policy_body),
         compiled_post_submit_policy=CanonicalJsonObject.from_mapping(post_policy.policy_body),
+        external_checker_policies=CanonicalJsonObject.from_mapping(
+            approval.operation.effective_pre_submit_plan
+        ),
         review_policy=_policy_body("review", review, command.review, view.guide),
         review_semantics_format=review.semantics_format,
         revision_policy=_policy_body("revision", revision, command.revision, view.guide),

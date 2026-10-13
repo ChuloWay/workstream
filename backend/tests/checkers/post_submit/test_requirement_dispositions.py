@@ -6,33 +6,24 @@ from app.interfaces.project_agents import (
     AtomicGuideRequirement,
     CapabilitySuggestion,
     PostSubmissionBindingProposal,
-    CapabilityParameter,
-    ProjectGuideCompilationContext,
     ProjectGuideCompilationResult,
     validate_project_guide_compilation_result,
 )
-from app.modules.checkers.api.post_submit_catalogue import (
-    PostSubmitCatalogue,
-)
 from tests.test_project_guide_compilation_contracts import _artifact_policy, _context, _evidence
-from tests.checkers.post_submit.support import altered_catalogue, catalogue
-
-
-def context(snapshot=None):
-    base = _context()
-    fields = base.model_dump()
-    fields["post_submission_capabilities"] = PostSubmitCatalogue.model_validate(
-        (snapshot or catalogue()).model_dump()
-    )
-    return ProjectGuideCompilationContext.model_validate(fields)
 
 
 def proposal(disposition, *, binding=False):
     gap = disposition == "post_submit_capability_gap"
     return ProjectGuideCompilationResult(
-        status="guide_blocked" if gap else "draft_ready",
+        status="draft_ready_with_warnings" if gap else "draft_ready",
         agent_version="v1",
-        submission_artifact_policy=None if gap else _artifact_policy(),
+        submission_artifact_policy=_artifact_policy(),
+        findings=({
+            "severity": "warning",
+            "code": "capability.unavailable",
+            "message": "Required automation is awaiting a registered checker.",
+            "evidence_refs": (_evidence(),),
+        },) if gap else (),
         requirements=(
             AtomicGuideRequirement(
                 requirement_id="quality",
@@ -49,8 +40,8 @@ def proposal(disposition, *, binding=False):
         post_submit_bindings=(
             PostSubmissionBindingProposal(
                 requirement_id="quality",
-                capability_id="check_acceptance_criteria_present",
-                capability_version="v0.1",
+                capability_id="acme.post",
+                capability_version="v1.2.3",
                 stage="post_submit",
             ),
         )
@@ -60,7 +51,7 @@ def proposal(disposition, *, binding=False):
 
 
 def test_requirement_disposition_is_preserved():
-    source = context()
+    source = _context()
     human = proposal("human_review")
     validate_project_guide_compilation_result(source, human)
     assert human.requirements[0].disposition.value == "human_review"
@@ -69,62 +60,16 @@ def test_requirement_disposition_is_preserved():
     validate_project_guide_compilation_result(source, gap)
     assert gap.requirements[0].disposition.value == "post_submit_capability_gap"
     assert gap.post_submit_bindings == ()
-    ready_gap = gap.model_copy(
-        update={"status": "draft_ready", "submission_artifact_policy": _artifact_policy()}
+    blocked_gap = gap.model_copy(
+        update={"status": "guide_blocked", "submission_artifact_policy": None}
     )
-    with pytest.raises(ValueError, match="ready compilation cannot contain blocking"):
-        validate_project_guide_compilation_result(source, ready_gap)
+    with pytest.raises(ValueError, match="blocked compilation requires blocking"):
+        validate_project_guide_compilation_result(source, blocked_gap)
 
 
 @pytest.mark.parametrize("disposition", ("human_review", "post_submit_capability_gap"))
 def test_unbound_dispositions_cannot_acquire_a_binding(disposition):
-    source = context()
+    source = _context()
     validate_project_guide_compilation_result(source, proposal(disposition))
     with pytest.raises(ValueError, match="compilation capability binding is invalid"):
         validate_project_guide_compilation_result(source, proposal(disposition, binding=True))
-
-
-def test_supported_binding_is_valid_and_roundtrips():
-    source = context()
-    valid = proposal("supported_post_submit", binding=True)
-    validate_project_guide_compilation_result(source, valid)
-    assert ProjectGuideCompilationContext.model_validate_json(source.model_dump_json()) == source
-
-
-@pytest.mark.parametrize(
-    "change,message",
-    [
-        ({"capability_version": "wrong"}, "version is stale"),
-        ({"capability_id": "unknown"}, "binding is invalid"),
-        ({"capability_id": "check_submission_packet"}, "binding is invalid"),
-        ({"stage": "pre_submit"}, "binding is invalid"),
-        ({"parameters": (CapabilityParameter(name="arbitrary", value="data"),)}, "Extra inputs"),
-        ({"parameters": (CapabilityParameter(name="supported_claim", value="criteria_presence"),)}, "Extra inputs"),
-    ],
-)
-def test_binding_rejects_exact_invalid_property(change, message):
-    valid = proposal("supported_post_submit", binding=True)
-    binding = valid.post_submit_bindings[0]
-    invalid = PostSubmissionBindingProposal(**{**binding.model_dump(), **change})
-    with pytest.raises(ValueError, match=message):
-        validate_project_guide_compilation_result(
-            context(), valid.model_copy(update={"post_submit_bindings": (invalid,)})
-        )
-
-
-def test_disabled_selection_stays_a_gap_and_cannot_bind():
-    source = context(altered_catalogue(state="disabled"))
-    gap = proposal("post_submit_capability_gap")
-    validate_project_guide_compilation_result(source, gap)
-    assert gap.requirements[0].disposition.value == "post_submit_capability_gap"
-    with pytest.raises(ValueError, match="definition is unavailable"):
-        validate_project_guide_compilation_result(
-            source, proposal("supported_post_submit", binding=True)
-        )
-
-
-def test_disabled_mandatory_catalogue_cannot_produce_a_ready_guide():
-    with pytest.raises(ValueError, match="post-submit capability projection is unavailable"):
-        validate_project_guide_compilation_result(
-            context(altered_catalogue(index=0, state="disabled")), proposal("human_review")
-        )

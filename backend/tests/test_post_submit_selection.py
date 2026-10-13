@@ -33,7 +33,12 @@ async def test_task_projection_is_owner_qualified_and_exact(tmp_path, isolated_d
                 assert "workstream_tasks.project_id =" in statement
                 assert "submissions.task_id =" in statement and "submissions.id =" in statement
                 assert "FOR UPDATE" not in statement
-                assert "package_uri" not in statement and "policy_body" not in statement
+                assert "package_uri" not in statement
+                assert "selected_post_submit_policy_body" in statement
+                assert not any(field in statement for field in (
+                    "locked_post_submit_checker_policy_body", "locked_review_policy_body",
+                    "locked_revision_policy_body",
+                ))
                 assert "worker_attestation" not in statement and "summary" not in statement
         finally:
             event.remove(h.engine.sync_engine, "before_cursor_execute", observe)
@@ -58,6 +63,8 @@ async def test_task_projection_is_owner_qualified_and_exact(tmp_path, isolated_d
             "review_generation": "locked_review_policy_generation", "review_hash": "locked_review_policy_hash",
             "revision_policy_id": "locked_revision_policy_id", "revision_generation": "locked_revision_policy_generation",
             "revision_hash": "locked_revision_policy_hash",
+            "selected_post_policy_hash": "selected_post_submit_policy_sha256",
+            "selected_post_policy_body": "selected_post_submit_policy_body",
         }
         assert {key: str(value) for key, value in asdict(facts.context).items()} == {
             key: str(row[column]) for key, column in mapping.items()
@@ -69,11 +76,8 @@ async def test_frozen_context_substitution_rejected_by_art_selection(tmp_path, i
         for name in ("source_id", "effective_policy_id", "pre_policy_id", "post_policy_id", "review_policy_id", "revision_policy_id", "review_generation", "revision_hash"):
             value = (2 if name == "review_generation" else "sha256:" + "0" * 64 if name == "revision_hash" else new_record_id())
             expected = h.request.expected_context.model_copy(update={name: value})
-            packet = h.request.structural_input.model_copy(update={
-                "observed_context": h.request.structural_input.observed_context.model_copy(update={name: value}),
-            })
             with pytest.raises(PostSubmissionMaterializationUnavailable, match="identity_mismatch"):
-                await select_material(h, change_request(h.request, expected_context=expected, structural_input=packet))
+                await select_material(h, change_request(h.request, expected_context=expected))
         assert not h.store.opens and not h.preparation._active
         selected = await select_material(h, h.request)
         assert selected.submission.admission_id == h.created.admission_id
@@ -111,8 +115,7 @@ async def test_valid_foreign_lineage_mixes_deny_before_material_access(tmp_path,
                             # Keep duplicated project/policy facts schema-valid so
                             # rejection must come from persisted owner selection.
                             mix.update(policy=foreign.request.policy,
-                                       expected_context=foreign.request.expected_context,
-                                       structural_input=foreign.request.structural_input)
+                                       expected_context=foreign.request.expected_context)
                         mixed = change_request(own.request, **mix)
                         with pytest.raises((PostSubmissionMaterializationUnavailable, SubmittedBundleUnavailable)):
                             await select_material(own, mixed)

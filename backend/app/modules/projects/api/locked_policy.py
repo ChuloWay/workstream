@@ -169,6 +169,7 @@ class ProjectLockedPolicyContextFacts:
     activation_receipt: GuideActivationReceipt
     artifact_policy: CanonicalJsonObject
     compiled_post_submit_policy: CanonicalJsonObject
+    external_checker_policies: CanonicalJsonObject
     review_policy: CanonicalJsonObject
     review_semantics_format: ReviewSemanticsFormat
     revision_policy: CanonicalJsonObject
@@ -200,6 +201,7 @@ class ProjectLockedPolicyContextFacts:
                 self.compiled_pre_submit_bundle,
                 self.artifact_policy,
                 self.compiled_post_submit_policy,
+                self.external_checker_policies,
                 self.review_policy,
                 self.revision_policy,
             )
@@ -220,6 +222,25 @@ class ProjectLockedPolicyContextFacts:
         ):
             raise ValueError("project display facts differ from locked context")
         target, upstream = receipt.command.target.proposal, receipt.command.target.upstream
+        from app.modules.checkers.api.external_policy import (
+            validate_stored_external_checker_policies,
+        )
+
+        external_policies = validate_stored_external_checker_policies(
+            json.loads(self.external_checker_policies.value)
+        )
+        pre_body = json.loads(self.compiled_pre_submit_bundle.value)
+        post_body = json.loads(self.compiled_post_submit_policy.value)
+        external_hashes_match = (
+            external_policies.policies_sha256
+            == receipt.command.target.upstream.effective_pre_submit_plan_hash
+            and external_policies.pre_submit.model_dump(mode="json") == pre_body
+            and external_policies.pre_submit.policy_sha256
+            == self.pre_submit_policy_bundle_hash
+            and external_policies.post_submit.model_dump(mode="json") == post_body
+            and external_policies.post_submit.policy_sha256
+            == receipt.command.target.policy_hash
+        )
         if (
             (
                 self.project_id,
@@ -248,9 +269,8 @@ class ProjectLockedPolicyContextFacts:
                 upstream.pre_submit_bundle_hash,
             )
             or self.effective_policy.sha256 != self.effective_policy_hash
-            or self.compiled_pre_submit_bundle.sha256 != self.pre_submit_policy_bundle_hash
+            or not external_hashes_match
             or self.artifact_policy.sha256 != target.artifact_policy_hash
-            or self.compiled_post_submit_policy.sha256 != receipt.command.target.policy_hash
         ):
             raise ValueError("project locked policy facts differ from activation")
         require_complete_policy(

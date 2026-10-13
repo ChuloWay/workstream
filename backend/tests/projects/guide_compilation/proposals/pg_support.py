@@ -120,7 +120,14 @@ class PreparedProposal(PreparedGuideProposalOperation):
 
 class ProposalAuthority:
     def __init__(
-        self, session, actor, project_id, grant_id, *, on_consume=None, close_error=False,
+        self,
+        session,
+        actor,
+        project_id,
+        grant_id,
+        *,
+        on_consume=None,
+        close_error=False,
         resource_override=None,
     ):
         self.session, self.actor = session, actor
@@ -167,8 +174,21 @@ class ProposalAuthority:
 
 
 @asynccontextmanager
-async def proposal_case(url, *, classification="draft_ready", guide_version="v1", outcome=None):
-    async with database_case(url, classification=classification, guide_version=guide_version, outcome=outcome) as (values, factory, command):
+async def proposal_case(
+    url,
+    *,
+    classification="draft_ready",
+    guide_version="v1",
+    outcome=None,
+    checker_capabilities=None,
+):
+    async with database_case(
+        url,
+        classification=classification,
+        guide_version=guide_version,
+        outcome=outcome,
+        checker_capabilities=checker_capabilities,
+    ) as (values, factory, command):
         await finalize(factory, values, command)
         async with factory() as session:
             row = (
@@ -218,7 +238,7 @@ async def read_package(factory, command, actor, grant_id):
         raise exc from exc.__context__
 
 
-async def request_corrected_attempt(factory, actor, correction):
+async def request_corrected_attempt(factory, actor, correction, *, capabilities=None):
     """Enter the existing production human request port; no provider is invoked."""
     from app.adapters.artifacts import guide_document_manifest_port
     from app.modules.authorization.guide_compilation import (
@@ -232,11 +252,7 @@ async def request_corrected_attempt(factory, actor, correction):
         HumanAuthorizationContext,
         IdentityLinkStatus,
     )
-    from app.modules.checkers.catalogue import (
-        build_pre_submission_checker_catalogue,
-        project_guide_pre_submission_capabilities,
-    )
-    from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
+    from tests.checkers.external.support import capability_projection
     from app.modules.projects.guide_compilation.request_inputs import CompilationRequestInputs
     from app.modules.projects.guide_compilation.service import GuideCompilationService
     from tests.projects.guide_compilation.helpers import runtime_configuration
@@ -259,8 +275,7 @@ async def request_corrected_attempt(factory, actor, correction):
             ProjectGuideCompilationAuthorizationAdapter(kernel, prepared),
             request_inputs=CompilationRequestInputs(
                 guide_document_manifest_port(session),
-                project_guide_pre_submission_capabilities(build_pre_submission_checker_catalogue()),
-                current_post_submit_catalogue(),
+                capabilities or capability_projection(),
                 runtime_configuration(),
             ),
         )
@@ -269,32 +284,40 @@ async def request_corrected_attempt(factory, actor, correction):
         )
 
 
-async def finalize_corrected_attempt(factory, values, actor, correction):
+async def finalize_corrected_attempt(factory, values, actor, correction, *, outcome=None):
     """Run a scripted result through actual execution, projections and finalization."""
     from app.adapters.artifacts import guide_document_manifest_port
     from app.adapters.auth import (
-        artifact_policy_projection_authorization, guide_compilation_execution_authority,
-        guide_compilation_request_authority, guide_sufficiency_projection_authorization,
+        artifact_policy_projection_authorization,
+        guide_compilation_execution_authority,
+        guide_compilation_request_authority,
+        guide_sufficiency_projection_authorization,
         setup_finalization_authorization,
     )
-    from app.adapters.checkers import project_guide_approval_compiler
+    from app.adapters.checkers import external_checker_capability_projection
     from app.adapters.projects import project_guide_compilation_delivery_port
     from app.modules.projects.api import ProjectGuideSetupFinalizationCommand
     from app.modules.projects.api.guide_compilation import ProjectGuideCompilationDelivery
     from app.modules.projects.api.setup_identity import project_guide_compilation_task_id
     from tests.projects.guide_compilation.helpers import runtime_configuration
-    from tests.projects.guide_compilation.runtime_fixtures import ScriptedGuideRuntime, document_access
+    from tests.projects.guide_compilation.runtime_fixtures import (
+        ScriptedGuideRuntime,
+        document_access,
+    )
 
-    await request_corrected_attempt(factory, actor, correction)
+    async with factory() as session, session.begin():
+        capabilities = await external_checker_capability_projection(session)
+    await request_corrected_attempt(factory, actor, correction, capabilities=capabilities)
     async with factory() as session:
         setup = await session.get(ProjectSetupRun, str(correction.successor_setup_run_id))
     runtime = ScriptedGuideRuntime()
-    _, pre, post = project_guide_approval_compiler()
+    if outcome is not None:
+        runtime.outcome = outcome
     coordinator = project_guide_compilation_delivery_port(
         factory,
         material_factory=guide_document_manifest_port,
         document_access_factory=document_access,
-        pre_capabilities=pre, post_capabilities=post,
+        checker_capabilities=capabilities,
         request_authority=guide_compilation_request_authority,
         execution_authority=guide_compilation_execution_authority,
         configuration_factory=runtime_configuration,
@@ -304,30 +327,37 @@ async def finalize_corrected_attempt(factory, values, actor, correction):
         finalization_authorization_factory=setup_finalization_authorization,
     )
     delivery = ProjectGuideCompilationDelivery(
-        project_id=values["project"], guide_id=values["guide"],
+        project_id=values["project"],
+        guide_id=values["guide"],
         source_snapshot_id=setup.source_snapshot_id,
         setup_run_id=correction.successor_setup_run_id,
         setup_generation=correction.successor_setup_generation,
-        task_id=project_guide_compilation_task_id(str(correction.successor_setup_run_id), correction.successor_setup_generation),
+        task_id=project_guide_compilation_task_id(
+            str(correction.successor_setup_run_id), correction.successor_setup_generation
+        ),
     )
     receipt = await coordinator.run(delivery)
     assert receipt["status"] == "policy_draft_ready", receipt
     assert runtime.calls == 1
     from app.modules.projects.guide_compilation.models import ProjectGuideSetupFinalization
+
     async with factory() as session:
         finalization = await session.get(
             ProjectGuideSetupFinalization, UUID(str(receipt["finalization_id"]))
         )
         compilation_id = finalization.compilation_id
     return ProjectGuideSetupFinalizationCommand(
-        project_id=values["project"], guide_id=values["guide"],
+        project_id=values["project"],
+        guide_id=values["guide"],
         setup_run_id=correction.successor_setup_run_id,
         setup_generation=correction.successor_setup_generation,
         compilation_id=compilation_id,
     )
 
 
-async def seed_review_actor(factory, project_id, *, actor=None, role="project_manager", scope="project"):
+async def seed_review_actor(
+    factory, project_id, *, actor=None, role="project_manager", scope="project"
+):
     """Seed stored grant variants; request/approval authority guards remain enabled."""
     from datetime import UTC, datetime
     from app.modules.actors.models import ActorProfile, ActorIdentityLink
@@ -336,46 +366,98 @@ async def seed_review_actor(factory, project_id, *, actor=None, role="project_ma
     async with factory() as session, session.begin():
         if actor is None:
             actor = ActorIdentityFacts(new_record_id(), new_record_id(), ActorKind.HUMAN)
-            session.add(ActorProfile(id=str(actor.actor_profile_id), actor_kind="human", status="active",
-                                    provisioning_method="automatic_first_access", created_by="proposal-fixture"))
+            session.add(
+                ActorProfile(
+                    id=str(actor.actor_profile_id),
+                    actor_kind="human",
+                    status="active",
+                    provisioning_method="automatic_first_access",
+                    created_by="proposal-fixture",
+                )
+            )
             await session.flush()
-            session.add(ActorIdentityLink(id=str(actor.identity_link_id), actor_profile_id=str(actor.actor_profile_id),
-                                         issuer="https://identity.flowresearch.tech", subject=str(actor.actor_profile_id),
-                                         subject_kind="human", status="active", linked_by="proposal-fixture",
-                                         last_verified_at=datetime.now(UTC)))
+            session.add(
+                ActorIdentityLink(
+                    id=str(actor.identity_link_id),
+                    actor_profile_id=str(actor.actor_profile_id),
+                    issuer="https://identity.flowresearch.tech",
+                    subject=str(actor.actor_profile_id),
+                    subject_kind="human",
+                    status="active",
+                    linked_by="proposal-fixture",
+                    last_verified_at=datetime.now(UTC),
+                )
+            )
             await session.flush()
-        grant = await grant_fixture_admin_role(session, actor.actor_profile_id, role=role, scope=scope,
-                                               project_id=project_id if scope == "project" else None)
+        grant = await grant_fixture_admin_role(
+            session,
+            actor.actor_profile_id,
+            role=role,
+            scope=scope,
+            project_id=project_id if scope == "project" else None,
+        )
         return actor, grant.id
 
 
 async def revoke_review_grant(factory, actor, grant):
     """Use the database's real revoke transition with an attributed administrator."""
-    administrator, admin_grant = await seed_review_actor(factory, None, role="access_administrator", scope="system")
+    administrator, admin_grant = await seed_review_actor(
+        factory, None, role="access_administrator", scope="system"
+    )
     async with factory() as session, session.begin():
-        result = await session.execute(text(
-            "UPDATE admin_role_grants SET status='revoked',version=2,revoked_by_actor_profile_id=:actor,"
-            "revoked_by_admin_role_grant_id=:authorizer,revoked_at=now(),revoked_reason='Manager turnover' WHERE id=:id AND target_actor_profile_id=:target"
-        ), {"actor": str(administrator.actor_profile_id), "authorizer": admin_grant, "id": grant, "target": str(actor.actor_profile_id)})
+        result = await session.execute(
+            text(
+                "UPDATE admin_role_grants SET status='revoked',version=2,revoked_by_actor_profile_id=:actor,"
+                "revoked_by_admin_role_grant_id=:authorizer,revoked_at=now(),revoked_reason='Manager turnover' WHERE id=:id AND target_actor_profile_id=:target"
+            ),
+            {
+                "actor": str(administrator.actor_profile_id),
+                "authorizer": admin_grant,
+                "id": grant,
+                "target": str(actor.actor_profile_id),
+            },
+        )
         assert result.rowcount == 1
 
 
-async def seed_selected_review_revision_inputs(factory, command, actor, *, human_review_required=True):
+async def seed_selected_review_revision_inputs(
+    factory, command, actor, *, human_review_required=True
+):
     """Select valid review/revision inputs through their authorized mutation owner."""
     from app.modules.actors.models import ActorProfile, ActorIdentityLink
     from app.modules.actors.service import ResolvedActor
     from app.modules.authorization.kernel import AuthorizationService
     from app.modules.authorization.prepared import PreparedAuthorizationService
     from app.modules.authorization.repository import AdminAuthorizationRepository
-    from app.modules.authorization.runtime import ActorStatus, HumanAuthorizationContext, IdentityLinkStatus
-    from app.modules.projects.policy_mutation_service import ProjectPolicyMutationService, NO_CURRENT_POLICY_ETAG
+    from app.modules.authorization.runtime import (
+        ActorStatus,
+        HumanAuthorizationContext,
+        IdentityLinkStatus,
+    )
+    from app.modules.projects.policy_mutation_service import (
+        ProjectPolicyMutationService,
+        NO_CURRENT_POLICY_ETAG,
+    )
     from app.modules.projects.schemas import ReviewPolicyInput, RevisionPolicyInput
 
     for kind, payload in (
-        ("review", ReviewPolicyInput(human_review_required=human_review_required, review_preference_window_seconds=3600, review_lease_duration_seconds=1800,
-                                   allowed_decisions=["accept", "needs_revision", "reject"])),
-        ("revision", RevisionPolicyInput(max_revision_rounds=2, revision_deadline_hours=48,
-                                       allowed_resubmission_states=["needs_revision"])),
+        (
+            "review",
+            ReviewPolicyInput(
+                human_review_required=human_review_required,
+                review_preference_window_seconds=3600,
+                review_lease_duration_seconds=1800,
+                allowed_decisions=["accept", "needs_revision", "reject"],
+            ),
+        ),
+        (
+            "revision",
+            RevisionPolicyInput(
+                max_revision_rounds=2,
+                revision_deadline_hours=48,
+                allowed_resubmission_states=["needs_revision"],
+            ),
+        ),
     ):
         async with factory() as session:
             resolved = ResolvedActor(
@@ -383,14 +465,30 @@ async def seed_selected_review_revision_inputs(factory, command, actor, *, human
                 await session.get(ActorIdentityLink, str(actor.identity_link_id)),
             )
             ctx = HumanAuthorizationContext(
-                actor_profile_id=actor.actor_profile_id, actor_kind=ActorKind.HUMAN,
-                actor_status=ActorStatus.ACTIVE, identity_link_id=actor.identity_link_id,
-                identity_link_status=IdentityLinkStatus.ACTIVE, request_id=uuid4(), correlation_id=uuid4(),
+                actor_profile_id=actor.actor_profile_id,
+                actor_kind=ActorKind.HUMAN,
+                actor_status=ActorStatus.ACTIVE,
+                identity_link_id=actor.identity_link_id,
+                identity_link_status=IdentityLinkStatus.ACTIVE,
+                request_id=uuid4(),
+                correlation_id=uuid4(),
             )
             repository = AdminAuthorizationRepository(session)
             kernel = AuthorizationService(session, ctx, admin_repository=repository)
             prepared = PreparedAuthorizationService(session, ctx, kernel, repository)
             service = ProjectPolicyMutationService(session)
-            mutate = service.replace_review_policy if kind == "review" else service.replace_revision_policy
-            await mutate(resolved, prepared, uuid4(), NO_CURRENT_POLICY_ETAG, command.project_id, command.guide_id, payload)
+            mutate = (
+                service.replace_review_policy
+                if kind == "review"
+                else service.replace_revision_policy
+            )
+            await mutate(
+                resolved,
+                prepared,
+                uuid4(),
+                NO_CURRENT_POLICY_ETAG,
+                command.project_id,
+                command.guide_id,
+                payload,
+            )
             await session.commit()

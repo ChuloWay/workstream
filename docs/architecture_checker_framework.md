@@ -45,72 +45,16 @@ It is either `completed`, with closed findings and a passed/failed verdict, or
 `infrastructure_failed`, with one of the existing capacity, deadline, material,
 implementation or invalid-output codes. Missing images, crashes and malformed
 or oversized output cannot become a silent pass. This contract and the
-immutable registry are available to later owner operations; no external
-launcher, routing path or execution factory is installed yet.
+immutable registry are consumed by selected hidden PRE/POST owners through an
+explicit Rust service adapter. Production request/completion handlers are
+registered; public contributor intake remains PILOT-12 work.
 
-The following catalogue contracts remain the currently executing behavior
-until the clean cutover replaces them. They are not alternate external wire
-formats.
+Both executable catalogues, their runtime factories and their request/result
+decoders are removed. Requests use the default-plus-external PRE contract and
+external POST contract. Stored predecessor rows retain their original provenance
+and business-version digests; they do not supply an alternate execution path.
 
-The following illustrative provenance envelope uses a pre-submission catalogue
-`v1` definition; it is not a universal serialized result schema. The
-[current post-submit contract](#current-post-submit-contract) uses
-`PostSubmitMemberResult` with schema `post_submit_structural_result` and its
-separate bounded fields.
-
-Illustrative pre-submission provenance envelope:
-
-```json
-{
-  "definition": {
-    "dispatch_authority": "pre_submission_catalogue",
-    "definition_id": "policy.submission_packet.validate",
-    "definition_version": "v1",
-    "public_name": "check_submission_packet",
-    "source": "locked_project_policy"
-  },
-  "policy_trace": {
-    "effective_plan_hash": "sha256:<64 lowercase hex>",
-    "rule_instance_id": "sha256:<64 lowercase hex>",
-    "locked_policy_hash": "sha256:<64 lowercase hex>"
-  },
-  "status": "passed",
-  "severity": "info",
-  "code": "submission_packet_complete",
-  "message": "Submission packet is complete.",
-  "suggested_fix": null,
-  "evidence": [],
-  "metadata": {}
-}
-```
-
-`definition` and `policy_trace` are typed provenance, not arbitrary metadata.
-The discriminating `dispatch_authority` gives `definition_id/version` exact
-meaning: for `pre_submission_catalogue` they are the stable catalogue
-definition ID/version, while the effective plan separately binds the top-level
-catalogue ID/version and manifest hash; for `durable_checker_registry` they are
-the registered durable checker ID/version.
-For Workstream defaults, `source=workstream_default` and policy-only fields may
-be null under the closed schema. Serialization preserves this exact nesting.
-Persistence uses explicit authority-neutral columns or schema-validated typed
-JSON fields for every member; none may be stored only inside open-ended
-`metadata`.
-
-Status:
-
-- passed
-- warning
-- failed
-
-Severity:
-
-- info
-- low
-- medium
-- high
-- critical
-
-## External Checker Registry And Current Catalogues
+## External Checker Registry And Selected Policies
 
 The immutable external registry publishes one capability/version/phase with an
 exact OCI `sha256` digest, bounded configuration/input/output JSON Schemas and
@@ -123,22 +67,16 @@ schema, request and entry digest while denying update, delete and truncate.
 Registry metadata grants no policy selection, activation, execution or routing
 authority. Consumers read an exact registry ID and digest; there is no
 "latest" lookup and no registry-driven Python plugin or callable discovery.
-The registry supports both `pre_submit` and `post_submit`, but no external
-execution is wired in this foundation.
+The registry supports both `pre_submit` and `post_submit`. Registration alone
+grants no execution; selected owners execute only exact approved image bindings
+with fresh phase authority and ART-verified material.
 
-Until the replacement proof and clean cutover, the single versioned
-`PreSubmissionCheckerCatalogue` remains the pre-submit dispatch authority and
-the current process-wide post-submit catalogue remains the post-submit dispatch
-authority. They do not execute registry entries in parallel.
-
-The current hidden catalogue implementation is process-wide and immutable.
-Deployment configuration may name disabled stable definition IDs only at startup. Unknown
-or duplicate IDs, invalid dependencies/order, unknown capabilities, and unsafe
-disabled behavior fail startup validation. The pure effective-plan compiler
-binds project, guide version, source snapshot, effective policy, pre-submit
-policy, catalogue manifest, availability state, ordered definition/configuration
-hashes, and deterministic rule-instance identities. It does not read artifacts
-or invoke either pre-submit or durable checkers.
+The trusted compiler binds approved requirement identities to exact immutable
+registry entries, image/configuration/schema digests and ordered PRE/POST
+policies. PRE includes the single versioned Workstream default. No executable
+pre-submit or post-submit catalogue remains, and no registry-driven Python
+implementation discovery is allowed. Retained catalogue identities remain
+immutable provenance for earlier records; they do not select new execution.
 
 External registry fields include:
 
@@ -152,38 +90,29 @@ External registry fields include:
   decision receipt.
 
 Capability names must not drift between project guides, approved policy
-bindings, registry entries and checker results. Later policy work must bind the
+bindings, registry entries and checker results. Approved policies bind the
 exact digest, configuration and schema identities; registration alone changes
-no locked task.
+no locked task or approved guide generation.
 
-## Current post-submit contract
+## Post-submit contract
 
-CHECKERS owns one immutable initial-v0.1 catalogue, one implementation per
-checker ID, and closed evaluation-request/result contracts. PROJECTS uses that
-same catalogue to compile one canonical policy body. Active PROJECTS, TASKS and
-CHECKERS consumers validate that body and its exact hash; persisted required,
-warning and blocking summaries must agree with it. Unsupported development
-bodies reject without translation or an alternate reader.
+POST requests carry the task's locked `LockedExternalPostSubmitPolicy` and the
+exact immutable Submission/ART identity. One request/result contract drives
+reservation, execution, completion and recovery. Every approved digest-pinned
+image receives verified read-only material; its normalized findings and observed
+isolation become immutable evidence for the existing routing owner.
 
-The eight mandatory structural defaults and the selectable
-`check_acceptance_criteria_present` have conformance fixtures. Criteria presence
-does not prove that work satisfies the criteria. Unsupported substantive
-automation remains a capability gap; an explicitly approved `human_review`
-disposition remains valid without a checker binding.
+Policies bind exact registry entries, image digests, configuration and schema
+hashes. TASK and ART validate the locked guide, source, policy, assignment,
+predecessor and material context before admission or evaluation. Checker results
+supply work evidence and do not grant acceptance authority. Passing required
+POST checks routes through the existing human-review or shared final-acceptance
+branch selected by the locked ReviewPolicy.
 
-The single policy-context check compares actual Task and Submission locks:
-guide version, source snapshot, effective artifact policy, pre-submit bundle,
-post-submit policy, review policy and revision policy. It has no economic-policy
-prerequisite. Compilation and ContributionPolicy task references are not yet
-persisted and are not fabricated as checker inputs. Project ownership remains
-checked by the owning services. Structural consistency grants no authorization.
-
-The canonical `policy_hash` binds ordered entries, configuration and exact
-catalogue/implementation identities. Domain project policy versions record
-changes to project rules; they do not select obsolete software implementations.
-ARCH-04C implements hidden phase execution; ARCH-04D2 supplies exact service authority. No public execution route or dispatcher is activated.
-POL-04B connects unified guide setup; POL-05B and POL-06B expose separate
-pre-submit and post-submit policy approvals.
+There is no catalogue request/result decoder, generic rule planner, alternate
+phase service or old execution path. Removing those implementations does not
+rewrite or delete stored records. Unsupported stored envelopes fail closed;
+stored historical facts cannot select a checker implementation.
 
 ## Durable execution custody
 
@@ -194,9 +123,8 @@ split attempts. Replay returns the original identity; it cannot restore an old
 request as current. Execution claims a PostgreSQL-timed execution lease and releases
 all locks and prepared authority before materialization or evaluator work.
 
-The existing in-process post-submit structural-handler registry evaluates exactly
-the compiled entries against ART-verified material; it is distinct from the new
-external-image metadata registry. Finalization consumes separate action-specific authority,
+Selected POST execution runs every approved digest-pinned image against
+ART-verified immutable Submission material through the Rust service. Finalization consumes separate action-specific authority,
 checks the current fence and unexpired lease, and commits complete ordered closed
 members, terminal result and shared-outbox completion together. Expired-lease
 recovery retains the attempt; terminal infrastructure failures never restart or
@@ -210,24 +138,25 @@ I/O. Execute/finalize receipts are bound to the persisted phase facts by Postgre
 terminal replay validates both original receipts without appending new evidence.
 No new Celery task or public execution endpoint exists. ARCH-04E/B8 recheck
 currentness when consuming a completion event and apply the locked ReviewPolicy;
-their hidden handlers remain unregistered. CHECKERS never accepts a contribution
+their selected hidden handlers are registered in production composition. CHECKERS never accepts a contribution
 or mutates TASK state.
 Migration 0008 refuses retained checker history before changing schema rather
 than inventing request lineage or deleting data.
 
 ## Blocking Policy
 
-The current catalogue behavior remains:
+Selected PRE requires the Workstream default and every required external image
+to pass. Selected POST derives `needs_revision` from a failed required image and
+`allow_review` from a complete passing set; TASK applies the locked review mode.
+The old severity lists belong only to retained structural evidence.
 
-- critical- and high-severity `failed` results block human review
-- medium-severity `failed` result creates reviewer warning
-- low-severity `failed` result creates informational note
-
-Approved machine policies can declare stricter blocking behavior. `SubmissionArtifactPolicy` and generated project `PreSubmitCheckerPolicy` govern pre-submit artifact rules. `PostSubmitCheckerPolicy` governs durable post-submit checker blocking.
+Approved project images enforce their exact required checks. Artifact custody
+cannot be weakened by project configuration, and a failed required image cannot
+be reclassified into a pass through an administrative grant.
 
 Project policy cannot weaken Workstream default submission artifact rules. Workstream defaults are applied before project policy. A project policy that attempts to require a forbidden artifact, remove hash requirements, allow credential-bearing storage references, or downgrade blocking defaults is a project setup defect.
 
-The clean-cutover target has one versioned Workstream default checker with
+The selected hidden flow has one versioned Workstream default checker with
 exactly four blocking behaviors:
 
 1. safely open exactly one ZIP within platform size limits, rejecting
@@ -240,9 +169,23 @@ exactly four blocking behaviors:
 
 Missing summary or attestation produces warnings only. Required-file, project
 size and forbidden-file rules belong to digest-pinned external project images.
-The default checker, ART custody and project images must replace every required
-outcome before either current catalogue is removed. Human reviewers continue
+The default checker, ART custody and approved project images replace the removed
+executable catalogues. Human reviewers continue
 to own final quality judgment.
+
+The selected `workstream.default` v1 component implements this closed result
+boundary. It consumes detached ART/TASK custody facts and reads verified bytes
+only through the existing CHECKERS-owned callback-scoped material capability;
+it receives no path or storage authority and introduces no CHECKERS-to-ART
+dependency. It reports four ordered blocking slots and separate warning-only
+summary/attestation absence; matched secret bytes and contributor text never
+enter its result. Malformed or
+unsafe contributor ZIPs are bounded work findings, while storage integrity,
+inspection timeout, stale predecessor and mixed-custody failures remain
+recoverable infrastructure outcomes. The unchanged-work check compares the
+canonical predecessor only when its locked task-rules digest is still current.
+The selected PRE owner calls this component before required project images;
+both executable catalogues are removed.
 
 The clean-cutover intake order is fixed. ART receives the ZIP, computes its
 SHA-256, verifies the stored bytes, safely opens it within platform limits and
@@ -261,11 +204,18 @@ External image execution never occurs inside that database transaction. A
 valid locked policy with no project pre-submit bindings is distinct from an
 unavailable required image and may proceed after the default checker passes.
 
+Guide activation refuses an approved compilation with unresolved required
+checker capabilities. After current manager authority and policy custody checks,
+the canonical HTTP `error.details.missing_capabilities` lists only each
+requirement ID, pre-submit or post-submit stage, and title. It contains no
+rationale, evidence paths or provider coordinates. Registration alone cannot
+clear a gap: a corrected compilation and approved binding are required.
+
 The target launcher and checker integration use the agreed Rust service and
 SDK. Registered OCI images are not thereby required to be written in Rust;
 their execution identity is the approved digest, schemas and resource limits.
 The hidden runtime mechanism now supplies the strict Rust SDK and long-lived
-service plus an unselected typed Python Unix-socket adapter. ART can issue one
+service plus an explicitly composed typed Python Unix-socket adapter. ART can issue one
 opaque request-bound grant only inside the existing pre-admission prepared-ZIP
 callback; the service independently verifies its sealed file/directory manifest
 and exact private-root location before a read-only mount. The service accepts
@@ -274,103 +224,33 @@ and config image ID all match, and owns no-network, non-root, capability-free,
 read-only sandbox launch, bounded output/deadline handling and cleanup. Hosted
 readiness requires `runsc`; local `runc` is reported as `docker-dev`.
 
-This hidden mechanism is not selected by either current catalogue and stores no
-run state. Policy binding, caller-owned phase authority/currentness, durable
-attempt and isolation receipts, the one default checker, project-image routing,
-F-020 and public intake remain required before cutover.
-The replacement must remove both current pre- and post-submit catalogues after
-end-to-end replacement proof. It must not retain a legacy/new parallel path,
-weaken caller-owned atomicity or bypass phase identity and currentness checks.
-
-## Current Required Core Checkers Pending Removal
-
-The names below describe the current catalogue pending replacement; they do
-not expand the four future Workstream defaults.
-
-### check_policy_context_present
-
-Ensures the task has locked guide, checker, review, and revision policy context.
-Award eligibility is locked on TaskAssignment for the attempt, stamped on the
-immutable Submission, and copied from that Submission to ReviewLease. It is not
-checker-policy context.
-
-### check_submission_packet
-
-Ensures submission has summary, output reference, and package/evidence where required.
-
-### check_evidence_present
-
-Ensures accepted work can be audited.
-
-### check_evidence_integrity
-
-Ensures the submission packet records content hashes for uploaded artifacts and that checker runs use those exact hashes.
-
-### check_acceptance_criteria_present
-
-Ensures a task has rubric or acceptance criteria.
-
-### check_required_files
-
-Validates required submission artifacts from the locked project pre-submit
-checker policy.
-
-### check_forbidden_files
-
-Blocks known forbidden artifacts, secrets, private keys, copied internal data, or artifacts forbidden by the locked project pre-submit checker policy.
-
-Default forbidden patterns include:
-
-- private keys
-- API tokens
-- `.env`
-- copied confidential client/source files
-- generated low-quality helper artifacts banned by project submission artifact policy
-- files not allowed in the submission packet
-
-### check_confidentiality_attestation
-
-Ensures the contributor explicitly attests that the submission does not contain prohibited client data, private source material, credentials, or copied platform artifacts.
-
-### check_low_quality_generated_artifacts
-
-Flags repeated low-quality generated patterns banned by project submission artifact policy, such as generic helper files, hidden-test leakage patterns, fabricated model files, placeholder evidence, or boilerplate reports that do not prove task-specific work.
-
-This mandatory default emits a medium-severity warning for placeholder signals.
-It cannot be removed or reclassified as a project-selected entry. Project
-blocking severities govern whether that warning requires contributor revision;
-only `check_acceptance_criteria_present` is selectable.
-
-Revision closure, task lifecycle movement, task readiness, and pre-review routing are enforced as lifecycle guards in v0.1. They must not be configured as checker policy names until a registered checker exists for that contract.
-
-The pre-review gate is a checker execution phase. The persisted task status during this phase is `evaluation_pending`.
+The Rust launcher owns sandbox execution; durable CHECKERS owners retain
+approved policy binding, phase authority/currentness, attempts, results and
+isolation receipts. F-020 requires corrected approved generation after missing
+capability registration; registration alone never clears the old warning.
+Production completion routes true-policy success to review_pending and eligible
+locked false-policy success through shared acceptance. Public false-guide
+activation remains PILOT-08 work; public intake remains PILOT-12 work. Local
+Rust/MinIO proof uses runc/docker-dev and makes no deployed or gVisor claim.
 
 ## Gate Mapping
 
-Project activation gate:
+- Project activation validates approved source/policy identities and exact
+  registry digests; missing required capability coverage blocks activation.
+- TASK screening and release retain their canonical locked-context and lifecycle
+  guards; registry publication alone grants no Task transition authority.
+- Selected PRE runs the four Workstream defaults and all required project images
+  before caller-owned immutable Submission creation.
+- Valid empty image bindings require no external-service configuration. The
+  fixed Unix provider is resolved only when an image executes; missing required
+  runtime configuration yields recoverable `implementation_unavailable` evidence.
+- Selected POST consumes committed Submission custody and produces durable
+  evidence. TASK's authorized completion operation alone changes lifecycle state
+  or invokes shared acceptance.
 
-- `check_policy_context_present`
-- project-specific guide completeness checks
-
-Task screening gate:
-
-- `check_policy_context_present`
-- `check_acceptance_criteria_present`
-- task lifecycle transition guards
-
-Submission quality gate:
-
-- `check_submission_packet`
-- `check_evidence_present`
-- `check_evidence_integrity`
-- `check_required_files`
-- `check_forbidden_files`
-- `check_confidentiality_attestation`
-- `check_low_quality_generated_artifacts`
-
-Pre-review gate phase:
-
-- project-configured registered checkers run against the locked submission and policy context
+Revision closure and task lifecycle movement remain owner guards, not generated
+checker names. Public false-policy guide activation is still blocked pending
+PILOT-08, and public contributor intake remains PILOT-12 work.
 
 ## Submission Artifact Policy And Pre-Submit Generation
 
@@ -405,9 +285,9 @@ policy.
 
 Workstream default submission artifact rules require:
 
-- summary
+- summary metadata, with absence warning-only
 - one outer ZIP whose exact identity and semantic manifest are generated by ART
-- contributor attestation
+- contributor attestation metadata, with absence warning-only
 - safe relative artifact paths
 - production artifact hashes shaped as `sha256:<64 lowercase hex>`
 - pre-cutover only: validated caller-supplied storage references and manifest;
@@ -426,15 +306,16 @@ Workstream default submission artifact rules require:
   advisory or locked project-specific unless an exact generic custody risk is
   proven
 
-The hidden pre-submit executor consumes one exact effective plan under ART
-scratch custody. It validates the commitment, inspection, semantic manifest and
-change-gate facts and returns bounded entry results. ART owns the immutable
-pre-submit evidence; these results are separate from post-submit CheckerRuns.
+The selected hidden PRE owner consumes one exact approved policy under ART
+scratch custody. It validates commitment, inspection, semantic manifest and
+change-gate facts and returns bounded default/external results. CHECKERS retains
+immutable selected run/evidence custody; ART owns verified bytes and admission.
+PRE results remain separate from post-submit CheckerRuns.
 
-POL-07B composes exactly two internal commands, `evaluate_pre_submission` and
+The earlier POL-07B phase facade composes two internal commands, `evaluate_pre_submission` and
 `evaluate_post_submission`. Hidden preparation calls the pre command once after
 reservation commits, including completed replay. The composition passes the
-same opaque reservation to the same ART evidence owner; it clears the consumed
+same opaque reservation through canonical selected custody; it clears the consumed
 prepared authorization and opens no transaction before ART's existing executor
 obtains fresh authority. Replay returns ART's canonical result unchanged.
 
@@ -452,7 +333,7 @@ deny-only. Controlled nonempty slots prove ART mechanics only. ARCH-04C supports
 that exact empty output set and owns durable execution. ARCH-04D2 supplies input,
 execute and finalize authority; ARCH-04E/B8 supply the hidden routing operation
 and completion handler, and 04F2 supplies its remediation branch. Production
-registration remains pending. A returned evaluation value is not a stored current
+request/completion registration is supplied by PILOT-04. A returned evaluation value is not a stored current
 result or acceptance.
 Retained run and submission history now use canonical AUTH and separate fixed
 contributor/manager projections. The alternate execution service and Celery worker are
@@ -504,48 +385,20 @@ Pre-submit results do not create durable `CheckerRun` records, do not move a
 task to `review_pending`, and do not return review decision values: `accept`,
 `needs_revision`, or `reject`.
 
-The unified `ProjectGuideCompilationAgent` proposes the artifact-intake
-contract alongside sufficiency and both checker-stage bindings in one result.
-It does not produce unrestricted checker code. Workstream's trusted
-checker compiler builds and validates the project checker specification during
-setup, then persists deterministic project-level checker logic using approved
-primitives such as:
+The unified `ProjectGuideCompilationAgent` proposes artifact intake, sufficiency
+and both checker-stage bindings in one constrained result. It proposes no
+unrestricted executable code. The trusted compiler resolves each required
+project check to an immutable Operator-registered image, validates bounded typed
+configuration against that entry's schema, and locks its exact digest and order.
+An unsupported required automated check blocks the guide; a presence check cannot
+stand in for a substantive evaluator. The removed primitive catalogue is not an
+alternate compiler or runtime path.
 
-- `validate_submission_packet`
-- `enforce_storage_scheme`
-- `require_manifest_field`
-- `verify_hash`
-- `require_file`
-- `require_minimum_evidence`
-- `forbid_artifact`
-- `require_attestation`
-- `limit_file_size`
-- `limit_package_size`
-- `limit_archive_size`
-- `limit_archive_entries`
-- `require_packaging`
-- `warn_low_quality_generated_artifact`
-
-`limit_package_size` evaluates total expanded bytes from ART's verified manifest,
-not compressed upload size. `limit_archive_size` separately evaluates the entire
-compressed ZIP's verified `ArtifactCommitment.byte_count`, including archive
-metadata, not the sum of compressed member sizes. It is an optional strict
-positive byte limit; null adds no project limit. `limit_archive_entries` evaluates that manifest's
-normalized outer ZIP entry count, including explicit and implied parent
-directories. Omitting a ZIP directory record cannot evade this limit. Nested archives count as
-files; this rule does not recursively unpack them. Project count is an optional
-strict positive integer; null adds no project limit. All three rules preserve ART's
-independent platform safety ceilings and block intake through the existing
-effective-plan result, without creating acceptance or exposing hidden routes.
-
-`warn_low_quality_generated_artifact` is warning-only. The trusted compiler
-rejects checker specifications that escalate that primitive to blocking.
-
-Project-specific executable checker code is a future extension path, not the
-default. That extension path must require static validation, generated tests,
-sandboxed execution, no network, no shell, no secrets, no database access,
-covered Project Manager approval of the exact code hash after those checks
-pass, and a locked code hash.
+Project-specific file/count/size/evidence requirements belong to these approved
+external checks. Workstream's independent ZIP/resource and credential safety
+bounds remain mandatory regardless of project configuration. Generated checker
+implementations remain later development work; registering an implemented image
+is distinct from asking a setup agent to generate or run contributor evaluation.
 
 Pre-submit checks are authoritative for intake. Post-submit runs supply the
 current evaluation evidence for TASK's locked-policy routing, not acceptance
@@ -560,8 +413,7 @@ effective intake policy and compiled pre-submit policy; a separate operation
 then deterministically projects the same result's post-submit component. It
 does not resume finalized setup or invoke `PostSubmitCheckerPolicyDerivationAgent`.
 
-Bindings select only implemented definitions/configurations from the exact
-CHECKERS-owned catalogue snapshot and trace to the guide's requirement inventory.
+Bindings select exact registered image/configuration/schema identities and trace to the guide's requirement inventory.
 All pre/post capability gaps block under the current compilation schema.
 Ordinary warnings may be acknowledged; unsupported automation cannot be silently
 reclassified as human review. Explicit approved `human_review` requirements
@@ -571,8 +423,8 @@ acceptance both reject any applicable approved `human_review` disposition.
 Passing every executable check cannot discharge that separate requirement.
 
 The unified output is a constrained proposal. Workstream's trusted compiler owns the
-canonical `PostSubmitCheckerPolicy.policy_body`, hash, default checker list,
-and execution order. Runtime checker execution loads the locked compiled
+canonical `PostSubmitCheckerPolicy.policy_body`, hash and ordered external
+bindings. Workstream defaults belong to PRE, not a duplicated POST list. Runtime checker execution loads the locked compiled
 policy; it does not call the setup derivation agent to judge a contributor
 submission. A model-based runtime evaluator would be a separate supported,
 registered checker, not an automatic consequence of this setup flow.
@@ -590,7 +442,9 @@ The first two gates replace external origin qualification and task ingestion for
 
 ## Project-Specific Checkers
 
-Each project can register specialized checkers.
+A system-scoped Operator registers specialized image implementations. Covered
+Project Managers approve exact project bindings; a project grant alone grants
+no registry publication authority.
 
 Examples:
 
@@ -609,32 +463,19 @@ Examples:
 ## Post-Submit Compiler Boundary
 
 `PostSubmitCheckerPolicy` is produced by Workstream's trusted post-submit
-compiler from a constrained specification. The compiler owns the canonical
+compiler by projecting the exact approved external POST policy. The compiler owns the canonical
 runtime body and hash. Setup agents may propose registered checker names and
 routing classifications, but they do not produce executable runtime code and
 they do not decide submission outcomes at runtime.
 
-The compiler always includes the platform default durable checkers in
-`default_checkers` and `execution_checkers`:
+Stored pre-cutover bodies preserve their original ordered entries and hashes
+as immutable provenance, without a runtime decoder or replay executor.
 
-- `check_submission_packet`
-- `check_policy_context_present`
-- `check_evidence_present`
-- `check_evidence_integrity`
-- `check_required_files`
-- `check_forbidden_files`
-- `check_confidentiality_attestation`
-- `check_low_quality_generated_artifacts`
-
-Default-only projects are valid. The single compiled body stores ordered
-entries; default, required, warning and execution lists are derived from them.
-Project selections cannot remove, rename, reorder or reclassify mandatory
-defaults. Only registered selectable entries may be added. Unknown or
-conflicting selections reject before persistence.
-
-Platform blocking severities are `critical` and `high`. Project policy may add
-stricter blocking severities, but it cannot remove those platform blocking
-severities.
+Those bodies are retained provenance only. New POST bodies contain the exact
+approved external entries and `policy_sha256`; an empty approved POST binding
+set is valid. Saved requirement, capability/version, stage and configuration
+substitution rejects before projection. All required image results are consumed
+by the selected outcome owner, without runtime catalogue lookup.
 
 ## Checker Run Flow — Target Contract
 
@@ -646,14 +487,14 @@ invocation, recovers B6's exact request and fences both execution and terminal
 replay/publication. B8 delivers the hidden completion handler, and ARCH-04F2
 extends its existing TASK/AUTH outcome operation so an exact current
 contributor-correctable result routes to `needs_revision` under either locked
-ReviewPolicy mode. Both handlers remain unregistered; automatic production
-delivery is unavailable. Known missing or corrupt input after ART authorization records a
+ReviewPolicy mode. Selected request and completion handlers are registered in
+production composition, with exact invocation authority and replay custody. Known missing or corrupt input after ART authorization records a
 terminal infrastructure failure only after cleanup and fresh finalization
 authorization; it does not route the task. Exact replay does not reread storage.
 Denied material access and unexpected failures remain nonterminal. ARCH-04F adds
-replacement intake and authorized recovery after the delivered hidden
-remediation handoff; those remaining boundaries gate public intake and enabling
-the false-policy acceptance path. The true `allow_review` route may ship first.
+implemented hidden exact-cause replacement intake and reason-bound Operator
+retry after the remediation handoff. Public intake and false-policy guide
+activation remain separate prerequisites for the complete public journey.
 ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered
 with output-file authority unavailable; exact input authority is implemented.
 The flow below is not a claim that the complete journey is live in production.
@@ -661,18 +502,18 @@ The flow below is not a claim that the complete journey is live in production.
 ```text
 Draft packet
 -> load locked task context
--> load locked EffectiveProjectSubmissionArtifactPolicy hash
--> load locked PreSubmitCheckerPolicy compiled bundle hash
--> run pre-submit intake checks
+-> safely inspect ZIP in bounded private ART scratch
+-> run the four Workstream default checks with server-verified digest/manifest
+-> execute every approved external PRE image against verified read-only files
 -> create Submission only when blocking pre-submit checks pass
 -> automatically lock submission
 -> queue automatic pre-review CheckerRun
 -> validate locked PostSubmitCheckerPolicy id/version/hash/body
--> execute locked PostSubmitCheckerPolicy execution_checkers
+-> execute every exact locked external POST image
 -> store CheckerResult records
 -> calculate blocking status
--> commit final CheckerRun result/recommendation, required verified output bindings and completion event
--> TASK consumes the current result: publish allow_review manifest/current pointer and review_pending atomically when eligible
+-> commit final CheckerRun result/recommendation, normalized JSON evidence and completion event
+-> TASK consumes the current result: true -> review_pending; eligible locked false -> shared FinalAcceptance/TASK/CON/awards atomically
 -> TASK projects an exact current contributor-fixable failure as needs_revision with the retained manifest recommendation and no Review
 -> project/setup faults remain internal task_setup_blocked, never contributor blame
 -> if checker infrastructure fails: keep in checker retry handling
@@ -681,8 +522,7 @@ Draft packet
 The checker run must bind to one immutable submission version. If the contributor uploads a replacement file, the platform creates a new submission version and reruns checks.
 
 `evaluation_pending` is the persisted state while post-submit checker execution
-or infrastructure retry is active. After checker results, immutable output/log
-artifact bindings, and completion facts commit atomically, the TASK-owned
+or infrastructure retry is active. After checker results, normalized JSON evidence and completion facts commit atomically, the TASK-owned
 handler performs the routes above through its own transaction and authority:
 passing work moves to `review_pending`, while
 contributor-fixable blocking failures may move to `needs_revision`. The routing
@@ -704,14 +544,15 @@ Submission/result/manifest/receipt lineage, and creates no Review,
 FinalAcceptance, ContributionRecord or award in either ReviewPolicy mode. Exact
 replay returns the retained outcome without repeating effects. Contributors
 continue to receive only the existing bounded checker-history projection; no new
-public API is added. Replacement intake, setup-fault and Operator recovery,
-production composition and public intake remain required before public cutover.
+public API is added. Exact-cause replacement and Operator retry are implemented hidden owners;
+manager-visible setup-fault hold and public intake remain before public cutover; selected production
+composition is implemented.
 The direct CHECKERS-to-TASK mutation, fabricated system actor and alternate
-Celery gate are removed. Hidden durable execution and exact service authority are implemented; automatic
-routing remains unregistered. ARCH-04E2-B supplies the hidden authorized
+Celery gate are removed. Hidden durable execution and exact service authority are implemented; selected automatic
+request/completion delivery is registered. ARCH-04E2-B supplies the hidden authorized
 outcome operation; B8 supplies hidden completion delivery; ARCH-04F2 extends
-that operation with remediation. Live composition and the remaining 04F
-replacement/recovery boundaries remain pending.
+that operation with remediation. Manager-visible setup-fault hold, public intake and public false-guide activation
+remain pending.
 
 `review_pending` marks readiness for the separately owned WS-REV lifecycle.
 WS-REV alone creates `ReviewPacketManifest`, review queues, reviewer leases,
@@ -726,10 +567,10 @@ and there is no Review or review decision ID. Human review can also produce
 
 If a checker crashes or cannot run because of platform infrastructure, the
 checker run remains failed as an infrastructure failure and the task does not
-move to human review. The planned retry contract requires Operator
+move to human review. The implemented hidden retry contract requires Operator
 `operations.checker.retry`, a reason, a new attempt/supersession record, and
-append-only audit evidence. That action is currently unavailable; no public
-retry or repair route survives the alternate execution removal.
+append-only audit evidence. That action is available only through the canonical hidden recovery owner;
+no public retry or repair route is added.
 
 This terminal retry is distinct from transport redelivery or recovery of an
 unfinished provider call. In-flight recovery retains its logical attempt and
@@ -793,8 +634,8 @@ locked post-submit policy body, or hidden task setup details.
 ARCH-04C retains closed, ordered post-submit checker identity and implementation
 version, status, code, failure category, severity and the bounded counter fields
 of `PostSubmitMemberResult`. It also retains exact request/result generation and
-digests, locked policy lineage and verified material custody. Current structural
-handlers emit empty counters. Explanations and suggested fixes in history are
+digests, locked policy lineage and verified material custody. Retained structural
+results have empty counters; selected image results use their closed JSON schema. Explanations and suggested fixes in history are
 derived deterministically from the closed code; raw handler messages and arbitrary
 metadata are not retained.
 
@@ -821,15 +662,14 @@ ARCH-04C adds neither full-log reads nor retry/repair controls.
 
 ## Recovery, Not Checker Override
 
-`operations.submission_gate.repair` and `operations.checker.retry` are planned,
-unavailable actions. The following describes their required future authority
-and evidence contract, not existing callable recovery routes.
+`operations.checker.retry` has a hidden reason-bound Operator owner with fresh
+authority and immutable attempt/audit custody. `operations.submission_gate.repair`
+remains unavailable. Neither grants a public override or bypasses checker results.
 
 Critical- and high-severity checker failures cannot be converted into review
 readiness by an administrative grant. A covered Project Manager may repair task
-setup under `project.task.manage`. Future Operator submission-gate repair and
-checker retry must be limited to the registered recovery purpose once their
-canonical owner implementation and AUTH activation are delivered.
+setup under `project.task.manage`. Future Operator submission-gate repair and current hidden checker retry must
+remain limited to their exact registered recovery purposes.
 
 Recovery requires:
 
@@ -934,22 +774,24 @@ No manual execution endpoint accompanies these reads. See the
 
 ### Shared evaluation content capacity
 
-ARCH-04E1B-B5 provides `PostSubmissionEvaluationContent` for both preparation and
-later identified requests. It enforces the existing locked catalogue, policy
-consistency and structural field limits, plus 1 MiB minus a 1,024-byte reserve
-for the finite request identity envelope. The full request retains its 1 MiB
-limit and canonical digest. Catalogue and policy identities are unchanged.
+ART checks the canonical selected POST content against the request capacity
+before durable admission. The content binds the exact approved external policy,
+verified artifact/manifest, and checked packet; the removed catalogue content
+type and preparation adapter are not retained as executable alternatives.
+See [the ART admission boundary](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission).
 
-The typed adapter projects every verified file and only required evidence with
-matching verified `evidence/{key}` files. Missing criteria remain empty text for
-the existing post-submit checker. This check does not execute evaluators or
-supply authority. See [the ART admission boundary](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission)
-for timing and cleanup. ARCH-04E1B-B6 reuses this projection with actual record
-identities and reserves generation one through the required TASK guard in the
-Submission transaction. The same commit retains exact creation/binding AUTH
-receipts and a bounded `PostSubmissionEvaluationRequested` outbox event.
-Select-only creation replay checks the original request and event without
-changing the current-generation fence. Request/completion handlers remain
-unregistered; this stored intent alone does not invoke checker execution or accept work.
+The existing Submission transaction reserves generation one through the TASK
+guard and retains exact creation/binding AUTH receipts and a bounded
+`PostSubmissionEvaluationRequested` outbox event. Exact creation replay checks
+the original request and event without changing the current-generation fence.
+The selected request/completion handlers consume those facts. Stored intent
+alone confers no execution or acceptance authority.
 Preparation has no stored Submission to observe and never replaces the TASK
 evaluation guard.
+
+External PRE and POST bindings may carry the same bounded, flat typed parameters.
+Approval validates their JSON values against the exact registered configuration
+schema and retains both the values and configuration digest in the locked policy.
+Empty PRE parameters remain absent from serialized bindings so reading historical
+compilation evidence does not change its original hash. Array values serialize
+as JSON arrays before schema validation and digest computation.

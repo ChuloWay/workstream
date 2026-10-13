@@ -127,12 +127,14 @@ async def prepare_post_policy(factory, command, actor, grant, setup_actor):
 
 
 async def operate(factory, actor, project_id, grant, operation, command, *, close_error=False, guide_close_error=False):
-    from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
     from app.modules.projects.post_policy.service import PostPolicyService
     from tests.projects.guide_compilation.proposals.pg_support import ProposalAuthority
 
     async with factory() as session, session.begin():
-        service = PostPolicyService(session, PostAuthority(session, actor, project_id, grant, close_error=close_error), current_post_submit_catalogue())
+        service = PostPolicyService(
+            session,
+            PostAuthority(session, actor, project_id, grant, close_error=close_error),
+        )
         kwargs = dict(actor=actor, request_id=uuid4())
         if operation == "review_package":
             kwargs["contribution"] = GuideContributionPolicyDiscovery(published_contribution_policy_port(session))

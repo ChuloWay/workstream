@@ -26,10 +26,9 @@ from app.modules.checkers.api.output_custody import (
     CheckerOutputReservation,
     CheckerOutputSlot,
 )
+from app.modules.checkers.execution_repository import stored_request
 from app.modules.checkers.models import CheckerRun
-from app.modules.checkers.api.post_submit import make_post_submit_request
 from app.modules.tasks.models import Submission, WorkstreamTask
-from tests.checkers.post_submit.support import request as checker_evaluation_request
 
 
 async def make_checker_output_reservation(
@@ -54,15 +53,12 @@ async def make_checker_output_reservation(
     )
     task = await session.get(WorkstreamTask, checker_run.task_id)
     assert submission is not None and task is not None
-    seed = checker_evaluation_request(project_id=UUID(task.project_id))
-    fields = seed.model_dump(exclude={"request_sha256"})
-    fields.update(
-        task_id=UUID(task.id),
-        assignment_id=UUID(submission.task_assignment_id),
-        submission_id=UUID(submission.id),
-        submission_version=submission.version,
-    )
-    evaluation = make_post_submit_request(**fields)
+    evaluation = stored_request(checker_run)
+    assert (evaluation.project_id, evaluation.task_id, evaluation.submission_id,
+            evaluation.submission_version, evaluation.assignment_id) == (
+                UUID(task.project_id), UUID(task.id), UUID(submission.id),
+                submission.version, UUID(submission.task_assignment_id),
+            )
     return CheckerOutputReservation(
         evaluation=evaluation,
         checker_run_id=UUID(checker_run.id),

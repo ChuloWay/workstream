@@ -540,6 +540,13 @@ class Submission(Base):
             "and artifact_binding_id is not null and artifact_content_id is not null)",
             name="artifact_lineage_shape",
         ),
+        CheckConstraint(
+            "(selected_post_submit_policy_sha256 is null and "
+            "selected_post_submit_policy_body is null) or "
+            "(selected_post_submit_policy_sha256 ~ '^sha256:[0-9a-f]{64}$' and "
+            "jsonb_typeof(selected_post_submit_policy_body)='object')",
+            name="selected_post_submit_policy",
+        ),
         Index(
             "ix_submissions_locked_source_snapshot",
             "locked_guide_source_snapshot_id",
@@ -592,6 +599,8 @@ class Submission(Base):
     )
     locked_post_submit_checker_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     locked_post_submit_checker_policy_body: Mapped[dict] = mapped_column(JSON, nullable=False)
+    selected_post_submit_policy_sha256: Mapped[str | None] = mapped_column(String(71))
+    selected_post_submit_policy_body: Mapped[dict | None] = mapped_column(JSONB)
     locked_review_policy_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     locked_review_policy_generation: Mapped[int] = mapped_column(Integer, nullable=False)
     locked_review_policy_hash: Mapped[str] = mapped_column(String(71), nullable=False)

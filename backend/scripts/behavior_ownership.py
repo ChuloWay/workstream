@@ -167,6 +167,52 @@ PILOT_04_RUNTIME_TARGETS = frozenset(
         "backend/app/modules/artifacts/preparation.py",
     }
 )
+PILOT_04_DEFAULT_CHECKER_TARGETS = frozenset(
+    {
+        "backend/app/modules/checkers/api/default_checker.py",
+        "backend/app/modules/checkers/default_checker.py",
+    }
+)
+PILOT_04_RETIRED_CATALOGUE_TARGETS = frozenset(
+    {
+        "backend/app/modules/artifacts/pre_submit_attempts.py",
+        "backend/app/modules/artifacts/pre_submit_evidence.py",
+        "backend/app/modules/checkers/api/historical_post_submit.py",
+        "backend/app/modules/checkers/api/policy_compilation.py",
+        "backend/app/modules/checkers/api/post_submit.py",
+        "backend/app/modules/checkers/api/pre_submit.py",
+        "backend/app/modules/checkers/api/pre_submit_catalogue.py",
+        "backend/app/modules/checkers/api/post_submit_catalogue.py",
+        "backend/app/modules/checkers/catalogue.py",
+        "backend/app/modules/checkers/compiler.py",
+        "backend/app/modules/checkers/effective_plan.py",
+        "backend/app/modules/checkers/post_submit_catalogue.py",
+        "backend/app/modules/checkers/post_submit_implementations.py",
+        "backend/app/modules/checkers/post_submit_contracts.py",
+        "backend/app/modules/checkers/pre_submit_execution.py",
+        "backend/app/modules/checkers/runner.py",
+        "backend/app/modules/projects/post_submit_policy.py",
+    }
+)
+PILOT_04_SELECTED_FLOW_TARGETS = frozenset(
+    {
+        "backend/app/modules/artifacts/selected_pre_submit_admission.py",
+        "backend/app/modules/artifacts/selected_pre_submit_execution.py",
+        "backend/app/modules/authorization/domain/pre_submit.py",
+        "backend/app/modules/authorization/pre_submit_authorization.py",
+        "backend/app/modules/checkers/api/canonical_values.py",
+        "backend/app/modules/checkers/api/evaluation_contract.py",
+        "backend/app/modules/checkers/api/external_policy.py",
+        "backend/app/modules/checkers/api/material.py",
+        "backend/app/modules/checkers/api/policy_custody.py",
+        "backend/app/modules/checkers/api/pre_submit_material.py",
+        "backend/app/modules/checkers/api/selected_post_submit.py",
+        "backend/app/modules/checkers/api/selected_pre_submit.py",
+        "backend/app/modules/checkers/selected_post_submit_execution.py",
+        "backend/app/modules/checkers/selected_pre_submit_coordination.py",
+        "backend/app/modules/checkers/selected_pre_submit_execution.py",
+    }
+)
 LOCAL_PILOT_HELPER_TARGETS = frozenset(
     {
         "backend/scripts/ensure_local_minio_bucket.py",
@@ -311,9 +357,7 @@ ARCH_04A_POST_SUBMIT_TARGETS = frozenset(
     {
         "backend/app/modules/checkers/api/post_submit.py",
         "backend/app/modules/checkers/api/post_submit_catalogue.py",
-        "backend/app/modules/checkers/post_submit_catalogue.py",
         "backend/app/modules/checkers/post_submit_contracts.py",
-        "backend/app/modules/checkers/post_submit_implementations.py",
     }
 )
 ARCH_02F_SUBMISSION_COMPOSITION_TARGETS = frozenset(
@@ -832,7 +876,7 @@ def _validate_additive_partition_transition(
     ]
     if (
         trusted_targets != sorted(trusted_targets)
-        or removed - (REV_04C_REMOVED_TARGETS | ARCH_04D2_REMOVED_TARGETS | ARCH_03D_REMOVED_TARGETS | TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS | ARCH_04B_SEAM_REMOVED_TARGETS)
+        or removed - (REV_04C_REMOVED_TARGETS | ARCH_04D2_REMOVED_TARGETS | ARCH_03D_REMOVED_TARGETS | TASK_CHECKER_CLEANUP_REMOVED_TARGETS | ARCH_03C2_REMOVED_TARGETS | OUTBOX_IDENTITY_REMOVED_TARGETS | V01_BASELINE_REMOVED_TARGETS | POL_03B_REMOVED_TARGETS | POL_04B_REMOVED_TARGETS | POL_05A_REMOVED_TARGETS | ARCH_03A_GUIDE_CONTEXT_REMOVED_TARGETS | ARCH_04B_SEAM_REMOVED_TARGETS | PILOT_04_RETIRED_CATALOGUE_TARGETS)
         or [current_by_target[item["target"]] for item in retained_trusted]
         != retained_trusted
     ):
@@ -850,6 +894,8 @@ def _validate_additive_partition_transition(
         | PILOT_04_REGISTRY_TARGETS
         | PILOT_10_EXPORT_TARGETS
         | PILOT_04_RUNTIME_TARGETS
+        | PILOT_04_DEFAULT_CHECKER_TARGETS
+        | PILOT_04_SELECTED_FLOW_TARGETS
         | LOCAL_PILOT_HELPER_TARGETS
         | MODULE_BOUNDARY_FOUNDATION_TARGETS
         | MODULE_PUBLIC_API_FOUNDATION_TARGETS

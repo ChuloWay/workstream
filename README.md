@@ -177,13 +177,20 @@ durable post-submit execution and unfinished-attempt recovery. ARCH-04D2 supplie
 exact service authority. ARCH-04E1A adds immutable route-neutral TASK source
 storage, detached source facts and accepted-effects contracts. B6 commits each
 new hidden Submission with its initial checker reservation and outbox request;
-automatic production delivery, routing and acceptance remain unavailable; hidden
-authorized outcomes are implemented. Project-guide ingestion stores original documents,
+selected production request/completion delivery now runs digest-pinned external
+images after the four Workstream defaults and approved external PRE checks.
+Passing true-policy results reach `review_pending`; eligible false-policy results
+invoke shared authorized acceptance atomically. Public contributor intake and
+false-guide activation remain separate pilot work. Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
 unified setup agent. Accepted originals are PDF, DOCX, PPTX and byte-preserved
 UTF-8 Markdown (`.md`); HTML and documentation sites are not guide inputs. Guide
 metadata in PostgreSQL also holds at least one required task example; the agent
 assesses the examples with the uploaded guide documents.
+
+Default-only projects need no external-service configuration. The fixed Rust
+provider is resolved only when a required project image executes; missing
+configuration for that image produces recoverable infrastructure evidence.
 Findings and policy proposals retain document-access evidence.
 
 [ART-07A1](.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) provides strict
@@ -464,8 +471,9 @@ AUTH/PREP decisions for claim, invocation and finalization. AUTH-OUTBOX-02 binds
 those decisions to immutable delivery receipts and supplies Celery delivery and
 bounded recovery scans. ARCH-03C2 registers exact assignment invalidation,
 with atomic publication from supported authority mutations and separate fixed
-feature authority. The authorized checker request and completion handlers are
-implemented but unregistered; production registration and live composition remain.
+feature authority. The selected checker request and completion handlers are
+registered in production composition; public contributor intake remains PILOT-12
+work. Registration does not establish deployed sandbox readiness.
 Delivery consumes `workstream.outbox` only under a validated non-eager prefork
 Celery process; other queues can use their appropriate execution pool.
 
@@ -760,10 +768,12 @@ canonical evidence ownership. The obsolete checker worker, manual execution and
 submission-finalize repair routes are removed. `evaluate_post_submission` now
 uses hidden durable execution with exact ARCH-04D2 service authority. ARCH-04E1A
 retains route-neutral source evidence. REV-04C uses its bounded exact-source
-verifier and hidden FinalAcceptance/TASK/CON participant, while no general
-routing publication writer/reader or current pointer exists. B7 implements hidden
+verifier and hidden FinalAcceptance/TASK/CON participant. The authorized TASK
+outcome owner publishes exact routing sources under CHECKERS current-run custody.
+B7 implements hidden
 request delivery with invocation fencing. B8 adds hidden completion routing with commit-before-ACK. Production
-registration remains ARCH-04E3 work.
+request/completion registration is supplied by the selected PILOT-04 composition;
+public contributor intake remains PILOT-12 work.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no
@@ -810,8 +820,8 @@ ARCH-03A completes the existing internal PROJECTS context port. New work selects
 one active activated guide; existing work resolves its exact frozen guide and
 policy selectors, including after a successor or contribution-policy retirement.
 The result includes the saved activation receipt, both checker-policy bodies,
-artifact/effective policy, review/revision semantics and recorded catalogue
-identities. It never substitutes current policies or reruns inference. CP08 uses
+artifact/effective policy, review/revision semantics and exact approved external
+image bindings. Retained earlier contexts preserve their immutable identities. It never substitutes current policies or reruns inference. CP08 uses
 that port in the existing TASK writers: screening stamps the activated contribution
 policy, claim copies it to the assignment, and hidden Submission creation copies
 the assignment's exact stamp. PostgreSQL rejects mismatched or replaced stamps.
@@ -856,12 +866,14 @@ input with scoped async file access and cleanup. ARCH-04B2 adds hidden typed
 checker-output storage, byte-free recovery and flush-only verified binding over
 the generic ART put/verification path. ARCH-04C supplies hidden durable execution,
 exact request/execution-lease custody, immutable member results and atomic completion events.
-The structural catalogue produces no output files, so output write/bind authority
-remains unavailable. ARCH-04D1 validates retained terminal material against canonical
+Selected image execution retains normalized bounded JSON results. Checker file
+output write/bind authority remains unavailable; neither executable catalogue
+remains in the live flow. ARCH-04D1 validates retained terminal material against canonical
 ART lineage. ARCH-04D2 supplies fixed-service input, execute and finalize authority,
 with PostgreSQL enforcement of exact execution/finalization receipts. ARCH-04E1A
-adds immutable source storage and detached contracts only. Automatic dispatch,
-production routing and public acceptance remain ARCH-04E work. The hidden
+adds immutable source storage and detached contracts. PILOT-04 composes selected
+hidden dispatch and production routing; public contributor intake and supported
+false-guide activation remain separate pilot work. The hidden
 [ARCH-04E2-B operation](.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E2B.md)
 consumes canonical fixed-router authorization and commits the actual receipt
 with its exact source and complete consequence. Locked true moves TASK to

@@ -43,9 +43,6 @@ async def test_invalid_transaction_or_authority_denies_before_product_sql(denial
     service = GuideActivationService(
         session,
         contribution=None,
-        planner=None,
-        pre_catalogue=None,
-        post_catalogue=None,
         authorization=Authority(),
     )
     with pytest.raises(GuideProposalError, match="authority_unavailable"):

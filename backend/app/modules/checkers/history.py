@@ -1,13 +1,13 @@
 """Fixed history projection from closed results and the sole currentness fence."""
 
-from sqlalchemy import select, literal_column, tuple_
+from sqlalchemy import select, tuple_
 
 from app.modules.checkers.models import CheckerRun, CheckerResult, CheckerSubmissionFence
 from app.modules.checkers.api.history import (
     ContributorCheckerHistory, ManagementCheckerHistory,
     ContributorCheckerResult, ManagementCheckerResult,
 )
-from app.modules.checkers.execution_results import RESULT_MESSAGES
+from app.modules.checkers.execution_results import RESULT_STATUS_MESSAGES
 
 
 class CheckerHistoryRepository:
@@ -38,9 +38,9 @@ class CheckerHistoryRepository:
         rows = (await self._session.execute(statement.order_by(CheckerRun.created_at, CheckerRun.id).limit(limit + 1))).mappings().all()
         values = []
         for row in rows[:limit]:
-            columns = [getattr(CheckerResult, name) for name in ("id", "checker_name", "status", "severity", "code", "failure_category")]
+            columns = [getattr(CheckerResult, name) for name in ("id", "checker_name", "status", "severity", "failure_category")]
             if manager:
-                columns.append(literal_column("(checker_results.status<>'passed' AND (checker_runs.request_json::jsonb #> '{policy,blocking_severities}') ? checker_results.severity)").label("blocks_review"))
+                columns.append((CheckerResult.status == "failed").label("blocks_review"))
             result_query = select(*columns).join(CheckerRun, CheckerRun.id == CheckerResult.checker_run_id).where(
                 CheckerResult.checker_run_id == row["id"],
                 CheckerResult.submission_id == str(submission_id), CheckerResult.task_id == str(task_id),
@@ -53,7 +53,7 @@ class CheckerHistoryRepository:
             results = (await self._session.execute(result_query.order_by(CheckerResult.member_order))).mappings().all()
             projected = []
             for member in results:
-                message, fix = RESULT_MESSAGES[member["code"]]
+                message, fix = RESULT_STATUS_MESSAGES[member["status"]]
                 visible = member["failure_category"] != "task_configuration"
                 item = {key: member[key] for key in ("id", "checker_name", "status", "severity")}
                 item.update(worker_message=message if visible else None, worker_suggested_fix=fix if visible else None)

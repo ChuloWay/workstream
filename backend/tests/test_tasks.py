@@ -173,7 +173,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         locked_pre_submit_checker_policy_id=str(references.pre_submit_policy_id),
         locked_pre_submit_checker_bundle_hash=references.pre_submit_policy_bundle_hash,
     )
-    from tests.checkers.post_submit.support import request as evaluation_request
+    from tests.checkers.execution.support import selected_request
     from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 
     base_context = submission_context_facts(
@@ -182,10 +182,10 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         submitter_contribution_policy_version_id=references.locked_contribution_policy_version_id,
         locked_project_context=references,
     )
-    post_policy = evaluation_request(project_id=references.project_id).policy
+    post_policy = selected_request(project_id=references.project_id).policy
     lineage = TaskPolicyLineage(**{
         **base_context.locked_policy.model_dump(),
-        "locked_post_submit_checker_policy_hash": post_policy.policy_hash,
+        "locked_post_submit_checker_policy_hash": post_policy.policy_sha256,
     })
     for field, value in lineage.model_dump().items():
         setattr(task, field, str(value) if field.endswith("_id") and field != "locked_contribution_policy_version_id" else value)
@@ -254,24 +254,6 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
         statement.get_execution_options().get("populate_existing") is True
         for statement in assignment_statements
     )
-
-    session.scalar = AsyncMock(return_value=assignment)
-    repository.get_latest_submission_for_task = AsyncMock(return_value=None)
-    task.status = "in_progress"
-    from app.modules.projects.post_submit_policy import build_project_post_submit_checker_spec, compile_project_post_submit_checker_spec
-    substituted = compile_project_post_submit_checker_spec(
-        project_id=str(references.project_id), guide_version=references.guide_version,
-        spec=build_project_post_submit_checker_spec(project_id=str(references.project_id),
-                                                   guide_version=references.guide_version, required_checkers=[]),
-    )
-    assert substituted.policy_hash != lineage.locked_post_submit_checker_policy_hash
-    task.locked_post_submit_checker_policy_body = substituted.model_dump(mode="json")
-    with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_context_invalid"):
-        await repository.select_submission_context(TaskSubmissionContextRequest(
-            task_id=task_id, assignment_id=assignment_id, contributor_id=contributor_id,
-            predecessor_submission_id=None,
-        ))
-
 
 @pytest.mark.asyncio
 async def test_task_repository_rejects_stale_submission_predecessor() -> None:
@@ -603,7 +585,7 @@ async def create_policy_bundle_for_guide(
     guide_id: str,
     artifact_proposal=None,
     *,
-    post_submit_required_checkers: list[str] | None = None,
+    post_submit_registry_spec=None,
 ) -> dict:
     for kind, body in (
         (
@@ -649,7 +631,7 @@ async def create_policy_bundle_for_guide(
         client, project_id, guide_id,
         artifact_proposal=artifact_proposal or task_artifact_proposal(),
         request_headers=auth_headers(),
-        post_submit_required_checkers=post_submit_required_checkers,
+        post_submit_registry_spec=post_submit_registry_spec,
     )
 
 
@@ -703,7 +685,9 @@ def complete_submission_payload(package_hash: str = "sha256:package-v1") -> dict
     }
 
 
-async def create_active_project(client: AsyncClient, *, slug: str = "task-queue-project") -> dict:
+async def create_active_project(
+    client: AsyncClient, *, slug: str = "task-queue-project", post_submit_registry_spec=None,
+) -> dict:
     project_response = await client.post(
         "/api/v1/projects",
         headers=auth_headers() | {"Idempotency-Key": str(new_record_id())},
@@ -723,7 +707,9 @@ async def create_active_project(client: AsyncClient, *, slug: str = "task-queue-
     )
     assert guide_response.status_code == 201, guide_response.text
     guide = guide_response.json()
-    await create_policy_bundle_for_guide(client, project["id"], guide["id"])
+    await create_policy_bundle_for_guide(
+        client, project["id"], guide["id"], post_submit_registry_spec=post_submit_registry_spec,
+    )
 
     await seed_active_guide_for_downstream_test(
         db_session.get_session_factory(),
@@ -1542,20 +1528,7 @@ async def test_release_rejects_crossed_post_submit_policy_sidecar(
     assert persisted_task is not None
     assert persisted_task.status == "screening"
     assert persisted_task.locked_post_submit_checker_policy_body == locked_body
-    assert "check_acceptance_criteria_present" not in [
-        entry["checker_id"]
-        for entry in locked_body["entries"]
-        if entry["classification"] == "project_required"
-    ]
-    assert "check_acceptance_criteria_present" not in [
-        entry["checker_id"] for entry in locked_body["entries"]
-    ]
-    assert "check_required_files" in [
-        entry["checker_id"]
-        for entry in locked_body["entries"]
-        if entry["classification"] == "platform_default"
-    ]
-    assert "check_required_files" in [entry["checker_id"] for entry in locked_body["entries"]]
+
 
 
 async def test_worker_task_response_redacts_locked_policy_hashes(
@@ -2448,7 +2421,8 @@ async def test_retained_submission_versions_are_readable_without_exposing_packet
     task_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project = await create_active_project(task_client)
+    from tests.checkers.external.support import post_registry_spec
+    project = await create_active_project(task_client, post_submit_registry_spec=post_registry_spec())
     started_task = await create_started_task(task_client, project["id"], monkeypatch)
     v1_payload = complete_submission_payload()
     v1_id = await seed_retained_submission(
@@ -2557,7 +2531,8 @@ async def test_retained_version_read_does_not_rewrite_prior_finalized_packet(
     task_client: AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    project = await create_active_project(task_client)
+    from tests.checkers.external.support import post_registry_spec
+    project = await create_active_project(task_client, post_submit_registry_spec=post_registry_spec())
     started_task = await create_started_task(task_client, project["id"], monkeypatch)
     v1_payload = complete_submission_payload()
     v1_id = await seed_retained_submission(
@@ -2904,63 +2879,3 @@ async def test_task_metadata_round_trips(task_client: AsyncClient) -> None:
     assert task is not None
     assert task.skill_tags == ["stem", "proofs"]
     assert task.source_payload_hash == "hash-123"
-
-
-@pytest.mark.parametrize("transition", ("screen", "release"))
-@pytest.mark.parametrize("phase", ("pre", "post_missing", "post_substituted"))
-async def test_catalogue_rollout_blocks_task_transition_without_writes(
-    task_client: AsyncClient, monkeypatch: pytest.MonkeyPatch, transition: str, phase: str,
-) -> None:
-    from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
-    from app.modules.checkers.runner import default_checker_registry
-
-    project = await create_active_project(task_client)
-    task = await create_draft_task(task_client, project["id"])
-    if transition == "release":
-        screened = await task_client.post(
-            f"/api/v1/tasks/{task['id']}/screen", headers=auth_headers(),
-            json={"reason": "initial screening"},
-        )
-        assert screened.status_code == 200, screened.text
-    task_query = select(WorkstreamTask.__table__).where(WorkstreamTask.id == task["id"])
-    audit_query = select(AuditEvent.id).where(AuditEvent.entity_id == task["id"]).order_by(AuditEvent.id)
-    async with db_session.get_session_factory()() as session:
-        before = dict((await session.execute(task_query)).mappings().one())
-        audits = list(await session.scalars(audit_query))
-    if transition == "screen":
-        assert before["status"] == "draft"
-        assert all(value is None for key, value in before.items() if key.startswith("locked_"))
-    else:
-        assert before["status"] == "screening"
-    if phase.startswith("post_"):
-        metadata = current_post_submit_catalogue()
-        registry = default_checker_registry()
-        missing = "check_acceptance_criteria_present"
-        if phase == "post_missing":
-            registry._checkers.pop(missing)
-        else:
-            registry._checkers[missing] = registry.resolve("check_evidence_present")
-        monkeypatch.setattr("app.modules.checkers.runner.default_checker_registry", lambda: registry)
-        assert current_post_submit_catalogue() == metadata
-    else:
-        from app.modules.checkers.catalogue import build_pre_submission_checker_catalogue
-        disabled = build_pre_submission_checker_catalogue().entries[0].stable_id
-        monkeypatch.setattr(get_settings(), "artifact_pre_submission_checker_disabled_ids", disabled)
-    if transition == "release":
-        historical = await task_client.get(
-            f"/api/v1/projects/{project['id']}/tasks/{task['id']}/locked-context", headers=auth_headers(),
-        )
-        assert historical.status_code == 200, historical.text
-    response = await task_client.post(
-        f"/api/v1/tasks/{task['id']}/{transition}", headers=auth_headers(),
-        json={"reason": "must remain unchanged"},
-    )
-    assert response.status_code == 422, response.text
-    expected = "installed checkers cannot execute the locked policies"
-    assert expected in response.text
-    async with db_session.get_session_factory()() as session:
-        assert dict((await session.execute(task_query)).mappings().one()) == before
-        assert list(await session.scalars(audit_query)) == audits
-        assert list(await session.scalars(select(TaskAssignment.id).where(
-            TaskAssignment.task_id == task["id"],
-        ))) == []

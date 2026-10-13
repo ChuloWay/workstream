@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.actors.service import ResolvedActor
+from app.core.identifiers import new_record_id
 from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.repository import AdminAuthorizationRepository
@@ -26,7 +27,6 @@ from tests.committed_guide_fixtures import (
     seed_setup_service_for_compiled_fixture,
 )
 from tests.project_create_fixtures import seed_authorized_project
-from tests.migration_fixtures import current_art_attempt_seed_schema
 from tests.projects.guide_compilation.helpers import ids, context, result
 from tests.projects.guide_compilation.finalization.pg_prerequisites import (
     compilation_and_projections,
@@ -35,8 +35,7 @@ from tests.projects.guide_compilation.finalization.pg_support import finalize
 from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor
 
 
-async def create_compiled_guide(factory, values, actor, *, version="v1", artifact_proposal=None):
-    """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
+async def _create_guide_source(factory, values, actor, version):
     async with factory() as session, session.begin():
         resolved = ResolvedActor(
             await session.get(ActorProfile, str(actor.actor_profile_id)),
@@ -70,7 +69,76 @@ async def create_compiled_guide(factory, values, actor, *, version="v1", artifac
             ),
         )
         setup = await session.get(ProjectSetupRun, str(created.response.setup.id))
-        snapshot_id = setup.source_snapshot_id
+        return setup.source_snapshot_id
+
+
+def _external_compilation_outcome(outcome, registry_entries, pre_entry, post_entry, refs):
+    if not registry_entries:
+        return outcome
+    from app.interfaces.project_agents import (
+        AtomicGuideRequirement,
+        PostSubmissionBindingProposal,
+        PreSubmissionBindingProposal,
+    )
+
+    requirements, pre_bindings, post_bindings = [], [], []
+    if pre_entry is not None:
+        requirements.append(
+            AtomicGuideRequirement(
+                requirement_id="project.archive_rules",
+                statement="Validate the submitted project archive rules.",
+                disposition="supported_pre_submit",
+                evidence_refs=refs,
+            )
+        )
+        pre_bindings.append(
+            PreSubmissionBindingProposal(
+                requirement_id="project.archive_rules",
+                capability_id=pre_entry.capability_id,
+                capability_version=pre_entry.capability_version,
+                stage="pre_submit",
+            )
+        )
+    if post_entry is not None:
+        requirements.append(
+            AtomicGuideRequirement(
+                requirement_id="project.post_evidence",
+                statement="Evaluate the submitted evidence package.",
+                disposition="supported_post_submit",
+                evidence_refs=refs,
+            )
+        )
+        post_bindings.append(
+            PostSubmissionBindingProposal(
+                requirement_id="project.post_evidence",
+                capability_id=post_entry.capability_id,
+                capability_version=post_entry.capability_version,
+                stage="post_submit",
+                parameters=(),
+            )
+        )
+    return outcome.model_copy(
+        update={
+            "requirements": tuple(requirements),
+            "pre_submit_bindings": tuple(pre_bindings),
+            "post_submit_bindings": tuple(post_bindings),
+        }
+    )
+
+
+async def create_compiled_guide(
+    factory,
+    values,
+    actor,
+    *,
+    version="v1",
+    artifact_proposal=None,
+    pre_submit_registry_entry=None,
+    post_submit_registry_entry=None,
+    compilation_outcome=None,
+):
+    """Create declarations with real AUTH, then execute/project/finalize scripted findings."""
+    snapshot_id = await _create_guide_source(factory, values, actor, version)
     manifest = await create_committed_document_fixture(str(snapshot_id), sessions=factory)
     # Arrange the completed durable dispatch prerequisite; no broker is exercised here.
     async with factory() as session, session.begin():
@@ -85,10 +153,22 @@ async def create_compiled_guide(factory, values, actor, *, version="v1", artifac
         "snapshot": manifest.source_snapshot_id,
         "setup_1": manifest.setup_run_id,
     }
-    compilation_context = context(values, guide_version=version).model_copy(
-        update={"material": manifest}
+    checker_capabilities = None
+    registry_entries = tuple(
+        entry
+        for entry in (pre_submit_registry_entry, post_submit_registry_entry)
+        if entry is not None
     )
-    outcome = result()
+    if registry_entries:
+        from tests.checkers.external.support import capability_projection
+
+        checker_capabilities = capability_projection(*registry_entries)
+    compilation_context = context(
+        values,
+        guide_version=version,
+        checker_capabilities=checker_capabilities,
+    ).model_copy(update={"material": manifest})
+    outcome = compilation_outcome or result()
     if artifact_proposal is not None:
         outcome = outcome.model_copy(update={"submission_artifact_policy": artifact_proposal})
     refs = tuple(
@@ -100,7 +180,19 @@ async def create_compiled_guide(factory, values, actor, *, version="v1", artifac
         for item in manifest.documents
     )
     outcome = outcome.model_copy(
-        update={"findings": (outcome.findings[0].model_copy(update={"evidence_refs": refs}),)}
+        update={
+            field: tuple(
+                item.model_copy(update={"evidence_refs": refs}) for item in getattr(outcome, field)
+            )
+            for field in ("findings", "requirements", "capability_suggestions")
+        }
+    )
+    outcome = _external_compilation_outcome(
+        outcome,
+        registry_entries,
+        pre_submit_registry_entry,
+        post_submit_registry_entry,
+        refs,
     )
     url = factory.kw["bind"].url.render_as_string(hide_password=False)
     finalization = await compilation_and_projections(
@@ -115,22 +207,36 @@ async def create_compiled_guide(factory, values, actor, *, version="v1", artifac
 
 
 @asynccontextmanager
-async def source_case(url, *, namespace=None, guide_version="v1", artifact_proposal=None):
+async def source_case(
+    url,
+    *,
+    namespace=None,
+    guide_version="v1",
+    artifact_proposal=None,
+    pre_submit_registry_spec=None,
+    post_submit_registry_spec=None,
+    compilation_outcome=None,
+):
     """An authorized draft Project plus a genuinely created complete guide source."""
     engine = create_async_engine(url)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:
         if namespace is not None:
             from app.modules.artifacts.models import ArtifactStorageNamespace
+
             async with factory() as session, session.begin():
                 existing = await session.get(ArtifactStorageNamespace, "primary")
                 if existing is None:
-                    session.add(ArtifactStorageNamespace(
-                        id="primary", backend=namespace.backend, adapter=namespace.adapter,
-                        provider_profile=namespace.provider_profile,
-                        namespace_descriptor=namespace.namespace_descriptor,
-                        namespace_fingerprint=namespace.namespace_fingerprint,
-                    ))
+                    session.add(
+                        ArtifactStorageNamespace(
+                            id="primary",
+                            backend=namespace.backend,
+                            adapter=namespace.adapter,
+                            provider_profile=namespace.provider_profile,
+                            namespace_descriptor=namespace.namespace_descriptor,
+                            namespace_fingerprint=namespace.namespace_fingerprint,
+                        )
+                    )
                 else:
                     assert existing.namespace_fingerprint == namespace.namespace_fingerprint
         values = ids()
@@ -152,9 +258,87 @@ async def source_case(url, *, namespace=None, guide_version="v1", artifact_propo
             ).one()
             values.update(actor=UUID(service_id), link=UUID(link_id))
         actor, grant = await seed_review_actor(factory, values["project"])
-        async with current_art_attempt_seed_schema(url):
-            values, finalization = await create_compiled_guide(factory, values, actor, version=guide_version,
-                                                               artifact_proposal=artifact_proposal)
+        pre_registry_entry = (
+            await _register_external_checker_fixture(factory, pre_submit_registry_spec)
+            if pre_submit_registry_spec is not None
+            else None
+        )
+        post_registry_entry = (
+            await _register_external_checker_fixture(factory, post_submit_registry_spec)
+            if post_submit_registry_spec is not None
+            else None
+        )
+        values, finalization = await create_compiled_guide(
+            factory,
+            values,
+            actor,
+            version=guide_version,
+            artifact_proposal=artifact_proposal,
+            pre_submit_registry_entry=pre_registry_entry,
+            post_submit_registry_entry=post_registry_entry,
+            compilation_outcome=compilation_outcome,
+        )
         yield values, factory, finalization, actor, grant
     finally:
         await engine.dispose()
+
+
+async def _register_external_checker_fixture(factory, spec):
+    """Publish one real Operator-authorized immutable entry before compilation."""
+    from app.modules.authorization.checker_registry_authorization import (
+        ExternalCheckerRegistryAuthorizationAdapter,
+    )
+    from app.modules.checkers.api.external import make_external_checker_registration_request
+    from app.modules.checkers.external_registry import (
+        ExternalCheckerRegistryReader, ExternalCheckerRegistryService,
+    )
+    from tests.project_create_fixtures import (
+        grant_fixture_admin_role,
+        seed_fixture_actor,
+    )
+
+    async with factory() as session, session.begin():
+        reader = ExternalCheckerRegistryReader(session)
+        existing = tuple(
+            entry for entry in await reader.list_entries()
+            if (entry.capability_id, entry.capability_version, entry.phase)
+            == (spec.capability_id, spec.capability_version, spec.phase)
+        )
+        if existing:
+            assert len(existing) == 1 and existing[0].entry_digest == spec.spec_digest
+            return await reader.read_exact(
+                UUID(str(existing[0].registry_entry_id)), existing[0].entry_digest,
+            )
+        profile, link = await seed_fixture_actor(
+            session,
+            issuer="https://external-checker-fixture.test",
+            subject_prefix="external-checker-operator",
+        )
+        await grant_fixture_admin_role(
+            session,
+            profile.id,
+            role="operator",
+            scope="system",
+        )
+        operation_id = new_record_id()
+        request = make_external_checker_registration_request(
+            actor_profile_id=UUID(profile.id),
+            operation_id=operation_id,
+            registry_entry_id=new_record_id(),
+            spec=spec,
+        )
+        authority_context = HumanAuthorizationContext(
+            actor_profile_id=UUID(profile.id),
+            actor_kind=ActorKind.HUMAN,
+            actor_status=ActorStatus.ACTIVE,
+            identity_link_id=UUID(link.id),
+            identity_link_status=IdentityLinkStatus.ACTIVE,
+            request_id=uuid4(),
+            correlation_id=operation_id,
+        )
+        return await ExternalCheckerRegistryService(
+            session,
+            ExternalCheckerRegistryAuthorizationAdapter(
+                AuthorizationService(session, authority_context)
+            ),
+        ).register(request)

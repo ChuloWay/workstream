@@ -1297,50 +1297,6 @@ async def test_malformed_ledger_and_layout_fail_closed(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_version_two_scratch_ledger_is_normalized_on_reopen(tmp_path: Path) -> None:
-    """Preserve restart compatibility for the genuine version-two ledger."""
-    root = tmp_path / "scratch"
-    initial = ArtifactScratchManager(root=root, limits=preparation_limits())
-    owner_process_identity = initial._owner_process_identity
-    initial.close()
-    ledger_path = root / ".ledger.json"
-    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
-    ledger["version"] = 2
-    workspace_name = f"extract_{'a' * 32}"
-    (root / "workspaces" / workspace_name).mkdir(mode=0o700)
-    ledger["workspaces"] = [
-        {
-            "workspace_name": workspace_name,
-            "created_at_unix_ns": 1,
-            "expires_at_unix_ns": 10**20,
-            "owner_pid": os.getpid(),
-            "owner_process_identity": owner_process_identity,
-        }
-    ]
-    ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
-
-    reopened = ArtifactScratchManager(root=root, limits=preparation_limits())
-    reservation, descriptor = await reopened.allocate()
-    os.close(descriptor)
-    await reopened.release(reservation)
-
-    normalized = json.loads(ledger_path.read_text(encoding="utf-8"))
-    assert normalized["version"] == 3
-    assert normalized["workspaces"] == [
-        {
-            "workspace_name": workspace_name,
-            "reserved_bytes": 0,
-            "maximum_entries": preparation_limits().maximum_workspace_entries,
-            "created_at_unix_ns": 1,
-            "expires_at_unix_ns": 10**20,
-            "owner_pid": os.getpid(),
-            "owner_process_identity": owner_process_identity,
-        }
-    ]
-    reopened.close()
-
-
-@pytest.mark.asyncio
 async def test_truncated_version_three_scratch_ledger_fails_closed(tmp_path: Path) -> None:
     """Reject a current-version ledger missing workspace custody state."""
     root = tmp_path / "scratch"
@@ -1353,21 +1309,6 @@ async def test_truncated_version_three_scratch_ledger_fails_closed(tmp_path: Pat
 
     with pytest.raises(ArtifactScratchIntegrityError, match="ledger is invalid"):
         ArtifactScratchManager(root=root, limits=preparation_limits())
-
-
-def test_legacy_safe_empty_root_marker_upgrades_once(tmp_path: Path) -> None:
-    """Upgrade only the exact prior marker while the scratch root is empty."""
-    limits = preparation_limits()
-    root = tmp_path / "scratch"
-    initial = ArtifactScratchManager(root=root, limits=limits)
-    initial.close()
-    marker = root / ".workstream-artifact-scratch-v1"
-    marker.write_bytes(ArtifactScratchManager._legacy_marker_content(limits))
-
-    reopened = ArtifactScratchManager(root=root, limits=limits)
-    reopened.close()
-
-    assert marker.read_bytes() == ArtifactScratchManager._marker_content(limits)
 
 
 @pytest.mark.asyncio

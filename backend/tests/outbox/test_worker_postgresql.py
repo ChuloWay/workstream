@@ -187,13 +187,18 @@ async def test_worker_scan_continues_after_failed_publication(worker, monkeypatc
     assert attempts == [(str(cursor), str(selectors[0].project_id)), (str(cursor),)]
 
 
-async def test_production_registry_claims_only_registered_invalidation(delivery_harness):
+async def test_production_registry_claims_only_registered_features(delivery_harness):
     from app.adapters.outbox import production_outbox_delivery
+    from app.modules.checkers.api.execution import COMPLETION_EVENT, REQUEST_EVENT
 
     h = delivery_harness
     event = await h.append()
     production = production_outbox_delivery(h.factory)
-    assert production._registry.keys == (("TaskAssignmentAuthorityInvalidationRequested", 1),)
+    assert production._registry.keys == (
+        ("TaskAssignmentAuthorityInvalidationRequested", 1),
+        (REQUEST_EVENT, 1),
+        (COMPLETION_EVENT, 1),
+    )
     assert (await production.candidates()).items == ()
     assert await production.deliver(event.event_id, h.project, "worker") is None
     async with h.factory() as session:
@@ -239,6 +244,8 @@ async def test_prefork_bounds_cancellation_resistant_worker(
     # prefork task hanging until the independent test watchdog detects it.
     if task.time_limit is not None:
         monkeypatch.setattr(task, "time_limit", 5)
+        from app.workers import outbox_topology
+        monkeypatch.setattr(outbox_topology, "OUTBOX_HARD_LIMIT_SECONDS", 5)
     monkeypatch.setenv("WORKSTREAM_ARTIFACT_STORE_BACKEND", "disabled")
     get_settings.cache_clear()
     acked = Event()
@@ -253,9 +260,14 @@ async def test_prefork_bounds_cancellation_resistant_worker(
             properties={"correlation_id": task_id},
             body=((str(event.event_id), str(h.project)), {}, {}),
         )
-        request = Request(message, app=worker.celery_app, task=task, decoded=True,
-                          on_ack=lambda *args: acked.set(),
-                          on_reject=lambda *args: rejected.append(args))
+        request = Request(
+            message,
+            app=worker.celery_app,
+            task=task,
+            decoded=True,
+            on_ack=lambda *args: acked.set(),
+            on_reject=lambda *args: rejected.append(args),
+        )
         result = request.execute_using_pool(pool)
         with pytest.raises(ExceptionWithTraceback) as timed_out:
             result.get(timeout=15)
@@ -264,13 +276,21 @@ async def test_prefork_bounds_cancellation_resistant_worker(
         assert rejected == []
         # The pool owns waitpid/reaping. A competing join can observe stale
         # returncode metadata; the owned child sentinel proves actual exit.
-        assert wait([child.sentinel], timeout=5), "hard timeout must terminate the stuck worker process"
+        assert wait([child.sentinel], timeout=5), (
+            "hard timeout must terminate the stuck worker process"
+        )
         duplicate_id = str(new_record_id())
-        duplicate = Request(Message(
-            headers={"id": duplicate_id, "task": task.name},
-            properties={"correlation_id": duplicate_id}, body=message.body,
-        ), app=worker.celery_app, task=task, decoded=True,
-            on_reject=lambda *args: rejected.append(args))
+        duplicate = Request(
+            Message(
+                headers={"id": duplicate_id, "task": task.name},
+                properties={"correlation_id": duplicate_id},
+                body=message.body,
+            ),
+            app=worker.celery_app,
+            task=task,
+            decoded=True,
+            on_reject=lambda *args: rejected.append(args),
+        )
         failed, body, _ = duplicate.execute_using_pool(pool).get(timeout=15)
         assert not failed and ast.literal_eval(body) == {"status": "delivery_unavailable"}
         assert duplicate.worker_pid != child.pid
@@ -301,7 +321,14 @@ def test_delivery_task_has_independent_hard_limit(worker):
     from app.modules.outbox.api import DeliveryOptions
 
     task = worker.deliver_event
-    assert task.time_limit == 300
+    from app.modules.checkers.api.external_policy import (
+        SELECTED_POST_DELIVERY_LEASE_SECONDS, SELECTED_POST_HANDLER_TIMEOUT_SECONDS,
+    )
+    from app.workers.outbox_topology import OUTBOX_PROCESS_SHUTDOWN_MARGIN_SECONDS
+    assert task.time_limit == (
+        SELECTED_POST_DELIVERY_LEASE_SECONDS + OUTBOX_PROCESS_SHUTDOWN_MARGIN_SECONDS
+    )
+    assert task.time_limit > SELECTED_POST_HANDLER_TIMEOUT_SECONDS
     assert task.time_limit > DeliveryOptions().handler_timeout_seconds
     assert task.acks_late and task.acks_on_failure_or_timeout
     assert task.reject_on_worker_lost is True

@@ -14,11 +14,6 @@ from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.authorization.models import AdminRoleGrant
-from app.modules.checkers.catalogue import (
-    build_pre_submission_checker_catalogue,
-    project_guide_pre_submission_capabilities,
-)
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
 from app.modules.projects.api import (
     ProjectGuideProjectionCommand,
     ProjectGuideSetupFinalizationCommand,
@@ -51,7 +46,7 @@ def downstream_artifact_proposal():
     )
 
 
-async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=None, post_submit_required_checkers=()):
+async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=None, post_submit_registry_spec=None):
     """Project the actual scripted result, with no manual policy row replacement."""
     sessions = db_session.get_session_factory()
     proposal = proposal or downstream_artifact_proposal()
@@ -59,7 +54,7 @@ async def create_unified_submission_policy(report_id, snapshot_id, *, proposal=N
         report_id,
         snapshot_id,
         artifact_proposal=proposal,
-        post_submit_required_checkers=post_submit_required_checkers,
+        post_submit_registry_spec=post_submit_registry_spec,
     )
     async with sessions() as session:
         compilation = (
@@ -125,8 +120,13 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, 
             request_id=uuid4(),
         )
     assert str(package.target.artifact_policy_id) == policy_id
-    planner = build_pre_submission_checker_catalogue()
     async with sessions() as session, session.begin():
+        from app.adapters.checkers import (
+            external_checker_capability_projection,
+            external_checker_registry_reader,
+        )
+
+        capabilities = await external_checker_capability_projection(session)
         receipt = await GuideProposalService(
             session,
             ProposalAuthority(
@@ -135,6 +135,7 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, 
                 UUID(project_id),
                 grant_id,
             ),
+            external_checker_registry_reader(session),
         ).approve(
             GuideProposalApproval(
                 target=package.target,
@@ -146,9 +147,7 @@ async def approve_unified_submission_policy(project_id, guide_id, policy_id, *, 
             actor=actor,
             request_id=uuid4(),
             material=guide_document_manifest_port(session),
-            pre_capabilities=project_guide_pre_submission_capabilities(planner),
-            post_capabilities=current_post_submit_catalogue(),
-            planner=planner,
+            capabilities=capabilities,
         )
     async with sessions() as session:
         effective = await session.get(
@@ -167,6 +166,8 @@ async def create_standalone_unified_policy(
     artifact_proposal=None,
     contribution_awards=(),
     human_review_required=True,
+    pre_submit_registry_spec=None,
+    post_submit_registry_spec=None,
 ):
     """Arrange complete activated context before a downstream artifact transaction."""
     from app.modules.projects.models import PreSubmitCheckerPolicy
@@ -180,7 +181,12 @@ async def create_standalone_unified_policy(
 
     url = sessions.kw["bind"].url.render_as_string(hide_password=False)
     async with source_case(
-        url, namespace=namespace, guide_version=guide_version, artifact_proposal=artifact_proposal
+        url,
+        namespace=namespace,
+        guide_version=guide_version,
+        artifact_proposal=artifact_proposal,
+        pre_submit_registry_spec=pre_submit_registry_spec,
+        post_submit_registry_spec=post_submit_registry_spec,
     ) as (values, _, command, actor, grant):
         await seed_selected_review_revision_inputs(
             sessions, command, actor, human_review_required=human_review_required

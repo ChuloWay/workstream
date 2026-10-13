@@ -11,8 +11,8 @@ from app.core.hashing import canonical_json_hash
 from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable, EvaluationCoordinationPort, REQUEST_EVENT,
 )
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest, PostSubmissionExecutionPort,
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
 )
 from app.modules.outbox.api import (
     CommittedInvocationPort, HandlerOutcome, OutboxEventEnvelope,
@@ -31,7 +31,7 @@ class EvaluationDeliveryRequestReader:
     def __init__(self, session: AsyncSession, evaluations: EvaluationCoordinationPort):
         self._session, self._evaluations = session, evaluations
 
-    async def read(self, envelope: OutboxEventEnvelope) -> PostSubmissionEvaluationRequest:
+    async def read(self, envelope: OutboxEventEnvelope) -> PostSubmissionExecutionRequest:
         """Select all owner identifiers together, without creating or repairing rows."""
         retry = await self._evaluations.read_retry_delivery(
             project_id=envelope.claim.project_id,
@@ -98,7 +98,7 @@ class EvaluationRequestHandler:
         self, sessions: async_sessionmaker[AsyncSession], *,
         observer: CommittedInvocationPort,
         evaluations: Callable[[AsyncSession], EvaluationCoordinationPort],
-        executor: Callable[[OutboxEventEnvelope, PostSubmissionEvaluationRequest], PostSubmissionExecutionPort],
+        executor: Callable[[OutboxEventEnvelope, PostSubmissionExecutionRequest], object],
     ):
         self._sessions, self._observer = sessions, observer
         self._evaluations, self._executor = evaluations, executor

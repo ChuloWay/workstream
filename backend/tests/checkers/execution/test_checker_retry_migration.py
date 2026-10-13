@@ -1,86 +1,25 @@
 """0035 preserves retained checker custody and installs terminal retry closure."""
 
 import asyncio
-import io
 import json
-import os
-from pathlib import Path
-import subprocess
-import sys
-import tarfile
 from uuid import UUID
 
 import asyncpg
 import pytest
 from alembic import command
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from app.adapters.checkers import evaluation_coordinator
+from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
-from app.modules.checkers.api.post_submit import PostSubmissionEvaluationRequest
-from tests.checkers.post_submit.support import change_request
+from tests.historical_submission_fixtures import restore_archived_snapshot
 from tests.migration_fixtures import _config
 
 
 pytestmark = pytest.mark.postgres_schema_contract
 PREDECESSOR = "0034_checker_replacement"
 SUCCESSOR = "0035_checker_retry"
-# Pin the last F3 writer: current F4 delivery reads the 0035 retry table.
-HISTORICAL_WRITER = "926b4ef118db3708e50d1869db5ee78a79e5b5de"
-HISTORICAL_SEED = """
-import asyncio
-import json
-import os
-from pathlib import Path
-import sys
-
-import pytest
-
-from app.adapters.artifacts import internal_workers
-from app.adapters.artifacts.local import LocalStorageAdapter
-from app.db import session as db_session
-from app.interfaces.artifacts import ArtifactObjectMissingError
-from tests.post_submit_materialization_helpers import material_fixture
-from tests.tasks.evaluation_delivery.support import delivery_fixture, outcome, state
-from tests.tasks.evaluation_delivery.test_worker_materialization import _worker_port
-
-
-async def seed():
-    database_url = os.environ["WS_MIGRATION_DATABASE_URL"]
-    tmp_path = Path(sys.argv[1])
-    result_path = Path(sys.argv[2])
-
-    def missing(_store, _reference):
-        raise ArtifactObjectMissingError("controlled verified object loss")
-
-    try:
-        with pytest.MonkeyPatch.context() as monkeypatch:
-            async with material_fixture(tmp_path, database_url, provider="local") as h:
-                port = _worker_port(h, monkeypatch)
-                try:
-                    delivery = await delivery_fixture(h, materialization=port)
-                    with monkeypatch.context() as patch:
-                        patch.setattr(LocalStorageAdapter, "open", missing)
-                        initial = await delivery.delivery.deliver(
-                            h.created.evaluation_event_id, h.request.project_id, "retry-source",
-                        )
-                    assert outcome(initial)["delivery_state"] == "acknowledged"
-                    saved = await state(h)
-                    assert saved["run"]["status"] == "infrastructure_failed"
-                    assert json.loads(saved["run"]["result_json"])["infrastructure_failure_code"] == "material_unavailable"
-                    result_path.write_text(json.dumps({
-                        "submission_id": str(h.created.submission_id),
-                        "request": h.request.model_dump(mode="json"),
-                    }))
-                finally:
-                    internal_workers.shutdown_artifact_internal_runtime()
-    finally:
-        await db_session.dispose_engine()
-
-
-asyncio.run(seed())
-"""
 RETAINED_TABLES = (
     "submissions",
     "submission_dispatches",
@@ -122,36 +61,6 @@ async def _reset_to_predecessor(database_url):
     await asyncio.to_thread(command.upgrade, _config(), PREDECESSOR)
 
 
-def _historical_backend(tmp_path):
-    root = Path(__file__).resolve().parents[4]
-    archived = subprocess.run(
-        ["git", "archive", "--format=tar", HISTORICAL_WRITER, "backend"],
-        cwd=root,
-        capture_output=True,
-        check=True,
-    )
-    source = tmp_path / "historical"
-    with tarfile.open(fileobj=io.BytesIO(archived.stdout), mode="r:") as archive:
-        archive.extractall(source, filter="data")
-    return source / "backend"
-
-
-def _seed_with_historical_writer(tmp_path, database_url):
-    backend = _historical_backend(tmp_path)
-    result_path = tmp_path / "historical-seed.json"
-    subprocess.run(
-        [sys.executable, "-c", HISTORICAL_SEED, str(tmp_path), str(result_path)],
-        cwd=backend,
-        env={
-            **os.environ,
-            "PYTHONPATH": os.pathsep.join((str(backend), str(backend / "tests"))),
-            "WS_MIGRATION_DATABASE_URL": database_url,
-        },
-        check=True,
-    )
-    return json.loads(result_path.read_text())
-
-
 async def _retained_rows(connection):
     return {
         table: tuple(
@@ -167,7 +76,7 @@ async def _retained_rows(connection):
 async def _source_custody(connection, submission_id):
     return await connection.fetchrow(
         """
-        SELECT r.status, r.failure_code, r.result_digest,
+        SELECT r.id AS run_id, r.status, r.failure_code, r.result_digest,
           r.finalize_evidence_id IS NOT NULL AS finalized,
           fin.action_id='checker.post_submit.finalize' AS finalize_authority_valid,
           fin.event_type='SensitiveAuthorizationAllowed' AS finalize_allowed,
@@ -193,7 +102,7 @@ async def _source_custody(connection, submission_id):
 
 
 async def _predecessor_evidence(connection, submission_id):
-    """Verify the actual old writer's complete source before comparing its upgrade."""
+    """Verify the complete archived source before comparing its upgrade."""
     assert await connection.fetchval("SELECT version_num FROM public.alembic_version") == PREDECESSOR
     assert await connection.fetchval(
         "SELECT to_regclass('public.checker_retry_receipts') IS NULL"
@@ -227,14 +136,12 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
 ):
     with migration_lock():
         await _reset_to_predecessor(isolated_database_env)
-        seed = await asyncio.to_thread(
-            _seed_with_historical_writer, tmp_path, isolated_database_env
+        seed = await restore_archived_snapshot(
+            isolated_database_env, "0034_checker_retry_source"
         )
         submission_id = UUID(seed["submission_id"])
-        request = PostSubmissionEvaluationRequest.model_validate_json(
-            json.dumps(seed["request"])
-        )
-        assert request.submission_id == submission_id
+        request = seed["request"]
+        assert UUID(request["submission_id"]) == submission_id
         connection = await _connection(isolated_database_env)
         try:
             before, source = await _predecessor_evidence(connection, submission_id)
@@ -274,17 +181,39 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
         finally:
             await connection.close()
 
-        successor = change_request(
-            request,
-            evaluation_request_id=new_record_id(),
-            evaluation_generation=2,
-        )
+        # This is a raw predecessor SQL invariant, not a current runtime request.
+        successor_request = {key: value for key, value in request.items() if key != "request_sha256"}
+        successor_request.update(evaluation_request_id=str(new_record_id()), evaluation_generation=2)
+        successor_id = new_record_id()
+        request_json = json.dumps(successor_request, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+        successor_row = {
+            "id": str(successor_id), "evaluation_request_id": successor_request["evaluation_request_id"],
+            "evaluation_generation": 2, "request_json": request_json,
+            "request_digest": canonical_json_hash(successor_request), "result_id": str(new_record_id()),
+            "supersedes_checker_run_id": str(source["run_id"]),
+            "status": "queued", "outcome_source": "none", "routing_recommendation": "not_evaluated",
+            "worker_lease_id": None, "worker_lease_generation": 0, "worker_lease_expires_at": None,
+            "execute_evidence_id": None, "finalize_evidence_id": None,
+            "result_json": None, "result_digest": None, "material_custody": None,
+            "input_materialization_evidence_id": None, "completion_event_id": None,
+            "started_at": None, "completed_at": None, "failure_code": None,
+            "passed_count": 0, "warning_count": 0, "failed_count": 0, "blocking_count": 0,
+        }
         with pytest.raises(
             IntegrityError,
             match="terminal checker infrastructure retry requires Operator receipt",
         ):
             async with db_session.get_session_factory().begin() as session:
-                await evaluation_coordinator(session).reserve_current_evaluation(successor)
+                await session.execute(text("""
+                    INSERT INTO public.checker_runs
+                    SELECT (jsonb_populate_record(NULL::public.checker_runs,
+                      to_jsonb(r) || CAST(:changes AS jsonb))).*
+                    FROM public.checker_runs r WHERE id=:source
+                """), {"changes": json.dumps(successor_row), "source": source["run_id"]})
+                await session.execute(text("""
+                    UPDATE public.checker_submission_fences SET current_run_id=:successor
+                    WHERE submission_id=:submission
+                """), {"successor": successor_id, "submission": submission_id})
         connection = await _connection(isolated_database_env)
         try:
             assert await _retained_rows(connection) == before
@@ -292,5 +221,105 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
                 await connection.fetchval("SELECT count(*) FROM public.checker_retry_receipts")
                 == 0
             )
+        finally:
+            await connection.close()
+
+async def test_current_schema_refuses_new_archived_pre_submit_lineage(
+    isolated_database_env,
+    migration_lock,
+):
+    """Retain archived rows while refusing every new old-lineage insertion."""
+    with migration_lock():
+        await _reset_to_predecessor(isolated_database_env)
+        await restore_archived_snapshot(
+            isolated_database_env, "0034_checker_retry_source"
+        )
+        await db_session.dispose_engine()
+        await asyncio.to_thread(command.upgrade, _config(), "head")
+        connection = await _connection(isolated_database_env)
+        try:
+            before = await _retained_rows(connection)
+            intent_id = await connection.fetchval("""
+                SELECT id FROM public.submission_bundle_durable_intents
+                WHERE pre_submit_evidence_set_id IS NOT NULL
+            """)
+            admission_id = await connection.fetchval("""
+                SELECT id FROM public.submission_bundle_admissions
+                WHERE pre_submit_evidence_set_id IS NOT NULL
+            """)
+            attempt_id = await connection.fetchval(
+                "SELECT id FROM public.pre_submit_execution_attempts"
+            )
+            evidence_id = await connection.fetchval(
+                "SELECT id FROM public.pre_submit_evidence_sets"
+            )
+            result_id = await connection.fetchval(
+                "SELECT id FROM public.pre_submit_evidence_results ORDER BY result_order LIMIT 1"
+            )
+            assert all((intent_id, admission_id, attempt_id, evidence_id, result_id))
+            with pytest.raises(
+                asyncpg.CheckViolationError,
+                match="submission bundle durable intent requires selected PRE lineage",
+            ):
+                async with connection.transaction():
+                    await connection.execute("""
+                        INSERT INTO public.submission_bundle_durable_intents
+                        SELECT (jsonb_populate_record(
+                          NULL::public.submission_bundle_durable_intents,
+                          to_jsonb(value) || jsonb_build_object('id',$1::uuid)
+                        )).* FROM public.submission_bundle_durable_intents value
+                        WHERE value.id=$2::uuid
+                    """, new_record_id(), intent_id)
+            with pytest.raises(
+                asyncpg.CheckViolationError,
+                match="submission bundle admission requires selected PRE lineage",
+            ):
+                async with connection.transaction():
+                    await connection.execute("""
+                        INSERT INTO public.submission_bundle_admissions
+                        SELECT (jsonb_populate_record(
+                          NULL::public.submission_bundle_admissions,
+                          to_jsonb(value) || jsonb_build_object('id',$1::uuid)
+                        )).* FROM public.submission_bundle_admissions value
+                        WHERE value.id=$2::uuid
+                    """, new_record_id(), admission_id)
+            for table, source_id, message in (
+                (
+                    "pre_submit_execution_attempts",
+                    attempt_id,
+                    "retained pre-submit attempts are immutable",
+                ),
+                (
+                    "pre_submit_evidence_sets",
+                    evidence_id,
+                    "retained pre-submit evidence is immutable",
+                ),
+                (
+                    "pre_submit_evidence_results",
+                    result_id,
+                    "retained pre-submit evidence results are immutable",
+                ),
+            ):
+                with pytest.raises(asyncpg.PostgresError, match=message) as refused:
+                    async with connection.transaction():
+                        await connection.execute(f"""
+                            INSERT INTO public.{table}
+                            SELECT (jsonb_populate_record(
+                              NULL::public.{table},
+                              to_jsonb(value) || jsonb_build_object('id',$1::uuid)
+                            )).* FROM public.{table} value WHERE value.id=$2::uuid
+                        """, new_record_id(), source_id)
+                assert refused.value.sqlstate == "55000"
+            with pytest.raises(
+                asyncpg.PostgresError,
+                match="retained pre-submit attempts are immutable",
+            ) as refused:
+                async with connection.transaction():
+                    await connection.execute("""
+                        UPDATE public.pre_submit_execution_attempts
+                        SET status=status WHERE id=$1::uuid
+                    """, attempt_id)
+            assert refused.value.sqlstate == "55000"
+            assert await _retained_rows(connection) == before
         finally:
             await connection.close()

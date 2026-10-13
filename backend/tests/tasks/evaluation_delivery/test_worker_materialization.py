@@ -66,7 +66,7 @@ async def test_worker_art_lease_executes_exact_hidden_request(
         port = _worker_port(h, monkeypatch)
         try:
             d = await delivery_fixture(h, materialization=port)
-            assert (REQUEST_EVENT, 1) not in production_outbox_delivery(h.factory)._registry.keys
+            assert (REQUEST_EVENT, 1) in production_outbox_delivery(h.factory)._registry.keys
             receipt = await d.delivery.deliver(
                 h.created.evaluation_event_id, h.request.project_id, "worker-runtime",
             )

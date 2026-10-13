@@ -1,17 +1,16 @@
-
 from __future__ import annotations
 
 from app.core.config import get_settings
 
 from app.adapters.tasks import task_service
 
-from app.modules.checkers.catalogue import project_guide_pre_submission_capabilities
-
 from tests.projects.guide_compilation.helpers import runtime_configuration
+from tests.checkers.external.support import registry_spec
 
+from datetime import UTC, datetime
+import json
 from uuid import uuid4
 
-from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 
 import pytest
@@ -32,31 +31,44 @@ from app.interfaces.project_agents import (
     validate_project_guide_compilation_result,
 )
 from app.modules.projects.api.guide_documents import GuideDocumentManifest, GuideDocumentVersion
-from app.modules.checkers.catalogue import (
-    PreSubmissionCheckerClassification,
-    build_pre_submission_checker_catalogue,
+from app.modules.checkers.api.default_checker import (
+    WORKSTREAM_DEFAULT_CHECKER_ID,
+    WORKSTREAM_DEFAULT_CHECKER_VERSION,
 )
-from app.modules.checkers.api.post_submit_catalogue import current_post_submit_catalogue
-from app.modules.projects.post_submit_policy import DEFAULT_DURABLE_CHECKERS
+from app.modules.checkers.api.external import (
+    ExternalCheckerCapabilityDefinition,
+    ExternalCheckerCapabilityProjection,
+    ExternalCheckerRegistryEntry,
+    external_checker_json_hash,
+)
 
 
 SHA256 = "sha256:" + "a" * 64
 
 
-@pytest.mark.parametrize("project_limit, default_limit, expected", [
-    (100, None, 100), (None, 50, 50), (100, 50, 50), (20, 50, 20), (None, None, None),
-])
+@pytest.mark.parametrize(
+    "project_limit, default_limit, expected",
+    [
+        (100, None, 100),
+        (None, 50, 50),
+        (100, 50, 50),
+        (20, 50, 20),
+        (None, None, None),
+    ],
+)
 @pytest.mark.parametrize("field", ["maximum_archive_entries", "maximum_archive_size_bytes"])
-def test_archive_limit_projection_and_default_floor(monkeypatch, project_limit, default_limit, expected, field):
+def test_archive_limit_projection_and_default_floor(
+    monkeypatch, project_limit, default_limit, expected, field
+):
     from app.modules.projects import service
     from app.modules.projects.guide_compilation.projection_payloads import policy_body
 
     proposal = SubmissionArtifactPolicyProposal(
-        maximum_file_size_bytes=1000, maximum_package_size_bytes=2000,
+        maximum_file_size_bytes=1000,
+        maximum_package_size_bytes=2000,
         **{field: project_limit},
     )
-    monkeypatch.setitem(service.WORKSTREAM_DEFAULT_SUBMISSION_ARTIFACT_POLICY,
-                        field, default_limit)
+    monkeypatch.setitem(service.WORKSTREAM_DEFAULT_SUBMISSION_ARTIFACT_POLICY, field, default_limit)
     body = policy_body(None, proposal)
     assert body[field] == project_limit
     effective = service.ProjectService(None)._merge_effective_submission_artifact_policy(body)
@@ -66,11 +78,20 @@ def test_archive_limit_projection_and_default_floor(monkeypatch, project_limit, 
 
 
 @pytest.mark.parametrize("field", ["required_evidence", "attestation_terms"])
-@pytest.mark.parametrize("value, valid", [
-    ("results", True), ("a" + "b" * 99, True), ("results.v0_1-ok", True),
-    ("", False), ("a" + "b" * 100, False), ("Provide results", False),
-    ("evidence/results", False), ("9results", False), ("Results", False),
-])
+@pytest.mark.parametrize(
+    "value, valid",
+    [
+        ("results", True),
+        ("a" + "b" * 99, True),
+        ("results.v0_1-ok", True),
+        ("", False),
+        ("a" + "b" * 100, False),
+        ("Provide results", False),
+        ("evidence/results", False),
+        ("9results", False),
+        ("Results", False),
+    ],
+)
 def test_policy_identifier_schema_matches_existing_validator(field, value, valid):
     import re
     from app.interfaces.project_agents import _SAFE_IDENTIFIER
@@ -93,7 +114,9 @@ def test_model_schema_describes_existing_expanded_byte_limit():
     properties = SubmissionArtifactPolicyProposal.model_json_schema()["properties"]
     assert "expanded bytes" in properties["maximum_package_size_bytes"]["description"]
     assert "not compressed upload bytes" in properties["maximum_package_size_bytes"]["description"]
-    assert "entire submitted compressed ZIP" in properties["maximum_archive_size_bytes"]["description"]
+    assert (
+        "entire submitted compressed ZIP" in properties["maximum_archive_size_bytes"]["description"]
+    )
     assert "directory entries" in properties["maximum_archive_entries"]["description"]
     assert "ZIP root" in properties["required_artifacts"]["description"]
 
@@ -107,8 +130,7 @@ def test_omitted_optional_archive_limit_preserves_default_floor(monkeypatch, def
     owner = service.ProjectService(None)
     policy = owner._canonical_policy_body(SubmissionArtifactPolicyInput().model_dump())
     del policy[field]
-    monkeypatch.setitem(service.WORKSTREAM_DEFAULT_SUBMISSION_ARTIFACT_POLICY,
-                        field, default_limit)
+    monkeypatch.setitem(service.WORKSTREAM_DEFAULT_SUBMISSION_ARTIFACT_POLICY, field, default_limit)
     effective = owner._merge_effective_submission_artifact_policy(policy)
     assert effective[field] == default_limit
     assert field not in policy
@@ -128,31 +150,104 @@ def test_task_requirements_response_carries_valid_locked_archive_limit(limit, fi
     )
     policy[field] = limit
     from app.modules.projects.api.locked_policy import CanonicalJsonObject
-    context = SimpleNamespace(facts=SimpleNamespace(effective_policy=CanonicalJsonObject.from_mapping(policy)))
+
+    context = SimpleNamespace(
+        facts=SimpleNamespace(effective_policy=CanonicalJsonObject.from_mapping(policy))
+    )
     task = SimpleNamespace(id=str(uuid4()), project_id=str(uuid4()), locked_guide_version="v0.1")
     if limit is not None and (type(limit) is not int or limit <= 0):
         with pytest.raises(TaskLockedContextInvalid):
-            task_service(None, settings=get_settings())._contributor_submission_requirements_response(task, context)
+            task_service(
+                None, settings=get_settings()
+            )._contributor_submission_requirements_response(task, context)
     else:
-        response = task_service(None, settings=get_settings())._contributor_submission_requirements_response(task, context)
+        response = task_service(
+            None, settings=get_settings()
+        )._contributor_submission_requirements_response(task, context)
         assert response.model_dump(mode="json")[field] == limit
+
+
 SOURCE_ITEM_ID = new_record_id()
 DOCUMENT_VERSION_ID = new_record_id()
+
+
+def _registered_capability(capability_id: str, phase: str, capability_version: str = "v1.2.3"):
+    spec = registry_spec(phase).model_copy(
+        update={
+            "capability_id": capability_id,
+            "capability_version": capability_version,
+        }
+    )
+    spec = type(spec).model_validate(spec.model_dump())
+    entry = ExternalCheckerRegistryEntry(
+        **spec.model_dump(),
+        registry_entry_id=new_record_id(),
+        entry_digest=spec.spec_digest,
+        registration_operation_id=uuid4(),
+        registered_by_actor_profile_id=uuid4(),
+        authorization_decision_event_id=uuid4(),
+        created_at=datetime.now(UTC),
+    )
+    return ExternalCheckerCapabilityDefinition(
+        capability_id=capability_id,
+        capability_version=spec.capability_version,
+        phase=phase,
+        selectable=True,
+        registry_entry=entry,
+    )
+
+
+def _capabilities() -> ExternalCheckerCapabilityProjection:
+    definitions = tuple(
+        sorted(
+            (
+                ExternalCheckerCapabilityDefinition(
+                    capability_id=WORKSTREAM_DEFAULT_CHECKER_ID,
+                    capability_version=WORKSTREAM_DEFAULT_CHECKER_VERSION,
+                    phase="pre_submit",
+                    selectable=False,
+                ),
+                _registered_capability("acme.pre", "pre_submit"),
+                _registered_capability("acme.post", "post_submit"),
+            ),
+            key=lambda item: (item.phase, item.capability_id, item.capability_version),
+        )
+    )
+    body = {
+        "schema_version": "external_checker_capabilities.v1",
+        "definitions": [item.model_dump(mode="json") for item in definitions],
+    }
+    return ExternalCheckerCapabilityProjection(
+        definitions=definitions,
+        manifest_sha256=external_checker_json_hash(body),
+    )
 
 
 def _context() -> ProjectGuideCompilationContext:
     setup_id = new_record_id()
     material = GuideDocumentManifest(
-        project_id=new_record_id(), guide_id=new_record_id(), guide_version="v1",
-        source_snapshot_id=new_record_id(), source_snapshot_hash=SHA256,
-        setup_run_id=setup_id, setup_generation=1,
-        documents=(GuideDocumentVersion(
-            source_item_id=SOURCE_ITEM_ID, ingest_id=DOCUMENT_VERSION_ID, item_order=0,
-            put_attempt_id=new_record_id(), content_id=new_record_id(),
-            replica_id=new_record_id(),
-            storage_namespace_id="primary", namespace_fingerprint=SHA256,
-            sha256=SHA256, byte_count=100, media_type="application/pdf",
-        ),),
+        project_id=new_record_id(),
+        guide_id=new_record_id(),
+        guide_version="v1",
+        source_snapshot_id=new_record_id(),
+        source_snapshot_hash=SHA256,
+        setup_run_id=setup_id,
+        setup_generation=1,
+        documents=(
+            GuideDocumentVersion(
+                source_item_id=SOURCE_ITEM_ID,
+                ingest_id=DOCUMENT_VERSION_ID,
+                item_order=0,
+                put_attempt_id=new_record_id(),
+                content_id=new_record_id(),
+                replica_id=new_record_id(),
+                storage_namespace_id="primary",
+                namespace_fingerprint=SHA256,
+                sha256=SHA256,
+                byte_count=100,
+                media_type="application/pdf",
+            ),
+        ),
     )
     return ProjectGuideCompilationContext(
         task_examples=({"content": "Review a claim using the project guide."},),
@@ -162,10 +257,7 @@ def _context() -> ProjectGuideCompilationContext:
         instruction_version="v1",
         agent_identity="project-guide-compilation-agent-v1",
         agent_version="v1",
-        pre_submission_capabilities=project_guide_pre_submission_capabilities(
-            build_pre_submission_checker_catalogue()
-        ),
-        post_submission_capabilities=current_post_submit_catalogue(),
+        checker_capabilities=_capabilities(),
         runtime_configuration=runtime_configuration(),
     )
 
@@ -188,125 +280,47 @@ def _artifact_policy() -> SubmissionArtifactPolicyProposal:
     )
 
 
-def test_pre_submission_projection_preserves_exact_manifest_and_selectability() -> None:
-    catalogue = build_pre_submission_checker_catalogue(
-        disabled_entry_ids=frozenset({"artifact.quality.placeholder_signal"})
-    )
-    projection = project_guide_pre_submission_capabilities(catalogue)
+def test_checker_projection_has_one_default_and_exact_registry_entries() -> None:
+    projection = _capabilities()
+    defaults = [item for item in projection.definitions if not item.selectable]
+    registered = [item for item in projection.definitions if item.selectable]
 
-    assert projection.manifest_sha256 == catalogue.manifest_sha256
-    assert len(projection.definitions) == len(catalogue.entries)
-    assert [item.stable_id for item in projection.definitions] == [
-        item.stable_id for item in catalogue.entries
+    assert [(item.capability_id, item.phase) for item in defaults] == [
+        ("workstream.default", "pre_submit")
     ]
-    for definition, source in zip(projection.definitions, catalogue.entries, strict=True):
-        projected = definition.model_dump(mode="json")
-        selectable = projected.pop("selectable")
-        assert projected == source.manifest_entry()
-        assert selectable is (
-            source.state.value == "enabled"
-            and source.dispatch_kind.value == "policy_primitive"
-            and source.phase.value == "project_policy"
-        )
-    disabled = next(
-        item
-        for item in projection.definitions
-        if item.stable_id == "artifact.quality.placeholder_signal"
-    )
-    assert disabled.state == "disabled"
-    assert disabled.selectable is False
-    assert projection.available is True
-
-
-def test_pre_submission_projection_reports_disabled_mandatory_unavailable() -> None:
-    catalogue = build_pre_submission_checker_catalogue(
-        disabled_entry_ids=frozenset({"artifact.outer_zip.valid"})
-    )
-    projection = project_guide_pre_submission_capabilities(catalogue)
-    assert projection.available is False
-    assert projection.definitions[0].classification == (
-        PreSubmissionCheckerClassification.MANDATORY_SECURITY.value
-    )
-    assert projection.definitions[0].selectable is False
-
-
-@pytest.mark.parametrize("disabled", [False, True])
-def test_archive_encryption_guard_is_described_as_mandatory_platform_coverage(disabled):
-    from app.interfaces.project_agents import project_guide_compilation_prompt_bytes
-
-    capability_id = "artifact.archive.entries_safe"
-    catalogue = build_pre_submission_checker_catalogue(
-        disabled_entry_ids=frozenset({capability_id}) if disabled else frozenset()
-    )
-    projection = project_guide_pre_submission_capabilities(catalogue)
-    definition = next(item for item in projection.definitions if item.stable_id == capability_id)
-    expected = "Reject encrypted ZIP entries, symbolic links and special files"
-    assert definition.public_name == expected
-    manifest_entry = next(item for item in catalogue.manifest["entries"]
-                          if item["stable_id"] == capability_id)
-    assert manifest_entry["public_name"] == expected
-    assert definition.classification == "mandatory_security"
-    assert definition.dispatch_kind == "platform_capability"
-    assert definition.dispatch_capability == "submission_archive.entries_safe"
-    assert definition.selectable is False
-    assert definition.state == ("disabled" if disabled else "enabled")
-    assert projection.available is (not disabled)
-    context = _context().model_copy(update={"pre_submission_capabilities": projection})
-    assert expected.encode() in project_guide_compilation_prompt_bytes(context)
-
-
-def test_compilation_rejects_unavailable_mandatory_pre_submission_projection() -> None:
-    context = _context().model_copy(
-        update={
-            "pre_submission_capabilities": project_guide_pre_submission_capabilities(
-                build_pre_submission_checker_catalogue(
-                    disabled_entry_ids=frozenset({"artifact.outer_zip.valid"})
-                )
-            )
-        }
-    )
-    result = ProjectGuideCompilationResult(
-        status="draft_ready",
-        findings=(
-            CompilationFinding(severity="info", code="guide.ready", message="Guide is complete."),
-        ),
-        submission_artifact_policy=_artifact_policy(),
-        agent_version="v1",
-    )
-    with pytest.raises(ValueError, match="projection is unavailable"):
-        validate_project_guide_compilation_result(context, result)
-
-
-def test_post_submission_projection_uses_registry_and_frozen_default_truth() -> None:
-    projection = current_post_submit_catalogue()
-    by_name = {item.capability_id: item for item in projection.definitions}
-
-    assert projection.source_version == "v0.1"
-    assert set(DEFAULT_DURABLE_CHECKERS).issubset(by_name)
-    assert {name for name, item in by_name.items() if item.platform_default} == set(
-        DEFAULT_DURABLE_CHECKERS
-    )
-    assert [item.capability_id for item in projection.definitions if item.selectable] == [
-        "check_acceptance_criteria_present"
+    assert [(item.capability_id, item.phase) for item in registered] == [
+        ("acme.post", "post_submit"),
+        ("acme.pre", "pre_submit"),
     ]
-    assert all(item.stage == "post_submit" for item in projection.definitions)
+    assert all(item.registry_entry is not None for item in registered)
 
 
-def test_post_submission_projection_rejects_sparse_definitions() -> None:
-    from app.modules.checkers.api.post_submit_catalogue import PostSubmitCatalogue
-
-    projection = current_post_submit_catalogue()
+def test_checker_projection_rejects_a_second_code_owned_default() -> None:
+    projection = _capabilities()
     body = projection.model_dump(mode="json")
-    sparse_keys = {"capability_id", "capability_version", "stage", "platform_default", "selectable"}
-    body["definitions"] = [
-        {key: value for key, value in item.items() if key in sparse_keys}
-        for item in body["definitions"]
-    ]
-    body["manifest_sha256"] = canonical_json_hash(
-        {key: value for key, value in body.items() if key != "manifest_sha256"}
+    body["definitions"] = (
+        *body["definitions"],
+        {
+            "capability_id": "workstream.other",
+            "capability_version": "v1",
+            "phase": "post_submit",
+            "selectable": False,
+            "registry_entry": None,
+        },
     )
-    with pytest.raises(ValidationError, match="Field required"):
-        PostSubmitCatalogue.model_validate(body)
+    body["definitions"] = tuple(
+        sorted(
+            body["definitions"],
+            key=lambda item: (item["phase"], item["capability_id"], item["capability_version"]),
+        )
+    )
+    manifest = {
+        "schema_version": body["schema_version"],
+        "definitions": list(body["definitions"]),
+    }
+    body["manifest_sha256"] = external_checker_json_hash(manifest)
+    with pytest.raises(ValidationError, match="default capability"):
+        ExternalCheckerCapabilityProjection.model_validate_json(json.dumps(body))
 
 
 @pytest.mark.parametrize(
@@ -357,8 +371,13 @@ def test_guide_evidence_ref_rejects_non_lineage_fields(payload: dict[str, str], 
 )
 def test_model_produced_text_rejects_unsafe_shapes(unsafe: str) -> None:
     with pytest.raises(ValidationError):
-        CapabilitySuggestion(requirement_id="r001", stage="pre_submit",
-                             title="new checker", rationale=unsafe, evidence_refs=(_evidence(),))
+        CapabilitySuggestion(
+            requirement_id="r001",
+            stage="pre_submit",
+            title="new checker",
+            rationale=unsafe,
+            evidence_refs=(_evidence(),),
+        )
 
 
 @pytest.mark.parametrize(
@@ -370,8 +389,13 @@ def test_model_produced_text_rejects_unsafe_shapes(unsafe: str) -> None:
     ],
 )
 def test_model_produced_text_allows_safe_security_policy_language(safe: str) -> None:
-    suggestion = CapabilitySuggestion(requirement_id="r001", stage="pre_submit",
-                                      title="security guidance", rationale=safe, evidence_refs=(_evidence(),))
+    suggestion = CapabilitySuggestion(
+        requirement_id="r001",
+        stage="pre_submit",
+        title="security guidance",
+        rationale=safe,
+        evidence_refs=(_evidence(),),
+    )
     assert suggestion.rationale == safe
 
 
@@ -380,8 +404,13 @@ def test_compilation_context_requires_task_examples_and_preserves_all_input() ->
     import json
 
     payload = _context().model_dump(mode="json")
-    examples = [{"content": "A starting idea."}, {"content": "  修復 worker\n", "title": "Second", "labels": ["research", "repair"]}]
-    context = ProjectGuideCompilationContext.model_validate(payload | {"task_examples": examples})
+    examples = [
+        {"content": "A starting idea."},
+        {"content": "  修復 worker\n", "title": "Second", "labels": ["research", "repair"]},
+    ]
+    context = ProjectGuideCompilationContext.model_validate_json(
+        json.dumps(payload | {"task_examples": examples})
+    )
     sent = json.loads(project_guide_compilation_prompt_bytes(context))
     assert sent["task_examples"] == [item.model_dump(mode="json") for item in context.task_examples]
     del payload["task_examples"]
@@ -402,24 +431,46 @@ def test_maximum_examples_and_documents_fit_default_runtime_input_budgets() -> N
     from app.modules.projects.api.task_examples import MAXIMUM_TASK_EXAMPLE_BYTES
 
     context = _context()
-    examples = [{"content": "x" * 65_536, "title": None, "labels": []},
-                {"content": "", "title": None, "labels": []}]
+    examples = [
+        {"content": "x" * 65_536, "title": None, "labels": []},
+        {"content": "", "title": None, "labels": []},
+    ]
     overhead = len(json.dumps(examples, sort_keys=True, separators=(",", ":")).encode())
     examples[1]["content"] = "y" * (MAXIMUM_TASK_EXAMPLE_BYTES - overhead)
-    assert len(json.dumps(examples, sort_keys=True, separators=(",", ":")).encode()) == MAXIMUM_TASK_EXAMPLE_BYTES
+    assert (
+        len(json.dumps(examples, sort_keys=True, separators=(",", ":")).encode())
+        == MAXIMUM_TASK_EXAMPLE_BYTES
+    )
     prototype = context.material.documents[0].model_dump(mode="json")
-    documents = [prototype | {
-        "source_item_id": str(uuid4()), "ingest_id": str(uuid4()),
-        "put_attempt_id": str(uuid4()), "item_order": index,
-    } for index in range(100)]
-    material = context.material.model_dump(mode="json") | {"documents": documents, "guide_version": "g" * 50}
-    largest = ProjectGuideCompilationContext.model_validate(
-        context.model_dump(mode="json") | {"task_examples": examples, "material": material},
+    documents = [
+        prototype
+        | {
+            "source_item_id": str(uuid4()),
+            "ingest_id": str(uuid4()),
+            "put_attempt_id": str(uuid4()),
+            "item_order": index,
+        }
+        for index in range(100)
+    ]
+    material = context.material.model_dump(mode="json") | {
+        "documents": documents,
+        "guide_version": "g" * 50,
+    }
+    largest = ProjectGuideCompilationContext.model_validate_json(
+        json.dumps(
+            context.model_dump(mode="json") | {"task_examples": examples, "material": material}
+        ),
     )
     assert len(largest.task_examples) == 2
     assert len(largest.material.documents) == 100
-    assert len(project_guide_compilation_prompt_bytes(largest)) <= largest.runtime_configuration.maximum_manifest_bytes
-    assert len(canonical_project_guide_compilation_context_bytes(largest)) <= MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES
+    assert (
+        len(project_guide_compilation_prompt_bytes(largest))
+        <= largest.runtime_configuration.maximum_manifest_bytes
+    )
+    assert (
+        len(canonical_project_guide_compilation_context_bytes(largest))
+        <= MAXIMUM_PROJECT_GUIDE_COMPILATION_PROMPT_BYTES
+    )
 
 
 def test_unified_result_accepts_exact_stage_capability_and_closed_parameters() -> None:
@@ -446,16 +497,16 @@ def test_unified_result_accepts_exact_stage_capability_and_closed_parameters() -
         pre_submit_bindings=(
             PreSubmissionBindingProposal(
                 requirement_id="requirement.packet",
-                capability_id="policy.file_size.limit",
-                capability_version="v1",
+                capability_id="acme.pre",
+                capability_version="v1.2.3",
                 stage="pre_submit",
             ),
         ),
         post_submit_bindings=(
             PostSubmissionBindingProposal(
                 requirement_id="requirement.acceptance",
-                capability_id="check_acceptance_criteria_present",
-                capability_version="v0.1",
+                capability_id="acme.post",
+                capability_version="v1.2.3",
                 stage="post_submit",
             ),
         ),
@@ -464,21 +515,82 @@ def test_unified_result_accepts_exact_stage_capability_and_closed_parameters() -
     validate_project_guide_compilation_result(context, result)
 
 
+def test_unified_result_selects_each_exact_registered_capability_version() -> None:
+    definitions = tuple(
+        sorted(
+            (
+                ExternalCheckerCapabilityDefinition(
+                    capability_id=WORKSTREAM_DEFAULT_CHECKER_ID,
+                    capability_version=WORKSTREAM_DEFAULT_CHECKER_VERSION,
+                    phase="pre_submit",
+                    selectable=False,
+                ),
+                _registered_capability("acme.pre", "pre_submit", "v1.0.0"),
+                _registered_capability("acme.pre", "pre_submit", "v2.0.0"),
+                _registered_capability("acme.post", "post_submit"),
+            ),
+            key=lambda item: (item.phase, item.capability_id, item.capability_version),
+        )
+    )
+    body = {
+        "schema_version": "external_checker_capabilities.v1",
+        "definitions": [item.model_dump(mode="json") for item in definitions],
+    }
+    capabilities = ExternalCheckerCapabilityProjection(
+        definitions=definitions,
+        manifest_sha256=external_checker_json_hash(body),
+    )
+    context = _context().model_copy(update={"checker_capabilities": capabilities})
+
+    for version in ("v1.0.0", "v2.0.0"):
+        result = ProjectGuideCompilationResult(
+            status="draft_ready",
+            submission_artifact_policy=_artifact_policy(),
+            requirements=(
+                AtomicGuideRequirement(
+                    requirement_id="requirement.packet",
+                    statement="Validate the submission packet.",
+                    disposition="supported_pre_submit",
+                ),
+            ),
+            pre_submit_bindings=(
+                PreSubmissionBindingProposal(
+                    requirement_id="requirement.packet",
+                    capability_id="acme.pre",
+                    capability_version=version,
+                    stage="pre_submit",
+                ),
+            ),
+            agent_version="v1",
+        )
+        validate_project_guide_compilation_result(context, result)
+
+    wrong_version = result.model_copy(
+        update={
+            "pre_submit_bindings": (
+                result.pre_submit_bindings[0].model_copy(update={"capability_version": "v1.5.0"}),
+            )
+        }
+    )
+    with pytest.raises(ValueError, match="version is stale"):
+        validate_project_guide_compilation_result(context, wrong_version)
+
+
 @pytest.mark.parametrize(
     ("capability_id", "version", "stage", "expected_error"),
     [
-        ("submission.packet.required_fields", "v1", "pre_submit", "binding is invalid"),
-        ("policy.submission_packet.validate", "stale", "pre_submit", "version is stale"),
+        ("workstream.default", "v1", "pre_submit", "binding is invalid"),
+        ("acme.pre", "stale", "pre_submit", "version is stale"),
         ("unknown.capability", "v1", "pre_submit", "binding is invalid"),
         (
-            "check_submission_packet",
-            "v0.1",
+            "acme.pre",
+            "v1.2.3",
             "post_submit",
             "binding is invalid",
         ),
         (
-            "check_acceptance_criteria_present",
-            "v0.1",
+            "acme.post",
+            "v1.2.3",
             "pre_submit",
             "binding is invalid",
         ),
@@ -489,7 +601,9 @@ def test_unified_result_rejects_default_unknown_stale_and_wrong_stage_bindings(
 ) -> None:
     context = _context()
     disposition = "supported_post_submit" if stage == "post_submit" else "supported_pre_submit"
-    binding_type = PreSubmissionBindingProposal if stage == "pre_submit" else PostSubmissionBindingProposal
+    binding_type = (
+        PreSubmissionBindingProposal if stage == "pre_submit" else PostSubmissionBindingProposal
+    )
     binding = binding_type(
         requirement_id="requirement.one",
         capability_id=capability_id,
@@ -549,10 +663,11 @@ def test_unified_result_rejects_open_nested_or_executable_configuration() -> Non
         )
 
 
-def test_pre_submission_projection_resource_budget_is_deeply_frozen() -> None:
-    projection = project_guide_pre_submission_capabilities(build_pre_submission_checker_catalogue())
+def test_external_registry_resource_budget_is_deeply_frozen() -> None:
+    projection = _capabilities()
+    registered = next(item for item in projection.definitions if item.registry_entry)
     with pytest.raises(ValidationError):
-        projection.definitions[0].resource_budget.maximum_results = 99
+        registered.registry_entry.resources.deadline_ms = 99
 
 
 @pytest.mark.parametrize("field", ["canonical_content", "content_markdown", "provider_url"])
@@ -562,7 +677,9 @@ def test_manifest_rejects_document_bodies_and_untrusted_storage_coordinates(fiel
         GuideDocumentManifest.model_validate(body | {field: "untrusted content"})
 
 
-@pytest.mark.parametrize("field", ["source_item_id", "ingest_id", "put_attempt_id", "replica_id", "sha256"])
+@pytest.mark.parametrize(
+    "field", ["source_item_id", "ingest_id", "put_attempt_id", "replica_id", "sha256"]
+)
 def test_manifest_requires_exact_document_identity(field):
     body = _context().material.model_dump(mode="python")
     document = dict(body["documents"][0])
@@ -636,8 +753,8 @@ def test_post_submission_binding_rejects_unowned_parameters() -> None:
     context = _context()
     binding = PostSubmissionBindingProposal(
         requirement_id="requirement.one",
-        capability_id="check_acceptance_criteria_present",
-        capability_version="v0.1",
+        capability_id="acme.post",
+        capability_version="v1.2.3",
         stage="post_submit",
         parameters=(CapabilityParameter(name="unowned_parameter", value=True),),
     )
@@ -654,7 +771,7 @@ def test_post_submission_binding_rejects_unowned_parameters() -> None:
         post_submit_bindings=(binding,),
         agent_version="v1",
     )
-    with pytest.raises(ValueError, match="Extra inputs"):
+    with pytest.raises(ValueError, match="value is invalid"):
         validate_project_guide_compilation_result(context, result)
 
 
@@ -701,7 +818,7 @@ def test_result_status_must_match_findings_and_blocking_dispositions(
 
 @pytest.mark.parametrize(
     "invalid_capability_id",
-    ["policy.submission_packet.validate", "artifact.quality.placeholder_signal"],
+    ["acme.pre", "unknown.capability"],
 )
 def test_platform_coverage_requires_exact_mandatory_platform_capability(
     invalid_capability_id: str,
@@ -716,7 +833,7 @@ def test_platform_coverage_requires_exact_mandatory_platform_capability(
                 statement="Validate the outer ZIP.",
                 disposition="platform_covered",
                 platform_coverage=PlatformCoverageRef(
-                    capability_id="artifact.outer_zip.valid",
+                    capability_id="workstream.default",
                     capability_version="v1",
                     stage="pre_submit",
                 ),
@@ -745,16 +862,8 @@ def test_platform_coverage_requires_exact_mandatory_platform_capability(
         validate_project_guide_compilation_result(context, invalid)
 
 
-def test_platform_coverage_rejects_disabled_platform_capability() -> None:
-    context = _context().model_copy(
-        update={
-            "pre_submission_capabilities": project_guide_pre_submission_capabilities(
-                build_pre_submission_checker_catalogue(
-                    disabled_entry_ids=frozenset({"artifact.outer_zip.valid"})
-                )
-            )
-        }
-    )
+def test_platform_coverage_rejects_registered_project_image() -> None:
+    context = _context()
     result = ProjectGuideCompilationResult(
         status="draft_ready",
         submission_artifact_policy=_artifact_policy(),
@@ -764,19 +873,19 @@ def test_platform_coverage_rejects_disabled_platform_capability() -> None:
                 statement="Validate the outer ZIP.",
                 disposition="platform_covered",
                 platform_coverage=PlatformCoverageRef(
-                    capability_id="artifact.outer_zip.valid",
-                    capability_version="v1",
+                    capability_id="acme.pre",
+                    capability_version="v1.2.3",
                     stage="pre_submit",
                 ),
             ),
         ),
         agent_version="v1",
     )
-    with pytest.raises(ValueError, match="projection is unavailable"):
+    with pytest.raises(ValueError, match="canonical truth"):
         validate_project_guide_compilation_result(context, result)
 
 
-def test_platform_coverage_accepts_exact_post_submit_default() -> None:
+def test_platform_coverage_rejects_post_submit_project_image() -> None:
     result = ProjectGuideCompilationResult(
         status="draft_ready",
         submission_artifact_policy=_artifact_policy(),
@@ -786,15 +895,16 @@ def test_platform_coverage_accepts_exact_post_submit_default() -> None:
                 statement="Run the platform submission-packet check.",
                 disposition="platform_covered",
                 platform_coverage=PlatformCoverageRef(
-                    capability_id="check_submission_packet",
-                    capability_version="v0.1",
+                    capability_id="acme.post",
+                    capability_version="v1.2.3",
                     stage="post_submit",
                 ),
             ),
         ),
         agent_version="v1",
     )
-    validate_project_guide_compilation_result(_context(), result)
+    with pytest.raises(ValueError, match="canonical truth"):
+        validate_project_guide_compilation_result(_context(), result)
 
 
 def test_platform_coverage_ref_is_required_only_for_platform_disposition() -> None:
@@ -853,17 +963,36 @@ def test_blocked_result_cannot_publish_policy_or_bindings() -> None:
 
 
 @pytest.mark.parametrize("parameters", [[], [{"name": "maximum_file_size_bytes", "value": 1000}]])
-def test_pre_submission_binding_rejects_duplicate_policy_configuration(parameters):
-    """The sole intake configuration is the artifact policy, never a second copy."""
-    with pytest.raises(ValidationError, match="Extra inputs"):
-        PreSubmissionBindingProposal(
-            requirement_id="requirement.size", capability_id="policy.file_size.limit",
-            capability_version="v1", stage="pre_submit", parameters=parameters,
-        )
+def test_pre_submission_binding_accepts_explicit_checker_configuration(parameters):
+    """Approved PRE image configuration is distinct from platform intake limits."""
+    binding = PreSubmissionBindingProposal(
+        requirement_id="requirement.size",
+        capability_id="policy.file_size.limit",
+        capability_version="v1",
+        stage="pre_submit",
+        parameters=parameters,
+    )
+    assert [item.model_dump(mode="json") for item in binding.parameters] == parameters
 
 
 def test_context_rejects_instruction_version_separate_from_snapshot() -> None:
     payload = _context().model_dump(mode="json")
     payload["instruction_version"] = "different"
     with pytest.raises(ValidationError, match="instruction configuration mismatch"):
-        ProjectGuideCompilationContext.model_validate(payload)
+        ProjectGuideCompilationContext.model_validate_json(json.dumps(payload))
+
+
+@pytest.mark.parametrize("value", ["outputs/answer.md", "src/main.py", "tests/**/*.py"])
+def test_checker_configuration_accepts_canonical_relative_paths(value: str) -> None:
+    parameter = CapabilityParameter(name="required_path", value=value)
+    assert parameter.value == value
+
+
+@pytest.mark.parametrize("value", [
+    "/etc/passwd", "../answer.md", "src/../answer.md", "https://example.invalid/x",
+    "file:///tmp/x", "src/answer.md\x00", "src/$(command)", "bash/run",
+    "token=secret", "Bearer opaque-token", "import subprocess", "src\\main.py",
+])
+def test_checker_configuration_rejects_unsafe_machine_values(value: str) -> None:
+    with pytest.raises(ValidationError):
+        CapabilityParameter(name="required_path", value=value)

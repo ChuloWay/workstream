@@ -5,7 +5,7 @@ from sqlalchemy import select, func, text
 from sqlalchemy.exc import IntegrityError
 
 from app.modules.checkers.models import CheckerRun, CheckerResult
-from app.modules.checkers.post_submit_contracts import make_post_submit_result
+from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_result
 from app.modules.outbox.models import OutboxEvent
 from tests.post_submit_materialization_helpers import material_fixture
 from .support import live_executor, reserve
@@ -17,8 +17,8 @@ async def terminal_facts(h, lease, outcome):
     facts = await final_facts(h, lease)
     if outcome == "infrastructure_failed":
         body = facts.result.model_dump(exclude={"result_digest"})
-        body.update(outcome=outcome, member_results=(), infrastructure_failure_code="implementation_unavailable")
-        facts = facts.model_copy(update={"result": make_post_submit_result(**body)})
+        body.update(outcome=outcome, execution=None, infrastructure_failure_code="implementation_unavailable")
+        facts = facts.model_copy(update={"result": make_selected_post_submit_result(**body)})
     return facts
 
 

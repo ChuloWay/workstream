@@ -280,6 +280,15 @@ def post_submit_execution_authority(session):
     return PostSubmitExecutionAuthorization(session)
 
 
+def selected_pre_submit_authority(session):
+    """Compose fixed selected-PRE execute/finalize authority."""
+    from app.modules.authorization.pre_submit_authorization import (
+        SelectedPreSubmitAuthorization,
+    )
+
+    return SelectedPreSubmitAuthorization(session)
+
+
 def post_submit_materialization_authority(session):
     """Compose the separate fixed ART materializer principal."""
     from app.modules.authorization.post_submit_authorization import PostSubmitMaterializationAuthorization

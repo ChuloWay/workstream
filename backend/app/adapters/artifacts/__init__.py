@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.api_controls import request_ids
 from app.api.deps.authorization import get_authorization_actor_identity
-from app.adapters.checkers import PreSubmitCheckerExecutionAdapter, post_submission_executor, checker_output_reservations
+from app.adapters.checkers import checker_output_reservations
 from app.adapters.projects import project_locked_policy_context_port
 from app.adapters.tasks import task_submission_context_port
-from app.db.session import get_db_session, get_session_factory
+from app.db.session import get_db_session
 from app.interfaces.artifact_operations import GuideArtifactIngestCommand
 from app.modules.projects.api.guide_documents import GuideDocumentUploadTargetPort
 from app.modules.artifacts.api import SubmissionBundlePreparationCommand
@@ -59,54 +59,6 @@ from app.modules.artifacts.authorization import (
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.api import ActorIdentityFacts
 from app.modules.tasks.api.guide_documents import TaskGuideDocumentsPort
-
-
-from app.modules.artifacts.api import SubmissionBundlePreparationRequest
-from app.modules.artifacts.pre_submit_evidence import PreSubmitEvidencePersistenceResult
-from app.modules.artifacts.submission_materialization import (
-    PreparedBundleMaterializationRequest,
-    PreparedBundlePreSubmitEvidenceService,
-)
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
-    PostSubmissionExecutionPort,
-)
-
-
-class CheckerPhaseService:
-    """One command per phase, composed from the canonical ART and CHECKER owners."""
-
-    def __init__(
-        self, *, pre_submission: PreparedBundlePreSubmitEvidenceService,
-        post_submission: PostSubmissionExecutionPort,
-    ) -> None:
-        self._pre_submission = pre_submission
-        self._post_submission = post_submission
-
-    async def evaluate_pre_submission(
-        self, request: PreparedBundleMaterializationRequest, reservation: object, *,
-        preparation_request: SubmissionBundlePreparationRequest,
-    ) -> PreSubmitEvidencePersistenceResult:
-        """Finish ART's committed selection, preserving its exact canonical result."""
-        if request.prepared_authorization is not None:
-            raise ValueError("pre_submission_phase_requires_consumed_authorization")
-        if isinstance(reservation, PreSubmitEvidencePersistenceResult):
-            return reservation
-        return await self._pre_submission.execute_reserved(
-            request, reservation, preparation_request=preparation_request,
-        )
-
-    async def evaluate_post_submission(
-        self, request: PostSubmissionEvaluationRequest,
-    ) -> PostSubmissionEvaluationResult:
-        """Delegate the closed post contract; production execution remains unavailable."""
-        request = PostSubmissionEvaluationRequest.model_validate(request)
-        result = PostSubmissionEvaluationResult.model_validate(
-            await self._post_submission.evaluate_post_submission(request)
-        )
-        result.validate_request(request)
-        return result
 
 
 async def get_submission_bundle_preparation_actor(
@@ -383,7 +335,6 @@ def get_submission_bundle_preparation_command(
     from app.modules.artifacts.submission_archive import SubmissionArchiveInspector
     from app.modules.artifacts.submission_materialization import (
         PreparedBundleMaterializationService,
-        PreparedBundlePreSubmitEvidenceService,
     )
     from app.modules.artifacts.submission_admission import (
         PreparedSubmissionBundlePreparationCommand,
@@ -422,10 +373,16 @@ def get_submission_bundle_preparation_command(
                 )
             )
             preparation = ArtifactPreparationService(manager)
-            catalogue = request.app.state.pre_submission_checker_catalogue
             inspector = SubmissionArchiveInspector(submission_archive_limits(settings))
-            checker_execution = PreSubmitCheckerExecutionAdapter(
-                catalogue=catalogue,
+            from app.adapters.auth import selected_pre_submit_authority
+            from app.adapters.checkers import selected_pre_submit_checker_execution
+            from app.modules.artifacts.selected_pre_submit_execution import (
+                SelectedPreSubmitExecutionService,
+            )
+            from app.adapters.checkers import selected_pre_submit_coordinator
+
+            checker_execution = selected_pre_submit_checker_execution(
+                settings=settings,
                 archive_inspector=inspector,
             )
             storage_schemes = {"local": "local", "s3_compatible": "s3"}
@@ -448,28 +405,22 @@ def get_submission_bundle_preparation_command(
                 settings,
                 internal_authority,
             )
-            evidence = PreparedBundlePreSubmitEvidenceService(
-                session=session,
-                materialization=materialization,
-                preparation_authorization=authority,
-                task_contexts=task_contexts,
-                project_contexts=project_contexts,
-            )
-            from app.adapters.checkers import submission_evaluation_content
+            selected_coordinator = selected_pre_submit_coordinator(session)
 
             yield SubmissionBundlePreparationRuntime(
-                evaluation_content=submission_evaluation_content,
                 preparation=preparation,
                 inspector=inspector,
-                catalogue=catalogue,
                 materialization=materialization,
-                evidence=evidence,
-                checker_service=CheckerPhaseService(
-                    pre_submission=evidence,
-                    post_submission=post_submission_executor(
-                        sessions=get_session_factory(), materialization=post_submission_materialization(
-                            sessions=get_session_factory(), store=store, namespace=namespace,
-                            preparation=preparation, inspector=inspector)),
+                selected_coordinator=selected_coordinator,
+                selected_execution=SelectedPreSubmitExecutionService(
+                    session=session,
+                    coordinator=selected_coordinator,
+                    authority=selected_pre_submit_authority(session),
+                    materialization=materialization,
+                ),
+                storage_scheme=storage_scheme,
+                artifact_deadline_ms=int(
+                    settings.artifact_preparation_total_deadline_seconds * 1000
                 ),
                 durable_put=SubmissionBundleDurablePutService(
                     session=session,
@@ -576,8 +527,26 @@ class _WorkerPostSubmissionMaterialization:
             initialize_artifact_internal_runtime,
         )
         from app.modules.artifacts.submission_archive import SubmissionArchiveInspector
+        from app.modules.checkers.api.external_policy import (
+            ExternalCheckerPolicyError,
+            selected_post_submit_execution_budget_ms,
+        )
+        from app.modules.checkers.api.materialization import (
+            PostSubmissionMaterializationFailure,
+        )
 
         settings = get_settings()
+        try:
+            selected_post_submit_execution_budget_ms(
+                facts.request.policy,
+                artifact_deadline_ms=int(
+                    settings.artifact_preparation_total_deadline_seconds * 1000
+                ),
+            )
+        except ExternalCheckerPolicyError:
+            raise PostSubmissionMaterializationFailure(
+                "post_submit_material_deadline_unavailable"
+            ) from None
         await initialize_artifact_internal_runtime()
         with _artifact_internal_runtime() as (store, namespace):
             manager = create_artifact_scratch_manager(settings)

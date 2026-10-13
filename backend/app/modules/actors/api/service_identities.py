@@ -16,6 +16,7 @@ class ServiceIdentity(StrEnum):
     ARTIFACT_CHECKER_OUTPUT = "workstream.artifact.checker_output"
     TASK_ASSIGNMENT_RECONCILER = "workstream.task.assignment_reconciler"
     TASK_POST_SUBMIT_ROUTER = "workstream.task.post_submit_router"
+    CHECKER_PRE_SUBMIT = "workstream.checker.pre_submit"
     CHECKER_POST_SUBMIT = "workstream.checker.post_submit"
     OUTBOX_DISPATCHER = "workstream.outbox.dispatcher"
     PROJECT_SETUP = "workstream.project.setup"

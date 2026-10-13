@@ -36,6 +36,7 @@ from app.modules.checkers.models import (  # noqa: F401
     CheckerRun,
     CheckerSubmissionFence,
     ExternalCheckerRegistryEntryRecord,
+    SelectedPreSubmitRun,
 )
 from app.modules.compensation.models import (  # noqa: F401
     CompensationAdapterBindingLifecycleEvent,

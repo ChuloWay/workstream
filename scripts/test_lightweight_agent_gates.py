@@ -57,13 +57,13 @@ class LightweightAgentGateTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, exit_code, result.stderr)
 
-    def test_backend_redis_services_use_the_exact_official_mirror_image(self) -> None:
+    def test_backend_redis_services_use_the_exact_official_image(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
         images = re.findall(r"(?m)^      redis:\n        image: (\S+)$", workflow)
         self.assertEqual(
             images,
             [
-                "public.ecr.aws/docker/library/redis:7-alpine@sha256:"
+                "docker.io/library/redis:7-alpine@sha256:"
                 "520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7"
             ]
             * 2,

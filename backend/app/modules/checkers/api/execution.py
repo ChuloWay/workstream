@@ -10,13 +10,14 @@ from typing import Literal, Protocol
 from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from app.core.hashing import canonical_json_hash
-from app.modules.checkers.api.post_submit import (
-    PostSubmissionEvaluationRequest,
-    PostSubmissionEvaluationResult,
-    PostSubmitCurrentResultReference,
+
+from app.modules.checkers.api.evaluation_contract import (
+    PostSubmissionExecutionRequest,
+    PostSubmissionExecutionResult,
 )
-from app.modules.checkers.api.post_submit_catalogue import (
-    PostSubmitValue,
+from app.modules.checkers.api.selected_post_submit import SelectedPostSubmitCurrentResultReference
+from app.modules.checkers.api.canonical_values import (
+    CheckerValue,
     ResourceId,
     Sha256,
     VersionNumber,
@@ -34,7 +35,7 @@ class CheckerRequestConflict(CheckerExecutionUnavailable):
     """A request key or generation already belongs to different facts."""
 
 
-class CheckerRetryCommand(PostSubmitValue):
+class CheckerRetryCommand(CheckerValue):
     """Operator's exact source, reason and replay key; no caller-selected successor."""
 
     source_run_id: ResourceId
@@ -49,7 +50,7 @@ class CheckerRetryCommand(PostSubmitValue):
         return value
 
 
-class CheckerRetrySource(PostSubmitValue):
+class CheckerRetrySource(CheckerValue):
     """Stored immutable failed-run tuple presented to AUTH before supersession."""
 
     project_id: ResourceId
@@ -67,7 +68,7 @@ class CheckerRetrySource(PostSubmitValue):
     failure_code: str = Field(min_length=1, max_length=100)
 
 
-class CheckerRetryPreparation(PostSubmitValue):
+class CheckerRetryPreparation(CheckerValue):
     """Stable actor/request/source identity bound before AUTH grants are locked."""
 
     actor_profile_id: ResourceId
@@ -83,7 +84,7 @@ class CheckerRetryPreparation(PostSubmitValue):
         return value
 
 
-class CheckerRetrySuccessor(PostSubmitValue):
+class CheckerRetrySuccessor(CheckerValue):
     """Actual coordinator and participant identities appended in one transaction."""
 
     request_id: ResourceId
@@ -95,7 +96,7 @@ class CheckerRetrySuccessor(PostSubmitValue):
     audit_event_id: ResourceId
 
 
-class CheckerRetryResult(PostSubmitValue):
+class CheckerRetryResult(CheckerValue):
     """Retained receipt identities returned on new request or authorized replay."""
 
     receipt_id: ResourceId
@@ -104,7 +105,7 @@ class CheckerRetryResult(PostSubmitValue):
     authorization_decision_id: ResourceId
 
 
-class CheckerRetryEventExpectation(PostSubmitValue):
+class CheckerRetryEventExpectation(CheckerValue):
     """Immutable retry event facts for exact TASK delivery comparison."""
 
     event_type: str
@@ -118,14 +119,14 @@ class CheckerRetryEventExpectation(PostSubmitValue):
     payload_digest: Sha256
 
 
-class CheckerRetryDelivery(PostSubmitValue):
+class CheckerRetryDelivery(CheckerValue):
     """CHECKERS-owned committed source and exact event for the single TASK handler."""
 
-    request: PostSubmissionEvaluationRequest
+    request: PostSubmissionExecutionRequest
     expected_event: CheckerRetryEventExpectation
 
 
-class CheckerRetryAuthorityReceipt(PostSubmitValue):
+class CheckerRetryAuthorityReceipt(CheckerValue):
     """AUTH's consumed exact resource, used only in the caller transaction."""
 
     actor_profile_id: ResourceId
@@ -169,7 +170,7 @@ class CheckerRetryAuditPort(Protocol):
         ...
 
 
-class EvaluationReservation(PostSubmitValue):
+class EvaluationReservation(CheckerValue):
     """Stable request, attempt and result identities reserved together."""
 
     request_id: ResourceId
@@ -179,14 +180,14 @@ class EvaluationReservation(PostSubmitValue):
     evaluation_generation: VersionNumber
 
 
-class ReservedEvaluation(PostSubmitValue):
+class ReservedEvaluation(CheckerValue):
     """Exact retained request and identities, without a currentness assertion."""
 
-    request: PostSubmissionEvaluationRequest
+    request: PostSubmissionExecutionRequest
     reservation: EvaluationReservation
 
 
-class ExecutionLease(PostSubmitValue):
+class ExecutionLease(CheckerValue):
     """Database-timed generation granting temporary use of one reserved attempt."""
 
     reservation: EvaluationReservation
@@ -195,14 +196,14 @@ class ExecutionLease(PostSubmitValue):
     expires_at: AwareDatetime
 
 
-class ExecuteFacts(PostSubmitValue):
+class ExecuteFacts(CheckerValue):
     """Exact request and lease consumed by execution authority."""
 
-    request: PostSubmissionEvaluationRequest
+    request: PostSubmissionExecutionRequest
     lease: ExecutionLease
 
 
-class VerifiedMaterialFacts(PostSubmitValue):
+class VerifiedMaterialFacts(CheckerValue):
     """ART-verified byte and lineage facts required for completed results."""
 
     submission_id: ResourceId
@@ -219,7 +220,7 @@ class VerifiedMaterialFacts(PostSubmitValue):
 class FinalizeFacts(ExecuteFacts):
     """Exact terminal result and material custody consumed by finalization authority."""
 
-    result: PostSubmissionEvaluationResult
+    result: PostSubmissionExecutionResult
     material: VerifiedMaterialFacts | None
     input_materialization_evidence_id: ResourceId | None
     output_binding_ids: tuple[ResourceId, ...] = Field(max_length=0)
@@ -291,14 +292,14 @@ def execution_authority_digest(facts: ExecuteFacts | FinalizeAuthorityFacts) -> 
     return canonical_json_hash(execution_authority_values(facts))
 
 
-class ExecuteEvidence(PostSubmitValue):
+class ExecuteEvidence(CheckerValue):
     """Opaque action-specific receipt; real AUTH custody is installed by 04D."""
 
     evidence_id: ResourceId
     facts_digest: Sha256
 
 
-class FinalizeEvidence(PostSubmitValue):
+class FinalizeEvidence(CheckerValue):
     """Nominally distinct from execute evidence, even for the same run."""
 
     evidence_id: ResourceId
@@ -344,12 +345,12 @@ class CurrentExecutionPort(Protocol):
 class ExecutionAuthorityPort(Protocol):
     """Provide fresh authorization before acquiring an execution lease."""
 
-    async def preflight(self, request: PostSubmissionEvaluationRequest) -> None:
+    async def preflight(self, request: PostSubmissionExecutionRequest) -> None:
         """Reject unavailable execution authority before entering preparation."""
         ...
 
     def prepare_execution(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> AbstractAsyncContextManager[PreparedExecution]:
         """Hold execution preparation within the caller transaction."""
         ...
@@ -358,37 +359,37 @@ class ExecutionAuthorityPort(Protocol):
 class FinalizationAuthorityPort(Protocol):
     """Provide fresh authorization for atomic terminal publication."""
 
-    async def preflight(self, request: PostSubmissionEvaluationRequest) -> None:
+    async def preflight(self, request: PostSubmissionExecutionRequest) -> None:
         """Reject unavailable finalization authority before preparation."""
         ...
 
     def prepare_finalization(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> AbstractAsyncContextManager[PreparedFinalization]:
         """Hold finalization preparation within the terminal transaction."""
         ...
 
 
-class CompletedEvaluation(PostSubmitValue):
+class CompletedEvaluation(CheckerValue):
     """Fresh owner projection; the consumer must keep the caller transaction open."""
 
-    reference: PostSubmitCurrentResultReference
+    reference: SelectedPostSubmitCurrentResultReference
     routing_recommendation: Literal["allow_review", "needs_revision", "task_setup_blocked"]
-    result: PostSubmissionEvaluationResult
+    result: PostSubmissionExecutionResult
 
 
 class EvaluationTaskGuard(Protocol):
     """TASK locks exact evaluation scope; the boolean is reservation eligibility, not authority."""
 
-    async def lock_evaluation_scope(self, request: PostSubmissionEvaluationRequest) -> bool:
+    async def lock_evaluation_scope(self, request: PostSubmissionExecutionRequest) -> bool:
         """Hold TASK locks through commit; False forbids new reservations, not current reads."""
         ...
 
-    async def lock_terminal_retry_scope(self, request: PostSubmissionEvaluationRequest) -> None:
+    async def lock_terminal_retry_scope(self, request: PostSubmissionExecutionRequest) -> None:
         """Lock the active, latest evaluation-pending TASK scope for a new retry."""
         ...
 
-    async def lock_retry_replay_scope(self, request: PostSubmissionEvaluationRequest) -> None:
+    async def lock_retry_replay_scope(self, request: PostSubmissionExecutionRequest) -> None:
         """Lock exact historical receipt owners without current lifecycle eligibility."""
         ...
 
@@ -417,39 +418,39 @@ class EvaluationCoordinationPort(Protocol):
         ...
 
     async def reserve_current_evaluation(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> EvaluationReservation:
         """Reserve or replay the exact request without committing the caller transaction."""
         ...
 
     async def read_current_result(
-        self, request: PostSubmissionEvaluationRequest
+        self, request: PostSubmissionExecutionRequest
     ) -> CompletedEvaluation:
         """Lock and return the completed evaluation for the exact current request."""
         ...
 
 
-class EvaluationCompletion(PostSubmitValue):
+class EvaluationCompletion(CheckerValue):
     """Bounded publication facts, never perpetual authority or private packet data."""
 
     project_id: ResourceId
     task_id: ResourceId
     submission_id: ResourceId
-    reference: PostSubmitCurrentResultReference
+    reference: SelectedPostSubmitCurrentResultReference
     routing_recommendation: Literal["allow_review", "needs_revision", "task_setup_blocked"]
     output_binding_ids: tuple[ResourceId, ...] = Field(max_length=0)
     execute_evidence_id: ResourceId
     finalize_evidence_id: ResourceId
 
 
-class VerifiedEvaluationCompletion(PostSubmitValue):
+class VerifiedEvaluationCompletion(CheckerValue):
     """Current owner-verified completion and retained material, never routing authority."""
 
     completion: EvaluationCompletion
     submission_version: VersionNumber
     material: VerifiedMaterialFacts
     input_materialization_evidence_id: ResourceId
-    result: PostSubmissionEvaluationResult
+    result: PostSubmissionExecutionResult
 
     @model_validator(mode="after")
     def bind_completed_result(self):

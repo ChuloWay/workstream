@@ -20,9 +20,88 @@ from app.modules.projects.api.guide_activation import (
 from app.modules.projects.api.guide_proposals import (
     GuideProposalTarget,
     GuideProposalApprovalReceipt,
+    GuideProposalError,
+    MissingCheckerCapability,
 )
 from app.modules.projects.api.post_policy import PostPolicyTarget
 from tests.projects.guide_compilation.proposals.contract_support import HASH, target_values
+
+
+@pytest.mark.parametrize("field,value", [
+    ("requirement_id", "../private"),
+    ("stage", "review"),
+    ("title", ""),
+    ("title", "x" * 1001),
+    ("provider_coordinates", "private"),
+])
+def test_missing_capability_feedback_is_closed_and_bounded(field, value):
+    values = dict(requirement_id="required.tests", stage="pre_submit", title="Required tests")
+    values[field] = value
+    with pytest.raises(ValidationError):
+        MissingCheckerCapability(**values)
+
+
+def test_missing_capabilities_cannot_be_attached_to_concealed_errors_or_exceed_bound():
+    item = MissingCheckerCapability(
+        requirement_id="required.tests", stage="pre_submit", title="Required tests"
+    )
+    for code, capabilities in (
+        ("proposal_unavailable", (item,)),
+        ("authority_unavailable", (item,)),
+        ("approval_blocked", (item,) * 201),
+    ):
+        with pytest.raises(ValueError, match="invalid missing capability refusal"):
+            GuideProposalError(code, missing_capabilities=capabilities)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", (
+    "approval_blocked", "authority_unavailable", "proposal_unavailable", "foreign_project",
+))
+async def test_public_activation_refusal_projects_only_authorized_missing_capabilities(failure):
+    from httpx import ASGITransport, AsyncClient
+    from app.api.deps.authorization import enforce_human_authorization_read
+    from app.api.deps.guide_activation import ActivationRequest, get_activation_request
+    from app.main import create_app
+    from app.modules.authorization.api import ActorIdentityFacts, ActorKind
+
+    items = tuple(MissingCheckerCapability(
+        requirement_id=f"required.{stage}", stage=stage, title=f"Required {stage} checker",
+    ) for stage in ("pre_submit", "post_submit"))
+    error = GuideProposalError(
+        "proposal_unavailable" if failure == "foreign_project" else failure,
+        missing_capabilities=items if failure == "approval_blocked" else (),
+    )
+    session = SimpleNamespace(commit=AsyncMock())
+    service = SimpleNamespace(activate=AsyncMock(side_effect=error))
+    actor = ActorIdentityFacts(
+        actor_profile_id=uuid4(), identity_link_id=uuid4(), actor_kind=ActorKind.HUMAN,
+    )
+    async def dependency():
+        return ActivationRequest(session, service, actor, uuid4())
+
+    app = create_app()
+    app.dependency_overrides[enforce_human_authorization_read] = lambda: None
+    app.dependency_overrides[get_activation_request] = dependency
+    command = GuideActivationCommand(**command_values())
+    target = command.target.proposal
+    project_id = uuid4() if failure == "foreign_project" else target.project_id
+    path = f"/api/v1/projects/{project_id}/guides/{target.guide_id}/activate"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            path, json=command.model_dump(mode="json", exclude={"idempotency_key"}),
+            headers={"Idempotency-Key": str(command.idempotency_key)},
+        )
+    expected_details = {
+        "missing_capabilities": [item.model_dump(mode="json") for item in items]
+    } if failure == "approval_blocked" else {}
+    assert response.status_code == (409 if failure == "approval_blocked" else 404)
+    assert response.json()["error"]["details"] == expected_details
+    session.commit.assert_not_awaited()
+    if failure == "foreign_project":
+        service.activate.assert_not_awaited()
+    else:
+        service.activate.assert_awaited_once()
 
 
 def command_values():

@@ -9,7 +9,7 @@ from app.interfaces.project_agents import (
     project_guide_compilation_result_storage_bytes, validate_project_guide_compilation_result,
 )
 from .helpers import context, ids
-from .test_capability_growth import growth_report
+from .test_capability_growth import _context as growth_context, growth_report
 
 
 def large_report(length):
@@ -62,7 +62,7 @@ def test_actual_sdk_parser_accepts_current_handoff(gaps):
     schema = AgentOutputSchema(ProjectGuideCompilationResult)
     # Strict SDK parsing sees every field, including explicit linkage and evidence.
     parsed = schema.validate_json(growth_report(gaps=gaps).model_dump_json())
-    validate_project_guide_compilation_result(context(ids()), parsed)
+    validate_project_guide_compilation_result(growth_context(), parsed)
     assert len(parsed.capability_suggestions) == (2 if gaps else 0)
 
 

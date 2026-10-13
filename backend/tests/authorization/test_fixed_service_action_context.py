@@ -93,7 +93,8 @@ async def test_submission_binding_validation_is_concealed() -> None:
     """Malformed exact binding facts never expose Pydantic validation details."""
     ids = [uuid4() for _ in range(12)]
     facts = SubmissionBindingAuthorityFacts(
-        admission_id=ids[0], evidence_set_id=ids[1], actor_profile_id=ids[2],
+        admission_id=ids[0], evidence_set_id=ids[1], selected_pre_submit_run_id=None,
+        actor_profile_id=ids[2],
         identity_link_id=ids[3], project_id=ids[4], task_id=ids[5],
         assignment_id=ids[6], predecessor_submission_id=None,
         predecessor_submission_version=None, submission_id=ids[7],

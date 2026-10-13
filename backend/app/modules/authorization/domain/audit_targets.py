@@ -6,6 +6,7 @@ from app.modules.authorization.catalogue import ActionId
 from app.modules.authorization.domain.lifecycle import ReviewLifecycleActivationContract
 from app.modules.authorization.domain.post_submit_routing import PostSubmitRoutingResourceContext
 from app.modules.authorization.domain.post_submit import PostSubmitResourceContext
+from app.modules.authorization.domain.pre_submit import PreSubmitResourceContext
 from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
@@ -107,7 +108,7 @@ def project_authority_audit_target(
             AdapterBindingMutationResourceContext,
             ProjectGuideProjectionResourceContext,
             ProjectSetupFinalizationResourceContext,
-            GuideProposalResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext,
+            GuideProposalResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, PreSubmitResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext,
         ),
     ):
         project_id = str(getattr(resource, "project_id", None) or resource.scope_project_id)

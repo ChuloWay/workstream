@@ -193,10 +193,10 @@ def untrusted_completion():
     """Valid value shape only; empty database ensures root denial precedes owner reads."""
     from app.core.identifiers import new_record_id
     from app.modules.checkers.api.execution import EvaluationCompletion
-    from app.modules.checkers.api.post_submit import PostSubmitCurrentResultReference
+    from app.modules.checkers.api.selected_post_submit import SelectedPostSubmitCurrentResultReference
     return new_record_id(), EvaluationCompletion(
         project_id=new_record_id(), task_id=new_record_id(), submission_id=new_record_id(),
-        reference=PostSubmitCurrentResultReference(
+        reference=SelectedPostSubmitCurrentResultReference(
             request_id=new_record_id(), request_digest="sha256:" + "a" * 64,
             attempt_id=new_record_id(), evaluation_generation=1,
             result_id=new_record_id(), result_digest="sha256:" + "b" * 64,

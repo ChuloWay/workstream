@@ -31,6 +31,8 @@ class SubmittedPolicyContext:
     post_policy_id: UUID
     post_policy_version: str
     post_policy_hash: str
+    selected_post_policy_hash: str | None
+    selected_post_policy_body: dict | None
     review_policy_id: UUID
     review_generation: int
     review_hash: str
