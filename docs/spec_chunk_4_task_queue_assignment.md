@@ -787,8 +787,9 @@ repeating effects. Existing acceptance consumers admit only `allow_review`.
 
 The operation adds no route or contributor response schema. Contributors use the
 existing bounded Submission/checker-history reads above. ARCH-04F3 supplies
-hidden exact-cause replacement Submission intake through the same writer.
-Manager-visible setup-fault hold, production handler registration, public intake
-and the first end-to-end drill remain separate work. The hold retains the
-Submission and locked rules without contributor penalty; changing or
+the exact-cause replacement Submission owner used by ARCH-02I-B public intake.
+PILOT-04 registers the request and completion handlers. Manager-visible
+setup-fault hold and the complete public API/Celery drill remain separate work.
+The planned hold will retain the Submission and locked rules without
+contributor penalty; changing or
 re-screening submitted-task rules is deferred.
