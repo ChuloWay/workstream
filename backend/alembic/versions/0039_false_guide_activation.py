@@ -4,8 +4,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0038_false_guide_activation"
-down_revision = "0037_task_import_batches"
+revision = "0039_false_guide_activation"
+down_revision = "0038_task_batch_transitions"
 branch_labels = None
 depends_on = None
 

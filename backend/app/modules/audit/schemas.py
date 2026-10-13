@@ -80,6 +80,7 @@ _FACT_VALUES: dict[str, frozenset[str]] = {
     "scope_type": frozenset({"system", "project"}),
     "future_obligation": frozenset({"auth13_assignment", "rev_reviewer_obligation", "none"}),
 }
+_TASK_MANAGER_AUTHORITY_FACTS_MAX_BYTES = 8192
 
 
 def _task_policy_lineage(value: Mapping[str, object]) -> dict[str, object]:
@@ -126,7 +127,17 @@ def _manager_authority_facts(event: LifecycleAuditEventInput) -> dict[str, objec
                 'identity_link_id', 'task_status', 'assigned_to', 'assignment_id',
                 'assignment_contributor_id', 'locked_context_hash', 'reason',
                 'idempotency_key', 'replay_assignment_id', 'request_digest', 'replay_command_id'}
-    if set(facts) != required or len(json.dumps(facts).encode()) > 4096:
+    try:
+        encoded = json.dumps(
+            facts,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError):
+        raise ValueError('invalid bounded manager authority facts') from None
+    if set(facts) != required or len(encoded.encode("utf-8")) > _TASK_MANAGER_AUTHORITY_FACTS_MAX_BYTES:
         raise ValueError('invalid bounded manager authority facts')
     for key in ('resource_id', 'scope_project_id', 'actor_profile_id', 'identity_link_id', 'idempotency_key'):
         value = facts[key]
@@ -148,7 +159,7 @@ def _manager_authority_facts(event: LifecycleAuditEventInput) -> dict[str, objec
     digest = canonical_json_hash({'resource_context': {key: value for key, value in facts.items() if value is not None}})
     if digest != event.authorization_resource_digest:
         raise ValueError('manager authority digest mismatch')
-    return json.loads(json.dumps(facts))
+    return json.loads(encoded)
 
 
 class LifecycleAuditEntityType(StrEnum):

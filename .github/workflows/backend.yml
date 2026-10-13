@@ -378,7 +378,10 @@ jobs:
           retention-days: 7
 
   cli-public-contract:
+    needs: minio-image
     uses: ./.github/workflows/cli.yml
+    with:
+      minio_artifact: ${{ needs.minio-image.outputs.artifact }}
 
   test:
     if: ${{ always() }}

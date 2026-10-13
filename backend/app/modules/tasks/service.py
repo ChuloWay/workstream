@@ -244,11 +244,25 @@ class TaskService:
                     pre_submit_policy_bundle_hash=task.locked_pre_submit_checker_bundle_hash,
                 ),
             )
+        except (ProjectLockedPolicyContextUnavailable, ValueError, TypeError) as exc:
+            raise TaskLockedContextInvalid("task locked policy custody is invalid") from exc
+        return self._validate_locked_task_context(task, facts)
+
+    def _validate_locked_task_context(
+        self, task: WorkstreamTask, facts: ProjectLockedPolicyContextFacts,
+    ) -> LockedTaskContext:
+        """Compare every current Task stamp with already locked immutable PROJECT facts."""
+        missing = self._missing_locked_context_fields(task)
+        if missing:
+            raise TaskLockedContextInvalid(
+                "task locked context is incomplete", {"missing_fields": missing}
+            )
+        try:
             expected = self._policy_stamps(facts)
             if any(getattr(task, name) != value for name, value in expected.items()):
                 raise ValueError("task policy stamps differ from activation receipt")
             parsed = self._parse_post_submit_policy_summary(facts)
-        except (ProjectLockedPolicyContextUnavailable, ValueError, TypeError) as exc:
+        except (ValueError, TypeError) as exc:
             raise TaskLockedContextInvalid("task locked policy custody is invalid") from exc
         return LockedTaskContext(
             facts=facts,

@@ -125,8 +125,8 @@ Its public routes are covered by PostgreSQL/MinIO custody, authority, replay and
 recovery tests. PILOT-02B imports one verified JSON source into immutable native
 batch membership and 1..500 DRAFT Tasks atomically, with fresh-authority exact-file
 replay and batch status through the public TASK contract. Its actual 200-row and
-rollback/custody controls pass on PostgreSQL and MinIO. Explicit batch screening
-and release and CLI conversion remain separate work. A client-converted CSV retains
+rollback/custody controls pass on PostgreSQL and MinIO. PILOT-02C adds explicit atomic batch screening
+and release and CLI source/import/status commands with local CSV conversion. A client-converted CSV retains
 its received JSON rather than claiming original CSV custody.
 External origin onboarding, external task-routing systems, and execution workspaces remain
 later adapters. Revision and reassignment belong to the governed lifecycle;

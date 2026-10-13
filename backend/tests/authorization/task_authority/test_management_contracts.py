@@ -1,5 +1,7 @@
 """Closed manager PREP requests and independently validated audit storage shapes."""
 
+import json
+
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -77,6 +79,48 @@ def manager_event(event_type=Event.TASK_SCREENED):
     fields['manager_authority_facts'] = facts
     fields['authorization_resource_digest'] = canonical_json_hash({'resource_context': {k:v for k,v in facts.items() if v is not None}})
     return fields
+
+
+@pytest.mark.parametrize(
+    ("character", "minimum_canonical_bytes"),
+    [("é", 2000), ("😀", 4000), ("\x01", 6000)],
+)
+def test_manager_audit_admits_every_canonical_1000_character_reason(
+    character, minimum_canonical_bytes
+):
+    fields = manager_event()
+    reason = character * 1000
+    fields["task_reason"] = reason
+    fields["manager_authority_facts"]["reason"] = reason
+    from app.core.hashing import canonical_json_hash
+
+    fields["authorization_resource_digest"] = canonical_json_hash(
+        {
+            "resource_context": {
+                key: value
+                for key, value in fields["manager_authority_facts"].items()
+                if value is not None
+            }
+        }
+    )
+    encoded = json.dumps(
+        fields["manager_authority_facts"],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    assert minimum_canonical_bytes < len(encoded) <= 8192
+    if character == "😀":
+        assert len(json.dumps(fields["manager_authority_facts"]).encode("utf-8")) > 8192
+    assert LifecycleAuditEventInput(**fields).task_reason == reason
+
+
+def test_manager_audit_rejects_facts_beyond_canonical_evidence_bound():
+    fields = manager_event()
+    fields["manager_authority_facts"]["reason"] = "\x01" * 1300
+    with pytest.raises(ValidationError, match="invalid bounded manager authority facts"):
+        LifecycleAuditEventInput(**fields)
 
 
 @pytest.mark.parametrize("field", list(TaskPolicyLineage.model_fields))

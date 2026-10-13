@@ -81,6 +81,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0038_task_batch_transitions",
         "0037_task_import_batches",
         "0036_selected_checker_flow",
         "0035_checker_retry",
@@ -246,15 +247,15 @@ def test_repeated_upgrade_head_preserves_current_database(
 def test_preceding_head_upgrades_to_current_without_recreation(
     isolated_database_env: str, migration_lock
 ) -> None:
-    """A database at the merged import head upgrades to activation without recreation."""
+    """A database at the merged batch-transition head upgrades without recreation."""
     config = _alembic_config()
     with migration_lock():
         asyncio.run(
             _execute(isolated_database_env, "drop schema public cascade; create schema public")
         )
-        command.upgrade(config, "0037_task_import_batches")
+        command.upgrade(config, "0038_task_batch_transitions")
         before = asyncio.run(_database_snapshot(isolated_database_env))
-        assert before["versions"] == ["0037_task_import_batches"]
+        assert before["versions"] == ["0038_task_batch_transitions"]
         command.upgrade(config, HEAD_REVISION)
         after = asyncio.run(_database_snapshot(isolated_database_env))
         command.upgrade(config, "head")
