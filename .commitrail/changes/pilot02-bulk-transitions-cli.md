@@ -820,3 +820,32 @@ the ended-transaction and wrong-project guards, the 200-row public journey, and
 the canonical reason-boundary journey. Scoped Ruff, Python compilation and
 `git diff --check` pass. No PostgreSQL timing or behavior result is claimed from
 this source-only checkpoint.
+
+The serialized diagnostic subsequently observed 139 historical policy-context
+loads consuming 112 seconds while RELEASE was still running. Extend the same
+transaction-owned preparation to fresh reserved RELEASE without introducing a
+second cache: group only by exact Project and the canonical locked-context hash,
+which covers every `LOCKED_CONTEXT_REQUIRED_FIELDS` value including the POST
+policy body. Resolve each distinct historical group once, then make every Task
+compare all current stamps with the resolved immutable facts through the same
+TaskService validator used by the ordinary path. Mixed historical contexts stay
+separate. Replay prepares no context and recovers before any provider access.
+
+This follow-up may also update `backend/app/modules/tasks/service.py` and the
+same already-owned participant/batch-transition tests. Required controls cover
+a changed locked body/hash, multiple frozen groups, RELEASE replay with the
+provider unavailable, and unchanged fresh per-row authority consumption. Root
+owns the serialized native and CLI timing proof.
+
+The completed diagnostic at root source `453` measured one active-context load
+in 1.48 seconds for SCREEN and 142 historical-context calls consuming 126.67
+seconds before RELEASE was cancelled. Import took 97.917 seconds, SCREEN and its
+replay completed in 108.265 and 64.723 seconds, and RELEASE exceeded its unchanged
+180-second client bound at 180.271 seconds. The outer isolated run exited 124
+after eventual cleanup; this is failure evidence, not a passing journey claim.
+
+The unified source passes scoped Ruff, compilation and diff checks. Six focused
+native controls collect, including genuine v1/v2 contexts in one batch. A wider
+locked-context selection produced 22 passing cases and six setup errors solely
+because no `WORKSTREAM_TEST_DATABASE_URL` was supplied; no database behavior is
+claimed from that local selection. Exact native execution remains root-owned.

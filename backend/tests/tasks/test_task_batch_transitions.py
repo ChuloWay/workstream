@@ -25,7 +25,14 @@ from app.modules.tasks.task_batch_transitions import _membership_digest
 from app.modules.tasks.task_import_membership import TaskImportMembership
 from tests.authorization.guide_activation.pg_support import revoke_manager_grant
 from tests.test_task_import_sources import import_source_client as import_source_client
-from tests.test_tasks import task_database_env as task_database_env, auth_headers, create_active_project
+from tests.test_tasks import (
+    task_database_env as task_database_env,
+    auth_headers,
+    complete_guide_payload,
+    create_active_project,
+    create_policy_bundle_for_guide,
+    seed_active_guide_for_downstream_test,
+)
 from tests.tasks.test_task_import_batches import _batch_path, _verified_source, _project
 from tests.tasks.test_task_import_contract import document
 
@@ -90,14 +97,15 @@ async def test_public_source_import_screen_release_complete_journey(
         assert [row["row_index"] for row in original["tasks"]] == list(range(count))
         assert all(row["status"] == status and row["locked_guide_version"] for row in original["tasks"])
         before = await _success_facts(project)
-        if operation == "screen":
-            async def fail_current_policy_load(*_args, **_kwargs):
-                raise AssertionError("committed SCREEN replay read the current policy")
+        async def fail_policy_load(*_args, **_kwargs):
+            raise AssertionError(f"committed {operation.upper()} replay read policy custody")
 
-            with monkeypatch.context() as replay_patch:
-                replay_patch.setattr(TaskService, "_load_active_policy_context", fail_current_policy_load)
-                replay = await client.post(_path(project, batch, operation), headers=key, json=payload)
-        else:
+        with monkeypatch.context() as replay_patch:
+            replay_patch.setattr(
+                TaskService,
+                "_load_active_policy_context" if operation == "screen" else "_load_locked_task_context",
+                fail_policy_load,
+            )
             replay = await client.post(_path(project, batch, operation), headers=key, json=payload)
         assert replay.status_code == 200 and replay.json() == original, replay.text
         after = await _success_facts(project)
@@ -152,19 +160,26 @@ async def test_reason_limit_matches_canonical_transition_without_partial_effects
         assert await _success_facts(project) == before
     reasons = {"screen": "é" * 1000, "release": "\x01" * 1000}
     original_load = TaskService._load_active_policy_context
-    active_context_loads = 0
+    original_locked_load = TaskService._load_locked_task_context
+    active_context_loads = locked_context_loads = 0
 
     async def count_active_policy_load(service, project_id):
         nonlocal active_context_loads
         active_context_loads += 1
         return await original_load(service, project_id)
 
+    async def count_locked_policy_load(service, task):
+        nonlocal locked_context_loads
+        locked_context_loads += 1
+        return await original_locked_load(service, task)
+
     monkeypatch.setattr(TaskService, "_load_active_policy_context", count_active_policy_load)
+    monkeypatch.setattr(TaskService, "_load_locked_task_context", count_locked_policy_load)
     for operation, reason in reasons.items():
         admitted = await client.post(_path(project, batch, operation), headers=auth_headers(),
                                      json={"reason": reason})
         assert admitted.status_code == 200, admitted.text
-    assert active_context_loads == 1
+    assert active_context_loads == 1 and locked_context_loads == 1
     async with db_session.get_session_factory()() as session:
         retained = list(await session.scalars(select(TaskBatchTransitionReceipt.reason).where(
             TaskBatchTransitionReceipt.project_id == project,
@@ -182,6 +197,55 @@ async def test_reason_limit_matches_canonical_transition_without_partial_effects
         assert {
             event.event_payload["manager_authority_facts"]["reason"] for event in lifecycle
         } == set(reasons.values())
+
+
+async def test_release_resolves_each_distinct_frozen_context_once(import_source_client, monkeypatch):
+    """Two genuine historical guide contexts remain separate without per-Task graph reloads."""
+    client = import_source_client
+    project, batch = await _import(client)
+    first = await client.post(
+        f"/api/v1/tasks/{batch['tasks'][0]['id']}/screen", headers=auth_headers(),
+        json={"reason": "Screen under the original guide"},
+    )
+    assert first.status_code == 200, first.text
+    successor = await client.post(
+        f"/api/v1/projects/{project}/guides", headers=auth_headers(),
+        json=complete_guide_payload("v2"),
+    )
+    assert successor.status_code == 201, successor.text
+    await create_policy_bundle_for_guide(client, project, successor.json()["id"])
+    await seed_active_guide_for_downstream_test(
+        db_session.get_session_factory(), project_id=project, guide_id=successor.json()["id"],
+    )
+    second = await client.post(
+        f"/api/v1/tasks/{batch['tasks'][1]['id']}/screen", headers=auth_headers(),
+        json={"reason": "Screen under the successor guide"},
+    )
+    assert second.status_code == 200, second.text
+    assert first.json()["locked_guide_version"] != second.json()["locked_guide_version"]
+
+    original = TaskService._load_locked_task_context
+    loads = 0
+
+    async def count_locked_policy_load(service, task):
+        nonlocal loads
+        loads += 1
+        return await original(service, task)
+
+    monkeypatch.setattr(TaskService, "_load_locked_task_context", count_locked_policy_load)
+    released = await client.post(
+        _path(project, batch, "release"), headers=auth_headers(),
+        json={"reason": "Release both frozen guide generations"},
+    )
+    assert released.status_code == 200, released.text
+    assert loads == 2
+    versions = {
+        row["task_id"]: row["locked_guide_version"] for row in released.json()["tasks"]
+    }
+    assert versions == {
+        batch["tasks"][0]["id"]: first.json()["locked_guide_version"],
+        batch["tasks"][1]["id"]: second.json()["locked_guide_version"],
+    }
 
 
 async def test_missing_active_guide_refuses_whole_batch_without_success_effects(import_source_client):

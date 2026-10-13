@@ -180,17 +180,25 @@ class TaskBatchTransitionCommands:
             if (any(row.task.facts.actor_profile_id != self._actor_id for row in rows)
                     or any(decision.identity_link_id != self._link_id for decision in decisions)):
                 raise TaskImportBatchError("task_batch_transition_custody_invalid", 409)
-            screen_context = (
-                await self._tasks.prepare_screen_context(project_id)
-                if reserved and operation is TaskAuthorityOperation.SCREEN
-                else None
-            )
+            contexts = {}
+            if reserved:
+                for row in rows:
+                    context_key = (
+                        row.task.facts.project_id,
+                        row.task.facts.locked_context_hash,
+                    )
+                    if context_key not in contexts:
+                        contexts[context_key] = await self._tasks.prepare_transition_context(row.task)
             results = []
             for row, decision in zip(rows, decisions, strict=True):
+                context_key = (
+                    row.task.facts.project_id,
+                    row.task.facts.locked_context_hash,
+                )
                 response = await self._tasks.stage_transition(
                     row.task,
                     decision,
-                    screen_context=screen_context,
+                    transition_context=contexts.get(context_key),
                 )
                 results.append(self._result(row, response))
                 if reserved:
