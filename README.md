@@ -178,7 +178,7 @@ exact service authority. ARCH-04E1A adds immutable route-neutral TASK source
 storage, detached source facts and accepted-effects contracts. B6 commits each
 new hidden Submission with its initial checker reservation and outbox request;
 selected production request/completion delivery now runs digest-pinned external
-images after the four Workstream defaults and approved external PRE checks.
+images after the Workstream default checker and approved external PRE checks.
 Passing true-policy results reach `review_pending`; eligible false-policy results
 invoke shared authorized acceptance atomically. Public contributor intake and
 false-guide activation remain separate pilot work. Project-guide ingestion stores original documents,
@@ -230,10 +230,12 @@ the successor evaluation request. This hidden path creates no Review or
 contribution on failure. ARCH-04F4 adds hidden reason-bound Operator retry for
 known terminal infrastructure failures using the existing CHECKERS coordinator
 and request handler, with exact AUTH, audit and outbox custody. Fresh-authorized
-replay validates the historical request. Manager-visible holds for valid setup
-faults remain, without contributor penalty. Changing or re-screening submitted-task
-rules remains deferred. The retry has no public route or production registration.
-Production composition follows before public intake and the first real end-to-end drill.
+replay validates the historical request. The current selected completion classifier has no `task_setup_blocked` path.
+A future setup-fault hold must preserve the Submission and locked rules without
+contributor penalty; changing or re-screening submitted-task rules remains
+deferred. PILOT-04 already registers selected production request/completion
+delivery. Public admission-backed entry and false-guide activation/readiness are
+planned independently before the first real end-to-end drill.
 
 Active work stays on that first contribution path. Live human review/revision,
 reviewer participation and fulfillment delivery follow separately.
@@ -472,7 +474,7 @@ those decisions to immutable delivery receipts and supplies Celery delivery and
 bounded recovery scans. ARCH-03C2 registers exact assignment invalidation,
 with atomic publication from supported authority mutations and separate fixed
 feature authority. The selected checker request and completion handlers are
-registered in production composition; public contributor intake remains PILOT-12
+registered in production composition; public admission-backed Submission entry remains ARCH-02I-B
 work. Registration does not establish deployed sandbox readiness.
 Delivery consumes `workstream.outbox` only under a validated non-eager prefork
 Celery process; other queues can use their appropriate execution pool.
@@ -773,7 +775,7 @@ outcome owner publishes exact routing sources under CHECKERS current-run custody
 B7 implements hidden
 request delivery with invocation fencing. B8 adds hidden completion routing with commit-before-ACK. Production
 request/completion registration is supplied by the selected PILOT-04 composition;
-public contributor intake remains PILOT-12 work.
+public admission-backed Submission entry remains ARCH-02I-B work.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no
@@ -890,11 +892,11 @@ handoff without Review, acceptance, contribution or award effects. 04F3 supplies
 hidden exact-cause replacement intake through the canonical Submission writer;
 it neither creates failure economics nor activates human revision. 04F4 adds
 hidden Operator retry for known terminal infrastructure failures with immutable
-source evidence. Manager-visible setup-fault holds without contributor penalty,
-live registration, false-guide
-activation and public intake remain subsequent gates.
-Setup-fault holds retain the Submission and locked rules; changing those rules
-for submitted work remains deferred.
+source evidence. PILOT-04 registers selected production request/completion handlers. Public
+admission-backed entry and false-guide activation/readiness remain planned
+connections before the real public/worker drill. A future setup-fault hold must
+retain the Submission and locked rules without contributor penalty; changing
+submitted-work rules remains deferred.
 The hidden false-path proof uses explicitly seeded valid policy lineage;
 normal guide activation still rejects false until the runtime is ready.
 Conditional awards stay atomic; payment delivery and fulfillment-root machinery
