@@ -16,16 +16,18 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   ARCH-04C hidden execution, ARCH-04B hidden input,
   [ARCH-04B2 output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md), ARCH-03D hidden
   intake and [AUTH-18 public manager activation](../WS-AUTH-001/WS-AUTH-001-18.md).
-  ARCH-04E2-A then adds strict AUTH-private resource/preparation matching and a
-  nominal fixed-router adapter through canonical PREP. The action remains
-  planned/unavailable; it installs no handler, source writer or runtime composition.
+  ARCH-04E2-A adds strict AUTH-private resource/preparation matching and the
+  fixed-router adapter. ARCH-04E2-B delivers the authorized outcome operation;
+  PILOT-04 registers selected production request/completion handlers.
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
 - Next usable boundary: follow the [first contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone):
-  delivered capacity alignment, atomic Submission/dispatch and hidden B7 request delivery; completion routing remains next
-  and exact authority/effect closure. CON-07/shared acceptance foundations are
-  delivered; production consumption and scoped lifecycle activation remain gated.
+  atomic Submission/dispatch, exact AUTH outcome custody and selected production
+  request/completion registration and ARCH-02I-B public admission-backed entry
+  are delivered. False-guide activation/readiness and the real public/worker
+  drill remain. CON-07/shared acceptance foundations
+  and scoped lifecycle control are delivered.
   Submission/checker history uses canonical authority; the alternate gate lifecycle
   is removed. Continue shrinking the canonical import ledger as implementation
   reaches each remaining consumer.
@@ -34,8 +36,8 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Preserve: the ledger is CI debt data, not engineering authority, and may only
   shrink unless a separately reviewed architecture change authorizes growth.
 
-This is delivery priority, not a prerequisite of true human admission. Both
-routing branches have delivered request reservation 04E1B-A and exact AUTH preparation 04E2-A before hidden 04E1B-B → activation 04E2-B → live 04E3; true routing
-can proceed after its own prerequisites without CON-07/shared acceptance or
-scoped lifecycle activation. False routing adds those requirements. Human final
+This is delivery priority, not a prerequisite of true human admission. Both routing branches have delivered request reservation 04E1B-A, exact AUTH
+preparation 04E2-A, authorized outcomes 04E2-B, hidden completion delivery B8
+and PILOT-04 selected production registration. True routing proceeds without
+CON-07/shared acceptance or scoped lifecycle activation. False routing adds those requirements. Human final
 acceptance later uses the same authorized shared acceptance/CON operation.

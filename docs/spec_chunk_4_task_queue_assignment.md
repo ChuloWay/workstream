@@ -6,12 +6,14 @@ Workstream is developing its first, unreleased v0.1. This specification covers
 the existing task-record and assignment foundation, including the bounded
 [project-grant authorization replacement](../.commitrail/changes/task-project-grant-authorization.md).
 CP08 delivers exact contribution-policy lineage through task, assignment and
-hidden Submission creation. ARCH-03C2 delivers exact assignment-invalidation
+Submission creation. ARCH-03C2 delivers exact assignment-invalidation
 publication and registered delivery. ARCH-03C4 delivers the three public task
 queues with exact project authority. ARCH-03C5 delivers distinct Contributor and
 Manager task detail and requirements. ARCH-03C6 exposes the three distinct
-locked-context reads with exact current grants. Public Submission cutover remains pending;
-the [capability ledger](roadmap_status.md) identifies its owner.
+locked-context reads with exact current grants. ARCH-02I-B exposes public ZIP
+preparation and admission-backed initial/checker-remediation Submission creation.
+The complete public API and Celery service drill remains pending; the
+[capability ledger](roadmap_status.md) tracks that proof.
 
 Task responses and immutable command receipts contain no task-local payment
 amount, currency, payout type or guide-keyed payment-policy stamp. Compensation
@@ -65,10 +67,9 @@ Audit Authority task history and removes the old unbounded task-only audit route
 
 There is no self-activation endpoint. A contributor cannot acquire permission
 by creating a worker profile, supplying skill tags, or presenting a token role.
-There is no public JSON-packet submission creation route. The existing
-`GET /api/v1/tasks/{task_id}/submissions` remains a read, not evidence that POST
-creation is usable. Admission-backed Submission creation stays hidden until
-its separate canonical public integration is complete.
+There is no public JSON-packet submission creation route. ARCH-02I-B exposes
+the separate canonical admission-backed `POST /api/v1/tasks/{task_id}/submissions`
+for initial work and exact checker remediation; the existing GET remains a read.
 
 ## Canonical Task-Import Sources
 
@@ -232,8 +233,8 @@ tokens and not the full planned workflow:
 - Claimed with the caller's exact active assignment: `start`.
 - Otherwise: no contributor command hint.
 - Management context does not advertise contributor commands.
-- No `submit` or pre-submit execution hint is advertised by this surface while
-  the canonical public submission integration remains hidden.
+- This read surface advertises no `submit` or pre-submit hint. The separate
+  public preparation and Submission commands enforce their own authority.
 
 Pre-submission intake failures prevent Submission creation. Post-submission
 evaluation concerns the submitted work and supplies evidence for
@@ -373,7 +374,8 @@ Only contributor context has `lifecycle`, with `assigned_to_current_actor` and
 `next_actions`. Unassigned READY advertises `claim`; own CLAIMED advertises
 `start`; other own-active states have no action hint. Task status appears only in
 `task.status`. Hints never authorize execution. There is no `can_submit` flag or
-precheck capability; hidden submission creation is not advertised as usable.
+precheck capability; the public submission command performs its own fresh
+authority and admission checks.
 Contributor context also includes `guide_documents`: ordered document IDs,
 labels, media types, byte counts, SHA-256 and task-scoped authorized read references.
 It is empty for ready unassigned browsing and contains only exact locked originals
@@ -684,7 +686,7 @@ publication, TASK transition, Review, FinalAcceptance or ContributionRecord is
 created by that preparation alone. ARCH-04E2-B commits exact AUTH custody and
 complete governed success outcomes through the hidden operation; ARCH-04F2
 extends that same operation with the exact contributor-remediation consequence.
-Production delivery remains unavailable. Atomic publication binds the
+PILOT-04 registers selected production delivery. Atomic publication binds the
 manifest to the reserved identity and verifies genuine immutable AUTH evidence.
 
 
@@ -696,15 +698,16 @@ source facts only; the persisted manifest additionally requires its database
 creation time. No source INSERT or authority follows from constructing a proposal.
 B6 atomic Submission/dispatch sets `evaluation_pending` through the canonical
 operation. 04E2-B consumes that real lineage; production dispatch registration
-and public intake remain separate boundaries.
+and public intake are delivered by PILOT-04 and ARCH-02I-B respectively.
 
-### Checked packet custody at hidden creation
+### Checked packet custody at admission-backed creation
 
 ARCH-04E1B-B4 forwards the canonical summary/attestation commitment from the
 actual Submission request to ART. Consumption rejects a different packet before
 binding or consumed replay. PostgreSQL also checks the final bound Submission
 against retained pre-submit evidence at commit, permitting the existing atomic
-insert-then-bind sequence. This does not activate dispatch or expose public intake.
+insert-then-bind sequence. B4 established this owner boundary; PILOT-04 and
+ARCH-02I-B subsequently supplied selected dispatch and public intake.
 
 
 ### Submission evaluation input facts
@@ -716,13 +719,14 @@ projection to reconcile every identity/hash/generation with historical PROJECTS
 facts. Missing criteria become empty checker text; no requirement is fabricated.
 The [ART capacity check](spec_artifact_storage_service.md#evaluation-content-capacity-before-durable-admission)
 consumes these facts before durable admission. ARCH-04E1B-B6 reuses that bounded
-content with real record identities and fresh authorization in the existing hidden
+content with real record identities and fresh authorization in the canonical
 Submission command. Its caller-owned root transaction commits ART consumption,
 Submission, both exact AUTH decisions, the generation-one evaluation reservation,
 TASK evaluation_pending and one shared request event. Admission-scoped replay
 validates the original immutable owners under live authority without reserve or
 append calls; it cannot reset a later generation. Every new predecessor-linked
-Submission uses the same writer. Public intake and delivery activation remain deferred.
+Submission uses the same writer. ARCH-02I-B exposes public intake and PILOT-04
+registers selected request/completion delivery; complete connected proof remains pending.
 
 ARCH-04F3 names the supported predecessor-linked creation kind
 `checker_remediation`. TASK locks its task, assignment and latest Submission,
@@ -735,7 +739,7 @@ generation-one reservation and request event. A replay under fresh authority
 returns the committed identities. Human-review revision has no uncaused runtime
 or replay path; its own exact Review source remains future work.
 
-### Hidden initial evaluation delivery
+### Initial evaluation delivery
 
 ARCH-04E1B-B7 recovers the exact immutable dispatch event and CHECKERS request.
 An independent committed-invocation read precedes execution. Each phase acquires
@@ -745,13 +749,13 @@ Terminal replay validates retained execute/finalize receipts without reopening
 bytes. Uncertain execution does not renew an expired lease or request a retry;
 shared UNKNOWN handling preserves it for later authorized recovery.
 
-The handler is unregistered. Completion routing, governed outcomes and public
-intake remain separate boundaries; this adds no Review or acceptance. B8 and
-04F2 now supply the hidden success/remediation completion operation described
-below.
+PILOT-04 registers this handler and the separate completion handler. B8 and
+04F2 supply the governed success/remediation operation described below, and
+ARCH-02I-B exposes public intake. Request delivery itself creates no Review
+or acceptance.
 
 
-### Hidden completion delivery
+### Completion delivery
 
 ARCH-04E1B-B8 connects the closed completion envelope to the existing
 `TaskPostSubmitOutcome`. The handler independently checks committed invocation,
@@ -763,9 +767,10 @@ invocations reject before owner entry; uncertain owner/commit failures remain
 shared OUTBOX UNKNOWN, never an automatic uncertain-effect retry. A still-current
 unfinalized invocation can replay the exact outcome with fresh authority.
 The true branch never observes REV generation or enters CON. Both request and
-completion handlers remain absent from production registration. Connected
-production readiness and authorized manager-visible setup-fault hold precede
-public intake; 04F3 supplies hidden exact-cause replacement intake. ARCH-04F4
+completion handlers are registered by PILOT-04. ARCH-02I-B exposes initial and
+exact-cause checker-remediation intake over the 04F3 owner. The complete public
+API and Celery service drill remains pending; manager-visible setup-fault hold
+is separate safety work. ARCH-04F4
 supplies separate hidden Operator retry of a known terminal
 `infrastructure_failed` checker run through the existing request handler.
 Fresh-authorized historical replay does not require the old run to remain current.
@@ -782,8 +787,9 @@ repeating effects. Existing acceptance consumers admit only `allow_review`.
 
 The operation adds no route or contributor response schema. Contributors use the
 existing bounded Submission/checker-history reads above. ARCH-04F3 supplies
-hidden exact-cause replacement Submission intake through the same writer.
-Manager-visible setup-fault hold, production handler registration, public intake
-and the first end-to-end drill remain separate work. The hold retains the
-Submission and locked rules without contributor penalty; changing or
+the exact-cause replacement Submission owner used by ARCH-02I-B public intake.
+PILOT-04 registers the request and completion handlers. Manager-visible
+setup-fault hold and the complete public API/Celery drill remain separate work.
+The planned hold will retain the Submission and locked rules without
+contributor penalty; changing or
 re-screening submitted-task rules is deferred.

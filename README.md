@@ -62,11 +62,13 @@ submitter ContributionRecord, with no reviewer contribution.
 The separate `requires_second_review` policy field is [fixed to `false`](.commitrail/changes/enforce-requires-second-review-false.md)
 at input, immutable lineage, and database boundaries; second-review and
 adjudication behavior remain deferred.
-The automated-acceptance branch is not live yet: the [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
+The [policy setting](.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
 is implemented for configuration, and the hidden submitter participant can
-stage or exactly replay its complete frozen award set. Shared acceptance, TASK
-terminal effects, authority/source custody, routing activation and public
-composition remain pending. Adjudication is excluded.
+stage or exactly replay its complete frozen award set. Selected production
+completion invokes shared authorized acceptance atomically for eligible locked
+false-policy facts, with the corresponding TASK effects and authority/source
+custody. False-guide activation/readiness and the complete public API/Celery
+journey remain pending. Adjudication is excluded.
 
 The stage describes the purpose and lifecycle boundary, not a promise that all
 checks are deterministic. Deterministic compilation and policy routing do not
@@ -181,10 +183,11 @@ exact service authority. ARCH-04E1A adds immutable route-neutral TASK source
 storage, detached source facts and accepted-effects contracts. B6 commits each
 new hidden Submission with its initial checker reservation and outbox request;
 selected production request/completion delivery now runs digest-pinned external
-images after the four Workstream defaults and approved external PRE checks.
+images after the Workstream default checker and approved external PRE checks.
 Passing true-policy results reach `review_pending`; eligible false-policy results
-invoke shared authorized acceptance atomically. Public contributor intake and
-false-guide activation remain separate pilot work. Project-guide ingestion stores original documents,
+invoke shared authorized acceptance atomically. ARCH-02I-B exposes public
+initial and checker-remediation intake; false-guide activation remains planned.
+Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
 unified setup agent. Accepted originals are PDF, DOCX, PPTX and byte-preserved
 UTF-8 Markdown (`.md`); HTML and documentation sites are not guide inputs. Guide
@@ -233,10 +236,12 @@ the successor evaluation request. This hidden path creates no Review or
 contribution on failure. ARCH-04F4 adds hidden reason-bound Operator retry for
 known terminal infrastructure failures using the existing CHECKERS coordinator
 and request handler, with exact AUTH, audit and outbox custody. Fresh-authorized
-replay validates the historical request. Manager-visible holds for valid setup
-faults remain, without contributor penalty. Changing or re-screening submitted-task
-rules remains deferred. The retry has no public route or production registration.
-Production composition follows before public intake and the first real end-to-end drill.
+replay validates the historical request. The current selected completion classifier has no `task_setup_blocked` path.
+A future setup-fault hold must preserve the Submission and locked rules without
+contributor penalty; changing or re-screening submitted-task rules remains
+deferred. PILOT-04 already registers selected production request/completion
+delivery. ARCH-02I-B exposes public admission-backed entry; false-guide
+activation/readiness and the real public API and Celery service drill remain.
 
 Active work stays on that first contribution path. Live human review/revision,
 reviewer participation and fulfillment delivery follow separately.
@@ -367,7 +372,8 @@ contributor writes through existing public APIs, with server-owned authority,
 explicit caller retry keys and uncertain-outcome reporting without automatic retries.
 `workstream task context TASK_ID` and `task requirements TASK_ID` inspect the
 governing guide/policy selectors, server action hints and locked intake rules.
-Hints do not grant authority; requirements do not expose hidden submission upload.
+Hints do not grant authority; these CLI reads do not invoke the separate public
+submission upload and creation operations.
 `workstream task guide TASK_ID [--download DIR]` lists or downloads the original
 documents of the task's locked guide for its currently authorized assignee.
 Downloaded bytes are verified against their retained hash and size; task examples
@@ -487,8 +493,9 @@ those decisions to immutable delivery receipts and supplies Celery delivery and
 bounded recovery scans. ARCH-03C2 registers exact assignment invalidation,
 with atomic publication from supported authority mutations and separate fixed
 feature authority. The selected checker request and completion handlers are
-registered in production composition; public contributor intake remains PILOT-12
-work. Registration does not establish deployed sandbox readiness.
+registered in production composition. ARCH-02I-B exposes ZIP preparation and
+admission-backed Submission creation for initial work and checker remediation
+through public backend APIs. Registration does not establish deployed sandbox readiness.
 Delivery consumes `workstream.outbox` only under a validated non-eager prefork
 Celery process; other queues can use their appropriate execution pool.
 
@@ -766,14 +773,15 @@ post-submit evaluators. A periodic scan recovers publication failures from
 committed approvals; duplicate delivery retains one policy and receipt.
 Hidden post-submission execution and completion custody are implemented.
 ARCH-04D2 supplies exact service authority and ARCH-04E1A supplies source-only
-facts/types without a runtime entry. Automatic routing remains ARCH-04E work.
+facts/types without a runtime entry. Selected production request/completion
+routing is registered by PILOT-04; false-guide activation remains planned.
 The local Celery command above includes Beat; start it before creating guide sources.
 
 The Beat scheduler must run alongside the Celery execution processes so
 artifact pending-work, verified guide-continuation and post-policy approval scans can recover
 publication failures automatically.
 
-The hidden submission-bundle preparation flow reserves an exact pre-submit
+The public submission-bundle preparation flow reserves an exact pre-submit
 attempt before invoking checks. Completed retries recover the original evidence
 without rerunning checks or issuing a new upload capability. An uncertain attempt
 cannot execute again under the same key. POL-07B connects the internal
@@ -788,7 +796,8 @@ outcome owner publishes exact routing sources under CHECKERS current-run custody
 B7 implements hidden
 request delivery with invocation fencing. B8 adds hidden completion routing with commit-before-ACK. Production
 request/completion registration is supplied by the selected PILOT-04 composition;
-public contributor intake remains PILOT-12 work.
+ARCH-02I-B exposes the existing admission-backed writer through the public
+Submission POST for initial work and checker remediation.
 Submission and checker history use live exact-project Submitter authority for the
 original contributor. Separate `/projects/{project_id}` reads require a covering
 Project Manager grant and expose fixed management fields. Token roles confer no
@@ -828,8 +837,8 @@ Managers obtain those selectors without Finance privileges, then submit the exac
 selection with one UUID `Idempotency-Key`. Save the body and key for receipt replay;
 the draft context is not an active-guide replay endpoint. Response validation,
 authority evidence and activation effects commit together. ARCH-03D connects the
-hidden intake handoff to the exact activated guide. Public intake and controlled
-revision integration remain separate.
+intake handoff to the exact activated guide. ARCH-02I-B exposes public initial
+and checker-remediation intake; controlled human-review revision remains separate.
 
 ARCH-03A completes the existing internal PROJECTS context port. New work selects
 one active activated guide; existing work resolves its exact frozen guide and
@@ -876,7 +885,8 @@ locked-context reads with exact current grants. ARCH-03C7 exposes bounded task
 history only to covered Audit Authority and removes the old payload-bearing
 task-only audit route. AUTH-18 delivers public manager guide activation;
 ARCH-03D connects hidden intake through final durable intent to canonical TASK/PROJECTS
-ports, preserving historical guide selection. Public intake remains deferred. ARCH-04B supplies hidden exact verified Submission
+ports, preserving historical guide selection. ARCH-02I-B exposes public ZIP
+preparation and canonical admission-backed Submission creation. ARCH-04B supplies hidden exact verified Submission
 input with scoped async file access and cleanup. ARCH-04B2 adds hidden typed
 checker-output storage, byte-free recovery and flush-only verified binding over
 the generic ART put/verification path. ARCH-04C supplies hidden durable execution,
@@ -887,8 +897,8 @@ remains in the live flow. ARCH-04D1 validates retained terminal material against
 ART lineage. ARCH-04D2 supplies fixed-service input, execute and finalize authority,
 with PostgreSQL enforcement of exact execution/finalization receipts. ARCH-04E1A
 adds immutable source storage and detached contracts. PILOT-04 composes selected
-hidden dispatch and production routing; public contributor intake and supported
-false-guide activation remain separate pilot work. The hidden
+hidden dispatch and production routing; ARCH-02I-B adds public initial and
+checker-remediation intake, while supported false-guide activation remains planned. The hidden
 [ARCH-04E2-B operation](.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E2B.md)
 consumes canonical fixed-router authorization and commits the actual receipt
 with its exact source and complete consequence. Locked true moves TASK to
@@ -905,11 +915,11 @@ handoff without Review, acceptance, contribution or award effects. 04F3 supplies
 hidden exact-cause replacement intake through the canonical Submission writer;
 it neither creates failure economics nor activates human revision. 04F4 adds
 hidden Operator retry for known terminal infrastructure failures with immutable
-source evidence. Manager-visible setup-fault holds without contributor penalty,
-live registration, false-guide
-activation and public intake remain subsequent gates.
-Setup-fault holds retain the Submission and locked rules; changing those rules
-for submitted work remains deferred.
+source evidence. PILOT-04 registers selected production request/completion handlers;
+ARCH-02I-B exposes public admission-backed entry. False-guide activation/readiness
+and the complete public API and Celery service drill remain. A future setup-fault hold must
+retain the Submission and locked rules without contributor penalty; changing
+submitted-work rules remains deferred.
 The hidden false-path proof uses explicitly seeded valid policy lineage;
 normal guide activation still rejects false until the runtime is ready.
 Conditional awards stay atomic; payment delivery and fulfillment-root machinery

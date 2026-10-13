@@ -77,10 +77,17 @@ async def _verified_admission(factory, store, namespace, settings, context, requ
             PreparedSubmissionBundlePreparationAuthorization(session, context),
         ).prepare(request)
         assert result.put_attempt_id is not None
+    return await _verify_put_attempt(
+        factory, store, namespace, settings, result.put_attempt_id
+    )
+
+
+async def _verify_put_attempt(factory, store, namespace, settings, put_attempt_id):
+    """Publish a prepared put through the real independent ART verifier."""
     async with factory() as session:
         job_id = await session.scalar(
             select(ArtifactVerificationJob.id).where(
-                ArtifactVerificationJob.originating_put_attempt_id == str(result.put_attempt_id)
+                ArtifactVerificationJob.originating_put_attempt_id == str(put_attempt_id)
             )
         )
         assert job_id is not None
@@ -99,7 +106,7 @@ async def _verified_admission(factory, store, namespace, settings, context, requ
         )
     async with factory() as session:
         admission = (await session.scalars(select(SubmissionBundleAdmission).where(
-            SubmissionBundleAdmission.put_attempt_id == str(result.put_attempt_id),
+            SubmissionBundleAdmission.put_attempt_id == str(put_attempt_id),
         ))).one()
         assert admission.status == "ready"
         admission_id = UUID(admission.id)

@@ -1,14 +1,19 @@
-"""Endpoint retirement is explicit; GET preservation cannot mask an old POST."""
+"""Canonical task routes retain protected creation and no self-activation."""
 
 from app.main import create_app
 
 
-def test_task_public_surface_has_no_self_activation_or_packet_creation():
+def test_task_public_surface_has_no_self_activation_and_one_admission_creation():
     schema = create_app().openapi()
     paths = schema["paths"]
     assert "/api/v1/workers/me/profile" not in paths
     submissions = paths["/api/v1/tasks/{task_id}/submissions"]
-    assert "get" in submissions and "post" not in submissions
+    assert "get" in submissions and "post" in submissions
+    creation = submissions["post"]
+    assert creation["security"]
+    assert creation["x-workstream-action-id"] == "submission.create"
+    assert "201" in creation["responses"]
+    assert creation["requestBody"]["required"] is True
     for path, method, action in (
         ("/api/v1/tasks/{task_id}/claim", "post", "task.claim"),
         ("/api/v1/tasks/{task_id}/start", "post", "task.start"),

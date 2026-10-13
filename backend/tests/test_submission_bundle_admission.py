@@ -250,19 +250,30 @@ def test_artifact_adapter_composes_submission_command_from_owner_ports(
     artifact_adapters.project_locked_policy_context_port.assert_called_once_with(session)
 
 
-def test_submission_bundle_preparation_route_is_hidden() -> None:
+def test_submission_bundle_preparation_is_public_binary_contract() -> None:
+    from fastapi import FastAPI
+
     app = create_app()
     route = next(
         route
         for route in submission_router.routes
         if getattr(route, "name", None) == "prepare_submission_bundle"
     )
-    assert route.include_in_schema is False
+    assert route.include_in_schema is True
     mounted = app.url_path_for("prepare_submission_bundle", task_id=str(new_record_id()))
     assert str(mounted).startswith("/api/v1/tasks/")
     assert str(mounted).endswith("/submission-bundle-preparations")
     assert route.methods == {"POST"}
-    assert "/api/v1/tasks/{task_id}/submission-bundle-preparations" not in app.openapi()["paths"]
+    schema_app = FastAPI()
+    schema_app.include_router(submission_router, prefix="/api/v1")
+    operation = schema_app.openapi()["paths"]["/api/v1/tasks/{task_id}/submission-bundle-preparations"]["post"]
+    assert operation["requestBody"]["content"]["application/zip"]["schema"] == {
+        "type": "string", "format": "binary",
+    }
+    required_headers = {parameter["name"] for parameter in operation["parameters"]
+                        if parameter["in"] == "header" and parameter["required"]}
+    assert {"X-Task-Assignment-Id", "Idempotency-Key"} <= required_headers
+    assert operation["responses"]["202"] and operation["responses"]["422"]
 
 
 def test_submission_packet_headers_reject_non_ascii() -> None:

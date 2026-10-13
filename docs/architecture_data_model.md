@@ -950,11 +950,10 @@ The generated checker order is deterministic:
 POL-07B removes the standalone JSON precheck and connects the internal
 checker phase service. Authoritative pre-submit checking
 already belongs to the preparation request owning the uploaded ZIP and bounded
-scratch. Broader Submission caller migration remains WS-ARCH-001-02I.
+scratch. ARCH-02I-B exposes public ZIP preparation and admission-backed initial and checker-remediation Submission creation.
 
-The existing mounted authorized hidden route returns the following structured
-same-request feedback. It remains absent from OpenAPI; public intake activation
-is still pending:
+The public authorized ZIP preparation route returns the following structured
+same-request feedback and is published in OpenAPI:
 
 ```text
 POST /api/v1/tasks/{id}/submission-bundle-preparations
@@ -971,13 +970,13 @@ POST /api/v1/tasks/{id}/submission-bundle-preparations
 ```
 
 No independent precheck route remains. A client-owned manifest
-cannot reproduce the authoritative result. At the later public cutover,
-`POST /api/v1/tasks/{id}/submissions` will consume the verified ready admission
-without receiving scratch paths or rerunning the pre-submit plan. Canonical
-admission-backed creation remains hidden until then.
+cannot reproduce the authoritative result. The public
+`POST /api/v1/tasks/{id}/submissions` consumes the verified ready admission
+without receiving scratch paths or rerunning the pre-submit plan. ARCH-02I-B
+exposes this operation for initial work and exact checker remediation.
 
-Before that cutover, hidden pre-submit materialization establishes the execution boundary without
-exposing a route. The fixed materializer authorizes before any prepared-byte
+Internal pre-submit materialization establishes the execution boundary behind
+the public preparation route. The fixed materializer authorizes before any prepared-byte
 read or workspace reservation. One callback-scoped sealed tree is checked
 against the server commitment and semantic manifest. The locked project-policy phase extends that same
 callback to execute the locked project-policy phase and normalize every
@@ -1010,12 +1009,12 @@ It starts in `ready`. The hidden ART admission-consumption capability may apply
 `ready -> consumed|stale` only inside a caller-owned root transaction after
 exact TASK and ART lineage validation. A consumed admission records the exact
 Submission identifier and lifecycle version while its generic artifact binding
-uses its independent binding-chain version. The capability remains deny-only
-and route-unreachable until the later TASK composition and AUTH activation
-chunks.
-The hidden preparation route keeps scratch and prepared handles process-local,
-returns before durable verification finishes, and remains excluded from OpenAPI
-and crosses the active `artifact.submission_bundle.prepare` PREP boundary before durable intent.
+uses its independent binding-chain version. The capability began deny-only and route-unreachable. TASK composition
+and AUTH activation now allow exact consumption through admission-backed public
+Submission creation for initial work and checker remediation.
+The public preparation route keeps scratch and prepared handles process-local,
+returns before durable verification finishes, and crosses the active
+`artifact.submission_bundle.prepare` PREP boundary before durable intent.
 
 Blocking pre-submit failures prevent submission creation, create no submission
 row, no submission version, no task transition to `submitted`, and no
@@ -1518,9 +1517,9 @@ Fields:
 - `version`
 - `status`
 - `summary`
-- `submission_bundle_admission_id` (hidden canonical intake identity from WS-ARCH-001-02F; public cutover remains 02I)
-- `artifact_binding_id` (hidden canonical byte binding from WS-ARCH-001-02F; public cutover remains 02I)
-- `artifact_content_id` (hidden canonical immutable ART content identity from WS-ARCH-001-02F; public cutover remains 02I)
+- `submission_bundle_admission_id` (canonical intake identity from WS-ARCH-001-02F; public use delivered by 02I-B)
+- `artifact_binding_id` (canonical byte binding from WS-ARCH-001-02F; public use delivered by 02I-B)
+- `artifact_content_id` (canonical immutable ART content identity from WS-ARCH-001-02F; public use delivered by 02I-B)
 - `submission_bundle_manifest_id` (target server-generated manifest identity)
 - `pre_submit_evidence_set_id` (target checker evidence identity)
 - `package_uri` (legacy caller transport removed by WS-ARCH-001-02I, which implements the superseded WS-ART-001-05B cutover)

@@ -6,8 +6,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 - Disposition: Planned
 - Intent: preserve exact artifact identity, verified bytes, provider-neutral
   storage, and bounded private processing scratch.
-- Current boundary: ready-admission publication and hidden preparation,
-  consumption, and binding dependencies are merged through ARCH-02H.
+- Current boundary: ready-admission publication, public ZIP preparation and
+  admission-backed Submission creation are delivered through ARCH-02I-B; the
+  underlying ART consumption and binding dependencies remain the single writer.
 - Completed boundary: ARCH-04B hidden input materialization and hidden
   [ARCH-04B2 checker-output custody](../WS-ARCH-001/WS-ARCH-001-04B2.md).
   The CHECKERS zero-slot reservation reader is implemented; checker-output
@@ -35,9 +36,8 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
   [REV-04B](../WS-REV-001/WS-REV-001-04B.md) adds shared FinalAcceptance source
   storage, without AUTH receipt custody or runtime consumers.
-- Next usable boundary: manager-visible setup-fault hold after hidden exact-cause
-  replacement intake and 04F4 Operator retry, 04E3 production composition/readiness,
-  public intake and the first-layer drill.
+- Next usable boundary: false-guide activation/readiness, followed by the
+  first-layer public API/Celery worker drill. A setup-fault hold is later safety work.
 - Governing sources: artifact specifications, `ArtifactStore`,
   `ArtifactScratchManager`, code, migrations, and artifact tests.
 - Preserve: SHA-256/byte-count identity, reread verification, isolation,
@@ -50,7 +50,7 @@ source custody and CON participation. Production activation remains separate.
 This is delivery priority, not a prerequisite of true human admission. Both
 hidden success branches have 04E1B request/source custody, exact AUTH 04E2
 outcomes and B8 completion delivery; 04F2 adds the policy-independent failure
-handoff. Live 04E3 remains. True routing has no CON-07/shared-acceptance
+handoff. PILOT-04 selected production registration is delivered. True routing has no CON-07/shared-acceptance
 prerequisite; false routing does. Human final acceptance later uses the same
 authorized shared acceptance/CON operation.
 
@@ -61,8 +61,8 @@ authorized shared acceptance/CON operation.
   formats, canonical manifests, and same-generation sufficiency are merged.
 - Pre-submit planning/execution, project-policy continuation, durable put
   intent, ready-admission publication, contributor preparation, admission
-  consumption, Submission creation, and final binding exist behind the current
-  hidden route.
+  consumption, Submission creation, and final binding are delivered. ARCH-02I-B
+  exposes the existing preparation and creation operations through public HTTP.
 
 ## Remaining v0.1 sequence
 
@@ -78,12 +78,12 @@ must prove exact approved lineage at preparation, consumption and binding.
    storage, CON contribution/award storage and participation, exact routing AUTH,
    B8 completion delivery and the 04F2 hidden remediation handoff are delivered.
 3. ARCH-04F3 supplies exact-cause checker-remediation resubmission using
-   existing ART ports. 04F4 adds hidden Operator retry through existing CHECKERS custody without changing ART bindings. Remaining ARCH-04F owns manager-visible setup-fault hold;
-   later reviewer-requested revision remains a separate REV boundary. Add the
-   manager-visible hold before public Submission cutover; submitted-task rule
-   changes or re-screening are deferred.
-4. Perform ARCH-02I only after that recovery path exists; historical
-   ART-05/06 and XINT-05 designs remain non-executable.
+   existing ART ports. 04F4 adds hidden Operator retry through existing CHECKERS custody without changing ART bindings. A manager-visible setup-fault hold is later safety work because no current
+   production result classifies to `task_setup_blocked`. Later reviewer-requested
+   revision is a separate REV boundary. Submitted-task rule changes remain deferred.
+4. Perform the first-layer public API/Celery worker drill after false-guide
+   activation/readiness; historical ART-05/06 and XINT-05 designs remain
+   non-executable.
 
 ## Preserved history
 

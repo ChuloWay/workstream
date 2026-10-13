@@ -6,11 +6,10 @@ from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.api import ReadyTaskSummary, ManagementTaskSummary, OperationalTaskSummary
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Literal
 from uuid import UUID
-from urllib.parse import unquote, urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.modules.projects.api.guide_activation_context import GuidePolicySelection
 from app.modules.projects.api.locked_policy import GuideDisplayFacts, ProjectDisplayFacts
@@ -74,64 +73,6 @@ class ManagementTaskWorkContext(_TaskWorkContext):
         return self
 
 
-ALLOWED_STORAGE_URI_PREFIXES = ("local://", "s3://", "r2://")
-FORBIDDEN_URI_FRAGMENTS = (
-    "?",
-    "#",
-    "@",
-    "authorization=",
-    "credential=",
-    "password=",
-    "secret=",
-    "signature=",
-    "token=",
-    "x-amz-",
-)
-
-
-def validate_storage_reference(value: str | None) -> str | None:
-    """Validate a storage URI/reference accepted by submission packets.
-
-    Args:
-        value: Optional storage reference supplied by the client.
-
-    Returns:
-        Normalized value when it is a safe storage reference.
-
-    Raises:
-        ValueError: If the value is not an allowed storage reference.
-    """
-    if value is None:
-        return value
-    normalized = value.strip()
-    parsed = urlparse(normalized)
-    matching_prefix = next(
-        (prefix for prefix in ALLOWED_STORAGE_URI_PREFIXES if parsed.scheme == prefix[:-3]),
-        None,
-    )
-    if matching_prefix is None:
-        raise ValueError("uri must be a local, R2, or S3 object reference")
-    lowered_auth_components = f"{parsed.query}&{parsed.fragment}".lower()
-    has_signed_or_credential_fragment = any(
-        fragment in lowered_auth_components
-        for fragment in FORBIDDEN_URI_FRAGMENTS
-        if fragment not in {"?", "#", "@"}
-    )
-    if parsed.username or parsed.password or "@" in parsed.netloc:
-        raise ValueError("uri must not include credentials, query strings, or signed URL data")
-    if parsed.query or parsed.fragment or has_signed_or_credential_fragment:
-        raise ValueError("uri must not include credentials, query strings, or signed URL data")
-    reference = f"{parsed.netloc}{parsed.path}"
-    if not reference.strip("/"):
-        raise ValueError("uri must include an object reference")
-    if matching_prefix in {"s3://", "r2://"} and (not parsed.netloc or not parsed.path.strip("/")):
-        raise ValueError("uri must include a bucket and object key")
-    decoded_segments = unquote(reference).replace("\\", "/").split("/")
-    if any(segment in {"", ".", ".."} for segment in decoded_segments):
-        raise ValueError("uri must not include empty or traversal path segments")
-    return normalized
-
-
 class TaskCreate(BaseModel):
     """Request schema for creating a draft task."""
 
@@ -168,53 +109,27 @@ class TaskTransitionRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=1000)
 
 
-class EvidenceItemCreate(BaseModel):
-    """Request schema for one evidence item in a submission packet."""
+class AdmissionBackedSubmissionCreate(BaseModel):
+    """Contributor packet and selectors for the canonical ready-admission POST."""
 
     model_config = ConfigDict(extra="forbid")
 
-    type: Literal[
-        "log",
-        "screenshot",
-        "test_result",
-        "package",
-        "diff",
-        "note",
-        "external_reference",
-    ]
-    label: str = Field(min_length=1, max_length=200)
-    uri: str | None = Field(default=None, max_length=1000)
-    hash: str | None = Field(default=None, max_length=128)
-    size_bytes: int | None = Field(default=None, ge=0)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-    _validate_uri = field_validator("uri")(validate_storage_reference)
+    admission_id: UUID
+    assignment_id: UUID
+    predecessor_submission_id: UUID | None = None
+    summary: str | None = None
+    contributor_attestation: str | None = None
 
 
-class ArtifactHashEntry(BaseModel):
-    """Structured artifact hash entry supplied by a Contributor."""
+class AdmissionBackedSubmissionResponse(BaseModel):
+    """Stable Workstream result without provider or scratch coordinates."""
 
     model_config = ConfigDict(extra="forbid")
 
-    artifact: str = Field(min_length=1, max_length=1000)
-    hash: str = Field(min_length=1, max_length=128)
-    size_bytes: int | None = Field(default=None, ge=0)
-    notes: str | None = None
-
-
-class SubmissionCreate(BaseModel):
-    """Shared packet value used by retained checker feedback and evaluation."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    summary: str = Field(min_length=1)
-    package_uri: str | None = Field(default=None, max_length=1000)
-    package_hash: str = Field(min_length=1, max_length=128)
-    artifact_hash_manifest: list[ArtifactHashEntry] = Field(min_length=1)
-    worker_attestation: str = Field(min_length=1)
-    evidence_items: list[EvidenceItemCreate] = Field(default_factory=list)
-
-    _validate_package_uri = field_validator("package_uri")(validate_storage_reference)
+    submission_id: UUID
+    submission_version: int
+    admission_id: UUID
+    evaluation_request_id: UUID
 
 
 class TaskResponse(BaseModel):

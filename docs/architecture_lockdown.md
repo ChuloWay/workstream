@@ -67,8 +67,9 @@ reviewer contribution. Its source/authority/CON design is defined in the
 [shared acceptance contract](spec_review_lifecycle.md#finalacceptance);
 REV-04C supplies its hidden FinalAcceptance/TASK/CON transaction participant,
 and ARCH-04E2-B binds actual routing authority, immutable evidence and complete
-atomic outcomes under currentness custody. B8 supplies hidden completion delivery. Remediation and
-production composition remain before false-guide activation and public intake.
+atomic outcomes under currentness custody. B8 supplies hidden completion delivery. Checker remediation and selected production
+composition are delivered. Public initial and checker-remediation intake is
+exposed; false-guide activation and the complete public API and Celery service drill remain.
 This amendment does not enable raw checker results to create acceptance or
 change the existing human branch's implementation contract.
 The ReviewPolicy field `requires_second_review` is fixed to `false` in v0.1.
@@ -193,10 +194,9 @@ rules changed. Missing summary or attestation produces warnings only. All
 project checks are approved, digest-pinned external images; there is no built-in
 project-rule catalogue or alternate checker runtime.
 
-Blocking pre-submit failures prevent submission creation. The mounted
-authorized hidden preparation route returns `pre_submission_checker_failed`
-with exact ordered bounded results in the same request. It remains absent from
-OpenAPI, and public intake activation remains pending. Failures create no submission
+Blocking pre-submit failures prevent submission creation. The public authorized ZIP preparation route returns
+`pre_submission_checker_failed` with exact ordered bounded results in the same
+request. It is published in OpenAPI alongside admission-backed Submission creation. Failures create no submission
 row, no submission version, no task transition to `submitted`, and no
 submission-created audit event. ART constructs a bounded audit-ready projection;
 publication as a task event named `pre_submission_check_failed` remains pending.
@@ -327,8 +327,8 @@ old request/result decoders are removed.
 
 Contributor feedback contains bounded default/image findings and eligibility.
 It conceals scratch state, provider coordinates, credentials and raw checker
-output. The hidden preparation flow is implemented; public contributor
-upload/finalize and CLI submit/status remain PILOT-12 work.
+output. Public contributor ZIP preparation and admission-backed Submission creation
+are implemented. CLI submit/status and the complete public API and Celery service drill remain.
 
 ### Contribution Records
 

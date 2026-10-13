@@ -507,7 +507,7 @@ The paired artifact hidden-behavior matrix is closed:
 | `WS-ART-001-02D` | Operator binding/replica/receipt/verification-job/recovery-attempt/audit reads; the operations-domain `operations.artifact_storage_admission.read` action mapped to `operations.status.read`; verification retry; `artifact.verification.execute`; `artifact.pending_work.scan`; and `artifact.put_attempt.resolve` |
 | `WS-ART-001-03` | Hidden guide behavior for `artifact.guide_source.ingest -> artifact.guide_source.ingest`, `artifact.guide_source.read -> artifact.guide_source.read`; AUTH activation custody is split between WS-XINT-002-04A and 04B below |
 | `WS-ART-001-04A` historical baseline | the former multi-step upload authority had no route/command and is deleted from the live catalogue by WS-XINT-002-01 without compatibility aliases |
-| `WS-ART-001-04A1` through `04C2` | one hidden `artifact.submission_bundle.prepare` surface mapped to `submission.create`; 04B1-04B3 implement the sole catalogue/materialization/evidence path and XINT-002-06A activates its fixed pre-submit materializer before 04C1; WS-ARCH-001-02G activates hidden contributor preparation and 02H activates hidden consumption/binding on the completed 02A-02F owner foundation; the public Submission cutover remains 02I work; POL-07B connects the internal checker phase service and removes the standalone JSON precheck |
+| `WS-ART-001-04A1` through `04C2` | the ART-owned `artifact.submission_bundle.prepare` capability maps to `submission.create`; 04B1-04B3 implement the sole catalogue/materialization/evidence path and XINT-002-06A activates its fixed pre-submit materializer before 04C1; WS-ARCH-001-02G and 02H delivered hidden preparation and consumption/binding on the completed 02A-02F owner foundation; ARCH-02I-B exposes public ZIP preparation and initial/checker-remediation Submission entry; POL-07B connects the internal checker phase service and removes the standalone JSON precheck |
 | `WS-ART-001-04B2` and `04B3` | hidden `artifact.pre_submit.checker_input.materialize` resource/guard usage mapped to `artifact.checker_input.materialize`; 04B2 owns exact sealed materialization and 04B3 consumes it in the complete effective plan |
 | `WS-ART-001-05` | `artifact.submission.binding.create` mapped to `artifact.binding.create` |
 | `WS-ART-001-06A` | `artifact.post_submit.checker_input.materialize` mapped to `artifact.checker_input.materialize` |
@@ -918,19 +918,21 @@ active AdminRoleGrant-backed administrative mutations, the three active fixed
 ART foundation service actions, Project Manager
 `artifact.guide_source.ingest`, and the fixed-service
 `artifact.guide_source.read`
-action, contributor `artifact.submission_bundle.prepare`, hidden human
+action, contributor `artifact.submission_bundle.prepare`, human
 `submission.create`, and fixed-service `artifact.submission.binding.create`.
 REV-12A4A additionally issues PREP for internal
 `review.lifecycle.activation.manage`, the sole active review exception. Human
-review, generic artifact-read and the public Submission cutover remain planned
-and issue no handle. The controller activates no public review route, routing,
+review and generic artifact-read remain planned and issue no handle. ARCH-02I-B
+exposes public ZIP preparation and initial/checker-remediation Submission entry.
+The controller activates no public review route, routing,
 acceptance or payment delivery.
 ARCH-04E1B-B6 retains the exact creation and binding decision IDs in their owner
 receipts. Fresh PREP authority validates those immutable events on replay,
 including exact actor/service, action, permission, project, resource and canonical
 context digest. The retained event keeps its original request/correlation IDs and
 grant provenance; fresh transport IDs do not create another allow. Missing or
-inconsistent receipts make replay unavailable. No public route is added.
+inconsistent receipts make replay unavailable. B6 adds no separate replay route;
+ARCH-02I-B exposes the existing creation operation, including exact replay.
 
 Actor-self preparation locks the exact caller
 profile and then its exact identity link. Administrative preparation locks

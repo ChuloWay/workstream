@@ -82,7 +82,7 @@ async def test_raw_savepoint_cannot_release_creation_custody(tmp_path, isolated_
 
 async def test_revoked_binding_identity_rolls_back_initial_creation(tmp_path, isolated_database_env):
     from sqlalchemy import text
-    from app.modules.artifacts.api import SubmissionAdmissionConsumptionError
+    from app.modules.tasks.api import SubmissionCreationAdmissionError
     from tests.post_submit_materialization_helpers import _material_fixture, _write_current_submission, _read_current_request
 
     async def revoke_before_create(factory, context, request):
@@ -93,7 +93,7 @@ async def test_revoked_binding_identity_rolls_back_initial_creation(tmp_path, is
                     WHERE service_identity='workstream.artifact.binding')"""))
         return await _write_current_submission(factory, context, request)
 
-    with pytest.raises(SubmissionAdmissionConsumptionError, match="submission_bundle_admission_unavailable"):
+    with pytest.raises(SubmissionCreationAdmissionError, match="submission_bundle_admission_unavailable"):
         async with _material_fixture(tmp_path, isolated_database_env,
                                      write_submission=revoke_before_create, read_request=_read_current_request):
             pytest.fail("revoked binding service created a Submission")

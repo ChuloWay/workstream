@@ -10,7 +10,7 @@ from app.api.deps.authorization import compose_hidden_submission_creation_comman
 from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorProfile
 from app.modules.actors.api import ServiceIdentity
-from app.modules.artifacts.api import SubmissionAdmissionConsumptionError
+from app.modules.tasks.api import SubmissionCreationAdmissionError
 from app.modules.checkers.models import CheckerRun, CheckerSubmissionFence
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.api import SubmissionCreationUnavailable, TaskSubmissionContextUnavailable
@@ -64,7 +64,7 @@ async def test_live_revocation_and_service_suspension_deny_retained_replay(tmp_p
             async with h.factory.begin() as session:
                 await session.execute(text("UPDATE public.actor_profiles SET status='suspended', suspended_by='dispatch-test', suspended_at=clock_timestamp(), suspension_reason='Recheck live authority' WHERE id=:id"), {"id": actor_id})
             try:
-                with pytest.raises((SubmissionCreationUnavailable, SubmissionAdmissionConsumptionError)):
+                with pytest.raises((SubmissionCreationUnavailable, SubmissionCreationAdmissionError)):
                     await replay(h)
             finally:
                 async with h.factory.begin() as session:
@@ -124,7 +124,7 @@ async def test_missing_retained_owners_never_trigger_repair(tmp_path, isolated_d
                 if missing == "event":
                     patch.setattr(OutboxRepository, "read_exact", read_event)
                 with pytest.raises((SubmissionCreationUnavailable, TaskSubmissionContextUnavailable,
-                                    SubmissionAdmissionConsumptionError, CheckerExecutionUnavailable,
+                                    SubmissionCreationAdmissionError, CheckerExecutionUnavailable,
                                     OutboxIdempotencyConflict)):
                     await replay(h)
             assert seen == [missing]

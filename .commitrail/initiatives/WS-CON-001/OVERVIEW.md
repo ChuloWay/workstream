@@ -1,6 +1,6 @@
 # WS-CON-001 — Contribution and conditional compensation
 
-[REV-12A4A](../WS-REV-001/WS-REV-001-12A4A.md) adds internal Operator-controlled lifecycle transitions and current-generation terminal replay. New acceptance effects require LIVE; 04E2-B supplies hidden source AUTH custody, while production routing remains unavailable. Conditional award facts stay atomic, while fulfillment admission, payment delivery and their root/cutoff machinery remain deferred until a successor manifest enables them.
+[REV-12A4A](../WS-REV-001/WS-REV-001-12A4A.md) adds internal Operator-controlled lifecycle transitions and current-generation terminal replay. New acceptance effects require LIVE; 04E2-B supplies hidden source AUTH custody, while PILOT-04 now registers selected production routing. Conditional award facts stay atomic, while fulfillment admission, payment delivery and their root/cutoff machinery remain deferred until a successor manifest enables them.
 
 Delivery priority follows the [first complete contributor milestone](../WS-ARCH-001/planning/PLAN.md#first-complete-contributor-milestone): contribute only prerequisites of that public backend path; live human review/revision and external integrations remain later work.
 
@@ -18,8 +18,8 @@ B8 supplies hidden completion delivery with commit-before-ACK.
 operation so an exact current contributor-correctable result reaches
 `needs_revision` under either policy mode, with no Review, FinalAcceptance,
 ContributionRecord or award. 04F3 hidden exact-cause replacement intake and 04F4 hidden Operator retry are delivered; neither creates a contribution or award.
-Manager-visible setup-fault hold, 04E3 production composition, public intake and
-the first-layer drill remain. False-guide activation, live human review/revision
+Selected production composition and ARCH-02I-B public entry are delivered. False-guide activation
+and the first-layer drill remain; setup-fault handling is future safety work. Live human review/revision
 and payment delivery remain unavailable.
 
 Current pre-review work follows the [cross-owner dependency contract](../WS-ARCH-001/planning/PLAN.md#current-dependency-contract)
@@ -72,10 +72,9 @@ and the [capability ledger](../../../docs/roadmap_status.md).
   [CON-07](WS-CON-001-07.md) adds hidden source-neutral submitter participation
   and complete frozen award-set staging/replay; no recognition route or
   fulfillment operation is live.
-- Next usable boundary: the manager-visible setup-fault hold after 04F3 hidden
-  exact-cause replacement intake and 04F4 hidden Operator infrastructure retry,
-  followed by 04E3 live composition and false-guide readiness, public intake and
-  the first-layer drill. The delivered remediation handoff is independent of REV/CON;
+- Next usable boundary: public admission-backed entry is delivered by ARCH-02I-B;
+  false-guide activation/readiness and the first-layer public/worker drill remain.
+  Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: `docs/spec_contribution_compensation.md`,
   [`CONFORMANCE.md`](CONFORMANCE.md), code, migrations, and tests.
@@ -85,10 +84,11 @@ and the [capability ledger](../../../docs/roadmap_status.md).
 
 REV-12A4A supplies scoped lifecycle transitions on the existing REV fence.
 04E2-B supplies exact source AUTH custody and complete database/effect closure.
-Production composition and false-guide activation remain separate work.
+PILOT-04 selected production composition is delivered; false-guide activation
+remains planned.
 
 This is delivery priority, not a prerequisite of true human admission. Both
-routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → delivered authorized outcomes 04E2-B → completion delivery 04E1B-B → live 04E3; true routing
+routing branches have delivered request reservation 04E1B-A → delivered AUTH preparation 04E2-A → delivered authorized outcomes 04E2-B → completion delivery 04E1B-B → PILOT-04 selected production registration; true routing
 can proceed after its own prerequisites without CON/shared acceptance or
 scoped lifecycle activation. False routing adds those requirements. Human final
 acceptance later uses the same authorized shared acceptance/CON operation.

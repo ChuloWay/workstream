@@ -193,6 +193,7 @@ async def test_hidden_preparation_maps_context_custody_and_authority_distinctly(
             request=request,
             actor=_actor(),
             command=command,
+            session=SimpleNamespace(rollback=AsyncMock()),
             assignment_id=str(new_record_id()),
             idempotency_key=str(new_record_id()),
             summary="summary",
@@ -218,6 +219,7 @@ async def test_hidden_preparation_treats_missing_optional_packet_text_as_warning
 
     await prepare_submission_bundle(
         task_id=str(new_record_id()), request=request, actor=_actor(), command=command,
+        session=SimpleNamespace(rollback=AsyncMock()),
         assignment_id=str(new_record_id()), idempotency_key=str(new_record_id()),
         summary=None, contributor_attestation=None,
     )
