@@ -355,18 +355,25 @@ async def test_committed_receipt_is_immutable_through_sql(task_client, monkeypat
     _, task, _ = await _setup(task_client, monkeypatch)
     response = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
     assert response.status_code == 200, response.text
+    async with db_session.get_session_factory()() as session:
+        retained = (await session.execute(text(
+            "select to_jsonb(r)::text from task_command_receipts r order by id"
+        ))).scalars().all()
     statements = (
         "update task_command_receipts set idempotency_key=gen_random_uuid()",
         "update task_command_receipts set task_id='" + str(uuid4()) + "'",
         "update task_command_receipts set response='{}'::jsonb",
         "update task_command_receipts set request_digest='sha256:'||repeat('0',64)",
-        "delete from task_command_receipts", "truncate task_command_receipts",
+        "delete from task_command_receipts", "truncate task_command_receipts cascade",
     )
     for statement in statements:
         async with db_session.get_session_factory()() as session:
             with pytest.raises(IntegrityError, match="task command receipt"):
                 await session.execute(text(statement))
             await session.rollback()
+            assert (await session.execute(text(
+                "select to_jsonb(r)::text from task_command_receipts r order by id"
+            ))).scalars().all() == retained
     async with db_session.get_session_factory()() as session, session.begin():
         assert (await session.execute(text("update task_command_receipts set id=id"))).rowcount == 4
     assert await _counts(task["id"]) == (1, 1, 1)

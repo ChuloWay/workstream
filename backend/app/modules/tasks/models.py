@@ -35,6 +35,7 @@ class TaskCommandReceipt(Base):
     __table_args__ = (
         CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         UniqueConstraint("actor_profile_id", "action_id", "idempotency_key", name="uq_task_command_namespace"),
+        Index("ix_task_command_receipts_batch_transition_receipt_id", "batch_transition_receipt_id"),
         ForeignKeyConstraint(
             ["assignment_id", "task_id", "contributor_id"],
             ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"],
@@ -46,6 +47,8 @@ class TaskCommandReceipt(Base):
             name="task_command_action",
         ),
         CheckConstraint("request_digest ~ '^sha256:[0-9a-f]{64}$'", name="task_command_request_digest"),
+        CheckConstraint("batch_transition_receipt_id is null or action_id in ('project.task.screen','project.task.release')",
+                        name="task_command_batch_transition_action"),
         CheckConstraint(
             "(status='pending' and assignment_id is null and contributor_id is null "
             "and locked_context_hash is null and response is null and committed_at is null) or "
@@ -74,6 +77,12 @@ class TaskCommandReceipt(Base):
     action_id: Mapped[str] = mapped_column(String(160))
     idempotency_key: Mapped[UUID] = mapped_column(Uuid())
     request_digest: Mapped[str] = mapped_column(String(71))
+    # Existing single-Task/CREATE receipts remain null. Bulk participation is
+    # immutable receipt provenance, never an AUTH selector or a mutable Task flag.
+    batch_transition_receipt_id: Mapped[UUID | None] = mapped_column(ForeignKey(
+        "task_batch_transition_receipts.id", name="fk_task_command_batch_transition",
+        ondelete="RESTRICT", deferrable=True, initially="DEFERRED",
+    ))
     # Defer TASK custody until after reservation and proposed-task insertion.
     task_id: Mapped[str] = mapped_column(ForeignKey(
         "workstream_tasks.id", name="fk_task_command_task", deferrable=True, initially="DEFERRED",

@@ -117,6 +117,10 @@
       "target": "backend/app/api/deps/rate_controls.py"
     },
     {
+      "group": "lifecycle",
+      "target": "backend/app/api/deps/task_batch_transitions.py"
+    },
+    {
       "group": "shared",
       "target": "backend/app/api/router.py"
     },
@@ -555,14 +559,6 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/assignment_invalidation_authorization.py"
-    },
-    {
-      "group": "auth",
-      "target": "backend/app/modules/authorization/catalogue.py"
-    },
-    {
-      "group": "auth",
-      "target": "backend/app/modules/authorization/catalogue.py"
     },
     {
       "group": "auth",
@@ -1658,6 +1654,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/task_batch_transition.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/task_detail.py"
     },
     {
@@ -1775,6 +1775,18 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/submitted_bundle.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transition/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transition_router.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/task_batch_transitions.py"
     },
     {
       "group": "lifecycle",
@@ -1926,14 +1938,6 @@
     },
     {
       "group": "shared",
-      "target": "backend/scripts/test_lane_catalogue.py"
-    },
-    {
-      "group": "shared",
-      "target": "backend/scripts/test_lane_catalogue.py"
-    },
-    {
-      "group": "shared",
       "target": "backend/scripts/test_structure_boundary.py"
     },
     {
@@ -1941,7 +1945,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "64d2303dc5a6f08c78c1cc9d3acec3c20a24252068c1e042c29675ac637f28fb",
-  "protected_base_commit": "6d64a6353fd619f5b917359da8b82c307d97d40d",
+  "authority_digest": "79e06b3daa8e3c0e74c90de03fd36ae8568e24021c6cfd7a09910d8a1fbb3e02",
+  "protected_base_commit": "728148626590ee73f5579db065f716b7b781e0dc",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

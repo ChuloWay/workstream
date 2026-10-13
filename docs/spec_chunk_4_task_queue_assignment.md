@@ -124,11 +124,46 @@ conflicts even if both verified sources contain identical bytes.
 
 `GET /api/v1/projects/{project_id}/task-import-batches/{batch_id}` returns original
 creation facts separately from current states selected by ordered native
-membership. Missing, foreign and revoked status access is concealed. Explicit
-batch screen/release, normal locked-guide prerequisites and CLI/client CSV
-conversion remain separate chunks. The bounded implementation and required
-native proof are recorded in the
+membership. Missing, foreign and revoked status access is concealed. The bounded
+implementation and required native proof are recorded in the
 [atomic-import change record](../.commitrail/changes/pilot02-atomic-json-draft-import.md).
+
+### Explicit whole-batch screening and release contract
+
+Separate `POST /api/v1/projects/{project_id}/task-import-batches/{batch_id}/screen`
+and `/release` accept a reason and exactly one UUID `Idempotency-Key`. SCREEN
+permits an omitted reason; RELEASE requires the normal nonblank decision reason.
+Both operate on the complete immutable native import membership, preserving
+original row order. Arbitrary `Task.import_batch_id` metadata cannot select
+members. Each actual Task consumes fresh covered-PM authority through the normal
+SCREEN/RELEASE owner, with all Task/assignment custody locked before authority
+and guide/policy evaluation. One caller transaction commits every member's normal
+transition, guide/policy locks, authority evidence and success receipt together;
+a late failure rolls back the complete successful effect set.
+
+The compact response identifies project, native batch, operation and row count,
+then returns every ordered Task ID, row index, poststate, locked guide version,
+locked ContributionPolicyVersion ID and locked context hash. It repeats no Task
+instructions. SCREEN returns `screening`; RELEASE returns `ready`. The server
+records a separate aggregate retry namespace and retained canonical per-Task
+keys; callers cannot choose those row keys or attach old standalone successes.
+
+Same-key replay reauthorizes every current member and recovers the exact recorded
+response only while all Tasks retain their corresponding poststate, unassigned
+custody and locked context. A partially advanced or assigned member refuses the
+whole operation, as does a changed reason, selector or member set. This differs
+from import replay, which recovers original DRAFT creation facts after Tasks
+advance. An uncertain client write requires manual replay of the unchanged
+project, batch, operation, reason and key; later authority or Task changes may
+prevent recovery. There are no automatic write retries or per-row commits.
+
+The CLI keeps local CSV conversion, source declaration/upload/status, import,
+batch status, screening and release explicit. UTF-8 quoted CSV and semicolon skill
+fields produce validated canonical JSON; its exact bytes supply the uploaded
+SHA/count. The server retains those JSON bytes, with no claim to retaining the
+original CSV. Native aggregate DDL and the public 200/500-member journey remain
+pending in the [bulk/CLI change record](../.commitrail/changes/pilot02-bulk-transitions-cli.md);
+this contract does not establish delivered bulk readiness.
 
 ## Transitions and locked lineage
 

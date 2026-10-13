@@ -2,6 +2,10 @@ name: CLI Public Contract
 
 on:
   workflow_call:
+    inputs:
+      minio_artifact:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -41,11 +45,14 @@ jobs:
           python-version: "3.12"
 
       - name: Bind checked-out source
+        env:
+          MINIO_ARTIFACT: ${{ inputs.minio_artifact }}
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           test -z "$(git status --porcelain)"
+          test "${MINIO_ARTIFACT}" = "minio-source-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Verify and build independent CLI
         working-directory: cli
@@ -59,6 +66,7 @@ jobs:
           go mod tidy -diff
           test -z "$(gofmt -l cmd internal)"
           go vet ./...
+          go test ./...
           go build -trimpath -ldflags "-X main.version=${GITHUB_SHA}" -o "${RUNNER_TEMP}/workstream-cli" ./cmd/workstream
 
       - name: Install API integration tooling
@@ -71,7 +79,33 @@ jobs:
           ruff check cli/tests
           ruff format --check cli/tests
 
-      - name: Exercise built CLI against HTTP boundaries and real public API
+      - name: Download existing source-pinned MinIO image
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ inputs.minio_artifact }}
+          path: ${{ runner.temp }}/minio-image
+
+      - name: Start real CLI artifact provider
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd "${RUNNER_TEMP}/minio-image" && sha256sum --check minio.tar.sha256)
+          docker load --input "${RUNNER_TEMP}/minio-image/minio.tar"
+          docker run --detach --rm --name workstream-cli-minio \
+            --publish 127.0.0.1:9000:9000 \
+            --env MINIO_ROOT_USER=workstream-minio \
+            --env MINIO_ROOT_PASSWORD=workstream-minio-secret-key \
+            workstream-minio:source server /data --address :9000
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:9000/minio/health/live >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs workstream-cli-minio
+          exit 1
+
+      - name: Exercise built CLI against task HTTP and local file boundaries
         working-directory: backend
         env:
           WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
@@ -82,4 +116,84 @@ jobs:
           python scripts/run_isolated_tests.py \
             --metadata-json "${RUNNER_TEMP}/workstream-cli-isolation.json" \
             --timeout-seconds 300 \
-            -- python -m pytest -q ../cli/tests/integration
+            -- python -m pytest -q ../cli/tests/integration \
+              '--ignore-glob=../cli/tests/integration/*_public_api.py' \
+              '--ignore-glob=../cli/tests/integration/test_guide*.py' \
+              --ignore=../cli/tests/integration/test_public_self_service.py
+
+      - name: Exercise existing guide HTTP contracts
+        working-directory: backend
+        env:
+          WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
+          WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          guide_files=()
+          for test_path in ../cli/tests/integration/test_guide*.py; do
+            if [[ "${test_path}" != *_public_api.py ]]; then
+              guide_files+=("${test_path}")
+            fi
+          done
+          test "${#guide_files[@]}" -gt 0
+          python scripts/run_isolated_tests.py \
+            --metadata-json "${RUNNER_TEMP}/workstream-cli-guide-isolation.json" \
+            --timeout-seconds 300 \
+            -- python -m pytest -q "${guide_files[@]}"
+
+      - name: Exercise existing native guide API callers
+        working-directory: backend
+        env:
+          WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
+          WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          native_files=()
+          for test_path in ../cli/tests/integration/*_public_api.py; do
+            if [[ "${test_path}" != ../cli/tests/integration/test_task_batch_public_api.py ]]; then
+              native_files+=("${test_path}")
+            fi
+          done
+          test "${#native_files[@]}" -gt 0
+          python scripts/run_isolated_tests.py \
+            --metadata-json "${RUNNER_TEMP}/workstream-cli-native-isolation.json" \
+            --timeout-seconds 300 \
+            -- python -m pytest -q "${native_files[@]}"
+
+      - name: Exercise existing native CLI self-service caller
+        working-directory: backend
+        env:
+          WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
+          WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
+        run: |
+          python scripts/run_isolated_tests.py \
+            --metadata-json "${RUNNER_TEMP}/workstream-cli-self-service-isolation.json" \
+            --timeout-seconds 300 \
+            -- python -m pytest -q ../cli/tests/integration/test_public_self_service.py
+
+      - name: Exercise complete native CLI batch journey
+        working-directory: backend
+        env:
+          WORKSTREAM_CLI_EXECUTABLE: ${{ runner.temp }}/workstream-cli
+          WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
+          WORKSTREAM_TEST_MINIO_ENDPOINT: http://127.0.0.1:9000
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/run_isolated_tests.py \
+            --metadata-json "${RUNNER_TEMP}/workstream-cli-batch-isolation.json" \
+            --timeout-seconds 300 \
+            -- python -m pytest -q ../cli/tests/integration/test_task_batch_public_api.py
+
+      - name: Stop owned CLI artifact provider
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if docker inspect workstream-cli-minio >/dev/null 2>&1; then
+            docker logs workstream-cli-minio
+            docker stop workstream-cli-minio
+          fi

@@ -58,10 +58,11 @@ func (f *Failure) Error() string {
 }
 
 type Client struct {
-	origin    string
-	token     string
-	http      *http.Client
-	guideHTTP *http.Client
+	origin        string
+	token         string
+	http          *http.Client
+	guideHTTP     *http.Client
+	taskBatchHTTP *http.Client
 }
 
 type Profile struct {
@@ -125,7 +126,11 @@ func New(origin, token string) (*Client, error) {
 	guideHTTP := *client
 	guideHTTP.Transport = guideTransport
 	guideHTTP.Timeout = 10 * time.Minute
-	return &Client{origin: normalized, token: token, http: client, guideHTTP: &guideHTTP}, nil
+	// Complete 1..500-member writes include fresh per-Task authorization and one
+	// atomic commit. Keep their measured budget separate from ordinary requests.
+	taskBatchHTTP := *client
+	taskBatchHTTP.Timeout = 3 * time.Minute
+	return &Client{origin: normalized, token: token, http: client, guideHTTP: &guideHTTP, taskBatchHTTP: &taskBatchHTTP}, nil
 }
 
 func validateOrigin(raw string) (string, error) {
@@ -343,8 +348,12 @@ func (c *Client) requestWithKey(ctx context.Context, method, path, query string,
 }
 
 func (c *Client) requestWithResponseLimit(ctx context.Context, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
-	mutation := method == http.MethodPatch || method == http.MethodPost
-	response, err := c.openRequest(ctx, c.http, method, path, query, body, key, "application/json")
+	return c.requestWithClientAndResponseLimit(ctx, c.http, method, path, query, body, key, successStatus, responseLimit)
+}
+
+func (c *Client) requestWithClientAndResponseLimit(ctx context.Context, requestClient *http.Client, method, path, query string, body []byte, key string, successStatus, responseLimit int) (json.RawMessage, error) {
+	mutation := method == http.MethodPatch || method == http.MethodPost || method == http.MethodPut
+	response, err := c.openRequest(ctx, requestClient, method, path, query, body, key, "application/json")
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +383,7 @@ func (c *Client) openRequest(ctx context.Context, requestClient *http.Client, me
 }
 
 func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client, method, path, query string, reader io.Reader, length int64, key, accept, contentType string) (*http.Response, error) {
-	mutation := method == http.MethodPatch || method == http.MethodPost
+	mutation := method == http.MethodPatch || method == http.MethodPost || method == http.MethodPut
 	target := c.origin + path
 	if query != "" {
 		target += "?" + query
@@ -423,7 +432,7 @@ func (c *Client) responseCorrelation(response *http.Response) string {
 }
 
 func (c *Client) responseFailure(method string, response *http.Response, responseBody []byte) error {
-	mutation := method == http.MethodPatch || method == http.MethodPost
+	mutation := method == http.MethodPatch || method == http.MethodPost || method == http.MethodPut
 	correlation := c.responseCorrelation(response)
 	code := "api_error"
 	knownEnvelope := false
@@ -440,7 +449,7 @@ func (c *Client) responseFailure(method string, response *http.Response, respons
 			code = envelope.Error.Code
 		}
 	}
-	if method == http.MethodPost {
+	if method == http.MethodPost || method == http.MethodPut {
 		knownEnvelope = canonicalMutationError(responseBody, response.Header.Get("Content-Type"))
 	}
 	// A complete API 4xx envelope is a known denial, independent of code
@@ -449,7 +458,7 @@ func (c *Client) responseFailure(method string, response *http.Response, respons
 		OutcomeUnknown: mutation && (response.StatusCode < 400 || response.StatusCode >= 500 || !knownEnvelope)}
 }
 
-// POST writes need a complete public ApiError, not a gateway's code-shaped
+// POST/PUT writes need a complete public ApiError, not a gateway's code-shaped
 // JSON. Profile PATCH deliberately retains its existing response contract.
 func canonicalMutationError(raw []byte, contentType string) bool {
 	mediaType, _, err := mime.ParseMediaType(contentType)

@@ -406,6 +406,16 @@ cannot be reused as post-submission review-gate evidence. See the
   verified source ancestry and per-row canonical AUTH/TaskCreated evidence. Its
   actual 200-row, rollback, lock-wait and immutable SQL controls pass on PostgreSQL
   and MinIO. Issue 489 retains explicit batch screen/release and CLI conversion.
+  The [PILOT-02C bulk/CLI candidate](../.commitrail/changes/pilot02-bulk-transitions-cli.md)
+  implements caller-root canonical SCREEN/RELEASE composition and separate CLI
+  source/import/status/screen/release commands with local CSV-to-JSON conversion.
+  Installed sole-author DDL proves public PostgreSQL/MinIO 200/500-member
+  import-screen-release journeys and fresh replay in the recorded candidate.
+  Qualified native negative controls cover rollback, native waits, revocation
+  and immutable custody. The recorded built-CLI 200-row socket journey and
+  equivalent verified-source recovery also pass against actual PostgreSQL and
+  MinIO. Required independent review and complete final-head CI remain pending.
+  Issue 489 stays open.
   [CLI manager task browsing](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-04.md)
   adds one-page task discovery and exact task detail through existing manager
   reads, with server-owned live authority and opaque continuation.
