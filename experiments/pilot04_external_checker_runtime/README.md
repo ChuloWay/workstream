@@ -45,9 +45,13 @@ From that explicit precondition, the companion must use a live loopback API,
 the public manager guide activation and task lifecycle, contributor ZIP
 preparation and canonical Submission POST, and a real Redis-backed prefork
 Celery worker for artifact and outbox delivery. It checks actionable intake
-failure, verified immutable admission, selected POST routing under both locked
-review modes, exact false-mode FinalAcceptance and submitter contribution/award
-evidence, and replay. It must keep guide activation guards and database triggers
+failure from both Workstream defaults and the selected external PRE image,
+verified immutable admission, a selected POST failure routed to
+`needs_revision` and an exact public replacement, and passing POST routing under
+both locked review modes. It checks exact false-mode FinalAcceptance and
+submitter contribution/award evidence and replay. The phase-aware
+`post-rejected.txt` rule lives only in this small checker fixture. The drill
+must keep guide activation guards and database triggers
 enabled. PostgreSQL, MinIO, Redis, the digest registry, Rust checker service,
 and API/worker processes belong to one disposable local run; the isolated-test
 runner owns database/role/MinIO namespace cleanup. This still does not certify
