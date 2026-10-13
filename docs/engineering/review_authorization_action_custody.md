@@ -58,8 +58,8 @@ only, and every command prepares fresh authority inside its transaction.
 |---|---|---|---|
 | `artifact.review_packet.materialize` | `artifact.review_packet.materialize` | fixed ART materializer; exact active-lease packet | runtime `WS-XINT-002-07`; activation sub-wave `07A` |
 | `artifact.review_evidence.binding.create` | `artifact.binding.create` | future fixed ART binding service only | runtime catalogue custody `WS-XINT-002-07`; no approved activation wave |
-| `artifact.submission_bundle.prepare` | `submission.create` | assigned contributor; exact preparation | base public availability delivered; human-revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D |
-| `submission.create` | `submission.create` | assigned contributor; exact prepared admission | base public availability delivered; human-revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D |
+| `artifact.submission_bundle.prepare` | `submission.create` | assigned contributor; exact preparation | public initial/checker-remediation availability delivered by ARCH-02I-B; human-review revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D |
+| `submission.create` | `submission.create` | assigned contributor; exact prepared admission | public initial/checker-remediation availability delivered by ARCH-02I-B; human-review revision extension requires the future exact WS-ARCH-001-05 replacement for superseded XINT-002-05D |
 
 These actions are not XINT-003 custody. Generic artifact download, adjudication, automated routing, reputation, settlement, and agent workspace authority are out of scope.
 
@@ -119,8 +119,8 @@ actions remain reference-only external handoffs.
 | `review.projection.rebuild` | merged REV-12P2 derived-projection command |
 | `artifact.review_packet.materialize` | XINT-002-07A after hidden ART packet behavior and REV active-lease manifest |
 | `artifact.review_evidence.binding.create` | future only; remains planned/unavailable in v0.1 |
-| `artifact.submission_bundle.prepare` | Future exact WS-ARCH-001-05 replacement after merged REV-09A1-09B human-revision preparation and replay behavior; required before 02I |
-| `submission.create` | Future exact WS-ARCH-001-05 replacement after merged REV-09A1-09B verified, consumable human-revision admission; required before 02I |
+| `artifact.submission_bundle.prepare` | Future exact WS-ARCH-001-05 human-review revision extension after REV-09A1-09B preparation and replay; public initial/checker-remediation entry is delivered by 02I-B |
+| `submission.create` | Future exact WS-ARCH-001-05 human-review revision extension after REV-09A1-09B verified admission; public initial/checker-remediation entry is delivered by 02I-B |
 
 ### Shared acceptance controller slice
 

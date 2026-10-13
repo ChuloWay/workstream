@@ -225,10 +225,11 @@ removed. Claim and start require canonical actor/lifecycle checks and an active
 Submitter grant for the exact project; an authorized Operator start override
 uses its explicit operation and reason. Retained eligibility rows do not grant
 TASK authority and have not been deleted. The old public submission-packet POST
-is also removed. The public admission-backed Submission operation validates
-current authority, exact assignment and locked policy lineage before consuming
-ART admission in the same transaction. The remaining management/read-route
-cutovers remain separate work, not capabilities implied by this retirement.
+is also removed. ARCH-02I-B exposes canonical admission-backed Submission creation for initial
+work and exact checker remediation. Its command validates current authority,
+exact assignment and locked policy lineage before consuming ART admission in
+the same transaction. This public entry is a later bounded cutover, not a
+capability implied by the earlier authority retirement.
 
 ## Contributor Attribution Runtime Guard
 

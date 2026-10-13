@@ -68,7 +68,8 @@ by creating a worker profile, supplying skill tags, or presenting a token role.
 There is no public JSON-packet submission creation route. Contributors upload
 one ZIP through the public submission-bundle preparation route, then the public
 `POST /api/v1/tasks/{task_id}/submissions` operation consumes a fresh ready
-admission through the canonical writer. The corresponding GET remains a history
+admission through the canonical writer for initial work or exact checker
+remediation. The corresponding GET remains a history
 read, not creation authority.
 
 ## Canonical Task-Import Sources
@@ -376,8 +377,8 @@ Only contributor context has `lifecycle`, with `assigned_to_current_actor` and
 `next_actions`. Unassigned READY advertises `claim`; own CLAIMED advertises
 `start`; other own-active states have no action hint. Task status appears only in
 `task.status`. Hints never authorize execution. There is no `can_submit` flag or
-precheck capability in the work-context response; the public preparation and
-Submission operations authorize independently.
+precheck capability; the public submission command performs its own fresh
+authority and admission checks.
 Contributor context also includes `guide_documents`: ordered document IDs,
 labels, media types, byte counts, SHA-256 and task-scoped authorized read references.
 It is empty for ready unassigned browsing and contains only exact locked originals

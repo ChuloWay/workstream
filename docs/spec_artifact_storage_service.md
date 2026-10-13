@@ -1396,7 +1396,7 @@ matches the durable intent, passing evidence, put attempt, content, verified
 replica, and successful full-read verification receipt. Direct provider
 acknowledgement and observed-confirmed recovery use distinct nullable receipt
 references; exactly one must match. Guide and checker-output verification do
-not create submission admissions. The hidden preparation POST returns bounded
+not create submission admissions. The public preparation POST returns bounded
 operation/current-admission state and does not wait for verification.
 
 `ready -> consumed` occurs only in the transaction creating Submission and
@@ -1832,5 +1832,6 @@ backfilled or deleted; absent receipt custody cannot use current consumed replay
 The caller transaction commits this receipt with the Submission and its initial
 evaluation request. ARCH-04E1B-B7 consumes that request through the selected
 handler and existing exact-byte materializer. Selected request/completion handlers
-are registered in production composition, and public ZIP preparation plus
-admission-backed Submission creation expose intake.
+are registered in production composition, and ARCH-02I-B exposes public ZIP
+preparation plus admission-backed initial/checker-remediation Submission
+creation. The complete public API and Celery service drill remains pending.

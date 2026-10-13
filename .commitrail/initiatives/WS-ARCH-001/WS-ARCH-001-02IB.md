@@ -103,6 +103,13 @@ The following describes the source state before this bounded public-entry change
   new test module in `backend/scripts/test_lane_catalogue.py` and
   `backend/tests/test_ci_lane_catalogue.py` if required to register the new
   test module.
+- The same public intake test may add real preparation-to-creation and replay
+  proof for absent, JSON `null`, and empty summary/attestation. Retain the
+  existing registered required external PRE failure control.
+  `backend/tests/tasks/test_submission_lineage.py` may expose its already-live
+  store and namespace to that HTTP case; its existing verifier setup in
+  `backend/tests/tasks/submission_lineage_support.py` may be reused for a
+  public-prepared put without altering owner behavior.
 - Companion real public drill under
   `experiments/pilot04_external_checker_runtime/` is owned by the runtime
   worker and uses these canonical entry routes with PostgreSQL and MinIO
@@ -115,6 +122,10 @@ The following describes the source state before this bounded public-entry change
   intended merge outcome while preserving planned false-guide activation and
   complete public API/Celery service drill. The lead coordinates final PR and
   integrated-branch reconciliation; no local sheet export is present.
+- Reconcile affected current contract documentation in
+  `docs/architecture_brief/{README.md,workstream_architecture_brief.md}`;
+  `docs/engineering/review_authorization_action_custody.md`; and
+  `docs/{architecture_checker_framework.md,architecture_data_model.md,architecture_lockdown.md,current_system_data_flow.html,decision_0011_submission_artifact_policy_drives_pre_submit.md,glossary.md,operations_authorization_service.md,operations_project_operating_manual.md,product_brief.md,spec_artifact_storage_service.md,spec_authorization_service.md,spec_chunk_4_task_queue_assignment.md,spec_chunk_5_submission_packet_foundation.md,spec_chunk_6_checker_contract_records.md,spec_chunk_7_checker_runner_registry.md,spec_week2_checker_framework.md,template_checker_policy.md,template_submission_artifact_policy.md,template_submission_packet.md}`.
 
 ### Not allowed
 
@@ -139,6 +150,15 @@ Submission. The command checks current actor, project grant, task/assignment,
 predecessor, packet commitment and admission under its existing transaction.
 The canonical route name avoids a second finalize operation and preserves the
 retired `/submissions/{submission_id}/finalize` boundary.
+
+The public POST packet text is optional in the same way as the preparation
+headers: omitted, JSON `null`, and empty text all become the canonical empty
+string before the TASK command. The selected PRE packet, admission SHA, TASK
+creation, retained non-null Submission text, and exact replay continue to use
+those same strings. An empty packet earns the selected default checker absence
+warnings; a registered required external PRE failure still blocks a ready
+admission independently. This closes the review-found request-shape defect without changing
+the packet hash, owner custody, stored data, or the canonical operation.
 
 Preparation should become discoverable with a truthful binary ZIP OpenAPI
 contract. Its 202 status vocabulary includes non-ready custody states; only
@@ -191,6 +211,12 @@ owner-port extension for review, not an approved or implemented part of 02I-B.
 - [x] The POST derives the contributor identity from AUTH and accepts no
       caller-owned contributor, package URI/hash/manifest, checker outcome,
       locked policy or reviewer decision. Server-generated result IDs are stable.
+- [x] The POST accepts omitted, JSON `null`, and empty summary/attestation as
+      the exact empty packet text accepted at preparation. Real public HTTP
+      preparation, creation, and replay retain one admission and Submission for
+      equivalent empty forms; changed text fails packet custody. Default
+      absence warnings remain visible in selected PRE evidence, while a
+      registered required external PRE failure still blocks before admission.
 - [x] Exact creation replay after lost response returns the same Submission,
       binding and evaluation request without duplicate effects. Concurrent
       requests preserve one winner. A changed packet, foreign actor, crossed
@@ -231,7 +257,8 @@ proof establishes the HTTP entry, not that combined outcome.
 | Existing operation and gap | Inspect `artifact_submissions.py`, `compose_hidden_submission_creation_command`, `TransactionalSubmissionCreationCommand`, `TaskSubmissionCreationService`, and mounted routes | Confirmed at `cdfdebd74`: preparation was mounted but hidden from OpenAPI; no creation POST was mounted. This change closes that public boundary. | Complete worker/outcome drill remains separate |
 | Public HTTP entry and recovery | Earlier focused run passed 53 public-route, owner replay/rollback and history tests; its metadata identified the pre-edit base and is supporting diagnostic evidence only. The corrected public initial/history case passed at `9bfc5b589` after validated-settings/rate-control preflight. At clean merged head `b932bf3c4`, `/tmp/ws-entry-b932-qa-pg.json` records four focused PostgreSQL tests, including exact foreign-assignment concealment and all old client-packet denials. | Passed; exact-head runner records Alembic 0036, MinIO probe, and PostgreSQL/MinIO cleanup | Focused route fixture uses local artifact bytes; the companion public drill owns live MinIO transport |
 | Closed authority and packet | The initial case proves a second active same-project Submitter without the assignment cannot consume the original actor's valid admission; uncaused predecessor, changed packet and caller `package_uri` are denied. Checker-remediation version two/replay and owner rollback pass | Passed | Existing owner tests retain concurrency and consumed-admission matching receipt proof |
-| Published contracts and boundaries | Full `create_app().openapi()` check verified binary ZIP prep and the five-field extra-forbid canonical POST; `scripts.module_boundaries validate --protected-base cdfdebd74` | Passed | Full CI and implementation review remain pending |
+| Published contracts and boundaries | Full `create_app().openapi()` check verified binary ZIP prep and the five-field extra-forbid canonical POST; the review repair makes its two packet-text fields nullable and optional while retaining required selectors. `scripts.module_boundaries validate --protected-base cdfdebd74` | Earlier contract check passed; optional-body schema assertion passed on the repair draft | Fresh published OpenAPI check and hosted CI remain pending |
+| Optional packet-text review repair | Real public ZIP preparation with omitted text, independent ART verification, empty-header ready replay, omitted POST creation, null/empty exact replay, stored empty text, retained two selected PRE warnings, packet SHA and changed-text denial; registered required-external PRE failure control uses a fake execution adapter | Draft diagnostic: new public case passed; both required-external pass/fail controls passed. Old required DTO and TASK nonempty-guard mutants independently fail the focused test | Re-run on a clean exact commit; the fake adapter does not prove a live external image |
 | Protected route inventory | Published route/action inventory counts both new secured POST operations and preserves the hash of all other retained routes; old client-owned packet returns `422 invalid_request` without a Submission. `test_public_surface` and `test_openapi_documents_request_error_and_response_context` passed locally. | Passed | Hosted CI must run against the final PR head |
 | Full journey | Real API plus broker/worker drain through current checker/outcome and contribution reads | Coordinated companion first-layer drill pending | Local route proof uses real PostgreSQL and local artifact bytes; companion public drill establishes MinIO transport |
 
@@ -258,6 +285,14 @@ reserves retryable 503 for SQLAlchemy failures, while focused proof requires
 composition errors to propagate. Public denial tests now require exact
 predecessor, packet and concealed suspended-actor codes; the planning baseline
 and ART next-boundary prose are reconciled with delivered entry.
+A later P2 review found the public POST still rejected absent, JSON `null`, and
+empty packet text even though preparation and selected default PRE treat absent
+text as warning-only. The repair normalizes both public wire forms to the
+existing empty-string packet; no optional value enters TASK, ART hashing,
+Submission storage, or replay. The canonical 64 KiB UTF-8 packet bound remains
+owned by `SubmissionPacketView`; a registered required external PRE failure
+remains an independent blocker. The focused new test catches both the former
+DTO rejection and the former TASK nonempty guard when restored separately.
 
 ## Reconciliation
 

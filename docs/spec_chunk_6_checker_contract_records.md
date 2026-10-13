@@ -211,9 +211,9 @@ public precheck response schema is defined here. Pre-submit evidence is not a
 post-submit CheckerRun and does not require a finalized Submission ID/version.
 
 Blocking pre-submit failures prevent submission creation. POL-07B removes the
-standalone JSON precheck and its response schema. Public ZIP preparation returns
-`pre_submission_checker_failed` with bounded structured feedback, while ART
-retains canonical evidence.
+standalone JSON precheck and its response schema. The public authorized ZIP preparation route returns
+`pre_submission_checker_failed` with ART's bounded ordered evidence in the same
+request. ARCH-02I-B publishes this route in OpenAPI.
 Failure creates no Submission row or version, task transition to `submitted`,
 or submission-created audit event.
 

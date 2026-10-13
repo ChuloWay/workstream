@@ -73,9 +73,9 @@ contributor attestation. A caller-owned manifest or storage reference is not
 proof of uploaded bytes.
 
 Blocking pre-submit failures prevent submission creation. POL-07B removes the
-standalone JSON precheck and its response schema. Public ZIP preparation returns
-`pre_submission_checker_failed` with bounded structured feedback, while ART
-retains canonical evidence.
+standalone JSON precheck and its response schema. The public authorized ZIP preparation route returns
+`pre_submission_checker_failed` with ART's bounded ordered evidence in the same
+request. ARCH-02I-B publishes this route in OpenAPI.
 Failure creates no Submission row or version, task transition to `submitted`,
 or submission-created audit event.
 
@@ -180,7 +180,7 @@ Detailed spec: [Chunk 7 Checker Runner And Registry](spec_chunk_7_checker_runner
 Conditions of satisfaction:
 
 - registered checker names cannot drift from policy names
-- public pre-submit ZIP failures return `pre_submission_checker_failed` with bounded structured feedback while ART retains canonical evidence
+- public pre-submit ZIP failures return structured `pre_submission_checker_failed` feedback; ART retains bounded evidence
 - `check_submission_packet` runs against real submission data
 - failed structural checks produce stored checker results
 - worker-fixable submission failures and locked task setup failures are blocked before human review with distinct routing recommendations

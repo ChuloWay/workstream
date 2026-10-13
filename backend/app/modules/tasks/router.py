@@ -590,8 +590,11 @@ async def create_admission_backed_submission(
             contributor_id=actor.actor_profile_id,
             predecessor_submission_id=payload.predecessor_submission_id,
             admission_id=payload.admission_id,
-            summary=payload.summary,
-            contributor_attestation=payload.contributor_attestation,
+            summary=payload.summary if payload.summary is not None else "",
+            contributor_attestation=(
+                payload.contributor_attestation
+                if payload.contributor_attestation is not None else ""
+            ),
         ))
     except TaskSubmissionContextUnavailable as exc:
         if exc.code == "task_submission_predecessor_changed":

@@ -234,7 +234,7 @@ The deterministic merge of Workstream's default submission artifact policy and t
 
 ## Pre-Submit Checker Policy
 
-The server-generated project checker matrix produced from the effective project submission artifact policy and one immutable default-catalogue snapshot. The compiled bundle embeds the catalogue version, canonical manifest digest, ordered entry ID/version/configuration hashes, and enabled/disabled state. Its compiled bundle hash therefore commits transitively to that exact snapshot, and each task locks that hash before entering the contributor pipeline. Runtime uses the same snapshot to derive the effective-plan hash. It runs against the uploaded ZIP in bounded scratch before Workstream creates a submission. ART retains bounded check results; the public submission-bundle preparation route returns `pre_submission_checker_failed` with those exact ordered bounded results in the same request. A passing ready admission can be consumed by the public admission-backed Submission operation. POL-07B connects the internal phase service and removes the standalone JSON precheck. Results never use review decision values: `accept`, `needs_revision`, or `reject`.
+The server-generated project checker matrix produced from the effective project submission artifact policy and one immutable default-catalogue snapshot. The compiled bundle embeds the catalogue version, canonical manifest digest, ordered entry ID/version/configuration hashes, and enabled/disabled state. Its compiled bundle hash therefore commits transitively to that exact snapshot, and each task locks that hash before entering the contributor pipeline. Runtime uses the same snapshot to derive the effective-plan hash. It runs against the uploaded ZIP in bounded scratch before Workstream creates a submission. ART retains bounded check results; the public authorized ZIP preparation route returns `pre_submission_checker_failed` with those exact ordered bounded results in the same request. ARCH-02I-B publishes that route and admission-backed Submission creation in OpenAPI. POL-07B connects the internal phase service and removes the standalone JSON precheck; the complete public API and Celery service drill remains pending. Results never use review decision values: `accept`, `needs_revision`, or `reject`.
 
 The hidden 04B2 Workstream-default execution slice and the hidden 04B3 complete
 effective execution use the closed entry statuses
@@ -245,7 +245,7 @@ one immutable ordered platform-plus-project evidence set after scratch cleanup.
 
 ## pre_submission_checker_failed
 
-The contributor-facing domain error code returned when submission-bundle preparation is blocked by pre-submit checks. The public preparation route returns this code with the exact ordered bounded results in the same request. The code is not a review decision. It must not be stored as `accept`, `needs_revision`, or `reject`.
+The contributor-facing domain error code returned when submission-bundle preparation is blocked by pre-submit checks. The public authorized ZIP preparation route returns this code with the exact ordered bounded results in the same request. It is published in OpenAPI; the complete public API and Celery service drill remains pending. The code is not a review decision. It must not be stored as `accept`, `needs_revision`, or `reject`.
 
 ## Task
 

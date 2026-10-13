@@ -947,11 +947,13 @@ The generated checker order is deterministic:
 8. contributor attestation validation
 9. low-quality artifact warnings
 
-POL-07B removes the standalone JSON precheck and connects the internal checker
-phase service. Authoritative pre-submit checking belongs to the preparation
-request owning the uploaded ZIP and bounded scratch.
+POL-07B removes the standalone JSON precheck and connects the internal
+checker phase service. Authoritative pre-submit checking
+already belongs to the preparation request owning the uploaded ZIP and bounded
+scratch. ARCH-02I-B exposes public ZIP preparation and admission-backed initial and checker-remediation Submission creation.
 
-The public route returns the following structured same-request feedback:
+The public authorized ZIP preparation route returns the following structured
+same-request feedback and is published in OpenAPI:
 
 ```text
 POST /api/v1/tasks/{id}/submission-bundle-preparations

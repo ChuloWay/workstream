@@ -239,10 +239,10 @@ Tasks lock this project checker compiled bundle hash before entering the contrib
 do not derive or compile their own checker by default.
 
 Failed preparation returns `pre_submission_checker_failed` with ART's exact
-ordered bounded results through the public submission-bundle preparation route. POL-07B connects
+ordered bounded results through the public authorized ZIP preparation route published in OpenAPI. POL-07B connects
 the internal checker phase service and removes the standalone JSON precheck.
-The public admission-backed Submission operation consumes a fresh ready
-admission; no ID-addressed evidence-read route exists. These results never use review decision values:
+ARCH-02I-B exposes admission-backed Submission creation; no ID-addressed
+evidence-read route exists. These results never use review decision values:
 `accept`, `needs_revision`, or `reject`. After verified preparation,
 final Submission creation consumes the ready admission under fresh authority
 and does not rerun scratch-bound checks.

@@ -20,9 +20,11 @@ from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.artifacts.models import ArtifactPutAttempt, SubmissionBundleAdmission
 from app.modules.checkers.models import CheckerRun, SelectedPreSubmitRun
+from app.modules.checkers.api.pre_submit_material import SubmissionPacketView
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import Submission
 from app.modules.tasks.models import WorkstreamTask
+from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.router import create_admission_backed_submission
 from app.modules.tasks.schemas import AdmissionBackedSubmissionCreate
 from app.modules.api_controls.service import AUTHORIZATION_READ_SCOPE, RateControlService
@@ -32,7 +34,7 @@ from tests.test_artifact_admission import _context, _seed_human_actor
 from tests.submission_preparation_auth_helpers import install_submitter_grant
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.post_submit_routing.support import revision_archive
-from tests.tasks.submission_lineage_support import _verified_admission
+from tests.tasks.submission_lineage_support import _verified_admission, _verify_put_attempt
 from tests.test_submission_predecessor_custody import (
     _fixture_revision_context, _replacement_request,
 )
@@ -111,6 +113,113 @@ def _payload(request, admission_id):
         "summary": request.summary,
         "contributor_attestation": request.contributor_attestation,
     }
+
+
+def test_optional_public_text_keeps_packet_utf8_byte_limit():
+    """The new nullable body still uses the existing exact packet byte bound."""
+    base = {"admission_id": str(new_record_id()), "assignment_id": str(new_record_id())}
+    assert set(AdmissionBackedSubmissionCreate.model_json_schema()["required"]) == {
+        "admission_id", "assignment_id",
+    }
+    for value in (None, ""):
+        packet = AdmissionBackedSubmissionCreate.model_validate(
+            base | {"summary": value, "contributor_attestation": value}
+        )
+        assert packet.summary == value
+        assert packet.contributor_attestation == value
+    omitted = AdmissionBackedSubmissionCreate.model_validate(base)
+    assert omitted.summary is None and omitted.contributor_attestation is None
+    canonical = SubmissionCreationRequest(
+        admission_id=new_record_id(), task_id=new_record_id(),
+        assignment_id=new_record_id(), contributor_id=new_record_id(),
+        predecessor_submission_id=None, summary="", contributor_attestation="",
+    )
+    assert SubmissionPacketView(
+        canonical.summary, canonical.contributor_attestation,
+    ).sha256 == SubmissionPacketView("", "").sha256
+    assert SubmissionPacketView("é" * 32768, "").sha256
+    with pytest.raises(ValueError, match="submission packet text is invalid"):
+        SubmissionPacketView("é" * 32769, "")
+
+
+async def test_public_optional_packet_text_round_trips_through_ready_admission(
+    isolated_database_env, tmp_path, monkeypatch,
+):
+    """Omitted, null and empty POST text match PRE's warning-only empty packet."""
+    async with _prepared_packet(isolated_database_env, tmp_path) as h:
+        preparation_route = f"/api/v1/tasks/{h.task_id}/submission-bundle-preparations"
+        creation_route = f"/api/v1/tasks/{h.task_id}/submissions"
+        key = new_record_id()
+        headers = {
+            "Content-Type": "application/zip",
+            "X-Task-Assignment-Id": str(h.assignment_id),
+            "Idempotency-Key": str(key),
+        }
+        async with _client(h, monkeypatch, isolated_database_env) as client:
+            prepared = await client.post(
+                preparation_route, headers=headers, content=h.archive_bytes,
+            )
+            assert prepared.status_code == 202, prepared.text
+            assert prepared.json()["submission_bundle_preparation_status"] == "stored_pending_verification"
+            assert prepared.json()["admission_id"] is None
+            admission_id = await _verify_put_attempt(
+                h.factory, h.store, h.namespace, h.settings,
+                prepared.json()["put_attempt_id"],
+            )
+            ready = await client.post(
+                preparation_route,
+                headers=headers | {
+                    "X-Submission-Summary": "",
+                    "X-Contributor-Attestation": "",
+                },
+                content=h.archive_bytes,
+            )
+            assert ready.status_code == 202, ready.text
+            assert ready.json()["submission_bundle_preparation_status"] == "ready"
+            assert ready.json()["admission_id"] == str(admission_id)
+            assert ready.json()["replayed"] is True
+
+            async with h.factory() as session:
+                selected = await session.scalar(
+                    select(SelectedPreSubmitRun).where(
+                        SelectedPreSubmitRun.idempotency_key == str(key)
+                    )
+                )
+                assert selected is not None
+                default = selected.terminal_json["execution"]["workstream_default"]
+                assert default["eligible"] is True
+                assert [warning["code"] for warning in default["warnings"]] == [
+                    "submission_summary_missing", "submission_attestation_missing",
+                ]
+
+            empty = _payload(h.creation, admission_id)
+            empty.pop("summary")
+            empty.pop("contributor_attestation")
+            created = await client.post(creation_route, json=empty)
+            assert created.status_code == 201, created.text
+            result = created.json()
+            for value in (None, ""):
+                replay_packet = empty | {
+                    "summary": value,
+                    "contributor_attestation": value,
+                }
+                replay = await client.post(creation_route, json=replay_packet)
+                assert replay.status_code == 201, replay.text
+                assert replay.json() == result
+
+            changed = empty | {"summary": "now supplied"}
+            denied = await client.post(creation_route, json=changed)
+            assert denied.status_code == 404, denied.text
+            assert denied.json()["error"]["code"] == "submission_unavailable"
+
+        async with h.factory() as session:
+            stored = await session.get(Submission, result["submission_id"])
+            assert stored.summary == ""
+            assert stored.worker_attestation == ""
+            assert await session.scalar(select(func.count()).select_from(Submission)) == 1
+            admission = await session.get(SubmissionBundleAdmission, str(admission_id))
+            assert admission.status == "consumed"
+            assert admission.packet_sha256 == SubmissionPacketView("", "").sha256
 
 
 async def test_public_submission_infrastructure_error_is_retryable_only_for_sql():

@@ -42,11 +42,6 @@ class SubmissionCreationRequest:
     summary: str
     contributor_attestation: str
 
-    def __post_init__(self) -> None:
-        """Reject empty contributor-authored text at the public boundary."""
-        if not self.summary.strip() or not self.contributor_attestation.strip():
-            raise ValueError("submission text is empty")
-
 
 @dataclass(frozen=True, slots=True)
 class SubmissionCreationPreparationFacts:
