@@ -273,8 +273,10 @@ delivered. ARCH-04C adds hidden durable execution and exact zero-slot reservatio
 ARCH-04D2 supplies exact execution/finalization authority and durable receipts.
 Output-file authority remains unavailable. B7 supplies hidden request delivery and
 04E2-B supplies complete hidden authorized outcomes. B8 supplies hidden completion
-delivery; production registration remains pending. Public intake remains deferred
-to ARCH-02I after evaluation and remediation prerequisites.
+delivery; PILOT-04 registers the selected request and completion handlers in
+production composition. ARCH-02I-B exposes public ZIP preparation and Submission
+intake. ARCH-04F4 supplies hidden reason-bound Operator retry of an exact terminal
+checker infrastructure failure; it has no public retry route.
 
 The intended unified flow uses one compilation result for sufficiency and
 artifact/pre-submit/post-submit proposals. Once finalized, its `ProjectSetupRun`,
@@ -417,20 +419,19 @@ missing and unauthorized requests return 404; malformed cursors or invalid
 stored evidence return sanitized 422. The old `/tasks/{task_id}/audit-events`
 route is removed. Submission recovery retains its separate internal evidence reader.
 
-### Submission Quality Gate — Target Contract
+### Submission Quality Gate — Current Boundary
 
-Hidden durable post-submit execution and unfinished-attempt recovery are
-implemented with exact input, execute and finalize service authority. Automatic
-dispatch/routing and authorized terminal retry remain unavailable.
-`operations.checker.retry` is planned; the removed alternate Celery worker and repair
-route do not provide it. The required future behavior is:
-
-A submission cannot move to human review until required checkers run against
-the exact submission version and artifact hashes. Critical- or high-severity
-failures return to the contributor when submission-caused; platform infrastructure
-failures remain in checker retry handling through
-`operations.checker.retry` or covered setup repair and never move directly to
-human review.
+Hidden durable post-submit execution and unfinished-attempt recovery use exact
+input, execute and finalize authority. PILOT-04 registers selected production
+request and completion delivery. Required checks run against the exact Submission
+version and artifact hashes before a passing result routes to `review_pending`
+under a true ReviewPolicy or the shared authorized FinalAcceptance under a false
+ReviewPolicy. Contributor-correctable failures retain the exact remediation cause.
+ARCH-04F4 provides a hidden, reason-bound `operations.checker.retry` command for
+an exact current terminal `infrastructure_failed` run; it creates a new CHECKERS
+generation through the existing request handler without changing the failed run.
+There is no public checker-retry route. Infrastructure failure does not move a
+Submission directly to human review.
 
 External origin qualification and webhook drop notifications are future adapter concerns, not v0.1 gates.
 
