@@ -46,7 +46,7 @@ from app.modules.checkers.api.default_checker import WORKSTREAM_DEFAULT_CHECK_ID
 from app.modules.outbox.models import OutboxDeliveryAttempt, OutboxEvent
 from app.modules.artifacts.service import artifact_storage_namespace_spec
 from app.modules.projects.models import ProjectGuide
-from app.modules.tasks.models import Submission, SubmissionDispatch, WorkstreamTask
+from app.modules.tasks.models import AuditEvent, Submission, SubmissionDispatch, WorkstreamTask
 from experiments.pilot04_external_checker_runtime.run_probe import _image_identity
 from experiments.pilot04_external_checker_runtime.run_selected_end_to_end_probe import (
     _locked_spec,
@@ -319,39 +319,67 @@ async def _seed_contributor(factory) -> ActorIdentityFacts:
     return actor
 
 
-async def _deliver(factory, event_id: UUID, project_id: UUID) -> None:
-    from app.workers.outbox import deliver_event
+async def _assert_outbox_worker_custody(session, event: OutboxEvent,
+                                        project_id: UUID) -> None:
+    """Bind the observed worker attempts to this event and project authority."""
+    _require(event.project_id == str(project_id) and event.attempt_count > 0,
+             "OUTBOX completion lacks this project's worker attempt")
+    actor_id = await session.scalar(select(ActorProfile.id).where(
+        ActorProfile.service_identity == ServiceIdentity.OUTBOX_DISPATCHER.value
+    ))
+    _require(actor_id is not None, "OUTBOX dispatcher actor is absent")
+    attempts = (await session.scalars(select(OutboxDeliveryAttempt).where(
+        OutboxDeliveryAttempt.event_id == event.event_id
+    ).order_by(OutboxDeliveryAttempt.claim_generation))).all()
+    _require(len(attempts) == event.attempt_count,
+             "OUTBOX worker attempt history is incomplete")
+    for generation, attempt in enumerate(attempts, 1):
+        ids = (attempt.claim_decision_event_id, attempt.invoke_decision_event_id,
+               attempt.finalize_decision_event_id)
+        _require(attempt.claim_generation == generation
+                 and attempt.project_id == str(project_id)
+                 and attempt.payload_digest == event.payload_digest
+                 and attempt.claim_owner.startswith("celery:")
+                 and attempt.stage == "completed"
+                 and all(ids) and len(set(ids)) == 3,
+                 "OUTBOX worker attempt lacks exact completed phase custody")
+        decisions = (await session.scalars(select(AuditEvent).where(
+            AuditEvent.id.in_(ids)
+        ))).all()
+        _require(len(decisions) == 3 and {decision.id for decision in decisions} == set(ids),
+                 "OUTBOX dispatch decisions are incomplete")
+        for decision in decisions:
+            _require(decision.actor_id == actor_id
+                     and decision.event_type == "SensitiveAuthorizationAllowed"
+                     and decision.action_id == decision.permission_id == "outbox.dispatch"
+                     and decision.project_id == str(project_id)
+                     and decision.resource_type == "outbox_event"
+                     and decision.resource_id == str(event.event_id),
+                     "OUTBOX phase decision differs from registered project dispatcher")
 
+
+async def _wait_outbox_acknowledged(factory, event_id: UUID, project_id: UUID) -> None:
+    """Observe ordinary Beat-discovered delivery by the real prefork worker."""
     async with factory() as session:
         current = await session.get(OutboxEvent, event_id)
         _require(current is not None, "expected outbox event is missing")
-        if current.delivery_state == "acknowledged":
-            return
-    # Production task publication and real prefork child handle the event.
-    await asyncio.to_thread(
-        deliver_event.apply_async,
-        args=(str(event_id), str(project_id)),
-    )
-    deadline = time.monotonic() + 120
+    deadline = time.monotonic() + 240
     while time.monotonic() < deadline:
         async with factory() as session:
             event = await session.get(OutboxEvent, event_id)
             if event.delivery_state == "acknowledged":
+                await _assert_outbox_worker_custody(session, event, project_id)
                 return
             if event.delivery_state in {"dead_letter", "cancelled"}:
                 raise RuntimeError(f"outbox event ended {event.delivery_state}")
         await asyncio.sleep(0.3)
-    raise RuntimeError("outbox event was not acknowledged by prefork worker")
+    raise RuntimeError("Beat-discovered outbox event was not acknowledged by prefork worker")
 
 
-async def _deliver_known_retry(factory, event_id: UUID, project_id: UUID,
-                               task_id: str, submission_id: str) -> None:
-    from app.workers.outbox import deliver_event
-
-    await asyncio.to_thread(
-        deliver_event.apply_async, args=(str(event_id), str(project_id)),
-    )
-    deadline = time.monotonic() + 120
+async def _wait_known_retry(factory, event_id: UUID, project_id: UUID,
+                            task_id: str, submission_id: str) -> None:
+    """Observe one safe non-live attempt from ordinary scheduled delivery."""
+    deadline = time.monotonic() + 240
     while time.monotonic() < deadline:
         async with factory() as session:
             event = await session.get(OutboxEvent, event_id)
@@ -367,6 +395,7 @@ async def _deliver_known_retry(factory, event_id: UUID, project_id: UUID,
                          and receipt["invocation_unknown"] is False
                          and event.next_attempt_at is not None,
                          "non-live completion did not record one known safe retry")
+                await _assert_outbox_worker_custody(session, event, project_id)
                 task = await session.get(WorkstreamTask, task_id)
                 submission = await session.get(Submission, submission_id)
                 _require(task.status == "evaluation_pending"
@@ -388,7 +417,7 @@ async def _deliver_known_retry(factory, event_id: UUID, project_id: UUID,
             if event.delivery_state in {"acknowledged", "dead_letter", "cancelled"}:
                 raise RuntimeError("non-live completion escaped the safe retry path")
         await asyncio.sleep(0.3)
-    raise RuntimeError("non-live completion did not settle into retryable")
+    raise RuntimeError("Beat-discovered non-live completion did not become retryable")
 
 
 async def _outbox_snapshot(factory, event_id: UUID) -> tuple:
@@ -548,7 +577,7 @@ async def _complete_post(factory, *, submission_id: str,
         _require(dispatch is not None, "atomic Submission dispatch is absent")
         request_event_id = dispatch.evaluation_event_id
         attempt_id = dispatch.evaluation_attempt_id
-    await _deliver(factory, request_event_id, project_id)
+    await _wait_outbox_acknowledged(factory, request_event_id, project_id)
     async with factory() as session:
         run = await session.get(CheckerRun, attempt_id)
         _require(run.status == "completed" and run.completion_event_id is not None,
@@ -565,7 +594,7 @@ async def _complete_post(factory, *, submission_id: str,
                  "selected POST finding differs from fixture rule")
         completion_id = run.completion_event_id
     if deliver_completion:
-        await _deliver(factory, completion_id, project_id)
+        await _wait_outbox_acknowledged(factory, completion_id, project_id)
     return str(attempt_id), completion_id
 
 
@@ -922,14 +951,15 @@ async def _one_mode(client, factory, database_url, namespace, image, env, *,
                 project_id=compilation.project_id, recommendation="allow_review",
             )
         else:
-            await _deliver_known_retry(
+            await _wait_known_retry(
                 factory, completion_id, compilation.project_id,
                 task_id, first_submission_id,
             )
             from tests.reviews.lifecycle.transition_support import command_for, transition
             await transition(await command_for(operator_id, "live"))
             await _wait_outbox_due(factory, completion_id)
-            await _deliver(factory, completion_id, compilation.project_id)
+            await _wait_outbox_acknowledged(factory, completion_id,
+                                           compilation.project_id)
             async with factory() as session:
                 event = await session.get(OutboxEvent, completion_id)
                 _require(event.delivery_state == "acknowledged"

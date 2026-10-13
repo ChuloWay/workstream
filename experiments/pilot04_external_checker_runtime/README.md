@@ -49,6 +49,10 @@ run sets the supported artifact scan interval to 10 seconds and requires a
 retained scheduler audit before public intake; no manual scanner dispatch can
 make a preparation ready. After a bounded timeout, the probe may publish the
 exact pending verifier for private diagnosis and then unconditionally fails.
+OUTBOX keeps its production 60-second Beat scan. The probe only observes its
+ordinary first delivery and due retry through retained project-scoped worker
+attempts and dispatch decisions; it publishes a duplicate message only after
+acknowledgment to prove replay refusal.
 It checks actionable intake
 failure from both Workstream defaults and the selected external PRE image,
 verified immutable admission, a selected POST failure routed to
