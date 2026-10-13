@@ -1,4 +1,4 @@
-"""CLI Finance reads inside the retained real public guide-activation journey."""
+"""CLI Finance lifecycle inside the retained real public guide-activation journey."""
 
 import json
 from uuid import uuid4
@@ -22,6 +22,7 @@ async def publish_with_policy_reads(
     other_token,
     foreign_finance_token,
     admin,
+    tmp_path,
 ):
     root = f"/api/v1/projects/{project}/contribution-policies"
     finance = {"Authorization": "Bearer " + finance_token}
@@ -56,6 +57,80 @@ async def publish_with_policy_reads(
         )
         assert response.status_code in (200, 201), response.text
         return response.json()
+
+    async def mutate(
+        action,
+        *,
+        policy=None,
+        version=None,
+        body=None,
+        key=None,
+        token=finance_token,
+        selected_project=project,
+        status=None,
+    ):
+        key = key or str(uuid4())
+        body = {} if body is None else body
+        selectors = (str(selected_project).replace("-", ""),)
+        path = f"/api/v1/projects/{selected_project}/contribution-policies"
+        method = "POST"
+        if action == "create":
+            path += "/drafts"
+        else:
+            selectors += (str(policy).replace("-", ""), str(version).replace("-", ""))
+            path += f"/{policy}/versions/{version}"
+            path += {"publish": "/publication", "retire": "/retirement"}.get(action, "")
+            if action == "update":
+                method = "PUT"
+        flags = ()
+        if action in ("create", "update"):
+            file = tmp_path / "finance-policy-input.json"
+            file.write_text(json.dumps(body))
+            flags = ("--input", str(file))
+        before = await stored()
+        result = cli(
+            origin,
+            token,
+            "project",
+            "contribution-policy",
+            action,
+            *selectors,
+            *flags,
+            "--idempotency-key",
+            key,
+            "-o",
+            "json",
+        )
+        if status is not None:
+            assert result.returncode == 1 and result.stdout == "", result.stderr
+            error = json.loads(result.stderr)["error"]
+            assert error["status"] == status and "outcome_unknown" not in error, error
+            assert await stored() == before
+            return error
+        assert result.returncode == 0 and result.stderr == "", result.stderr
+        value = json.loads(result.stdout)
+        after = await stored()
+        # Direct REST replay must recover the very same immutable event.
+        replay = await direct.request(
+            method,
+            path,
+            headers={"Authorization": "Bearer " + token, "Idempotency-Key": key},
+            json=body,
+        )
+        assert replay.status_code == (201 if action == "create" else 200), replay.text
+        assert replay.json() == value and await stored() == after
+        events = [
+            row
+            for row in after["contribution_policy_lifecycle_events"]
+            if str(row["id"]) == value["event_id"]
+        ]
+        assert len(events) == 1 and str(events[0]["operation_id"]) == key
+        assert str(events[0]["actor_profile_id"]) == str(finance_id)
+        assert (
+            str(events[0]["contribution_policy_version_id"])
+            == value["contribution_policy_version_id"]
+        )
+        return value
 
     def call(
         action,
@@ -123,15 +198,49 @@ async def publish_with_policy_reads(
         assert (
             spec[route]["get"]["x-workstream-action-id"] == "contribution.policy.read"
         )
-    first = await write("POST", root + "/drafts", {"name": "Governed project policy"})
+    create_key = str(uuid4())
+    for presented in (manager_token, other_token, foreign_finance_token):
+        await mutate("create", body={"name": "Denied"}, token=presented, status=404)
+    first = await mutate(
+        "create", body={"name": "Governed project policy"}, key=create_key
+    )
     first_id = first["contribution_policy_version_id"]
-    version_path = root + f"/{first['contribution_policy_id']}/versions/{first_id}"
     empty = await inspect(
         first, None, first_id, explicit=first_id, expected_status="draft"
     )
     assert empty["rules"] == [] and empty["version_number"] == 1
-    await write("PUT", version_path, UNPAID)
-    published = await write("POST", version_path + "/publication", {})
+    await mutate("create", body={"name": "Changed intent"}, key=create_key, status=409)
+    first_update_key = str(uuid4())
+    first_update = await mutate(
+        "update",
+        policy=first["contribution_policy_id"],
+        version=first_id,
+        body=UNPAID,
+        key=first_update_key,
+    )
+    for presented in (manager_token, other_token, foreign_finance_token):
+        await mutate(
+            "update",
+            policy=first["contribution_policy_id"],
+            version=first_id,
+            body=UNPAID,
+            token=presented,
+            status=404,
+        )
+        await mutate(
+            "publish",
+            policy=first["contribution_policy_id"],
+            version=first_id,
+            token=presented,
+            status=404,
+        )
+    first_publish_key = str(uuid4())
+    first_published = await mutate(
+        "publish",
+        policy=first["contribution_policy_id"],
+        version=first_id,
+        key=first_publish_key,
+    )
     view = await inspect(first, first_id, None, expected_status="published")
     assert {rule["contribution_type"] for rule in view["rules"]} == {
         "accepted_submission",
@@ -141,9 +250,7 @@ async def publish_with_policy_reads(
         rule["compensation_mode"] == "unpaid" and rule["definitions"] == []
         for rule in view["rules"]
     )
-    successor = await write(
-        "POST", root + "/drafts", {"name": "Governed project policy"}
-    )
+    successor = await mutate("create", body={"name": "Governed project policy"})
     next_id = successor["contribution_policy_version_id"]
     default = await inspect(first, first_id, next_id, expected_status="published")
     assert default["contribution_policy_version_id"] == first_id
@@ -151,9 +258,35 @@ async def publish_with_policy_reads(
         first, first_id, next_id, explicit=next_id, expected_status="draft"
     )
     assert next_view["rules"] == [] and next_view["version_number"] == 2
-    version_path = root + f"/{first['contribution_policy_id']}/versions/{next_id}"
-    await write("PUT", version_path, UNPAID)
-    published = await write("POST", version_path + "/publication", {})
+    await mutate(
+        "update", policy=first["contribution_policy_id"], version=next_id, body=UNPAID
+    )
+    publish_key = str(uuid4())
+    published = await mutate(
+        "publish",
+        policy=first["contribution_policy_id"],
+        version=next_id,
+        key=publish_key,
+    )
+    assert (
+        await mutate(
+            "update",
+            policy=first["contribution_policy_id"],
+            version=first_id,
+            body=UNPAID,
+            key=first_update_key,
+        )
+        == first_update
+    )
+    assert (
+        await mutate(
+            "publish",
+            policy=first["contribution_policy_id"],
+            version=first_id,
+            key=first_publish_key,
+        )
+        == first_published
+    )
     old = await inspect(
         first, next_id, None, explicit=first_id, expected_status="retired"
     )
@@ -169,6 +302,13 @@ async def publish_with_policy_reads(
     )
     before = await stored()
     for presented in (manager_token, other_token, foreign_finance_token):
+        await mutate(
+            "retire",
+            policy=first["contribution_policy_id"],
+            version=next_id,
+            token=presented,
+            status=404,
+        )
         call("current", token=presented, status=404)
         call(
             "show",
@@ -197,6 +337,28 @@ async def publish_with_policy_reads(
         status=404,
     )
     call("current", token="invalid-token", status=401)
+    await mutate(
+        "retire",
+        policy=first["contribution_policy_id"],
+        version=next_id,
+        token="invalid-token",
+        status=401,
+    )
+    await mutate(
+        "retire",
+        policy=foreign["contribution_policy_id"],
+        version=foreign["contribution_policy_version_id"],
+        status=404,
+    )
+    await mutate(
+        "retire",
+        policy=first["contribution_policy_id"],
+        version=foreign["contribution_policy_version_id"],
+        status=404,
+    )
+    await mutate(
+        "create", selected_project=foreign_project, body={"name": "Denied"}, status=404
+    )
     assert await stored() == before
 
     async def denied():
@@ -204,6 +366,19 @@ async def publish_with_policy_reads(
         call("current", status=404)
         call(
             "show", policy=first["contribution_policy_id"], version=next_id, status=404
+        )
+        await mutate(
+            "retire",
+            policy=first["contribution_policy_id"],
+            version=next_id,
+            status=404,
+        )
+        await mutate(
+            "publish",
+            policy=first["contribution_policy_id"],
+            version=next_id,
+            key=publish_key,
+            status=404,
         )
         assert await stored() == before
 
@@ -242,7 +417,20 @@ async def publish_with_policy_reads(
     )
     await inspect(first, next_id, None, expected_status="published")
 
-    async def inspect_retired():
+    async def retire_and_inspect():
+        retired = await mutate(
+            "retire", policy=first["contribution_policy_id"], version=next_id
+        )
+        assert retired["prior_current_version_id"] == next_id
+        assert (
+            await mutate(
+                "publish",
+                policy=first["contribution_policy_id"],
+                version=next_id,
+                key=publish_key,
+            )
+            == published
+        )
         before = await stored()
         historical = call(
             "show", policy=first["contribution_policy_id"], version=next_id
@@ -260,4 +448,4 @@ async def publish_with_policy_reads(
         call("current", status=404)
         assert await stored() == before
 
-    return published, version_path, inspect_retired
+    return published, retire_and_inspect
