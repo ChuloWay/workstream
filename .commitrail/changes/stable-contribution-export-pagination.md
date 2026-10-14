@@ -11,8 +11,9 @@
 The public self and project contribution reads currently refuse any selected set
 larger than 1,000 records. A normal `(recorded_at, contribution_id)` keyset does
 not safely remove that ceiling: `ContributionRecord.created_at` is assigned at
-insert time, so a transaction can insert a row before page one, commit it after
-page one, and make it appear behind the continuation boundary.
+insert time, so a transaction can stage a row after page one's boundary, remain
+invisible to page one, commit before page two, and then enter a live keyset
+traversal even though it was not a member of page one's result set.
 
 ### Why this work matters
 
@@ -36,7 +37,8 @@ must appear exactly once even when other acceptances commit between pages.
 
 ### Target behavior
 
-The first authorized request selects at most 100,000 contribution IDs in its
+The supported v0.1 completeness range is 1..100,000 contributions. The first
+authorized request selects at most 100,000 contribution IDs in its
 existing repeatable-read snapshot and, only when another page exists, stores
 their exact order in one CON-owned expiring snapshot row. Pages contain 1..1,000
 complete contribution items. A signed opaque cursor names that snapshot and the
@@ -65,7 +67,8 @@ the retained page IDs through the existing owner ports.
   expired-snapshot pruning and exact page projection.
 - Existing contribution adapter, export dependency and routes for pagination
   secret composition, query parameters, generic cursor errors, JSON
-  `next_cursor`, and the equivalent CSV continuation response header.
+  `next_cursor`, the equivalent CSV continuation response header, and the
+  existing human authorization-read rate-control dependency.
 - `backend/app/modules/authorization/contribution_read.py` only if needed to
   retain a digest of the normalized page query and presented cursor without
   persisting raw cursor material; no evaluator, permission or grant change.
@@ -103,7 +106,9 @@ selection before storing or serializing anything. When the result exceeds the
 requested page size, one snapshot row stores the complete UUID array, its
 creator actor, canonical query digest, database creation/expiry timestamps, and
 UUIDv7 record identity. The array is immutable, non-null, duplicate-free by
-owner validation, and database-bounded to 100,000 members. Existing immutable
+owner validation, and database-bounded to 100,000 members. A database trigger
+rejects snapshot updates while allowing the owner repository to delete expired
+ephemeral rows. Existing immutable
 ContributionRecord foreign/source constraints remain the source of truth; the
 snapshot grants no authority and creates no contribution fact.
 
@@ -136,16 +141,27 @@ committed snapshot replayable and rolls back only that attempt's ALLOW evidence.
 
 ### Lifetime, allocation and cleanup
 
-Snapshots expire one hour after the database creation timestamp. Each initial
-request allocates at most one row and 100,000 UUIDs; selections above that bound
-receive the existing generic over-limit 422 with updated guidance to narrow
-filters. The existing API request controls remain the request-admission bound;
-this change adds no second quota subsystem. Every authorized export request
-prunes at most 25 expired snapshot rows using the existing repository convention
-of expiry order plus `FOR UPDATE SKIP LOCKED`. The expiry index supports both
-bounded pruning and exact stale-state tests. Pruning is transaction-owned: a
-failed response rolls it back, and a later request can retry it. No product fact
-or immutable evidence row is deleted.
+Snapshot access expires one hour after the database creation timestamp. Every
+page compares both cursor and stored expiry with database `clock_timestamp()`;
+the one-hour boundary does not claim guaranteed physical deletion at that
+instant. Each initial request allocates at most one row and 100,000 UUIDs;
+selections above that bound receive a documented full 422 refusal with guidance
+to narrow filters before any snapshot state or body is produced.
+
+Both contribution routes consume the existing human authorization-read rate
+control. In addition, an actor may retain at most five unexpired contribution
+export snapshots. Canonical AUTH already locks that actor row before the CON
+repository counts and inserts snapshots in the same transaction, so concurrent
+initial requests cannot cross the per-actor bound. Capacity refusal is a
+generic 429 with `Retry-After` derived from the earliest database expiry; it
+does not disclose snapshot membership or another actor's state.
+
+Every authorized export request prunes at most 25 expired snapshot rows using
+the existing repository convention of expiry order plus `FOR UPDATE SKIP
+LOCKED`. The expiry index supports both bounded pruning and exact stale-state
+tests. Pruning is transaction-owned: a failed response rolls it back, and a
+later request can retry it. No product fact or immutable evidence row is
+deleted; physical removal remains opportunistic without a new cleanup worker.
 
 ### JSON and CSV
 
@@ -158,7 +174,10 @@ CSV row counts remain distinct from contribution counts.
 ### Alternatives considered
 
 - A high timestamp/UUID boundary was rejected because insertion time is not
-  commit visibility order.
+  commit visibility order: committed A is page one's boundary, late L is staged
+  next, committed B is initially visible after A, and L commits only after page
+  one; a live keyset would then admit L even though page one's snapshot contained
+  only A and B.
 - PostgreSQL exported snapshots were rejected because their exporting
   transaction must remain open across HTTP requests.
 - One membership row per contribution was rejected because a bounded UUID array
@@ -169,10 +188,12 @@ CSV row counts remain distinct from contribution counts.
 
 ## Acceptance criteria
 
-- [ ] Traversing a selection above 1,000 records returns every member visible in
-      page one's snapshot exactly once and excludes a staged pre-page insert
-      committed between pages, even when its timestamp sorts before the page
-      boundary.
+- [ ] Traversing any supported selection of 1,001..100,000 records returns every
+      member visible in page one's snapshot exactly once; selections above
+      100,000 receive one documented full refusal before state or output.
+- [ ] A discriminating real PostgreSQL race commits A, stages late L, commits B,
+      reads page one with `limit=1`, commits L, then proves traversal returns B
+      and excludes L. A deliberately live keyset would wrongly admit L.
 - [ ] Every page preserves complete zero, one and two-award sets, exact decimal
       strings, source lineage, stable ordering and zero-award CSV visibility.
 - [ ] JSON and CSV traversals over an unchanged source select the same
@@ -184,6 +205,9 @@ CSV row counts remain distinct from contribution counts.
 - [ ] Cursor replay is deterministic until expiry; missing/expired state is
       generic, and bounded concurrent pruning neither deadlocks nor deletes a
       live traversal.
+- [ ] Both routes consume the existing authorization-read rate limit, and six
+      concurrent/fresh initial exports for one actor commit at most five live
+      snapshots while continuations of existing snapshots remain available.
 - [ ] First-page snapshot creation and ALLOW evidence roll back on projection,
       serialization, over-limit and driver failure; the existing bounded 40001
       retry creates at most one committed snapshot and one fresh ALLOW.
@@ -198,14 +222,15 @@ CSV row counts remain distinct from contribution counts.
 - Required reviewers: `architecture`, `security`, `qa`, `test_delta`, and
   `documentation`
 - Human review focus: durable short-lived membership is the minimum mechanism
-  that survives late commits; assess the 100,000-member/one-hour bounds, generic
-  cursor concealment, exact per-page authority, replay behavior and CSV header
-  contract.
+  that survives late commits; assess the supported 1..100,000 range, five-live-
+  snapshot actor bound, one-hour access expiry, generic cursor concealment,
+  exact per-page authority, replay behavior and CSV header contract.
 
 ## Implementation plan
 
 1. Add failing pure cursor/request/response and real PostgreSQL snapshot tests,
-   including the late-commit counterexample and valid unchanged-source control.
+   including the A/L/B late-commit counterexample and valid unchanged-source
+   control; keep the >1,000 traversal proof separate from the three-row race.
 2. Add reserved migration 0040 and matching CON model/repository operations for
    bounded materialization, exact page lookup and bounded expiry pruning.
 3. Replace the hard 1,001-row refusal flow with page selection in the canonical
@@ -224,13 +249,19 @@ CSV row counts remain distinct from contribution counts.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Current hard bound and transaction/owner invariants | Inspect canonical records API, repository, service, dependency, routes and existing export tests at `82a46ff3c5f21e3cdf762cf505d61d84531a7c80` | Confirmed | Implementation and runtime proof pending |
-| Timestamp/UUID keyset cannot freeze membership | Trace `clock_timestamp()` insert default and a transaction that commits after page one | Counterexample established in discovery; regression test pending | Exact test fixture execution pending |
+| Timestamp/UUID keyset cannot freeze membership | Trace A committed, L staged, B committed, page-one limit 1, then L committed | Discriminating counterexample established in plan review; regression test pending | Exact test fixture execution pending |
 | Migration allocation | Lead reserved `0040_contribution_export_snapshots` after `0039_false_guide_activation` | Confirmed | Migration implementation and parity proof pending |
 | Cursor and snapshot plan | Required architecture/security plan review | Pending | No application code starts before review |
 
 ## Review findings
 
-No implementation review findings yet. Plan review is required before code.
+Plan review at `5c4c50af69b7caafb562e94e26591f3e1943419f` blocked the
+behind-boundary concurrency example and the unsupported assumption that these
+routes already consumed authorization-read rate control. This revision uses the
+discriminating A/L/B interleaving, adds the existing rate dependency plus an
+actor-serialized five-live-snapshot bound, clarifies the supported
+1..100,000/full-refusal contract, distinguishes access expiry from opportunistic
+physical deletion, and requires database rejection of snapshot updates.
 
 ## Reconciliation
 
