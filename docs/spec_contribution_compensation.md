@@ -164,9 +164,10 @@ retired_at
 
 Draft content may be edited through the authorized policy service. Published
 and retired content is immutable. Publishing a later version affects a work
-attempt only when a future guide activation or human `needs_revision`
-preparation deliberately adopts the complete changed context. Existing
-Submissions, admissions, ReviewLeases, Reviews, ContributionRecords, and awards
+attempt only when guide activation or controlled checker/human `needs_revision`
+preparation deliberately adopts the complete changed context. Checker
+preparation is implemented; genuine human Review integration remains #554 work.
+Existing Submissions, admissions, ReviewLeases, Reviews, ContributionRecords, and awards
 never change; only the continuing Task and TaskAssignment may rebase at that
 controlled boundary for the next attempt.
 
@@ -534,18 +535,23 @@ status, policy status, or other Finance administration facts. It does not create
 an award, promise fulfillment, or change publication, locking, retirement,
 payment, reconciliation, or delivery behavior.
 
-After a human `needs_revision`, task-owned preparation locks the complete
-current next-attempt context. If policy changed, it validates the newly active
-guide-bound version through CON and atomically rebases the continuing Task and
-TaskAssignment for the next submission attempt, recording exact prior/next
-lineage. Missing, incomplete, crossed-project, ambiguous, or binding-ineligible
-context blocks the whole preparation. Publication alone never performs an
+After a committed checker or human `needs_revision`, TASK-owned preparation
+freezes the complete next-attempt context. Checker preparation implements this
+boundary; #554 owns genuine human Review integration under the same intended
+policy. If policy changed, preparation validates the newly active guide-bound
+version through CON and atomically rebases the continuing Task and TaskAssignment
+for the next immutable Submission, recording exact prior/next lineage. The next
+committed Submission stamps that frozen target version. Missing, incomplete,
+crossed-project, ambiguous or binding-ineligible context blocks the whole
+preparation. Publication alone never performs an
 update. CP06’s distinct revision-adoption purpose checks only the supplied
 version and current resource eligibility, allowing immutable published or
 retired versions without requiring current-selector equality. It does not
 verify a complete guide, authorize a revision, or write attempt lineage. The
-future TASK/PROJECTS composition must derive those IDs from its locked complete
-guide context and cannot use revision-purpose facts to activate a new guide.
+TASK/PROJECTS composition derives those IDs from the exact complete guide
+context and cannot use revision-purpose facts to activate a new guide. Human
+source integration remains future work; checker-rooted preparation already
+consumes the owner-validated context.
 An unchanged attempt makes no CON reselection call.
 
 ### Reviewer inheritance

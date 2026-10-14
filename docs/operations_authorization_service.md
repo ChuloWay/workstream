@@ -482,6 +482,13 @@ resource loader, lifecycle guards, negative tests, and evidence path exist.
 
 ### Catalogue And Action-Evidence Staging
 
+The staging narrative below records historical custody and activation chunks;
+it is not a current catalogue count or a complete list of active actions.
+The canonical runtime catalogue and explicit selected composition govern current
+availability. PILOT-08 retires the superseded planned manager-closure action,
+leaving 22 REV-owned actions. `review.lifecycle.activation.manage` is active
+internally through REV-12A4A; both revision-context actions remain planned.
+
 WS-XINT-002-01 left the catalogue at exactly 71 PermissionIds and 78 ActionIds.
 The two AUTH-07B actor-self actions, seven AUTH-08 administrative
 actions, `actor.service.provision`, `actor.profile.read`,
@@ -501,9 +508,11 @@ availability. The REV owner cardinalities are `2/5/3/1/1/5/2` for
 `WS-AUTH-001-REV-05`, `WS-AUTH-001-REV-06`, `WS-AUTH-001-REV-07`,
 `WS-AUTH-001-REV-08`, `WS-AUTH-001-REV-09A`, `WS-AUTH-001-REV-11`, and
 `WS-AUTH-001-REV-12`. Custodian labels grant no reviewer, Operator, or service
-authority; all 23 REV actions remain planned and unavailable. WS-XINT-003-02C
-registers the four additional actions and six closed service identities but
-adds no evaluator, route, job, principal row, or lifecycle behavior.
+authority. At the historical 02C registration boundary, all 23 REV actions were
+planned and unavailable. WS-XINT-003-02C registered four additional actions and
+six closed service identities but added no evaluator, route, job, principal row,
+or lifecycle behavior. Subsequent internal lifecycle activation and PILOT-08
+retirement produce the current 22-action catalogue described above.
 The v0.1 baseline seeds no ActorProfile, identity link, grant, route, or job for
 REV readiness. Its closed catalogue constraints are installed directly.
 Their owning feature must publish the approved principal/resource/guard/surface/
@@ -557,7 +566,9 @@ AUTH-11C2 current effective-policy/active-guide actions are active. AUTH-11C2
 admits only covered Project Manager/Audit Authority or system Operator grants;
 Finance, Access Administrator, contributors, and services receive concealed
 denial. Its active-guide projection excludes retired compensation configuration.
-Four later REV registrations add exactly four planned and zero active actions.
+Historically, the four later 02C REV registrations added exactly four planned
+and zero active actions; this registration result does not describe current
+availability after internal lifecycle activation and PILOT-08 retirement.
 Review-evidence binding is registered planned and unavailable.
 `WS-XINT-002-07A` activates packet materialization only; it does not activate
 review-evidence binding. v0.1 reviewer findings/notes and contributor responses

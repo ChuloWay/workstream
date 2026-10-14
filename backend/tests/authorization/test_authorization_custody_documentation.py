@@ -167,5 +167,10 @@ def test_rev_custody_documentation_matches_the_independent_catalogue_fixture() -
         encoding="utf-8"
     )
     assert "the original 19 REV\nrows to seven exact AUTH custodians" in operations
-    assert "all 23 REV actions remain planned and unavailable" in operations
-    assert "registers the four additional actions" in operations
+    assert (
+        "At the historical 02C registration boundary, all 23 REV actions were\n"
+        "planned and unavailable"
+    ) in operations
+    assert "WS-XINT-003-02C registered four additional actions" in operations
+    assert "leaving 22 REV-owned actions" in operations
+    assert "`review.lifecycle.activation.manage` is active\ninternally through REV-12A4A" in operations
