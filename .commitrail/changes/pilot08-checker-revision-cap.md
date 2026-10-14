@@ -25,7 +25,8 @@ and immutable; no second counter is needed.
 - ART preparation and its public error mapping; TASK public error mapping.
 - One migration enforcing the same cap on new Submission INSERT, its Alembic
   head registration and schema proof.
-- Focused cap, replay, concurrency and SQL regressions using existing fixtures.
+- Focused cap, replay, concurrency and SQL regressions using existing fixtures,
+  including registration in the CI lane catalogue and its ownership assertion.
 - Affected current lifecycle specification, roadmap and this record.
 
 ### Not allowed

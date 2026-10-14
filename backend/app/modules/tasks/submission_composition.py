@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select, func
 from sqlalchemy.exc import DBAPIError
 
+from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
 from app.modules.tasks.api.submission_context import require_revision_capacity
 from app.modules.tasks.api import (
     SubmissionCreationAuthorizationPort,
@@ -171,7 +172,17 @@ class TaskSubmissionCreationService:
         prepared_authorization = await self._authorization.prepare(final)
         try:
             project = await self._contexts._load_locked_task_context(task)
-            require_revision_capacity(context, project.facts)
+            if context.predecessor is not None:
+                selected_revision = project.facts.activation_receipt.command.revision
+                require_revision_capacity(
+                    context, project_id=project.facts.project_id,
+                    policy_id=selected_revision.policy_id,
+                    policy_generation=selected_revision.generation,
+                    policy_hash=selected_revision.policy_hash,
+                    max_revision_rounds=RevisionPolicySemantics.model_validate_json(
+                        project.facts.revision_policy.value,
+                    ).max_revision_rounds,
+                )
             submission = build_submission(
                 submission_id=str(submission_id), task=task,
                 contribution_policy_version_id=context.submitter_contribution_policy_version_id,

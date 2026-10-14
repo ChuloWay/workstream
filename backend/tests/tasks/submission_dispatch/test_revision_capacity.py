@@ -80,7 +80,7 @@ async def test_two_revisions_then_public_and_sql_refusal(
             with monkeypatch.context() as patch:
                 patch.setattr(
                     "app.modules.artifacts.submission_admission.require_revision_capacity",
-                    lambda *_: None,
+                    lambda *_, **__: None,
                 )
                 spare, spare_admission = await _ready_replacement(h, revision_archive(h.data))
             spare_payload = _payload(spare, spare_admission)
@@ -111,7 +111,7 @@ async def test_two_revisions_then_public_and_sql_refusal(
         with monkeypatch.context() as patch:
             patch.setattr(
                 "app.modules.tasks.submission_composition.require_revision_capacity",
-                lambda *_: None,
+                lambda *_, **__: None,
             )
             with pytest.raises(IntegrityError, match="revision_limit_reached"):
                 await _create(h, _creation_request(h, spare, spare_admission))

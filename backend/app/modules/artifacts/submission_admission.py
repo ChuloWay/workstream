@@ -86,6 +86,7 @@ from app.modules.projects.api import (
     ProjectLockedPolicyContextRequest,
     ProjectLockedPolicyContextUnavailable,
 )
+from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
 from app.modules.tasks.api.submission_context import require_revision_capacity
 from app.modules.tasks.api import (
     TaskRetainedSubmissionParentsRequest,
@@ -877,7 +878,17 @@ class PreparedSubmissionBundlePreparationCommand:
             project_id=task.locked_project_context.project_id,
         )
         try:
-            require_revision_capacity(task, project)
+            if task.predecessor is not None:
+                selected_revision = project.activation_receipt.command.revision
+                require_revision_capacity(
+                    task, project_id=project.project_id,
+                    policy_id=selected_revision.policy_id,
+                    policy_generation=selected_revision.generation,
+                    policy_hash=selected_revision.policy_hash,
+                    max_revision_rounds=RevisionPolicySemantics.model_validate_json(
+                        project.revision_policy.value,
+                    ).max_revision_rounds,
+                )
         except TaskSubmissionContextUnavailable as exc:
             raise SubmissionBundlePreparationRejected(exc.code) from exc
         return task, project

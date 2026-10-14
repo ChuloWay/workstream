@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, Protocol, get_args
+from typing import Literal, Protocol, get_args
 from uuid import UUID
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
-
-if TYPE_CHECKING:
-    from app.modules.projects.api.locked_policy import ProjectLockedPolicyContextFacts
 
 
 TaskSubmissionContextKind = Literal["initial", "checker_remediation"]
@@ -165,23 +162,20 @@ class TaskSubmissionContextPort(Protocol):
 
 
 def require_revision_capacity(
-    task: TaskSubmissionContextFacts, project: ProjectLockedPolicyContextFacts,
+    task: TaskSubmissionContextFacts, *, project_id: UUID, policy_id: UUID,
+    policy_generation: int, policy_hash: str, max_revision_rounds: int,
 ) -> None:
     """Apply the exact locked policy to a new attempt; initial work is round zero."""
-    from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
-
     if task.predecessor is None:
         return
-    selected = project.activation_receipt.command.revision
     locked = task.locked_policy
     if (
-        task.locked_project_context.project_id != project.project_id
+        task.locked_project_context.project_id != project_id
         or (locked.locked_revision_policy_id, locked.locked_revision_policy_generation,
             locked.locked_revision_policy_hash)
-        != (selected.policy_id, selected.generation, selected.policy_hash)
+        != (policy_id, policy_generation, policy_hash)
     ):
         raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
-    policy = RevisionPolicySemantics.model_validate_json(project.revision_policy.value)
     # The predecessor's one-based version equals the next zero-based round.
-    if task.predecessor.version > policy.max_revision_rounds:
+    if task.predecessor.version > max_revision_rounds:
         raise TaskSubmissionContextUnavailable("revision_limit_reached")
