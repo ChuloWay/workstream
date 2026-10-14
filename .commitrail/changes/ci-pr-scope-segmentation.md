@@ -121,7 +121,7 @@ by its reusable workflow and is outside this lock-custody amendment.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Scope selection is deterministic and fail-closed | `PYTHONPATH=backend ... pytest -q backend/tests/test_ci_scope_selection.py scripts/test_lightweight_agent_gates.py -k 'not postgres_storage_guard_rejects_wrong_mounts_and_write_settings'` | 42 passed, 1 deselected, including a real-Git rename-out-of-backend probe; the deselected pre-existing Bash 3 host probe passes on hosted Linux and fails unchanged on base locally. | Hosted event expressions still require GitHub execution proof. |
+| Scope selection is deterministic and fail-closed | `PYTHONPATH=backend ... pytest -q backend/tests/test_ci_scope_selection.py scripts/test_lightweight_agent_gates.py -k 'not postgres_storage_guard_rejects_wrong_mounts_and_write_settings'` | 47 passed, 1 deselected, including a real-Git rename-out-of-backend probe and non-draft diff-skip probes; the deselected pre-existing Bash 3 host probe passes on hosted Linux and fails unchanged on base locally. | Hosted event expressions still require GitHub execution proof. |
 | Required fan-in rejects missing selected proof | Focused selector/workflow tests and embedded shell truth-table probes | Passed, including failure, cancellation, skip and unexpected-success cases. | Branch-protection configuration remains repository-admin state. |
 | Complete merge proof is unchanged | `pytest` lane catalogue, runner and evidence contract modules | 137 passed. | Hosted ready-PR Backend execution remains required. |
 | Repository process/docs remain valid | Markdown, stale-contract and reviewer-contract checks | Passed; 200 Agent Gates tests passed locally, with only the same 9 pre-existing macOS Bash 3 subtest failures seen on base. | Hosted Linux is authoritative for that host-specific probe. |
@@ -152,6 +152,13 @@ lock-only dependency repair. The workflow now recreates a frozen all-extras uv
 environment in each affected job and binds all subsequent commands to it. The
 download cache remains an optimization only and cannot replace or mutate that
 fresh environment.
+
+External review noted that `main()` previously calculated a Git diff before
+checking the event type. On a push or newly created branch, the base ref can be
+an all-zero SHA or unreachable, causing `git diff` to fail. The selector CLI
+now skips Git diff calculation entirely for non-draft events (protected pushes
+and ready PRs), allows omitting base/head refs on those events, and requires
+base/head refs only for draft pull requests when changed paths are not supplied.
 
 ## Reconciliation
 

@@ -8,7 +8,7 @@ import subprocess
 
 import pytest
 
-from scripts.select_ci_scope import ALL_LANES, changed_paths, select_scope
+from scripts.select_ci_scope import ALL_LANES, changed_paths, main, select_scope
 
 
 def test_ready_pull_request_always_selects_the_complete_suite() -> None:
@@ -263,3 +263,117 @@ def test_invalid_changed_paths_are_rejected(path: str) -> None:
             event_name="pull_request",
             pull_request_draft=True,
         )
+
+
+def test_main_skips_git_diff_on_push_even_with_null_or_unreachable_base(
+    tmp_path: Path,
+) -> None:
+    output_file = tmp_path / "github_output.txt"
+    exit_code = main(
+        [
+            "--event-name",
+            "push",
+            "--pull-request-draft",
+            "false",
+            "--base-ref",
+            "0000000000000000000000000000000000000000",
+            "--head-ref",
+            "HEAD",
+            "--github-output",
+            str(output_file),
+        ]
+    )
+
+    assert exit_code == 0
+    contents = output_file.read_text(encoding="utf-8")
+    assert "full_suite=true\n" in contents
+    assert "scope_reason=protected_push\n" in contents
+    assert "lanes_required=true\n" in contents
+
+
+def test_main_skips_git_diff_on_ready_pull_request_with_invalid_base(
+    tmp_path: Path,
+) -> None:
+    output_file = tmp_path / "github_output.txt"
+    exit_code = main(
+        [
+            "--event-name",
+            "pull_request",
+            "--pull-request-draft",
+            "false",
+            "--base-ref",
+            "nonexistent-unreachable-sha",
+            "--head-ref",
+            "HEAD",
+            "--github-output",
+            str(output_file),
+        ]
+    )
+
+    assert exit_code == 0
+    contents = output_file.read_text(encoding="utf-8")
+    assert "full_suite=true\n" in contents
+    assert "scope_reason=ready_pull_request\n" in contents
+    assert "lanes_required=true\n" in contents
+
+
+def test_main_allows_omitting_base_and_head_refs_on_non_draft_events(
+    tmp_path: Path,
+) -> None:
+    output_file = tmp_path / "github_output.txt"
+    exit_code = main(
+        [
+            "--event-name",
+            "push",
+            "--pull-request-draft",
+            "false",
+            "--github-output",
+            str(output_file),
+        ]
+    )
+
+    assert exit_code == 0
+    contents = output_file.read_text(encoding="utf-8")
+    assert "full_suite=true\n" in contents
+
+
+def test_main_draft_pull_request_requires_refs_when_no_paths_supplied(
+    tmp_path: Path,
+) -> None:
+    output_file = tmp_path / "github_output.txt"
+    with pytest.raises(SystemExit):
+        main(
+            [
+                "--event-name",
+                "pull_request",
+                "--pull-request-draft",
+                "true",
+                "--github-output",
+                str(output_file),
+            ]
+        )
+
+
+def test_main_draft_pull_request_with_explicit_changed_paths(
+    tmp_path: Path,
+) -> None:
+    output_file = tmp_path / "github_output.txt"
+    exit_code = main(
+        [
+            "--event-name",
+            "pull_request",
+            "--pull-request-draft",
+            "true",
+            "--changed-path",
+            "docs/roadmap_status.md",
+            "--github-output",
+            str(output_file),
+        ]
+    )
+
+    assert exit_code == 0
+    contents = output_file.read_text(encoding="utf-8")
+    assert "full_suite=false\n" in contents
+    assert "lanes_required=false\n" in contents
+    assert "scope_reason=draft_changed_paths\n" in contents
+

@@ -209,20 +209,29 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--event-name", required=True)
     parser.add_argument("--pull-request-draft", choices=("true", "false"), required=True)
-    parser.add_argument("--base-ref")
-    parser.add_argument("--head-ref")
+    parser.add_argument("--base-ref", default="")
+    parser.add_argument("--head-ref", default="")
     parser.add_argument("--changed-path", action="append", default=[])
     parser.add_argument("--github-output", type=Path, required=True)
     args = parser.parse_args(argv)
-    if not args.changed_path and (not args.base_ref or not args.head_ref):
-        parser.error("base/head refs are required when changed paths are not supplied")
+    is_draft = args.event_name == "pull_request" and args.pull_request_draft == "true"
+    if is_draft and not args.changed_path and (not args.base_ref or not args.head_ref):
+        parser.error(
+            "base/head refs are required when changed paths are not supplied for draft pull requests"
+        )
     return args
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Select and emit one exact CI scope."""
     args = parse_args(argv)
-    paths = tuple(args.changed_path) or changed_paths(args.base_ref, args.head_ref)
+    is_draft = args.event_name == "pull_request" and args.pull_request_draft == "true"
+    if args.changed_path:
+        paths: Sequence[str] = tuple(args.changed_path)
+    elif is_draft:
+        paths = changed_paths(args.base_ref, args.head_ref)
+    else:
+        paths = ()
     scope = select_scope(
         paths,
         event_name=args.event_name,
