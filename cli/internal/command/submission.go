@@ -12,6 +12,7 @@ import (
 func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
 	for _, prepare := range []bool{true, false} {
 		var assignment, predecessor, summary, attestation, path, key, admission string
+		var revisionPreparationID, revisionPreparationSHA256 string
 		name, description := "submit", "Create or explicitly replay a Submission from a ready admission"
 		if prepare {
 			name, description = "prepare", "Upload a ZIP for intake preparation; does not create a Submission"
@@ -24,10 +25,25 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 		if prepare {
 			cmd.Flags().StringVar(&path, "file", "", "Required regular ZIP; keep unchanged for explicit replay")
 			cmd.Flags().StringVar(&key, "idempotency-key", "", "Required caller-owned UUID; never retried automatically")
+			cmd.Flags().StringVar(&revisionPreparationID, "revision-preparation-id", "", "Exact preparation UUID from task context; required with --predecessor")
+			cmd.Flags().StringVar(&revisionPreparationSHA256, "revision-preparation-sha256", "", "Exact preparation digest from task context; required with --predecessor")
 		} else {
 			cmd.Flags().StringVar(&admission, "admission", "", "Required ready admission UUID; exact admission and packet identify replay")
 		}
 		cmd.RunE = func(cmd *cobra.Command, args []string) error {
+			var acknowledgement *api.RevisionAcknowledgement
+			if prepare {
+				hasID := cmd.Flags().Changed("revision-preparation-id")
+				hasSHA := cmd.Flags().Changed("revision-preparation-sha256")
+				if cmd.Flags().Changed("predecessor") != (hasID && hasSHA) || hasID != hasSHA {
+					return commandError{"invalid_arguments", "revision preparation ID and sha256 are both required with --predecessor and forbidden for initial preparation"}
+				}
+				if hasID {
+					acknowledgement = &api.RevisionAcknowledgement{
+						PreparationID: revisionPreparationID, PreparationSHA256: revisionPreparationSHA256,
+					}
+				}
+			}
 			packet := api.SubmissionPacket{Assignment: assignment}
 			if cmd.Flags().Changed("predecessor") {
 				packet.Predecessor = &predecessor
@@ -62,7 +78,7 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 				return bad
 			}
 			defer file.Close()
-			result, err := c.PrepareSubmission(cmd.Context(), args[0], key, packet, file)
+			result, err := c.PrepareSubmission(cmd.Context(), args[0], key, packet, acknowledgement, file)
 			if err != nil {
 				return err
 			}
@@ -75,7 +91,7 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 			if result.Value.Status == "ready" {
 				_, err = fmt.Fprintln(stdout, "Ready admission: submit explicitly with the same assignment and packet.")
 			} else {
-				_, err = fmt.Fprintln(stdout, "Not ready: inspect the returned status. Any manual replay must use the same key, ZIP bytes, assignment and packet; this command never polls.")
+				_, err = fmt.Fprintln(stdout, "Not ready: inspect the returned status. Any manual replay must use the same key, ZIP bytes, assignment, packet and revision acknowledgement; this command never polls.")
 			}
 			return err
 		}

@@ -21,6 +21,7 @@ type WorkContext struct {
 	RevisionPolicy              ContextPolicy         `json:"revision_policy"`
 	ContributionPolicyVersionID string                `json:"contribution_policy_version_id"`
 	Lifecycle                   ContextLifecycle      `json:"lifecycle"`
+	RevisionContext             *RevisionContext      `json:"revision_context,omitempty"`
 	GuideDocuments              []TaskGuideDocument   `json:"guide_documents"`
 }
 
@@ -175,6 +176,15 @@ func (c *Client) WorkContext(ctx context.Context, selector string) (Result[WorkC
 	}
 	if err := validateGuideDocuments(fields["guide_documents"], value.GuideDocuments, value.Task.TaskID, value.Lifecycle.AssignedToCurrentActor); err != nil {
 		return result, &Failure{Code: "invalid_api_response"}
+	}
+	if rawRevision, present := fields["revision_context"]; present {
+		if string(rawRevision) != "null" {
+			if value.RevisionContext == nil || validateRevisionContext(rawRevision, value.RevisionContext) != nil {
+				return result, &Failure{Code: "invalid_api_response"}
+			}
+		} else if value.RevisionContext != nil {
+			return result, &Failure{Code: "invalid_api_response"}
+		}
 	}
 	return Result[WorkContext]{Raw: raw, Value: value}, nil
 }

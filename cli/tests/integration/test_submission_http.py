@@ -15,6 +15,8 @@ PUT = "018f0ebc-7966-7e8d-bc4d-1cae1e000013"
 ADMISSION = "018f0ebc-7966-7e8d-bc4d-1cae1e000014"
 SUBMISSION = "018f0ebc-7966-7e8d-bc4d-1cae1e000015"
 RUN = "018f0ebc-7966-7e8d-bc4d-1cae1e000016"
+REVISION_PREPARATION = "018f0ebc-7966-7e8d-bc4d-1cae1e000017"
+REVISION_DIGEST = "sha256:" + "a" * 64
 RECEIPT = {
     "submission_id": SUBMISSION,
     "submission_version": 1,
@@ -137,6 +139,42 @@ def test_explicit_prepare_replay_then_create_preserves_packet_and_bytes(cli, tmp
             f"/api/v1/tasks/{TASK}/submissions",
             "Bearer " + TOKEN,
         )
+
+
+def test_revision_prepare_requires_and_replays_exact_acknowledgement_headers(cli, tmp_path):
+    path = tmp_path / "revision.zip"
+    path.write_bytes(b"PK\x03\x04revision")
+    pair = (
+        "--revision-preparation-id", REVISION_PREPARATION,
+        "--revision-preparation-sha256", REVISION_DIGEST,
+    )
+    with http_fixture() as (origin, response, requests):
+        for args in (
+            ("--predecessor", SUBMISSION),
+            pair,
+            ("--predecessor", SUBMISSION, "--revision-preparation-id", REVISION_PREPARATION),
+            ("--predecessor", SUBMISSION, "--revision-preparation-sha256", REVISION_DIGEST),
+            ("--predecessor", SUBMISSION, *pair[:-1], "sha256:" + "A" * 64),
+        ):
+            assert_failure(cli(origin, TOKEN, *prepare_args(path), *args), "invalid_arguments", 2)
+        assert requests == []
+        respond(response, preparation("ready"), 202)
+        for _ in range(2):
+            result = cli(origin, TOKEN, *prepare_args(path), "--predecessor", SUBMISSION, *pair)
+            assert result.returncode == 0, result.stderr
+        assert len(requests) == 2
+        for headers in response["request_headers"]:
+            assert headers["X-Predecessor-Submission-Id"] == SUBMISSION
+            assert headers["X-Revision-Preparation-Id"] == REVISION_PREPARATION
+            assert headers["X-Revision-Preparation-Sha256"] == REVISION_DIGEST
+        respond(response, RECEIPT | {"submission_version": 2}, 201)
+        result = cli(origin, TOKEN, *submit_args(), "--predecessor", SUBMISSION)
+        assert result.returncode == 0, result.stderr
+        assert response["commands"][-1][2] == {
+            "assignment_id": ASSIGNMENT,
+            "predecessor_submission_id": SUBMISSION,
+            "admission_id": ADMISSION,
+        }
 
 
 def test_prepare_rejects_untransportable_packet_before_request(cli, tmp_path):

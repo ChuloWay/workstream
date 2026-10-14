@@ -52,7 +52,7 @@ contribution-evidence exports:
 | `workstream project contribution-policy publish PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/publication` |
 | `workstream project contribution-policy retire PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/retirement` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
-| `workstream task prepare TASK_ID --assignment UUID --file ZIP --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/submission-bundle-preparations` |
+| `workstream task prepare TASK_ID --assignment UUID --file ZIP --idempotency-key UUID` (revision: add predecessor and exact preparation ID/SHA-256) | `POST /api/v1/tasks/TASK_ID/submission-bundle-preparations` |
 | `workstream task submit TASK_ID --assignment UUID --admission UUID` | `POST /api/v1/tasks/TASK_ID/submissions` |
 | `workstream task submissions TASK_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/tasks/TASK_ID/submissions` |
 | `workstream submission show SUBMISSION_ID` | `GET /api/v1/submissions/SUBMISSION_ID` |
@@ -115,7 +115,7 @@ The table above is the delivered command inventory. PILOT-02 supplies the
 [batch conversion/import/screen/release commands](#prepare-a-task-import-json-source)
 in the same CLI; contribution-evidence reads do not depend on using batch import.
 Submission preparation, creation and history commands are described below;
-unfinished review/revision APIs are not current CLI implementation scope.
+manager revision repair and human-review commands are outside this CLI inventory.
 
 ## Build and use
 
@@ -640,6 +640,14 @@ workstream task prepare TASK_ID --assignment ASSIGNMENT_ID --file work.zip \
 # preparation command, key, file bytes and packet. There is no polling GET.
 workstream task submit TASK_ID --assignment ASSIGNMENT_ID --admission READY_ADMISSION_ID \
   --summary 'Completed work' --attestation 'My attestation'
+# For a checker-requested revision, inspect the current task context first.
+workstream task context TASK_ID --output json
+workstream task prepare TASK_ID --assignment ASSIGNMENT_ID --file revision.zip \
+  --predecessor SOURCE_SUBMISSION_ID --revision-preparation-id PREPARATION_ID \
+  --revision-preparation-sha256 "$PREPARATION_SHA256" \
+  --idempotency-key REVISION_KEY --summary 'Revised work'
+workstream task submit TASK_ID --assignment ASSIGNMENT_ID --admission READY_REVISION_ADMISSION_ID \
+  --predecessor SOURCE_SUBMISSION_ID --summary 'Revised work'
 workstream task submissions TASK_ID --limit 25
 workstream submission show SUBMISSION_ID
 workstream submission findings SUBMISSION_ID --limit 25
@@ -654,6 +662,13 @@ as readiness. Before confirming a successful upload, the CLI checks file size,
 modification time and SHA-256 again; a changed source reports an uncertain outcome.
 
 Both commands accept optional `--summary`, `--attestation` and `--predecessor`.
+Revision preparation additionally requires the exact `revision_context.preparation_id`
+and `revision_context.preparation_sha256` from the authorized task context as
+`--revision-preparation-id` and `--revision-preparation-sha256`. Both flags are
+forbidden for initial preparation and are sent as preparation headers only; they
+are not part of the Submission JSON. Keep the pair unchanged for explicit
+preparation replay. A fresh server check rejects a stale pair after a rebase,
+deadline or source change; the CLI never selects a replacement automatically.
 Use the same packet for preparation, creation and explicit replay. The current
 preparation API transports text in headers: printable ASCII only, at most 64KiB
 per text field, with no leading/trailing whitespace. Unsupported text is rejected
@@ -1090,6 +1105,11 @@ server's current assignment/action hints and `guide_documents`. An active own
 assignment receives the exact locked originals' IDs, order, labels, media types,
 sizes, SHA-256 commitments and task-scoped read references; ready unassigned
 browsing receives an empty document list. Task examples are never included.
+For a task awaiting revision, the optional `revision_context` gives the current
+preparation ID and digest, source Submission, deadline, eligibility disposition
+and bounded change summary. It may be absent or null on other tasks. Use its
+exact preparation pair for a revision ZIP preparation; the read does not reserve
+or authorize later intake.
 Hints are observations, not authority
 or a claimability guarantee. The CLI never recomputes them or automatically
 executes a hinted action. Claim/start independently authorize their requests.
