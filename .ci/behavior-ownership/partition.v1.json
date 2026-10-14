@@ -1949,7 +1949,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "d47fc9d5e325152ec04f2d5c1ddc3230c890736cbd1dbe64494062a5bcde1739",
-  "protected_base_commit": "82a46ff3c5f21e3cdf762cf505d61d84531a7c80",
+  "authority_digest": "16a48b4d8280a121dd9c1680c037177fb5a3abecf1c8d3ccbebaced86e99d3ac",
+  "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
