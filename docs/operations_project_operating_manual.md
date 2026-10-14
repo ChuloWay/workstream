@@ -276,7 +276,8 @@ Output-file authority remains unavailable. B7 supplies hidden request delivery a
 delivery; PILOT-04 registers the selected request and completion handlers in
 production composition. ARCH-02I-B exposes public ZIP preparation and admission-backed
 initial/checker-remediation Submission creation. The bounded local public API
-and Celery service drill passed under scripted approved-guide preconditions. ARCH-04F4 supplies hidden reason-bound Operator retry of an exact terminal
+and Celery service drill starts from public guide inputs with recorded inference.
+ARCH-04F4 supplies hidden reason-bound Operator retry of an exact terminal
 checker infrastructure failure; it has no public retry route.
 
 The intended unified flow uses one compilation result for sufficiency and

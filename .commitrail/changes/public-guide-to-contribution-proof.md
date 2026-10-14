@@ -340,3 +340,18 @@ manager grant. The initial authority fixture now grants that same manager the
 created project's scope before setup; no product authorization rule changes.
 This remains within the declared identity/grant infrastructure preconditions.
 The failed run completed database and MinIO cleanup and is not success evidence.
+
+## Current documentation reconciliation
+
+The connected drill replaces the approved-guide fixture; reconcile current
+canonical descriptions in the glossary, architecture lockdown/brief/system map,
+product brief and user flows, project and authorization operating manuals,
+checker architecture/specification/template, Task and artifact specifications,
+current-system HTML diagram, roadmap and ARCH chunk map. These documentation
+paths are allowed for this correction. Preserve explicitly historical proof at
+`d5703d9c6`; recorded inference is not live model or hosted deployment proof.
+The latest bounded run reached both outcomes but expired during final late-
+revocation restart verification. Database and MinIO cleanup completed; owned
+API/Celery children were stopped. It is incomplete evidence, not a full pass.
+The next unchanged-runtime run receives a larger outer local-run allowance for
+this loaded host; product deadlines, assertions and hosted CI limits are unchanged.

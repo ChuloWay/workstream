@@ -21,7 +21,7 @@ operation so an exact current contributor-correctable result reaches
 production composition and ARCH-02I-B public entry are delivered. ARCH-04E3-B
 admits complete false guides with supported approved checks and no `human_review`
 disposition under matching Python/PostgreSQL custody. The bounded local
-public/worker drill passed from public guide inputs with recorded inference; it did not
+public/worker drill starts from public guide inputs with recorded inference; it did not
 exercise live setup inference. Setup-fault handling and live human review/revision
 are separate work.
 
@@ -97,8 +97,9 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Local proof: the first-layer public/worker drill passed across Submission
-  entry and selected completion from public guide inputs with recorded inference.
+- Local proof: the first-layer public/worker drill now starts from public guide inputs
+  with recorded inference before Submission entry and selected completion;
+  full connected verification remains in progress.
   The [connected guide proof](../../changes/public-guide-to-contribution-proof.md)
   includes original bytes, task examples, real Celery setup using recorded
   inference and public separate approvals. Next usable boundary: configured

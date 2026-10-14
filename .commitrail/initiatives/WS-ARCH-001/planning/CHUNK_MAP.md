@@ -16,8 +16,7 @@ REV's selected-production manifest. New false/pass effects require an
 Operator-authorized LIVE REV generation; a known pre-effect non-live refusal
 retries only within the existing OUTBOX attempt budget. Exhaustion dead-letters
 without automatic reopen. The default-true `review_pending` branch remains.
-A bounded local public API/durable-worker drill passed under scripted
-approved-guide preconditions. Human review/revision and
+A bounded local public API/durable-worker drill starts from public guide inputs with recorded inference. Human review/revision and
 payment fulfillment remain later work. Current production classification has
 no `task_setup_blocked` path, so a manager-visible setup-fault hold is future
 safety work rather than a prerequisite. Configuration faults must never become

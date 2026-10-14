@@ -6,7 +6,7 @@ The goal remains **claim -> upload ZIP -> pre-submit feedback or immutable
 Submission -> automatic post-submit checking -> outcome**. For an eligible
 project with locked `human_review_required=false`, the outcome includes shared
 FinalAcceptance, the submitter ContributionRecord and applicable award facts.
-The bounded local public API and durable-worker journey passed from public
+The bounded local public API and durable-worker journey starts from public
 guide inputs with recorded inference; hosted operation and human review remain separate.
 
 ### Delivered foundations
