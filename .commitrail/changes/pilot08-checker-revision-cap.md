@@ -183,15 +183,9 @@ unrelated uniqueness or stale-lineage rejections.
 - Current-source reconciliation: merged main 2c1f7517c includes supported false
   activation and the CLI submission journey. Checker remediation shares revision
   limits by the explicit product decision, superseding the human-only wording.
-- The working candidate implements deadline handling, guarded complete-context
+- The intended merge outcome includes deadline handling, guarded complete-context
   rebase, contributor change summaries and repair, assignment-scoped rounds,
-  atomic timeout receipts/outcomes and retained-source recovery. These are not
-  delivered capabilities until the complete candidate passes review and merges.
-- Interim validation: the CLI submission HTTP suite passed 14 tests. An isolated
-  PostgreSQL run proved due expiry, immutable submission preservation, assignment
-  release, rejected-status projection and outcome acknowledgement, then failed
-  retained-source recovery at audit input validation. This is partial evidence,
-  not final-head approval; recovery, crash/retry and concurrency checks remain.
-- Remaining risks: complete cross-owner retained lineage and lock-order proof,
-  final independent reviews and required CI. Live human decision creation remains
-  the separate #554 dependency.
+  atomic timeout receipts/outcomes and retained-source recovery.
+- Cross-owner retained lineage, lock order, crash recovery and exact replay need
+  PostgreSQL proof in addition to the repository checks. Live human decision
+  creation remains the separate #554 dependency.
