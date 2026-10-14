@@ -21,6 +21,10 @@ shared fixtures can persist state consumed by later tests without execution in
 those tests' contexts. Both designs are rejected. Their history remains in Git;
 remove the selected-mode implementation rather than weaken its probe.
 
+Final review also found that the reusable CLI contract resolved its Backend
+Ruff and pytest tooling outside `backend/uv.lock`, so lock-only maintenance was
+not fully proven by a hosted green run.
+
 ## Bounded change
 
 1. Simplify `backend/scripts/select_ci_scope.py` and Backend workflow to the
@@ -43,6 +47,10 @@ remove the selected-mode implementation rather than weaken its probe.
    `docs/operations_backend_testing.md` together. Reconcile current main before
    final verification. No product roadmap impact: no capability or public API
    changes, and no claim that CI work completes a product gate.
+
+The reusable CLI contract keeps its independent Go build, while its Backend
+Ruff checks, isolated runner and five pytest groups use the same pinned frozen
+all-extras environment as the other affected Backend jobs.
 
 | Change/event | Required runtime |
 |---|---|
@@ -83,6 +91,8 @@ reported as complete proof. No new selector/evidence service or paid runner.
   and all assertions. Coverage percentages remain diagnostic only.
 - Run lint, markdown links, stale wording and Commitrail checks. Final hosted
   execution and focused internal reviews must pass before readiness.
+- Verify the reusable CLI contract preserves its Go build and runs all Backend
+  Ruff and pytest commands through pinned `uv` with `--frozen` lock custody.
 
 ## Risk and review routing
 
@@ -96,20 +106,37 @@ Prior focused selector, evidence and workflow tests passed, but their passing
 results did not prove complete dependency selection. The adversarial failure
 above supersedes any earlier selected-backend readiness claim.
 
+The final reusable-CLI repair passed 74 focused workflow/selector tests, 149
+lane catalogue/evidence tests and 160 behavior-ownership tests locally. Its
+regression tests fail when `uv sync` loses `--frozen` or when any of the five
+isolated pytest groups loses its exact arguments. Hosted Linux remains the
+authoritative exact-lock proof.
+
 Hosted run `38593205795` at `0586a9e64` failed: project_lifecycle_a reached its
 existing 1,200-second bound and schema_contracts was cancelled. No full-suite
 success is claimed. The two-test local baseline passed in 344.62 seconds,
 including 155.92 seconds of setup/teardown. The identical coverage-enabled
 after-run timed out at 600 seconds under heavy shared-host load; both runs
 confirmed database, role and MinIO cleanup. This is not evidence of a speedup.
-Complete-module correctness and final hosted timing proof remain pending.
+These measurements do not prove complete-module correctness or a speedup;
+hosted Linux proof remains required for every reviewable candidate.
 
 After simplification, 174 selector/catalogue/runner/evidence tests passed;
 the expanded draft/ready component matrix passed 47 tests, and 27 workflow
-integrity tests passed. These precede reconciliation with main `80be49391`;
-final exact-head checks remain required. Ruff, links and Commitrail checks passed.
+integrity tests passed. These are historical pre-reconciliation results from
+before main `80be49391`; exact-head checks supersede them for readiness. Ruff,
+links and Commitrail checks passed.
 
 The marker plan received focused feasibility review: both actual schema
 mutations retain rebuild isolation; ordinary tests retain verified reset.
 Earlier draft-only and backend-selection plans are superseded, not additional
 acceptance contracts.
+
+The final external review found that the reusable CLI contract still resolved
+its Backend Ruff and five pytest groups independently of the lock. Those Backend
+commands now use the same pinned frozen environment, while independent Go
+module verification, tests and binary build remain unchanged.
+The Ruff commands still execute from the repository root with the Backend uv
+project selected explicitly, preserving the CLI tests' original format rules.
+The MinIO producer-attempt guard now exits explicitly on malformed values so its
+fail-closed behavior does not depend on Bash `errexit` handling of `[[ ... ]]`.

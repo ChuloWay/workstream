@@ -27,7 +27,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")
         step = workflow.split("      - name: Bind checked-out source\n", 1)[1].split("\n      - ", 1)[0]
         script = textwrap.dedent(step.split("        run: |\n", 1)[1])
-        guard = script[script.index('[[ "${MINIO_PRODUCER_ATTEMPT}"'):]
+        guard = script[script.index('if ! [[ "${MINIO_PRODUCER_ATTEMPT}"'):]
         head = "a" * 40
         for producer, consumer, artifact, success in (
             ("1", "1", f"minio-source-{head}-1", True),
@@ -70,36 +70,115 @@ class LightweightAgentGateTests(unittest.TestCase):
             step = workflow.split("      - name: " + name + "\n", 1)[1].split("\n      - ", 1)[0]
             script = textwrap.dedent(step.split("        run: |\n", 1)[1])
             self.assertIn("--timeout-seconds 300", script)
-            self.assertIn("python scripts/run_isolated_tests.py", script)
+            self.assertIn(
+                "uv run --frozen python scripts/run_isolated_tests.py",
+                script,
+            )
             self.assertNotIn("|| true", script)
             scripts.append(script)
             for exit_code in (0, 1, 124):
                 with self.subTest(step=name, exit_code=exit_code):
                     result = subprocess.run(
-                        ["bash", "-e", "-c", f"python() {{ return {exit_code}; }}\n" + script],
+                        [
+                            "bash",
+                            "-e",
+                            "-c",
+                            "uv() { shift 2; \"$@\"; }\n"
+                            f"python() {{ return {exit_code}; }}\n"
+                            + script,
+                        ],
                         cwd="backend",
                         env=os.environ | {"RUNNER_TEMP": tempfile.gettempdir()},
                         capture_output=True, text=True, check=False,
                     )
                     self.assertEqual(result.returncode, exit_code, result.stderr)
-        self.assertEqual(
-            shlex.split(scripts[0].replace("\\\n", ""), comments=True),
+        runner_prefix = [
+            "uv", "run", "--frozen", "python", "scripts/run_isolated_tests.py",
+        ]
+        pytest_prefix = [
+            "--timeout-seconds", "300", "--", "uv", "run", "--frozen", "python",
+            "-m", "pytest", "-q",
+        ]
+        expected_runners = (
             [
-                "set", "-euo", "pipefail", "python", "scripts/run_isolated_tests.py",
+                *runner_prefix,
                 "--metadata-json", "${RUNNER_TEMP}/workstream-cli-isolation.json",
-                "--timeout-seconds", "300", "--", "python", "-m", "pytest", "-q",
+                *pytest_prefix,
                 "../cli/tests/integration",
                 "--ignore-glob=../cli/tests/integration/*_public_api.py",
                 "--ignore-glob=../cli/tests/integration/test_guide*.py",
                 "--ignore=../cli/tests/integration/test_public_self_service.py",
             ],
+            [
+                *runner_prefix,
+                "--metadata-json", "${RUNNER_TEMP}/workstream-cli-guide-isolation.json",
+                *pytest_prefix, "${guide_files[@]}",
+            ],
+            [
+                *runner_prefix,
+                "--metadata-json", "${RUNNER_TEMP}/workstream-cli-native-isolation.json",
+                *pytest_prefix, "${native_files[@]}",
+            ],
+            [
+                *runner_prefix,
+                "--metadata-json", "${RUNNER_TEMP}/workstream-cli-self-service-isolation.json",
+                *pytest_prefix, "../cli/tests/integration/test_public_self_service.py",
+            ],
+            [
+                *runner_prefix,
+                "--metadata-json", "${RUNNER_TEMP}/workstream-cli-batch-isolation.json",
+                *pytest_prefix, "../cli/tests/integration/test_task_batch_public_api.py",
+            ],
         )
+        for script, expected in zip(scripts, expected_runners, strict=True):
+            runner = script[script.index("uv run --frozen python scripts/run_isolated_tests.py"):]
+            self.assertEqual(
+                shlex.split(runner.replace("\\\n", ""), comments=True),
+                expected,
+            )
         self.assertNotIn("continue-on-error", workflow)
         self.assertIn("timeout-minutes: 15", workflow)
-        self.assertIn("--ignore=../cli/tests/integration/test_public_self_service.py", scripts[0])
-        self.assertIn("test_task_batch_public_api.py", scripts[2])
-        self.assertIn("test_public_self_service.py", scripts[3])
-        self.assertIn("test_task_batch_public_api.py", scripts[4])
+
+    def test_cli_backend_groups_use_the_frozen_backend_lock_environment(self) -> None:
+        workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")
+        install = workflow.split("      - name: Install API integration tooling\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+        source_check = workflow.split("      - name: Check integration test source\n", 1)[1].split(
+            "\n      - name:", 1
+        )[0]
+
+        self.assertIn("        working-directory: backend", install)
+        self.assertIn('python -m pip install "uv==0.10.7"', install)
+        self.assertIn('test "$(uv --version)" = "uv 0.10.7"', install)
+        self.assertIn("uv sync --frozen --all-extras", install)
+        self.assertIn(
+            'test "$(uv run --frozen ruff --version)" = "ruff 0.15.22"',
+            install,
+        )
+        self.assertNotIn("working-directory:", source_check)
+        self.assertIn(
+            "uv run --frozen --project backend ruff check cli/tests",
+            source_check,
+        )
+        self.assertIn(
+            "uv run --frozen --project backend ruff format --check cli/tests",
+            source_check,
+        )
+        self.assertEqual(
+            workflow.count("uv run --frozen python scripts/run_isolated_tests.py"),
+            5,
+        )
+        self.assertEqual(
+            workflow.count("-- uv run --frozen python -m pytest -q"),
+            5,
+        )
+        self.assertNotIn('python -m pip install -e "./backend[dev,agents]"', workflow)
+        self.assertNotIn("\n          ruff check cli/tests", workflow)
+        self.assertNotIn("\n          ruff format --check cli/tests", workflow)
+        for line in workflow.splitlines():
+            if "uv run " in line:
+                self.assertIn("uv run --frozen ", line)
 
     def test_backend_redis_services_use_the_exact_official_image(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")

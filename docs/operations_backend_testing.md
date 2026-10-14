@@ -200,7 +200,10 @@ Each affected Backend job binds its checkout to `GITHUB_SHA`, installs pinned
 docstring and coverage commands through `uv run --frozen`. Its download cache is
 keyed by `backend/uv.lock` and the workflow, but the environment itself is never
 restored from cache. This makes hosted proof use the exact selected backend lock
-without changing any lane or gate. Each matrix job then starts MinIO.
+without changing any lane or gate. The reusable CLI contract keeps its
+independent Go verification and build, while its Backend Ruff checks, isolated
+runner and five pytest groups use the same pinned, frozen all-extras environment.
+Each matrix job then starts MinIO.
 Authorization preflight asserts the lock-selected Ruff `0.15.22`, then runs
 source-wide lint and docstring checks once for the selected run. The
 runner discovers, validates and collects the full canonical inventory before
@@ -299,7 +302,7 @@ its head and digests differ. Each lane bundle records its job-start epoch;
 missing or malformed timing fails the final evidence step. Hosted evidence
 records whole Backend wall time from the earliest selected lane start, lane
 aggregate/slowest execution timing, and whether
-the eight-minute target was met. Timing uses the same bundle selection as
+the five-minute target was met. Timing uses the same bundle selection as
 evidence. On a retry this wall time includes the wait between selected attempts;
 it is not fresh-run execution latency. When the repository owner explicitly accepts
 a measured target miss at the human merge checkpoint, that performance result
@@ -312,7 +315,7 @@ requires fresh CI; prior same-head retry evidence cannot be carried forward.
 The content-addressed MinIO cache can remove the measured 145-second image
 rebuild when its exact Docker context, Backend workflow and runner platform are
 unchanged. It does not solve observed 17-minute queue waits or 20-minute lanes
-and does not promise an eight-minute Backend completion time.
+and does not promise a five-minute Backend completion time.
 
 ## Retired changed-scope behavior mutation
 
