@@ -33,9 +33,9 @@ Use the normal `uv` resolver with package-specific upgrades so unaffected locked
 ## Acceptance criteria
 
 - [ ] A private reviewed inventory maps every backend snapshot alert to its manifest, selected version, direct/transitive relationship, runtime/dev scope, available fix, affected owner boundary, and disposition without exposing dashboard-only evidence publicly.
-- [ ] Every backend alert in the issue snapshot resolves outside its affected range using supported patched versions corroborated by canonical advisories.
-- [ ] `uv` regenerates the lock reproducibly through package-specific upgrades, with no manual lock editing, unrelated dependency additions, or unrelated version churn.
-- [ ] A fresh isolated environment installs from the frozen backend lock with all runtime, agent, and development dependencies.
+- [x] Every backend alert in the issue snapshot resolves outside its affected range using supported patched versions corroborated by canonical advisories.
+- [x] `uv` regenerates the lock reproducibly through package-specific upgrades, with no manual lock editing, unrelated dependency additions, or unrelated version churn.
+- [x] A fresh isolated environment installs from the frozen backend lock with all runtime, agent, and development dependencies.
 - [ ] Existing authentication/JWT, Alembic, HTTP/storage, lint, and the complete backend suite run from the fresh frozen-lock environment without skips or weakened assertions; pip-resolved hosted backend lanes remain supplemental compatibility evidence rather than exact-lock custody.
 - [ ] Public records and PR text contain no credentials, private dashboard links, private alert identifiers, or non-public exploit detail.
 
@@ -49,19 +49,19 @@ Use the normal `uv` resolver with package-specific upgrades so unaffected locked
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Every snapshot alert has a reviewed disposition | Private inventory reconciled to the creation-time snapshot, current lock graph, and canonical advisories | Pending | Private evidence remains outside Git and public PR text |
-| Plan is bounded and executable | Internal plan review against the base lock, owners, and issue #565 contract | Pending | No runtime proof before implementation |
-| Lock has only intended resolver changes | `uv lock --check` plus base/head package and lock diff inspection | Pending | Canonical advisories and dashboard must be reconciled again after merge |
-| Patched graph installs cleanly | Fresh temporary `UV_PROJECT_ENVIRONMENT` with `uv sync --frozen --all-extras` | Pending | Hosted platform matrix remains CI custody |
-| Affected runtime behavior remains compatible | Backend lint plus focused and complete backend tests from the fresh frozen-lock environment, including owned PostgreSQL/S3 resources; pip-resolved hosted backend checks as supplemental compatibility evidence | Pending | Hosted lanes do not currently establish exact backend lock custody |
+| Every snapshot alert has a reviewed disposition | Private inventory reconciled to the creation-time snapshot, current lock graph, and canonical advisories | Passed | Private evidence remains outside Git and public PR text |
+| Plan is bounded and executable | Internal plan review against the base lock, owners, and issue #565 contract | Passed | No runtime proof before implementation |
+| Lock has only intended resolver changes | `uv lock --check` plus base/head package and lock diff inspection | Passed on the reconciled head; four intended package selections changed and no package was added or removed | Canonical advisories and dashboard must be reconciled again after merge |
+| Patched graph installs cleanly | Fresh temporary `UV_PROJECT_ENVIRONMENT` with `uv sync --frozen --all-extras`, followed by installed-distribution and import inspection | Passed on the reconciled head | Hosted platform matrix remains CI custody |
+| Affected runtime behavior remains compatible | Backend lint plus focused and complete backend tests from the fresh frozen-lock environment, including owned PostgreSQL/S3 resources; pip-resolved hosted backend checks as supplemental compatibility evidence | Frozen-lock authentication/JWT selection: 60 passed; Ruff passed. Complete frozen-lock suite and hosted checks remain pending | Hosted lanes do not currently establish exact backend lock custody |
 
 ## Review findings
 
-Pending implementation and exact-head review.
+The original exact-head review passed for the bounded resolver delta. Reconciliation review against the current base remains pending after this record update.
 
 ## Reconciliation
 
-- Current-source reconciliation: Based on `main` at `82a46ff3c5f21e3cdf762cf505d61d84531a7c80`; open dependency PRs were inspected for overlapping lock paths before implementation.
+- Current-source reconciliation: Based on `main` at `24119122bf5b4284878996b7c655072e666d96e1`; open dependency PRs were inspected for overlapping lock paths before implementation.
 - Roadmap impact: None. This repair changes selected dependency versions without changing a capability, exposure, completed scope, remaining product gate, or next product dependency.
 - Next usable boundary: Merge this backend repair, re-read the default-branch alert dashboard, and retain explicit ownership of any remaining snapshot alert.
-- Remaining risks: Pending implementation evidence and exact-head review.
+- Remaining risks: Complete-suite execution from this exact frozen lock, hosted checks on the reconciled head, and exact-head reconciliation review remain pending. PR #566 demonstrates a frozen-lock CI path, but its merge is not a product or repository dependency for this repair.
