@@ -1,7 +1,7 @@
-"""Exercise the public first journey after a scripted, approved guide precondition.
+"""Exercise public original-guide setup through a governed contribution outcome.
 
-Run only through the isolated database/MinIO runner with a disposable Redis broker.
-The source compilation is a canonical owner fixture, not a model-provider run.
+Run only with isolated PostgreSQL/MinIO and an owned disposable Redis broker.
+Inference is explicitly recorded; real Celery executes the canonical setup owners.
 """
 
 from __future__ import annotations
@@ -62,21 +62,11 @@ from tests.post_submit_materialization_helpers import (
     provision_material_services,
 )
 from tests.tasks.post_submit_routing.support import revision_archive
-from tests.projects.guide_activation.pg_support import (
-    activation_command,
-    publish_policy,
-)
-from tests.projects.guide_activation.source_fixtures import source_case
-from tests.projects.guide_compilation.helpers import service_actor
-from tests.projects.guide_compilation.proposals.pg_support import (
-    seed_review_actor,
-    seed_selected_review_revision_inputs,
-)
-from tests.projects.post_policy.pg_support import operate, prepare_post_policy
+from tests.projects.guide_activation.source_fixtures import _register_external_checker_fixture
+from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor
+from experiments.pilot04_external_checker_runtime.public_guide_setup import public_guide_setup
 from tests.tasks.invalidation_support import provision_reconciler
 from tests.test_s3_artifact_store import minio_settings
-from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
-from app.modules.projects.api.post_policy import PostPolicyApproval
 
 BACKEND = Path(__file__).resolve().parents[2] / "backend"
 sys.path.insert(0, str(BACKEND / "scripts"))
@@ -191,7 +181,8 @@ def _start_worker(env: dict[str, str], root: Path, generation: int) -> tuple[sub
     """Start one owned prefork worker with a distinct broker identity and log."""
     hostname = f"first-journey-{uuid4().hex}@localhost"
     process = _process([
-        sys.executable, "-m", "celery", "-A", "app.workers.celery_app",
+        sys.executable, "-m", "celery", "-A",
+        "experiments.pilot04_external_checker_runtime.guide_worker",
         "worker", "--pool=prefork", "--concurrency=1",
         "--queues=celery,workstream.outbox", "--hostname", hostname,
         "--without-gossip", "--without-mingle", "--without-heartbeat",
@@ -294,7 +285,8 @@ async def _json(client: httpx.AsyncClient, method: str, path: str, token: str,
 async def _provision_runtime_services(factory) -> None:
     async with factory() as session, session.begin():
         for identity in (ServiceIdentity.OUTBOX_DISPATCHER,
-                         ServiceIdentity.ARTIFACT_SCHEDULER):
+                         ServiceIdentity.ARTIFACT_SCHEDULER,
+                         ServiceIdentity.ARTIFACT_GUIDE_READER, ServiceIdentity.PROJECT_SETUP):
             existing = await session.scalar(select(ActorProfile.id).where(
                 ActorProfile.service_identity == identity.value
             ))
@@ -734,7 +726,7 @@ async def _assert_revision(factory, *, project_id: UUID, task_id: str,
             _require(count == 0, "revision minted final or economic evidence")
 
 
-async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
+async def _assert_outcome(factory, *, guide_source, project_id: UUID, task_id: str,
                           submission_id: str, initial_submission_id: str,
                           contributor_id: UUID,
                           human_review_required: bool, expected_awards: int,
@@ -746,6 +738,13 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
                  "governed Task outcome differs")
         _require(submission is not None and submission.submission_bundle_admission_id is not None,
                  "Submission lacks consumed immutable admission")
+        for field, expected in guide_source.evidence["locked_context"].items():
+            _require(str(getattr(task, field)) == str(expected)
+                     and str(getattr(submission, field)) == str(expected),
+                     f"{field} differs from the public guide approval")
+        _require(str(task.locked_contribution_policy_version_id)
+                 == guide_source.activation["contribution_policy_version_id"],
+                 "Task did not retain the publicly published ContributionPolicy")
         _require(submission.locked_post_submit_checker_policy_hash == task.locked_post_submit_checker_policy_hash,
                  "Submission POST policy differs from locked Task")
         _require(submission.contribution_policy_version_id == task.locked_contribution_policy_version_id,
@@ -925,307 +924,274 @@ async def _late_revocation_trial(client, factory, env, *, project_id: UUID,
             "outbox_state": "dead_letter", "routing_authority": "revoked_after_post_result"}
 
 
-async def _one_mode(client, factory, database_url, namespace, image, env, *,
+async def _one_mode(client, factory, env, *,
                     human_review_required: bool, operator_id: UUID | None,
                     stop_worker: Callable[[], None] | None = None,
-                    start_worker: Callable[[], Awaitable[None]] | None = None,
-                    bootstrap_only: bool = False) -> dict:
+                    start_worker: Callable[[], Awaitable[None]] | None = None) -> dict:
     awards = () if human_review_required else ("project_points",)
-    proposal = SubmissionArtifactPolicyProposal(
-        maximum_file_size_bytes=1_000_000,
-        maximum_package_size_bytes=5_000_000,
-        required_artifacts=("task.toml",),
-        required_evidence=("results",),
-        attestation_terms=("rights_confirmed",),
+    compilation = await public_guide_setup(
+        client, factory, human_review_required, _json, lambda actor: _token(env, actor),
     )
-    async with source_case(
-        database_url, namespace=namespace, artifact_proposal=proposal,
-        pre_submit_registry_spec=_locked_spec("pre_submit", image),
-        post_submit_registry_spec=_locked_spec("post_submit", image),
-    ) as (values, _, compilation, manager, grant):
-        await seed_selected_review_revision_inputs(
-            factory, compilation, manager,
-            human_review_required=human_review_required,
-        )
-        _, derived = await prepare_post_policy(
-            factory, compilation, manager, grant, service_actor(values)
-        )
-        approved = await operate(
-            factory, manager, compilation.project_id, grant, "approve",
-            PostPolicyApproval(target=derived.target, idempotency_key=uuid4()),
-        )
-        _, policy = await publish_policy(
-            factory, compilation.project_id, contribution_awards=awards
-        )
-        activation = await activation_command(factory, approved, policy)
-        async with factory() as session:
-            draft = await session.get(ProjectGuide, guide_id := str(compilation.guide_id))
-            _require(draft is not None and draft.status == "draft"
-                     and draft.activation_operation_id is None,
-                     "guide setup did not leave a draft for public activation")
-        contributor = await _seed_contributor(factory)
-        if bootstrap_only:
-            return {
-                "review_mode": "human" if human_review_required else "automatic",
-                "approved_draft": True,
-                "ordinary_contributor": contributor.actor_profile_id != manager.actor_profile_id,
-            }
-        from app.workers.outbox import deliver_event
+    manager = compilation.manager
+    guide_id = str(compilation.guide_id)
+    contributor = await _seed_contributor(factory)
+    from app.workers.outbox import deliver_event
 
-        manager_token, contributor_token = _token(env, manager), _token(env, contributor)
-        project_id = str(compilation.project_id)
-        activation_path = f"/api/v1/projects/{project_id}/guides/{guide_id}/activate"
-        body = activation.model_dump(mode="json", exclude={"idempotency_key"})
-        activation_headers = {"Idempotency-Key": str(activation.idempotency_key)}
-        activated = await _json(
-            client, "POST", activation_path, manager_token, 200,
-            headers=activation_headers, json=body,
-        )
-        _require(activated["prior_project_status"] == "draft"
-                 and activated["command"]["target"]["proposal"]["guide_id"] == guide_id,
-                 "public activation receipt lacks the draft guide lineage")
-        async with factory() as session:
-            bound = await session.get(ProjectGuide, guide_id)
-            _require(bound is not None and bound.status == "active"
-                     and str(bound.activation_operation_id) == activated["operation_id"],
-                     "public activation did not bind the guide")
-        replay = await _json(
-            client, "POST", activation_path, manager_token, 200,
-            headers=activation_headers, json=body,
-        )
-        _require(replay == activated, "public activation replay changed receipt")
+    manager_token, contributor_token = _token(env, manager), _token(env, contributor)
+    project_id = str(compilation.project_id)
+    activation_path = f"/api/v1/projects/{project_id}/guides/{guide_id}/activate"
+    body = compilation.activation
+    activation_headers = {"Idempotency-Key": str(uuid4())}
+    activated = await _json(
+        client, "POST", activation_path, manager_token, 200,
+        headers=activation_headers, json=body,
+    )
+    _require(activated["prior_project_status"] == "draft"
+             and activated["command"]["target"]["proposal"]["guide_id"] == guide_id,
+             "public activation receipt lacks the draft guide lineage")
+    async with factory() as session:
+        bound = await session.get(ProjectGuide, guide_id)
+        _require(bound is not None and bound.status == "active"
+                 and str(bound.activation_operation_id) == activated["operation_id"],
+                 "public activation did not bind the guide")
+    replay = await _json(
+        client, "POST", activation_path, manager_token, 200,
+        headers=activation_headers, json=body,
+    )
+    _require(replay == activated, "public activation replay changed receipt")
 
-        admitted = await _json(client, "GET", "/api/v1/actors/me", contributor_token, 200)
-        _require(admitted["actor_profile_id"] == str(contributor.actor_profile_id),
-                 "Flow-linked contributor did not resolve to the stored human")
-        role_grant = await _json(
-            client, "POST", f"/api/v1/projects/{project_id}/role-grants",
-            manager_token, 201,
-            headers={"Idempotency-Key": str(uuid4())},
-            json={
-                "target_actor_profile_id": str(contributor.actor_profile_id),
-                "role": "submitter",
-                "qualification": {
-                    "skills_snapshot": {
-                        "availability": "unavailable", "reference_ids": [],
-                        "unavailable_reason": "no_record",
-                    },
-                    "reputation_snapshot": {
-                        "availability": "unavailable", "reference_ids": [],
-                        "unavailable_reason": "no_record",
-                    },
-                    "prior_project_work_refs": [], "external_expertise_refs": [],
+    admitted = await _json(client, "GET", "/api/v1/actors/me", contributor_token, 200)
+    _require(admitted["actor_profile_id"] == str(contributor.actor_profile_id),
+             "Flow-linked contributor did not resolve to the stored human")
+    role_grant = await _json(
+        client, "POST", f"/api/v1/projects/{project_id}/role-grants",
+        manager_token, 201,
+        headers={"Idempotency-Key": str(uuid4())},
+        json={
+            "target_actor_profile_id": str(contributor.actor_profile_id),
+            "role": "submitter",
+            "qualification": {
+                "skills_snapshot": {
+                    "availability": "unavailable", "reference_ids": [],
+                    "unavailable_reason": "no_record",
                 },
-                "reason": "Assign this contributor to the public first-journey task",
+                "reputation_snapshot": {
+                    "availability": "unavailable", "reference_ids": [],
+                    "unavailable_reason": "no_record",
+                },
+                "prior_project_work_refs": [], "external_expertise_refs": [],
             },
-        )
-        _require(role_grant["role"] == "submitter"
-                 and role_grant["actor_profile_id"] == str(contributor.actor_profile_id),
-                 "public project submitter grant names another actor or role")
+            "reason": "Assign this contributor to the public first-journey task",
+        },
+    )
+    _require(role_grant["role"] == "submitter"
+             and role_grant["actor_profile_id"] == str(contributor.actor_profile_id),
+             "public project submitter grant names another actor or role")
 
-        task_id, assignment_id = await _started_public_task(
-            client, project_id=project_id, manager_token=manager_token,
-            contributor_token=contributor_token, source_ref="local-ticket-1",
-        )
+    task_id, assignment_id = await _started_public_task(
+        client, project_id=project_id, manager_token=manager_token,
+        contributor_token=contributor_token, source_ref="local-ticket-1",
+    )
 
-        archive = archive_with_modes("evidence/results", compilation.project_id)
-        summary = "Completed the governed task with required evidence."
-        attestation = (
-            "I confirm no confidential client data, credentials, or copied source "
-            "material is included in this submission; rights_confirmed."
-        )
-        bad = await _json(
-            client, "POST", f"/api/v1/tasks/{task_id}/submission-bundle-preparations",
-            contributor_token, 422,
-            headers={
-                "Content-Type": "application/zip",
-                "X-Task-Assignment-Id": assignment_id,
-                "Idempotency-Key": str(uuid4()),
-                "X-Submission-Summary": summary,
-                "X-Contributor-Attestation": attestation,
-            },
-            content=_secret_archive(archive),
-        )
-        _require(bad["error"]["code"] == "pre_submission_checker_failed",
-                 "public intake did not return checker feedback")
-        default_details = bad["error"]["details"]
-        default_results = [item for item in default_details["results"]
-                           if item["source"] == "workstream_default"]
-        _require(
-            default_details["eligible_to_submit"] is False
-            and [item["check_id"] for item in default_results]
-            == list(WORKSTREAM_DEFAULT_CHECK_IDS)
-            and [
-                (item["status"], item["failure_code"], item["finding_count"])
-                for item in default_results
-            ] == [
-                ("passed", None, 0),
-                ("passed", None, 0),
-                ("failed", "high_confidence_secret_detected", 1),
-                ("passed", None, 0),
-            ],
-            "public default PRE feedback did not identify the injected private key",
-        )
-        external_bad = await _json(
-            client, "POST", f"/api/v1/tasks/{task_id}/submission-bundle-preparations",
-            contributor_token, 422,
-            headers={
-                "Content-Type": "application/zip",
-                "X-Task-Assignment-Id": assignment_id,
-                "Idempotency-Key": str(uuid4()),
-                "X-Submission-Summary": summary,
-                "X-Contributor-Attestation": attestation,
-            },
-            content=_with_fixture_file(archive, "project-rejected.txt"),
-        )
-        results = external_bad["error"]["details"]["results"]
-        external = [item for item in results
-                    if item["source"] == "project_external_checker"]
-        _require(external_bad["error"]["code"] == "pre_submission_checker_failed"
-                 and len(external) == 1 and external[0]["status"] == "failed"
-                 and [finding["code"] for finding in external[0]["findings"]]
-                 == ["probe.project_rule_failed"]
-                 and all(item.get("failure_code") is None for item in results
-                         if item["source"] == "workstream_default"),
-                 "public external PRE rejection did not preserve passing defaults")
-        async with factory() as session:
-            _require(await session.scalar(select(func.count()).select_from(Submission).where(
-                Submission.task_id == task_id
-            )) == 0, "failed intake created a Submission")
+    archive = archive_with_modes("evidence/results", compilation.project_id)
+    summary = "Completed the governed task with required evidence."
+    attestation = (
+        "I confirm no confidential client data, credentials, or copied source "
+        "material is included in this submission; rights_confirmed."
+    )
+    bad = await _json(
+        client, "POST", f"/api/v1/tasks/{task_id}/submission-bundle-preparations",
+        contributor_token, 422,
+        headers={
+            "Content-Type": "application/zip",
+            "X-Task-Assignment-Id": assignment_id,
+            "Idempotency-Key": str(uuid4()),
+            "X-Submission-Summary": summary,
+            "X-Contributor-Attestation": attestation,
+        },
+        content=_secret_archive(archive),
+    )
+    _require(bad["error"]["code"] == "pre_submission_checker_failed",
+             "public intake did not return checker feedback")
+    default_details = bad["error"]["details"]
+    default_results = [item for item in default_details["results"]
+                       if item["source"] == "workstream_default"]
+    _require(
+        default_details["eligible_to_submit"] is False
+        and [item["check_id"] for item in default_results]
+        == list(WORKSTREAM_DEFAULT_CHECK_IDS)
+        and [
+            (item["status"], item["failure_code"], item["finding_count"])
+            for item in default_results
+        ] == [
+            ("passed", None, 0),
+            ("passed", None, 0),
+            ("failed", "high_confidence_secret_detected", 1),
+            ("passed", None, 0),
+        ],
+        "public default PRE feedback did not identify the injected private key",
+    )
+    external_bad = await _json(
+        client, "POST", f"/api/v1/tasks/{task_id}/submission-bundle-preparations",
+        contributor_token, 422,
+        headers={
+            "Content-Type": "application/zip",
+            "X-Task-Assignment-Id": assignment_id,
+            "Idempotency-Key": str(uuid4()),
+            "X-Submission-Summary": summary,
+            "X-Contributor-Attestation": attestation,
+        },
+        content=_with_fixture_file(archive, "project-rejected.txt"),
+    )
+    results = external_bad["error"]["details"]["results"]
+    external = [item for item in results
+                if item["source"] == "project_external_checker"]
+    _require(external_bad["error"]["code"] == "pre_submission_checker_failed"
+             and len(external) == 1 and external[0]["status"] == "failed"
+             and [finding["code"] for finding in external[0]["findings"]]
+             == ["probe.project_rule_failed"]
+             and all(item.get("failure_code") is None for item in results
+                     if item["source"] == "workstream_default"),
+             "public external PRE rejection did not preserve passing defaults")
+    async with factory() as session:
+        _require(await session.scalar(select(func.count()).select_from(Submission).where(
+            Submission.task_id == task_id
+        )) == 0, "failed intake created a Submission")
 
-        first_archive = (_with_fixture_file(archive, "post-rejected.txt")
-                         if human_review_required else archive)
+    first_archive = (_with_fixture_file(archive, "post-rejected.txt")
+                     if human_review_required else archive)
+    saved = await _submit(
+        client, factory, task_id=task_id, assignment_id=assignment_id,
+        contributor_token=contributor_token, archive=first_archive,
+        summary=summary, attestation=attestation, predecessor_id=None,
+    )
+    submission_path = f"/api/v1/tasks/{task_id}/submissions"
+    history = await _json(client, "GET", submission_path, contributor_token, 200)
+    _require([item["id"] for item in history["items"]] == [saved["submission_id"]],
+             "public submission history differs")
+    first_submission_id = saved["submission_id"]
+    first_attempt_id, completion_id = await _complete_post(
+        factory, submission_id=first_submission_id,
+        project_id=compilation.project_id,
+        recommendation="needs_revision" if human_review_required else "allow_review",
+        finding_code="probe.post_rule_failed" if human_review_required else None,
+        deliver_completion=human_review_required,
+    )
+    attempt_id = first_attempt_id
+    if human_review_required:
+        await _assert_revision(
+            factory, project_id=compilation.project_id,
+            task_id=task_id, submission_id=first_submission_id,
+            attempt_id=first_attempt_id,
+        )
         saved = await _submit(
             client, factory, task_id=task_id, assignment_id=assignment_id,
-            contributor_token=contributor_token, archive=first_archive,
-            summary=summary, attestation=attestation, predecessor_id=None,
+            contributor_token=contributor_token,
+            archive=revision_archive(archive), summary=summary,
+            attestation=attestation, predecessor_id=first_submission_id,
         )
-        submission_path = f"/api/v1/tasks/{task_id}/submissions"
+        _require(saved["submission_version"] == 2,
+                 "public checker remediation did not create version 2")
         history = await _json(client, "GET", submission_path, contributor_token, 200)
-        _require([item["id"] for item in history["items"]] == [saved["submission_id"]],
-                 "public submission history differs")
-        first_submission_id = saved["submission_id"]
-        first_attempt_id, completion_id = await _complete_post(
-            factory, submission_id=first_submission_id,
-            project_id=compilation.project_id,
-            recommendation="needs_revision" if human_review_required else "allow_review",
-            finding_code="probe.post_rule_failed" if human_review_required else None,
-            deliver_completion=human_review_required,
+        _require([item["id"] for item in history["items"]]
+                 == [first_submission_id, saved["submission_id"]],
+                 "public revision history lost exact predecessor order")
+        attempt_id, completion_id = await _complete_post(
+            factory, submission_id=saved["submission_id"],
+            project_id=compilation.project_id, recommendation="allow_review",
         )
-        attempt_id = first_attempt_id
-        if human_review_required:
-            await _assert_revision(
-                factory, project_id=compilation.project_id,
-                task_id=task_id, submission_id=first_submission_id,
-                attempt_id=first_attempt_id,
-            )
-            saved = await _submit(
-                client, factory, task_id=task_id, assignment_id=assignment_id,
-                contributor_token=contributor_token,
-                archive=revision_archive(archive), summary=summary,
-                attestation=attestation, predecessor_id=first_submission_id,
-            )
-            _require(saved["submission_version"] == 2,
-                     "public checker remediation did not create version 2")
-            history = await _json(client, "GET", submission_path, contributor_token, 200)
-            _require([item["id"] for item in history["items"]]
-                     == [first_submission_id, saved["submission_id"]],
-                     "public revision history lost exact predecessor order")
-            attempt_id, completion_id = await _complete_post(
-                factory, submission_id=saved["submission_id"],
-                project_id=compilation.project_id, recommendation="allow_review",
-            )
-        else:
-            await _wait_known_retry(
-                factory, completion_id, compilation.project_id,
-                task_id, first_submission_id,
-            )
-            _require(stop_worker is not None and start_worker is not None,
-                     "prefork restart control is absent")
-            stop_worker()
-            from tests.reviews.lifecycle.transition_support import command_for, transition
-            await transition(await command_for(operator_id, "live"))
-            await _wait_outbox_due(factory, completion_id)
-            await start_worker()
-            await _wait_outbox_acknowledged(factory, completion_id,
-                                           compilation.project_id)
-            async with factory() as session:
-                event = await session.get(OutboxEvent, completion_id)
-                _require(event.delivery_state == "acknowledged"
-                         and event.attempt_count == 2,
-                         "known safe retry did not commit once after authorized live transition")
-        outcome = await _assert_outcome(
-            factory, project_id=compilation.project_id, task_id=task_id,
-            submission_id=saved["submission_id"], initial_submission_id=first_submission_id,
-            contributor_id=contributor.actor_profile_id,
-            human_review_required=human_review_required,
-            expected_awards=len(awards),
-            expected_submissions=2 if human_review_required else 1,
+    else:
+        await _wait_known_retry(
+            factory, completion_id, compilation.project_id,
+            task_id, first_submission_id,
         )
-        if not human_review_required:
-            exported = await _json(
-                client, "GET", "/api/v1/actors/me/contributions",
-                contributor_token, 200,
-                params={"project_id": project_id},
-            )
-            _require(len(exported["items"]) == 1, "public self contribution is absent")
-            item = exported["items"][0]
-            _require(item["submission_id"] == saved["submission_id"]
-                     and item["acceptance_source"] == "task_post_submit_route"
-                     and [(award["instrument"], award["unit"], Decimal(award["quantity"]))
-                     for award in item["awards"]] == [("project_points", "PTS", Decimal("7"))],
-                     "public contribution source or award set differs")
-        # A result for this one probe publish proves the prefork child consumed
-        # the duplicate; the production task still ignores results by default.
-        before_delivery = await _outbox_snapshot(factory, completion_id)
-        duplicate = await asyncio.to_thread(
-            deliver_event.apply_async,
-            args=(str(completion_id), project_id),
-            ignore_result=False,
+        _require(stop_worker is not None and start_worker is not None,
+                 "prefork restart control is absent")
+        stop_worker()
+        from tests.reviews.lifecycle.transition_support import command_for, transition
+        await transition(await command_for(operator_id, "live"))
+        await _wait_outbox_due(factory, completion_id)
+        await start_worker()
+        await _wait_outbox_acknowledged(factory, completion_id,
+                                       compilation.project_id)
+        async with factory() as session:
+            event = await session.get(OutboxEvent, completion_id)
+            _require(event.delivery_state == "acknowledged"
+                     and event.attempt_count == 2,
+                     "known safe retry did not commit once after authorized live transition")
+    outcome = await _assert_outcome(
+        factory, guide_source=compilation, project_id=compilation.project_id, task_id=task_id,
+        submission_id=saved["submission_id"], initial_submission_id=first_submission_id,
+        contributor_id=contributor.actor_profile_id,
+        human_review_required=human_review_required,
+        expected_awards=len(awards),
+        expected_submissions=2 if human_review_required else 1,
+    )
+    if not human_review_required:
+        exported = await _json(
+            client, "GET", "/api/v1/actors/me/contributions",
+            contributor_token, 200,
+            params={"project_id": project_id},
         )
-        try:
-            duplicate_result = await asyncio.to_thread(
-                duplicate.get, timeout=120, propagate=True,
-            )
-        finally:
-            await asyncio.to_thread(duplicate.forget)
-        _require(duplicate_result == {"status": "delivery_unavailable"},
-                 "prefork child did not refuse duplicate completion delivery")
-        _require(await _outbox_snapshot(factory, completion_id) == before_delivery,
-                 "duplicate completion changed retained OUTBOX custody")
-        again = await _assert_outcome(
-            factory, project_id=compilation.project_id, task_id=task_id,
-            submission_id=saved["submission_id"], initial_submission_id=first_submission_id,
-            contributor_id=contributor.actor_profile_id,
-            human_review_required=human_review_required,
-            expected_awards=len(awards),
-            expected_submissions=2 if human_review_required else 1,
+        _require(len(exported["items"]) == 1, "public self contribution is absent")
+        item = exported["items"][0]
+        _require(item["submission_id"] == saved["submission_id"]
+                 and item["acceptance_source"] == "task_post_submit_route"
+                 and [(award["instrument"], award["unit"], Decimal(award["quantity"]))
+                 for award in item["awards"]] == [("project_points", "PTS", Decimal("7"))],
+                 "public contribution source or award set differs")
+    # A result for this one probe publish proves the prefork child consumed
+    # the duplicate; the production task still ignores results by default.
+    before_delivery = await _outbox_snapshot(factory, completion_id)
+    duplicate = await asyncio.to_thread(
+        deliver_event.apply_async,
+        args=(str(completion_id), project_id),
+        ignore_result=False,
+    )
+    try:
+        duplicate_result = await asyncio.to_thread(
+            duplicate.get, timeout=120, propagate=True,
         )
-        _require(again == outcome, "duplicate completion changed governed outcome")
-        late_revocation = None
-        if not human_review_required:
-            late_revocation = await _late_revocation_trial(
-                client, factory, env, project_id=compilation.project_id,
-                accepted_task_id=task_id, manager_token=manager_token,
-                contributor_token=contributor_token, operator_id=operator_id,
-                archive=archive, summary=summary, attestation=attestation,
-                stop_worker=stop_worker, start_worker=start_worker,
-            )
-        return {
-            "project_id": project_id,
-            "task_id": task_id,
-            "submission_id": saved["submission_id"],
-            "initial_submission_id": first_submission_id,
-            "review_mode": "human" if human_review_required else "automatic",
-            "intake_failure_code": bad["error"]["code"],
-            "external_pre_failure_code": "probe.project_rule_failed",
-            "selected_pre_runs": await _pre_runs(factory, task_id),
-            "selected_post_attempt_ids": (
-                [first_attempt_id, attempt_id] if human_review_required else [attempt_id]
-            ),
-            "outcome": outcome,
-            "late_revocation": late_revocation,
-        }
+    finally:
+        await asyncio.to_thread(duplicate.forget)
+    _require(duplicate_result == {"status": "delivery_unavailable"},
+             "prefork child did not refuse duplicate completion delivery")
+    _require(await _outbox_snapshot(factory, completion_id) == before_delivery,
+             "duplicate completion changed retained OUTBOX custody")
+    again = await _assert_outcome(
+        factory, guide_source=compilation, project_id=compilation.project_id, task_id=task_id,
+        submission_id=saved["submission_id"], initial_submission_id=first_submission_id,
+        contributor_id=contributor.actor_profile_id,
+        human_review_required=human_review_required,
+        expected_awards=len(awards),
+        expected_submissions=2 if human_review_required else 1,
+    )
+    _require(again == outcome, "duplicate completion changed governed outcome")
+    late_revocation = None
+    if not human_review_required:
+        late_revocation = await _late_revocation_trial(
+            client, factory, env, project_id=compilation.project_id,
+            accepted_task_id=task_id, manager_token=manager_token,
+            contributor_token=contributor_token, operator_id=operator_id,
+            archive=archive, summary=summary, attestation=attestation,
+            stop_worker=stop_worker, start_worker=start_worker,
+        )
+    return {
+        "project_id": project_id,
+        "guide_setup": compilation.evidence,
+        "task_id": task_id,
+        "submission_id": saved["submission_id"],
+        "initial_submission_id": first_submission_id,
+        "review_mode": "human" if human_review_required else "automatic",
+        "intake_failure_code": bad["error"]["code"],
+        "external_pre_failure_code": "probe.project_rule_failed",
+        "selected_pre_runs": await _pre_runs(factory, task_id),
+        "selected_post_attempt_ids": (
+            [first_attempt_id, attempt_id] if human_review_required else [attempt_id]
+        ),
+        "outcome": outcome,
+        "late_revocation": late_revocation,
+    }
 
 
 async def _pre_runs(factory, task_id: str) -> list[str]:
@@ -1282,10 +1248,10 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_SOCKET": str(socket_path),
         "WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT": str(scratch),
         "WORKSTREAM_EXTERNAL_CHECKER_SERVICE_TIMEOUT_SECONDS": "90",
-        "PYTHONPATH": str(BACKEND),
+        "PYTHONPATH": os.pathsep.join(map(str, (BACKEND, BACKEND / "tests", BACKEND.parent))),
     })
     env.pop("OPENAI_API_KEY", None)
-    # Owner fixture calls and broker publication in this process use the same
+    # Infrastructure prerequisites and broker publication use the same
     # isolated database and provider settings as the API and worker children.
     for key, value in env.items():
         if key.startswith("WORKSTREAM_"):
@@ -1362,6 +1328,8 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         await provision_router(factory)
         await provision_reconciler(factory)
         await _provision_runtime_services(factory)
+        for phase in ("pre_submit", "post_submit"):
+            await _register_external_checker_fixture(factory, _locked_spec(phase, image))
         operator, _ = await seed_review_actor(factory, None, role="operator", scope="system")
         from tests.reviews.lifecycle.transition_support import command_for, transition
         await transition(await command_for(operator.actor_profile_id, "shadow"))
@@ -1385,10 +1353,10 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         ], env=env, log=root / "beat.log")
         await _wait_beat_scan(factory, beat, scans_before_beat)
         async with httpx.AsyncClient(base_url=origin, timeout=90) as client:
-            true = await _one_mode(client, factory, database_url, namespace, image, env,
+            true = await _one_mode(client, factory, env,
                                    human_review_required=True,
                                    operator_id=operator.actor_profile_id)
-            false = await _one_mode(client, factory, database_url, namespace, image, env,
+            false = await _one_mode(client, factory, env,
                                     human_review_required=False,
                                     operator_id=operator.actor_profile_id,
                                     stop_worker=stop_owned_worker,
@@ -1400,7 +1368,8 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         ).strip(), "runtime": "runc/docker-dev", "image_digest": image["platform_manifest_digest"],
                 "public_api": True, "prefork_worker": True,
                 "scheduled_artifact_scans": True,
-                "scripted_approved_guide_precondition": True,
+                "public_original_guide_setup": True,
+                "recorded_inference": True,
                 "human": true, "automatic": false}
     finally:
         _stop_process(beat)
@@ -1413,44 +1382,17 @@ async def run(database_url: str, image_reference: str, service_binary: Path,
         await engine.dispose()
 
 
-async def _fixture_bootstrap_only(database_url: str) -> dict:
-    """Check both actual guide setup fixtures before the costly runtime launch."""
-    engine = create_async_engine(database_url)
-    factory = async_sessionmaker(engine, expire_on_commit=False)
-    try:
-        # Registry custody validates the digest shape; no image is executed here.
-        image = {"platform_manifest_digest": "sha256:" + "0" * 64}
-        true = await _one_mode(
-            None, factory, database_url, None, image, None,
-            human_review_required=True, operator_id=None, bootstrap_only=True,
-        )
-        false = await _one_mode(
-            None, factory, database_url, None, image, None,
-            human_review_required=False, operator_id=None, bootstrap_only=True,
-        )
-        _require(true["ordinary_contributor"] and false["ordinary_contributor"],
-                 "fixture contributor has manager identity")
-        return {"fixture_bootstrap_only": True, "human": true, "automatic": false}
-    finally:
-        await engine.dispose()
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=os.environ.get("WORKSTREAM_TEST_DATABASE_URL"))
     parser.add_argument("--image-reference")
     parser.add_argument("--service-binary", type=Path)
     parser.add_argument("--broker-url")
-    parser.add_argument("--fixture-bootstrap-only", action="store_true")
     parser.add_argument("--work-dir", type=Path,
                         help="Unique private directory retaining API and worker diagnostics")
     args = parser.parse_args()
     if not args.database_url:
         parser.error("isolated --database-url or WORKSTREAM_TEST_DATABASE_URL is required")
-    if args.fixture_bootstrap_only:
-        print(json.dumps(asyncio.run(_fixture_bootstrap_only(args.database_url)),
-                         sort_keys=True, separators=(",", ":")))
-        return 0
     if not args.image_reference or not args.service_binary or not args.broker_url:
         parser.error("full drill requires image, service binary, and broker URL")
     workspace = (nullcontext(args.work_dir) if args.work_dir else

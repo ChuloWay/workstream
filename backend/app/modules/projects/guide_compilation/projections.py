@@ -450,6 +450,10 @@ class GuideCompilationProjectionService:
 
     async def _lock_common(self, session: AsyncSession, seed: _ProjectionSeed) -> _LockedProjection:
         """Lock and revalidate the compilation, material, guide, and setup."""
+        projects = ProjectRepository(session)
+        project = await projects.get_project(str(seed.project_id), for_update=True)
+        if project is None:
+            raise ProjectGuideProjectionError("source_state_unavailable")
         compilation_repo = GuideCompilationRepository(session)
         attempt = await compilation_repo.attempt(seed.attempt_id, lock=True)
         request = await compilation_repo.request_operation_for_attempt(seed.attempt_id, lock=True)
@@ -464,7 +468,6 @@ class GuideCompilationProjectionService:
                 setup_generation=seed.setup_generation,
             )
         )
-        projects = ProjectRepository(session)
         guide = await projects.lock_project_guide(str(seed.guide_id))
         setup = await projects.lock_project_setup_run(str(seed.setup_run_id))
         snapshot = await projects.get_guide_source_snapshot(str(seed.source_snapshot_id))
