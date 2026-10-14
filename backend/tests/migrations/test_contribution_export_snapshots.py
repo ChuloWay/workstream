@@ -17,7 +17,7 @@ pytestmark = pytest.mark.postgres_schema_contract
 
 async def test_snapshot_storage_bounds_model_parity_and_immutable_membership(isolated_database_env):
     connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
-    actor, snapshot = new_record_id(), new_record_id()
+    actor, link, snapshot = new_record_id(), new_record_id(), new_record_id()
     digest = "sha256:" + "a" * 64
     members = [new_record_id(), new_record_id()]
     insert = """
@@ -26,11 +26,18 @@ async def test_snapshot_storage_bounds_model_parity_and_immutable_membership(iso
         VALUES ($1,$2,$3,$4,$5,$6,$7)
     """
     try:
-        await connection.execute("""
-            INSERT INTO public.actor_profiles
-              (id,actor_kind,status,provisioning_method,created_by)
-            VALUES ($1,'human','active','automatic_first_access','snapshot-migration-test')
-        """, actor)
+        async with connection.transaction():
+            await connection.execute("""
+                INSERT INTO public.actor_profiles
+                  (id,actor_kind,status,provisioning_method,created_by)
+                VALUES ($1,'human','active','automatic_first_access','snapshot-migration-test')
+            """, actor)
+            await connection.execute("""
+                INSERT INTO public.actor_identity_links
+                  (id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at)
+                VALUES ($1,$2,'https://identity.flowresearch.tech',$3,'human','active',
+                        'snapshot-migration-test',clock_timestamp())
+            """, link, actor, str(actor))
         now = await connection.fetchval("SELECT clock_timestamp()")
         expiry = now + timedelta(hours=1)
         await connection.execute(insert, snapshot, actor, 1, digest, members, now, expiry)

@@ -43,6 +43,7 @@ class ContributionReadRepository:
     """Read immutable evidence in the caller's authorized repeatable-read transaction."""
 
     def __init__(self, session: AsyncSession, *, cursor_codec: ContributionExportCursorCodec) -> None:
+        """Use the response transaction for membership, snapshot and evidence reads."""
         self._session = session
         self._cursor_codec = cursor_codec
 
@@ -57,6 +58,7 @@ class ContributionReadRepository:
 
     @staticmethod
     def _filtered(query, request: ContributionReadRequest):
+        """Apply the authorized audience and canonical request filters to a query."""
         if request.audience == "self":
             query = query.where(ContributionRecord.contributor_id == str(request.actor_profile_id))
         if request.project_id is not None:
@@ -70,6 +72,7 @@ class ContributionReadRepository:
         return query
 
     async def _first_page(self, request: ContributionReadRequest, digest: str) -> ContributionReadPage:
+        """Select bounded membership and retain it only when continuation is required."""
         selected = self._filtered(select(ContributionRecord.id), request).order_by(
             ContributionRecord.created_at, ContributionRecord.id,
         ).limit(MAX_EXPORT_MEMBERS + 1)
@@ -91,6 +94,7 @@ class ContributionReadRepository:
     async def _continuation(
         self, request: ContributionReadRequest, digest: str,
     ) -> ContributionReadPage:
+        """Load the next slice solely from the verified retained membership."""
         assert request.cursor is not None
         position = self._cursor_codec.decode(request.cursor, query_digest=digest)
         snapshot = await self._session.get(ContributionExportSnapshot, position.snapshot_id)
@@ -121,6 +125,7 @@ class ContributionReadRepository:
     async def _allocate_snapshot(
         self, actor_profile_id: UUID, digest: str, member_ids: tuple[UUID, ...],
     ) -> ContributionExportSnapshot:
+        """Claim one actor-local slot and persist immutable membership for one hour."""
         now = await self._session.scalar(select(func.clock_timestamp()))
         assert now is not None
         occupied = (await self._session.execute(select(
@@ -163,6 +168,7 @@ class ContributionReadRepository:
     async def _delete_expired(
         self, *, limit: int, actor_profile_id: UUID | None, now: datetime,
     ) -> int:
+        """Delete a bounded expired set with skip-locked contention handling."""
         ids = select(ContributionExportSnapshot.id).where(
             ContributionExportSnapshot.expires_at <= now,
         )
@@ -179,6 +185,7 @@ class ContributionReadRepository:
     async def _load_records(
         self, request: ContributionReadRequest, ids: tuple[UUID, ...],
     ) -> tuple[ContributionReadFacts, ...]:
+        """Load exact records and frozen rule terms in retained membership order."""
         if not ids:
             return ()
         query = select(

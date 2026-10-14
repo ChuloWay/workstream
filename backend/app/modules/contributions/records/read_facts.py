@@ -55,5 +55,7 @@ class ContributionReadRepositoryPort(Protocol):
 
 @dataclass(frozen=True)
 class ContributionReadPage:
+    """One ordered evidence page and its optional signed continuation."""
+
     records: tuple[ContributionReadFacts, ...]
     next_cursor: str | None

@@ -33,21 +33,26 @@ def contribution_export_query_digest(request: ContributionReadRequest) -> str:
 
 @dataclass(frozen=True)
 class ContributionCursorPosition:
+    """Verified retained snapshot location and expiry from one cursor."""
+
     snapshot_id: UUID
     next_offset: int
     expires_at: datetime
 
 
 def _canonical_json(value: dict[str, Any]) -> bytes:
+    """Serialize signed cursor objects to their one accepted byte form."""
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
                       allow_nan=False).encode("utf-8")
 
 
 def _encode(value: bytes) -> str:
+    """Encode bytes as unpadded URL-safe base64."""
     return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
 
 
 def _decode(value: str) -> bytes:
+    """Decode only bounded canonical URL-safe base64 cursor segments."""
     if not value or len(value) > _MAX_CURSOR_BYTES or _BASE64URL.fullmatch(value) is None:
         raise InvalidContributionCursor("invalid contribution cursor")
     result = base64.b64decode((value + "=" * (-len(value) % 4)).encode("ascii"),
@@ -58,6 +63,7 @@ def _decode(value: str) -> bytes:
 
 
 def _unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Build a cursor object while rejecting duplicate JSON keys."""
     value: dict[str, Any] = {}
     for key, item in pairs:
         if key in value:
@@ -67,6 +73,7 @@ def _unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 def _timestamp(value: datetime) -> str:
+    """Render one aware timestamp in the cursor's canonical UTC form."""
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("cursor expiry must be aware")
     return value.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
@@ -76,6 +83,7 @@ class ContributionExportCursorCodec:
     """Canonical HMAC cursor; the stored snapshot and fresh AUTH remain authoritative."""
 
     def __init__(self, secret: bytes) -> None:
+        """Copy an exact 256-bit HMAC secret into this request-independent codec."""
         if len(secret) != 32:
             raise ValueError("invalid contribution cursor secret")
         self._secret = bytes(secret)
@@ -84,6 +92,7 @@ class ContributionExportCursorCodec:
         self, *, query_digest: str, snapshot_id: UUID, next_offset: int,
         expires_at: datetime,
     ) -> str:
+        """Sign one bounded next-page location for the retained membership."""
         if _DIGEST.fullmatch(query_digest) is None or not 1 <= next_offset < MAX_EXPORT_MEMBERS:
             raise ValueError("invalid contribution cursor position")
         payload = {"v": 1, "q": query_digest, "id": str(snapshot_id),

@@ -78,13 +78,16 @@ the retained page IDs through the existing owner ports.
   snapshot migration test, the shared test-database reset/fingerprint metadata,
   exact test-lane inventory updates required for any new test module, and only
   the behavior-ownership metadata required by changed eligible source paths.
+- `cli/tests/integration/test_contribution_evidence_public_api.py` only to
+  activate the existing pagination-secret fixture for the real API contract;
+  no CLI implementation or consumer behavior changes.
 - Affected current contract text in `README.md`,
   `docs/spec_contribution_compensation.md`,
   `docs/spec_authorization_service.md`, and `docs/roadmap_status.md`.
 
 ### Not allowed
 
-- CLI changes; issue #499 has separate ownership.
+- CLI production or consumer changes; issue #499 has separate ownership.
 - Contribution, award, policy, acceptance, review, task, artifact or economic
   mutation; fulfillment, payout, reconciliation, reputation or broad
   all-project export.
@@ -270,10 +273,13 @@ CSV row counts remain distinct from contribution counts.
 | Migration allocation | Lead reserved migration number 0040 after `0039_false_guide_activation`; the revision is the 32-character-safe `0040_contribution_export_page` | Confirmed | Migration implementation and parity proof pending |
 | Cursor and snapshot plan | Required architecture/security plan review at `017729ca4ea319d20f1d8fec02fa9660862cbdf1` | Passed with low residual risks | Runtime and exact-candidate review remain |
 | Pure page/cursor behavior | `cd backend && .venv/bin/python -m pytest -q tests/contributions/test_export_projection.py` | 20 passed | PostgreSQL owner/API paths remain |
-| Lint and import syntax | Focused Ruff over all changed Python plus `compileall` | Passed | Full repository checks remain |
+| Lint, import syntax and documentation coverage | Focused Ruff over changed Python and CLI integration source, `compileall`, and unchanged `docstr-coverage --config .docstr.yaml` | Passed; documentation coverage is 80.2% | Full repository checks remain |
 | Migration graph and schema fingerprint | Isolated PostgreSQL migration through `0040_contribution_export_page`; public schema fingerprint `a14b2b41d5c2e3a450105ad8283720490116545c376404c6507c9054b9986bac` | Passed; owned temporary database cleaned | Migration constraint/index tests remain |
-| Focused PostgreSQL owner/API batch | 39 selected export, migration and graph tests in one isolated database | Inconclusive at the 1,800-second host-pressure timeout after 17 completions; progress exposed one test expectation defect, now repaired | Clean rerun is required and this is not passing evidence |
-| CLI consumer continuation | Inspect `cli/internal/api/contribution_evidence.go` and its command callers | JSON strict decoding has no `next_cursor`; CSV performs one GET and ignores the continuation header | Issue #499 must consume continuation or fail explicitly before this backend contract can ship |
+| Focused PostgreSQL owner/API proof | 39 selected export, migration and graph tests split only after two host-pressure timeouts | First 24 passed before the second timeout; its 25th node later passed alone and the already completed 26th passed; the remaining selection produced 12 passes and one fixture-only failure, then the repaired migration node passed alone in 143.69 seconds. The earlier broad runs remain incomplete and are not reported as one clean passing batch. | Hosted complete lane execution remains required; one earlier authorization node failure had no captured traceback and did not reproduce alone, so its cause is unknown |
+| Migration constraints and model parity | Exact real-PostgreSQL `test_snapshot_storage_bounds_model_parity_and_immutable_membership` after atomically seeding the baseline-required actor/identity pair | 1 passed in 143.69 seconds; database and role cleanup complete | Hosted schema lane remains |
+| Hosted failure diagnosis at draft head `84542bf37` | Inspect GitHub Actions run `38528310566` job steps and bounded logs | All ten semantic lanes stopped at the unchanged 80% docstring gate because the new pagination modules lowered total coverage to 79.9%; the added function documentation restores 80.2%. The CLI job's first evidence read returned 503 because its separate pytest root had not activated the required existing cursor-secret fixture. | Fresh hosted run required after the repaired head is pushed |
+| Focused real CLI/API contract after secret-fixture repair | Exact socket/PostgreSQL contribution evidence node with the independently built CLI | The backend now returns its successful JSON page, and the current CLI fails it as `invalid_api_response` because strict decoding does not admit `next_cursor`; database and role cleanup complete | Issue #499 must consume continuation or fail explicitly before this backend contract can ship or hosted CLI CI can pass |
+| CLI consumer continuation after main `2c1f7517c` | Inspect `cli/internal/api/contribution_evidence.go` and `cli/internal/command/contribution_evidence.go` | JSON strict decoding has no `next_cursor`; both JSON and CSV perform one request, and CSV ignores `X-Workstream-Next-Cursor` | Issue #499 remains a coordinated ship blocker; this change does not alter CLI production behavior |
 
 ## Review findings
 
@@ -294,9 +300,10 @@ actor business row changes and continuations allocate no slot.
 
 ## Reconciliation
 
-- Current-source reconciliation: branch and worktree start at clean main
-  `82a46ff3c5f21e3cdf762cf505d61d84531a7c80`; PILOT-10A REST/CSV and CLI24 are
-  delivered, while CLI continuation belongs to separate issue #499 ownership.
+- Current-source reconciliation: the implementation is reconciled with main
+  `2c1f7517c285437c6adad27f2c3425212a615373`, including CLI25 submission
+  support. That merge did not change the contribution evidence consumer;
+  continuation remains separate issue #499 ownership.
 - Next usable boundary: CLI cursor traversal can consume the merged backend
   contract in its separately owned change.
 - Remaining risks: exact operational cost of 100,000-ID materialization and
