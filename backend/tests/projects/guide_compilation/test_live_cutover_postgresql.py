@@ -162,6 +162,86 @@ async def test_pending_exact_delivery_compiles_once_and_replays_finalization(
     assert runtime.calls == 1
 
 
+@pytest.mark.parametrize("phase", ["compilation", "sufficiency", "finalization"])
+async def test_compilation_phase_and_public_setup_read_share_parent_lock_order(
+    automatic_source, project_client, project_database_env, monkeypatch, phase
+):
+    """A status read during a phase's child INSERT cannot deadlock its parent FK."""
+    import asyncio
+    from sqlalchemy.ext.asyncio import AsyncSession
+    from app.core.config import get_settings
+    from app.modules.projects import router
+    from app.modules.projects.guide_compilation.models import (
+        ProjectGuideCompilation, ProjectGuideSetupFinalization,
+    )
+    from app.modules.projects.models import GuideSufficiencyReport
+    from app.workers import project_setup as worker
+    from tests.auth_concurrency_support import wait_for_named_database_lock
+    from tests.projects.client_fixtures import auth_headers
+
+    monkeypatch.setenv("WORKSTREAM_CELERY_TASK_ALWAYS_EAGER", "true")
+    get_settings.cache_clear()
+    factory, _actor, setup_id, snapshot = automatic_source
+    await create_committed_document_fixture(snapshot["id"])
+    delivery = await _delivery(factory, setup_id)
+    runtime = ScriptedGuideRuntime()
+    monkeypatch.setattr(worker, "create_project_guide_runtime", lambda configuration: runtime)
+    monkeypatch.setattr(worker, "project_guide_runtime_configuration", lambda settings: runtime_configuration())
+    coordinator = await worker._coordinator(factory)
+    target = {"compilation": ProjectGuideCompilation, "sufficiency": GuideSufficiencyReport,
+              "finalization": ProjectGuideSetupFinalization}[phase]
+    held, release = asyncio.Event(), asyncio.Event()
+    waiter_name, pids = "guide-phase-read-" + uuid4().hex, {}
+    flush, diagnostic = AsyncSession.flush, router.authorize_project_diagnostic_read
+
+    async def paused_flush(session, *args, **kwargs):
+        if not held.is_set() and any(isinstance(row, target) for row in session.new):
+            connection = await session.connection()
+            pids["worker"] = await connection.scalar(text("select pg_backend_pid()"))
+            held.set()
+            await release.wait()
+        return await flush(session, *args, **kwargs)
+
+    async def named_diagnostic(**kwargs):
+        session = kwargs["repository"]._session
+        pids["read"] = await session.scalar(text("select pg_backend_pid()"))
+        await session.execute(text("select set_config('application_name', :name, true)"),
+                              {"name": waiter_name})
+        return await diagnostic(**kwargs)
+
+    monkeypatch.setattr(AsyncSession, "flush", paused_flush)
+    monkeypatch.setattr(router, "authorize_project_diagnostic_read", named_diagnostic)
+    tasks = [asyncio.create_task(coordinator.run(delivery))]
+    try:
+        await asyncio.wait_for(held.wait(), timeout=60)
+        tasks.append(asyncio.create_task(project_client.get(
+            f"/api/v1/projects/{delivery.project_id}/guides/{delivery.guide_id}/setup-runs/latest",
+            headers=auth_headers(),
+        )))
+        await asyncio.wait_for(wait_for_named_database_lock(
+            project_database_env, waiter_name, expected_blocker_pid=pids["worker"],
+        ), timeout=15)
+        assert pids["read"] != pids["worker"]
+        assert not tasks[1].done()
+        release.set()
+        outcome, response = await asyncio.wait_for(asyncio.gather(*tasks), timeout=60)
+        assert response.status_code == 200, response.text
+        assert response.json()["id"] == str(setup_id)
+        assert outcome["status"] == "policy_draft_ready"
+        assert runtime.calls == 1
+    finally:
+        release.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    async with factory() as session:
+        for table, count in (("project_guide_compilations", 1),
+                             ("project_guide_component_projection_operations", 2),
+                             ("project_guide_setup_finalizations", 1)):
+            assert await session.scalar(text(f"select count(*) from {table}")) == count
+
+
 @pytest.mark.parametrize(
     "field",
     ["project_id", "guide_id", "source_snapshot_id", "setup_run_id", "setup_generation", "task_id"],

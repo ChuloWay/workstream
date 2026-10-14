@@ -74,8 +74,8 @@ creation in OpenAPI. A complete supported false guide activates only when its
 approved requirement inventory contains no
 `human_review` disposition. New false/pass effects still require a live REV
 generation; a pre-effect non-live refusal rolls back and uses bounded retry.
-The bounded local public API and Celery service drill passed under scripted
-approved-guide preconditions; this does not establish hosted deployment.
+The bounded local public API and Celery service drill starts from public guide inputs
+with recorded inference; this does not establish hosted deployment.
 This amendment does not enable raw checker results to create acceptance or
 change the existing human branch's implementation contract.
 The ReviewPolicy field `requires_second_review` is fixed to `false` in v0.1.
@@ -336,7 +336,7 @@ Contributor feedback contains bounded default/image findings and eligibility.
 It conceals scratch state, provider coordinates, credentials and raw checker
 output. Public contributor ZIP preparation and admission-backed Submission creation
 are implemented. CLI submit/status remains separate; the bounded local public API
-and Celery service drill passed under scripted approved-guide preconditions.
+and Celery service drill starts from public guide inputs with recorded inference.
 
 ### Contribution Records
 
