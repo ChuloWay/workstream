@@ -155,8 +155,9 @@ fresh environment.
 
 ## Reconciliation
 
-- Current-source reconciliation: Merged current main `82a46ff3c`, including the
-  first-layer acceptance changes, and preserved its ten-lane catalogue,
-  behavior-ownership partition and Backend proof contracts.
+- Current-source reconciliation: Merged current main `2c1f7517c`, including the
+  first-layer acceptance changes (PR #550) and CLI submission work (PR #570),
+  and preserved its ten-lane catalogue, behavior-ownership partition and Backend
+  proof contracts. No overlap with CI-segmentation or frozen-lock changes.
 - Next usable boundary: Measure draft feedback and full ready-PR runtime after hosted execution; rebalance lanes only in a separate measured change if still needed.
 - Remaining risks: GitHub-hosted runner and registry availability remain external dependencies; no product roadmap capability changes.
