@@ -5,7 +5,8 @@ agents using the terminal. It provides human self-profile reads and editing,
 plus draft project/guide declaration and original upload, exact-project inspection, authority reads, manager task browsing and
 contributor work discovery, claim/start, locked guide documents and governing
 context/intake requirements, explicit batch import/screen/release, Finance
-policy management and contribution-evidence exports:
+policy management, explicit ZIP preparation/submission, checker findings and
+contribution-evidence exports:
 
 | Command | Public API |
 |---|---|
@@ -51,6 +52,12 @@ policy management and contribution-evidence exports:
 | `workstream project contribution-policy publish PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/publication` |
 | `workstream project contribution-policy retire PROJECT_ID POLICY_ID VERSION_ID --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/contribution-policies/POLICY_ID/versions/VERSION_ID/retirement` |
 | `workstream task ready PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/ready` |
+| `workstream task prepare TASK_ID --assignment UUID --file ZIP --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/submission-bundle-preparations` |
+| `workstream task submit TASK_ID --assignment UUID --admission UUID` | `POST /api/v1/tasks/TASK_ID/submissions` |
+| `workstream task submissions TASK_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/tasks/TASK_ID/submissions` |
+| `workstream submission show SUBMISSION_ID` | `GET /api/v1/submissions/SUBMISSION_ID` |
+| `workstream submission findings SUBMISSION_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/submissions/SUBMISSION_ID/checker-runs` |
+| `workstream submission findings SUBMISSION_ID --run UUID` | `GET /api/v1/submissions/SUBMISSION_ID/checker-runs/UUID` |
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
 | `workstream task start TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/start` |
@@ -624,6 +631,57 @@ including stored foreign-project concealment. Canonical retained prerequisites
 and Celery publication to an in-memory test broker do not prove distributed
 delivery, worker completion, live setup inference or deployed Flow behavior.
 
+## Prepare, submit and inspect contributor work
+
+```sh
+workstream task prepare TASK_ID --assignment ASSIGNMENT_ID --file work.zip \
+  --idempotency-key CALLER_UUID --summary 'Completed work' --attestation 'My attestation'
+# If still pending, wait for server verification and explicitly repeat the same
+# preparation command, key, file bytes and packet. There is no polling GET.
+workstream task submit TASK_ID --assignment ASSIGNMENT_ID --admission READY_ADMISSION_ID \
+  --summary 'Completed work' --attestation 'My attestation'
+workstream task submissions TASK_ID --limit 25
+workstream submission show SUBMISSION_ID
+workstream submission findings SUBMISSION_ID --limit 25
+workstream submission findings SUBMISSION_ID --run CHECKER_RUN_ID
+```
+
+Preparation streams one nonempty regular ZIP (at most 512MiB) to the public
+authenticated API. Server project limits can be smaller. It never creates a
+Submission, automatically retries or polls. A `ready` receipt supplies the
+admission for the separate submit command. Other statuses must not be interpreted
+as readiness. Before confirming a successful upload, the CLI checks file size,
+modification time and SHA-256 again; a changed source reports an uncertain outcome.
+
+Both commands accept optional `--summary`, `--attestation` and `--predecessor`.
+Use the same packet for preparation, creation and explicit replay. The current
+preparation API transports text in headers: printable ASCII only, at most 64KiB
+per text field, with no leading/trailing whitespace. Unsupported text is rejected
+before dispatch, not rewritten. Omitted or explicitly empty text is supported;
+the server supplies warning-only defaults where applicable. The API owns all
+policy checks, predecessor/currentness rules and authorization.
+
+Submission creation is keyed by the exact admission and packet; there is no
+additional client-generated creation key. A lost or malformed write response
+exits 1 with `outcome_unknown: true`, empty stdout and a text-mode recovery hint.
+Inspect task history and explicitly replay only unchanged inputs. Do not generate
+a new preparation key simply because a response was lost. Each replay requires
+fresh server authority, including after a CLI restart.
+
+Blocked pre-submission intake prints the validated contributor findings in error
+`details`; it creates no Submission. Infrastructure failures are not quality
+findings. After creation, `submission findings` reads contributor-visible durable
+checker runs/results. Run status is not human review or final acceptance, and the
+CLI never follows finding paths or exposes provider/private management fields.
+History and findings lists fetch one page only; use the returned opaque cursor
+explicitly. `--run` cannot be combined with pagination flags. Revision change
+summary is unavailable in the current public history API; the CLI does not invent it.
+
+The native process test uses real HTTP, PostgreSQL and local ART custody, with
+approved-policy/assignment prerequisites arranged by fixtures. It drives the real
+independent verifier directly; it does not certify distributed scheduling, S3 or
+the complete public guide-setup journey owned by PILOT #552.
+
 ## Inspect an exact derived post-submission policy
 
 After backend derivation, the proposal read supplies `post_submit_policy_id`:
@@ -869,8 +927,10 @@ plus one, timezone-bearing effective time and prior project status. Integer
 fields retain the backend range and UUIDs compare by identity, not spelling.
 JSON returns the validated API object; text renders every field with terminal
 escaping. A replay receipt proves that operation, not that its guide is still
-current after later supersession. The current backend still rejects activation
-with `human_review_required=false`; this CLI does not change that readiness gate.
+current after later supersession. Supported `human_review_required=false` guides
+can activate when their approved inventory has no `human_review` disposition;
+new false/pass effects still require a live REV generation. The CLI does not
+change those backend-owned readiness gates.
 
 Malformed or substituted receipts, lost responses and other uncertain writes
 exit 1 with empty stdout and `outcome_unknown: true`. Retain the original input
@@ -1102,8 +1162,8 @@ contributor-safe task in progress. The CLI validates the requested task identity
 assignment/task/project/policy consistency, claim contributor/assigner identity,
 active/unreleased assignment and required timestamps before output. It rejects
 management-only fields. JSON preserves the API object; text prints every public
-field with escaped terminal controls. This does not expose submission or review
-commands, or activate unfinished product lifecycle work.
+field with escaped terminal controls. Separate submission commands are described
+below; claim/start does not invoke them or activate unfinished human review.
 
 The API scopes keys by actor and action, and checks current authority before
 recovering a committed result. An exact retry can recover the same result only
@@ -1193,7 +1253,7 @@ Batch proof covers the built CLI's CSV conversion, source upload, atomic import,
 status, screen and release against real PostgreSQL/MinIO. Contribution-export
 proof covers self and authorized project reads, exact server CSV, fresh grant
 and lifecycle denials, and safe local publication failures. These are separate
-journeys in one binary, not evidence that submission/review commands exist.
+journeys in one binary, not proof of a complete public setup-to-acceptance journey.
 Hosted CLI verification partitions the complete integration directory into
 task/general HTTP, guide HTTP, native API, native self-service and native batch
 groups. The contribution HTTP and native API tests remain included; no group

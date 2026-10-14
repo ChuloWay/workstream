@@ -383,6 +383,13 @@ explicit caller retry keys and uncertain-outcome reporting without automatic ret
 governing guide/policy selectors, server action hints and locked intake rules.
 Hints do not grant authority; these CLI reads do not invoke the separate public
 submission upload and creation operations.
+`workstream task prepare` streams the contributor ZIP once with an explicit
+caller key; `task submit` separately consumes its ready admission and exact
+packet. Preparation never creates a Submission or automatically polls/retries.
+`task submissions`, `submission show` and `submission findings` read bounded
+public history and contributor checker evidence, not inferred acceptance.
+See the [submission command contract](cli/README.md#prepare-submit-and-inspect-contributor-work)
+for replay, packet-header restrictions and proof boundaries.
 `workstream task guide TASK_ID [--download DIR]` lists or downloads the original
 documents of the task's locked guide for its currently authorized assignee.
 Downloaded bytes are verified against their retained hash and size; task examples
