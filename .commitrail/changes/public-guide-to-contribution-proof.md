@@ -102,8 +102,10 @@ connected proof and regressions for discovered defects.
 - [x] Insufficient source, provider failure, required unsupported capability,
   correction, stale completion, cross-project access and replay have explicit
   authoritative proof; new integration defects have discriminating regressions.
-- [x] Real runtime cleanup releases every owned database, storage prefix,
-  scratch area, worker, broker and subprocess; failure is bounded and reported.
+- [x] The drill and isolated runner release their database and MinIO namespace
+  and stop the API, Celery worker, Beat and checker service; failure is bounded
+  and reported. Caller-owned Redis and registry removal is separate, and an
+  explicit `--work-dir` retains private diagnostics for caller-managed removal.
 
 ## Risk and review routing
 
