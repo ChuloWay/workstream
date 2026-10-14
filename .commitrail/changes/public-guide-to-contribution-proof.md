@@ -165,6 +165,27 @@ assertion. Existing reservation, manager-read, replay and revocation proofs rema
 required, followed by the full connected runtime. Architecture/security and
 QA/test-delta review must cover the combined ordering, including shared callers.
 
+### Recovery replay test correction (QA-567-RECOVERY-001)
+
+The authorized PostgreSQL recovery test still encoded a superseded pre-cutover
+assumption that uncertain replay bypassed AUTH. The bounded test-only repair may
+change only
+`backend/tests/projects/guide_compilation/test_authorized_recovery_postgresql.py`
+and this record; production code, CI, specifications, and other support remain
+unchanged.
+
+The corrected proof must use the real fixed-service execution composition and
+fresh preflight on every fence boundary. The first fence permits dispatch; an
+authorized restart returns the same receipt with dispatch prohibited, stages no
+new execute audit evidence, and leaves the request operation, attempt,
+compilation, outbox, and uncertain-attempt facts unchanged. A discriminating
+real-PostgreSQL case revokes the fixed-service identity link after the first
+fence and requires uncertain replay to raise the public authorization denial
+while retaining the same uncertain facts and zero new effects. Fixture teardown,
+not an invented reactivation, ends that scenario. Focused real-PostgreSQL proof
+plus QA/test-delta and security review are required; no fallback, AUTH bypass, or
+status-only fast path is admitted.
+
 ## Focused failure-proof map
 
 All paths below are relative to `backend/tests/`. Run named existing nodes with
