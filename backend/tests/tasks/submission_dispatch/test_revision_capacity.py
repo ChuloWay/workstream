@@ -531,6 +531,13 @@ async def test_expiry_allows_new_assignment_initial_at_next_global_version(
     async with remediation_source(tmp_path, isolated_database_env) as h:
         old_submission_id = h.created.submission_id
         old_assignment_id = h.request.assignment_id
+        async with h.factory() as session:
+            assert await session.scalar(text(
+                "SELECT public.task_revision_expired_assignment_current(:assignment_id,:submission_id)"
+            ), {
+                "assignment_id": old_assignment_id,
+                "submission_id": old_submission_id,
+            }) is False
         old_source_id, old_revision, old_event_id = await expire_retained_revision(
             h, monkeypatch=monkeypatch, isolated_database_env=isolated_database_env,
             ack_lost=True,

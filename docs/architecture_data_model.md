@@ -1982,8 +1982,10 @@ Fields:
 Purpose:
 
 This immutable Review-rooted record is created atomically before a contributor
-can observe human-review-caused revision. Checker remediation retains the Task's
-locked context and creates no preparation. Preparation compares the prior
+can observe human-review-caused revision. Checker remediation uses a distinct
+TASK-owned `TaskRevisionPreparation`, rooted in its exact routing manifest,
+with the same complete-context comparison, guarded rebase and exact next-attempt
+acknowledgement; it creates no human-Review-rooted record. Preparation compares the prior
 Submission's complete stamped context with every applicable currently active
 Project Guide and policy selector: guide identity/version/activation sequence,
 source snapshot, submission-artifact policy, effective project policy,

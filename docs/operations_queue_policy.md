@@ -183,9 +183,10 @@ Policy:
 
 - checker-caused remediation carries CheckerResult lineage; human-review
   revision carries an immutable Review and at least one blocking finding
-- checker-caused remediation retains the Task's locked rules and reruns full
-  pre-submit intake against a changed ZIP; it needs no Review preparation,
-  finding response, or context rebase
+- checker-caused remediation freezes a TASK-owned checker-rooted preparation,
+  applies a guarded complete-context rebase when applicable, and reruns full
+  pre-submit intake with the exact preparation acknowledgement; it needs no
+  human-Review-rooted preparation or finding response
 - human-review resubmission includes one immutable response per unresolved
   blocking finding
 

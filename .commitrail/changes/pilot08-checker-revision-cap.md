@@ -142,12 +142,15 @@ head rather than a partial rebase. Replays never reselect active policy.
 - Human review focus: off-by-one semantics, locked policy custody, concealment,
   replay and SQL enforcement; complete-context atomicity, authorized recovery and immutable history.
 
-## Evidence
+## Historical cap-stage evidence (`49ca2fbf8`)
+
+This table describes only the earlier cap stage, not the complete revision,
+rebase, deadline and recovery implementation in this PR.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner reuse | TASK/ART/PROJECTS source inspection and focused tests | Reuses existing locked-context calls; authority and exact replay preserved | Deadline/rebase remain out of scope |
-| Schema delta | PostgreSQL 16 canonical catalog comparison | Only new guard function, namespace identity and trigger differ; removing them reproduces the predecessor hash | Hosted repetition required |
+| Existing owner reuse | TASK/ART/PROJECTS source inspection and focused tests | Reused existing locked-context calls; authority and exact replay preserved | That stage excluded deadline/rebase |
+| Schema delta | PostgreSQL 16 canonical catalog comparison | That stage added only the cap guard function, namespace identity and trigger; removing them reproduced its predecessor hash | Did not cover subsequent migrations |
 
 Focused verification of the implementation recorded at `49ca2fbf8`:
 

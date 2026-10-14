@@ -125,6 +125,20 @@ RETURNS boolean LANGUAGE sql STABLE SET search_path=pg_catalog,public,pg_temp AS
 $$;
     """)
     _replace(
+        "public.guard_selected_pre_submit_run_insert()",
+        "or exists(select 1 from public.submissions s where s.task_id=new.task_id)",
+        """or exists(select 1 from public.submissions s
+       where s.task_assignment_id=new.assignment_id)
+     or (exists(select 1 from public.submissions s where s.task_id=new.task_id)
+       and not exists(select 1 from public.submissions prior
+         where prior.task_id=new.task_id
+           and prior.task_assignment_id<>new.assignment_id
+           and not exists(select 1 from public.submissions later
+             where later.task_id=prior.task_id and later.version>prior.version)
+           and public.task_revision_expired_assignment_current(
+             prior.task_assignment_id,prior.id)))""",
+    )
+    _replace(
         "public.guard_submission_revision_capacity()",
         "OR prior_assignment.released_at IS NULL\n          THEN RAISE EXCEPTION 'submission_revision_lineage_invalid' USING ERRCODE='23514'; END IF;",
         "OR prior_assignment.released_at IS NULL\n          THEN RAISE EXCEPTION 'submission_revision_lineage_invalid' USING ERRCODE='23514'; END IF;\n          IF NOT public.task_revision_expired_assignment_current(prior.task_assignment_id,prior.id)\n          THEN RAISE EXCEPTION 'submission_revision_lineage_invalid' USING ERRCODE='23514'; END IF;",

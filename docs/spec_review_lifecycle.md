@@ -304,19 +304,25 @@ false/pass still requires an Operator-authorized live REV generation.
 
 Checker routing is not human judgment. A final needs-remediation CHECKER result
 is consumed by the TASK-owned ARCH-04F handler, which moves the Task to
-contributor-readable `needs_revision` in its own authorized transaction while
-retaining the Task's locked context. CHECKERS does not mutate TASK directly.
-This creates no Review,
-ReviewFinding, RevisionContextPreparation, reviewer contribution, or synthetic
-human actor and does not use D6 closure. Checker replacements share the locked
+contributor-readable `needs_revision` and creates a TASK-owned checker-rooted
+revision preparation in the same authorized transaction. The preparation freezes
+the complete next-attempt context, including a guarded complete-context rebase
+when applicable, or records why revision is blocked. CHECKERS does not mutate
+TASK directly. This creates no Review, ReviewFinding, human-Review-rooted
+preparation, reviewer contribution or synthetic human actor, and does not use
+D6 closure. Checker replacements share the locked
 revision allowance: the initial Submission is round 0; max_revision_rounds=2
 permits rounds 1 and 2, for three Submissions total. Infrastructure retries and
 replay create no Submission and consume no round. ART preparation and new TASK
 creation refuse revision_limit_reached with HTTP 409 before new effects; SQL
 also rejects over-cap inserts. The task remains needs_revision with its earlier
-evidence intact. Cap enforcement does not automatically reject or close work.
-Checker deadline enforcement and controlled context rebase remain separate
-PILOT-08 work; this cap does not create a contributor assignment lease. Checker remediation follows that exact CheckerRun lineage and must pass
+evidence intact. Reaching the cap does not itself reject the outstanding attempt;
+its original revision deadline still applies. Each committed fixable failure
+starts a fresh window from PostgreSQL time and the failed attempt's locked
+RevisionPolicy. At expiry, TASK atomically records rejection, releases the
+assignment and returns the task to ready with audit and outbox evidence. A new
+assignment starts its own round 0 while global Submission versions remain
+consecutive. Checker remediation follows that exact CheckerRun lineage and must pass
 the normal submission/checker spine before human review.
 
 Queue schema migration performs no blanket historical backfill. A later audited
@@ -831,9 +837,11 @@ lock. Each Submission stamps the exact guide ID, version, immutable per-project
 activation sequence, source snapshot, and task-execution policy IDs, versions,
 and hashes used for that attempt.
 
-Controlled revision preparation applies only after an immutable human
-`Review(needs_revision)`. Checker-caused remediation remains the distinct
-CheckerRun-rooted path above and performs no guide rebase or human finding replay.
+Human revision preparation is rooted in an immutable `Review(needs_revision)`;
+its decision integration remains separate work. Checker-caused remediation uses
+the distinct CheckerRun-rooted TASK preparation described above. Both use the
+complete-context comparison; checker remediation never replays human findings
+or fabricates a Review.
 
 Revision preparation compares the prior Submission's complete stamped context
 with the project's complete currently active applicable guide and policy
@@ -897,12 +905,14 @@ after corrected checker admission.
 
 A planned human-Review Submission N+1 links its immediate predecessor, exact
 preparation head, required bounded response text, and target TaskAssignment.
-The hidden checker-remediation Submission N+1 instead uses the exact authorized
+The checker-remediation Submission N+1 instead uses the exact authorized
 needs-revision routing manifest for the predecessor's current completed
 CheckerRun. Its `checker_remediation_manifest_id` is retained by ART evidence and
 admission, TASK dispatch and exact AUTH receipts; Submission links the admission
-and predecessor without a duplicate cause column. It keeps the Task's locked
-context and has no preparation or ReviewFinding response. Both paths rerun the
+and predecessor without a duplicate cause column. It acknowledges the exact
+current checker-rooted preparation ID and digest and stamps its frozen target
+context, including an authorized rebase. It requires no ReviewFinding response.
+Both paths rerun the
 existing finalization and checker spine. A new current `allow_review` creates a
 queue entry preferred to the reviewer who issued the prior human revision
 request. Corrected checker work enters ordinary open routing.
