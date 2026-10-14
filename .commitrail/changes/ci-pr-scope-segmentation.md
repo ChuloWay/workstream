@@ -14,6 +14,45 @@ the expanded implementation until measured.
 
 ### Implementation plan
 
+#### Dependency-selection repair: rejected alternatives
+
+The import-only implementation failed CI-SEL-001: non-import reads and injected
+ports can cross its inferred edges. Universal reader/owner retention is safe
+only with complete port-consumer mappings and approaches full execution here.
+Do not ship source-hash exemptions or weaken the controlled probe to get green.
+
+The evaluated alternative used exact-base execution footprints instead of inferring every dataflow
+from imports. The existing full run can record per-test Python execution and
+repository file reads; this is dependency evidence, never a cached passing test
+result. Narrowing would require a complete successful full-run footprint from
+the exact protected base, matching source/collection identities. Missing,
+incomplete, stale or ambiguous evidence means full execution. Selected tests
+still execute freshly and retain the same completion and isolation checks.
+
+Start with a deliberately closed eligible change: existing function-body edits
+only. Module/class initialization, decorators, signatures, new/deleted files,
+shared fixtures, dependency or schema changes stay full. Retain every test that
+executed the changed function or read its source, along with source-reading and
+unattributable/background/subprocess consumers. Unexecuted changed functions or
+unmodelled external inputs stay full. A changed function that introduces a new
+call is covered by its existing caller tests; this must be challenged with
+cross-owner, indirect-port and dynamic-path counterexamples before acceptance.
+
+Plan review rejected this alternative: a session/module fixture can execute a
+function once, then persist or register state consumed by later tests whose
+contexts never execute that function. Partial direct coverage does not expose
+all background or subprocess consumers, and cached source/bytecode inspection
+need not produce attributable file-read events. Exact commit custody cannot
+repair missing behavioral dependencies. Do not implement this proposal or
+claim that a new call is necessarily covered by existing caller tests.
+
+A narrower pure-function verifier would introduce another evidence subsystem
+and needs demonstrated relevance to actual changes before consideration.
+The existing runner/plugin, evidence artifacts, merger and validator remain
+the owners. No product changes or external CI service.
+Independently measure coverage instrumentation cost against identical real
+PostgreSQL tests; do not infer the bottleneck from test count or raise timeouts.
+
 1. Reuse the existing static import parser, test catalogue, isolated PostgreSQL
    runner and evidence validators. Build a conservative reverse dependency
    closure from both base and head, including package initializers, relative
@@ -156,8 +195,28 @@ retry changes passed their affected selector and workflow checks. Dependency
 analysis reuses the existing dynamic-loading visitor on an already parsed AST;
 it does not reparse each file through a second import scan.
 
-Representative current-tree measurements select 413 of 521 modules for a
+Before review, current-tree measurements selected 413 of 521 modules for a
 `test_identifiers.py` change and 460 for `tasks/submission_history.py`.
+CI-SEL-001 invalidated the production-selection claim: production readers and
+registry/source strings lacked import edges. The repair forces full execution
+for backend changes when either tree contains this uncertainty. Current
+backend changes therefore run full, not 460 modules. Readers may also consume
+test source; test-only changes cannot safely bypass this guard.
+Copied read capabilities (`read = Path.read_text` or `read = open`) also
+require fallback: checking only the eventual call name misses these edges.
+The focused selector/scope checks passed after this repair. Disabling only the
+copied-capability guard makes all six base/head alias regressions fail; the six
+direct-read/registry controls still pass. These are regression results, not
+proof that the overall selection design is complete or faster.
+This is a remaining limitation against the production-speed goal,
+not a completed solution to that bottleneck. No filename exemptions or symbolic
+path-analysis subsystem are introduced to manufacture savings.
+The controlled runtime fixture retains the application and will fail selection
+under this conservative guard. Do not weaken that probe or claim readiness:
+the non-import dependency boundary needs a sound design before this PR meets
+its outcome. The current local repair is diagnostic work, not a passing release.
+CI-EVT-002 is repaired by subscribing to PR `edited` events so a base retarget
+requests new exact-base proof (title/body edits also rerun).
 Shared support, dynamic inspection and transitive imports legitimately expand
 those sets. These counts demonstrate omission, not a five-minute backend
 result. No acceptance claim may substitute the controlled small fixture for

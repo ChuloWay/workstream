@@ -78,6 +78,7 @@ class DependencyGraph:
     paths: frozenset[str]
     uncertain_tests: frozenset[str]
     sentinels: frozenset[str]
+    production_readers: frozenset[str]
 
 
 def _module(path: str) -> str:
@@ -114,6 +115,7 @@ def dependency_graph(root: Path) -> DependencyGraph:
     reverse: dict[str, set[str]] = defaultdict(set)
     uncertain: set[str] = set()
     sentinels: set[str] = set()
+    production_readers: set[str] = set()
     for relative, path in files.items():
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -129,7 +131,25 @@ def dependency_graph(root: Path) -> DependencyGraph:
             uncertain.add(relative)
         name = _module(relative)
         targets: set[str] = set()
+        direct_calls = {
+            id(node.func) for node in ast.walk(tree) if isinstance(node, ast.Call)
+        }
         for node in ast.walk(tree):
+            # A copied read capability can be called under another name. The
+            # direct-call branch below handles explicit write-only opens;
+            # escaped references have no such bounded mode evidence.
+            referenced_name = node.attr if isinstance(node, ast.Attribute) else (
+                node.id if isinstance(node, ast.Name) else ""
+            )
+            if (
+                referenced_name in SOURCE_READ_CALLS
+                and isinstance(getattr(node, "ctx", None), ast.Load)
+                and id(node) not in direct_calls
+            ):
+                if relative.startswith("tests/"):
+                    sentinels.add(relative)
+                else:
+                    production_readers.add(relative)
             if isinstance(node, ast.Assign) and any(
                 isinstance(target, ast.Name) and target.id == "pytest_plugins"
                 for target in node.targets
@@ -155,7 +175,7 @@ def dependency_graph(root: Path) -> DependencyGraph:
                 targets.add(base)
                 # Either a package submodule or a symbol; resolve both safely.
                 targets.update(f"{base}.{alias.name}" for alias in node.names)
-            elif isinstance(node, ast.Call) and relative.startswith("tests/"):
+            elif isinstance(node, ast.Call):
                 called = node.func
                 called_name = called.attr if isinstance(called, ast.Attribute) else (
                     called.id if isinstance(called, ast.Name) else ""
@@ -169,13 +189,19 @@ def dependency_graph(root: Path) -> DependencyGraph:
                     and "+" not in mode.value
                 )
                 if called_name in SOURCE_READ_CALLS and not explicit_write:
-                    sentinels.add(relative)
+                    if relative.startswith("tests/"):
+                        sentinels.add(relative)
+                    else:
+                        production_readers.add(relative)
             elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-                if relative.startswith("tests/") and any(
+                if any(
                     marker in node.value.lower()
                     for marker in ("backend/", "app/", "app.")
                 ):
-                    sentinels.add(relative)
+                    if relative.startswith("tests/"):
+                        sentinels.add(relative)
+                    else:
+                        production_readers.add(relative)
         for target in targets:
             parts = target.split(".")
             matches = [modules[".".join(parts[:end])]
@@ -216,6 +242,7 @@ def dependency_graph(root: Path) -> DependencyGraph:
     return DependencyGraph(
         {path: frozenset(consumers) for path, consumers in reverse.items()},
         frozenset(files), frozenset(uncertain), frozenset(sentinels),
+        frozenset(production_readers),
     )
 
 
@@ -227,6 +254,11 @@ def affected_modules(
 ) -> tuple[str, ...]:
     """Union base/head consumers, owner tests and non-import sentinels."""
     executable = set(executable_modules)
+    # An import graph cannot establish what a production file reader or string
+    # registry consumes. Include both trees: deleting the reader does not erase
+    # its base dependencies. Do not guess from a known filename or path today.
+    if base.production_readers or head.production_readers:
+        raise ImpactUncertain("production_non_import_dependency")
     if not executable or not executable <= head.paths:
         raise ImpactUncertain("unresolved_executable_inventory")
     reverse: dict[str, set[str]] = defaultdict(set)

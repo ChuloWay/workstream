@@ -121,7 +121,11 @@ ownership remains repository-defined and exact.
 Draft and ready PRs use the same conservative impact rules. Eligible backend
 changes select whole test modules using the union of base/tested-tree reverse
 imports, owner tests, package initializers, fixtures and source-reading/dynamic
-test sentinels. Uncertain production imports, shared infrastructure, AUTH,
+test sentinels. Production file readers and source/registry strings force full
+execution for backend changes: an import graph does not prove their inputs.
+The current application contains these readers, so backend changes currently
+remain full. This blocks the intended backend speedup; the selector must not be
+declared ready on controlled-fixture evidence alone. Uncertain production imports, shared infrastructure, AUTH,
 custody/economic owners, models/schemas, fixture changes, CI controls and unknown
 paths require full execution. External-checker changes remain full until their
 backend consumers have a proven narrower mapping. CLI-only and MCP-only changes
@@ -138,6 +142,8 @@ described as full-suite proof. Broad dependencies can still select most tests.
 Draft fan-in publishes `draft-test`, not required `test`. Marking ready starts
 the required check even on an unchanged commit; an older green draft result
 cannot satisfy it.
+Base-branch edits also start a fresh run bound to the new base; ordinary PR
+title/body edits rerun as the conservative cost of subscribing to `edited`.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
 Authorization preflight runs alongside the selected lanes. On complete runs,

@@ -63,6 +63,36 @@ def test_production_dynamic_loading_requires_full_fallback(tmp_path: Path) -> No
         dependency_graph(tmp_path)
 
 
+@pytest.mark.parametrize("reader", [
+    'from pathlib import Path\ndef read(): return Path("backend/app/modules/tasks/leaf.py").read_text()\n',
+    'REGISTRY = {"reader": "app.modules.tasks.leaf:read"}\n',
+    'from pathlib import Path\nread = Path.read_text\ndef consume(path): return read(path)\n',
+    'read = open\ndef consume(path): return read(path).read()\n',
+])
+@pytest.mark.parametrize("reader_tree", ["base", "head", "both"])
+def test_cross_owner_non_import_consumers_force_full_fallback(
+    tmp_path: Path, reader: str, reader_tree: str,
+) -> None:
+    sources = {
+        "app/modules/tasks/leaf.py": "value = 1\n",
+        "app/modules/projects/reader.py": "value = 1\n",
+        "tests/tasks/test_leaf.py": "from app.modules.tasks import leaf\n",
+        "tests/projects/test_reader.py": "from app.modules.projects import reader\n",
+    }
+    base_sources = {**sources, "app/modules/projects/reader.py":
+                    reader if reader_tree in {"base", "both"} else "value = 1\n"}
+    head_sources = {**sources, "app/modules/projects/reader.py":
+                    reader if reader_tree in {"head", "both"} else "value = 1\n"}
+    base = dependency_graph(_tree(tmp_path / "base", base_sources))
+    head = dependency_graph(_tree(tmp_path / "head", head_sources))
+    executable = tuple(path for path in sources if path.startswith("tests/"))
+    with pytest.raises(ImpactUncertain, match="production_non_import_dependency"):
+        affected_modules(base, head, ("backend/app/modules/tasks/leaf.py",), executable)
+    # Unknown readers can consume test source too; do not assume otherwise.
+    with pytest.raises(ImpactUncertain, match="production_non_import_dependency"):
+        affected_modules(base, head, ("backend/tests/tasks/test_leaf.py",), executable)
+
+
 @pytest.mark.parametrize("changed", [
     "backend/tests/support.py", "backend/tests/deleted_test.py",
     "backend/app/modules/authorization/operation.py",
