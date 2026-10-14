@@ -7,7 +7,10 @@ from app.modules.authorization.domain import (
     checker_registry,
     contribution_policies,
 )
-from app.modules.authorization.domain.action_groups import PROJECT_SCOPED_ADMIN_MUTATIONS
+from app.modules.authorization.domain.action_groups import (
+    EXACT_PROJECT_MANAGER_SCOPE_ACTIONS,
+    PROJECT_SCOPED_ADMIN_MUTATIONS,
+)
 from app.modules.authorization.runtime import (
     AuthorizationDenialCode, HumanAuthorizationContext, PreparedAuthorizationUnsupported,
     PreparedAuthorityScopeKind, ProjectCreateResourceContext,
@@ -55,6 +58,40 @@ async def lock_admin_mutation_authority(repository, context, scope, action_id, p
         **contribution_policies.policy_finance_grant_filters(action_id),
     )
     if grant is None:
+        raise PreparedAuthorizationUnsupported(
+            AuthorizationDenialCode.PERMISSION_NOT_GRANTED
+        )
+    return context, grant
+
+
+async def lock_project_manager_authority(
+    repository, context, scope, action_id, permission_id, locked_context
+):
+    """Lock the current human and covered manager grant before product resources."""
+    if (
+        not isinstance(context, HumanAuthorizationContext)
+        or scope.kind is not PreparedAuthorityScopeKind.PROJECT
+        or scope.project_id is None
+    ):
+        raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED)
+    if action_id is ActionId.PROJECT_GUIDE_ACTIVATE:
+        await repository.lock_control()
+    locked = await repository.lock_request_actor(
+        context.identity_link_id, context.actor_profile_id
+    )
+    context = locked_context(locked, context)
+    grant = await repository.find_effective_grant(
+        context.actor_profile_id,
+        permission_id,
+        scope_project_id=scope.project_id,
+        for_update=True,
+        allowed_roles=frozenset({AdminRole.PROJECT_MANAGER}),
+        exact_project_scope=(action_id in EXACT_PROJECT_MANAGER_SCOPE_ACTIONS),
+    )
+    if grant is None or (
+        action_id in EXACT_PROJECT_MANAGER_SCOPE_ACTIONS
+        and (grant.scope_type != "project" or grant.scope_project_id != str(scope.project_id))
+    ):
         raise PreparedAuthorizationUnsupported(
             AuthorizationDenialCode.PERMISSION_NOT_GRANTED
         )

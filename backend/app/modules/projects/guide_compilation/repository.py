@@ -147,6 +147,10 @@ class GuideCompilationRepository:
         exact_setup: bool = False,
     ) -> LockedFinalization:
         """Follow the projection lock order and refresh all read-before-lock objects."""
+        projects = ProjectRepository(self._session)
+        project = await projects.get_project(str(command.project_id), for_update=True)
+        if project is None:
+            raise GuideCompilationIntegrityError("finalization project unavailable")
         attempt = await self._session.scalar(
             select(ProjectGuideCompilationAttempt)
             .where(ProjectGuideCompilationAttempt.id == attempt_id)
@@ -154,7 +158,6 @@ class GuideCompilationRepository:
             .execution_options(populate_existing=True)
         )
         request = await self.request_operation_for_attempt(attempt_id, lock=True)
-        projects = ProjectRepository(self._session)
         guide = await projects.lock_project_guide(str(command.guide_id))
         if guide is None or guide.project_id != str(command.project_id):
             raise GuideCompilationIntegrityError("finalization guide unavailable")

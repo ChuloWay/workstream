@@ -49,7 +49,7 @@ immutable registry are consumed by selected hidden PRE/POST owners through an
 explicit Rust service adapter. Production request/completion handlers are
 registered; ARCH-02I-B exposes public contributor ZIP preparation and
 admission-backed initial/checker-remediation Submission creation. The bounded
-local public API and Celery service drill passed under scripted approved-guide preconditions.
+local public API and Celery service drill starts from public guide inputs with recorded inference.
 
 Both executable catalogues, their runtime factories and their request/result
 decoders are removed. Requests use the default-plus-external PRE contract and
@@ -383,7 +383,8 @@ pass/fail/warning results. The public authorized ZIP preparation route returns
 same request. ARCH-02I-B publishes it in OpenAPI with admission-backed
 Submission creation. A passing ready admission can be consumed by the public
 Submission operation. The bounded local public API and Celery service drill
-passed under scripted approved-guide preconditions. POL-07B removes the standalone JSON precheck and its exclusive
+starts from public guide inputs with recorded inference. POL-07B removes the standalone
+JSON precheck and its exclusive
 implementation. This result is not a review decision value.
 Pre-submit results do not create durable `CheckerRun` records, do not move a
 task to `review_pending`, and do not return review decision values: `accept`,
@@ -498,7 +499,7 @@ authorization; it does not route the task. Exact replay does not reread storage.
 Denied material access and unexpected failures remain nonterminal. ARCH-04F adds
 implemented hidden exact-cause replacement intake and reason-bound Operator
 retry after the remediation handoff. The bounded local public durable-runtime
-drill passed under scripted approved-guide preconditions; hosted operation
+drill starts from public guide inputs with recorded inference; hosted operation
 remains a separate readiness boundary.
 ARCH-04B hidden input and ARCH-04B2 hidden output custody are delivered
 with output-file authority unavailable; exact input authority is implemented.
