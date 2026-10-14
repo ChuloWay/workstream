@@ -225,14 +225,17 @@ class LightweightAgentGateTests(unittest.TestCase):
             "lane:\n"
             "          - shared_foundations_a\n"
             "          - shared_foundations_b\n"
+            "          - shared_foundations_c\n"
             "          - schema_contracts\n"
             "          - project_lifecycle_a\n"
             "          - project_lifecycle_b\n"
             "          - project_lifecycle_c\n"
             "          - project_lifecycle_d\n"
+            "          - project_lifecycle_e\n"
             "          - task_lifecycle_a\n"
             "          - task_lifecycle_b\n"
-            "          - task_lifecycle_c",
+            "          - task_lifecycle_c\n"
+            "          - task_lifecycle_d",
         )
         self.assertIn(
             "  test:\n    if: ${{ always() }}\n"
