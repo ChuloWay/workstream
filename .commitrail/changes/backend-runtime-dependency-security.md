@@ -59,11 +59,11 @@ Use the normal `uv` resolver with package-specific upgrades so unaffected locked
 
 ## Review findings
 
-The original exact-head review passed for the bounded resolver delta. Reconciliation review against the current base remains pending after this record update.
+The exact-head resolver and frozen-workflow implementation reviews found no open findings. Reconciliation against merged PR #567 passed with no blob conflict or scope drift; hosted frozen-lock readiness remains pending.
 
 ## Reconciliation
 
-- Current-source reconciliation: Based on `main` at `24119122bf5b4284878996b7c655072e666d96e1`; open dependency PRs were inspected for overlapping lock paths before implementation.
+- Current-source reconciliation: Based on `main` at `80be493914392512cb5a7d663b9b7e3ebb1c4ac0`; merged PR #567 authorization, project, and test owners are preserved unchanged, and open dependency PRs were inspected for overlapping lock paths.
 - Roadmap impact: None. This repair changes selected dependency versions without changing a capability, exposure, completed scope, remaining product gate, or next product dependency.
 - Next usable boundary: Merge this backend repair, re-read the default-branch alert dashboard, and retain explicit ownership of any remaining snapshot alert.
-- Remaining risks: Complete-suite execution from this exact frozen lock, hosted checks on the reconciled head, and exact-head reconciliation review remain pending. This repair reuses only PR #566's frozen-install semantics; PR #566 remains independently responsible for draft path selection, and later reconciliation must retain `uv lock --check`.
+- Remaining risks: Complete-suite execution from this exact frozen lock, hosted checks on the reconciled head, and post-CI exact-head evidence replay remain pending. This repair reuses only PR #566's frozen-install semantics; PR #566 remains independently responsible for draft path selection, and later reconciliation must retain `uv lock --check`.
