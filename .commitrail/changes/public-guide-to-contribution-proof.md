@@ -124,9 +124,10 @@ connected proof and regressions for discovered defects.
 
 ## Reconciliation
 
-- Current-source reconciliation: #550 merged at main `82a46ff3c`; its manifest
-  renewal and replay guarantees remain unchanged. Parallel #565/#497 own their
-  separate branches and PRs; existing CLI agent owns #499.
+- Current-source reconciliation: main `2c1f7517c` includes #550 and #570. The
+  manifest renewal/replay guarantees and the CLI's explicit submission and
+  findings surface are preserved. Parallel #565/#497 own their separate
+  branches and PRs; the existing CLI agent owns #499.
 - Next usable boundary: #555 hosted operation and pilot after connected proof.
 - Remaining risks: Recorded inference proves integration, not model quality;
   local identity, MinIO and development container isolation are not deployment.
@@ -311,3 +312,22 @@ tests, compilation and lint provide local evidence. Focused PostgreSQL and
 CI-integrity review run after integration with the lead candidate.
 This extraction changes no capability, exposure or delivery claim in
 `docs/roadmap_status.md`, so the roadmap needs no edit for this scoped commit.
+
+## Integrated repair proof
+
+The clean `3dde907f3` repair passed five independent-session PostgreSQL races:
+request reservation, same-manager guide mutation, compilation persistence,
+sufficiency projection and finalization against the public latest-setup read.
+Removing only the execution Project lock reproduced PostgreSQL deadlock and
+failed the persistence case's HTTP 200 assertion with HTTP 503. Both runs
+completed database and MinIO cleanup. The diagnostic and strict-kernel contract
+selection passed 28 tests; structural-debt and module-boundary validation, lint,
+links and stale-wording checks passed without policy or gate changes.
+Focused architecture/security, QA/test-delta and CI-integrity reviews accepted
+the bounded repair. This is not a passing connected-journey result: both complete
+outcome branches and fresh hosted completeness remain required.
+
+Reconciliation with #570 retains its CLI navigation and this change's ARCH
+navigation; README and roadmap retain both changes. Backend code and tests are
+unchanged by that merge. The next complete runtime proof uses the reconciled
+candidate, and review must distinguish that proof from the earlier failed runs.
