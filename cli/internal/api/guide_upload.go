@@ -41,14 +41,14 @@ func (c *Client) UploadGuideDocument(ctx context.Context, project, guide, docume
 	if err != nil || !initial.Mode().IsRegular() || initial.Size() != size {
 		return result, errors.New("cannot read unchanged original")
 	}
-	expectedHash, err := guideOriginalHash(source, size)
+	expectedHash, err := uploadSourceHash(source, size)
 	if err != nil {
 		return result, err
 	}
 	path := "/api/v1/projects/" + url.PathEscape(project) + "/guides/" + url.PathEscape(guide) +
 		"/documents/" + url.PathEscape(document) + "/content"
 	response, err := c.openBodyRequest(ctx, c.guideHTTP, http.MethodPost, path, "",
-		io.NewSectionReader(source, 0, size), size, key, "application/json", mediaType)
+		io.NewSectionReader(source, 0, size), size, key, "application/json", mediaType, nil)
 	if err != nil {
 		return result, guideUploadFailure(err)
 	}
@@ -79,7 +79,7 @@ func (c *Client) UploadGuideDocument(ctx context.Context, project, guide, docume
 	// rewrote the local file. Re-read the whole bounded original before success.
 	// Section readers use independent offsets; an early response cannot race a
 	// shared Seek with the HTTP transport's body reader.
-	finalHash, hashErr := guideOriginalHash(source, size)
+	finalHash, hashErr := uploadSourceHash(source, size)
 	final, statErr := source.Stat()
 	if hashErr != nil || statErr != nil || final.Size() != initial.Size() ||
 		!final.ModTime().Equal(initial.ModTime()) || finalHash != expectedHash {
@@ -88,7 +88,7 @@ func (c *Client) UploadGuideDocument(ctx context.Context, project, guide, docume
 	return Result[GuideUploadReceipt]{Raw: json.RawMessage(raw), Value: value}, nil
 }
 
-func guideOriginalHash(source *os.File, size int64) (string, error) {
+func uploadSourceHash(source *os.File, size int64) (string, error) {
 	digest := sha256.New()
 	count, err := io.Copy(digest, io.NewSectionReader(source, 0, size+1))
 	if err != nil || count != size {

@@ -28,14 +28,16 @@ var bearerValue = regexp.MustCompile(`^[A-Za-z0-9\-._~+/]+=*$`)
 var safeCode = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,99}$`)
 var safeCorrelation = regexp.MustCompile(`^[0-9a-fA-F-]{36}$`)
 
-// Failure contains only bounded, public error metadata. It never includes a
-// credential, URL, response body, or transport exception.
+// Failure contains bounded public error metadata. Details is populated only
+// from the validated contributor PRE finding projection, never an arbitrary
+// error envelope or transport exception. Credential reflections are rejected.
 type Failure struct {
-	Code           string `json:"code"`
-	Status         int    `json:"status,omitempty"`
-	CorrelationID  string `json:"correlation_id,omitempty"`
-	OutcomeUnknown bool   `json:"outcome_unknown,omitempty"`
-	RecoveryHint   string `json:"-"`
+	Code           string          `json:"code"`
+	Status         int             `json:"status,omitempty"`
+	CorrelationID  string          `json:"correlation_id,omitempty"`
+	OutcomeUnknown bool            `json:"outcome_unknown,omitempty"`
+	RecoveryHint   string          `json:"-"`
+	Details        json.RawMessage `json:"details,omitempty"`
 }
 
 func (f *Failure) Error() string {
@@ -379,10 +381,10 @@ func (c *Client) openRequest(ctx context.Context, requestClient *http.Client, me
 		reader = bytes.NewReader(body)
 		contentType = "application/json"
 	}
-	return c.openBodyRequest(ctx, requestClient, method, path, query, reader, int64(len(body)), key, accept, contentType)
+	return c.openBodyRequest(ctx, requestClient, method, path, query, reader, int64(len(body)), key, accept, contentType, nil)
 }
 
-func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client, method, path, query string, reader io.Reader, length int64, key, accept, contentType string) (*http.Response, error) {
+func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client, method, path, query string, reader io.Reader, length int64, key, accept, contentType string, headers http.Header) (*http.Response, error) {
 	mutation := method == http.MethodPatch || method == http.MethodPost || method == http.MethodPut
 	target := c.origin + path
 	if query != "" {
@@ -402,6 +404,11 @@ func (c *Client) openBodyRequest(ctx context.Context, requestClient *http.Client
 		if req.Body == nil || req.Body == http.NoBody {
 			req.Body = io.NopCloser(bytes.NewReader(nil))
 		}
+	}
+	// Additional headers are fixed by internal operations, never caller-selected
+	// header names. Shared credential/content headers below cannot be overridden.
+	for name, values := range headers {
+		req.Header[name] = append([]string(nil), values...)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
 	req.Header.Set("Accept", accept)
