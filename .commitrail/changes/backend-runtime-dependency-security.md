@@ -55,15 +55,15 @@ Use the normal `uv` resolver with package-specific upgrades so unaffected locked
 | Plan is bounded and executable | Internal plan review against the base lock, owners, and issue #565 contract | Passed | No runtime proof before implementation |
 | Lock has only intended resolver changes | `uv lock --check` plus base/head package and lock diff inspection | Passed on the reconciled head; four intended package selections changed and no package was added or removed | Canonical advisories and dashboard must be reconciled again after merge |
 | Patched graph installs cleanly | Fresh temporary `UV_PROJECT_ENVIRONMENT` with `uv sync --frozen --all-extras`, followed by installed-distribution and import inspection | Passed on the reconciled head | Hosted platform matrix remains CI custody |
-| Affected runtime behavior remains compatible | Backend lint plus focused and complete backend tests from the fresh frozen-lock environment, including owned PostgreSQL/S3 resources; pip-resolved hosted backend checks as supplemental compatibility evidence | Frozen-lock authentication/JWT selection: 60 passed; Ruff passed. Complete frozen-lock suite and hosted checks remain pending | Hosted lanes do not currently establish exact backend lock custody |
+| Affected runtime behavior remains compatible | Backend lint plus focused and complete backend tests from the fresh frozen-lock environment, including owned PostgreSQL/S3 resources; pip-resolved hosted backend checks as supplemental compatibility evidence | Frozen-lock authentication/JWT selection: 60 passed; Ruff passed. The hosted workflow runs the complete suite from the exact frozen lock; GitHub checks retain its execution evidence | Pip-resolved runs predating this change are supplemental compatibility evidence only |
 
 ## Review findings
 
-The exact-head resolver and frozen-workflow implementation reviews found no open findings. Reconciliation against merged PR #567 passed with no blob conflict or scope drift; hosted frozen-lock readiness remains pending.
+The exact-head resolver and frozen-workflow implementation reviews found no open findings. Reconciliation against merged PR #567 passed with no blob conflict or scope drift. `WS565-QA-01`, `WS568-CI-01`, and `WS568-REC-01` are closed; GitHub checks remain the transient readiness record.
 
 ## Reconciliation
 
 - Current-source reconciliation: Based on `main` at `80be493914392512cb5a7d663b9b7e3ebb1c4ac0`; merged PR #567 authorization, project, and test owners are preserved unchanged, and open dependency PRs were inspected for overlapping lock paths.
 - Roadmap impact: None. This repair changes selected dependency versions without changing a capability, exposure, completed scope, remaining product gate, or next product dependency.
 - Next usable boundary: Merge this backend repair, re-read the default-branch alert dashboard, and retain explicit ownership of any remaining snapshot alert.
-- Remaining risks: Complete-suite execution from this exact frozen lock, hosted checks on the reconciled head, and post-CI exact-head evidence replay remain pending. This repair reuses only PR #566's frozen-install semantics; PR #566 remains independently responsible for draft path selection, and later reconciliation must retain `uv lock --check`.
+- Remaining risks: Default-branch alert reconciliation remains a post-merge operational step. This repair reuses only PR #566's frozen-install semantics; PR #566 remains independently responsible for draft path selection, and later reconciliation must retain `uv lock --check`.
