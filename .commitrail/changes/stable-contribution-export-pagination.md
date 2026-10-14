@@ -53,7 +53,8 @@ the retained page IDs through the existing owner ports.
 
 - `.commitrail/changes/stable-contribution-export-pagination.md` for this
   bounded intent, plan, evidence and final reviewer dispositions.
-- `backend/alembic/versions/0040_contribution_export_snapshots.py` and the CON
+- `backend/alembic/versions/0040_contribution_export_snapshots.py`, the Alembic
+  current-head guard and graph test, and the CON
   record model for one expiring snapshot table containing bounded ordered UUID
   membership, exact caller/query binding, database timestamps and supporting
   expiry/selection indexes. The reserved predecessor is
@@ -74,9 +75,9 @@ the retained page IDs through the existing owner ports.
   retain a digest of the normalized page query and presented cursor without
   persisting raw cursor material; no evaluator, permission or grant change.
 - Focused existing contribution export/projection/CSV/AUTH tests, a focused
-  snapshot migration test, exact test-lane inventory updates required for any
-  new test module, and only the behavior-ownership metadata required by changed
-  eligible source paths.
+  snapshot migration test, the shared test-database reset/fingerprint metadata,
+  exact test-lane inventory updates required for any new test module, and only
+  the behavior-ownership metadata required by changed eligible source paths.
 - Affected current contract text in `README.md`,
   `docs/spec_contribution_compensation.md`,
   `docs/spec_authorization_service.md`, and `docs/roadmap_status.md`.
@@ -266,8 +267,13 @@ CSV row counts remain distinct from contribution counts.
 |---|---|---|---|
 | Current hard bound and transaction/owner invariants | Inspect canonical records API, repository, service, dependency, routes and existing export tests at `82a46ff3c5f21e3cdf762cf505d61d84531a7c80` | Confirmed | Implementation and runtime proof pending |
 | Timestamp/UUID keyset cannot freeze membership | Trace A/B committed, L staged, page-one AUTH snapshot fixed, then L committed before owner selection | Discriminating counterexample established in plan review; regression test pending | Exact test fixture execution pending |
-| Migration allocation | Lead reserved `0040_contribution_export_snapshots` after `0039_false_guide_activation` | Confirmed | Migration implementation and parity proof pending |
-| Cursor and snapshot plan | Required architecture/security plan review | Pending | No application code starts before review |
+| Migration allocation | Lead reserved migration number 0040 after `0039_false_guide_activation`; the revision is the 32-character-safe `0040_contribution_export_page` | Confirmed | Migration implementation and parity proof pending |
+| Cursor and snapshot plan | Required architecture/security plan review at `017729ca4ea319d20f1d8fec02fa9660862cbdf1` | Passed with low residual risks | Runtime and exact-candidate review remain |
+| Pure page/cursor behavior | `cd backend && .venv/bin/python -m pytest -q tests/contributions/test_export_projection.py` | 20 passed | PostgreSQL owner/API paths remain |
+| Lint and import syntax | Focused Ruff over all changed Python plus `compileall` | Passed | Full repository checks remain |
+| Migration graph and schema fingerprint | Isolated PostgreSQL migration through `0040_contribution_export_page`; public schema fingerprint `a14b2b41d5c2e3a450105ad8283720490116545c376404c6507c9054b9986bac` | Passed; owned temporary database cleaned | Migration constraint/index tests remain |
+| Focused PostgreSQL owner/API batch | 39 selected export, migration and graph tests in one isolated database | Inconclusive at the 1,800-second host-pressure timeout after 17 completions; progress exposed one test expectation defect, now repaired | Clean rerun is required and this is not passing evidence |
+| CLI consumer continuation | Inspect `cli/internal/api/contribution_evidence.go` and its command callers | JSON strict decoding has no `next_cursor`; CSV performs one GET and ignores the continuation header | Issue #499 must consume continuation or fail explicitly before this backend contract can ship |
 
 ## Review findings
 

@@ -11,10 +11,159 @@ from sqlalchemy.orm import Session
 from app.modules.authorization.admin_service import AdminRoleGrantService
 from app.modules.authorization.repository import AdminAuthorizationRepository
 from app.modules.contributions.records.read_service import ContributionReadService
+from app.modules.contributions.records.read_repository import ContributionReadRepository
 from tests.auth_concurrency_support import wait_for_named_database_lock
-from tests.contributions.records.support import authorized_submitter_source
+from tests.contributions.records.support import (
+    authorized_submitter_source, reviewer_contribution_source, insert_record,
+)
 from tests.tasks.post_submit_routing.outcome_support import authorized_routing_source, apply_outcome
-from .support import export_path, export_audits
+from .support import export_path, export_audits, prepared_reviewer_sibling
+
+
+async def test_two_session_fifth_slot_race_returns_one_page_and_generic_capacity(
+    tmp_path, auth_database_env, admin_access, monkeypatch,
+):
+    """A sixth first page waits for the actor fence, then cannot take slot five."""
+    async with reviewer_contribution_source(tmp_path, auth_database_env) as h:
+        async with h.factory() as session, session.begin():
+            await insert_record(session, h.reviewer_record)
+        sibling = await prepared_reviewer_sibling(h)
+        async with h.factory() as session, session.begin():
+            await insert_record(session, sibling)
+        project = h.reviewer_record.project_id
+        reader = await admin_access.signed.actor("five-slot-project-reader")
+        await admin_access.signed.grant(admin_access.admin, reader,
+                                       role="project_manager", project_id=project)
+        path = export_path(project)
+        for _ in range(4):
+            page = await admin_access.signed.client.get(
+                path, params={"limit": 1}, headers=reader.headers,
+            )
+            assert page.status_code == 200 and page.json()["next_cursor"], page.text
+
+        identity = "contribution-slot-race-" + uuid4().hex
+        held, release = asyncio.Event(), asyncio.Event()
+        pids = {}
+        original = ContributionReadRepository._load_records
+
+        def named_transaction(session, transaction, connection):
+            name = asyncio.current_task().get_name()
+            if name in {identity + "-fifth", identity + "-sixth"}:
+                connection.execute(text("select set_config('application_name',:name,true)"), {"name": name})
+                pids[name] = connection.scalar(text("select pg_backend_pid()"))
+
+        async def hold_fifth(repository, request, ids):
+            if asyncio.current_task().get_name() == identity + "-fifth":
+                held.set()
+                await release.wait()
+            return await original(repository, request, ids)
+
+        tasks = []
+        with monkeypatch.context() as patch:
+            patch.setattr(ContributionReadRepository, "_load_records", hold_fifth)
+            event.listen(Session, "after_begin", named_transaction)
+            try:
+                tasks.append(asyncio.create_task(admin_access.signed.client.get(
+                    path, params={"limit": 1}, headers=reader.headers,
+                ), name=identity + "-fifth"))
+                await asyncio.wait_for(held.wait(), 30)
+                tasks.append(asyncio.create_task(admin_access.signed.client.get(
+                    path, params={"limit": 1}, headers=reader.headers,
+                ), name=identity + "-sixth"))
+                await asyncio.wait_for(wait_for_named_database_lock(
+                    auth_database_env, identity + "-sixth",
+                    expected_blocker_pid=pids[identity + "-fifth"],
+                ), 15)
+                release.set()
+                fifth, sixth = await asyncio.wait_for(asyncio.gather(*tasks), 30)
+            finally:
+                release.set()
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                event.remove(Session, "after_begin", named_transaction)
+
+        assert fifth.status_code == 200 and fifth.json()["next_cursor"], fifth.text
+        assert sixth.status_code == 429, sixth.text
+        assert sixth.json()["error"]["code"] == "contribution_export_at_capacity"
+        assert 1 <= int(sixth.headers["Retry-After"]) <= 3600
+        async with h.factory() as session:
+            count = await session.scalar(text("""
+                SELECT count(*) FROM public.contribution_export_snapshots
+                WHERE actor_profile_id=:actor
+            """), {"actor": str(reader.id)})
+        assert count == 5
+        continuation = await admin_access.signed.client.get(
+            path, params={"limit": 1, "cursor": fifth.json()["next_cursor"]},
+            headers=reader.headers,
+        )
+        assert continuation.status_code == 200, continuation.text
+        assert [item["contribution_id"] for item in continuation.json()["items"]] == [str(sibling.id)]
+        assert continuation.json()["next_cursor"] is None
+
+
+async def test_late_commit_after_first_auth_snapshot_never_enters_fixed_traversal(
+    tmp_path, auth_database_env, admin_access, monkeypatch,
+):
+    """A live timestamp keyset would expose L on page three after A and B."""
+    async with reviewer_contribution_source(tmp_path, auth_database_env) as h:
+        async with h.factory() as session, session.begin():
+            await insert_record(session, h.reviewer_record)
+        second = await prepared_reviewer_sibling(h)
+        async with h.factory() as session, session.begin():
+            await insert_record(session, second)
+        late = await prepared_reviewer_sibling(h)
+        project = h.reviewer_record.project_id
+        reader = await admin_access.signed.actor("late-commit-cursor-reader")
+        await admin_access.signed.grant(admin_access.admin, reader,
+                                       role="project_manager", project_id=project)
+
+        reached, proceed = asyncio.Event(), asyncio.Event()
+        original = AdminAuthorizationRepository.lock_project
+
+        async def after_first_auth_sql(repository, project_id):
+            if asyncio.current_task().get_name() == "contribution-fixed-first-page":
+                # Actor/link and selected grant SQL have fixed this attempt's RR snapshot.
+                reached.set()
+                await proceed.wait()
+            return await original(repository, project_id)
+
+        monkeypatch.setattr(AdminAuthorizationRepository, "lock_project", after_first_auth_sql)
+        async with h.factory() as producer:
+            await producer.begin()
+            await insert_record(producer, late)
+            first_task = asyncio.create_task(admin_access.signed.client.get(
+                export_path(project), params={"limit": 1}, headers=reader.headers,
+            ), name="contribution-fixed-first-page")
+            try:
+                await asyncio.wait_for(reached.wait(), 30)
+                await producer.commit()
+                proceed.set()
+                first = await asyncio.wait_for(first_task, 30)
+            finally:
+                proceed.set()
+                if not first_task.done():
+                    first_task.cancel()
+                await asyncio.gather(first_task, return_exceptions=True)
+
+        assert first.status_code == 200, first.text
+        assert [item["contribution_id"] for item in first.json()["items"]] == [str(h.reviewer_record.id)]
+        cursor = first.json()["next_cursor"]
+        assert cursor
+        second_page = await admin_access.signed.client.get(
+            export_path(project), params={"limit": 1, "cursor": cursor}, headers=reader.headers,
+        )
+        assert second_page.status_code == 200, second_page.text
+        assert [item["contribution_id"] for item in second_page.json()["items"]] == [str(second.id)]
+        assert second_page.json()["next_cursor"] is None
+        fresh = await admin_access.signed.client.get(
+            export_path(project), params={"limit": 3}, headers=reader.headers,
+        )
+        assert fresh.status_code == 200, fresh.text
+        assert [item["contribution_id"] for item in fresh.json()["items"]] == [
+            str(h.reviewer_record.id), str(second.id), str(late.id)
+        ]
 
 
 async def test_first_auth_snapshot_excludes_source_committed_before_owner_projection(
