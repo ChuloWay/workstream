@@ -99,7 +99,7 @@ connected proof and regressions for discovered defects.
 - [x] Default true reaches `review_pending` without acceptance/economic facts;
   false reaches exactly one shared FinalAcceptance and submitter contribution
   with the applicable awards, no fabricated Review/reviewer contribution.
-- [ ] Insufficient source, provider failure, required unsupported capability,
+- [x] Insufficient source, provider failure, required unsupported capability,
   correction, stale completion, cross-project access and replay have explicit
   authoritative proof; new integration defects have discriminating regressions.
 - [x] Real runtime cleanup releases every owned database, storage prefix,
@@ -120,8 +120,8 @@ connected proof and regressions for discovered defects.
 |---|---|---|---|
 | Existing shortcut identified | `_one_mode` and guide API drills inspected | Confirmed and removed | Partial public runs exposed the bounded repairs below |
 | Connected journey | Clean `f197b7b84` isolated public journey, recorded inference | Passed both outcomes, correction, replay/restarts, late revocation and cleanup | No hosted Flow/S3/gVisor or live model claim |
-| Failure boundaries | Existing owner tests plus focused new drill tests | Connected failure cases passed; uncertain-recovery authority regression repair pending | Exact nodes mapped below |
-| Repository integrity | Lint, boundaries, links, Commitrail, full hosted CI | Scoped checks passed; final hosted completeness pending recovery-test repair | No sampling or weakened gates |
+| Failure boundaries | Existing owner tests plus focused new drill tests | Connected failure cases and focused current-authority recovery regressions passed | Exact nodes mapped below |
+| Repository integrity | Lint, boundaries, links, Commitrail, full hosted CI | Scoped checks passed; final hosted completeness remains a merge gate | No sampling or weakened gates |
 
 ## Reconciliation
 
@@ -346,13 +346,13 @@ completed database and MinIO cleanup. The diagnostic and strict-kernel contract
 selection passed 28 tests; structural-debt and module-boundary validation, lint,
 links and stale-wording checks passed without policy or gate changes.
 Focused architecture/security, QA/test-delta and CI-integrity reviews accepted
-the bounded repair. This is not a passing connected-journey result: both complete
-outcome branches and fresh hosted completeness remain required.
+the bounded repair. These focused results alone did not establish connected composition; the later
+successful complete run is recorded below. Final hosted completeness remains required.
 
 Reconciliation with #570 retains its CLI navigation and this change's ARCH
 navigation; README and roadmap retain both changes. Backend code and tests are
-unchanged by that merge. The next complete runtime proof uses the reconciled
-candidate, and review must distinguish that proof from the earlier failed runs.
+unchanged by that merge. The later complete runtime proof uses the reconciled candidate; its evidence
+must remain distinct from the earlier failed runs.
 
 The reconciled runtime passed setup finalization, then correctly denied the
 proposal read because its manager fixture had only system-scoped authority.
@@ -371,11 +371,11 @@ checker architecture/specification/template, Task and artifact specifications,
 current-system HTML diagram, roadmap and ARCH chunk map. These documentation
 paths are allowed for this correction. Preserve explicitly historical proof at
 `d5703d9c6`; recorded inference is not live model or hosted deployment proof.
-The latest bounded run reached both outcomes but expired during final late-
+Earlier run 8 reached both outcomes but expired during final late-
 revocation restart verification. Database and MinIO cleanup completed; owned
 API/Celery children were stopped. It is incomplete evidence, not a full pass.
-The next unchanged-runtime run receives a larger outer local-run allowance for
-this loaded host; product deadlines, assertions and hosted CI limits are unchanged.
+The subsequent successful run used a larger outer local-run allowance for
+this loaded host; product deadlines, assertions and hosted CI limits were unchanged.
 
 ## Connected composition proof
 
@@ -407,3 +407,15 @@ containers. It does not prove model quality, hosted identity/S3/gVisor operation
 CLI continuation, live human review or payment fulfillment. Final test-only
 repairs and documentation changes must preserve this runtime/product source
 identity or receive new affected execution proof.
+
+## Recovery regression verification
+
+The test-only correction at clean `5d07d2498e87ef878dfb0e65949be455e44686f2`
+passed both focused PostgreSQL cases (54.25 seconds), with exact-target metadata
+in `/tmp/ws552-recovery-repair-5d07.json` and database cleanup confirmed. The
+prior dirty-tree run is supplementary only. Bypassing preflight only when the
+retained attempt is uncertain made the revoked-service case fail at its intended
+`AuthorizationDenied` assertion; `/tmp/ws552-recovery-mutant-5d07.json` records
+cleanup. No product implementation, authorization guard, CI limit or runtime
+assertion changed. The integrated test and documentation delta preserves the
+product/runtime source used by the successful connected run.
