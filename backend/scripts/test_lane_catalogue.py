@@ -420,7 +420,6 @@ PROJECT_MODULES = (
 # D, leaving project A capacity for the completed checker retry proofs.
 PROJECT_INTAKE_MODULES = (
     "tests/test_guide_document_intake.py",
-    "tests/test_projects.py",
 )
 
 # Checker delivery shares project dispatch ownership and the existing
@@ -574,6 +573,7 @@ PROJECT_BC_REBALANCED_MODULES = (
 )
 PROJECT_ABC_REBALANCED_MODULES = (
     "tests/projects/guide_compilation/finalization/test_lineage.py",
+    "tests/test_projects.py",
 )
 PROJECT_BC_REBALANCED_LANES = ("project_lifecycle_b", "project_lifecycle_c")
 PROJECT_ABC_REBALANCED_LANES = (

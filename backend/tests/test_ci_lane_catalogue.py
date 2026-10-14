@@ -103,7 +103,6 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
 def test_measured_project_intake_partitions_between_project_c_and_d() -> None:
     expected = {
         "tests/test_guide_document_intake.py",
-        "tests/test_projects.py",
     }
     assert set(catalogue.PROJECT_INTAKE_MODULES) == expected
     assert not expected & set(catalogue.PROJECT_MODULES)
@@ -295,6 +294,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     }
     assert set(catalogue.PROJECT_ABC_REBALANCED_MODULES) == {
         "tests/projects/guide_compilation/finalization/test_lineage.py",
+        "tests/test_projects.py",
     }
     assert all(
         catalogue.PARTITION_LANES_BY_MODULE[module]
