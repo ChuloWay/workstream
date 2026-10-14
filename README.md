@@ -440,7 +440,8 @@ uncertain writes are never automatically retried.
 --idempotency-key UUID` separately activates exactly selected, approved policies
 through the public manager API. It validates the immutable activation receipt;
 Workstream retains readiness, contribution-policy binding and supersession
-authority. It does not approve policies or enable false-review guide activation.
+authority. It does not approve policies or bypass activation readiness: supported
+false-review guides use the same backend-owned activation checks.
 `workstream project task create PROJECT_ID --input FILE --idempotency-key UUID`
 creates a draft; separate `project task screen PROJECT_ID TASK_ID` and
 `project task release PROJECT_ID TASK_ID --reason TEXT` commands each require

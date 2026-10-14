@@ -114,7 +114,7 @@ distinct from client response validation failures.
 The table above is the delivered command inventory. PILOT-02 supplies the
 [batch conversion/import/screen/release commands](#prepare-a-task-import-json-source)
 in the same CLI; contribution-evidence reads do not depend on using batch import.
-Submission commands require their usable public backend contracts first;
+Submission preparation, creation and history commands are described below;
 unfinished review/revision APIs are not current CLI implementation scope.
 
 ## Build and use
@@ -1098,7 +1098,7 @@ Requirements expose the task's locked guide and intake rules: packet fields,
 artifact/evidence requirements, forbidden patterns, attestation, hash/manifest
 requirements, storage-reference restrictions, size/entry limits and packaging.
 They are not a current-guide lookup, a checker verdict or permission to upload.
-Submission intake is still hidden; these commands do not expose it. Described
+These reads do not invoke the separate `task prepare`/`task submit` commands. Described
 paths and storage references are displayed only, never read, downloaded or executed.
 
 ### Read the assigned guide
