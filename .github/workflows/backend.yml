@@ -103,12 +103,12 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Restore exact backend pip downloads from trusted cache
-        id: pip-cache
+      - name: Restore exact backend uv downloads from trusted cache
+        id: uv-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: ${{ runner.temp }}/backend-pip-cache
-          key: backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}
+          path: ${{ runner.temp }}/backend-uv-cache
+          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
 
       - name: Bind exact checked-out tree
         shell: bash
@@ -117,23 +117,24 @@ jobs:
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           test -z "$(git status --porcelain)"
           test "$(git rev-parse "${GITHUB_SHA}^{tree}")" = "$(git rev-parse HEAD^{tree})"
-          echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"
+          echo "UV_CACHE_DIR=${RUNNER_TEMP}/backend-uv-cache" >> "${GITHUB_ENV}"
 
-      - name: Install backend architecture dependencies
+      - name: Install frozen backend architecture dependencies
         working-directory: backend
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,agents]"
-          python -m pip install ruff==0.15.22
-          test "$(ruff --version)" = "ruff 0.15.22"
+          python -m pip install "uv==0.10.7"
+          test "$(uv --version)" = "uv 0.10.7"
+          uv lock --check
+          uv sync --frozen --all-extras
+          test "$(uv run --frozen ruff --version)" = "ruff 0.15.22"
 
       - name: Validate module, AUTH, and test boundaries
         working-directory: backend
         shell: bash
         run: |
           set -euo pipefail
-          ruff check \
+          uv run --frozen ruff check \
             app/modules/authorization/api \
             scripts/authorization_boundary.py \
             scripts/module_boundaries.py \
@@ -141,25 +142,25 @@ jobs:
             tests/architecture/test_authorization_boundary.py \
             tests/architecture/test_module_boundaries.py \
             tests/architecture/test_test_structure_boundary.py
-          python -m scripts.module_boundaries validate \
+          uv run --frozen python -m scripts.module_boundaries validate \
             --protected-base "${{ github.event.pull_request.base.sha || github.event.before }}"
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q \
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --frozen python -m pytest -q \
             -p pytest_asyncio.plugin \
             tests/architecture/test_module_boundaries.py \
             tests/architecture/test_authorization_boundary.py
-          python -m scripts.authorization_boundary validate \
+          uv run --frozen python -m scripts.authorization_boundary validate \
             --ledger ../.ci/auth-boundaries/IMPORT_LEDGER.md
-          python -m scripts.test_structure_boundary validate \
+          uv run --frozen python -m scripts.test_structure_boundary validate \
             --policy ../.ci/auth-boundaries/TEST_STRUCTURE_POLICY.md \
             --ledger ../.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json
-          python -m scripts.behavior_ownership validate
+          uv run --frozen python -m scripts.behavior_ownership validate
 
-      - name: Save verified backend pip downloads to trusted cache
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.pip-cache.outputs.cache-hit != 'true'
+      - name: Save verified backend uv downloads to trusted cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.uv-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: ${{ runner.temp }}/backend-pip-cache
-          key: backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}
+          path: ${{ runner.temp }}/backend-uv-cache
+          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
 
   external-checker-runtime:
     runs-on: ubuntu-latest
@@ -203,14 +204,17 @@ jobs:
         lane:
           - shared_foundations_a
           - shared_foundations_b
+          - shared_foundations_c
           - schema_contracts
           - project_lifecycle_a
           - project_lifecycle_b
           - project_lifecycle_c
           - project_lifecycle_d
+          - project_lifecycle_e
           - task_lifecycle_a
           - task_lifecycle_b
           - task_lifecycle_c
+          - task_lifecycle_d
 
     services:
       redis:
@@ -247,11 +251,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Restore exact backend pip downloads from trusted cache
+      - name: Restore exact backend uv downloads from trusted cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: ${{ runner.temp }}/backend-pip-cache
-          key: backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}
+          path: ${{ runner.temp }}/backend-uv-cache
+          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
 
       - id: identity
         name: Bind exact checked-out tree
@@ -265,24 +269,24 @@ jobs:
           test "$(git rev-parse "${tree_sha}^{tree}")" = "$(git rev-parse HEAD^{tree})"
           echo "job_start_epoch=${job_start_epoch}" >> "${GITHUB_OUTPUT}"
           echo "tree_sha=${tree_sha}" >> "${GITHUB_OUTPUT}"
-          echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"
+          echo "UV_CACHE_DIR=${RUNNER_TEMP}/backend-uv-cache" >> "${GITHUB_ENV}"
 
-      - name: Install backend and exact Ruff
+      - name: Install frozen backend
         working-directory: backend
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,agents]"
-          python -m pip install ruff==0.15.22
-          test "$(ruff --version)" = "ruff 0.15.22"
+          python -m pip install "uv==0.10.7"
+          test "$(uv --version)" = "uv 0.10.7"
+          uv lock --check
+          uv sync --frozen --all-extras
 
       - name: Lint
         working-directory: backend
-        run: ruff check app tests scripts
+        run: uv run --frozen ruff check app tests scripts
 
       - name: Docstring coverage
         working-directory: backend
-        run: docstr-coverage --config .docstr.yaml
+        run: uv run --frozen docstr-coverage --config .docstr.yaml
 
       - name: Download source-pinned MinIO image
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -344,7 +348,7 @@ jobs:
         run: |
           set -uo pipefail
           install -d -m 700 ".ci/lane-bundle/${{ matrix.lane }}"
-          python scripts/run_test_lanes.py \
+          uv run --frozen python scripts/run_test_lanes.py \
             --lane "${{ matrix.lane }}" \
             --metadata-dir ".ci/lane-bundle/${{ matrix.lane }}/metadata" \
             --summary-json ".ci/lane-bundle/${{ matrix.lane }}/summary.json" \
@@ -423,11 +427,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Restore exact backend pip downloads from trusted cache
+      - name: Restore exact backend uv downloads from trusted cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
-          path: ${{ runner.temp }}/backend-pip-cache
-          key: backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}
+          path: ${{ runner.temp }}/backend-uv-cache
+          key: backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}
 
       - id: identity
         name: Bind exact checked-out tree
@@ -440,11 +444,16 @@ jobs:
           test -z "$(git status --porcelain)"
           echo "job_start_epoch=${job_start_epoch}" >> "${GITHUB_OUTPUT}"
           echo "tree_sha=${tree_sha}" >> "${GITHUB_OUTPUT}"
-          echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"
+          echo "UV_CACHE_DIR=${RUNNER_TEMP}/backend-uv-cache" >> "${GITHUB_ENV}"
 
-      - name: Install backend
+      - name: Install frozen backend
         working-directory: backend
-        run: python -m pip install -e ".[dev,agents]"
+        run: |
+          set -euo pipefail
+          python -m pip install "uv==0.10.7"
+          test "$(uv --version)" = "uv 0.10.7"
+          uv lock --check
+          uv sync --frozen --all-extras
 
       - name: Download source-pinned MinIO image
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
@@ -495,13 +504,13 @@ jobs:
         run: |
           set -euo pipefail
           install -d -m 700 .ci/test-lanes
-          python -m scripts.merge_test_lane_evidence \
+          uv run --frozen python -m scripts.merge_test_lane_evidence \
             --input-root .ci/download \
             --metadata-dir .ci/test-lanes/run \
             --summary-json .ci/test-lanes/run-summary.json \
             --expected-head "${GITHUB_SHA}" \
             --run-attempt "${GITHUB_RUN_ATTEMPT}"
-          python scripts/validate_test_lane_evidence.py \
+          uv run --frozen python scripts/validate_test_lane_evidence.py \
             --metadata-dir .ci/test-lanes/run \
             --summary-json .ci/test-lanes/run-summary.json
 
@@ -512,7 +521,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           coverage_files=(.ci/test-lanes/run/.coverage.*)
-          test "${#coverage_files[@]}" -eq 10
+          test "${#coverage_files[@]}" -eq 13
           for source in "${coverage_files[@]}"; do
             destination="$(basename "${source}")"
             test -f "${source}"
@@ -522,7 +531,7 @@ jobs:
             test "$(sha256sum "${source}" | cut -d' ' -f1)" = \
               "$(sha256sum "${destination}" | cut -d' ' -f1)"
           done
-          coverage combine
+          uv run --frozen coverage combine
 
       - name: API contract real API e2e
         working-directory: backend
@@ -531,14 +540,14 @@ jobs:
           WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
           WORKSTREAM_TEST_MINIO_ENDPOINT: http://127.0.0.1:9000
         run: >-
-          python scripts/run_isolated_tests.py
+          uv run --frozen python scripts/run_isolated_tests.py
           --metadata-json "${RUNNER_TEMP}/api-database.json"
           --timeout-seconds 1500
-          -- python scripts/api_contract_e2e.py
+          -- uv run --frozen python scripts/api_contract_e2e.py
 
       - name: Backend coverage diagnostics (no percentage gate)
         working-directory: backend
-        run: coverage report --precision=2
+        run: uv run --frozen coverage report --precision=2
 
       - name: Record hosted timing, complete execution and diagnostic coverage
         working-directory: backend
@@ -547,8 +556,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          coverage json --include='app/*' -o .ci/test-lanes/coverage.json
-          python - <<'PY'
+          uv run --frozen coverage json --include='app/*' -o .ci/test-lanes/coverage.json
+          uv run --frozen python - <<'PY'
           from __future__ import annotations
 
           from collections import Counter
@@ -591,7 +600,7 @@ jobs:
               raise SystemExit("hosted evidence head drift")
 
           lanes = summary.get("lanes")
-          if not isinstance(lanes, list) or len(lanes) != 10:
+          if not isinstance(lanes, list) or len(lanes) != 13:
               raise SystemExit("invalid hosted lane inventory")
           collected: list[str] = []
           completed: list[str] = []

@@ -4,15 +4,24 @@ from dataclasses import dataclass
 
 ADMIN_RUNNER_MODULE = "tests/test_isolated_database_runner.py"
 SCHEMA_MODULE = "tests/test_alembic.py"
-PARTITIONED_SHARED_LANES = ("shared_foundations_a", "shared_foundations_b")
+PARTITIONED_SHARED_LANES = (
+    "shared_foundations_a",
+    "shared_foundations_b",
+    "shared_foundations_c",
+)
 PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_a",
     "project_lifecycle_b",
     "project_lifecycle_c",
     "project_lifecycle_d",
+    "project_lifecycle_e",
 )
-PARTITIONED_PROJECT_INTAKE_LANES = ("project_lifecycle_c", "project_lifecycle_d")
-PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b", "task_lifecycle_c")
+PARTITIONED_TASK_LANES = (
+    "task_lifecycle_a",
+    "task_lifecycle_b",
+    "task_lifecycle_c",
+    "task_lifecycle_d",
+)
 
 
 @dataclass(frozen=True)
@@ -258,7 +267,7 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
-    # Project-bound batch custody uses measured four-way project headroom.
+    # Project-bound batch custody stays in the project semantic family.
     "tests/tasks/test_task_import_batch_contract.py",
     "tests/tasks/test_task_import_batch_bindings.py",
     "tests/tasks/test_task_import_batches.py",
@@ -272,8 +281,7 @@ PROJECT_MODULES = (
     "tests/contributions/exports/test_public_reads.py",
     "tests/contributions/exports/test_failures.py",
     "tests/contributions/exports/test_concurrency.py",
-    # Atomic submission composition shares the existing multi-owner project lanes;
-    # task C and schema are close to their cap on the merged baseline.
+    # Atomic submission composition stays with its multi-owner project family.
     "tests/tasks/evaluation_delivery/test_custody.py",
     "tests/tasks/evaluation_delivery/test_delivery.py",
     "tests/tasks/evaluation_delivery/test_isolation.py",
@@ -416,15 +424,13 @@ PROJECT_MODULES = (
     "tests/projects/test_retired_submission_derivation_route.py",
 )
 
-# Broad project intake keeps its deterministic node partition on project C and
-# D, leaving project A capacity for the completed checker retry proofs.
+# Broad project intake uses the same deterministic project-family partition.
 PROJECT_INTAKE_MODULES = (
     "tests/test_guide_document_intake.py",
     "tests/test_projects.py",
 )
 
-# Checker delivery shares project dispatch ownership and the existing
-# four-way partition; exclusive placement exceeded the hosted execution cap.
+# Checker delivery shares project dispatch ownership across the project family.
 CHECKER_DELIVERY_MODULES = (
     "tests/checkers/default/test_contract.py",
     "tests/checkers/default/test_execution.py",
@@ -552,19 +558,22 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
-# Routing PREP proofs share the four-way project-policy partition.
+# Routing PREP proofs share the project-policy family partition.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
     "tests/authorization/post_submit_routing/test_prepared.py",
 )
 
+PROJECT_PARTITIONED_MODULES = (
+    PROJECT_MODULES
+    + CHECKER_DELIVERY_MODULES
+    + ROUTING_AUTH_PREPARATION_MODULES
+    + PROJECT_INTAKE_MODULES
+)
+
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
-    (
-        PARTITIONED_PROJECT_LANES,
-        PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
-    ),
-    (PARTITIONED_PROJECT_INTAKE_LANES, PROJECT_INTAKE_MODULES),
+    (PARTITIONED_PROJECT_LANES, PROJECT_PARTITIONED_MODULES),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
@@ -605,15 +614,6 @@ LANES = (
             ADMIN_RUNNER_MODULE,
         ),
     ),
-    *(
-        TestLane(
-            name,
-            PROJECT_MODULES
-            + CHECKER_DELIVERY_MODULES
-            + ROUTING_AUTH_PREPARATION_MODULES
-            + (PROJECT_INTAKE_MODULES if name in PARTITIONED_PROJECT_INTAKE_LANES else ()),
-        )
-        for name in PARTITIONED_PROJECT_LANES
-    ),
+    *(TestLane(name, PROJECT_PARTITIONED_MODULES) for name in PARTITIONED_PROJECT_LANES),
     *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
 )
