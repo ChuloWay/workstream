@@ -68,7 +68,8 @@ the retained page IDs through the existing owner ports.
 - Existing contribution adapter, export dependency and routes for pagination
   secret composition, query parameters, generic cursor errors, JSON
   `next_cursor`, the equivalent CSV continuation response header, and the
-  existing human authorization-read rate-control dependency.
+  existing authorization-read rate-control dependency without its early
+  nonhuman concealment wrapper.
 - `backend/app/modules/authorization/contribution_read.py` only if needed to
   retain a digest of the normalized page query and presented cursor without
   persisting raw cursor material; no evaluator, permission or grant change.
@@ -148,13 +149,22 @@ instant. Each initial request allocates at most one row and 100,000 UUIDs;
 selections above that bound receive a documented full 422 refusal with guidance
 to narrow filters before any snapshot state or body is produced.
 
-Both contribution routes consume the existing human authorization-read rate
-control. In addition, an actor may retain at most five unexpired contribution
-export snapshots. Canonical AUTH already locks that actor row before the CON
-repository counts and inserts snapshots in the same transaction, so concurrent
-initial requests cannot cross the per-actor bound. Capacity refusal is a
-generic 429 with `Retry-After` derived from the earliest database expiry; it
-does not disclose snapshot membership or another actor's state.
+Both contribution routes consume the existing authorization-read rate control
+directly. They do not use `enforce_human_authorization_read`, because that
+wrapper would conceal service callers before the canonical contribution AUTH
+evaluator can commit its existing DENY evidence.
+
+In addition, an actor may retain at most five contribution export snapshots.
+Each snapshot owns one allocation slot in 1..5 and the database enforces unique
+`(actor_profile_id, allocation_slot)` occupancy. The repository prunes the
+actor's expired rows before selecting one free slot and inserts with exact
+conflict handling; the unique constraint is the final concurrency fence even
+when two repeatable-read transactions both observed slot 5 as free. In a 4→5/6
+race, one request acquires slot 5 and the other receives a conservative generic
+429. Continuations do not allocate slots and remain available at capacity.
+`Retry-After` uses the earliest expiry visible to the refusing transaction, or
+the one-hour maximum when a conflicting newly committed slot is outside that
+snapshot. It does not disclose snapshot membership or another actor's state.
 
 Every authorized export request prunes at most 25 expired snapshot rows using
 the existing repository convention of expiry order plus `FOR UPDATE SKIP
@@ -174,10 +184,11 @@ CSV row counts remain distinct from contribution counts.
 ### Alternatives considered
 
 - A high timestamp/UUID boundary was rejected because insertion time is not
-  commit visibility order: committed A is page one's boundary, late L is staged
-  next, committed B is initially visible after A, and L commits only after page
-  one; a live keyset would then admit L even though page one's snapshot contained
-  only A and B.
+  commit visibility order: A and B commit, late L is staged after both, page
+  one's authorization SQL fixes a repeatable-read snapshot while L is invisible,
+  L commits before page one's owner selection continues, and page one with
+  `limit=1` fixes membership as A/B. A fresh live keyset would later admit L even
+  though page one's snapshot contained only A and B.
 - PostgreSQL exported snapshots were rejected because their exporting
   transaction must remain open across HTTP requests.
 - One membership row per contribution was rejected because a bounded UUID array
@@ -191,9 +202,11 @@ CSV row counts remain distinct from contribution counts.
 - [ ] Traversing any supported selection of 1,001..100,000 records returns every
       member visible in page one's snapshot exactly once; selections above
       100,000 receive one documented full refusal before state or output.
-- [ ] A discriminating real PostgreSQL race commits A, stages late L, commits B,
-      reads page one with `limit=1`, commits L, then proves traversal returns B
-      and excludes L. A deliberately live keyset would wrongly admit L.
+- [ ] A discriminating real PostgreSQL race commits A and B, stages late L,
+      starts page one with `limit=1`, pauses after its first authorization SQL
+      fixes the snapshot, commits L before owner selection continues, then proves
+      traversal returns B and ends without L. A deliberately fresh live keyset
+      would wrongly admit L on another page.
 - [ ] Every page preserves complete zero, one and two-award sets, exact decimal
       strings, source lineage, stable ordering and zero-award CSV visibility.
 - [ ] JSON and CSV traversals over an unchanged source select the same
@@ -205,9 +218,11 @@ CSV row counts remain distinct from contribution counts.
 - [ ] Cursor replay is deterministic until expiry; missing/expired state is
       generic, and bounded concurrent pruning neither deadlocks nor deletes a
       live traversal.
-- [ ] Both routes consume the existing authorization-read rate limit, and six
-      concurrent/fresh initial exports for one actor commit at most five live
-      snapshots while continuations of existing snapshots remain available.
+- [ ] Both routes consume the existing authorization-read rate limit without
+      bypassing canonical service-caller DENY evidence. Two independent
+      repeatable-read sessions racing from four occupied slots commit at most
+      slot 5; one generic capacity refusal occurs and existing continuations
+      remain available.
 - [ ] First-page snapshot creation and ALLOW evidence roll back on projection,
       serialization, over-limit and driver failure; the existing bounded 40001
       retry creates at most one committed snapshot and one fresh ALLOW.
@@ -222,14 +237,15 @@ CSV row counts remain distinct from contribution counts.
 - Required reviewers: `architecture`, `security`, `qa`, `test_delta`, and
   `documentation`
 - Human review focus: durable short-lived membership is the minimum mechanism
-  that survives late commits; assess the supported 1..100,000 range, five-live-
-  snapshot actor bound, one-hour access expiry, generic cursor concealment,
-  exact per-page authority, replay behavior and CSV header contract.
+  that survives late commits; assess the supported 1..100,000 range, five-slot
+  actor bound, one-hour access expiry, conservative concurrent allocation
+  refusal, generic cursor concealment, exact per-page authority, replay behavior
+  and CSV header contract.
 
 ## Implementation plan
 
 1. Add failing pure cursor/request/response and real PostgreSQL snapshot tests,
-   including the A/L/B late-commit counterexample and valid unchanged-source
+   including the A/B/L late-commit counterexample and valid unchanged-source
    control; keep the >1,000 traversal proof separate from the three-row race.
 2. Add reserved migration 0040 and matching CON model/repository operations for
    bounded materialization, exact page lookup and bounded expiry pruning.
@@ -249,7 +265,7 @@ CSV row counts remain distinct from contribution counts.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Current hard bound and transaction/owner invariants | Inspect canonical records API, repository, service, dependency, routes and existing export tests at `82a46ff3c5f21e3cdf762cf505d61d84531a7c80` | Confirmed | Implementation and runtime proof pending |
-| Timestamp/UUID keyset cannot freeze membership | Trace A committed, L staged, B committed, page-one limit 1, then L committed | Discriminating counterexample established in plan review; regression test pending | Exact test fixture execution pending |
+| Timestamp/UUID keyset cannot freeze membership | Trace A/B committed, L staged, page-one AUTH snapshot fixed, then L committed before owner selection | Discriminating counterexample established in plan review; regression test pending | Exact test fixture execution pending |
 | Migration allocation | Lead reserved `0040_contribution_export_snapshots` after `0039_false_guide_activation` | Confirmed | Migration implementation and parity proof pending |
 | Cursor and snapshot plan | Required architecture/security plan review | Pending | No application code starts before review |
 
@@ -258,10 +274,17 @@ CSV row counts remain distinct from contribution counts.
 Plan review at `5c4c50af69b7caafb562e94e26591f3e1943419f` blocked the
 behind-boundary concurrency example and the unsupported assumption that these
 routes already consumed authorization-read rate control. This revision uses the
-discriminating A/L/B interleaving, adds the existing rate dependency plus an
-actor-serialized five-live-snapshot bound, clarifies the supported
+discriminating A/B/L interleaving, adds the existing rate dependency plus a
+database-enforced five-slot snapshot bound, clarifies the supported
 1..100,000/full-refusal contract, distinguishes access expiry from opportunistic
 physical deletion, and requires database rejection of snapshot updates.
+
+Replay review found that a locked-but-unchanged actor row does not refresh a
+waiting repeatable-read transaction's snapshot, so it cannot serialize a
+count-and-insert quota. It also found that the human-read wrapper would suppress
+existing canonical service DENY evidence. The repaired design uses a database
+unique five-slot allocation fence and the rate-control-only dependency; no
+actor business row changes and continuations allocate no slot.
 
 ## Reconciliation
 
