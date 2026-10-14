@@ -16,6 +16,7 @@ from pydantic import (
 
 from app.core.hashing import canonical_json_hash
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+from app.modules.tasks.api.revision import RevisionCandidate
 
 _Sha256 = Annotated[StrictStr, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
 _PositiveVersion = Annotated[StrictInt, Field(ge=1, le=2_147_483_647)]
@@ -183,6 +184,7 @@ class TaskRoutingSourcePreparation(BaseModel):
 
     request: TaskRoutingRequestFacts
     source: TaskPostSubmitSourceProposal
+    revision_candidate: RevisionCandidate | None = None
 
     @model_validator(mode="after")
     def matching_source(self) -> Self:

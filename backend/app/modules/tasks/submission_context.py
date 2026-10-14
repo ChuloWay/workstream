@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from uuid import UUID
+from dataclasses import replace
 
-from sqlalchemy import text
+from sqlalchemy import text, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.checkers.api.execution import (
@@ -18,6 +19,7 @@ from app.modules.tasks.api.submission_context import (
     TaskRetainedSubmissionParentsRequest,
 )
 from app.modules.tasks.repository import TaskRepository
+from app.modules.tasks.revision.service import head_for_source, project_revision
 
 
 class TaskSubmissionContextService:
@@ -97,4 +99,9 @@ class TaskSubmissionContextService:
                 raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
         except (CheckerExecutionUnavailable, ValueError, TypeError) as exc:
             raise TaskSubmissionContextUnavailable("task_submission_context_invalid") from exc
-        return facts
+        preparation = await head_for_source(self._session, source.id)
+        if preparation is None:
+            return replace(facts, revision_context_required=True)
+        now = await self._session.scalar(select(func.clock_timestamp()))
+        view = project_revision(preparation, now)
+        return replace(facts, revision_context=view, revision_context_required=True)

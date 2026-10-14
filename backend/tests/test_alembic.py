@@ -81,6 +81,8 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0041_revision_lineage",
+        "0040_checker_revision_cap",
         "0039_false_guide_activation",
         "0038_task_batch_transitions",
         "0037_task_import_batches",

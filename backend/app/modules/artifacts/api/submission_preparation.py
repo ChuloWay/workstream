@@ -109,6 +109,8 @@ class SubmissionBundlePreparationRequest:
     contributor_attestation: str
     media_type: str
     byte_source: AsyncIterable[bytes]
+    revision_preparation_id: str | None = None
+    revision_preparation_sha256: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

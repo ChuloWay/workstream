@@ -36,9 +36,11 @@ from app.modules.tasks.schemas import (
     ManagementTaskLockedContext, OperationalTaskLockedContext, AuditTaskLockedContext,
     TaskResponse,
     TaskTransitionRequest,
+    TaskRevisionRepairRequest,
     TaskWithAssignmentResponse,
     AdmissionBackedSubmissionCreate, AdmissionBackedSubmissionResponse,
 )
+from app.modules.tasks.api.revision import ContributorRevisionContext
 from app.modules.tasks.service import TaskProjectNotReady, TaskServiceError, TaskNotFound
 from app.modules.tasks.task_import_batches import TaskImportBatchCommands
 from app.modules.tasks.api.task_import_membership import TaskImportBatchError
@@ -386,6 +388,28 @@ async def release_task(
         raise task_http_error(exc) from exc
 
 
+@router.post(
+    "/projects/{project_id}/tasks/{task_id}/revision-context/repair",
+    openapi_extra={"x-workstream-action-id": TaskAuthorityOperation.REVISION_REPAIR.value,
+                   "parameters": [TASK_IDEMPOTENCY_PARAMETER]},
+    response_model=ContributorRevisionContext,
+)
+async def repair_task_revision_context(
+    project_id: UUID,
+    task_id: UUID,
+    payload: TaskRevisionRepairRequest,
+    idempotency_key: Annotated[UUID, Depends(require_task_command_key)],
+    commands: Annotated[AuthorizedTaskCommands, Depends(get_task_commands)],
+) -> ContributorRevisionContext:
+    """Repair the current frozen revision context under fresh PM authority."""
+    try:
+        return await commands.repair_revision_context(
+            project_id, task_id, payload, idempotency_key=idempotency_key,
+        )
+    except TaskServiceError as exc:
+        raise task_http_error(exc) from exc
+
+
 TASK_EVIDENCE_CURSOR_LIMIT = 512
 
 
@@ -597,7 +621,7 @@ async def create_admission_backed_submission(
             ),
         ))
     except TaskSubmissionContextUnavailable as exc:
-        if exc.code in {"task_submission_predecessor_changed", "revision_limit_reached"}:
+        if exc.code in {"task_submission_predecessor_changed", "revision_limit_reached", "revision_deadline_expired", "revision_context_blocked", "revision_context_changed"}:
             raise StructuredHTTPException(
                 status_code=409, detail=exc.code,
                 error_code=exc.code, error_message=exc.code,

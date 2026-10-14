@@ -1,8 +1,8 @@
-# [PILOT-08] — Enforce the locked checker revision cap
+# [PILOT-08] — Complete controlled contributor revision
 
 - Initiative: None
-- Durable disposition: Complete
-- Intended merge outcome: Reject checker-remediation submissions beyond the task’s locked revision allowance before PRE execution and at immutable Submission creation.
+- Durable disposition: Planned
+- Intended merge outcome: Govern checker-driven revision with assignment-scoped caps, fresh deadline windows, atomic complete-context rebase, contributor-visible change summaries, explicit repair and durable timeout rejection/release/reclaim, preserving historical evidence and a shared handoff for human revision.
 
 ## Intent
 
@@ -17,24 +17,44 @@ without applying RevisionPolicy.max_revision_rounds. ART and TASK already
 resolve the exact complete PROJECTS context. Submission.version is consecutive
 and immutable; no second counter is needed.
 
+## Delivery scope
+
+The user explicitly requested one complete PILOT-08 PR, with independently
+reviewed stage commits. PR #569 therefore contains the cap stage and remaining
+revision work together; additional stage PRs are not planned. Human decision
+creation remains owned by #554; this work supplies its reusable revision
+handoff, and does not claim live human decision delivery before that owner lands.
+
 ## Bounded change
 
 ### Allowed
 
 - TASK public submission-context rule and canonical submission creation.
 - ART preparation and its public error mapping; TASK public error mapping.
-- One migration enforcing the same cap on new Submission INSERT, its Alembic
-  head registration and schema proof.
+- Exact PM revision-repair AUTH action, typed facts and audit participant/closure.
+- TASK revision preparation, immutable source/target context records, eligibility,
+  backend contributor reads and authorized blocked-context recovery.
+- PROJECTS active/historical typed context reads and composition adapters needed
+  by the existing TASK routing transaction; no alternate lifecycle writer.
+- Affected TASK, CHECKERS and ART retained-lineage constraints and models,
+  INSERT-only currentness guards, migrations/head/schema registration.
+- Exact revision context acknowledgement through existing intake and submission
+  contracts; existing read authority and public error mapping.
 - Focused cap, replay, concurrency and SQL regressions using existing fixtures,
   including registration in the CI lane catalogue and its ownership assertion.
 - Affected current lifecycle specification, roadmap and this record.
+- TASK-owned timeout outcome and assignment release/reclaim, exact internal AUTH,
+  audit and outbox participants, recurring durable worker scan and registration.
+- Assignment-scoped revision accounting and new-claim intake across TASK/ART/
+  CHECKERS, preserving task-global immutable Submission ordering and evidence.
+- Reconcile the merged CLI submission/context commands with the revision contract.
 
 ### Not allowed
 
 - Guide setup integration (#552), export pagination (#497), dependencies (#565)
-  or CLI implementation (#499).
-- Deadline enforcement, policy rebase, change summaries, human queue/decisions,
-  automatic rejection/cancellation, new counters, retained-data rewrites,
+  or unrelated CLI expansion.
+- Human queue/lease/decision creation, general claim inactivity expiry,
+  redundant counters, retained-data rewrites,
   compatibility paths, deployment or merging.
 
 ## Design and decisions
@@ -45,7 +65,36 @@ preparation and before creating new Submission facts. Exact committed replay
 retains its original path. The SQL INSERT guard requires positive consecutive predecessor lineage, reads
 only the immutable exact policy, and creates no explicit row locks or lifecycle
 writers. Historical rows remain
-unchanged. Submission version minus one is the consumed revision number.
+unchanged. Task-global Submission versions remain ordered, but revision accounting
+must be scoped to the current assignment so a new claimant receives round 0.
+
+## Remaining design decisions
+
+Deadline timing uses PostgreSQL time and is frozen from the governing source
+policy. The user confirmed a fresh window for each committed fixable failure.
+Exact replay, duplicate delivery and repair preserve the original window. No contributor claim lease is introduced.
+
+The user subsequently confirmed automatic revision timeout: append the expired
+attempt's rejection outcome, release its assignment and return the task to ready.
+This supersedes the earlier no-automatic-closure restriction. A seven-day policy
+uses 168 hours; PostgreSQL supplies all eligibility timestamps. A successful
+immutable resubmission ends its predecessor's window, while the next fixable
+failure starts another. ZIP upload alone does not end it. Cap exhaustion refuses
+another revision; the outstanding deadline still governs automatic release.
+
+Use a TASK-owned operation with fresh exact service authority, TASK-first locks,
+immutable timeout evidence and atomic assignment/task/audit/outbox changes. A
+durable recurring scan recovers overdue work after downtime; duplicate delivery
+and stale jobs cannot change a newer attempt or assignment. New claimants receive
+their own initial attempt and revision allowance. Do not rewrite prior evidence,
+fabricate Reviews, or create contribution/award effects on timeout.
+
+Historical attempt rows must stop referencing mutable TASK policy stamps while
+retaining direct immutable owner references and INSERT-time exact-context
+checks. Rebase selects one complete approved active PROJECTS context, updates
+the continuing task/assignment atomically, and retains old/new lineage in an
+immutable preparation. Missing/inconsistent context produces a readable blocked
+head rather than a partial rebase. Replays never reselect active policy.
 
 ## Acceptance criteria
 
@@ -57,12 +106,32 @@ unchanged. Submission version minus one is the consumed revision number.
   immutable facts unchanged.
 - [x] Existing stale-cause and concurrent replacement tests still pass.
 
+- [ ] Fixable completion prepares one immutable source-rooted next-attempt
+  context; all changed policies rebase together or the operation is blocked.
+- [ ] Deadline and cap refusal leave no successor/partial rebase and are visible
+  through authorized contributor reads; infrastructure retries spend no round.
+- [ ] Contributor context exposes a bounded immutable change summary; intake
+  and final creation bind the exact prepared context and reject stale heads.
+- [ ] Repair appends an authorized successor without editing earlier evidence;
+  restarts, duplicate delivery and races cannot branch preparation history.
+- [ ] Historical submissions/checker evidence remain unchanged/readable after
+  rebase. PostgreSQL direct-write and intermediate-lock-wait tests protect this.
+- [ ] Human revision can consume the shared core with distinct genuine Review
+  provenance; live human decision integration remains coordinated with #554.
+- [ ] PostgreSQL-time expiry records rejection, releases the assignment and
+  returns the task to ready with one immutable audit/outbox outcome.
+- [ ] A new claimant completes round 0 and their own allowed revisions after
+  expiry without inheriting the old allowance or changing old evidence.
+- [ ] Real intermediate-lock-wait tests cover expiry/resubmission, duplicate
+  workers and stale jobs after reclaim; API/worker restart and outbox failure
+  recover the exact outcome without partial state or economic effects.
+
 ## Risk and review routing
 
 - Risk class: L1
 - Required reviewers: architecture/reuse, security, QA/test delta, documentation.
 - Human review focus: off-by-one semantics, locked policy custody, concealment,
-  replay and SQL enforcement; later deadline/rebase scope remains explicit.
+  replay and SQL enforcement; complete-context atomicity, authorized recovery and immutable history.
 
 ## Evidence
 
@@ -91,7 +160,8 @@ facts projected by its existing callers, and the test has explicit CI lane
 ownership. The dedicated boundary and lane checks pass.
 
 Scope review identified mutable TASK-lock foreign keys on retained attempt
-records as a prerequisite for later rebase. This PR does not change those keys.
+records as a prerequisite for rebase. The expanded scope replaces those backward
+references with immutable-owner custody and INSERT-time currentness checks.
 Review also identified non-positive Submission versions as a SQL cap bypass;
 the insert guard now validates positive consecutive lineage. The final-write
 regression arranges a real ready admission without the new application cap,
@@ -104,6 +174,7 @@ unrelated uniqueness or stale-lineage rejections.
 - Current-source reconciliation: main 82a46ff3 includes supported false activation;
   #550 is no longer a dependency. Checker remediation now shares revision limits
   by the explicit product decision, superseding the older human-only wording.
-- Next usable boundary: deadline handling, guarded complete-context rebase and
-  contributor change summary, then human-source integration with #554.
-- Remaining risks: complete PILOT-08 is not delivered by cap enforcement alone.
+- Remaining implementation in this PR: deadline handling, guarded complete-context
+  rebase, contributor change summary and repair, with the shared handoff for #554.
+- Remaining risks: cross-owner retained lineage and lock order require PostgreSQL
+  proof; live human decision creation is still a separate owner dependency.

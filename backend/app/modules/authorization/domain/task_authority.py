@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer
 
 from app.modules.authorization.catalogue import ActionAvailability, ActionId, TASK_CONCEALED_READ_ACTIONS, TASK_LOCKED_CONTEXT_READ_ACTIONS
 from app.modules.authorization.domain.audit import AuthorizationDenialCode, MatchedAuthorityKind
@@ -65,6 +65,19 @@ class TaskAuthorityResourceContext(BaseModel):
     revision_routing_manifest_id: UUID | None = None
     revision_replay_preparation_id: UUID | None = None
 
+    @model_serializer(mode="wrap")
+    def serialize(self, handler):
+        """Keep pre-existing TASK authority evidence exactly shaped on other actions."""
+        values = handler(self)
+        revision_keys = (
+            "revision_preparation_id", "revision_preparation_sha256",
+            "revision_routing_manifest_id", "revision_replay_preparation_id",
+        )
+        if all(values.get(key) is None for key in revision_keys):
+            for key in revision_keys:
+                values.pop(key, None)
+        return values
+
 
 class TaskImportBatchResourceContext(BaseModel):
     """Exact native batch, selected byte ancestry and original manifest under fresh PM authority."""
@@ -113,7 +126,9 @@ def task_resource_guard(action: ActionId, resource: TaskAuthorityResourceContext
     )
     if action is ActionId.PROJECT_TASK_REVISION_REPAIR:
         return (
-            all(value is not None for value in revision_fields[:3])
+            resource.revision_routing_manifest_id is not None
+            and ((resource.revision_preparation_id is None) ==
+                 (resource.revision_preparation_sha256 is None))
             and (
                 resource.task_status == "needs_revision"
                 or (

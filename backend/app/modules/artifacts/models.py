@@ -1365,6 +1365,21 @@ class SubmissionBundleAdmission(Base):
             "(predecessor_submission_id is null) = (checker_remediation_manifest_id is null)",
             name="remediation_shape",
         ),
+        ForeignKeyConstraint(
+            ["revision_preparation_id", "revision_preparation_sha256"],
+            ["task_revision_preparations.id", "task_revision_preparations.preparation_sha256"],
+            name="fk_submission_bundle_admission_revision_preparation",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(revision_preparation_id is null) = (revision_preparation_sha256 is null)",
+            name="revision_preparation_shape",
+        ),
+        CheckConstraint(
+            "revision_preparation_sha256 is null or "
+            + SHA256_CHECK.format(column="revision_preparation_sha256"),
+            name="revision_preparation_digest",
+        ),
         CheckConstraint(
             "((put_operation_receipt_id is not null)::int + "
             "(put_observation_receipt_id is not null)::int) = 1",
@@ -1436,6 +1451,8 @@ class SubmissionBundleAdmission(Base):
         ForeignKey("task_post_submit_routing_manifests.id", ondelete="RESTRICT",
                    name="fk_submission_bundle_admissions_checker_remediation_manifest"),
     )
+    revision_preparation_id: Mapped[UUID | None] = mapped_column(Uuid())
+    revision_preparation_sha256: Mapped[str | None] = mapped_column(String(71))
     locked_policy_context_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     guide_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     guide_version: Mapped[str | None] = mapped_column(String(50))

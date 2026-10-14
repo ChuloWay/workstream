@@ -46,26 +46,32 @@ def selected_pre_submit_attempt_request_digest(
     archive_sha256: str,
     archive_byte_count: int,
     packet_sha256: str,
+    revision_preparation_id: UUID | None = None,
+    revision_preparation_sha256: str | None = None,
 ) -> str:
     """Bind the public command namespace to server-observed bytes and packet."""
-    return canonical_json_hash(
-        {
-            "domain": "workstream.selected_pre_submit_attempt_request.v1",
-            "actor_profile_id": str(actor_profile_id),
-            "identity_link_id": str(identity_link_id),
-            "task_id": str(task_id),
-            "assignment_id": str(assignment_id),
-            "predecessor_submission_id": (
-                str(predecessor_submission_id)
-                if predecessor_submission_id is not None
-                else None
-            ),
-            "idempotency_key": str(idempotency_key),
-            "archive_sha256": archive_sha256,
-            "archive_byte_count": archive_byte_count,
-            "packet_sha256": packet_sha256,
-        }
-    )
+    if (revision_preparation_id is None) != (revision_preparation_sha256 is None):
+        raise ValueError("revision preparation acknowledgement is incomplete")
+    body = {
+        "domain": "workstream.selected_pre_submit_attempt_request.v1",
+        "actor_profile_id": str(actor_profile_id),
+        "identity_link_id": str(identity_link_id),
+        "task_id": str(task_id),
+        "assignment_id": str(assignment_id),
+        "predecessor_submission_id": (
+            str(predecessor_submission_id)
+            if predecessor_submission_id is not None
+            else None
+        ),
+        "idempotency_key": str(idempotency_key),
+        "archive_sha256": archive_sha256,
+        "archive_byte_count": archive_byte_count,
+        "packet_sha256": packet_sha256,
+    }
+    if revision_preparation_id is not None:
+        body["revision_preparation_id"] = str(revision_preparation_id)
+        body["revision_preparation_sha256"] = revision_preparation_sha256
+    return canonical_json_hash(body)
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +165,12 @@ def build_selected_pre_submit_reservation(
         semantic_manifest_body=manifest.as_dict(),
         packet_sha256=packet.sha256,
         storage_scheme=storage_scheme,
+        revision_preparation_id=(
+            task.revision_context.preparation_id if task.revision_context is not None else None
+        ),
+        revision_preparation_sha256=(
+            task.revision_context.preparation_sha256 if task.revision_context is not None else None
+        ),
     )
     return SelectedPreSubmitReservationFacts(
         actor_profile_id=actor_profile_id,

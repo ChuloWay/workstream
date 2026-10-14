@@ -52,7 +52,6 @@ async def read_creation_replay(
         or submission.worker_attestation != request.contributor_attestation
         or submission.artifact_binding_id != str(receipt.artifact_binding_id)
         or submission.artifact_content_id != str(receipt.artifact_content_id)
-        or submission.contribution_policy_version_id != assignment.submitter_contribution_policy_version_id
         or receipt.creation_kind != ("checker_remediation" if predecessor_id else "initial")
         or receipt.creation_status != ("needs_revision" if predecessor_id else "in_progress")
         or (receipt.checker_remediation_manifest_id is None) != (predecessor_id is None)

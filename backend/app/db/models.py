@@ -118,3 +118,5 @@ from app.modules.contributions.records.models import ContributionRecord  # noqa:
 from app.modules.compensation.awards.models import CompensationAward  # noqa: F401
 
 from app.modules.reviews.lifecycle.models import JointLifecycleReleaseControl  # noqa: F401
+
+from app.modules.tasks.revision.models import TaskRevisionPreparation  # noqa: F401

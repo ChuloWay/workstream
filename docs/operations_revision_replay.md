@@ -2,11 +2,11 @@
 
 ## Status And Purpose
 
-This is the planned v0.1 human revision operating contract. Human revision
-remains unavailable until its owning REV chunks, exact AUTH activation, and
-REV-13C joint release complete. Checker-remediation replacement uses the public
-preparation and admission-backed Submission operations under locked rules; it
-does not make human revision available.
+This contract covers controlled revision and the remaining human Review
+integration. Human decision composition remains unavailable until its owning
+REV work and exact AUTH activation complete. Checker-remediation replacement
+uses public preparation and admission-backed Submission operations with a frozen
+next-attempt context; it does not make human Review decisions available.
 
 Revision replay preserves an immutable answer to three questions: what the
 reviewer required, how the submitter responded, and how a later reviewer
@@ -15,10 +15,11 @@ resolution.
 
 ## Review-Rooted Preparation
 
-Controlled revision replay begins only from one immutable
-`Review(needs_revision)`. Checker remediation remains a separate CheckerRun-
-rooted resubmission path using the Task's existing locked context; it does not
-fabricate a Review, finding, preparation, reviewer contribution, or human actor.
+Human revision begins from one immutable `Review(needs_revision)`. Checker
+remediation begins from the exact authorized current CheckerRun failure and its
+routing manifest. Both require a frozen next-attempt preparation; checker
+remediation never fabricates a Review, finding, reviewer contribution or human
+actor.
 
 Before contributor access, Workstream appends a RevisionContextPreparation. It
 compares the prior Submission's complete stamped governing context with the
@@ -68,10 +69,12 @@ ReviewFinding response or resolution.
 ## Resubmission And Checks
 
 A human-Review Submission N+1 acknowledges the exact preparation head/digest,
-links its immediate predecessor, and stamps the complete frozen context. A checker-
-remediation Submission N+1 instead binds the exact final needs-revision
-CheckerRun and the Task's existing locked context; it carries no preparation or
-ReviewFinding response. Both paths rerun the normal finalization and checker
+links its immediate predecessor, and stamps the complete frozen context. A
+checker-remediation Submission N+1 binds the exact final needs-revision CheckerRun
+and its preparation, without a ReviewFinding response. Public ZIP preparation
+requires `X-Revision-Preparation-Id` and `X-Revision-Preparation-Sha256`; the ready
+admission retains that acknowledgement for final creation. Initial intake omits
+both. Both paths rerun the normal finalization and checker
 spine. Only a current successful `allow_review` may create a new queue entry.
 
 Human Review return initially prefers the reviewer who requested revision. The
@@ -92,21 +95,39 @@ new ReviewFinding on the later Review.
 
 ## Limits And Recovery
 
-Exact human Review round counting, deadline anchor, and boundary require human
-approval before implementation and exclude checker retries. Approved values use
-database time and freeze on the Review-rooted episode. A reached revision limit
-or deadline blocks further preparation and
-`submission.create`; it does not automatically reject or cancel the task. The
-task remains `needs_revision` until a covered Project Manager explicitly invokes
-the planned reason-bound `review.revision_obligation.close` command. That
-administrative closure uses task `cancelled`, releases the assignment, and
-creates no synthetic Review or contribution.
+The initial Submission is round 0; a limit of 2 permits revisions 1 and 2.
+Each committed contributor-fixable failure starts a fresh window using the
+failed attempt's locked policy and database time. Eligibility ends at the exact
+deadline. Infrastructure retries spend no round; duplicate delivery, replay and
+context repair preserve the original window. A reached revision limit or
+deadline blocks further preparation and
+`submission.create`. At expiry, the durable timeout operation records rejection
+of the outstanding attempt, releases its assignment and returns the task to
+`ready`. It preserves original Submission and finding evidence and creates no
+synthetic Review, contribution or award. Task/assignment changes, immutable
+timeout evidence, audit and outbox publication intent commit atomically.
+
+The recurring worker scan uses PostgreSQL server time and recovers overdue
+opportunities after downtime. Duplicate deliveries and old jobs recheck exact
+source, assignment and status under TASK-first custody; they cannot reject a
+newer submission or release another claimant. A new claimant starts round 0
+with their own allowance while task-global Submission versions remain ordered.
 
 A blocked or invalid context preparation can be repaired only by appending one
-successor through the planned covered-manager repair command. Repair cannot
-bypass limit/deadline exhaustion. Exact durable CheckerRun remediation is not
-legacy; only ambiguous or truly rootless claimed human Review state uses
-Operator evidence-linked close.
+successor through covered-manager repair. For checker-rooted preparations,
+`POST /projects/{project_id}/tasks/{task_id}/revision-context/repair` takes
+`parent_preparation_id`, `parent_preparation_sha256`, a bounded `reason`, and an
+`Idempotency-Key`. It records the exact parent and authorized child atomically.
+Repair cannot bypass limit/deadline exhaustion. The contributor work-context
+read exposes the frozen change summary and current eligibility.
+
+If a retained routing manifest has no preparation, the same endpoint accepts
+`routing_manifest_id` and `reason` instead of the parent pair. This explicit
+manager operation records the missing root using the original failure's window;
+ordinary routing replay does not create it. An expired or exhausted source stays
+blocked. Exact repair replay returns its original preparation identity and
+window after fresh authorization, with eligibility evaluated against the current
+source and preparation head.
 
 ## Required Proof
 
@@ -119,8 +140,8 @@ A checker-remediation replacement uses the exact authorized needs-revision
 routing manifest for the immediate predecessor's current completed CheckerRun.
 ART evidence and admission, TASK dispatch and final AUTH resources retain the
 server-selected `checker_remediation_manifest_id`; the new Submission links its
-predecessor and admission without a duplicate cause field. It keeps the Task's
-locked context, reruns full pre-submit intake, and has no Review preparation or
+predecessor and admission without a duplicate cause field. It uses the frozen
+next-attempt context, reruns full pre-submit intake, and has no human Review or
 ReviewFinding response requirement. A later current `allow_review` result can
 enter the ordinary review route only under its locked ReviewPolicy. A later
 retry cannot rewrite the committed cause.

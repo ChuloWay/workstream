@@ -180,6 +180,7 @@ class LifecycleAuditEntityType(StrEnum):
 class LifecycleAuditEventType(StrEnum):
     """Canonical REV/CON lifecycle facts admitted by the shared participant."""
 
+    TASK_REVISION_CONTEXT_REPAIRED = "TaskRevisionContextRepaired"
     TASK_POST_SUBMIT_ROUTED = "TaskPostSubmitRouted"
     CHECKER_RETRY_REQUESTED = "CheckerRetryRequested"
     TASK_CREATED = "TaskCreated"
@@ -245,6 +246,7 @@ class LifecycleAuditReferenceKind(StrEnum):
     REVIEW_FINDING = "review_finding_id"
     FINDING_RESOLUTION = "finding_resolution_id"
     SUBMISSION_FINDING_RESPONSE = "submission_finding_response_id"
+    REVISION_PREPARATION = "revision_preparation_id"
     ROUTING_MANIFEST = "routing_manifest_id"
     FINAL_ACCEPTANCE = "final_acceptance_id"
     CONTRIBUTION_RECORD = "contribution_record_id"
@@ -255,6 +257,7 @@ _LIFECYCLE_EVENT_ENTITY = {
     LifecycleAuditEventType.CHECKER_RETRY_REQUESTED: LifecycleAuditEntityType.CHECKER_RUN,
     **dict.fromkeys(
         (
+            LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
             LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED,
             LifecycleAuditEventType.TASK_CREATED,
             LifecycleAuditEventType.TASK_SCREENED,
@@ -313,6 +316,13 @@ _LIFECYCLE_EVENT_ENTITY = {
 }
 
 _LIFECYCLE_EVENT_REQUIRED_REFERENCES = {
+    LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED: frozenset({
+        LifecycleAuditReferenceKind.ASSIGNMENT,
+        LifecycleAuditReferenceKind.SUBMISSION,
+        LifecycleAuditReferenceKind.AUTHORIZATION_DECISION,
+        LifecycleAuditReferenceKind.ROUTING_MANIFEST,
+        LifecycleAuditReferenceKind.REVISION_PREPARATION,
+    }),
     LifecycleAuditEventType.CHECKER_RETRY_REQUESTED: frozenset({
         LifecycleAuditReferenceKind.TASK,
         LifecycleAuditReferenceKind.ASSIGNMENT,
@@ -478,6 +488,10 @@ class LifecycleAuditEventInput(BaseModel):
                 )
             if self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:
                 expected = (self.from_status, "ready") if self.from_status in {"claimed", "in_progress"} else None
+            if self.event_type is LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED:
+                expected = (None, None)
+                if self.task_reason is None or self.reason is not LifecycleAuditReason.FACT_RECORDED:
+                    raise ValueError("revision repair requires a reason and immutable fact")
             if expected != (self.from_status, self.to_status):
                 raise ValueError("task event requires its exact transition")
             if self.task_reason is not None and not self.task_reason.strip():

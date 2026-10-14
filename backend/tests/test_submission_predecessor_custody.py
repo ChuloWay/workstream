@@ -106,6 +106,8 @@ def _replacement_request(h, data: bytes, *, predecessor_id: UUID, idempotency_ke
         task_id=h.request.task_id,
         assignment_id=h.request.assignment_id,
         predecessor_submission_id=predecessor_id,
+        revision_preparation_id=str(h.revision_preparation_id),
+        revision_preparation_sha256=h.revision_preparation_sha256,
         idempotency_key=idempotency_key,
         summary=h.creation_request.summary,
         contributor_attestation=h.creation_request.contributor_attestation,
@@ -153,6 +155,11 @@ async def _fixture_revision_context(h):
         assert source["routing_recommendation"] == source["task_status"] == "needs_revision"
         assert source["assignment_status"] == "active" and source["complete"] is True
         await no_economic_effects(session)
+        from app.modules.tasks.revision.service import head_for_source
+        preparation = await head_for_source(session, result.routing_manifest_id)
+        assert preparation is not None
+        h.revision_preparation_id = preparation.id
+        h.revision_preparation_sha256 = preparation.preparation_sha256
     return result.routing_manifest_id
 
 

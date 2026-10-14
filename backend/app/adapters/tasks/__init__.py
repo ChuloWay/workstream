@@ -3,7 +3,9 @@
 from app.modules.tasks.api.submission_history import SubmissionHistoryReadPort
 from app.modules.tasks.api.submitted_bundle import SubmittedBundlePort
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 from app.core.config import Settings
+from app.db.errors import integrity_constraint_name
 from uuid import UUID
 
 from app.modules.artifacts.api import (
@@ -16,6 +18,7 @@ from app.modules.tasks.api import (
     SubmissionCreationRequest,
     SubmissionCreationResult,
     SubmissionCreationAdmissionError,
+    TaskSubmissionContextUnavailable,
     TaskSubmissionContextPort,
     TaskSubmissionContextRequest,
 )
@@ -333,6 +336,13 @@ class TransactionalSubmissionCreationCommand:
                 ).create(request)
         except SubmissionAdmissionConsumptionError as exc:
             raise SubmissionCreationAdmissionError(exc.code) from exc
+        except IntegrityError as exc:
+            name = integrity_constraint_name(exc)
+            if name == "ck_revision_submission_deadline_expired":
+                raise TaskSubmissionContextUnavailable("revision_deadline_expired") from exc
+            if name == "ck_revision_submission_context_changed":
+                raise TaskSubmissionContextUnavailable("revision_context_changed") from exc
+            raise
 
 
 def assignment_invalidation_targets(session: AsyncSession):

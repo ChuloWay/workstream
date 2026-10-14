@@ -17,6 +17,21 @@ from tests.authorization.task_authority.test_audit_contract import event_fields
 from tests.authorization.task_authority.test_prepared import setup, prepare
 
 
+def test_revision_fields_do_not_change_existing_manager_authority_evidence_shape():
+    _, _, _, resource, _ = setup()
+    manager = resource.model_copy(update={
+        "task_status": "draft", "idempotency_key": uuid4(),
+        "request_digest": "sha256:" + "b" * 64,
+    })
+    for value in (manager.model_dump(mode="json"), json.loads(manager.model_dump_json())):
+        assert all(not key.startswith("revision_") for key in value)
+    repair = manager.model_copy(update={"revision_routing_manifest_id": uuid4()})
+    assert all(key in repair.model_dump(mode="json") for key in (
+        "revision_preparation_id", "revision_preparation_sha256",
+        "revision_routing_manifest_id", "revision_replay_preparation_id",
+    ))
+
+
 def repair_resource():
     _, _, _, resource, _ = setup()
     contributor_id = uuid4()
@@ -65,6 +80,23 @@ def test_revision_repair_terminal_replay_requires_typed_committed_child(status):
         assert not task_resource_guard(action, resource)
     assert task_resource_guard(
         action, resource.model_copy(update={"revision_replay_preparation_id": uuid4()})
+    )
+
+
+def test_revision_repair_missing_root_requires_manifest_and_null_parent_pair():
+    resource = repair_resource().model_copy(update={
+        "revision_preparation_id": None,
+        "revision_preparation_sha256": None,
+    })
+    assert task_resource_guard(ActionId.PROJECT_TASK_REVISION_REPAIR, resource)
+    assert not task_resource_guard(
+        ActionId.PROJECT_TASK_REVISION_REPAIR,
+        resource.model_copy(update={"revision_routing_manifest_id": None}),
+    )
+    assert task_resource_guard(
+        ActionId.PROJECT_TASK_REVISION_REPAIR,
+        resource.model_copy(update={"revision_replay_preparation_id": uuid4(),
+                                    "task_status": "submitted"}),
     )
 
 

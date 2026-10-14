@@ -7,6 +7,7 @@ from typing import Literal, Protocol, get_args
 from uuid import UUID
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+from app.modules.tasks.api.revision import ContributorRevisionContext
 
 
 TaskSubmissionContextKind = Literal["initial", "checker_remediation"]
@@ -15,6 +16,9 @@ TaskSubmissionContextFailure = Literal[
     "task_submission_context_invalid",
     "task_submission_predecessor_changed",
     "revision_limit_reached",
+    "revision_deadline_expired",
+    "revision_context_blocked",
+    "revision_context_changed",
 ]
 
 
@@ -105,6 +109,8 @@ class TaskSubmissionContextFacts:
     locked_policy: TaskPolicyLineage
     acceptance_criteria: str | None
     checker_remediation_manifest_id: UUID | None = None
+    revision_context: ContributorRevisionContext | None = None
+    revision_context_required: bool = False
 
     def __post_init__(self) -> None:
         """Enforce the exact initial or checker-remediation lifecycle shape."""
@@ -168,6 +174,16 @@ def require_revision_capacity(
     """Apply the exact locked policy to a new attempt; initial work is round zero."""
     if task.predecessor is None:
         return
+    if task.revision_context_required and task.revision_context is None:
+        raise TaskSubmissionContextUnavailable("revision_context_blocked")
+    if (task.revision_context is not None and task.revision_context.outcome != "blocked"
+            and task.revision_context.target.lineage != task.locked_policy):
+        raise TaskSubmissionContextUnavailable("revision_context_changed")
+    if task.revision_context is not None and task.revision_context.disposition != "ready":
+        code = task.revision_context.disposition
+        raise TaskSubmissionContextUnavailable(
+            "revision_context_blocked" if code == "context_blocked" else code
+        )
     locked = task.locked_policy
     if (
         task.locked_project_context.project_id != project_id

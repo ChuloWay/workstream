@@ -40,6 +40,8 @@ class SelectedPreSubmitAdmissionLineage:
     semantic_manifest_body: dict[str, object]
     packet_sha256: str
     storage_scheme: str
+    revision_preparation_id: UUID | None = None
+    revision_preparation_sha256: str | None = None
 
     def __post_init__(self) -> None:
         identifiers = (
@@ -78,6 +80,19 @@ class SelectedPreSubmitAdmissionLineage:
             )
             or (self.predecessor_submission_id is None)
             != (self.checker_remediation_manifest_id is None)
+            or (self.revision_preparation_id is None)
+            != (self.revision_preparation_sha256 is None)
+            or (self.revision_preparation_id is not None and (
+                type(self.revision_preparation_id) is not UUID
+                or self.predecessor_submission_id is None
+            ))
+            or (self.revision_preparation_sha256 is not None and (
+                type(self.revision_preparation_sha256) is not str
+                or len(self.revision_preparation_sha256) != 71
+                or not self.revision_preparation_sha256.startswith("sha256:")
+                or any(character not in "0123456789abcdef"
+                       for character in self.revision_preparation_sha256[7:])
+            ))
             or (
                 self.checker_remediation_manifest_id is not None
                 and type(self.checker_remediation_manifest_id) is not UUID
@@ -104,7 +119,7 @@ class SelectedPreSubmitAdmissionLineage:
 
     def canonical_body(self) -> dict[str, object]:
         """Return every fact later copied into verified admission custody."""
-        return {
+        body = {
             "predecessor_submission_id": (
                 str(self.predecessor_submission_id)
                 if self.predecessor_submission_id is not None
@@ -136,11 +151,17 @@ class SelectedPreSubmitAdmissionLineage:
             "packet_sha256": self.packet_sha256,
             "storage_scheme": self.storage_scheme,
         }
+        # Preserve the exact canonical bytes of retained requests without an
+        # acknowledgement; new revision requests include both frozen facts.
+        if self.revision_preparation_id is not None:
+            body["revision_preparation_id"] = str(self.revision_preparation_id)
+            body["revision_preparation_sha256"] = self.revision_preparation_sha256
+        return body
 
     @classmethod
     def from_canonical_body(cls, body: object) -> SelectedPreSubmitAdmissionLineage:
         """Parse the exact closed body copied into ART's durable intent."""
-        if type(body) is not dict or set(body) != {
+        required = {
             "predecessor_submission_id",
             "predecessor_submission_version",
             "checker_remediation_manifest_id",
@@ -163,7 +184,15 @@ class SelectedPreSubmitAdmissionLineage:
             "semantic_manifest_body",
             "packet_sha256",
             "storage_scheme",
-        }:
+        }
+        if type(body) is not dict or set(body) not in (
+            required, required | {"revision_preparation_id", "revision_preparation_sha256"},
+        ):
+            raise ValueError("selected PRE admission lineage is invalid")
+        if "revision_preparation_id" in body and (
+            body["revision_preparation_id"] is None
+            or body["revision_preparation_sha256"] is None
+        ):
             raise ValueError("selected PRE admission lineage is invalid")
         predecessor = body["predecessor_submission_id"]
         return cls(
@@ -193,6 +222,11 @@ class SelectedPreSubmitAdmissionLineage:
             semantic_manifest_body=body["semantic_manifest_body"],
             packet_sha256=body["packet_sha256"],
             storage_scheme=body["storage_scheme"],
+            revision_preparation_id=(
+                UUID(str(body["revision_preparation_id"]))
+                if body.get("revision_preparation_id") is not None else None
+            ),
+            revision_preparation_sha256=body.get("revision_preparation_sha256"),
         )
 
 

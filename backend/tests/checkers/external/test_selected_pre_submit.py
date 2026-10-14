@@ -63,11 +63,14 @@ from app.modules.artifacts.preparation import (
 from app.modules.artifacts.selected_pre_submit_admission import (
     bind_selected_pre_submit_admission,
     build_selected_pre_submit_reservation,
+    selected_pre_submit_attempt_request_digest,
 )
 from app.modules.artifacts.submission_admission import (
     SubmissionBundleAdmissionPublicationError,
     SubmissionBundleAdmissionPublisher,
+    require_revision_preparation_acknowledgement,
 )
+from app.modules.artifacts.api import SubmissionBundlePreparationRejected
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspector,
     SubmissionArchiveLimits,
@@ -156,6 +159,98 @@ def _selected_admission_reservation():
         admission_lineage=lineage,
     )
     return manifest, post_policy, selected
+
+
+def test_revision_acknowledgement_changes_selected_request_and_retains_old_bytes() -> None:
+    """A new acknowledgement is frozen; old selected requests keep their digest."""
+    _, _, retained = _selected_admission_reservation()
+    old_body = retained.canonical_body()
+    assert SelectedPreSubmitReservationFacts.from_canonical_body(old_body).canonical_body() == old_body
+    assert "revision_preparation_id" not in old_body["admission_lineage"]
+
+    predecessor_id, manifest_id, preparation_id = (
+        new_record_id(), new_record_id(), new_record_id()
+    )
+    acknowledged = replace(
+        retained.admission_lineage,
+        predecessor_submission_id=predecessor_id,
+        predecessor_submission_version=1,
+        checker_remediation_manifest_id=manifest_id,
+        revision_preparation_id=preparation_id,
+        revision_preparation_sha256=_hex_sha("b"),
+    )
+    selected = replace(retained, admission_lineage=acknowledged)
+    body = selected.canonical_body()
+    assert body["admission_lineage"]["revision_preparation_id"] == str(preparation_id)
+    assert body["admission_lineage"]["revision_preparation_sha256"] == _hex_sha("b")
+    assert SelectedPreSubmitReservationFacts.from_canonical_body(body).request_digest == selected.request_digest
+    null_ack = dict(body)
+    null_ack["admission_lineage"] = dict(body["admission_lineage"])
+    null_ack["admission_lineage"]["revision_preparation_id"] = None
+    with pytest.raises(ValueError, match="selected PRE admission lineage is invalid"):
+        SelectedPreSubmitReservationFacts.from_canonical_body(null_ack)
+
+    request = dict(
+        actor_profile_id=selected.actor_profile_id,
+        identity_link_id=selected.identity_link_id,
+        task_id=selected.task_id,
+        assignment_id=selected.assignment_id,
+        predecessor_submission_id=predecessor_id,
+        idempotency_key=selected.idempotency_key,
+        archive_sha256=selected.archive_sha256,
+        archive_byte_count=selected.archive_byte_count,
+        packet_sha256=acknowledged.packet_sha256,
+    )
+    without_ack = selected_pre_submit_attempt_request_digest(**request)
+    with_ack = selected_pre_submit_attempt_request_digest(
+        **request, revision_preparation_id=preparation_id,
+        revision_preparation_sha256=_hex_sha("b"),
+    )
+    assert without_ack != with_ack
+    with pytest.raises(ValueError, match="incomplete"):
+        selected_pre_submit_attempt_request_digest(
+            **request, revision_preparation_id=preparation_id,
+        )
+    with pytest.raises(ValueError, match="selected PRE admission lineage is invalid"):
+        replace(retained.admission_lineage, revision_preparation_id=preparation_id,
+                revision_preparation_sha256=_hex_sha("b"))
+
+
+def test_revision_acknowledgement_requires_exact_current_preparation() -> None:
+    """The explicit pair is required for revisions and forbidden on initial intake."""
+    predecessor_id, manifest_id, preparation_id = (
+        new_record_id(), new_record_id(), new_record_id()
+    )
+    revision = SimpleNamespace(
+        preparation_id=preparation_id,
+        preparation_sha256=_hex_sha("c"),
+        source_submission_id=predecessor_id,
+        source_routing_manifest_id=manifest_id,
+    )
+    task = SimpleNamespace(
+        predecessor=SimpleNamespace(submission_id=predecessor_id),
+        checker_remediation_manifest_id=manifest_id,
+        revision_context=revision,
+    )
+    request = SimpleNamespace(
+        revision_preparation_id=str(preparation_id),
+        revision_preparation_sha256=_hex_sha("c"),
+    )
+    require_revision_preparation_acknowledgement(task, request)
+    with pytest.raises(SubmissionBundlePreparationRejected, match="revision_context_changed"):
+        require_revision_preparation_acknowledgement(
+            task, SimpleNamespace(revision_preparation_id=str(new_record_id()),
+                                  revision_preparation_sha256=_hex_sha("c")),
+        )
+    with pytest.raises(SubmissionBundlePreparationRejected, match="revision_acknowledgement_required"):
+        require_revision_preparation_acknowledgement(
+            task, SimpleNamespace(revision_preparation_id=None,
+                                  revision_preparation_sha256=None),
+        )
+    with pytest.raises(SubmissionBundlePreparationRejected, match="revision_acknowledgement_invalid"):
+        require_revision_preparation_acknowledgement(
+            SimpleNamespace(predecessor=None), request,
+        )
 
 
 def _selected_admission_publisher_fixture(selected):

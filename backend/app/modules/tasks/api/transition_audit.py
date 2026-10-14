@@ -49,5 +49,21 @@ class TaskTransitionFacts:
     authority: TaskAuthorityDecision | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class TaskRevisionRepairAuditFacts:
+    event_id: UUID
+    project_id: UUID
+    task_id: UUID
+    assignment_id: UUID
+    submission_id: UUID
+    routing_manifest_id: UUID
+    preparation_id: UUID
+    actor_profile_id: UUID
+    authorization_decision_id: UUID
+    reason: str
+
+
 class TaskTransitionAuditPort(Protocol):
     async def record(self, facts: TaskTransitionFacts) -> None: ...
+
+    async def record_revision_repair(self, facts: TaskRevisionRepairAuditFacts) -> None: ...

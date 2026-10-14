@@ -21,6 +21,7 @@ from app.modules.tasks.api.assignment_invalidation import (
     assignment_invalidation_resource_digest,
 )
 from app.modules.tasks.api import TaskAuthorityOperation, TaskTransitionAuditPort, TaskTransitionFacts
+from app.modules.tasks.api.transition_audit import TaskRevisionRepairAuditFacts
 
 
 class _TaskTransitionAudit:
@@ -55,6 +56,24 @@ class _TaskTransitionAudit:
                 LifecycleAuditReferenceKind.PROJECT: facts.project_id,
                 LifecycleAuditReferenceKind.TASK: facts.task_id,
                 **({LifecycleAuditReferenceKind.ASSIGNMENT: facts.assignment_id} if facts.assignment_id else {}),
+                LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: facts.authorization_decision_id,
+            },
+        ))
+
+
+    async def record_revision_repair(self, facts: TaskRevisionRepairAuditFacts) -> None:
+        await self._participant.add_event(LifecycleAuditEventInput(
+            event_id=facts.event_id, entity_type=LifecycleAuditEntityType.TASK,
+            entity_id=facts.task_id, event_type=LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
+            actor_id=facts.actor_profile_id, reason=LifecycleAuditReason.FACT_RECORDED,
+            task_reason=facts.reason,
+            references={
+                LifecycleAuditReferenceKind.PROJECT: facts.project_id,
+                LifecycleAuditReferenceKind.TASK: facts.task_id,
+                LifecycleAuditReferenceKind.ASSIGNMENT: facts.assignment_id,
+                LifecycleAuditReferenceKind.SUBMISSION: facts.submission_id,
+                LifecycleAuditReferenceKind.ROUTING_MANIFEST: facts.routing_manifest_id,
+                LifecycleAuditReferenceKind.REVISION_PREPARATION: facts.preparation_id,
                 LifecycleAuditReferenceKind.AUTHORIZATION_DECISION: facts.authorization_decision_id,
             },
         ))
