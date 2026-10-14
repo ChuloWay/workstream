@@ -78,9 +78,16 @@ the retained page IDs through the existing owner ports.
   snapshot migration test, the shared test-database reset/fingerprint metadata,
   exact test-lane inventory updates required for any new test module, and only
   the behavior-ownership metadata required by changed eligible source paths.
-- `cli/tests/integration/test_contribution_evidence_public_api.py` only to
-  activate the existing pagination-secret fixture for the real API contract;
-  no CLI implementation or consumer behavior changes.
+- `cli/internal/api/{contribution_evidence,contribution_csv}.go` and
+  `cli/internal/command/contribution_evidence.go` for strict fixed-membership
+  continuation, complete-output staging, and reuse of the existing private,
+  atomic, no-overwrite CSV publisher. The existing self/project commands,
+  filters and output shapes remain the public CLI surface; there is no cursor
+  flag or partial-page mode.
+- `cli/tests/integration/test_contribution_evidence.py` and
+  `cli/tests/integration/test_contribution_evidence_public_api.py` for hostile
+  multi-page HTTP responses and real CLI/socket/PostgreSQL traversal beyond
+  1,000 contributions, including later-page denial and concurrent acceptance.
 - Affected current contract text in `README.md`,
   `cli/README.md`,
   `docs/spec_contribution_compensation.md`,
@@ -88,8 +95,9 @@ the retained page IDs through the existing owner ports.
 
 ### Not allowed
 
-- CLI production or consumer changes; this backend change does not assign or
-  implement that follow-up.
+- A generic CLI pagination/export framework, new contribution cursor or page
+  flags, a partial-export mode, fallback decoding for the superseded response,
+  local membership invention, or automatic replay of a failed page.
 - Contribution, award, policy, acceptance, review, task, artifact or economic
   mutation; fulfillment, payout, reconciliation, reputation or broad
   all-project export.
@@ -187,6 +195,18 @@ cursor in `X-Workstream-Next-Cursor` when another page exists. Output format is
 cursor-bound, so a traversal cannot change serialization rules mid-snapshot.
 CSV row counts remain distinct from contribution counts.
 
+The CLI follows the opaque continuation internally with the same normalized
+filters and explicit 1,000-record limit on every request. It validates each
+closed page and cross-page contribution/award identity and ordering before
+publishing a complete result. Its JSON output retains the existing
+`exported_at`/`items` command shape, using page one's server timestamp and no
+CLI-visible cursor. CSV retains the server's exact header and data bytes, emits
+the header once, and never reconstructs award rows. JSON is staged in a private
+temporary file before stdout; CSV extends the existing confined 0600 temporary
+file, sync, hard-link and no-overwrite publication path. A denial, malformed
+page, transport failure or cursor cycle after page one therefore publishes no
+successful stdout or destination file.
+
 ### Alternatives considered
 
 - A high timestamp/UUID boundary was rejected because insertion time is not
@@ -259,10 +279,18 @@ CSV row counts remain distinct from contribution counts.
    read service while retaining all exact owner projection guards.
 4. Compose the secret and publish cursor/limit contracts through the existing
    routes/dependency, with JSON body and CSV header parity.
-5. Run focused pure, AUTH, migration and isolated PostgreSQL export proofs;
+5. Replace the CLI's single-page JSON/CSV calls with one contribution-specific
+   bounded traversal that follows opaque continuations, stages complete output,
+   and preserves the existing self/project command, filters, JSON shape and
+   exact server CSV bytes without exposing pagination controls.
+6. Prove hostile multi-page responses, exact-once contribution/award ordering,
+   unchanged filters/limit, cursor cycles and later-page failure without
+   publication; extend the real socket/PostgreSQL proof beyond 1,000 members
+   with concurrent acceptance and authority revocation between pages.
+7. Run focused pure, AUTH, migration and isolated PostgreSQL export proofs;
    then run lint, type checks, boundary/Commitrail/markdown/stale-wording gates
    and full CI without skips or threshold changes.
-6. Reconcile current main, update the affected current docs/roadmap claims, freeze
+8. Reconcile current main, update the affected current docs/roadmap claims, freeze
    a clean candidate, and run exact-head architecture, security, QA, test-delta
    and documentation reviews before PR readiness.
 
