@@ -225,14 +225,17 @@ class LightweightAgentGateTests(unittest.TestCase):
             "lane:\n"
             "          - shared_foundations_a\n"
             "          - shared_foundations_b\n"
+            "          - shared_foundations_c\n"
             "          - schema_contracts\n"
             "          - project_lifecycle_a\n"
             "          - project_lifecycle_b\n"
             "          - project_lifecycle_c\n"
             "          - project_lifecycle_d\n"
+            "          - project_lifecycle_e\n"
             "          - task_lifecycle_a\n"
             "          - task_lifecycle_b\n"
-            "          - task_lifecycle_c",
+            "          - task_lifecycle_c\n"
+            "          - task_lifecycle_d",
         )
         self.assertIn(
             "  test:\n    if: ${{ always() }}\n"
@@ -338,14 +341,14 @@ class LightweightAgentGateTests(unittest.TestCase):
             self.assertIn('docker load --input "${RUNNER_TEMP}/minio-image/minio.tar"', job)
             self.assertIn('"${MINIO_IMAGE}" server /data --address :9000', job)
 
-    def test_backend_python_cache_keeps_fresh_installs_and_exact_inputs(self) -> None:
+    def test_backend_uv_cache_keeps_fresh_frozen_installs_and_exact_inputs(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
 
         key = (
-            "backend-pip-v1-${{ runner.os }}-${{ runner.arch }}-py312-"
-            "${{ hashFiles('backend/pyproject.toml', '.github/workflows/backend.yml') }}"
+            "backend-uv-v1-${{ runner.os }}-${{ runner.arch }}-py312-"
+            "${{ hashFiles('backend/uv.lock', '.github/workflows/backend.yml') }}"
         )
-        self.assertEqual(workflow.count("Restore exact backend pip downloads from trusted cache"), 3)
+        self.assertEqual(workflow.count("Restore exact backend uv downloads from trusted cache"), 3)
         self.assertEqual(workflow.count(f"key: {key}"), 4)
         self.assertEqual(
             workflow.count(
@@ -357,40 +360,109 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow.count("uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830"),
             2,
         )
-        install = 'python -m pip install -e ".[dev,agents]"'
-        cache_env = 'echo "PIP_CACHE_DIR=${RUNNER_TEMP}/backend-pip-cache" >> "${GITHUB_ENV}"'
+        tool_install = 'python -m pip install "uv==0.10.7"'
+        frozen_install = "uv sync --frozen --all-extras"
+        lock_check = "uv lock --check"
+        cache_env = 'echo "UV_CACHE_DIR=${RUNNER_TEMP}/backend-uv-cache" >> "${GITHUB_ENV}"'
         job_blocks = (
             workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split("\n  lanes:\n", 1)[0],
             workflow.split("\n  lanes:\n", 1)[1].split("\n  cli-public-contract:\n", 1)[0],
             workflow.split("\n  test:\n", 1)[1],
         )
         for job in job_blocks:
-            self.assertEqual(job.count("Restore exact backend pip downloads from trusted cache"), 1)
-            self.assertEqual(job.count(install), 1)
+            self.assertEqual(job.count("Restore exact backend uv downloads from trusted cache"), 1)
+            self.assertEqual(job.count(tool_install), 1)
+            self.assertEqual(job.count(lock_check), 1)
+            self.assertEqual(job.count(frozen_install), 1)
+            self.assertLess(job.index(tool_install), job.index(lock_check))
+            self.assertLess(job.index(lock_check), job.index(frozen_install))
             self.assertEqual(job.count(cache_env), 1)
-            self.assertLess(job.index("Restore exact backend pip downloads"), job.index(cache_env))
-            self.assertLess(job.index(cache_env), job.index(install))
-        self.assertEqual(workflow.count(install), 3)
+            self.assertLess(job.index("Restore exact backend uv downloads"), job.index(cache_env))
+            self.assertLess(job.index(cache_env), job.index(tool_install))
+            self.assertLess(job.index(tool_install), job.index(frozen_install))
+        self.assertEqual(workflow.count(tool_install), 3)
+        self.assertEqual(workflow.count(lock_check), 3)
+        self.assertEqual(workflow.count(frozen_install), 3)
         self.assertEqual(workflow.count(cache_env), 3)
+        self.assertNotIn('python -m pip install -e ".[dev,agents]"', workflow)
         root_env = workflow.split("\nenv:\n", 1)[1].split("\njobs:\n", 1)[0]
         self.assertNotIn("runner.", root_env)
-        pip_save = workflow.split(
-            "      - name: Save verified backend pip downloads to trusted cache\n", 1
+        uv_save = workflow.split(
+            "      - name: Save verified backend uv downloads to trusted cache\n", 1
         )[1].split("\n  lanes:\n", 1)[0]
         self.assertIn(
             "if: github.event_name == 'push' && github.ref == 'refs/heads/main' "
-            "&& steps.pip-cache.outputs.cache-hit != 'true'",
-            pip_save,
+            "&& steps.uv-cache.outputs.cache-hit != 'true'",
+            uv_save,
         )
         preflight = workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split(
             "\n  lanes:\n", 1
         )[0]
         self.assertLess(
             preflight.index("      - name: Validate module, AUTH, and test boundaries"),
-            preflight.index("      - name: Save verified backend pip downloads to trusted cache"),
+            preflight.index("      - name: Save verified backend uv downloads to trusted cache"),
         )
         self.assertNotIn("restore-keys:", workflow)
         self.assertNotIn(".venv", workflow)
+
+    def test_backend_python_commands_stay_in_the_frozen_uv_environment(self) -> None:
+        workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
+        preflight = workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split(
+            "\n  external-checker-runtime:\n", 1
+        )[0]
+        lanes = workflow.split("\n  lanes:\n", 1)[1].split(
+            "\n  cli-public-contract:\n", 1
+        )[0]
+        full_suite = workflow.split("\n  test:\n", 1)[1]
+
+        for command in (
+            "uv run --frozen ruff check",
+            "uv run --frozen python -m scripts.module_boundaries validate",
+            "PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --frozen python -m pytest -q",
+            "uv run --frozen python -m scripts.authorization_boundary validate",
+            "uv run --frozen python -m scripts.test_structure_boundary validate",
+            "uv run --frozen python -m scripts.behavior_ownership validate",
+        ):
+            self.assertIn(command, preflight)
+        self.assertEqual(preflight.count("uv run --frozen ruff check"), 1)
+        self.assertIn(
+            'test "$(uv run --frozen ruff --version)" = "ruff 0.15.22"',
+            preflight,
+        )
+        self.assertIn("uv run --frozen python scripts/run_test_lanes.py", lanes)
+        self.assertIn("uv run --frozen ruff check app tests scripts", lanes)
+        self.assertIn("uv run --frozen docstr-coverage --config .docstr.yaml", lanes)
+        for command in (
+            "uv run --frozen python -m scripts.merge_test_lane_evidence",
+            "uv run --frozen python scripts/validate_test_lane_evidence.py",
+            "uv run --frozen coverage combine",
+            "uv run --frozen python scripts/run_isolated_tests.py",
+            "-- uv run --frozen python scripts/api_contract_e2e.py",
+            "uv run --frozen coverage report --precision=2",
+            "uv run --frozen coverage json",
+            "uv run --frozen python - <<'PY'",
+        ):
+            self.assertIn(command, full_suite)
+
+        for escaped in (
+            "\n          ruff check ",
+            "\n          python -m scripts.module_boundaries",
+            "\n          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest",
+            "\n          python scripts/run_test_lanes.py",
+            "\n          python -m scripts.merge_test_lane_evidence",
+            "\n          python scripts/validate_test_lane_evidence.py",
+            "\n          coverage combine",
+            "\n          python scripts/run_isolated_tests.py",
+            "\n          -- python scripts/api_contract_e2e.py",
+            "\n        run: coverage report",
+            "\n          coverage json",
+            "\n          python - <<'PY'",
+        ):
+            self.assertNotIn(escaped, workflow)
+
+        for line in workflow.splitlines():
+            if "uv run " in line:
+                self.assertIn("uv run --frozen ", line)
 
     def test_parallel_preflight_and_lanes_fail_closed_at_fan_in(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
