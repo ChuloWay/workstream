@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 from app.modules.authorization.catalogue import ActionId
@@ -34,19 +34,22 @@ def make_diagnostic_case() -> SimpleNamespace:
     return SimpleNamespace(
         project_id=project_id, guide_id=guide_id, target_id=target_id,
         project=project, guide=guide, target=target, repository=repository,
-        authorization=SimpleNamespace(
-            require=AsyncMock(), prelock_serialized_admin_read_actor=AsyncMock(),
-        ),
+        authorization=SimpleNamespace(require=AsyncMock()),
+        prelock=AsyncMock(),
     )
 
 
 async def read_diagnostic(case: SimpleNamespace, action: ActionId) -> Any:
     """Call real PROJECT composition with the requested immutable selectors."""
-    return await authorize_project_diagnostic_read(
-        authorization=case.authorization,
-        repository=case.repository,
-        action_id=action,
-        project_id=case.project_id,
-        guide_id=case.guide_id,
-        target_id=case.target_id,
-    )
+    with patch(
+        "app.modules.projects.authorization_reads.prelock_serialized_admin_read_actor",
+        case.prelock,
+    ):
+        return await authorize_project_diagnostic_read(
+            authorization=case.authorization,
+            repository=case.repository,
+            action_id=action,
+            project_id=case.project_id,
+            guide_id=case.guide_id,
+            target_id=case.target_id,
+        )

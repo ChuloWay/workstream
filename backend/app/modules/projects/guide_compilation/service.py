@@ -333,6 +333,21 @@ class GuideCompilationService:
             await self._session.flush()
         return await _request_receipt(repository, operation)
 
+    async def _lock_execution(
+        self,
+        repository: GuideCompilationRepository,
+        actor: ActorIdentityFacts,
+        facts: ProjectGuideCompilationExecutePreflightFacts,
+    ) -> tuple[ProjectGuideCompilationRequestOperation, ProjectGuideCompilationAttempt]:
+        """Retain service authority and parent custody before compilation children."""
+        await self._authorization.authorize_execute_preflight(actor=actor, facts=facts)
+        project = await ProjectRepository(self._session).get_project(
+            str(facts.project_id), for_update=True
+        )
+        if project is None:
+            raise GuideCompilationIntegrityError("compilation project unavailable")
+        return await _locked_exact(repository, facts)
+
     async def fence_dispatch(
         self,
         *,
@@ -343,7 +358,7 @@ class GuideCompilationService:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
-            operation, attempt = await _locked_exact(repository, facts)
+            operation, attempt = await self._lock_execution(repository, actor, facts)
             if attempt.status == "compilation_provider_uncertain":
                 return _dispatch_receipt(operation, attempt, dispatch_permitted=False)
             if attempt.status != "compilation_reserved":
@@ -353,7 +368,6 @@ class GuideCompilationService:
                     classification=await repository.recovery_classification(attempt.id),
                     dispatch_permitted=False,
                 )
-            await self._authorization.authorize_execute_preflight(actor=actor, facts=facts)
             attempt = await repository.mark_provider_uncertain(attempt.id)
             receipt = _dispatch_receipt(operation, attempt, dispatch_permitted=True)
         return receipt
@@ -370,10 +384,9 @@ class GuideCompilationService:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
-            operation, attempt = await _locked_exact(repository, facts)
+            operation, attempt = await self._lock_execution(repository, actor, facts)
             if attempt.status != "compilation_provider_uncertain":
                 raise GuideCompilationIntegrityError("provider outcome is not recordable")
-            await self._authorization.authorize_execute_preflight(actor=actor, facts=facts)
             attempt = await repository.accept_result(
                 attempt_id=attempt.id, context=context, result=result
             )
@@ -391,10 +404,9 @@ class GuideCompilationService:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
-            operation, attempt = await _locked_exact(repository, facts)
+            operation, attempt = await self._lock_execution(repository, actor, facts)
             if attempt.status != "compilation_provider_uncertain":
                 raise GuideCompilationIntegrityError("provider outcome is not recordable")
-            await self._authorization.authorize_execute_preflight(actor=actor, facts=facts)
             attempt = await repository.mark_invalid_terminal(
                 attempt_id=attempt.id, failure_code=failure_code
             )
@@ -412,7 +424,7 @@ class GuideCompilationService:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
-            operation, attempt = await _locked_exact(repository, facts)
+            operation, attempt = await self._lock_execution(repository, actor, facts)
             if attempt.status == "compilation_persisted":
                 return await _persisted_receipt(repository, operation, attempt)
             if attempt.status != "provider_result_accepted":

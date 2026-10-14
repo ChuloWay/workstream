@@ -131,6 +131,38 @@ connected proof and regressions for discovered defects.
 - Remaining risks: Recorded inference proves integration, not model quality;
   local identity, MinIO and development container isolation are not deployment.
 
+## Compilation phase lock repair
+
+The connected run on `175551c19` reached real setup execution and reproduced a
+second PostgreSQL `40P01`: public diagnostic reading held Project and waited for
+Guide, while accepted-result persistence held Guide and its compilation INSERT
+waited for the Project foreign key. Both isolated database and MinIO cleanup
+completed. Reservation-only proof does not establish the remaining phases.
+
+The reviewed repair extends the same order across mutation roots:
+AUTH actor/link, Project, Attempt/request, Guide/Setup, then child writes.
+Additional allowed files are
+`backend/app/modules/projects/guide_compilation/repository.py`,
+`backend/app/modules/projects/guide_compilation/projections.py`, and
+`backend/tests/projects/guide_compilation/test_live_cutover_postgresql.py`.
+The already allowed compilation service performs current execution preflight
+before the existing Project lock and exact child-lineage locks for fence,
+accepted/invalid result recording and persistence. Result-bound prepare/consume
+remains after exact facts are locked. Projection and finalization already prepare
+AUTH first; their existing shared lock routines acquire Project before children.
+The shared finalization reader also serves prepared proposal mutations. No
+manifest or read-only execution-state reader gains mutation authority or a new
+lock order; no 503 retry conceals a deadlock.
+
+Required proof pauses each of compilation persistence, sufficiency projection
+and finalization before its child INSERT, starts an authorized public setup read
+in an independent session, observes the worker blocking that read, then requires
+both operations to finish with one retained result chain. Removing the execution
+Project lock must make the persistence case fail at its intended completion
+assertion. Existing reservation, manager-read, replay and revocation proofs remain
+required, followed by the full connected runtime. Architecture/security and
+QA/test-delta review must cover the combined ordering, including shared callers.
+
 ## Focused failure-proof map
 
 All paths below are relative to `backend/tests/`. Run named existing nodes with

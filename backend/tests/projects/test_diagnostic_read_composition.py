@@ -133,7 +133,8 @@ async def test_diagnostic_prelock_precedes_product_but_does_not_authorize():
     case = make_diagnostic_case()
     observed = []
 
-    async def prelock(action):
+    async def prelock(authorization, action):
+        assert authorization is case.authorization
         assert action is ActionId.PROJECT_SETUP_RUN_READ
         observed.append("actor")
 
@@ -145,7 +146,7 @@ async def test_diagnostic_prelock_precedes_product_but_does_not_authorize():
         observed.append("decision")
         raise PermissionError("final authority denied")
 
-    case.authorization.prelock_serialized_admin_read_actor.side_effect = prelock
+    case.prelock.side_effect = prelock
     case.repository.get_project.side_effect = project
     case.authorization.require.side_effect = deny
     with pytest.raises(PermissionError, match="final authority denied"):
@@ -156,10 +157,12 @@ async def test_diagnostic_prelock_precedes_product_but_does_not_authorize():
 @pytest.mark.asyncio
 async def test_actor_prelock_rejects_mutation_before_database_access():
     from unittest.mock import AsyncMock
-    from app.modules.authorization.kernel import AuthorizationService
+    from app.modules.authorization.kernel import (
+        AuthorizationService, prelock_serialized_admin_read_actor,
+    )
 
     service = object.__new__(AuthorizationService)
     service._admin = SimpleNamespace(lock_request_actor=AsyncMock())
     with pytest.raises(ValueError, match="unsupported serialized administrative read"):
-        await service.prelock_serialized_admin_read_actor(ActionId.PROJECT_CREATE)
+        await prelock_serialized_admin_read_actor(service, ActionId.PROJECT_CREATE)
     service._admin.lock_request_actor.assert_not_awaited()

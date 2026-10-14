@@ -9,7 +9,10 @@ from uuid import UUID
 
 from app.core.hashing import canonical_json_hash
 from app.modules.authorization.catalogue import ActionId
-from app.modules.authorization.kernel import AuthorizationService
+from app.modules.authorization.kernel import (
+    AuthorizationService,
+    prelock_serialized_admin_read_actor,
+)
 from app.modules.authorization.api import authorization_resource_selector_id
 from app.modules.authorization.runtime import (
     PROJECT_DIAGNOSTIC_TARGET_KIND_BY_ACTION,
@@ -499,7 +502,7 @@ async def authorize_project_diagnostic_read(
     if action_id not in PROJECT_DIAGNOSTIC_TARGET_KIND_BY_ACTION:
         raise ValueError("unsupported project diagnostic read action")
 
-    await authorization.prelock_serialized_admin_read_actor(action_id)
+    await prelock_serialized_admin_read_actor(authorization, action_id)
     project = await repository.get_project(project_id, for_update=True)
     guide = await repository.lock_project_guide(guide_id) if project is not None else None
     if guide is not None and guide.project_id != project_id:
