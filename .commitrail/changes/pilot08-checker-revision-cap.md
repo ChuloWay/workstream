@@ -183,3 +183,38 @@ consistency, not execution of runtime acceptance criteria. Current-source
 reconciliation includes merged supported false activation and CLI submission
 owners; checker remediation shares revision limits by the explicit product
 decision. The settled policy above governs both checker and future genuine human triggers.
+
+
+The repair verification includes four real PostgreSQL expiry/final-submission
+and missing-root recovery cases at `10d2e01ad541656adfcf326aab2cff4751b531d0`
+(4 passed), and four service-authority, stored-resource, direct-SQL custody and
+participant-rollback cases at `c6e18927a0c98c6e1ae69a45da66a73a88dd5e97`
+(4 passed). Both isolated runs exited successfully and confirmed database and
+storage cleanup. Their TASK, ART, OUTBOX and fixed-service custody code is
+unchanged in the main reconciliation; the incoming AUTH change extracts human
+manager authority and orders guide reads. These are focused runtime proofs,
+not an exact-final-head full-suite claim.
+
+The race commands select
+`test_due_expiry_and_ready_final_submission_wait_for_task_lock`, both parameters
+of `test_final_submission_commit_boundary_serializes_expiry`, and
+`test_concurrent_missing_root_recovery_commits_one_complete_effect` from the
+submission-dispatch tests through `scripts/run_isolated_tests.py`. They observe
+actual PostgreSQL waits, test both legal winners, and prove absent staged
+submission/dispatch effects after a late commit. Security verification selects
+`tests/tasks/submission_dispatch/test_revision_expiry_security.py`; authority
+revocation is serialized by retained AUTH row locks, not an unsupported mutation
+inside the transaction already holding those locks.
+
+Migration verification covers nine graph, intermediate-resume and invalid-stamp
+cases, including real upgrades from 0044 and 0045 to head. MCP verification
+passes the actual backend-generated 82-permission catalogue through the adapter
+and retains unknown-contract rejection. The CLI process checks pass for both
+affected modules. The graph duplication, CLI formatting and docstring gate are
+repaired without weakening checks. Current templates, lifecycle, compensation
+ADR/specification and authorization custody documentation distinguish delivered
+checker behavior from future genuine human-source integration. The retired
+manager-closure action has no runtime alias; historical audit data remains intact.
+
+Required hosted checks and independent review on the final PR head remain the
+merge evidence. Local test counts alone do not establish full-suite completion.
