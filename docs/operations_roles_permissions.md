@@ -141,7 +141,6 @@ Recovery is a separate, reasoned, audited path.
 | Checker retry (planned; unavailable) | `operations.checker.retry` | Operator |
 | Review lease force release | `review.lease.force_release` | Operator under WS-REV-001 |
 | Revision-context repair | `project.task.manage` via planned `review.revision_context.repair` | Covered Project Manager |
-| Revision-obligation close | `project.task.manage` via planned `review.revision_obligation.close` | Covered Project Manager |
 | Legacy revision close | `operations.reconcile.run` via planned `review.revision_context.legacy_close` | Operator |
 | Lifecycle release control | `operations.reconcile.run` via planned `review.lifecycle.activation.manage` | Operator |
 

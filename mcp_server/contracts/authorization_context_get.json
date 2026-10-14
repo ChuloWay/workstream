@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "e5bbf2041342f3dbe5f1f4f2a5891b6b4bdb19752ef5ad89909a858a00ea792f",
+  "canonical_sha256": "a8716072906771a0f7e04a36e5cd991cc3a5c5782ba95d2968b71ee65afc6b71",
   "components": {
     "schemas": {
       "ActionId": {
@@ -123,7 +123,6 @@
           "review.artifact_reference.reconcile",
           "review.projection.rebuild",
           "review.revision_context.repair",
-          "review.revision_obligation.close",
           "review.revision_context.legacy_close",
           "review.lifecycle.activation.manage",
           "artifact.binding.read",
@@ -548,7 +547,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.authorization_context.read",
-    "backend_git_sha": "7326dc95e59f59fc9f6dee438857091e73c370aa",
+    "backend_git_sha": "ff03cfc8238cbf5526005fbc45c564eb2047fef2",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me/authorization-context"

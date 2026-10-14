@@ -2318,7 +2318,7 @@ def test_rev_custody_documentation_matches_the_independent_catalogue_fixture() -
         "WS-AUTH-001-REV-09A": 1,
         "WS-AUTH-001-REV-11": 5,
         "WS-AUTH-001-REV-12": 2,
-        "WS-XINT-003-08A": 3,
+        "WS-XINT-003-08A": 2,
         "WS-XINT-003-08B": 1,
     }
     for document in custody_documents:

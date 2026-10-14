@@ -154,6 +154,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/submission_dispatch/test_replacement_creation.py",
             "tests/tasks/submission_dispatch/test_revision_capacity.py",
             "tests/tasks/submission_dispatch/test_revision_expiry.py",
+            "tests/tasks/submission_dispatch/test_revision_expiry_security.py",
                 "tests/tasks/submission_dispatch/test_revision_recovery_postgresql.py",
             "tests/tasks/submission_dispatch/test_replay.py",
             "tests/tasks/submission_dispatch/test_rollback.py",

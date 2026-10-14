@@ -133,7 +133,7 @@ unchanged until each exact XINT-003 activation wave.
 | `WS-AUTH-001-REV-09A` | `review.finding_response_evidence.ingest` |
 | `WS-AUTH-001-REV-11` | `review.lease.force_release`, `review.queue.routing.override`, `review.queue.routing.correct`, `review.queue.close`, `review.reconcile.run` |
 | `WS-AUTH-001-REV-12` | `review.artifact_reference.reconcile`, `review.projection.rebuild` |
-| `WS-XINT-003-08A` | `review.revision_context.repair`, `review.revision_obligation.close`, `review.revision_context.legacy_close` |
+| `WS-XINT-003-08A` | `review.revision_context.repair`, `review.revision_context.legacy_close` |
 | `WS-XINT-003-08B` | `review.lifecycle.activation.manage` |
 
 `WS-AUTH-001-REV-CUSTODY` atomically transfers these 19 rows with exact owner
@@ -164,7 +164,7 @@ The exact activation-wave replacement is:
 | `WS-XINT-003-04` | `review.context.read`, `review.chain.read` |
 | `WS-XINT-003-06` | `review.decision` |
 | `WS-XINT-003-07` | No availability change; extend the already XINT-002-owned preparation/Submission evaluators with the closed human-review revision context |
-| `WS-XINT-003-08A` | `review.queue.inspect`, `review.lease.force_release`, `review.queue.routing.override`, `review.queue.routing.correct`, `review.queue.close`, `review.revision_context.repair`, `review.revision_obligation.close`, `review.revision_context.legacy_close` |
+| `WS-XINT-003-08A` | `review.queue.inspect`, `review.lease.force_release`, `review.queue.routing.override`, `review.queue.routing.correct`, `review.queue.close`, `review.revision_context.repair`, `review.revision_context.legacy_close` |
 | `WS-XINT-003-08B` | `review.reconcile.run`, `review.artifact_reference.reconcile`, `review.projection.rebuild`, `review.lifecycle.activation.manage` |
 
 Evidence-upload actions remain future-intent-required and unavailable; they are
@@ -178,7 +178,7 @@ authority:
 
 | Registration chunk | Future activation chunk | Proposed ActionId -> PermissionId |
 |---|---|---|
-| `WS-XINT-003-02C` | `WS-XINT-003-08A` / `WS-XINT-003-08B` | `review.revision_context.repair` -> `project.task.manage`; `review.revision_context.legacy_close` -> `operations.reconcile.run`; `review.revision_obligation.close` -> `project.task.manage`; `review.lifecycle.activation.manage` -> `operations.reconcile.run` |
+| `WS-XINT-003-02C` | `WS-XINT-003-08A` / `WS-XINT-003-08B` | `review.revision_context.repair` -> `project.task.manage`; `review.revision_context.legacy_close` -> `operations.reconcile.run`; `review.lifecycle.activation.manage` -> `operations.reconcile.run` |
 
 `WS-XINT-003-02C` delivered availability-neutral AUTH readiness:
 it registered these four actions and the exact fixed-service identities/matrix

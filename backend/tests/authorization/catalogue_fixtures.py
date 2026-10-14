@@ -223,11 +223,6 @@ REV_CUSTODY_EXPECTATIONS = {
         "WS-XINT-003-08A",
         "planned",
     ),
-    "review.revision_obligation.close": (
-        "project.task.manage",
-        "WS-XINT-003-08A",
-        "planned",
-    ),
     "review.revision_context.legacy_close": (
         "operations.reconcile.run",
         "WS-XINT-003-08A",

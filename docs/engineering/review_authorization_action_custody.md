@@ -25,7 +25,6 @@ This table is the planning source of truth for the v0.1 review and human-revisio
 | `review.queue.routing.correct` | `review.queue.override` | Operator; canonical reason required | exact invalid routing state | REV | registered planned | `WS-XINT-003-08A` |
 | `review.queue.close` | `review.queue.override` | Operator; canonical reason required | exact stale queue entry | REV | registered planned | `WS-XINT-003-08A` |
 | `review.revision_context.repair` | `project.task.manage` | Project Manager grant for exact project | invalid revision context | REV | registered planned/unavailable | `WS-XINT-003-08A` |
-| `review.revision_obligation.close` | `project.task.manage` | Project Manager grant for exact project | exact unfulfillable obligation | REV | registered planned/unavailable | `WS-XINT-003-08A` |
 | `review.revision_context.legacy_close` | `operations.reconcile.run` | Operator; canonical reason required | exact legacy revision context | REV | registered planned/unavailable | `WS-XINT-003-08A` |
 | `review.lifecycle.activation.manage` | `operations.reconcile.run` | Operator; exact phase and reason | lifecycle release controller | REV | active internally; no public route | `REV-12A4A` scoped `WS-XINT-003-08B` slice |
 | `review.reconcile.run` | `operations.reconcile.run` | one of two fixed reconciler identities | invalidation or general reconciliation batch | REV | registered planned | `WS-XINT-003-08B` |
@@ -111,7 +110,6 @@ actions remain reference-only external handoffs.
 | `review.queue.routing.correct` | merged REV-11A correction command |
 | `review.queue.close` | merged REV-11A close command |
 | `review.revision_context.repair` | 02C unavailable registration plus merged REV-11B covered-project repair command |
-| `review.revision_obligation.close` | 02C unavailable registration plus merged REV-11B obligation-close command |
 | `review.revision_context.legacy_close` | 02C unavailable registration plus merged REV-11D legacy-close command |
 | `review.lifecycle.activation.manage` | Active internally through REV-12A4A: exact Operator transition/history custody for the bounded atomic-participant manifest; production acceptance and later human/fulfillment scopes require successor proofs |
 | `review.reconcile.run` | merged REV-11C invalidation and general reconciliation commands |

@@ -149,13 +149,13 @@ contribution. `closed/review_rejected` is not a canonical task state.
 - Each committed `needs_revision` starts a fresh PostgreSQL-time window using
   the failed attempt's locked RevisionPolicy. Only immutable resubmission ends
   it. Repair, upload, replay and infrastructure retry preserve the window.
-- At expiry, the authorized durable TASK worker records an immutable rejection
+- At expiry, the authorized durable TASK delivery handler records an immutable rejection
   receipt, marks the assignment `revision_expired`, releases it and returns the
   task to `ready` without Review or economic facts. Cap exhaustion refuses a
   successor but leaves its deadline in force. A new claimant starts round 0.
 - Checker expiry/recovery is implemented. #554 owns future human decision
   integration with the same intended policy. Provision the exact expirer
-  service and run Beat/outbox workers as described in
+  service and run Celery Beat and outbox delivery processes as described in
   [Revision Replay](operations_revision_replay.md#limits-and-recovery).
 - Planned Operator closure applies only to evidence-linked unrecoverable
   historical human context. Operator authority never records a human Review

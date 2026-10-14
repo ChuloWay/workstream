@@ -28,7 +28,8 @@ from app.modules.tasks.api.revision_expiry import (
     TaskRevisionExpiryAuthorityFacts, revision_expiry_resource_digest,
 )
 from app.modules.tasks.revision.expiry_event import revision_expiry_event
-from app.modules.tasks.revision.models import TaskRevisionExpiration
+from app.modules.tasks.revision.models import TaskRevisionExpiration, TaskRevisionPreparation
+from app.modules.tasks.revision.service import project_current_revision
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
 from tests.auth_concurrency_support import wait_for_named_database_lock
@@ -319,10 +320,30 @@ async def _wait_until_revision_due(h, event_id):
         deadline = (await session.get(OutboxEvent, event_id)).not_before_at
         now = await session.scalar(select(func.clock_timestamp()))
     remaining = max(0, (deadline - now).total_seconds())
-    assert remaining <= 30
-    await asyncio.sleep(remaining + 0.05)
+    assert remaining <= 60
+    while remaining > 0:
+        await asyncio.sleep(min(remaining, 30))
+        async with h.factory() as session:
+            now = await session.scalar(select(func.clock_timestamp()))
+        remaining = max(0, (deadline - now).total_seconds())
     async with h.factory() as session:
         assert await session.scalar(select(func.clock_timestamp())) >= deadline
+
+
+async def _ready_expiry_race_replacement(h):
+    """Diagnose a real PRE failure before the contenders reach final creation."""
+    try:
+        return await _ready_replacement(h, revision_archive(h.data))
+    except Exception as exc:
+        async with h.factory() as session:
+            root = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+            view = await project_current_revision(session, root)
+            now = await session.scalar(select(func.clock_timestamp()))
+        raise AssertionError(
+            f"race PRE failed: {type(exc).__name__}; "
+            f"remaining_database_seconds={(root.deadline_at - now).total_seconds():.3f}; "
+            f"disposition={view.disposition}"
+        ) from exc
 
 
 async def _assert_expired_creation_absent(h, source_id, admission_id, before):
@@ -350,9 +371,9 @@ async def test_due_expiry_and_ready_final_submission_wait_for_task_lock(
     async with remediation_source(tmp_path, isolated_database_env) as h:
         source_id, _, event_id = await expire_retained_revision(
             h, monkeypatch=monkeypatch, isolated_database_env=isolated_database_env,
-            deliver=False, window_seconds=20,
+            deliver=False, window_seconds=60,
         )
-        prepared, admission_id = await _ready_replacement(h, revision_archive(h.data))
+        prepared, admission_id = await _ready_expiry_race_replacement(h)
         assert await _admission_status(h, admission_id) == "ready"
         before = await _creation_snapshot(h)
         await _wait_until_revision_due(h, event_id)
@@ -417,9 +438,9 @@ async def test_final_submission_commit_boundary_serializes_expiry(
     async with remediation_source(tmp_path, isolated_database_env) as h:
         source_id, _, event_id = await expire_retained_revision(
             h, monkeypatch=monkeypatch, isolated_database_env=isolated_database_env,
-            deliver=False, window_seconds=20,
+            deliver=False, window_seconds=60,
         )
-        prepared, admission_id = await _ready_replacement(h, revision_archive(h.data))
+        prepared, admission_id = await _ready_expiry_race_replacement(h)
         before = await _creation_snapshot(h)
         staged, release = asyncio.Event(), asyncio.Event()
         expiry_name = f"expiry-commit-wait-{new_record_id().hex}"
@@ -432,7 +453,7 @@ async def test_final_submission_commit_boundary_serializes_expiry(
             result = await original_create(service, request)
             assert result.submission_version == 2
             staged.set()
-            await asyncio.wait_for(release.wait(), 35)
+            await asyncio.wait_for(release.wait(), 75)
             return result
 
         async def named_expiry_lock(repository, *args, **kwargs):

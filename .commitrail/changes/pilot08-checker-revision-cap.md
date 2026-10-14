@@ -71,6 +71,12 @@ Reviews, findings, reviewer contributions or human actors.
   reject Reviews; register the regression in the existing lightweight
   `.github/workflows/agent-gates.yml` step without weakening unrelated gates.
 
+- Remove the superseded planned cap/deadline manager-closure action, its contract,
+  exclusive tests and current documentation. Retain historical migration/audit
+  evidence; current audit reads use stored strings and need no compatibility alias.
+- Add focused service-denial, stored-resource substitution, direct-SQL receipt
+  custody and participant-failure rollback proofs for expiry and recovery.
+
 ### Not allowed
 
 - Guide setup integration (#552), export pagination (#497), dependencies (#565)

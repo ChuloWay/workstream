@@ -226,7 +226,6 @@ class ActionId(StrEnum):
     REVIEW_ARTIFACT_REFERENCE_RECONCILE = "review.artifact_reference.reconcile"
     REVIEW_PROJECTION_REBUILD = "review.projection.rebuild"
     REVIEW_REVISION_CONTEXT_REPAIR = "review.revision_context.repair"
-    REVIEW_REVISION_OBLIGATION_CLOSE = "review.revision_obligation.close"
     REVIEW_REVISION_CONTEXT_LEGACY_CLOSE = "review.revision_context.legacy_close"
     REVIEW_LIFECYCLE_ACTIVATION_MANAGE = "review.lifecycle.activation.manage"
     ARTIFACT_BINDING_READ = "artifact.binding.read"
@@ -634,7 +633,6 @@ ACTION_DEFINITIONS = (
     ),
     _planned(ActionId.REVIEW_PROJECTION_REBUILD, PermissionId.OPERATIONS_PROJECTION_REBUILD, ActionOwner.AUTH_REV_12),
     _planned(ActionId.REVIEW_REVISION_CONTEXT_REPAIR, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.XINT_003_08A),
-    _planned(ActionId.REVIEW_REVISION_OBLIGATION_CLOSE, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.XINT_003_08A),
     _planned(
         ActionId.REVIEW_REVISION_CONTEXT_LEGACY_CLOSE,
         PermissionId.OPERATIONS_RECONCILE_RUN,
@@ -798,7 +796,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 157:
+    if len(PERMISSION_IDS) != 82 or len(ACTION_IDS) != 156:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 33:
         raise RuntimeError("authorization permission boundary mismatch")

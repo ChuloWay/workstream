@@ -957,14 +957,13 @@ It does not rewrite Submission or Review evidence, fabricate a reject Review,
 or create FinalAcceptance, ContributionRecord, award, fulfillment or reputation
 effects. A new claimant receives their own round-0 allowance while task-global
 Submission versions remain consecutive. TASK-first revalidation fences
-resubmission, duplicate workers and stale delivery after reclaim. The recurring
+resubmission, duplicate expiry deliveries and stale delivery after reclaim. The recurring
 retained-source scan schedules the original source-policy window after downtime
 without selecting a new context or moving its deadline.
 
-The earlier manager-cancellation policy for normal limit/deadline exhaustion is
-superseded by this timeout rejection/release policy. The unavailable registered
-`review.revision_obligation.close` action must be reconciled with this contract
-before activation; it is not the normal expiry trigger.
+Normal revision timeout uses TASK service authority. Reaching the revision cap
+refuses another attempt while preserving the current deadline; it does not
+provide a manager command to cancel the task.
 
 Blocked/revoked/invalid context preparation is repaired only through the
 planned `review.revision_context.repair` command. A covered Project Manager
@@ -1066,27 +1065,6 @@ revalidation.
 - Effects: task cancelled, assignment released, queue administratively closed;
   no synthetic Review, FinalAcceptance, or CON record.
 - Hidden behavior dependency: `WS-REV-001-11D`.
-
-### `review.revision_obligation.close` (superseded policy; unavailable)
-
-This retained registration describes the earlier manager-cancellation design.
-It cannot be activated as the normal limit/deadline outcome: the governing
-policy now requires TASK timeout rejection/release and return to `ready`.
-Reconcile its intended use before implementing any command below.
-
-- Permission: existing `project.task.manage`.
-- Candidate: active covered Project Manager grant only; Operator authority does
-  not substitute.
-- Planned surface:
-  `POST /api/v1/tasks/{task_id}/revision-obligation/close`.
-- Resource facts: exact project, task, assignment, originating human
-  `needs_revision` Review, current preparation head, approved frozen
-  limit/deadline facts, and server proof of the selected reached cause.
-- CheckerRun-rooted remediation is not an eligible resource for this command.
-- Guards: exact current head/cause, task still `needs_revision`, and terminal
-  reason exactly `revision_limit_reached` or `revision_deadline_expired`;
-  missing, not-reached, stale, arbitrary, crossed, or cross-project input denies.
-- Hidden behavior dependency: `WS-REV-001-11B`.
 
 ### `review.lifecycle.activation.manage`
 

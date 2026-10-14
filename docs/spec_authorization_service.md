@@ -400,7 +400,7 @@ Chunk 01 changes no runtime owner or availability.
 | `WS-AUTH-001-REV-09A` | `review.finding_response_evidence.ingest` |
 | `WS-AUTH-001-REV-11` | `review.lease.force_release`, `review.queue.routing.override`, `review.queue.routing.correct`, `review.queue.close`, `review.reconcile.run` |
 | `WS-AUTH-001-REV-12` | `review.artifact_reference.reconcile`, `review.projection.rebuild` |
-| `WS-XINT-003-08A` | `review.revision_context.repair`, `review.revision_obligation.close`, `review.revision_context.legacy_close` |
+| `WS-XINT-003-08A` | `review.revision_context.repair`, `review.revision_context.legacy_close` |
 | `WS-XINT-003-08B` | `review.lifecycle.activation.manage` |
 
 The first seven rows preserve the trusted pre-WS-XINT-003-02C custody baseline.
@@ -434,7 +434,6 @@ uses the canonical custody map and exact merged REV proof.
 | `review.artifact_reference.reconcile` | `operations.reconcile.run` | `WS-AUTH-001-REV-12` |
 | `review.projection.rebuild` | `operations.projection.rebuild` | `WS-AUTH-001-REV-12` |
 | `review.revision_context.repair` | `project.task.manage` | `WS-XINT-003-08A` |
-| `review.revision_obligation.close` | `project.task.manage` | `WS-XINT-003-08A` |
 | `review.revision_context.legacy_close` | `operations.reconcile.run` | `WS-XINT-003-08A` |
 | `review.lifecycle.activation.manage` | `operations.reconcile.run` | `WS-XINT-003-08B` |
 
