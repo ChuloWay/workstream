@@ -998,8 +998,12 @@ actions:
 
 - registered planned `submission.create`;
 - 19 registered planned review actions; and
-- four then-unregistered approved REV actions, now registered but unavailable,
-  defined below.
+- four then-unregistered approved REV recovery/lifecycle actions.
+
+02C subsequently registered all four. PILOT-08 removes the superseded planned
+manager-closure action; three remain in the manifest below. Context repair and
+historical-context closure remain planned; `review.lifecycle.activation.manage`
+is active internally through REV-12A4A, with no public route.
 
 The registered planned `artifact.review_evidence.binding.create ->
 artifact.binding.create` service action is separate, unavailable, and not one
@@ -1021,14 +1025,16 @@ review rows without changing availability, and `WS-AUTH-001-PREP` supplied the
 prepared mutation protocol. Historical aliases `WS-AUTH-001-REV-REG`,
 `WS-AUTH-001-REV-05/06/07/08/09A/11/12`, and
 `WS-AUTH-001-REV-LIFECYCLE` are superseded as delivery authority by canonical
-WS-XINT-003 custody. 02C registers the four additions unavailable; 02D publishes
-their fail-closed contracts; later exact XINT waves activate only merged hidden
-behavior. REV-13C alone exposes the coherent product surface.
+WS-XINT-003 custody. Historically, 02C registered four additions unavailable and
+02D published their fail-closed contracts; later exact XINT waves activate only
+merged hidden behavior. PILOT-08 retires the superseded planned manager-closure
+registration. REV-13C alone exposes the coherent product surface.
 
-## Four-Action Registration Manifest
+## Three-Action Recovery And Lifecycle Manifest
 
-Registration adds no PermissionId, activates nothing, and claims no hidden
-behavior already exists. All human actors below are canonical ActorProfile IDs;
+The three retained actions add no PermissionId. Their original registration did
+not activate behavior; lifecycle control now has its separately delivered
+internal activation, while both revision-context actions remain planned. All human actors below are canonical ActorProfile IDs;
 all mutations use AUTH PREP, final-fact recomposition, route/service-command
 transaction ownership, one commit, exact idempotency, and transaction-time
 revalidation.

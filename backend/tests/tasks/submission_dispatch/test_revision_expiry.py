@@ -524,7 +524,7 @@ async def test_final_submission_commit_boundary_serializes_expiry(
             assert (await session.execute(text(
                 "SELECT status,assigned_to FROM public.workstream_tasks WHERE id=:task"
             ), {"task": h.request.task_id})).one() == (
-                "evaluation_pending", str(h.actor_context.actor_profile_id),
+                "evaluation_pending", h.actor_context.actor_profile_id,
             )
             assert await session.scalar(text(
                 "SELECT status FROM public.task_assignments WHERE id=:assignment"

@@ -337,15 +337,19 @@ planned. The ART
 catalogue: 16 planned, three active foundation-service actions, active
 `artifact.guide_source.ingest`, and active fixed-service guide binding/read;
 the remaining rows cover canonical
-`submission.create`, and 23 review actions. An action becomes active only when
+`submission.create`, and 22 review actions after PILOT-08 retires the superseded
+planned manager-closure registration. An action becomes active only when
 its feature owner has merged the canonical resource composer, guards, surface or
 command declaration, behavior tests, and transaction-local revalidation where
 required, and its dedicated AUTH activation custodian has integrated the exact
 evaluator and changed availability. Both halves are mandatory; registry or
 feature presence alone never grants authority.
 
-WS-XINT-003-02C registers the four approved REV recovery/lifecycle actions as
-planned and unavailable. `artifact.review_evidence.binding.create` is also
+Historically, WS-XINT-003-02C registered four approved REV recovery/lifecycle
+actions as planned and unavailable. PILOT-08 retires the superseded planned
+manager-closure action, leaving three: both revision-context actions remain
+planned, while REV-12A4A activates `review.lifecycle.activation.manage` internally
+without a public route. `artifact.review_evidence.binding.create` is also
 registered but planned and unavailable. Registration adds no evaluator, route,
 job, principal row, or lifecycle authority; activation remains blocked until
 complete feature-owned typed and transaction manifests exist.
@@ -403,9 +407,12 @@ Chunk 01 changes no runtime owner or availability.
 | `WS-XINT-003-08A` | `review.revision_context.repair`, `review.revision_context.legacy_close` |
 | `WS-XINT-003-08B` | `review.lifecycle.activation.manage` |
 
-The first seven rows preserve the trusted pre-WS-XINT-003-02C custody baseline.
-Those 19 actions remain planned and unavailable, while 02C registers the four approved REV
-recovery/lifecycle actions under XINT-003-08A/08B custody. The delivery path is
+The first seven rows preserve the trusted pre-WS-XINT-003-02C custody baseline
+of 19 then-planned review actions. Historically, 02C added four planned REV
+recovery/lifecycle actions under XINT-003-08A/08B custody. PILOT-08 retires the
+superseded planned manager-closure action, leaving the three shown above.
+`review.lifecycle.activation.manage` is now active internally through REV-12A4A;
+its registration alone did not grant that authority. The delivery path is
 front-loaded `WS-XINT-003-02C` unavailable catalogue/principal/matrix readiness
 followed by `WS-XINT-003-02D` closed PREP/read contract readiness. Neither wave
 implements REV behavior or activates a lifecycle action; later XINT activation
