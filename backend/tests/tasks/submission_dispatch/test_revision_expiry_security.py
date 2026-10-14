@@ -204,7 +204,7 @@ async def test_expiry_denies_invalid_service_and_committed_resource_substitution
         assert await _snapshot(h) == before
         async with remediation_source(
             tmp_path / "foreign", isolated_database_env,
-            provision_services=False, provision_checker=False,
+            provision_services=False, provision_checker=False, storage_settings=h.settings,
         ) as foreign:
             await _fixture_revision_context(foreign)
             assert foreign.request.project_id != h.request.project_id
