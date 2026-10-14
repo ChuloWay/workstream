@@ -172,10 +172,18 @@ class GuideCompilationService:
                 repository = GuideCompilationRepository(self._session)
                 existing = await self._existing_request(repository, actor, facts, origin)
                 if existing is not None:
+                    observed_operation_id = existing.operation_id
                     await self._authorization.validate_request_replay(
                         actor=actor, facts=facts, origin=origin
                     )
-                    return await _request_receipt(repository, existing)
+                    locked = await repository.matching_request_operation(
+                        actor=actor, facts=facts, origin=origin, lock=True
+                    )
+                    if locked is None or locked.operation_id != observed_operation_id:
+                        raise GuideCompilationIntegrityError(
+                            "compilation request custody is missing"
+                        )
+                    return await _request_receipt(repository, locked)
                 handle = await self._authorization.prepare_request(
                     actor=actor, facts=facts, origin=origin
                 )
@@ -208,11 +216,11 @@ class GuideCompilationService:
             return await self._recover_request(actor=actor, facts=facts, origin=origin)
 
     async def _existing_request(self, repository, actor, facts, origin):
-        """Lock a direct operation replay only when the caller supplied its UUIDv7 ID."""
+        """Discover a direct replay before acquiring AUTH and its operation lock."""
         if facts.operation_id.version != 7:
             return None
         return await repository.matching_request_operation(
-            actor=actor, facts=facts, origin=origin, lock=True
+            actor=actor, facts=facts, origin=origin, lock=False
         )
 
     async def _admit_request(self, repository, actor, prepared_facts, identity, origin):
