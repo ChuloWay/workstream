@@ -29,8 +29,13 @@ jobs:
       cli_contract: ${{ steps.select.outputs.cli_contract }}
       minio_image: ${{ steps.select.outputs.minio_image }}
       lanes_required: ${{ steps.select.outputs.lanes_required }}
-      lane_matrix: ${{ steps.select.outputs.lane_matrix }}
+      lane_matrix: ${{ steps.plan.outputs.lane_matrix || steps.select.outputs.lane_matrix }}
       scope_reason: ${{ steps.select.outputs.scope_reason }}
+      selected_backend: ${{ steps.select.outputs.selected_backend }}
+      selection_digest: ${{ steps.plan.outputs.selection_digest }}
+      selection_artifact: ${{ steps.plan.outputs.selection_artifact }}
+      mcp_contract: ${{ steps.select.outputs.mcp_contract }}
+      selection_probe: ${{ steps.select.outputs.selection_probe }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -38,7 +43,7 @@ jobs:
           fetch-depth: 0
 
       - id: select
-        name: Select draft feedback or complete merge proof
+        name: Select conservative change impact
         env:
           EVENT_NAME: ${{ github.event_name }}
           PR_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft || false }}
@@ -54,6 +59,43 @@ jobs:
             --head-ref "${HEAD_SHA}" \
             --github-output "${GITHUB_OUTPUT}"
 
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        if: steps.select.outputs.selected_backend == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Install frozen collection environment
+        if: steps.select.outputs.selected_backend == 'true'
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          python -m pip install "uv==0.10.7"
+          uv sync --frozen --all-extras
+
+      - id: plan
+        name: Collect exact selected nodes and nonempty lanes
+        if: steps.select.outputs.selected_backend == 'true'
+        working-directory: backend
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          uv run --frozen python scripts/ci_selection_receipt.py \
+            --base-sha "${BASE_SHA}" --pr-head-sha "${PR_HEAD_SHA}" \
+            --tested-sha "${GITHUB_SHA}" --output-dir "${RUNNER_TEMP}/selection" \
+            --github-output "${GITHUB_OUTPUT}"
+          echo "selection_artifact=backend-selection-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+
+      - name: Publish exact selection receipt
+        if: steps.select.outputs.selected_backend == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.plan.outputs.selection_artifact }}
+          path: ${{ runner.temp }}/selection/selection.json
+          if-no-files-found: error
+          retention-days: 7
+
   minio-image:
     needs: scope
     if: ${{ needs.scope.outputs.minio_image == 'true' }}
@@ -61,6 +103,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       artifact: ${{ steps.identity.outputs.artifact }}
+      producer_attempt: ${{ steps.identity.outputs.producer_attempt }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -73,6 +116,7 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           echo "artifact=minio-source-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
+          echo "producer_attempt=${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"
 
       - name: Restore exact source image from trusted cache
         id: cache
@@ -366,6 +410,13 @@ jobs:
           [[ "${settings}" == 'on|on|on|/var/lib/postgresql/data' ]]
           echo "PostgreSQL CI storage: ${filesystem}, bytes=$((blocks * block_size)); write settings: ${settings}"
 
+      - name: Download selected execution receipt
+        if: needs.scope.outputs.selected_backend == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.scope.outputs.selection_artifact }}
+          path: ${{ runner.temp }}/selection
+
       - name: Execute semantic lane ${{ matrix.lane }}
         working-directory: backend
         env:
@@ -374,11 +425,19 @@ jobs:
           WORKSTREAM_TEST_BROKER_URL: redis://localhost:6380/0
           WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
           WORKSTREAM_TEST_MINIO_ENDPOINT: http://127.0.0.1:9000
+          SELECTED_BACKEND: ${{ needs.scope.outputs.selected_backend }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         shell: bash
         run: |
           set -uo pipefail
           install -d -m 700 ".ci/lane-bundle/${{ matrix.lane }}"
+          selection_args=()
+          if [[ "${SELECTED_BACKEND}" == true ]]; then
+            selection_args=(--selection-file "${RUNNER_TEMP}/selection/selection.json" --base-sha "${BASE_SHA}" --pr-head-sha "${PR_HEAD_SHA}")
+          fi
           uv run --frozen python scripts/run_test_lanes.py \
+            "${selection_args[@]}" \
             --lane "${{ matrix.lane }}" \
             --metadata-dir ".ci/lane-bundle/${{ matrix.lane }}/metadata" \
             --summary-json ".ci/lane-bundle/${{ matrix.lane }}/summary.json" \
@@ -397,11 +456,12 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
+          name: ${{ needs.scope.outputs.selected_backend == 'true' && format('backend-selected-{0}', needs.scope.outputs.selection_digest) || 'backend-lane' }}-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}
           path: |
             backend/.ci/lane-bundle/${{ matrix.lane }}/summary.json
             backend/.ci/lane-bundle/${{ matrix.lane }}/job-start-epoch.txt
             backend/.ci/lane-bundle/${{ matrix.lane }}/metadata/manifest.json
+            backend/.ci/lane-bundle/${{ matrix.lane }}/metadata/selection.json
             backend/.ci/lane-bundle/${{ matrix.lane }}/metadata/${{ matrix.lane }}.json
             backend/.ci/lane-bundle/${{ matrix.lane }}/metadata/${{ matrix.lane }}.database.json
             backend/.ci/lane-bundle/${{ matrix.lane }}/metadata/.coverage.${{ matrix.lane }}
@@ -420,12 +480,18 @@ jobs:
     uses: ./.github/workflows/cli.yml
     with:
       minio_artifact: ${{ needs.minio-image.outputs.artifact }}
+      minio_producer_attempt: ${{ needs.minio-image.outputs.producer_attempt }}
+
+  mcp-contract:
+    needs: scope
+    if: ${{ needs.scope.outputs.mcp_contract == 'true' }}
+    uses: ./.github/workflows/mcp.yml
 
   full-suite:
     if: >-
       ${{ always() && needs.scope.result == 'success' &&
-          needs.scope.outputs.full_suite == 'true' }}
-    needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract]
+          (needs.scope.outputs.full_suite == 'true' || needs.scope.outputs.selected_backend == 'true') }}
+    needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, mcp-contract]
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -520,32 +586,64 @@ jobs:
         if: ${{ always() }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          pattern: backend-lane-${{ github.sha }}-*-attempt-*
+          pattern: ${{ needs.scope.outputs.selected_backend == 'true' && format('backend-selected-{0}', needs.scope.outputs.selection_digest) || 'backend-lane' }}-${{ github.sha }}-*-attempt-*
           path: backend/.ci/download
           merge-multiple: false
 
-      - name: Require preflight, every semantic lane and CLI public contract
+      - name: Download selected execution receipt
+        if: needs.scope.outputs.selected_backend == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: ${{ needs.scope.outputs.selection_artifact }}
+          path: ${{ runner.temp }}/selection
+
+      - name: Require selected supporting checks and every expected lane
         if: ${{ always() }}
         env:
           PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}
           EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}
+          EXTERNAL_EXPECTED: ${{ needs.scope.outputs.external_checker }}
           LANES_RESULT: ${{ needs.lanes.result }}
           CLI_RESULT: ${{ needs.cli-public-contract.result }}
-        run: test "${PREFLIGHT_RESULT}" = success && test "${EXTERNAL_CHECKER_RESULT}" = success && test "${LANES_RESULT}" = success && test "${CLI_RESULT}" = success
+          CLI_EXPECTED: ${{ needs.scope.outputs.cli_contract }}
+          MCP_RESULT: ${{ needs.mcp-contract.result }}
+          MCP_EXPECTED: ${{ needs.scope.outputs.mcp_contract }}
+        run: |
+          set -euo pipefail
+          test "${PREFLIGHT_RESULT}" = success
+          test "${LANES_RESULT}" = success
+          require_expected() {
+            if [[ "$1" == true ]]; then test "$2" = success; elif [[ "$1" == false ]]; then test "$2" = skipped; else exit 1; fi
+          }
+          require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_CHECKER_RESULT}"
+          require_expected "${CLI_EXPECTED}" "${CLI_RESULT}"
+          require_expected "${MCP_EXPECTED}" "${MCP_RESULT}"
 
       - name: Merge and independently validate exact lane custody
         working-directory: backend
+        env:
+          SELECTED_BACKEND: ${{ needs.scope.outputs.selected_backend }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         shell: bash
         run: |
           set -euo pipefail
           install -d -m 700 .ci/test-lanes
+          selection_args=()
+          identity_args=()
+          if [[ "${SELECTED_BACKEND}" == true ]]; then
+            identity_args=(--base-sha "${BASE_SHA}" --pr-head-sha "${PR_HEAD_SHA}")
+            selection_args=(--selection-file "${RUNNER_TEMP}/selection/selection.json" "${identity_args[@]}")
+          fi
           uv run --frozen python -m scripts.merge_test_lane_evidence \
+            "${selection_args[@]}" \
             --input-root .ci/download \
             --metadata-dir .ci/test-lanes/run \
             --summary-json .ci/test-lanes/run-summary.json \
             --expected-head "${GITHUB_SHA}" \
             --run-attempt "${GITHUB_RUN_ATTEMPT}"
           uv run --frozen python scripts/validate_test_lane_evidence.py \
+            "${identity_args[@]}" \
             --metadata-dir .ci/test-lanes/run \
             --summary-json .ci/test-lanes/run-summary.json
 
@@ -556,7 +654,8 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           coverage_files=(.ci/test-lanes/run/.coverage.*)
-          test "${#coverage_files[@]}" -eq 10
+          expected_count=$(uv run --frozen python -c 'import json; print(len(json.load(open(".ci/test-lanes/run-summary.json"))["lanes"]))')
+          test "${#coverage_files[@]}" -eq "${expected_count}"
           for source in "${coverage_files[@]}"; do
             destination="$(basename "${source}")"
             test -f "${source}"
@@ -579,6 +678,14 @@ jobs:
           --metadata-json "${RUNNER_TEMP}/api-database.json"
           --timeout-seconds 1500
           -- uv run --frozen python scripts/api_contract_e2e.py
+
+      - name: Prove selected execution against full control and inserted regression
+        if: needs.scope.outputs.selection_probe == 'true'
+        working-directory: backend
+        env:
+          WORKSTREAM_TEST_ADMIN_DATABASE_URL: postgresql+asyncpg://workstream:workstream@localhost:5433/postgres
+          WORKSTREAM_TEST_MINIO_ENDPOINT: http://127.0.0.1:9000
+        run: uv run --frozen python scripts/probe_ci_selection.py --output-dir .ci/test-lanes/selection-probe
 
       - name: Backend coverage diagnostics (no percentage gate)
         working-directory: backend
@@ -635,7 +742,9 @@ jobs:
               raise SystemExit("hosted evidence head drift")
 
           lanes = summary.get("lanes")
-          if not isinstance(lanes, list) or len(lanes) != 10:
+          selection = read_json(run_root / "selection.json") if summary.get("mode") == "selected_run" else None
+          expected_lane_count = len(selection["lanes"]) if selection is not None else 10
+          if not isinstance(lanes, list) or len(lanes) != expected_lane_count:
               raise SystemExit("invalid hosted lane inventory")
           collected: list[str] = []
           completed: list[str] = []
@@ -671,7 +780,7 @@ jobs:
               collected.extend(lane_collected)
               completed.extend(lane_completed)
 
-          canonical_count = summary.get("canonical_node_count")
+          canonical_count = len(selection["selected_nodes"]) if selection is not None else summary.get("canonical_node_count")
           if (
               isinstance(canonical_count, bool)
               or not isinstance(canonical_count, int)
@@ -705,6 +814,7 @@ jobs:
           start_epochs = []
           selected_bundles = select_lane_bundles(
               Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              selection=selection,
           )
           for bundle in selected_bundles.values():
               timing_path = bundle / "job-start-epoch.txt"
@@ -730,6 +840,9 @@ jobs:
               raise SystemExit("invalid hosted global coverage")
 
           hosted = {
+              "mode": summary["mode"],
+              "full_canonical_node_count": summary["canonical_node_count"],
+              "selection_sha256": summary.get("selection_sha256"),
               "aggregate_runner_seconds": float(aggregate),
               "canonical_collected_count": len(collected),
               "completed_count": len(completed),
@@ -769,7 +882,7 @@ jobs:
   test:
     name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'draft-test' || 'test' }}
     if: ${{ always() }}
-    needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, full-suite]
+    needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, mcp-contract, full-suite]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -777,6 +890,9 @@ jobs:
         env:
           SCOPE_RESULT: ${{ needs.scope.result }}
           FULL_SUITE: ${{ needs.scope.outputs.full_suite }}
+          SELECTED_BACKEND: ${{ needs.scope.outputs.selected_backend }}
+          MCP_EXPECTED: ${{ needs.scope.outputs.mcp_contract }}
+          MCP_RESULT: ${{ needs.mcp-contract.result }}
           PREFLIGHT_EXPECTED: ${{ needs.scope.outputs.preflight }}
           PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}
           EXTERNAL_EXPECTED: ${{ needs.scope.outputs.external_checker }}
@@ -792,8 +908,10 @@ jobs:
         run: |
           set -euo pipefail
           test "${SCOPE_RESULT}" = success
+          [[ "${FULL_SUITE}" == true || "${FULL_SUITE}" == false ]]
           if [[ "${FULL_SUITE}" == true ]]; then
             test "${FULL_RESULT}" = success
+            test "${MCP_RESULT}" = success
             exit 0
           fi
           require_expected() {
@@ -801,8 +919,10 @@ jobs:
             local actual="$2"
             if [[ "${expected}" == true ]]; then
               test "${actual}" = success
-            else
+            elif [[ "${expected}" == false ]]; then
               test "${actual}" = skipped
+            else
+              exit 1
             fi
           }
           require_expected "${PREFLIGHT_EXPECTED}" "${PREFLIGHT_RESULT}"
@@ -810,4 +930,5 @@ jobs:
           require_expected "${LANES_EXPECTED}" "${LANES_RESULT}"
           require_expected "${MINIO_EXPECTED}" "${MINIO_RESULT}"
           require_expected "${CLI_EXPECTED}" "${CLI_RESULT}"
-          test "${FULL_RESULT}" = skipped
+          require_expected "${MCP_EXPECTED}" "${MCP_RESULT}"
+          require_expected "${SELECTED_BACKEND}" "${FULL_RESULT}"

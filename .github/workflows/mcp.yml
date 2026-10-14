@@ -1,21 +1,7 @@
 name: MCP Foundation
 
 on:
-  pull_request:
-    paths:
-      - "backend/**"
-      - "mcp_server/**"
-      - ".commitrail/initiatives/WS-MCP-002/**"
-      - "docs/roadmap_status.md"
-      - ".github/workflows/mcp.yml"
-  push:
-    branches: [main]
-    paths:
-      - "backend/**"
-      - "mcp_server/**"
-      - ".commitrail/initiatives/WS-MCP-002/**"
-      - "docs/roadmap_status.md"
-      - ".github/workflows/mcp.yml"
+  workflow_call:
 
 concurrency:
   group: mcp-foundation-${{ github.event.pull_request.number || github.ref }}

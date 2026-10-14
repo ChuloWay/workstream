@@ -1,4 +1,4 @@
-"""Regression tests for conservative draft Backend CI selection."""
+"""Regression tests for conservative, event-independent PR impact selection."""
 
 from __future__ import annotations
 
@@ -11,18 +11,19 @@ import pytest
 from scripts.select_ci_scope import ALL_LANES, changed_paths, main, select_scope
 
 
-def test_ready_pull_request_always_selects_the_complete_suite() -> None:
+def test_ready_mcp_pull_request_requires_its_contract_without_backend_execution() -> None:
     scope = select_scope(
         ["mcp_server/workstream_mcp/server.py"],
         event_name="pull_request",
         pull_request_draft=False,
     )
 
-    assert scope.full_suite is True
-    assert scope.preflight is True
-    assert scope.external_checker is True
-    assert scope.cli_contract is True
-    assert scope.lanes == ALL_LANES
+    assert scope.full_suite is False
+    assert scope.preflight is False
+    assert scope.external_checker is False
+    assert scope.cli_contract is False
+    assert scope.mcp_contract is True
+    assert scope.lanes == ()
 
 
 def test_main_push_always_selects_the_complete_suite() -> None:
@@ -83,7 +84,7 @@ def test_draft_cli_change_selects_only_the_cli_contract_and_minio() -> None:
     assert scope.lanes == ()
 
 
-def test_draft_external_checker_change_selects_only_that_runtime() -> None:
+def test_external_checker_change_requires_full_unmapped_consumer_proof() -> None:
     scope = select_scope(
         ["external_checkers/crates/workstream-checker-sdk/src/lib.rs"],
         event_name="pull_request",
@@ -91,10 +92,11 @@ def test_draft_external_checker_change_selects_only_that_runtime() -> None:
     )
 
     assert scope.external_checker is True
-    assert scope.preflight is False
-    assert scope.cli_contract is False
-    assert scope.minio_image is False
-    assert scope.lanes == ()
+    assert scope.full_suite is True
+    assert scope.preflight is True
+    assert scope.cli_contract is True
+    assert scope.minio_image is True
+    assert scope.lanes == ALL_LANES
 
 
 @pytest.mark.parametrize(
@@ -116,7 +118,7 @@ def test_draft_external_checker_change_selects_only_that_runtime() -> None:
         ),
     ],
 )
-def test_known_test_module_selects_every_lane_that_owns_its_nodes(
+def test_known_test_module_requires_git_dependency_proof_before_narrowing(
     path: str,
     expected: tuple[str, ...],
 ) -> None:
@@ -126,9 +128,11 @@ def test_known_test_module_selects_every_lane_that_owns_its_nodes(
         pull_request_draft=True,
     )
 
-    assert scope.full_suite is False
+    assert scope.full_suite is True
     assert scope.preflight is True
-    assert scope.lanes == expected
+    assert set(expected) <= set(scope.lanes)
+    assert scope.lanes == ALL_LANES
+    assert scope.reason == "missing_dependency_proof"
 
 
 def test_unknown_or_support_test_module_fails_safe_to_every_lane() -> None:
@@ -142,7 +146,7 @@ def test_unknown_or_support_test_module_fails_safe_to_every_lane() -> None:
             pull_request_draft=True,
         )
 
-        assert scope.full_suite is False
+        assert scope.full_suite is True
         assert scope.preflight is True
         assert scope.lanes == ALL_LANES
 
@@ -174,7 +178,7 @@ def test_backend_workflow_change_exercises_every_component_in_draft() -> None:
         pull_request_draft=True,
     )
 
-    assert scope.full_suite is False
+    assert scope.full_suite is True
     assert scope.preflight is True
     assert scope.external_checker is True
     assert scope.cli_contract is True
@@ -189,10 +193,10 @@ def test_github_outputs_are_compact_and_parseable() -> None:
     )
     outputs = scope.outputs()
 
-    assert outputs["full_suite"] == "false"
+    assert outputs["full_suite"] == "true"
     assert outputs["lanes_required"] == "true"
     assert outputs["minio_image"] == "true"
-    assert json.loads(outputs["lane_matrix"]) == {"lane": ["schema_contracts"]}
+    assert json.loads(outputs["lane_matrix"]) == {"lane": list(ALL_LANES)}
 
 
 def test_empty_scope_keeps_a_valid_but_skipped_fail_safe_matrix() -> None:
@@ -291,7 +295,7 @@ def test_main_skips_git_diff_on_push_even_with_null_or_unreachable_base(
     assert "lanes_required=true\n" in contents
 
 
-def test_main_skips_git_diff_on_ready_pull_request_with_invalid_base(
+def test_main_falls_back_to_full_on_ready_pull_request_with_invalid_base(
     tmp_path: Path,
 ) -> None:
     output_file = tmp_path / "github_output.txt"
@@ -313,7 +317,7 @@ def test_main_skips_git_diff_on_ready_pull_request_with_invalid_base(
     assert exit_code == 0
     contents = output_file.read_text(encoding="utf-8")
     assert "full_suite=true\n" in contents
-    assert "scope_reason=ready_pull_request\n" in contents
+    assert "scope_reason=unavailable_diff\n" in contents
     assert "lanes_required=true\n" in contents
 
 
@@ -375,4 +379,4 @@ def test_main_draft_pull_request_with_explicit_changed_paths(
     contents = output_file.read_text(encoding="utf-8")
     assert "full_suite=false\n" in contents
     assert "lanes_required=false\n" in contents
-    assert "scope_reason=draft_changed_paths\n" in contents
+    assert "scope_reason=verified_changed_paths\n" in contents

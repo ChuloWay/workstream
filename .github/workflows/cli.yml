@@ -6,6 +6,9 @@ on:
       minio_artifact:
         required: true
         type: string
+      minio_producer_attempt:
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -47,12 +50,15 @@ jobs:
       - name: Bind checked-out source
         env:
           MINIO_ARTIFACT: ${{ inputs.minio_artifact }}
+          MINIO_PRODUCER_ATTEMPT: ${{ inputs.minio_producer_attempt }}
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
           test -z "$(git status --porcelain)"
-          test "${MINIO_ARTIFACT}" = "minio-source-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}"
+          [[ "${MINIO_PRODUCER_ATTEMPT}" =~ ^[1-9][0-9]*$ ]]
+          test "${MINIO_PRODUCER_ATTEMPT}" -le "${GITHUB_RUN_ATTEMPT}"
+          test "${MINIO_ARTIFACT}" = "minio-source-${GITHUB_SHA}-${MINIO_PRODUCER_ATTEMPT}"
 
       - name: Verify and build independent CLI
         working-directory: cli

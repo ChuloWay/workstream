@@ -49,7 +49,10 @@ In addition to the original scope below: existing lane runner, evidence merger
 and independent validator with their focused tests; a cohesive CI dependency
 analysis module and its regression tests if the existing parser cannot own
 selection; CLI reusable workflow and its workflow-integrity tests for artifact
-retry custody; affected behavior-ownership registration and operations docs.
+retry custody; `.github/workflows/mcp.yml` and its focused workflow-integrity
+tests to make the existing MCP workflow callable from Backend, without a second
+implementation or polling another workflow; affected behavior-ownership
+registration and operations docs.
 No application behavior, test deletion, timeout increase, coverage gate,
 branch-protection change, external CI service or historical-result cache.
 
@@ -82,15 +85,22 @@ engineering workflow change, not a newly exposed Workstream capability.
   imports, package initializers and local test-support imports. Ambiguity is
   uncertainty. Use the head catalogue/collection for executable test nodes.
 - Production parsing/dynamic uncertainty forces full. Uncertain test/support
-  modules are always retained with their reverse consumers for source changes;
+  modules are always retained with their reverse consumers for all backend changes;
   unresolved support ownership forces full. Include all tests under the
   changed owner's closed test-subtree map. Source-reading/path/registry/string
   controls are mandatory sentinels; unmapped non-import consumers force full.
   This mapping is not a replacement for backend module authorization policy.
+  Raw SQL inspection depends on the database schema: every model/migration/DDL
+  change runs full proof. It is not evidence that a generic database-cleanup
+  fixture depends on every ordinary Python leaf. Source-reading sentinels
+  exclude explicit write-only file opens and SQL construction; their actual
+  import/fixture edges remain present. No source-reading exemption is inferred
+  from a test/helper filename.
 - The planner freshly collects the full canonical pytest inventory before
   deriving selected whole modules, exact nodes and nonempty lanes. Hash-based
   lane partitioning is resolved from collected nodes, not module ownership.
-  Zero-node and admin-runner-only selections fall back to full execution.
+  Known admin-runner changes select full execution. An empty or admin-only
+  collected selection fails planning rather than publishing a green empty run.
 - Preserve full-manifest and default full-validator semantics. Selected mode
   has a distinct versioned receipt binding event base SHA, PR head SHA, tested
   merge-tree SHA, selector/input digests, selected/omitted modules and exact
@@ -112,7 +122,7 @@ engineering workflow change, not a newly exposed Workstream capability.
 | Main push | Full | Existing complete backend/CLI/external/API evidence |
 | Unknown or cross-cutting PR | Full | Same complete evidence |
 | Eligible backend source PR | Dependency/owner/sentinel closure | Static preflight, real API, mapped CLI/external consumers |
-| Ordinary test-only PR | Changed modules and known reverse consumers | Preflight and exact selected evidence |
+| Ordinary test-only PR | Changed modules, reverse consumers and non-import sentinels | Preflight and exact selected evidence |
 | CLI PR | CLI integration | Its real API/PostgreSQL/S3 proof and MinIO |
 | External-checker PR | External runtime and mapped backend consumers | Explicit port integration, otherwise full fallback |
 | MCP PR | MCP integration | MCP workflow result must join required fan-in before backend omission |
@@ -137,6 +147,27 @@ PostgreSQL/MinIO selected integration sample to prove execution/cleanup custody,
 including cancelled/missing/foreign/latest-failed evidence. Full-shadow results
 on identical tested source distinguish selection correctness from runtime
 speed. No selected-mode enablement based solely on unit/static assertions.
+
+### Takeover verification and limits
+
+Focused selector, runner, merger, validator and workflow checks passed locally
+(216 tests and 155 subchecks). The subsequent parser reuse and receipt-artifact
+retry changes passed their affected selector and workflow checks. Dependency
+analysis reuses the existing dynamic-loading visitor on an already parsed AST;
+it does not reparse each file through a second import scan.
+
+Representative current-tree measurements select 413 of 521 modules for a
+`test_identifiers.py` change and 460 for `tasks/submission_history.py`.
+Shared support, dynamic inspection and transitive imports legitimately expand
+those sets. These counts demonstrate omission, not a five-minute backend
+result. No acceptance claim may substitute the controlled small fixture for
+representative hosted runtime. The PostgreSQL/MinIO full-versus-selected probe,
+final reviews and hosted verification must establish their own evidence.
+
+Selection receipts, like MinIO images, use a producer-attempt-specific artifact
+name. Failed-job retries consume the successful planner's output; rerunning
+the planner publishes a distinct immutable artifact. Execution bundle identity
+also binds the receipt digest, tested tree, lane and execution attempt.
 
 ## Superseded draft-only baseline (historical context)
 

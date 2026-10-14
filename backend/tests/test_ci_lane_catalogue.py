@@ -411,6 +411,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/test_record_id_collection.py",
         "tests/test_ci_lane_catalogue.py",
         "tests/test_ci_scope_selection.py",
+        "tests/test_ci_test_impact.py",
         "tests/test_ci_test_lanes.py",
         "tests/test_test_lane_evidence.py",
         "tests/test_merge_test_lane_evidence.py",
@@ -725,16 +726,17 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     ) == 1
     assert (
         source.count(
-            "name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}"
+            "name: ${{ needs.scope.outputs.selected_backend == 'true' && format('backend-selected-{0}', needs.scope.outputs.selection_digest) || 'backend-lane' }}-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}"
         )
         == 1
     )
-    assert source.count("pattern: backend-lane-${{ github.sha }}-*-attempt-*") == 1
+    assert source.count("pattern: ${{ needs.scope.outputs.selected_backend == 'true' && format('backend-selected-{0}', needs.scope.outputs.selection_digest) || 'backend-lane' }}-${{ github.sha }}-*-attempt-*") == 1
     assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
     assert '--expected-head "${GITHUB_SHA}"' in source
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
-    assert 'test "${#coverage_files[@]}" -eq 10' in source
-    assert "len(lanes) != 10" in source
+    assert 'test "${#coverage_files[@]}" -eq "${expected_count}"' in source
+    assert 'len(selection["lanes"]) if selection is not None else 10' in source
+    assert "len(lanes) != expected_lane_count" in source
     assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
     assert 'timing_path = bundle / "job-start-epoch.txt"' in source
     assert (
@@ -750,7 +752,7 @@ def test_workflow_requires_the_locked_external_checker_workspace() -> None:
     assert "cargo fmt --all --check" in source
     assert "cargo test --workspace --locked" in source
     assert "EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}" in source
-    assert 'test "${EXTERNAL_CHECKER_RESULT}" = success' in source
+    assert 'require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_CHECKER_RESULT}"' in source
 
 
 def test_former_coverage_reruns_remain_in_full_suite_lanes() -> None:

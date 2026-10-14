@@ -23,6 +23,39 @@ from scripts.check_stale_workstream_wording import forbidden_path_failures
 class LightweightAgentGateTests(unittest.TestCase):
     """Keep the retained checks executable and cover their core parsing rules."""
 
+    def test_cli_minio_retry_binds_successful_producer_not_consumer_attempt(self) -> None:
+        workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")
+        step = workflow.split("      - name: Bind checked-out source\n", 1)[1].split("\n      - ", 1)[0]
+        script = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        guard = script[script.index('[[ "${MINIO_PRODUCER_ATTEMPT}"'):]
+        head = "a" * 40
+        for producer, consumer, artifact, success in (
+            ("1", "1", f"minio-source-{head}-1", True),
+            ("1", "2", f"minio-source-{head}-1", True),
+            ("2", "2", f"minio-source-{head}-2", True),
+            ("3", "2", f"minio-source-{head}-3", False),
+            ("1", "2", f"minio-source-{head}-2", False),
+            ("1", "2", "minio-source-foreign-1", False),
+            ("0", "2", f"minio-source-{head}-0", False),
+            ("", "2", f"minio-source-{head}-1", False),
+        ):
+            with self.subTest(producer=producer, consumer=consumer, artifact=artifact):
+                result = subprocess.run(
+                    ["bash", "-eu", "-c", guard], capture_output=True, check=False,
+                    env={"GITHUB_SHA": head, "GITHUB_RUN_ATTEMPT": consumer,
+                         "MINIO_PRODUCER_ATTEMPT": producer, "MINIO_ARTIFACT": artifact},
+                )
+                self.assertEqual(result.returncode == 0, success, result.stderr)
+
+    def test_mcp_has_one_callable_owner_and_required_backend_fan_in(self) -> None:
+        workflow = Path(".github/workflows/mcp.yml").read_text(encoding="utf-8")
+        self.assertIn("on:\n  workflow_call:\n", workflow)
+        self.assertNotIn("  pull_request:\n", workflow)
+        self.assertNotIn("  push:\n", workflow)
+        backend = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
+        self.assertEqual(backend.count("uses: ./.github/workflows/mcp.yml"), 1)
+        self.assertIn('require_expected "${MCP_EXPECTED}" "${MCP_RESULT}"', backend)
+
     def test_cli_full_contract_preserves_failure_and_timeout_exits(self) -> None:
         workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")
         names = (
@@ -228,7 +261,15 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertIn("python backend/scripts/select_ci_scope.py", scope_job)
         self.assertIn("BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}", scope_job)
         self.assertIn("PR_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft || false }}", scope_job)
-        self.assertIn("lane_matrix: ${{ steps.select.outputs.lane_matrix }}", scope_job)
+        self.assertIn("lane_matrix: ${{ steps.plan.outputs.lane_matrix || steps.select.outputs.lane_matrix }}", scope_job)
+        # A rerun-all publishes a new immutable receipt artifact; failed-only
+        # consumers retain the successful planner's identity, not their attempt.
+        self.assertIn(
+            'echo "selection_artifact=backend-selection-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"',
+            scope_job,
+        )
+        self.assertIn("name: ${{ steps.plan.outputs.selection_artifact }}", scope_job)
+        self.assertEqual(workflow.count("name: ${{ needs.scope.outputs.selection_artifact }}"), 2)
         self.assertEqual(
             workflow.count(
                 "matrix: ${{ fromJSON(needs.scope.outputs.lane_matrix) }}"
@@ -238,18 +279,18 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertIn(
             "  full-suite:\n    if: >-\n"
             "      ${{ always() && needs.scope.result == 'success' &&\n"
-            "          needs.scope.outputs.full_suite == 'true' }}\n"
+            "          (needs.scope.outputs.full_suite == 'true' || needs.scope.outputs.selected_backend == 'true') }}\n"
             "    needs: [scope, auth-boundary-preflight, external-checker-runtime, "
-            "lanes, minio-image, cli-public-contract]",
+            "lanes, minio-image, cli-public-contract, mcp-contract]",
             workflow,
         )
         self.assertIn(
             "    if: ${{ always() }}\n"
             "    needs: [scope, auth-boundary-preflight, external-checker-runtime, "
-            "lanes, minio-image, cli-public-contract, full-suite]",
+            "lanes, minio-image, cli-public-contract, mcp-contract, full-suite]",
             workflow,
         )
-        self.assertIn("Require preflight, every semantic lane and CLI public contract", workflow)
+        self.assertIn("Require selected supporting checks and every expected lane", workflow)
         self.assertIn("Require the selected draft scope or complete merge proof", workflow)
         cli_job = workflow.split("\n  cli-public-contract:\n", 1)[1].split(
             "\n  full-suite:\n", 1
@@ -385,8 +426,8 @@ class LightweightAgentGateTests(unittest.TestCase):
             self.assertLess(job.index("Restore exact backend uv downloads"), job.index(cache_env))
             self.assertLess(job.index(cache_env), job.index(tool_install))
             self.assertLess(job.index(tool_install), job.index(frozen_install))
-        self.assertEqual(workflow.count(tool_install), 3)
-        self.assertEqual(workflow.count(frozen_install), 3)
+        self.assertEqual(workflow.count(tool_install), 4)
+        self.assertEqual(workflow.count(frozen_install), 4)
         self.assertEqual(workflow.count(cache_env), 3)
         self.assertNotIn('python -m pip install -e ".[dev,agents]"', workflow)
         root_env = workflow.split("\nenv:\n", 1)[1].split("\njobs:\n", 1)[0]
@@ -492,7 +533,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertRegex(lanes, r"(?m)^    needs: \[scope, minio-image\]$")
         self.assertNotIn("needs: auth-boundary-preflight", lanes)
         step = workflow.split(
-            "      - name: Require preflight, every semantic lane and CLI public contract\n", 1
+            "      - name: Require selected supporting checks and every expected lane\n", 1
         )[1].split("\n      - name:", 1)[0]
         self.assertIn("if: ${{ always() }}", step)
         self.assertIn("PREFLIGHT_RESULT: ${{ needs.auth-boundary-preflight.result }}", step)
@@ -502,14 +543,15 @@ class LightweightAgentGateTests(unittest.TestCase):
         )
         self.assertIn("LANES_RESULT: ${{ needs.lanes.result }}", step)
         self.assertIn("CLI_RESULT: ${{ needs.cli-public-contract.result }}", step)
-        guard = re.search(r"(?m)^        run: (.+)$", step)
-        self.assertIsNotNone(guard)
+        guard = textwrap.dedent(step.split("        run: |\n", 1)[1])
+        required = {"EXTERNAL_EXPECTED": "true", "CLI_EXPECTED": "true",
+                    "MCP_EXPECTED": "true", "MCP_RESULT": "success"}
         for preflight in ("success", "failure", "cancelled", "skipped", "", "unknown"):
             for lanes_result in ("success", "failure", "cancelled", "skipped", "", "unknown"):
                 with self.subTest(preflight=preflight, lanes=lanes_result):
                     result = subprocess.run(
-                        ["bash", "-e", "-c", guard[1]],
-                        env={
+                        ["bash", "-e", "-c", guard],
+                        env=required | {
                             "PREFLIGHT_RESULT": preflight,
                             "EXTERNAL_CHECKER_RESULT": "success",
                             "LANES_RESULT": lanes_result,
@@ -531,8 +573,8 @@ class LightweightAgentGateTests(unittest.TestCase):
         ):
             with self.subTest(external_checker=external_checker):
                 result = subprocess.run(
-                    ["bash", "-e", "-c", guard[1]],
-                    env={
+                    ["bash", "-e", "-c", guard],
+                    env=required | {
                         "PREFLIGHT_RESULT": "success",
                         "EXTERNAL_CHECKER_RESULT": external_checker,
                         "LANES_RESULT": "success",
@@ -545,8 +587,8 @@ class LightweightAgentGateTests(unittest.TestCase):
         for cli_result in ("failure", "cancelled", "skipped", "", "unknown"):
             with self.subTest(cli=cli_result):
                 result = subprocess.run(
-                    ["bash", "-e", "-c", guard[1]],
-                    env={
+                    ["bash", "-e", "-c", guard],
+                    env=required | {
                         "PREFLIGHT_RESULT": "success",
                         "EXTERNAL_CHECKER_RESULT": "success",
                         "LANES_RESULT": "success",
@@ -579,6 +621,9 @@ class LightweightAgentGateTests(unittest.TestCase):
             defaults = {
                 "SCOPE_RESULT": "success",
                 "FULL_SUITE": "false",
+                "SELECTED_BACKEND": "false",
+                "MCP_EXPECTED": "false",
+                "MCP_RESULT": "skipped",
                 "PREFLIGHT_EXPECTED": "false",
                 "PREFLIGHT_RESULT": "skipped",
                 "EXTERNAL_EXPECTED": "false",
@@ -609,7 +654,7 @@ class LightweightAgentGateTests(unittest.TestCase):
             0,
         )
         self.assertEqual(
-            run_guard(FULL_SUITE="true", FULL_RESULT="success").returncode,
+            run_guard(FULL_SUITE="true", FULL_RESULT="success", MCP_RESULT="success").returncode,
             0,
         )
         component_pairs = (
@@ -618,6 +663,8 @@ class LightweightAgentGateTests(unittest.TestCase):
             ("LANES_EXPECTED", "LANES_RESULT"),
             ("MINIO_EXPECTED", "MINIO_RESULT"),
             ("CLI_EXPECTED", "CLI_RESULT"),
+            ("MCP_EXPECTED", "MCP_RESULT"),
+            ("SELECTED_BACKEND", "FULL_RESULT"),
         )
         for expected_key, result_key in component_pairs:
             with self.subTest(component=result_key, outcome="success"):

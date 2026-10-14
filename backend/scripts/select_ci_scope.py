@@ -16,6 +16,9 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.test_lane_catalogue import LANES
+from scripts.ci_test_impact import (
+    ImpactUncertain, affected_modules, dependency_graph, immutable_base_tree,
+)
 
 
 ALL_LANES = tuple(lane.name for lane in LANES)
@@ -24,20 +27,6 @@ LANES_BY_TEST_MODULE = {
     for lane in LANES
     for module in lane.modules
 }
-
-FULL_SCOPE_PATHS = frozenset(
-    {
-        ".github/workflows/backend.yml",
-        "backend/scripts/select_ci_scope.py",
-        "backend/scripts/test_lane_catalogue.py",
-        "scripts/test_lightweight_agent_gates.py",
-    }
-)
-PREFLIGHT_PREFIXES = (
-    ".ci/auth-boundaries/",
-    ".ci/behavior-ownership/",
-)
-
 
 @dataclass(frozen=True)
 class CiScope:
@@ -49,6 +38,8 @@ class CiScope:
     cli_contract: bool
     lanes: tuple[str, ...]
     reason: str
+    mcp_contract: bool = False
+    modules: tuple[str, ...] | None = None
 
     @property
     def lanes_required(self) -> bool:
@@ -76,6 +67,8 @@ class CiScope:
                 {"lane": list(matrix_lanes)}, separators=(",", ":")
             ),
             "scope_reason": self.reason,
+            "mcp_contract": _boolean(self.mcp_contract),
+            "selected_backend": _boolean(self.modules is not None),
         }
 
 
@@ -92,15 +85,18 @@ def full_scope(reason: str) -> CiScope:
         cli_contract=True,
         lanes=ALL_LANES,
         reason=reason,
+        mcp_contract=True,
     )
 
 
 def _normalize_paths(paths: Iterable[str]) -> tuple[str, ...]:
     normalized: set[str] = set()
     for raw in paths:
-        value = raw.strip().replace("\\", "/")
+        value = raw
         path = PurePosixPath(value)
-        if not value or path.is_absolute() or ".." in path.parts:
+        if (not value or path.is_absolute() or ".." in path.parts
+                or "\\" in value or any(ord(char) < 32 for char in value)
+                or path.as_posix() != value):
             raise ValueError(f"invalid changed path: {raw!r}")
         normalized.add(path.as_posix())
     return tuple(sorted(normalized))
@@ -120,65 +116,83 @@ def select_scope(
     *,
     event_name: str,
     pull_request_draft: bool,
+    repository_root: Path | None = None,
+    base_ref: str | None = None,
 ) -> CiScope:
-    """Select draft feedback or the complete merge-candidate suite."""
+    """Select positively classified impact; unknown dependencies run everything."""
+    del pull_request_draft  # Check naming differs; dependency impact does not.
     changed = _normalize_paths(paths)
     if event_name != "pull_request":
         return full_scope("protected_push")
-    if not pull_request_draft:
-        return full_scope("ready_pull_request")
     if not changed:
         return full_scope("empty_diff_fails_closed")
-
-    selected_lanes: set[str] = set()
-    preflight = False
-    external_checker = False
+    backend_paths: list[str] = []
     cli_contract = False
-    fallback_all_lanes = False
-
+    mcp_contract = False
     for path in changed:
-        if path in FULL_SCOPE_PATHS or path.startswith("docker/minio/"):
-            preflight = True
-            external_checker = True
+        if (path.startswith(("backend/tests/test_ci_", "backend/tests/test_test_lane"))
+                or path == "backend/tests/test_isolated_database_runner.py"):
+            return full_scope("ci_control_test_change")
+        if (path in {"README.md", "CHANGELOG.md"} or
+                path.endswith(".md") and path.startswith(("docs/", ".commitrail/changes/"))):
+            continue
+        if path.startswith("cli/"):
             cli_contract = True
-            fallback_all_lanes = True
             continue
-        if path == ".github/workflows/cli.yml" or path.startswith("cli/"):
-            cli_contract = True
+        if path.startswith("mcp_server/"):
+            mcp_contract = True
             continue
-        if path.startswith("external_checkers/"):
-            external_checker = True
+        if path.startswith("backend/tests/") and _test_module_lanes(path) is not None:
+            backend_paths.append(path)
             continue
-        if path.startswith(PREFLIGHT_PREFIXES):
-            preflight = True
+        if path.startswith("backend/app/modules/") and path.endswith(".py"):
+            parts = PurePosixPath(path).parts
+            if (len(parts) < 5 or parts[3] not in {"projects", "tasks", "checkers", "reviews"}
+                    or any(part in {"api", "models", "schemas"} for part in parts[4:])
+                    or parts[-1] in {"router.py", "composition.py", "wiring.py", "config.py"}
+                    or parts[-1].endswith(("models.py", "schemas.py", "model.py", "schema.py"))):
+                return full_scope("protected_backend_surface")
+            backend_paths.append(path)
             continue
-        if path.startswith("backend/tests/"):
-            preflight = True
-            lanes = _test_module_lanes(path)
-            if lanes is None:
-                fallback_all_lanes = True
-            else:
-                selected_lanes.update(lanes)
-            continue
-        if path.startswith("backend/"):
-            preflight = True
-            fallback_all_lanes = True
-            cli_contract = True
-
-    lanes = ALL_LANES if fallback_all_lanes else tuple(
-        lane for lane in ALL_LANES if lane in selected_lanes
-    )
+        return full_scope("unknown_or_cross_cutting_path")
+    modules: tuple[str, ...] | None = None
+    lanes: tuple[str, ...] = ()
+    if backend_paths:
+        if repository_root is None or base_ref is None:
+            return full_scope("missing_dependency_proof")
+        try:
+            head_graph = dependency_graph(repository_root)
+            with immutable_base_tree(repository_root, base_ref) as base:
+                base_graph = dependency_graph(base)
+            modules = affected_modules(
+                base_graph, head_graph, tuple(backend_paths), tuple(LANES_BY_TEST_MODULE),
+            )
+        except (ImpactUncertain, OSError, ValueError, subprocess.SubprocessError):
+            return full_scope("uncertain_dependency_closure")
+        if set(modules) == set(LANES_BY_TEST_MODULE):
+            return full_scope("dependency_closure_requires_full_suite")
+        # This is only a collection candidate; exact nonempty lanes are derived
+        # from collected node IDs before CI schedules selected execution.
+        lanes = tuple(lane for lane in ALL_LANES if any(
+            lane in LANES_BY_TEST_MODULE[module] for module in modules
+        ))
+        if any(path.startswith("backend/app/") for path in backend_paths):
+            cli_contract = mcp_contract = True
     return CiScope(
         full_suite=False,
-        preflight=preflight,
-        external_checker=external_checker,
+        preflight=bool(backend_paths),
+        external_checker=False,
         cli_contract=cli_contract,
         lanes=lanes,
-        reason="draft_changed_paths",
+        reason="verified_changed_paths",
+        mcp_contract=mcp_contract,
+        modules=modules,
     )
 
 
-def changed_paths(base_ref: str, head_ref: str) -> tuple[str, ...]:
+def changed_paths(
+    base_ref: str, head_ref: str, *, repository_root: Path | None = None,
+) -> tuple[str, ...]:
     """Read the exact base-to-head changed-file set from Git."""
     result = subprocess.run(
         [
@@ -186,6 +200,7 @@ def changed_paths(base_ref: str, head_ref: str) -> tuple[str, ...]:
             "diff",
             "--no-renames",
             "--name-only",
+            "-z",
             "--diff-filter=ACDMRT",
             f"{base_ref}...{head_ref}",
             "--",
@@ -193,8 +208,9 @@ def changed_paths(base_ref: str, head_ref: str) -> tuple[str, ...]:
         check=True,
         capture_output=True,
         text=True,
+        cwd=repository_root,
     )
-    return _normalize_paths(result.stdout.splitlines())
+    return _normalize_paths(result.stdout.split("\0")[:-1])
 
 
 def write_github_outputs(path: Path, scope: CiScope) -> None:
@@ -214,10 +230,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--changed-path", action="append", default=[])
     parser.add_argument("--github-output", type=Path, required=True)
     args = parser.parse_args(argv)
-    is_draft = args.event_name == "pull_request" and args.pull_request_draft == "true"
-    if is_draft and not args.changed_path and (not args.base_ref or not args.head_ref):
+    if args.event_name == "pull_request" and not args.changed_path and (not args.base_ref or not args.head_ref):
         parser.error(
-            "base/head refs are required when changed paths are not supplied for draft pull requests"
+            "base/head refs are required when changed paths are not supplied for pull requests"
         )
     return args
 
@@ -225,19 +240,37 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     """Select and emit one exact CI scope."""
     args = parse_args(argv)
-    is_draft = args.event_name == "pull_request" and args.pull_request_draft == "true"
     if args.changed_path:
         paths: Sequence[str] = tuple(args.changed_path)
-    elif is_draft:
-        paths = changed_paths(args.base_ref, args.head_ref)
+    elif args.event_name == "pull_request":
+        try:
+            paths = changed_paths(args.base_ref, args.head_ref)
+        except (ValueError, subprocess.SubprocessError):
+            scope = full_scope("unavailable_diff")
+            write_github_outputs(args.github_output, scope)
+            print(json.dumps(scope.outputs(), sort_keys=True))
+            return 0
     else:
         paths = ()
     scope = select_scope(
         paths,
         event_name=args.event_name,
         pull_request_draft=args.pull_request_draft == "true",
+        repository_root=Path(__file__).resolve().parents[2],
+        base_ref=args.base_ref or None,
     )
     write_github_outputs(args.github_output, scope)
+    # Exercise the actual selected path when its implementation changes even
+    # though those control changes deliberately select full product proof.
+    controls = {
+        ".github/workflows/backend.yml", "backend/scripts/select_ci_scope.py",
+        "backend/scripts/ci_test_impact.py", "backend/scripts/ci_selection_receipt.py",
+        "backend/scripts/probe_ci_selection.py", "backend/scripts/run_test_lanes.py",
+        "backend/scripts/merge_test_lane_evidence.py",
+        "backend/scripts/validate_test_lane_evidence.py",
+    }
+    with args.github_output.open("a", encoding="utf-8") as output:
+        output.write("selection_probe=" + _boolean(bool(controls & set(paths))) + "\n")
     print(json.dumps(scope.outputs(), sort_keys=True))
     return 0
 

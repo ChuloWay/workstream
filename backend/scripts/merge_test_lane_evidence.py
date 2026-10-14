@@ -12,6 +12,9 @@ import shutil
 from typing import Any
 
 from scripts.run_test_lanes import LANES, LaneError, SCHEMA_VERSION
+from scripts.ci_selection_receipt import (
+    SelectionError, receipt_bytes, receipt_digest, verify_receipt,
+)
 
 
 def _canonical_json(value: Any) -> bytes:
@@ -48,7 +51,10 @@ def _copy_bound(source: Path, destination: Path, expected_digest: Any) -> None:
     shutil.copyfile(source, destination)
 
 
-def select_lane_bundles(input_root: Path, head_sha: str, run_attempt: int) -> dict[str, Path]:
+def select_lane_bundles(
+    input_root: Path, head_sha: str, run_attempt: int, *,
+    selection: dict[str, Any] | None = None,
+) -> dict[str, Path]:
     """Select latest numeric attempts, never an older passing bundle after failure."""
     if (
         re.fullmatch(r"[0-9a-f]{40}", head_sha) is None
@@ -58,8 +64,12 @@ def select_lane_bundles(input_root: Path, head_sha: str, run_attempt: int) -> di
         or not input_root.is_dir()
     ):
         raise LaneError("invalid_lane_bundle_root")
-    expected = {lane.name for lane in LANES}
-    pattern = re.compile(rf"backend-lane-{head_sha}-([a-z_]+)-attempt-([1-9][0-9]*)")
+    expected = set(selection["lanes"]) if selection is not None else {lane.name for lane in LANES}
+    if not expected or not expected <= {lane.name for lane in LANES}:
+        raise LaneError("invalid_selected_lane_set")
+    prefix = (f"backend-selected-{receipt_digest(selection)}" if selection is not None
+              else "backend-lane")
+    pattern = re.compile(rf"{prefix}-{head_sha}-([a-z_]+)-attempt-([1-9][0-9]*)")
     selected: dict[str, tuple[int, Path]] = {}
     for path in input_root.iterdir():
         match = pattern.fullmatch(path.name)
@@ -73,12 +83,14 @@ def select_lane_bundles(input_root: Path, head_sha: str, run_attempt: int) -> di
             selected[lane] = (attempt, path)
     if selected.keys() != expected:
         raise LaneError("invalid_lane_bundle_set")
-    return {lane.name: selected[lane.name][1] for lane in LANES}
+    return {lane.name: selected[lane.name][1] for lane in LANES if lane.name in expected}
 
 
 def merge_bundles(
     input_root: Path, metadata_dir: Path, summary_json: Path, *,
     expected_head: str, run_attempt: int,
+    selection_file: Path | None = None, base_sha: str = "", pr_head_sha: str = "",
+    repository_root: Path | None = None,
 ) -> None:
     """Merge exactly one authenticated bundle for each declared lane."""
     if (
@@ -90,7 +102,10 @@ def merge_bundles(
         or summary_json.is_symlink()
     ):
         raise LaneError("invalid_lane_bundle_root")
-    bundles = select_lane_bundles(input_root, expected_head, run_attempt)
+    selection = _read_object(selection_file) if selection_file is not None else None
+    if selection is None and (base_sha or pr_head_sha):
+        raise LaneError("selection_identity_without_receipt")
+    bundles = select_lane_bundles(input_root, expected_head, run_attempt, selection=selection)
     metadata_dir.mkdir(mode=0o700)
 
     manifest_bytes: bytes | None = None
@@ -100,13 +115,15 @@ def merge_bundles(
     lane_rows: list[dict[str, Any]] = []
     elapsed_seconds = 0.0
     for lane in LANES:
+        if lane.name not in bundles:
+            continue
         bundle = bundles[lane.name]
         print(f"Selected lane evidence: {bundle.name}")
         summary = _read_object(bundle / "summary.json")
         if (
             summary.get("schema_version") != SCHEMA_VERSION
             or summary.get("head_sha") != expected_head
-            or summary.get("mode") != "lane"
+            or summary.get("mode") != ("selected_lane" if selection is not None else "lane")
             or not isinstance(summary.get("lanes"), list)
             or len(summary["lanes"]) != 1
             or not isinstance(summary["lanes"][0], dict)
@@ -133,6 +150,13 @@ def merge_bundles(
         if _digest(source_manifest) != summary.get("manifest_sha256"):
             raise LaneError("invalid_lane_bundle_manifest")
         if manifest_bytes is None:
+            if selection is not None:
+                selection = verify_receipt(
+                    selection_file, repository_root or Path(__file__).resolve().parents[2],
+                    base_sha=base_sha, pr_head_sha=pr_head_sha, tested_sha=expected_head,
+                    manifest=_read_object(source_manifest),
+                )
+                (metadata_dir / "selection.json").write_bytes(receipt_bytes(selection))
             manifest_bytes = current_manifest
             manifest_digest = summary["manifest_sha256"]
             head_sha = summary.get("head_sha")
@@ -145,6 +169,13 @@ def merge_bundles(
             or summary.get("canonical_node_count") != canonical_node_count
         ):
             raise LaneError("lane_manifest_mismatch")
+
+        if selection is not None:
+            if (summary.get("selection_file") != "selection.json" or
+                    summary.get("selection_sha256") != receipt_digest(selection) or
+                    (source_metadata / "selection.json").is_symlink() or
+                    (source_metadata / "selection.json").read_bytes() != receipt_bytes(selection)):
+                raise LaneError("lane_selection_mismatch")
 
         for file_key, digest_key in (
             ("evidence_file", "evidence_sha256"),
@@ -179,7 +210,9 @@ def merge_bundles(
                 "lanes": lane_rows,
                 "manifest_file": "manifest.json",
                 "manifest_sha256": manifest_digest,
-                "mode": "run",
+                "mode": "selected_run" if selection is not None else "run",
+                **({"selection_file": "selection.json", "selection_sha256": receipt_digest(selection)}
+                   if selection is not None else {}),
                 "schema_version": SCHEMA_VERSION,
                 "slowest_lane_seconds": round(max(elapsed), 3),
             }
@@ -194,13 +227,17 @@ def main() -> int:
     parser.add_argument("--summary-json", required=True, type=Path)
     parser.add_argument("--expected-head", required=True)
     parser.add_argument("--run-attempt", required=True, type=int)
+    parser.add_argument("--selection-file", type=Path)
+    parser.add_argument("--base-sha", default="")
+    parser.add_argument("--pr-head-sha", default="")
     args = parser.parse_args()
     try:
         merge_bundles(
             args.input_root, args.metadata_dir, args.summary_json,
             expected_head=args.expected_head, run_attempt=args.run_attempt,
+            selection_file=args.selection_file, base_sha=args.base_sha, pr_head_sha=args.pr_head_sha,
         )
-    except (LaneError, OSError) as exc:
+    except (LaneError, SelectionError, OSError, KeyError, TypeError) as exc:
         code = exc.args[0] if isinstance(exc, LaneError) else "lane_merge_failed"
         print(f"test lane merge failed: {code}")
         return 1

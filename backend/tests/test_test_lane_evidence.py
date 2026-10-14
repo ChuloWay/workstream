@@ -164,6 +164,50 @@ def test_validates_complete_exact_custody(tmp_path: Path, mode: str) -> None:
     assert validator.validate_evidence(metadata, summary_path, tmp_path) == summary
 
 
+@pytest.mark.parametrize("damage", [None, "missing_completion", "skipped", "foreign_lane", "full_label"])
+def test_selected_validation_retains_completion_and_mode_boundaries(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, damage: str | None,
+) -> None:
+    """Receipt verification changes inventory, never execution/cleanup requirements."""
+    metadata, summary_path, summary = _bundle(tmp_path)
+    selection = {"selected_modules": ["tests/test_0.py"],
+                 "selected_nodes": ["tests/test_0.py::test_ok"], "lanes": [LANES[0]]}
+    summary.update(mode="selected_run", lanes=summary["lanes"][:1], aggregate_runner_seconds=1.0,
+                   selection_file="selection.json", selection_sha256=_write(metadata / "selection.json", selection))
+    calls = []
+
+    def verified(path, root, **identities):
+        calls.append((path, root, identities))
+        assert identities["base_sha"] == "b" * 40
+        assert identities["pr_head_sha"] == HEAD
+        assert identities["tested_sha"] == HEAD
+        assert len(identities["manifest"]["nodes"]) == 11
+        return selection
+
+    monkeypatch.setattr(validator, "verify_receipt", verified)
+    lane = summary["lanes"][0]
+    evidence_path = metadata / lane["evidence_file"]
+    evidence = json.loads(evidence_path.read_bytes())
+    if damage == "missing_completion":
+        evidence["completed_nodes"] = []
+    elif damage == "skipped":
+        evidence["skipped_nodes"] = evidence["collected_nodes"]
+    elif damage == "foreign_lane":
+        lane["name"] = LANES[1]
+    elif damage == "full_label":
+        summary["mode"] = "run"
+    lane["evidence_sha256"] = _write(evidence_path, evidence)
+    _write(summary_path, summary)
+    if damage is None:
+        assert validator.validate_evidence(metadata, summary_path, tmp_path,
+                                          base_sha="b" * 40, pr_head_sha=HEAD) == summary
+        assert len(calls) == 1
+    else:
+        with pytest.raises(validator.EvidenceError):
+            validator.validate_evidence(metadata, summary_path, tmp_path,
+                                        base_sha="b" * 40, pr_head_sha=HEAD)
+
+
 def test_rejects_wrong_head_and_noncanonical_manifest(tmp_path: Path) -> None:
     metadata, summary_path, summary = _bundle(tmp_path)
     summary["head_sha"] = "b" * 40
