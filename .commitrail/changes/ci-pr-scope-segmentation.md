@@ -1,8 +1,148 @@
-# Scope draft CI without weakening merge proof
+# Select CI by verified change impact
 
 - Initiative: None
-- Durable disposition: Complete
-- Intended merge outcome: Draft pull requests run only affected Backend CI components while every ready pull request and main push retain the complete blocking Backend suite.
+- Durable disposition: Planned
+- Intended merge outcome: Draft and ready pull requests execute conservatively selected affected tests and integration contracts, with exact selected-execution proof; main and cross-cutting or uncertain changes retain complete-suite proof.
+
+## Approved takeover scope
+
+The human explicitly expanded this same PR to address ready-PR runtime, rather
+than shipping draft-only optimization and creating another PR. The earlier
+draft-only design and evidence below describe the starting implementation, not
+the final acceptance contract. No performance or readiness claim is made for
+the expanded implementation until measured.
+
+### Implementation plan
+
+1. Reuse the existing static import parser, test catalogue, isolated PostgreSQL
+   runner and evidence validators. Build a conservative reverse dependency
+   closure from both base and head, including package initializers, relative
+   imports, test support and fixtures. Include directly changed test modules.
+   Model, migration, AUTH, common infrastructure, dependency, fixture and CI
+   control changes force complete execution. Unmapped files, dynamic dependency
+   uncertainty, parsing failure and missing Git history also force full scope.
+   Explicit non-backend surfaces select their own integration workflows; only
+   positively classified ordinary documentation may omit runtime execution.
+2. Select whole test modules within existing semantic lanes; do not change
+   tests, pytest assertions or lane ownership to manufacture savings. Retain
+   full collection inventory and distinguish intentionally unselected modules
+   from deselected/skipped tests inside a selected invocation. Every selected
+   node must complete exactly once, with existing isolation and cleanup proof.
+3. Bind selection to exact base/head and selector inputs, record reasons and
+   omitted modules, and independently recompute selection at evidence fan-in.
+   Extend existing runner/merge/validator owners, not an alternative unchecked
+   test runner. Keep default full-suite validation unchanged. Full runs on
+   main remain mandatory. Full fallback remains possible on any PR.
+4. Keep required fan-in fail-closed for scope classification, static checks,
+   selected backend execution, CLI/external contracts and real API integration.
+   Repair producer/consumer attempt binding for immutable MinIO artifacts so
+   failed-job retries consume the exact successful producer artifact safely.
+5. Prove selection with dependency/deletion/rename/fixture/unknown-input
+   controls, mutation probes, independent collection reconciliation and
+   representative full-suite comparison. Measure selection and runtime on
+   concrete changes before enabling narrower merge proof. If discovery shows
+   an impact boundary cannot be justified, use full fallback and say so.
+
+### Expanded allowed files and acceptance
+
+In addition to the original scope below: existing lane runner, evidence merger
+and independent validator with their focused tests; a cohesive CI dependency
+analysis module and its regression tests if the existing parser cannot own
+selection; CLI reusable workflow and its workflow-integrity tests for artifact
+retry custody; affected behavior-ownership registration and operations docs.
+No application behavior, test deletion, timeout increase, coverage gate,
+branch-protection change, external CI service or historical-result cache.
+
+Acceptance requires safe selection on ready PRs, transitive consumer inclusion,
+base/head graph union for removed edges, full fallback on uncertainty, exact
+selected-node completion, mandatory main full runs, and measured examples of
+omitted unrelated work. A narrow run must not be reported as full-suite proof.
+Five minutes is a measurement target for bounded changes, not a promise for
+cross-cutting changes. Both full and selected paths need executed evidence.
+
+Risk remains L1. Required focused review covers CI integrity, dependency and
+module boundaries, test delta and documentation. Plan review precedes the
+expanded implementation. The human review focus is whether omitted tests have
+a defensible dependency reason and whether fresh complete selected proof is
+required before merge. Product roadmap impact remains absent: this is an
+engineering workflow change, not a newly exposed Workstream capability.
+
+### Selection and evidence contract
+
+- Full fallback: AUTH/identity, artifact custody, compensation/contribution
+  economics, ORM/models, schemas, migrations/DDL, common configuration/database
+  or composition roots, fixtures/plugins/conftests, dependency/build inputs,
+  CI/evidence controls, non-Python backend assets, deleted tests and unknown
+  paths. Both graphs must resolve a uniquely owned ordinary source before
+  production narrowing is eligible. Unmodelled production/external edges force
+  full execution, not just the API drill.
+- Materialize immutable base Python sources in a private temporary Git tree;
+  parse base and tested merge-tree without importing either. Union reverse
+  edges, resolving relative imports, both symbol/module forms of `from`
+  imports, package initializers and local test-support imports. Ambiguity is
+  uncertainty. Use the head catalogue/collection for executable test nodes.
+- Production parsing/dynamic uncertainty forces full. Uncertain test/support
+  modules are always retained with their reverse consumers for source changes;
+  unresolved support ownership forces full. Include all tests under the
+  changed owner's closed test-subtree map. Source-reading/path/registry/string
+  controls are mandatory sentinels; unmapped non-import consumers force full.
+  This mapping is not a replacement for backend module authorization policy.
+- The planner freshly collects the full canonical pytest inventory before
+  deriving selected whole modules, exact nodes and nonempty lanes. Hash-based
+  lane partitioning is resolved from collected nodes, not module ownership.
+  Zero-node and admin-runner-only selections fall back to full execution.
+- Preserve full-manifest and default full-validator semantics. Selected mode
+  has a distinct versioned receipt binding event base SHA, PR head SHA, tested
+  merge-tree SHA, selector/input digests, selected/omitted modules and exact
+  nodes, reasons and nonempty lanes. Shared validation primitives may be
+  extracted; do not duplicate or relax the full validation owner.
+- Selected lanes freshly collect and derive their exact subset. Selected
+  fan-in independently collects the full inventory, recomputes selection and
+  requires exact receipt agreement and exactly the expected nonempty bundles.
+  Missing history or disagreement at fan-in fails; no late full fallback can
+  excuse omitted execution. Every selected node completes exactly once, with
+  no skipped/deselected nodes, shared namespaces or missing cleanup/coverage.
+- Artifact identities bind mode, selection digest, tested tree, lane and
+  producer attempt. Retrying selects newest evidence for each expected lane,
+  never mixing selections or borrowing full/shadow evidence. MinIO consumers
+  bind the immutable successful producer attempt, not their retry attempt.
+
+| Change/event | Runtime selection | Required supporting checks |
+|---|---|---|
+| Main push | Full | Existing complete backend/CLI/external/API evidence |
+| Unknown or cross-cutting PR | Full | Same complete evidence |
+| Eligible backend source PR | Dependency/owner/sentinel closure | Static preflight, real API, mapped CLI/external consumers |
+| Ordinary test-only PR | Changed modules and known reverse consumers | Preflight and exact selected evidence |
+| CLI PR | CLI integration | Its real API/PostgreSQL/S3 proof and MinIO |
+| External-checker PR | External runtime and mapped backend consumers | Explicit port integration, otherwise full fallback |
+| MCP PR | MCP integration | MCP workflow result must join required fan-in before backend omission |
+| Positively classified ordinary docs | No runtime | Existing required Agent Gates |
+
+Draft and ready use the same impact rules but publish `draft-test` and required
+`test`, respectively. Mixed changes union all required components. Preflight
+remains required whenever backend code/tests participate. MinIO runs whenever
+a selected integration consumer needs it. Full suite and real integration
+proof remain mandatory on main and on every full-fallback PR.
+
+### Executed-proof plan
+
+Before narrowing ready checks, run a controlled selected-path probe inside
+this PR's full run (the CI-control diff itself must select full). A temporary
+Git fixture provides base/head with a static leaf, its failing affected test
+and an unrelated test; exercise collection, runner, merge and independent
+validation, compare against full execution, and prove the unrelated omission.
+Add deletion/rename, removed import, initializer, fixture/plugin, dynamic
+support, source-path/string and unknown-owner counterexamples. Use a real
+PostgreSQL/MinIO selected integration sample to prove execution/cleanup custody,
+including cancelled/missing/foreign/latest-failed evidence. Full-shadow results
+on identical tested source distinguish selection correctness from runtime
+speed. No selected-mode enablement based solely on unit/static assertions.
+
+## Superseded draft-only baseline (historical context)
+
+The sections below retain the prior author's bounded design and evidence.
+Their checked criteria and ready-always-full statements are historical; the
+approved takeover contract above is the sole current acceptance plan.
 
 ## Intent
 
