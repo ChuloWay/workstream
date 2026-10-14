@@ -376,4 +376,3 @@ def test_main_draft_pull_request_with_explicit_changed_paths(
     assert "full_suite=false\n" in contents
     assert "lanes_required=false\n" in contents
     assert "scope_reason=draft_changed_paths\n" in contents
-

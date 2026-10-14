@@ -431,6 +431,11 @@ class LightweightAgentGateTests(unittest.TestCase):
             "uv run --frozen docstr-coverage --config .docstr.yaml",
         ):
             self.assertIn(command, preflight)
+        self.assertEqual(preflight.count("uv run --frozen ruff check"), 2)
+        self.assertIn(
+            'test "$(uv run --frozen ruff --version)" = "ruff 0.15.22"',
+            preflight,
+        )
         self.assertIn("uv run --frozen python scripts/run_test_lanes.py", lanes)
         for command in (
             "uv run --frozen python -m scripts.merge_test_lane_evidence",
@@ -459,6 +464,10 @@ class LightweightAgentGateTests(unittest.TestCase):
             "\n          python - <<'PY'",
         ):
             self.assertNotIn(escaped, workflow)
+
+        for line in workflow.splitlines():
+            if "uv run " in line:
+                self.assertIn("uv run --frozen ", line)
 
     def test_source_wide_static_checks_run_once_outside_semantic_lanes(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
