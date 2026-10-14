@@ -79,11 +79,12 @@ the retained page IDs through the existing owner ports.
   exact test-lane inventory updates required for any new test module, and only
   the behavior-ownership metadata required by changed eligible source paths.
 - `cli/internal/api/{contribution_evidence,contribution_csv}.go` and
+  `cli/internal/api/contribution_evidence_test.go`, plus
   `cli/internal/command/contribution_evidence.go` for strict fixed-membership
-  continuation, complete-output staging, and reuse of the existing private,
-  atomic, no-overwrite CSV publisher. The existing self/project commands,
-  filters and output shapes remain the public CLI surface; there is no cursor
-  flag or partial-page mode.
+  continuation, complete-output staging, the bounded page/member transition,
+  and reuse of the existing private, atomic, no-overwrite CSV publisher. The
+  existing self/project commands, filters and output shapes remain the public
+  CLI surface; there is no cursor flag or partial-page mode.
 - `cli/tests/integration/test_contribution_evidence.py` and
   `cli/tests/integration/test_contribution_evidence_public_api.py` for hostile
   multi-page HTTP responses plus the existing real CLI/socket/PostgreSQL
@@ -299,11 +300,17 @@ values, empty/oversized cursors, cycles, more than 100 pages or more than
    consumer proof with the existing real-PostgreSQL 1,001-member retained-array
    test and its separate A/B/L late-commit test; do not fabricate 1,001 source
    rows or substitute the database owner in the public CLI fixture.
-7. Re-run the existing real CLI/socket/PostgreSQL fixture to prove the completed
-   consumer against the public JSON and CSV routes, canonical source values,
-   fresh single-request authority and private output. Fresh authority on a
-   continuation remains an existing backend PostgreSQL/API proof; the hostile
-   built-process second-page 404 proves the CLI publishes no partial result.
+7. Extend the real CLI/socket/PostgreSQL fixture with one base canonical Review
+   source plus 1,000 batch-cloned Review source graphs. Submission versions,
+   checker runs, closed queue entries and leases, packet manifests, Review facts
+   with recomputed aggregate digests, and ContributionRecords all remain under
+   their live database foreign-key, unique and check constraints. Traverse the
+   resulting 1,001 records through the actual JSON route and built CLI at the
+   production 1,000 limit. Then start a CSV traversal as a separate manager,
+   pause its actual second `ContributionReadService.read` before canonical AUTH,
+   revoke the grant, and prove concealed denial with no stdout, final file or
+   retained temporary output. Do not substitute the route cursor, page size,
+   membership repository or projection owners.
 8. Run focused pure, AUTH, migration and isolated PostgreSQL export proofs;
    then run lint, type checks, boundary/Commitrail/markdown/stale-wording gates
    and full CI without skips or threshold changes.
@@ -327,7 +334,7 @@ values, empty/oversized cursors, cycles, more than 100 pages or more than
 | Fixed 1,001-member storage/traversal and contended pruning | Isolated PostgreSQL execution of `test_real_postgres_retains_and_slices_1001_members_across_sessions` and `test_locked_expired_pruning_skips_contention_and_preserves_live_cursor` | 2 passed in 278.90 seconds through migration `0040_contribution_export_page`; database, role and container cleanup complete. The run used committed base `11db9d21dfe4ef119d9d7d1801c75921fd9708e1` plus the exact uncommitted test file later frozen in this change, SHA-256 `d54ae3a16b4489dd04e4041e554945631ffebe1be860a8c0a533cb0fb96c4b45`. | This is dirty-tree execution with content custody, not an exact committed-head run; hosted complete lane execution remains required |
 | Hosted failure diagnosis at draft head `84542bf37` | Inspect GitHub Actions run `38528310566` job steps and bounded logs | All ten semantic lanes stopped at the unchanged 80% docstring gate because the new pagination modules lowered total coverage to 79.9%; the added function documentation restores 80.2%. The CLI job's first evidence read returned 503 because its separate pytest root had not activated the required existing cursor-secret fixture. | Fresh hosted run required after the repaired head is pushed |
 | Focused real CLI/API contract after secret-fixture repair | Exact socket/PostgreSQL contribution evidence node with the independently built CLI | At that head, the backend returned its successful JSON page and the prior CLI failed it as `invalid_api_response` because strict decoding did not admit `next_cursor`; database and role cleanup completed | This historical failure is resolved by the built CLI traversal proof below; exact candidate CI remains |
-| CLI consumer continuation after main `80be49391` | Inspect `cli/internal/api/contribution_evidence.go` and `cli/internal/command/contribution_evidence.go` | JSON strict decoding has no `next_cursor`; both JSON and CSV perform one request, and CSV ignores `X-Workstream-Next-Cursor`. Issue #499 remains open and no separate continuation PR is open; its current issue body covers submission/status rather than this export contract. | Issue #497 retains ownership of the separate CLI correction before coordinated shipment; this change does not alter CLI production behavior |
+| Historical CLI consumer state after main `80be49391` | Inspect the then-current `cli/internal/api/contribution_evidence.go` and `cli/internal/command/contribution_evidence.go` | At that prior head, JSON strict decoding had no `next_cursor`; JSON and CSV each performed one request, and CSV ignored `X-Workstream-Next-Cursor`. Issue #499 covered unrelated submission/status/findings scope. | Resolved by the current built-CLI traversal proof below; issue #497 now changes the CLI production consumer without changing its public command/output contract |
 | Final hosted backend and CLI execution at `90d36d102` | GitHub Actions run `38551898443`, including one failed-job retry | The repaired schema lane and eight other backend lanes passed. `project_lifecycle_a` reached the 1,200-second lane limit twice with `interrupted=true` and no failing node or traceback; the unchanged lane passed at prior head `00771a387`. CLI passed 9 tests and failed only the public contribution-evidence node with `invalid_api_response`. | This prior head remained failed by the incomplete project lane and then-unresolved CLI continuation; no timeout increase or skipped test was introduced |
 | Exact hosted execution before guide-proof reconciliation at `d97a07afa` | GitHub Actions Backend run `38579957976`, MCP run `38579957924`, and Agent Gates run `38579957956` | All three backend preflights, all ten semantic lanes including schema and `project_lifecycle_a`, MCP package/real API, and Agent Gates passed. CLI passed 9 tests and failed only the public contribution-evidence node with `invalid_api_response`. | Aggregate failed only on the known issue #497 CLI incompatibility; this evidence is exact for `d97a07afa`, before main `80be49391` merged the guide-proof AUTH/PROJECTS lock corrections |
 | Built CLI traversal and failure boundaries | `cd cli && go test ./... && go vet ./... && go build -o /tmp/workstream-497-cli ./cmd/workstream && WORKSTREAM_CLI_EXECUTABLE=/tmp/workstream-497-cli ../backend/.venv/bin/python -m pytest -q tests/integration/test_contribution_evidence.py` | Go test/vet passed and 12 built-process tests passed in 127.76 seconds. JSON and CSV each traversed 1,001 contributions; exact zero/one/two awards, unchanged limit/filter queries, first-page timestamp, cursor hiding, terminal escaping, malformed/oversized/ambiguous/cyclic cursor and empty-continuation refusal, cross-page record/award uniqueness, and later-page 404 with no stdout/final CSV were proved through the built executable and real TCP server. | Real backend behavior remains covered by the existing PostgreSQL/API proofs; exact clean candidate CI remains |
