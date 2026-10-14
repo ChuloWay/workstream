@@ -98,8 +98,16 @@ above supersedes any earlier selected-backend readiness claim.
 
 Hosted run `38593205795` at `0586a9e64` failed: project_lifecycle_a reached its
 existing 1,200-second bound and schema_contracts was cancelled. No full-suite
-success is claimed. Local baseline/after measurements and final hosted proof
-remain pending. Shared local CPU contention limits timing comparisons.
+success is claimed. The two-test local baseline passed in 344.62 seconds,
+including 155.92 seconds of setup/teardown. The identical coverage-enabled
+after-run timed out at 600 seconds under heavy shared-host load; both runs
+confirmed database, role and MinIO cleanup. This is not evidence of a speedup.
+Complete-module correctness and final hosted timing proof remain pending.
+
+After simplification, 174 selector/catalogue/runner/evidence tests passed;
+the expanded draft/ready component matrix passed 47 tests, and 27 workflow
+integrity tests passed. These precede reconciliation with main `80be49391`;
+final exact-head checks remain required. Ruff, links and Commitrail checks passed.
 
 The marker plan received focused feasibility review: both actual schema
 mutations retain rebuild isolation; ordinary tests retain verified reset.
