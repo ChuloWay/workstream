@@ -131,6 +131,8 @@ def upgrade() -> None:
       THEN RAISE EXCEPTION 'submission task context differs' USING ERRCODE='23514'; END IF;
       RETURN NEW;
     END $$;
+    """)
+    op.execute("""
     CREATE TRIGGER a_revision_submission_task_stamps
       BEFORE INSERT ON public.submissions FOR EACH ROW
       EXECUTE FUNCTION public.require_new_submission_task_stamps();
@@ -173,6 +175,8 @@ def upgrade() -> None:
       THEN RAISE EXCEPTION 'checker task context differs' USING ERRCODE='23514'; END IF;
       RETURN NEW;
     END $$;
+    """)
+    op.execute("""
     CREATE TRIGGER a_revision_checker_task_stamps
       BEFORE INSERT ON public.checker_runs FOR EACH ROW
       EXECUTE FUNCTION public.require_new_checker_task_stamps();
@@ -197,6 +201,8 @@ def upgrade() -> None:
       THEN RAISE EXCEPTION 'pre-submit task context differs' USING ERRCODE='23514'; END IF;
       RETURN NEW;
     END $$;
+    """)
+    op.execute("""
     CREATE TRIGGER a_revision_pre_submit_task_stamps
       BEFORE INSERT ON public.pre_submit_evidence_sets FOR EACH ROW
       EXECUTE FUNCTION public.require_new_pre_submit_task_stamps();
