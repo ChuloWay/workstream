@@ -308,8 +308,15 @@ contributor-readable `needs_revision` in its own authorized transaction while
 retaining the Task's locked context. CHECKERS does not mutate TASK directly.
 This creates no Review,
 ReviewFinding, RevisionContextPreparation, reviewer contribution, or synthetic
-human actor, consumes no human revision round/deadline, and does not use D6
-closure. Checker remediation follows that exact CheckerRun lineage and must pass
+human actor and does not use D6 closure. Checker replacements share the locked
+revision allowance: the initial Submission is round 0; max_revision_rounds=2
+permits rounds 1 and 2, for three Submissions total. Infrastructure retries and
+replay create no Submission and consume no round. ART preparation and new TASK
+creation refuse revision_limit_reached with HTTP 409 before new effects; SQL
+also rejects over-cap inserts. The task remains needs_revision with its earlier
+evidence intact. Cap enforcement does not automatically reject or close work.
+Checker deadline enforcement and controlled context rebase remain separate
+PILOT-08 work; this cap does not create a contributor assignment lease. Checker remediation follows that exact CheckerRun lineage and must pass
 the normal submission/checker spine before human review.
 
 Queue schema migration performs no blanket historical backfill. A later audited

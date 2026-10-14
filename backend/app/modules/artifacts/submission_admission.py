@@ -86,6 +86,7 @@ from app.modules.projects.api import (
     ProjectLockedPolicyContextRequest,
     ProjectLockedPolicyContextUnavailable,
 )
+from app.modules.tasks.api.submission_context import require_revision_capacity
 from app.modules.tasks.api import (
     TaskRetainedSubmissionParentsRequest,
     TaskSubmissionContextFacts,
@@ -875,6 +876,10 @@ class PreparedSubmissionBundlePreparationCommand:
             request=request,
             project_id=task.locked_project_context.project_id,
         )
+        try:
+            require_revision_capacity(task, project)
+        except TaskSubmissionContextUnavailable as exc:
+            raise SubmissionBundlePreparationRejected(exc.code) from exc
         return task, project
 
     async def _lock_context(

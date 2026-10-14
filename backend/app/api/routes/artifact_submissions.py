@@ -137,7 +137,7 @@ async def prepare_submission_bundle(
     except SubmissionBundlePreparationRejected as exc:
         code = str(exc)
         if code in {"submission_bundle_preparation_context_changed",
-                    "submission_bundle_preparation_request_conflict"}:
+                    "submission_bundle_preparation_request_conflict", "revision_limit_reached"}:
             raise HTTPException(status_code=409, detail=code) from exc
         raise HTTPException(status_code=422, detail=code) from exc
     return SubmissionBundlePreparationResponse.model_validate(result, from_attributes=True)

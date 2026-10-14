@@ -597,7 +597,7 @@ async def create_admission_backed_submission(
             ),
         ))
     except TaskSubmissionContextUnavailable as exc:
-        if exc.code == "task_submission_predecessor_changed":
+        if exc.code in {"task_submission_predecessor_changed", "revision_limit_reached"}:
             raise StructuredHTTPException(
                 status_code=409, detail=exc.code,
                 error_code=exc.code, error_message=exc.code,

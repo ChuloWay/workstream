@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select, func
 from sqlalchemy.exc import DBAPIError
 
+from app.modules.tasks.api.submission_context import require_revision_capacity
 from app.modules.tasks.api import (
     SubmissionCreationAuthorizationPort,
     SubmissionCreationAuthorityFacts,
@@ -170,6 +171,7 @@ class TaskSubmissionCreationService:
         prepared_authorization = await self._authorization.prepare(final)
         try:
             project = await self._contexts._load_locked_task_context(task)
+            require_revision_capacity(context, project.facts)
             submission = build_submission(
                 submission_id=str(submission_id), task=task,
                 contribution_policy_version_id=context.submitter_contribution_policy_version_id,
