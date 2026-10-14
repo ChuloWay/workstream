@@ -207,6 +207,14 @@ file, sync, hard-link and no-overwrite publication path. A denial, malformed
 page, transport failure or cursor cycle after page one therefore publishes no
 successful stdout or destination file.
 
+After traversal succeeds, JSON reaches stdout through a bounded streaming
+renderer that preserves the command's existing C1, bidi and Unicode-format
+escaping; the complete staged file is never loaded back into memory. A
+non-null JSON cursor or CSV continuation header must contain 1..512 valid UTF-8
+characters before it is placed in a URL. Multiple CSV continuation header
+values, empty/oversized cursors, cycles, more than 100 pages or more than
+100,000 contributions fail closed as an invalid API response.
+
 ### Alternatives considered
 
 - A high timestamp/UUID boundary was rejected because insertion time is not
@@ -283,14 +291,27 @@ successful stdout or destination file.
    bounded traversal that follows opaque continuations, stages complete output,
    and preserves the existing self/project command, filters, JSON shape and
    exact server CSV bytes without exposing pagination controls.
-6. Prove hostile multi-page responses, exact-once contribution/award ordering,
-   unchanged filters/limit, cursor cycles and later-page failure without
-   publication; extend the real socket/PostgreSQL proof beyond 1,000 members
-   with concurrent acceptance and authority revocation between pages.
-7. Run focused pure, AUTH, migration and isolated PostgreSQL export proofs;
+6. Prove a 1,001-item traversal through the built CLI and an actual HTTP socket,
+   plus hostile multi-page JSON/CSV responses, exact-once contribution/award
+   ordering, unsafe terminal text escaping, unchanged filters/limit, cursor
+   bounds/cycles and later-page failure without publication. Compose that
+   consumer proof with the existing real-PostgreSQL 1,001-member retained-array
+   test and its separate A/B/L late-commit test; do not fabricate 1,001 source
+   rows or substitute the database owner in the public CLI fixture.
+7. Extend the real CLI/socket/PostgreSQL fixture with two canonical Review
+   contribution sources and a test-only page limit of one applied immediately
+   before the unchanged contribution service. For the success traversal, pause
+   the second `ContributionReadService.read` call before its authorization,
+   commit a third already-prepared canonical source in a separate transaction,
+   then prove the retained two-member traversal excludes it. In a separate
+   project traversal, pause at that same pre-authorization boundary, revoke the
+   caller's grant in another transaction, then prove concealed denial and no
+   stdout or final CSV. This keeps fresh AUTH ahead of cursor lookup and avoids
+   contending with actor/grant locks already taken by page two.
+8. Run focused pure, AUTH, migration and isolated PostgreSQL export proofs;
    then run lint, type checks, boundary/Commitrail/markdown/stale-wording gates
    and full CI without skips or threshold changes.
-8. Reconcile current main, update the affected current docs/roadmap claims, freeze
+9. Reconcile current main, update the affected current docs/roadmap claims, freeze
    a clean candidate, and run exact-head architecture, security, QA, test-delta
    and documentation reviews before PR readiness.
 
