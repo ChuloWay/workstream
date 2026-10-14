@@ -842,7 +842,7 @@ def test_contributions_reject_cursor_and_cross_page_failures_without_output(
         assert not list(tmp_path.glob(".workstream-contributions-*"))
 
     final_csv = csv_bytes({"exported_at": STAMP, "items": many_items(1100, 1)})
-    changed_header = final_csv.replace(b'"contribution_id",', b'"record_id",', 1)
+    changed_header = final_csv.replace(b'"contribution_id",', b"contribution_id,", 1)
 
     def changed_csv_header(target):
         selected = parse_qs(urlsplit(target).query)
