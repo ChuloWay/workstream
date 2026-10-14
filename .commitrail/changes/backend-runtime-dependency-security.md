@@ -20,17 +20,21 @@ Resolve the current backend runtime dependency alerts before the hosted v0.1 rel
 - `backend/uv.lock`: resolver-generated updates only for the exact affected packages and metadata that the selected resolver must regenerate.
 - `.github/workflows/backend.yml`: use the frozen backend lock in the three existing backend install paths and commands, retaining every job, lane, timeout, service, gate, and fan-in.
 - `scripts/test_lightweight_agent_gates.py`: guard exact lock freshness, frozen all-extras installation, frozen command execution, and unchanged gate structure.
+- `backend/scripts/test_lane_catalogue.py`: rebalance only whole test modules within their existing shared or project lane family when repeated exact-lock runs prove an existing lane cannot complete inside the retained timeout.
+- `backend/tests/test_ci_lane_catalogue.py`: prove the rebalanced module owners, exact suite union, uniqueness, and unchanged ten-lane structure.
 
 ### Not allowed
 
 - Runtime source, API contracts, tests, schemas, migrations, authorization, storage semantics, or product lifecycle changes.
 - `backend/pyproject.toml` constraint changes unless new resolver evidence first requires a reviewed plan amendment.
-- New CI jobs or workflows, path selection, lane or timeout changes, gate relaxation, dependency catalogue changes, unrelated upgrades, manual lock edits, alert dismissal, or public disclosure of private alert evidence.
+- New CI jobs or workflows, path selection, lane count or family changes, timeout changes, test deletion or skipping, gate relaxation, dependency catalogue changes, unrelated upgrades, manual lock edits, alert dismissal, or public disclosure of private alert evidence.
 - MCP adapter dependency changes; they have a separate package boundary and change record.
 
 ## Design and decisions
 
 Use the normal `uv` resolver with package-specific upgrades so unaffected locked versions remain fixed. Inspect the resulting package/version set against the base lock and reject unrelated dependency additions or version churn. Preserve the existing manifest ranges because they already admit the supported fixes. A manual lock edit was rejected because it would bypass resolver custody; a combined backend/MCP PR was rejected because their package graphs and behavior evidence differ. The hosted suite must execute this exact graph: pin the already reviewed `uv` version, reject stale manifest/lock pairs with `uv lock --check`, install all extras with `uv sync --frozen --all-extras`, and run every existing backend command through `uv run --frozen`. This narrowly transplants PR #566's frozen-install semantics without its draft path-selection feature; later reconciliation must preserve the lock-freshness check.
+
+The first exact-lock hosted run and its single unchanged failed-job probe both exhausted the retained 1,200-second semantic-lane cap in shared A and project D without an assertion failure, skip, deselection, or cleanup failure; project A passed the probe. Rebalance measured whole modules only within the existing shared or project family. Keep the same ten lanes, complete test membership, coverage, services, commands, authenticated evidence, timeout, and aggregate fan-in. Node-specific exceptions, a timeout increase, another retry, or moving a module across semantic families would conceal the capacity defect rather than repair it.
 
 ## Acceptance criteria
 
@@ -39,6 +43,7 @@ Use the normal `uv` resolver with package-specific upgrades so unaffected locked
 - [x] `uv` regenerates the lock reproducibly through package-specific upgrades, with no manual lock editing, unrelated dependency additions, or unrelated version churn.
 - [x] A fresh isolated environment installs from the frozen backend lock with all runtime, agent, and development dependencies.
 - [ ] Existing authentication/JWT, Alembic, HTTP/storage, lint, and the complete backend suite run from the fresh frozen-lock environment without skips or weakened assertions; pip-resolved hosted backend lanes remain supplemental compatibility evidence rather than exact-lock custody. All existing hosted jobs, ten semantic lanes, timeouts, services, evidence validation, API E2E, and fan-in remain required.
+- [ ] The measured lane repair retains the exact 8,899-node suite union on this source tree, one owner per node, zero skips or deselections, ten lanes, the 1,200-second cap, and ownership within each module's existing shared or project family.
 - [ ] Public records and PR text contain no credentials, private dashboard links, private alert identifiers, or non-public exploit detail.
 
 ## Risk and review routing
@@ -56,10 +61,11 @@ Use the normal `uv` resolver with package-specific upgrades so unaffected locked
 | Lock has only intended resolver changes | `uv lock --check` plus base/head package and lock diff inspection | Passed on the reconciled head; four intended package selections changed and no package was added or removed | Canonical advisories and dashboard must be reconciled again after merge |
 | Patched graph installs cleanly | Fresh temporary `UV_PROJECT_ENVIRONMENT` with `uv sync --frozen --all-extras`, followed by installed-distribution and import inspection | Passed on the reconciled head | Hosted platform matrix remains CI custody |
 | Affected runtime behavior remains compatible | Backend lint plus focused and complete backend tests from the fresh frozen-lock environment, including owned PostgreSQL/S3 resources; pip-resolved hosted backend checks as supplemental compatibility evidence | Frozen-lock authentication/JWT selection: 60 passed; Ruff passed. The hosted workflow runs the complete suite from the exact frozen lock; GitHub checks retain its execution evidence | Pip-resolved runs predating this change are supplemental compatibility evidence only |
+| Exact-lock lane capacity is bounded without weakening the suite | One unchanged failed-job probe plus authenticated lane manifests and cleanup records, followed by structural ownership tests and a fresh complete hosted run | Shared A and project D repeated the cap with zero skip/deselect and complete cleanup; project A passed the probe. A reviewed whole-module rebalance preserves 8,899 unique nodes and the existing ten lane families | Timing projections are estimates until the fresh hosted run passes every lane and aggregate fan-in |
 
 ## Review findings
 
-The exact-head resolver and frozen-workflow implementation reviews found no open findings. Reconciliation against merged PR #567 passed with no blob conflict or scope drift. `WS565-QA-01`, `WS568-CI-01`, and `WS568-REC-01` are closed; GitHub checks remain the transient readiness record.
+The exact-head resolver and frozen-workflow implementation reviews found no open findings. Reconciliation against merged PR #567 passed with no blob conflict or scope drift. `WS565-QA-01`, `WS568-CI-01`, and `WS568-REC-01` are closed. The focused lane-capacity CI-integrity and test-delta plan review passed with no findings; GitHub checks remain the transient readiness record.
 
 ## Reconciliation
 
