@@ -350,7 +350,13 @@ async def _ready_expiry_race_replacement(h):
 async def _assert_expired_creation_absent(h, source_id, admission_id, before):
     # Delivery changes OUTBOX custody and TASK status. Every finalization owner
     # before those two snapshot columns must remain exactly as before the race.
-    assert (await _creation_snapshot(h))[:8] == before[:8]
+    after = await _creation_snapshot(h)
+    assert after[:8] == before[:8]
+    assert [event for event in after[8]
+            if event["event_type"] == "PostSubmissionEvaluationRequested"] == [
+                event for event in before[8]
+                if event["event_type"] == "PostSubmissionEvaluationRequested"
+            ]
     assert await _admission_status(h, admission_id) == "ready"
     async with h.factory() as session:
         assert await session.scalar(text(

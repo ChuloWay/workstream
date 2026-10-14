@@ -1,6 +1,7 @@
 # Task Status Template
 
-> Planned review/revision fields remain unavailable until their release gates.
+> Checker revision context and timeout receipts are implemented. Planned human
+> Review fields remain unavailable until their own release gates.
 
 ## Task
 
