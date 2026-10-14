@@ -67,7 +67,7 @@ The combined exact-candidate security, QA, and CI-integrity review passed with n
 
 ## Reconciliation
 
-- Current-source reconciliation: Rebased onto current `main` at `2c1f7517c285437c6adad27f2c3425212a615373`. Open PR #518 remains at `9243fab6f19b41436f16759d2824c108b047b9f0` and changes MCP package inclusion metadata but does not change dependency constraints or the lock; recheck overlap if it merges before this pull request.
+- Current-source reconciliation: Merged current `main` at `2c1f7517c285437c6adad27f2c3425212a615373`. Open PR #518 remains at `9243fab6f19b41436f16759d2824c108b047b9f0` and changes MCP package inclusion metadata but does not change dependency constraints or the lock; recheck overlap if it merges before this pull request.
 - Roadmap impact: None. This repair changes a selected transitive dependency version without changing an MCP capability, exposure, completed scope, remaining product gate, or next product dependency.
 - Next usable boundary: Merge this MCP repair, re-read the default-branch alert dashboard, and retain explicit ownership of any remaining snapshot alert.
 - Remaining risks: Post-merge default-branch alert reconciliation remains pending. A future standalone wheel installation could be constrained to another release allowed by the upstream MCP SDK rather than using this lock; the hosted clean-wheel proof selected the patched release.
