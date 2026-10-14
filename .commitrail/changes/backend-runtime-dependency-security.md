@@ -32,7 +32,7 @@ Use the normal `uv` resolver with package-specific upgrades so unaffected locked
 
 ## Acceptance criteria
 
-- [ ] A private reviewed inventory maps every backend snapshot alert to its manifest, selected version, direct/transitive relationship, runtime/dev scope, available fix, affected owner boundary, and disposition without exposing dashboard-only evidence publicly.
+- [x] A private reviewed inventory maps every backend snapshot alert to its manifest, selected version, direct/transitive relationship, runtime/dev scope, available fix, affected owner boundary, and disposition without exposing dashboard-only evidence publicly.
 - [x] Every backend alert in the issue snapshot resolves outside its affected range using supported patched versions corroborated by canonical advisories.
 - [x] `uv` regenerates the lock reproducibly through package-specific upgrades, with no manual lock editing, unrelated dependency additions, or unrelated version churn.
 - [x] A fresh isolated environment installs from the frozen backend lock with all runtime, agent, and development dependencies.
