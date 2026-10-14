@@ -431,8 +431,9 @@ valid replay. The earlier diagnostic/compilation-phase races do not prove this
 intermediate request-replay boundary.
 
 Allowed repair files remain
-`backend/app/modules/projects/guide_compilation/service.py` and the existing
-automatic/authorized request PostgreSQL test owners. Discover a direct replay
+`backend/app/modules/projects/guide_compilation/service.py` and
+`backend/tests/projects/guide_compilation/test_authorized_concurrency_postgresql.py`,
+the existing independent-session request concurrency owner. Discover a direct replay
 without a child lock, validate current authority through the existing owner,
 then lock and revalidate the exact operation before returning its receipt.
 Natural replay already holds authority before operation custody. Preserve
