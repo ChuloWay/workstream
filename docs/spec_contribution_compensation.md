@@ -1032,6 +1032,16 @@ triggers, including whitespace-prefixed and full-width variants. Embedded CSV
 delimiters remain inside one quoted cell. This mitigation applies to the generated
 CSV; external spreadsheet save/re-export behavior can change its interpretation.
 
+The contribution CLI consumes these pages as one bounded export without adding
+cursor or page flags. It sends the same normalized filters and explicit
+1,000-contribution limit on every request, rejects cursor cycles, cross-page
+identity/order violations and changed CSV headers, and preserves page one's
+`exported_at` in the existing complete JSON shape. JSON is staged in a private
+file before safe terminal rendering. CSV preserves the validated server bytes,
+emits the header once, and uses its existing confined 0600 sync and no-overwrite
+publication path. A failure on any page publishes neither a successful JSON
+result nor a destination CSV.
+
 These mappings do not authorize protected handler execution. Before delivery,
 reconciliation, projection rebuild, or callback implementation, the human and
 AUTH must approve an exact ServiceIdentity/ActionId/static-row design or an
@@ -1335,8 +1345,7 @@ not wait for contribution/award persistence or REV decisions.
 PILOT-10's bounded reads consume existing immutable CON/award facts after their
 own exact AUTH/audit activation and snapshot proof. They do not wait for CON-08B
 fulfillment or the historical CON-10A ordering below. Fixed-membership REST
-pages are delivered independently of fulfillment; CLI continuation remains its
-separately owned consumer change.
+pages and their CLI traversal are delivered independently of fulfillment.
 
 ```text
 CON-01 -> CON-02A

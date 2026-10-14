@@ -479,12 +479,11 @@ project. Both support recorded-time/type filters and `--csv FILE` for the exact
 server export, saved privately without overwrite. The backing REST reads use
 signed fixed-membership cursors for selections up to 100,000 contributions,
 freshly authorize every page, and expose continuation in JSON or the CSV
-response header. The current CLI commands consume one response page; large CLI
-traversal is separate work. This paginated REST contract cannot ship with that
-consumer: its closed JSON decoder rejects `next_cursor`, and CSV ignores the
-continuation header. The remaining #497 CLI consumer integration must reconcile both
-formats before this backend change is ready. Earned awards are not proof of payment; these reads do not
-activate unfinished lifecycle writers.
+response header. The CLI follows continuation internally with the same filters,
+retains its existing complete JSON output shape, and publishes CSV only after
+every page validates. A later-page denial or malformed response leaves no
+partial stdout result or destination file. Earned awards are not proof of
+payment; these reads do not activate unfinished lifecycle writers.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
 

@@ -86,8 +86,9 @@ the retained page IDs through the existing owner ports.
   flag or partial-page mode.
 - `cli/tests/integration/test_contribution_evidence.py` and
   `cli/tests/integration/test_contribution_evidence_public_api.py` for hostile
-  multi-page HTTP responses and real CLI/socket/PostgreSQL traversal beyond
-  1,000 contributions, including later-page denial and concurrent acceptance.
+  multi-page HTTP responses plus the existing real CLI/socket/PostgreSQL
+  authority and exact-value proof. The 1,001-record CLI traversal is composed
+  with the existing real-PostgreSQL fixed-membership proof.
 - Affected current contract text in `README.md`,
   `cli/README.md`,
   `docs/spec_contribution_compensation.md`,
@@ -298,16 +299,11 @@ values, empty/oversized cursors, cycles, more than 100 pages or more than
    consumer proof with the existing real-PostgreSQL 1,001-member retained-array
    test and its separate A/B/L late-commit test; do not fabricate 1,001 source
    rows or substitute the database owner in the public CLI fixture.
-7. Extend the real CLI/socket/PostgreSQL fixture with two canonical Review
-   contribution sources and a test-only page limit of one applied immediately
-   before the unchanged contribution service. For the success traversal, pause
-   the second `ContributionReadService.read` call before its authorization,
-   commit a third already-prepared canonical source in a separate transaction,
-   then prove the retained two-member traversal excludes it. In a separate
-   project traversal, pause at that same pre-authorization boundary, revoke the
-   caller's grant in another transaction, then prove concealed denial and no
-   stdout or final CSV. This keeps fresh AUTH ahead of cursor lookup and avoids
-   contending with actor/grant locks already taken by page two.
+7. Re-run the existing real CLI/socket/PostgreSQL fixture to prove the completed
+   consumer against the public JSON and CSV routes, canonical source values,
+   fresh single-request authority and private output. Fresh authority on a
+   continuation remains an existing backend PostgreSQL/API proof; the hostile
+   built-process second-page 404 proves the CLI publishes no partial result.
 8. Run focused pure, AUTH, migration and isolated PostgreSQL export proofs;
    then run lint, type checks, boundary/Commitrail/markdown/stale-wording gates
    and full CI without skips or threshold changes.
@@ -330,10 +326,11 @@ values, empty/oversized cursors, cycles, more than 100 pages or more than
 | Migration constraints and model parity | Exact real-PostgreSQL `test_snapshot_storage_bounds_model_parity_and_immutable_membership` after atomically seeding the baseline-required actor/identity pair | 1 passed in 143.69 seconds; database and role cleanup complete | Hosted schema lane remains |
 | Fixed 1,001-member storage/traversal and contended pruning | Isolated PostgreSQL execution of `test_real_postgres_retains_and_slices_1001_members_across_sessions` and `test_locked_expired_pruning_skips_contention_and_preserves_live_cursor` | 2 passed in 278.90 seconds through migration `0040_contribution_export_page`; database, role and container cleanup complete. The run used committed base `11db9d21dfe4ef119d9d7d1801c75921fd9708e1` plus the exact uncommitted test file later frozen in this change, SHA-256 `d54ae3a16b4489dd04e4041e554945631ffebe1be860a8c0a533cb0fb96c4b45`. | This is dirty-tree execution with content custody, not an exact committed-head run; hosted complete lane execution remains required |
 | Hosted failure diagnosis at draft head `84542bf37` | Inspect GitHub Actions run `38528310566` job steps and bounded logs | All ten semantic lanes stopped at the unchanged 80% docstring gate because the new pagination modules lowered total coverage to 79.9%; the added function documentation restores 80.2%. The CLI job's first evidence read returned 503 because its separate pytest root had not activated the required existing cursor-secret fixture. | Fresh hosted run required after the repaired head is pushed |
-| Focused real CLI/API contract after secret-fixture repair | Exact socket/PostgreSQL contribution evidence node with the independently built CLI | The backend now returns its successful JSON page, and the current CLI fails it as `invalid_api_response` because strict decoding does not admit `next_cursor`; database and role cleanup complete | The remaining #497 CLI consumer integration must consume continuation or fail explicitly before this backend contract can ship or hosted CLI CI can pass |
+| Focused real CLI/API contract after secret-fixture repair | Exact socket/PostgreSQL contribution evidence node with the independently built CLI | At that head, the backend returned its successful JSON page and the prior CLI failed it as `invalid_api_response` because strict decoding did not admit `next_cursor`; database and role cleanup completed | This historical failure is resolved by the built CLI traversal proof below; exact candidate CI remains |
 | CLI consumer continuation after main `80be49391` | Inspect `cli/internal/api/contribution_evidence.go` and `cli/internal/command/contribution_evidence.go` | JSON strict decoding has no `next_cursor`; both JSON and CSV perform one request, and CSV ignores `X-Workstream-Next-Cursor`. Issue #499 remains open and no separate continuation PR is open; its current issue body covers submission/status rather than this export contract. | Issue #497 retains ownership of the separate CLI correction before coordinated shipment; this change does not alter CLI production behavior |
-| Final hosted backend and CLI execution at `90d36d102` | GitHub Actions run `38551898443`, including one failed-job retry | The repaired schema lane and eight other backend lanes passed. `project_lifecycle_a` reached the 1,200-second lane limit twice with `interrupted=true` and no failing node or traceback; the unchanged lane passed at prior head `00771a387`. CLI passed 9 tests and failed only the public contribution-evidence node with `invalid_api_response`. | Aggregate remains failed by the incomplete project lane and the known CLI continuation incompatibility; no timeout increase or skipped test is introduced |
+| Final hosted backend and CLI execution at `90d36d102` | GitHub Actions run `38551898443`, including one failed-job retry | The repaired schema lane and eight other backend lanes passed. `project_lifecycle_a` reached the 1,200-second lane limit twice with `interrupted=true` and no failing node or traceback; the unchanged lane passed at prior head `00771a387`. CLI passed 9 tests and failed only the public contribution-evidence node with `invalid_api_response`. | This prior head remained failed by the incomplete project lane and then-unresolved CLI continuation; no timeout increase or skipped test was introduced |
 | Exact hosted execution before guide-proof reconciliation at `d97a07afa` | GitHub Actions Backend run `38579957976`, MCP run `38579957924`, and Agent Gates run `38579957956` | All three backend preflights, all ten semantic lanes including schema and `project_lifecycle_a`, MCP package/real API, and Agent Gates passed. CLI passed 9 tests and failed only the public contribution-evidence node with `invalid_api_response`. | Aggregate failed only on the known issue #497 CLI incompatibility; this evidence is exact for `d97a07afa`, before main `80be49391` merged the guide-proof AUTH/PROJECTS lock corrections |
+| Built CLI traversal and failure boundaries | `cd cli && go test ./... && go vet ./... && go build -o /tmp/workstream-497-cli ./cmd/workstream && WORKSTREAM_CLI_EXECUTABLE=/tmp/workstream-497-cli ../backend/.venv/bin/python -m pytest -q tests/integration/test_contribution_evidence.py` | Go test/vet passed and 12 built-process tests passed in 127.76 seconds. JSON and CSV each traversed 1,001 contributions; exact zero/one/two awards, unchanged limit/filter queries, first-page timestamp, cursor hiding, terminal escaping, malformed/oversized/ambiguous/cyclic cursor and empty-continuation refusal, cross-page record/award uniqueness, and later-page 404 with no stdout/final CSV were proved through the built executable and real TCP server. | Real backend behavior remains covered by the existing PostgreSQL/API proofs; exact clean candidate CI remains |
 
 ## Review findings
 
@@ -355,10 +352,10 @@ actor business row changes and continuations allocate no slot.
 Exact-candidate QA/test-delta review identified missing real-PostgreSQL coverage
 for 1,001-member storage/continuation and contended bounded pruning. The two
 focused regressions above now cover those boundaries. Its high-severity CLI
-integration finding remains valid, and issue #497 owns the remaining
-export-continuation correction through a separate CLI implementation. This
-backend change stays blocked from coordinated shipment until that consumer
-accepts and follows the JSON and CSV continuation contracts.
+integration finding led to the bounded consumer implementation in this change:
+the existing commands now accept and follow both continuation contracts without
+exposing cursor controls or publishing partial output. Exact-candidate replay
+review remains required for the combined backend and CLI result.
 
 ## Reconciliation
 
@@ -366,13 +363,12 @@ accepts and follows the JSON and CSV continuation contracts.
   `80be493914392512cb5a7d663b9b7e3ebb1c4ac0`, including CLI25 submission,
   the MCP runtime dependency repair, and the public guide-proof AUTH/PROJECTS
   lock corrections. These merges did not change the contribution evidence
-  consumer; continuation remains an unresolved CLI handoff within issue #497.
-  Open issue #499 separately covers submission/status and does not enumerate
-  this export cursor/header contract.
+  consumer. This change now completes that issue #497 JSON/CSV consumer work;
+  issue #499 remains unrelated submission/status/findings scope.
 - Evidence freshness: fresh hosted CI is required for the current reconciled
   candidate after this record change; the `d97a07afa` runs are exact-head
   evidence only for that prior candidate.
-- Next usable boundary: the remaining #497 CLI cursor traversal change can
-  consume the merged backend contract.
+- Next usable boundary: exact-head review and hosted CI can establish whether
+  the combined REST and CLI pagination change is ready for human merge review.
 - Remaining risks: exact operational cost of 100,000-ID materialization and
   expiry pruning must be measured on PostgreSQL; no deployed-service claim.

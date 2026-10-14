@@ -89,9 +89,10 @@ RFC3339 `--recorded-from` (inclusive) / `--recorded-before` (exclusive) filters.
 Times are normalized to UTC microsecond precision before dispatch. Omitted
 filters select all authorized records. The paginated REST change exposes JSON
 `next_cursor` and CSV `X-Workstream-Next-Cursor` for selections through 100,000.
-The current CLI consumer does not yet accept or follow either continuation, so
-it cannot ship with that backend change until the remaining #497 CLI consumer
-integration reconciles both formats.
+The CLI follows either continuation internally with the same normalized filters
+and a 1,000-contribution page limit. Cursors are transport details: the complete
+JSON result retains `exported_at` from page one plus `items`, without exposing a
+cursor or adding pagination flags.
 
 Text and JSON retain every public source/acceptance identity and award, including
 exact decimal strings and unpaid empty award sets. These are **earned facts,
@@ -100,11 +101,14 @@ reading existing records does not activate unfinished review/revision workflows.
 
 `--csv FILE` requests the server's formula-neutralized CSV, one row per award
 or one row for an unpaid contribution. It preserves those exact bytes after
-validation, writes a new 0600 file in an existing directory and refuses existing
-files or destination symlinks. It never writes raw CSV to the terminal or
-reconstructs CSV from a separate JSON read. `--output json` with `--csv` returns
-only `{"format":"csv","saved":true}` after successful publication. Failures
-leave no published or temporary export. Keep exported personal data private.
+validation across every page, emits the server header once, writes a new 0600
+file in an existing directory and refuses existing files or destination
+symlinks. It never writes raw CSV to the terminal or reconstructs CSV from a
+separate JSON read. `--output json` with `--csv` returns only
+`{"format":"csv","saved":true}` after successful publication. JSON and CSV
+are staged privately until traversal completes; later-page failures leave no
+successful stdout or published/temporary export. Keep exported personal data
+private.
 Invalid destinations or empty explicit flags exit 2 (`invalid_arguments`);
 local file creation/write/persistence/publication failures exit 1
 (`file_io_error`). Text errors explain the failure without echoing paths.
