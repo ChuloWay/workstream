@@ -1,7 +1,7 @@
 # MCP Runtime Dependency Security — Resolve Current Alerts
 
 - Initiative: `None`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: The independently packaged MCP adapter lock resolves the issue #565 alert snapshot to a supported patched runtime dependency version without changing adapter behavior.
 
 ## Intent
@@ -57,14 +57,17 @@ Use the normal `uv` resolver with a package-specific upgrade so unaffected locke
 | MCP source behavior remains compatible | Frozen-lock Ruff, strict mypy, and non-integration suite locally and in the hosted package lane | Passed: Ruff and mypy clean; 367 passed, with the two custody-split tests executed separately below | Exact-head internal review remains pending |
 | Installed wheel and container are independent | Build sdist and wheel; install the wheel in a fresh environment; run `test_package_independence.py` with that interpreter; build and exercise the independent container | Passed locally and in the hosted package lane; the focused wheel test passed | The wheel intentionally resolves from its declared owner constraints rather than claiming lock custody |
 | MCP contracts match the backend | Run `test_contract_drift.py` with a backend interpreter supplying live OpenAPI; run hosted real API-to-MCP lifecycle parity | Passed locally and in hosted CI: contract comparison and both isolated lifecycle suites passed | Pip-resolved hosted backend integration is supplemental and does not establish exact backend-lock custody |
+| Exact candidate has proportionate review | Combined security, QA, and CI-integrity review bound to the clean candidate tree | Passed with no findings in any track | Standalone wheel installation follows the upstream SDK's broad transitive range; the frozen lock and observed wheel proof selected the patched release |
 
 ## Review findings
 
-The bounded plan review passed with low residual risks. It required explicit separation between exact MCP frozen-lock custody and the independently resolved installed-wheel proof, and retained hosted package/container and real-API checks as completion evidence. Exact-head security, QA, and CI-integrity review remains pending.
+The bounded plan review passed with low residual risks. It required explicit separation between exact MCP frozen-lock custody and the independently resolved installed-wheel proof, and retained hosted package/container and real-API checks as completion evidence.
+
+The combined exact-candidate security, QA, and CI-integrity review passed with no findings. It independently confirmed a two-file resolver delta, no package-set churn, the canonical patched range, no direct Workstream MCP JWT use, unchanged gateway behavior and CI, and successful frozen-lock package/container plus real-API jobs. Its non-blocking residual is that standalone wheel metadata inherits the upstream MCP SDK's broad transitive JWT range; the frozen lock and observed clean-wheel installation both selected the patched release.
 
 ## Reconciliation
 
 - Current-source reconciliation: Based on `main` at `82a46ff3c5f21e3cdf762cf505d61d84531a7c80`; PR #518 overlaps the MCP package area and must be reconciled before the final push.
 - Roadmap impact: None. This repair changes a selected transitive dependency version without changing an MCP capability, exposure, completed scope, remaining product gate, or next product dependency.
 - Next usable boundary: Merge this MCP repair, re-read the default-branch alert dashboard, and retain explicit ownership of any remaining snapshot alert.
-- Remaining risks: Exact-head internal review and post-merge default-branch alert reconciliation remain pending.
+- Remaining risks: Post-merge default-branch alert reconciliation remains pending. A future standalone wheel installation could be constrained to another release allowed by the upstream MCP SDK rather than using this lock; the hosted clean-wheel proof selected the patched release.
