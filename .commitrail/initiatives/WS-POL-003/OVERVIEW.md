@@ -99,7 +99,7 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
 - Local proof: the first-layer public/worker drill now starts from public guide inputs
   with recorded inference before Submission entry and selected completion;
-  full connected verification remains in progress.
+  both policy outcomes, restart/replay, late authority revocation and cleanup passed.
   The [connected guide proof](../../changes/public-guide-to-contribution-proof.md)
   includes original bytes, task examples, real Celery setup using recorded
   inference and public separate approvals. Next usable boundary: configured

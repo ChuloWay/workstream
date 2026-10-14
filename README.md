@@ -192,7 +192,9 @@ REV generation. ARCH-02I-B exposes public admission-backed Submission entry,
 and ARCH-04E3-B admits complete false-policy guides with supported approved
 checks. The bounded local public API and Celery service journey drill starts from public
 guide inputs with recorded inference;
-full connected verification remains in progress.
+the bounded local run passed both policy outcomes, restart/replay, late
+authority revocation and cleanup. Recorded inference is not live-model or hosted
+deployment proof.
 Project-guide ingestion stores original documents,
 records immutable metadata and provides authorized exact-file reads to the
 unified setup agent. Accepted originals are PDF, DOCX, PPTX and byte-preserved
@@ -943,7 +945,7 @@ supported false-policy guides, with new acceptance effects still gated on a
 LIVE REV generation bound to the current reviewed manifest. A known pre-effect
 refusal retries only within
 the existing OUTBOX budget; exhausted delivery dead-letters without automatic
-reopen. The bounded local public API and Celery service drill passed. A future setup-fault hold must
+reopen. The connected public-guide API and Celery drill passed with recorded inference. A future setup-fault hold must
 retain the Submission and locked rules without contributor penalty; changing
 submitted-work rules remains deferred.
 Real manager activation now supplies the false-policy lineage when the approved

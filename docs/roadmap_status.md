@@ -54,10 +54,11 @@ outside v0.1.
 
 ## Status Vocabulary
 
-The public automated-acceptance journey has bounded local proof from approved-guide
-fixtures. Its extended drill starts from public guide inputs with recorded inference,
-local Flow-compatible auth and real PostgreSQL, MinIO, Redis, prefork Celery and
-Beat; full connected verification remains in progress. ARCH-04E3-B admits
+The public automated-acceptance journey passed its bounded connected local drill
+from public guide inputs with recorded inference, local Flow-compatible auth and
+real PostgreSQL, MinIO, Redis, prefork Celery and Beat. Both policy outcomes,
+restart/replay, late authority revocation and cleanup passed; live-model and
+hosted deployment proof remain separate. ARCH-04E3-B admits
 complete false-policy guides with supported approved checks. Selected production
 completion reached the governed outcome under a LIVE REV generation. The
 existing versioned ReviewPolicy now

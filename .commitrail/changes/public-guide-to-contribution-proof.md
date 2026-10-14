@@ -88,21 +88,21 @@ connected proof and regressions for discovered defects.
 
 ## Acceptance criteria
 
-- [ ] Original guide upload and task examples drive real async setup; no direct
+- [x] Original guide upload and task examples drive real async setup; no direct
   compiled/approved/active row insertion supplies the public journey.
-- [ ] Setup stops at proposal; independent public PM PRE/POST approvals and
+- [x] Setup stops at proposal; independent public PM PRE/POST approvals and
   Finance publication precede exact public activation, including replay.
-- [ ] Original task examples and their normalized hash/snapshot commitment
+- [x] Original task examples and their normalized hash/snapshot commitment
   reach the actual worker runtime unchanged.
-- [ ] Source document, setup/proposal, policies, activation, Task, Submission,
+- [x] Source document, setup/proposal, policies, activation, Task, Submission,
   checker and outcome identifiers/hashes form one exact retained lineage.
-- [ ] Default true reaches `review_pending` without acceptance/economic facts;
+- [x] Default true reaches `review_pending` without acceptance/economic facts;
   false reaches exactly one shared FinalAcceptance and submitter contribution
   with the applicable awards, no fabricated Review/reviewer contribution.
 - [ ] Insufficient source, provider failure, required unsupported capability,
   correction, stale completion, cross-project access and replay have explicit
   authoritative proof; new integration defects have discriminating regressions.
-- [ ] Real runtime cleanup releases every owned database, storage prefix,
+- [x] Real runtime cleanup releases every owned database, storage prefix,
   scratch area, worker, broker and subprocess; failure is bounded and reported.
 
 ## Risk and review routing
@@ -119,9 +119,9 @@ connected proof and regressions for discovered defects.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Existing shortcut identified | `_one_mode` and guide API drills inspected | Confirmed and removed | Partial public runs exposed the bounded repairs below |
-| Connected journey | Updated isolated public journey invocation | Partial execution; full completion pending | No hosted Flow/S3/gVisor or live model claim |
-| Failure boundaries | Existing owner tests plus focused new drill tests | Planned | Exact nodes mapped below |
-| Repository integrity | Lint, boundaries, links, Commitrail, full hosted CI | Planned | No sampling or weakened gates |
+| Connected journey | Clean `f197b7b84` isolated public journey, recorded inference | Passed both outcomes, correction, replay/restarts, late revocation and cleanup | No hosted Flow/S3/gVisor or live model claim |
+| Failure boundaries | Existing owner tests plus focused new drill tests | Connected failure cases passed; uncertain-recovery authority regression repair pending | Exact nodes mapped below |
+| Repository integrity | Lint, boundaries, links, Commitrail, full hosted CI | Scoped checks passed; final hosted completeness pending recovery-test repair | No sampling or weakened gates |
 
 ## Reconciliation
 
@@ -355,3 +355,34 @@ revocation restart verification. Database and MinIO cleanup completed; owned
 API/Celery children were stopped. It is incomplete evidence, not a full pass.
 The next unchanged-runtime run receives a larger outer local-run allowance for
 this loaded host; product deadlines, assertions and hosted CI limits are unchanged.
+
+## Connected composition proof
+
+The complete isolated invocation exited **0** at clean commit
+`f197b7b8482eee6c2578217f434d90ad3a11c9b7`. The command described above used
+a 3,000-second outer local-run allowance without changing product deadlines,
+assertions or hosted CI limits. Its evidence is `/tmp/ws552-run-9.log` and
+`/tmp/ws552-run-9.json` in the local review workspace.
+
+- Public original upload, exact task examples, recorded inference through real
+  Celery, a manager correction, separate PRE/POST approvals, Finance publication
+  and guide activation all executed through their declared owners.
+- The human-policy branch retained two Submissions and reached `review_pending`,
+  with zero Review, FinalAcceptance, ContributionRecord or award facts.
+- The automatic branch retained one Submission and reached `accepted`, with
+  exactly one FinalAcceptance, submitter ContributionRecord and project-points
+  award, and zero Review. The public contribution read matched the retained source
+  and seven-point award.
+- Failed intake, post-check remediation, exact replay, duplicate completion,
+  prefork restart/recovery and late routing-authority revocation passed. The
+  revoked completion dead-lettered without effects and preserved prior acceptance.
+- Database and MinIO cleanup flags are true. The successful drill stopped its
+  owned API, Celery and checker service; an independent process check found no
+  remaining run-specific API/Celery processes. Run 8 required manual orphan
+  process cleanup after its timeout and remains explicitly incomplete evidence.
+
+This proves the local composition with recorded inference and development
+containers. It does not prove model quality, hosted identity/S3/gVisor operation,
+CLI continuation, live human review or payment fulfillment. Final test-only
+repairs and documentation changes must preserve this runtime/product source
+identity or receive new affected execution proof.
