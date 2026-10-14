@@ -7,6 +7,7 @@ are #552's separate proof, not claims of this test.
 """
 
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 import json
 import hashlib
@@ -34,6 +35,29 @@ from app.modules.tasks.models import Submission  # noqa: E402
 from app.modules.checkers.models import CheckerRun  # noqa: E402
 from app.modules.artifacts.models import SubmissionBundleAdmission  # noqa: E402
 from app.modules.authorization.models import ProjectRoleGrant  # noqa: E402
+from tests.test_artifact_admission import _context, _seed_human_actor  # noqa: E402
+from tests.submission_preparation_auth_helpers import install_submitter_grant  # noqa: E402
+
+
+@asynccontextmanager
+async def socket_api(app):
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    origin = f"http://127.0.0.1:{listener.getsockname()[1]}"
+    server = uvicorn.Server(uvicorn.Config(app, lifespan="off", log_level="error", access_log=False))
+    running = asyncio.create_task(server.serve(sockets=[listener]))
+    try:
+        async with asyncio.timeout(30):
+            while not server.started:
+                assert not running.done(), "real API failed to start"
+                await asyncio.sleep(0.01)
+        yield origin
+    finally:
+        server.should_exit = True
+        try:
+            await asyncio.wait_for(running, timeout=20)
+        finally:
+            listener.close()
 
 
 @pytest.mark.asyncio
@@ -49,18 +73,7 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
         prepare = ("task", "prepare", str(h.task_id), *packet,
                    "--file", str(archive), "--idempotency-key", key)
         async with _client(h, monkeypatch, isolated_database_env) as direct:
-            app = direct._transport.app
-            listener = socket.socket()
-            listener.bind(("127.0.0.1", 0))
-            origin = f"http://127.0.0.1:{listener.getsockname()[1]}"
-            server = uvicorn.Server(uvicorn.Config(app, lifespan="off", log_level="error", access_log=False))
-            running = asyncio.create_task(server.serve(sockets=[listener]))
-            try:
-                async with asyncio.timeout(30):
-                    while not server.started:
-                        assert not running.done(), "real API failed to start"
-                        await asyncio.sleep(0.01)
-
+            async with socket_api(direct._transport.app) as origin:
                 async def call(*args, denied=None):
                     result = await asyncio.to_thread(cli, origin, "public-intake-token", "-o", "json", *args)
                     if denied is not None:
@@ -110,7 +123,27 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
                     admission = await session.get(SubmissionBundleAdmission, str(admission_id))
                     assert admission.status == "consumed"
                     assert admission.archive_sha256 == "sha256:" + hashlib.sha256(h.archive_bytes).hexdigest()
+                    assert admission.archive_byte_count == len(h.archive_bytes)
                     assert admission.consumed_by_submission_id == submission_id
+                    stored_run = await session.get(CheckerRun, run["id"])
+                    assert stored_run.evaluation_request_id == receipt["evaluation_request_id"]
+                foreign_context = _context()
+                async with h.factory.begin() as session:
+                    await _seed_human_actor(session, foreign_context)
+                    await install_submitter_grant(await session.connection(), {
+                        "project": str(h.project_id), "actor": str(foreign_context.actor_profile_id),
+                    })
+                # A different authenticated actor with a real same-project
+                # Submitter grant still cannot reuse this assignment/history.
+                with monkeypatch.context() as foreign_patch:
+                    async with _client(h, foreign_patch, isolated_database_env,
+                        subject=f"human-{foreign_context.actor_profile_id}") as foreign:
+                        async with socket_api(foreign._transport.app) as foreign_origin:
+                            for args in (submit, ("submission", "show", submission_id),
+                                         ("submission", "findings", submission_id)):
+                                result = await asyncio.to_thread(cli, foreign_origin, "public-intake-token", "-o", "json", *args)
+                                assert result.returncode == 1 and result.stdout == "", result.stderr
+                                assert json.loads(result.stderr)["error"]["status"] == 404
                 async with h.factory.begin() as session:
                     profile = await session.get(ActorProfile, str(h.context.actor_profile_id))
                     profile.status = "suspended"
@@ -126,6 +159,9 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
                     profile = await session.get(ActorProfile, str(h.context.actor_profile_id))
                     profile.status = "active"
                     profile.suspended_by = profile.suspended_at = profile.suspension_reason = None
+                    profile.reactivated_by = "cli-test"
+                    profile.reactivated_at = datetime.now(UTC)
+                    profile.reactivation_reason = "Isolate revoked-grant proof"
                     grant = (await session.scalars(select(ProjectRoleGrant).where(
                         ProjectRoleGrant.actor_profile_id == str(h.context.actor_profile_id),
                         ProjectRoleGrant.project_id == str(h.project_id),
@@ -138,9 +174,3 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
                     grant.revoked_at = datetime.now(UTC)
                 await call(*submit, denied=404)
                 await call("submission", "show", submission_id, denied=404)
-            finally:
-                server.should_exit = True
-                try:
-                    await asyncio.wait_for(running, timeout=20)
-                finally:
-                    listener.close()
