@@ -189,8 +189,8 @@ The repair verification includes four real PostgreSQL expiry/final-submission
 and missing-root recovery cases at `10d2e01ad541656adfcf326aab2cff4751b531d0`
 (4 passed), and four service-authority, stored-resource, direct-SQL custody and
 participant-rollback cases at `c6e18927a0c98c6e1ae69a45da66a73a88dd5e97`
-(4 passed). Both isolated runs exited successfully and confirmed database and
-storage cleanup. Their TASK, ART, OUTBOX and fixed-service custody code is
+(4 passed). Both isolated runs exited successfully and confirmed isolated database/role
+cleanup. Their runners did not provision or probe a MinIO provider. Their TASK, ART, OUTBOX and fixed-service custody code is
 unchanged in the main reconciliation; the incoming AUTH change extracts human
 manager authority and orders guide reads. These are focused runtime proofs,
 not an exact-final-head full-suite claim.
