@@ -14,6 +14,17 @@ def upgrade() -> None:
     CREATE FUNCTION public.guard_submission_revision_capacity() RETURNS trigger
     LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
     BEGIN
+      IF NEW.version IS NULL OR NEW.version < 1
+        OR (NEW.version = 1) <> (NEW.supersedes_submission_id IS NULL)
+        OR (NEW.version > 1 AND NOT EXISTS (
+          SELECT 1 FROM public.submissions predecessor
+          WHERE predecessor.id=NEW.supersedes_submission_id
+            AND predecessor.task_id=NEW.task_id
+            AND predecessor.contributor_id=NEW.contributor_id
+            AND predecessor.version::bigint=NEW.version::bigint - 1
+        )) THEN
+        RAISE EXCEPTION 'submission_revision_lineage_invalid' USING ERRCODE='23514';
+      END IF;
       IF NEW.version > 1 AND NOT EXISTS (
         SELECT 1 FROM public.revision_policies p
         JOIN public.workstream_tasks t ON t.project_id=p.project_id

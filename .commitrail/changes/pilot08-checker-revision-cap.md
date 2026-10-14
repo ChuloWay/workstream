@@ -41,8 +41,9 @@ and immutable; no second counter is needed.
 Use one TASK-owned pure capacity check over verified locked PROJECTS facts,
 including exact revision policy identity. Apply it after current authority in
 preparation and before creating new Submission facts. Exact committed replay
-retains its original path. The SQL INSERT guard reads only the immutable exact
-policy and creates no new locks or lifecycle writers. Historical rows remain
+retains its original path. The SQL INSERT guard requires positive consecutive predecessor lineage, reads
+only the immutable exact policy, and creates no explicit row locks or lifecycle
+writers. Historical rows remain
 unchanged. Submission version minus one is the consumed revision number.
 
 ## Acceptance criteria
@@ -66,12 +67,19 @@ unchanged. Submission version minus one is the consumed revision number.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner reuse | TASK/ART/PROJECTS source inspection | Identified existing locked-context calls | Implementation and PostgreSQL proof pending |
+| Existing owner reuse | TASK/ART/PROJECTS source inspection | Reuses existing locked-context calls | Runtime proof pending |
+| Schema delta | PostgreSQL 16 canonical catalog comparison | Only new guard function, namespace identity and trigger differ; removing them reproduces the predecessor hash | Hosted repetition required |
 
 ## Review findings
 
 Scope review identified mutable TASK-lock foreign keys on retained attempt
 records as a prerequisite for later rebase. This PR does not change those keys.
+Review also identified non-positive Submission versions as a SQL cap bypass;
+the insert guard now validates positive consecutive lineage. The final-write
+regression arranges a real ready admission without the new application cap,
+retaining all existing authority, checker and artifact guards. Its SQL probe
+uses the canonical writer with only the application cap removed, avoiding
+unrelated uniqueness or stale-lineage rejections.
 
 ## Reconciliation
 

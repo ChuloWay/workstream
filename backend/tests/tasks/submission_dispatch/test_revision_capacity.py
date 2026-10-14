@@ -16,7 +16,7 @@ from tests.tasks.post_submit_routing.outcome_support import invoked_completion
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.post_submit_routing.support import revision_archive
 from tests.tasks.submission_dispatch.test_replacement_creation import (
-    _creation_snapshot, _ready_replacement,
+    _create, _creation_request, _creation_snapshot, _ready_replacement,
 )
 from tests.tasks.test_public_submission_intake import _client, _payload
 from tests.test_submission_predecessor_custody import _fixture_revision_context
@@ -66,9 +66,6 @@ async def test_two_revisions_then_public_and_sql_refusal(
             for round_number in (1, 2):
                 h.data = revision_archive(h.data)
                 prepared, admission = await _ready_replacement(h, h.data)
-                if round_number == 2:
-                    spare, spare_admission = await _ready_replacement(h, revision_archive(h.data))
-                    spare_payload = _payload(spare, spare_admission)
                 payload = _payload(prepared, admission)
                 response = await client.post(route, json=payload)
                 assert response.status_code == 201, response.text
@@ -78,6 +75,15 @@ async def test_two_revisions_then_public_and_sql_refusal(
                 saved_response = response.json()
                 await _fail_current_submission(h)
 
+            # Arrange a real ready admission retained from preparation without
+            # the new cap. All authority, checker, storage and lineage guards run.
+            with monkeypatch.context() as patch:
+                patch.setattr(
+                    "app.modules.artifacts.submission_admission.require_revision_capacity",
+                    lambda *_: None,
+                )
+                spare, spare_admission = await _ready_replacement(h, revision_archive(h.data))
+            spare_payload = _payload(spare, spare_admission)
             before = await _creation_snapshot(h)
             # Empty/malformed ZIP would fail archive checks if capacity were checked too late.
             denied = await client.post(
@@ -90,8 +96,8 @@ async def test_two_revisions_then_public_and_sql_refusal(
                 }, content=b"not a zip",
             )
             assert denied.status_code == 409, denied.text
-            assert "revision_limit_reached" in denied.text
-            over_cap = dict(spare_payload, predecessor_submission_id=str(h.created.submission_id))
+            assert denied.json()["error"]["code"] == "revision_limit_reached"
+            over_cap = spare_payload
             denied = await client.post(route, json=over_cap)
             assert denied.status_code == 409, denied.text
             assert denied.json()["error"]["code"] == "revision_limit_reached"
@@ -100,19 +106,31 @@ async def test_two_revisions_then_public_and_sql_refusal(
             assert replay.status_code == 201, replay.text
             assert replay.json() == saved_response
 
-        # An INSERT omitting the application check still meets the SQL cap guard.
+        # Removing only the application cap still cannot create round3: the
+        # otherwise-valid canonical writer must meet PostgreSQL's INSERT guard.
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                "app.modules.tasks.submission_composition.require_revision_capacity",
+                lambda *_: None,
+            )
+            with pytest.raises(IntegrityError, match="revision_limit_reached"):
+                await _create(h, _creation_request(h, spare, spare_admission))
+        assert await _creation_snapshot(h) == before
         async with h.factory() as session:
             original = await session.scalar(text(
                 "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
             ), {"id": h.created.submission_id})
-        original.update(id=str(new_record_id()), version=4,
-                        supersedes_submission_id=str(h.created.submission_id))
-        with pytest.raises(IntegrityError, match="revision_limit_reached"):
-            async with h.factory() as session, session.begin():
-                await session.execute(text(
-                    "INSERT INTO public.submissions SELECT * FROM "
-                    "jsonb_populate_record(NULL::public.submissions, CAST(:row AS jsonb))"
-                ), {"row": json.dumps(original)})
+        for version in (0, -1):
+            forged = dict(original, id=str(new_record_id()), version=version,
+                          supersedes_submission_id=str(h.created.submission_id),
+                          submission_bundle_admission_id=None, artifact_binding_id=None,
+                          artifact_content_id=None)
+            with pytest.raises(IntegrityError, match="submission_revision_lineage_invalid"):
+                async with h.factory() as session, session.begin():
+                    await session.execute(text(
+                        "INSERT INTO public.submissions SELECT * FROM "
+                        "jsonb_populate_record(NULL::public.submissions, CAST(:row AS jsonb))"
+                    ), {"row": json.dumps(forged)})
         async with h.factory() as session:
             rows = (await session.scalars(select(Submission).order_by(Submission.version))).all()
             assert [row.version for row in rows] == [1, 2, 3]

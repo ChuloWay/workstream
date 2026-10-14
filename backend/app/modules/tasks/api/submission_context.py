@@ -170,6 +170,8 @@ def require_revision_capacity(
     """Apply the exact locked policy to a new attempt; initial work is round zero."""
     from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
 
+    if task.predecessor is None:
+        return
     selected = project.activation_receipt.command.revision
     locked = task.locked_policy
     if (
@@ -181,5 +183,5 @@ def require_revision_capacity(
         raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
     policy = RevisionPolicySemantics.model_validate_json(project.revision_policy.value)
     # The predecessor's one-based version equals the next zero-based round.
-    if task.predecessor is not None and task.predecessor.version > policy.max_revision_rounds:
+    if task.predecessor.version > policy.max_revision_rounds:
         raise TaskSubmissionContextUnavailable("revision_limit_reached")
