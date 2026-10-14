@@ -246,7 +246,7 @@ Explicit CLI ZIP preparation, admission-backed creation/replay, submission histo
 and contributor checker findings now consume the public APIs. Preparation does
 not create a Submission; readiness recovery is an explicit same-key POST replay,
 not a polling GET. Revision-change summaries await their public field. Native
-proof uses fixture-arranged prerequisites; the separate #552 API/worker drill
+proof uses fixture-arranged prerequisites; the separate #552 API and Celery drill
 connects public guide inputs to governed outcomes. Full native CLI
 setup-to-submission proof remains separate.
 No public project-list
