@@ -32,9 +32,6 @@ from scripts.test_lane_catalogue import (  # noqa: E402
     TestLane,
 )
 from scripts.record_id_collection import RecordIdCollection  # noqa: E402
-from scripts.ci_selection_receipt import (  # noqa: E402
-    SelectionError, receipt_bytes, receipt_digest, verify_receipt,
-)
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS_DIR = ROOT / "tests"
@@ -695,11 +692,9 @@ def _aggregate_exit_codes(codes: list[int]) -> int:
     return 0 if all(code == 0 for code in codes) else 1
 
 
-def _timing_summary(
-    lanes: list[dict[str, Any]], *, expected_count: int = len(LANES),
-) -> dict[str, float]:
+def _timing_summary(lanes: list[dict[str, Any]]) -> dict[str, float]:
     """Derive aggregate timing only from the exact declared lane rows."""
-    if not lanes or len(lanes) != expected_count:
+    if len(lanes) != len(LANES):
         raise LaneError("invalid_lane_timing_inventory")
     elapsed = [row["elapsed_seconds"] for row in lanes]
     if any(
@@ -720,9 +715,6 @@ def run_lanes(
     *,
     collect_only: bool = False,
     selected_lane: str | None = None,
-    selection_file: Path | None = None,
-    base_sha: str = "",
-    pr_head_sha: str = "",
 ) -> int:
     """Collect canonical nodes and optionally execute all or one exact lane."""
     global INTERRUPTED
@@ -740,17 +732,6 @@ def run_lanes(
     manifest_path = metadata_dir / "manifest.json"
     manifest_path.write_bytes(_json_bytes(manifest))
     manifest_digest = _sha256(manifest_path.read_bytes())
-    selection = None
-    if selection_file is not None:
-        if collect_only:
-            raise LaneError("selection_with_collect_only")
-        selection = verify_receipt(
-            selection_file, ROOT.parent, base_sha=base_sha, pr_head_sha=pr_head_sha,
-            tested_sha=tree_sha, manifest=manifest,
-        )
-        (metadata_dir / "selection.json").write_bytes(receipt_bytes(selection))
-    elif base_sha or pr_head_sha:
-        raise LaneError("selection_identity_without_receipt")
     if collect_only:
         if selected_lane is not None:
             raise LaneError("collect_with_selected_lane")
@@ -801,10 +782,6 @@ def run_lanes(
         if selected_lane is None
         else tuple(lane for lane in LANES if lane.name == selected_lane)
     )
-    if selection is not None:
-        if selected_lane is not None and selected_lane not in selection["lanes"]:
-            raise LaneError("unselected_lane")
-        execution_lanes = tuple(lane for lane in execution_lanes if lane.name in selection["lanes"])
     if not execution_lanes:
         raise LaneError("unknown_selected_lane")
     if any(lane.requires_postgres for lane in execution_lanes) and not os.environ.get(ADMIN_ENV):
@@ -819,8 +796,7 @@ def run_lanes(
     old_term = signal.signal(signal.SIGTERM, _handle_interrupt)
     try:
         for lane in execution_lanes:
-            lane_rows = [row for row in manifest["nodes"] if row["lane"] == lane.name
-                         and (selection is None or row["module"] in selection["selected_modules"])]
+            lane_rows = [row for row in manifest["nodes"] if row["lane"] == lane.name]
             kinds = [ORDINARY_KIND]
             if any(row["execution_kind"] == ADMIN_KIND for row in lane_rows):
                 kinds.append(ADMIN_KIND)
@@ -939,13 +915,8 @@ def run_lanes(
         "mode": "run" if selected_lane is None else "lane",
         "schema_version": SCHEMA_VERSION,
     }
-    if selection is not None:
-        summary.update(
-            mode="selected_run" if selected_lane is None else "selected_lane",
-            selection_file="selection.json", selection_sha256=receipt_digest(selection),
-        )
     if selected_lane is None:
-        summary.update(_timing_summary(summary["lanes"], expected_count=len(execution_lanes)))
+        summary.update(_timing_summary(summary["lanes"]))
     else:
         elapsed = summary["lanes"][0]["elapsed_seconds"]
         summary.update(
@@ -971,9 +942,6 @@ def main() -> int:
     parser.add_argument("--timeout-seconds", default=1200.0, type=float)
     parser.add_argument("--collect-only", action="store_true")
     parser.add_argument("--lane", choices=[lane.name for lane in LANES])
-    parser.add_argument("--selection-file", type=Path)
-    parser.add_argument("--base-sha", default="")
-    parser.add_argument("--pr-head-sha", default="")
     args = parser.parse_args()
     try:
         return run_lanes(
@@ -982,11 +950,8 @@ def main() -> int:
             args.timeout_seconds,
             collect_only=args.collect_only,
             selected_lane=args.lane,
-            selection_file=args.selection_file,
-            base_sha=args.base_sha,
-            pr_head_sha=args.pr_head_sha,
         )
-    except (LaneError, SelectionError, OSError, subprocess.SubprocessError) as exc:
+    except (LaneError, OSError, subprocess.SubprocessError) as exc:
         code = exc.args[0] if isinstance(exc, LaneError) else "lane_operation_failed"
         print(f"test lane runner failed: {code}", file=sys.stderr)
         return 2

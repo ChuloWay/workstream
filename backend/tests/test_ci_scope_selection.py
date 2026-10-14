@@ -118,7 +118,7 @@ def test_external_checker_change_requires_full_unmapped_consumer_proof() -> None
         ),
     ],
 )
-def test_known_test_module_requires_git_dependency_proof_before_narrowing(
+def test_known_test_module_retains_complete_backend_proof(
     path: str,
     expected: tuple[str, ...],
 ) -> None:
@@ -132,7 +132,7 @@ def test_known_test_module_requires_git_dependency_proof_before_narrowing(
     assert scope.preflight is True
     assert set(expected) <= set(scope.lanes)
     assert scope.lanes == ALL_LANES
-    assert scope.reason == "missing_dependency_proof"
+    assert scope.reason == "unknown_or_cross_cutting_path"
 
 
 def test_unknown_or_support_test_module_fails_safe_to_every_lane() -> None:
@@ -259,7 +259,9 @@ def test_git_rename_out_of_backend_keeps_the_deleted_source_in_scope(
     assert scope.lanes == ALL_LANES
 
 
-@pytest.mark.parametrize("path", ("/absolute.py", "../escape.py", ""))
+@pytest.mark.parametrize(
+    "path", ("/absolute.py", "../escape.py", "", "docs//a.md", "docs/./a.md", "docs\\a.md", "docs/a.md\n")
+)
 def test_invalid_changed_paths_are_rejected(path: str) -> None:
     with pytest.raises(ValueError, match="invalid changed path"):
         select_scope(
@@ -267,6 +269,32 @@ def test_invalid_changed_paths_are_rejected(path: str) -> None:
             event_name="pull_request",
             pull_request_draft=True,
         )
+
+
+@pytest.mark.parametrize("draft", [False, True])
+@pytest.mark.parametrize(
+    ("paths", "full", "cli", "mcp"),
+    [
+        (["docs/example.md"], False, False, False),
+        (["cli/main.go", "docs/example.md"], False, True, False),
+        (["mcp_server/server.py"], False, False, True),
+        (["cli/main.go", "mcp_server/server.py"], False, True, True),
+        (["cli/main.go", "backend/app/modules/tasks/service.py"], True, True, True),
+        (["docs/example.md", "unknown/file.txt"], True, True, True),
+        ([".github/workflows/backend.yml"], True, True, True),
+        (["docs/tool.py"], True, True, True),
+        (["AGENTS.md"], True, True, True),
+    ],
+)
+def test_component_union_is_identical_for_draft_and_ready(paths, full, cli, mcp, draft):
+    scope = select_scope(paths, event_name="pull_request", pull_request_draft=draft)
+    assert scope.full_suite is full
+    assert scope.cli_contract is cli
+    assert scope.mcp_contract is mcp
+    assert scope.lanes == (ALL_LANES if full else ())
+    assert scope.preflight is full
+    assert scope.external_checker is full
+    assert scope.minio_image is (full or cli)
 
 
 def test_main_skips_git_diff_on_push_even_with_null_or_unreachable_base(

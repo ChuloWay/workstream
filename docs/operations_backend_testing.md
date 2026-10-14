@@ -109,7 +109,7 @@ creation must use the real admission-backed command, not this fixture.
 
 If provisioning fails, confirm the local PostgreSQL provisioning credential can create/drop databases and roles, terminate owned sessions, and reach the named admin database. Diagnostics omit credentials.
 
-## Hosted full and selected execution proof
+## Hosted component selection and complete backend proof
 
 The required GitHub check remains `Backend / test`. Every push to `main` and
 every cross-cutting or uncertain PR runs complete proof: ten matrix jobs each own a
@@ -118,26 +118,19 @@ exactly one dependency lane. A step-level curl health loop admits MinIO before
 collection. This is semantic fan-out, not arbitrary test-count sharding: lane
 ownership remains repository-defined and exact.
 
-Draft and ready PRs use the same conservative impact rules. Eligible backend
-changes select whole test modules using the union of base/tested-tree reverse
-imports, owner tests, package initializers, fixtures and source-reading/dynamic
-test sentinels. Production file readers and source/registry strings force full
-execution for backend changes: an import graph does not prove their inputs.
-The current application contains these readers, so backend changes currently
-remain full. This blocks the intended backend speedup; the selector must not be
-declared ready on controlled-fixture evidence alone. Uncertain production imports, shared infrastructure, AUTH,
-custody/economic owners, models/schemas, fixture changes, CI controls and unknown
-paths require full execution. External-checker changes remain full until their
-backend consumers have a proven narrower mapping. CLI-only and MCP-only changes
-require their respective public-contract workflows. Only positively classified
-ordinary documentation omits runtime checks; Agent Gates still runs.
+Draft and ready PRs use the same conservative component rules. Backend changes,
+including backend tests, run the complete suite. CI controls, unknown paths,
+unavailable Git history and external-checker changes also require full execution.
+CLI-only and MCP-only changes require their respective public-contract workflows;
+mixed client changes require both. Only positively classified ordinary Markdown
+documentation omits runtime checks; Agent Gates still runs. Any backend or
+unknown path in a mixed change restores complete proof.
 
-Selected execution retains full fresh collection and a distinct receipt binding
-base, PR head, tested merge tree, input digest, selected/omitted modules, exact
-nodes and nonempty lanes. Lane jobs verify the receipt; fan-in independently
-recollects and recomputes selection. Missing history or mismatched proof fails;
-it cannot retroactively excuse omitted execution. Selected proof is never
-described as full-suite proof. Broad dependencies can still select most tests.
+Import-only backend test selection was rejected: source readers and injected
+ports can cross import boundaries, and shared fixtures can carry state into
+tests without executing the originating code again. There is no partial-backend
+receipt or alternate evidence validator. These component omissions reduce
+unrelated client/documentation work, not the cost of every backend PR.
 
 Draft fan-in publishes `draft-test`, not required `test`. Marking ready starts
 the required check even on an unchanged commit; an older green draft result
@@ -146,10 +139,9 @@ Base-branch edits also start a fresh run bound to the new base; ordinary PR
 title/body edits rerun as the conservative cost of subscribing to `edited`.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-Authorization preflight runs alongside the selected lanes. On complete runs,
-the internal `full-suite` aggregate validates all ten lanes; on selected backend
-runs it validates exactly the receipt's nonempty lanes. Both require preflight
-and selected supporting contracts before validating evidence and coverage;
+Authorization preflight runs alongside all ten lanes when backend proof is
+required. The internal `full-suite` aggregate validates all ten lanes and
+requires preflight and supporting contracts before validating evidence and coverage;
 failed, cancelled or skipped required prerequisites remain blocking. Both final
 check names require every selected component to succeed and unselected
 components to be skipped. MCP has one reusable workflow called by Backend,
@@ -165,6 +157,11 @@ to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
 data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
 before tests. Real SQL, transaction, lock, isolation, and full hosted behavior
 checks remain.
+Ordinary storage tests use the existing transactional data reset with canonical
+schema verification before and after each test. Only tests that deliberately
+change schema use `postgres_schema_contract` to rebuild it. In contribution
+storage this includes the function-replacement test and the trigger-removal
+parameter, not the ordinary control. No assertions or storage tests are omitted.
 The schema-contract lane and aggregate job retain disk-backed databases.
 This is not a production configuration or proof of host-power-loss durability:
 [Docker tmpfs data disappears when the container stops](https://docs.docker.com/engine/storage/tmpfs/).
@@ -239,9 +236,7 @@ corrupt latest bundle to an older passing one. For the selected bundles it
 requires byte-identical manifests and heads, verifies every bound digest, and
 rejects symlinks or surplus lanes.
 
-Selected bundles additionally bind their selection digest and use the
-`backend-selected-<digest>-<tree>-<lane>-attempt-<n>` namespace. They cannot be
-mixed with full-run bundles or another selection. MinIO consumers receive the
+MinIO consumers receive the
 successful producer's explicit attempt identity: a failed-only retry may use
 that same-head earlier artifact, never a future attempt or foreign tree.
 
@@ -252,7 +247,7 @@ and coverage-file SHA-256 digests. Only then are exactly the expected regular,
 non-symlink coverage files copied byte-for-byte for one literal
 `coverage combine`. Percentages are diagnostic, with no global or subsystem
 floor. The real API contract drill remains a separate isolated invocation inside
-the full or selected backend aggregate. The stable required `test` status contains no database
+the full backend aggregate. The stable required `test` status contains no database
 or artifact work; it accepts only successful required component/aggregate results. Draft results
 cannot fulfill this required context.
 

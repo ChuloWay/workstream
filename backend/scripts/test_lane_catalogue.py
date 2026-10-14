@@ -598,7 +598,6 @@ LANES = (
             "tests/test_record_id_collection.py",
             "tests/test_ci_lane_catalogue.py",
             "tests/test_ci_scope_selection.py",
-            "tests/test_ci_test_impact.py",
             "tests/test_ci_test_lanes.py",
             "tests/test_test_lane_evidence.py",
             "tests/test_merge_test_lane_evidence.py",

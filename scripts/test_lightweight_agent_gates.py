@@ -261,15 +261,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertIn("python backend/scripts/select_ci_scope.py", scope_job)
         self.assertIn("BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}", scope_job)
         self.assertIn("PR_DRAFT: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft || false }}", scope_job)
-        self.assertIn("lane_matrix: ${{ steps.plan.outputs.lane_matrix || steps.select.outputs.lane_matrix }}", scope_job)
-        # A rerun-all publishes a new immutable receipt artifact; failed-only
-        # consumers retain the successful planner's identity, not their attempt.
-        self.assertIn(
-            'echo "selection_artifact=backend-selection-${GITHUB_SHA}-${GITHUB_RUN_ATTEMPT}" >> "${GITHUB_OUTPUT}"',
-            scope_job,
-        )
-        self.assertIn("name: ${{ steps.plan.outputs.selection_artifact }}", scope_job)
-        self.assertEqual(workflow.count("name: ${{ needs.scope.outputs.selection_artifact }}"), 2)
+        self.assertIn("lane_matrix: ${{ steps.select.outputs.lane_matrix }}", scope_job)
         self.assertEqual(
             workflow.count(
                 "matrix: ${{ fromJSON(needs.scope.outputs.lane_matrix) }}"
@@ -279,7 +271,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         self.assertIn(
             "  full-suite:\n    if: >-\n"
             "      ${{ always() && needs.scope.result == 'success' &&\n"
-            "          (needs.scope.outputs.full_suite == 'true' || needs.scope.outputs.selected_backend == 'true') }}\n"
+            "          needs.scope.outputs.full_suite == 'true' }}\n"
             "    needs: [scope, auth-boundary-preflight, external-checker-runtime, "
             "lanes, minio-image, cli-public-contract, mcp-contract]",
             workflow,
@@ -426,8 +418,8 @@ class LightweightAgentGateTests(unittest.TestCase):
             self.assertLess(job.index("Restore exact backend uv downloads"), job.index(cache_env))
             self.assertLess(job.index(cache_env), job.index(tool_install))
             self.assertLess(job.index(tool_install), job.index(frozen_install))
-        self.assertEqual(workflow.count(tool_install), 4)
-        self.assertEqual(workflow.count(frozen_install), 4)
+        self.assertEqual(workflow.count(tool_install), 3)
+        self.assertEqual(workflow.count(frozen_install), 3)
         self.assertEqual(workflow.count(cache_env), 3)
         self.assertNotIn('python -m pip install -e ".[dev,agents]"', workflow)
         root_env = workflow.split("\nenv:\n", 1)[1].split("\njobs:\n", 1)[0]
@@ -621,7 +613,6 @@ class LightweightAgentGateTests(unittest.TestCase):
             defaults = {
                 "SCOPE_RESULT": "success",
                 "FULL_SUITE": "false",
-                "SELECTED_BACKEND": "false",
                 "MCP_EXPECTED": "false",
                 "MCP_RESULT": "skipped",
                 "PREFLIGHT_EXPECTED": "false",
@@ -664,7 +655,6 @@ class LightweightAgentGateTests(unittest.TestCase):
             ("MINIO_EXPECTED", "MINIO_RESULT"),
             ("CLI_EXPECTED", "CLI_RESULT"),
             ("MCP_EXPECTED", "MCP_RESULT"),
-            ("SELECTED_BACKEND", "FULL_RESULT"),
         )
         for expected_key, result_key in component_pairs:
             with self.subTest(component=result_key, outcome="success"):

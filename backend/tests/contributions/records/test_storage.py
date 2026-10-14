@@ -24,8 +24,6 @@ from .support import (
     retire_policy_and_suspend_bindings,
 )
 
-pytestmark = pytest.mark.postgres_schema_contract
-
 
 async def reject_record(session, record, message, **changes):
     with pytest.raises(DBAPIError, match=message):
@@ -140,6 +138,7 @@ async def test_review_contribution_foreign_source_substitutions(tmp_path, isolat
                 await session.commit()
 
 
+@pytest.mark.postgres_schema_contract
 async def test_reviewer_award_definition_substitution(tmp_path, isolated_database_env):
     async with reviewer_contribution_source(tmp_path, isolated_database_env, paid=True) as h:
         async with h.factory() as session, session.begin():
@@ -320,7 +319,9 @@ async def test_reviewer_source_and_award_uniqueness_race(
             ]
 
 
-@pytest.mark.parametrize("remove_guard", [False, True])
+@pytest.mark.parametrize(
+    "remove_guard", [False, pytest.param(True, marks=pytest.mark.postgres_schema_contract)]
+)
 async def test_routed_accepted_submission_requires_complete_awards(
     tmp_path,
     isolated_database_env,

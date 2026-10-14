@@ -22,8 +22,6 @@ from .support import (
     source_rows,
 )
 
-pytestmark = pytest.mark.postgres_schema_contract
-
 
 async def test_source_matches_real_completed_run(tmp_path, isolated_database_env):
     async with authorized_routing_source(

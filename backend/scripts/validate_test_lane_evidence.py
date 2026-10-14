@@ -22,7 +22,6 @@ if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts.record_id_collection import RecordIdCollection  # noqa: E402
-from scripts.ci_selection_receipt import SelectionError, verify_receipt  # noqa: E402
 
 SCHEMA_VERSION = 1
 LANE_COUNT = 10
@@ -324,18 +323,15 @@ def _nodes(value: Any, field: str) -> list[str]:
 
 
 def validate_evidence(
-    metadata_dir: Path, summary_json: Path, repository_root: Path | None = None,
-    *, base_sha: str = "", pr_head_sha: str = "",
+    metadata_dir: Path, summary_json: Path, repository_root: Path | None = None
 ) -> dict[str, Any]:
     """Validate one complete collection or execution evidence set."""
     if metadata_dir.is_symlink() or not metadata_dir.is_dir():
         raise EvidenceError("invalid_metadata_dir")
     if summary_json.is_symlink() or not summary_json.is_file():
         raise EvidenceError("invalid_summary_file")
-    raw_summary = _json_bytes(summary_json.read_bytes(), "invalid_summary")
-    selected_mode = isinstance(raw_summary, dict) and raw_summary.get("mode") == "selected_run"
     summary = _object(
-        raw_summary,
+        _json_bytes(summary_json.read_bytes(), "invalid_summary"),
         {
             "canonical_node_count",
             "aggregate_runner_seconds",
@@ -347,12 +343,10 @@ def validate_evidence(
             "mode",
             "schema_version",
             "slowest_lane_seconds",
-        } | ({"selection_file", "selection_sha256"} if selected_mode else set()),
+        },
         "invalid_summary",
     )
-    mode = "run" if selected_mode else summary["mode"]
-    if not selected_mode and (base_sha or pr_head_sha):
-        raise EvidenceError("selection_identity_without_selected_proof")
+    mode = summary["mode"]
     if summary["schema_version"] != SCHEMA_VERSION or mode not in {"collect", "run"}:
         raise EvidenceError("invalid_summary")
     root = repository_root or Path(__file__).resolve().parents[2]
@@ -419,33 +413,14 @@ def validate_evidence(
     ):
         raise EvidenceError("canonical_node_count_mismatch")
 
-    expected_lane_count = LANE_COUNT
-    if selected_mode:
-        # Validate the full manifest above first; selected execution never
-        # substitutes a partial collection for the canonical inventory.
-        _bound_bytes(metadata_dir, summary["selection_file"], summary["selection_sha256"])
-        try:
-            selection = verify_receipt(
-                metadata_dir / summary["selection_file"], root,
-                base_sha=base_sha, pr_head_sha=pr_head_sha,
-                tested_sha=head, manifest=manifest,
-            )
-        except (SelectionError, ValueError, subprocess.SubprocessError) as exc:
-            raise EvidenceError("invalid_selected_execution_proof") from exc
-        canonical = [row for row in canonical if row[1] in selection["selected_modules"]]
-        canonical_ids = [row[0] for row in canonical]
-        if canonical_ids != selection["selected_nodes"]:
-            raise EvidenceError("selected_node_inventory_mismatch")
-        expected_lane_count = len(selection["lanes"])
-
     lanes = summary["lanes"]
-    if not isinstance(lanes, list) or len(lanes) != expected_lane_count:
+    if not isinstance(lanes, list) or len(lanes) != LANE_COUNT:
         raise EvidenceError("invalid_lane_count")
     expected_by_lane: dict[str, list[str]] = {}
     for nodeid, _module, lane, _kind in canonical:
         expected_by_lane.setdefault(lane, []).append(nodeid)
     lane_names = [lane.get("name") if isinstance(lane, dict) else None for lane in lanes]
-    if len(set(lane_names)) != expected_lane_count or set(lane_names) != set(expected_by_lane):
+    if len(set(lane_names)) != LANE_COUNT or set(lane_names) != set(expected_by_lane):
         raise EvidenceError("lane_inventory_mismatch")
 
     all_collected: list[str] = []
@@ -619,9 +594,8 @@ def validate_evidence(
         bucket_owners: dict[str, set[str]] = {}
         for lane_name, _database, _role, bucket, _prefix in isolation_namespaces:
             bucket_owners.setdefault(bucket, set()).add(lane_name)
-        shared_owners = set(SHARED_S3_LANES) & set(expected_by_lane)
         expected_bucket_owners = {
-            **({SHARED_S3_BUCKET: shared_owners} if shared_owners else {}),
+            SHARED_S3_BUCKET: set(SHARED_S3_LANES),
             **{
                 bucket: owners
                 for bucket, owners in bucket_owners.items()
@@ -629,9 +603,9 @@ def validate_evidence(
             },
         }
         if (
-            len(database_names) != expected_lane_count
-            or len(database_roles) != expected_lane_count
-            or len(minio_prefixes) != expected_lane_count
+            len(database_names) != LANE_COUNT
+            or len(database_roles) != LANE_COUNT
+            or len(minio_prefixes) != LANE_COUNT
             or bucket_owners != expected_bucket_owners
             or any(
                 len(owners) != 1
@@ -641,7 +615,7 @@ def validate_evidence(
         ):
             raise EvidenceError("shared_isolation_namespace")
     if mode == "run" and (
-        len(set(coverage_files)) != expected_lane_count or len(set(isolation_files)) != expected_lane_count
+        len(set(coverage_files)) != LANE_COUNT or len(set(isolation_files)) != LANE_COUNT
     ):
         raise EvidenceError("shared_lane_artifact")
     aggregate = summary["aggregate_runner_seconds"]
@@ -667,12 +641,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--metadata-dir", type=Path, required=True)
     parser.add_argument("--summary-json", type=Path, required=True)
-    parser.add_argument("--base-sha", default="")
-    parser.add_argument("--pr-head-sha", default="")
     args = parser.parse_args(argv)
     try:
-        validate_evidence(args.metadata_dir, args.summary_json,
-                          base_sha=args.base_sha, pr_head_sha=args.pr_head_sha)
+        validate_evidence(args.metadata_dir, args.summary_json)
     except (EvidenceError, OSError) as exc:
         print(f"test lane evidence invalid: {exc}", file=sys.stderr)
         return 1
