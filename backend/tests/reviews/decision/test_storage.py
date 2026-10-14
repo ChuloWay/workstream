@@ -296,7 +296,15 @@ async def test_predecessor_chain(tmp_path, clean_postgres_database):
     from tests.reviews.decision.support import successor_source
     from sqlalchemy.exc import DBAPIError
 
-    async with review_source(tmp_path, clean_postgres_database) as h:
+    # The packetless gap is a real Submission and spends a revision too;
+    # all four Submissions need an approved allowance of three revisions.
+    async with review_source(tmp_path, clean_postgres_database, max_revision_rounds=3) as h:
+        async with h.factory() as session:
+            assert await session.scalar(text(
+                "SELECT p.max_revision_rounds FROM public.revision_policies p "
+                "JOIN public.workstream_tasks t ON t.locked_revision_policy_id=p.id "
+                "WHERE t.id=:id"
+            ), {"id": h.request.task_id}) == 3
         first = h.review.model_copy(update={"decision": "needs_revision", "findings": (finding(),)})
         async with h.factory() as session:
             await insert_review(session, first)
@@ -335,6 +343,8 @@ async def test_predecessor_chain(tmp_path, clean_postgres_database):
 
         # A new stored successor cannot branch back to an already-used predecessor.
         later = await successor_source(successor)
+        assert (first.submission_version, gap.request.submission_version,
+                resolving.submission_version, later.review.submission_version) == (1, 2, 3, 4)
         async with h.factory() as session:
             with pytest.raises(DBAPIError, match="uq_reviews_predecessor_review_id"):
                 await insert_review(

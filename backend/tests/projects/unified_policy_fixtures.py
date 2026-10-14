@@ -166,6 +166,7 @@ async def create_standalone_unified_policy(
     artifact_proposal=None,
     contribution_awards=(),
     human_review_required=True,
+    max_revision_rounds=2,
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
 ):
@@ -189,7 +190,8 @@ async def create_standalone_unified_policy(
         post_submit_registry_spec=post_submit_registry_spec,
     ) as (values, _, command, actor, grant):
         await seed_selected_review_revision_inputs(
-            sessions, command, actor, human_review_required=human_review_required
+            sessions, command, actor, human_review_required=human_review_required,
+            max_revision_rounds=max_revision_rounds,
         )
         _, derived = await prepare_post_policy(sessions, command, actor, grant, service_actor(values))
         approved = await operate(sessions, actor, command.project_id, grant, "approve",

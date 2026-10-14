@@ -80,6 +80,14 @@ Reviews, findings, reviewer contributions or human actors.
   limit change.
 - Add focused service-denial, stored-resource substitution, direct-SQL receipt
   custody and participant-failure rollback proofs for expiry and recovery.
+- Add one project and one task partition through the existing CI lane catalogue
+  and workflow after the expanded revision schema exhausted a project lane's
+  budget and a passing task lane finished only 0.108 seconds below its cap.
+  Update exact aggregate counts, evidence-validator contracts
+  and current testing/roadmap documentation together; retain the 1,200-second
+  cap, full canonical test union, isolated services and mandatory fan-in. Verify
+  missing-lane rejection, unique ownership and complete hosted execution, with
+  focused CI-integrity review. No seed reshuffle, deselection or retry-to-pass.
 
 ### Not allowed
 
@@ -231,3 +239,16 @@ identifier-generation inventory retains the same two transport-token owners
 with their current expression fingerprints. This failed run is diagnostic
 evidence, not merge approval; replacement focused proofs and full required CI
 must pass on the repaired head.
+
+Hosted run `38605899596` tested PR head `16a1d19de` through merge tree
+`03dbd83549f3683ed227f66b4d1511610e4df360`. Seven backend lanes passed; two
+remaining fixtures require explicit guarded corruption and an approved
+three-revision policy for a four-submission ancestry proof. Project A completed
+533 of 561 selected nodes before its 1,200-second cap; project B took 1,103
+seconds and D 1,171 seconds. A fifth project partition adds capacity through the
+same deterministic allocator. These measurements justify the bounded change;
+they do not establish the new allocation's runtime before hosted verification.
+Task A used 1,020.068 runner seconds, B 1,193.532 and C 1,199.892. The repaired
+ancestry test adds a previously unexecuted fourth Submission to B's workload.
+A fourth task partition therefore provides measured headroom too, preserving
+the same required node union and 1,200-second deadline across twelve lanes.

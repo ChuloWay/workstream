@@ -1755,6 +1755,7 @@ async def test_task_context_apis_fail_closed_when_locked_context_is_missing(
 async def test_task_context_apis_fail_closed_on_stale_locked_context_rows(
     task_client: AsyncClient,
     mutation: str,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project = await create_active_project(task_client)
     ready_task = await create_ready_task(task_client, project["id"])
@@ -1799,8 +1800,10 @@ async def test_task_context_apis_fail_closed_on_stale_locked_context_rows(
                 "rules": [],
             }
         else:
+            original_body = dict(persisted_task.locked_post_submit_checker_policy_body)
+            audit_ids = sorted(await session.scalars(select(AuditEvent.id)))
             persisted_task.locked_post_submit_checker_policy_body = {
-                **persisted_task.locked_post_submit_checker_policy_body,
+                **original_body,
                 "blocking_severities": [],
             }
         if mutation in {"effective_policy_body", "pre_submit_bundle"}:
@@ -1808,12 +1811,33 @@ async def test_task_context_apis_fail_closed_on_stale_locked_context_rows(
                 await session.commit()
             await session.rollback()
             return
-        await session.commit()
+        with pytest.raises(IntegrityError, match="task revision context lacks current preparation"):
+            await session.commit()
+        await session.rollback()
 
-    response = await task_client.get(context_url, headers=auth_headers())
+    original_lock = TaskRepository.lock_project_task
+    locked_reads = []
 
+    async def stale_post_policy_read(repository, project_id, task_id):
+        stored = await original_lock(repository, project_id, task_id)
+        if stored is not None and str(stored.id) == ready_task["id"]:
+            locked_reads.append(str(stored.id))
+            repository._session.expunge(stored)
+            stored.locked_post_submit_checker_policy_body = {**original_body, "blocking_severities": []}
+        return stored
+
+    with monkeypatch.context() as patch:
+        patch.setattr(TaskRepository, "lock_project_task", stale_post_policy_read)
+        response = await task_client.get(context_url, headers=auth_headers())
+
+    assert locked_reads == [ready_task["id"]]
     assert response.status_code == 422, response.text
     assert response.json()["error"]["code"] == "task_locked_context_invalid"
+    async with db_session.get_session_factory()() as session:
+        canonical = await session.get(WorkstreamTask, ready_task["id"])
+        assert canonical is not None and canonical.status == "ready"
+        assert canonical.locked_post_submit_checker_policy_body == original_body
+        assert sorted(await session.scalars(select(AuditEvent.id))) == audit_ids
 
 
 async def test_submission_requirements_reject_detached_policy_not_matching_approval(

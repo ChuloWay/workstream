@@ -215,6 +215,7 @@ async def completed_source(
     storage_settings=None,
     contribution_awards=(),
     human_review_required=True,
+    max_revision_rounds=2,
     post_submit_registry_spec=None,
 ):
     """Yield one real authorized allow-review run and its valid source scalars."""
@@ -225,6 +226,7 @@ async def completed_source(
         storage_settings=storage_settings,
         contribution_awards=contribution_awards,
         human_review_required=human_review_required,
+        max_revision_rounds=max_revision_rounds,
         post_submit_registry_spec=post_submit_registry_spec,
     ) as h:
         await reserve(h)

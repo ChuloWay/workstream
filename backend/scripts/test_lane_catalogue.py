@@ -10,9 +10,10 @@ PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_b",
     "project_lifecycle_c",
     "project_lifecycle_d",
+    "project_lifecycle_e",
 )
 PARTITIONED_PROJECT_INTAKE_LANES = ("project_lifecycle_c", "project_lifecycle_d")
-PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b", "task_lifecycle_c")
+PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b", "task_lifecycle_c", "task_lifecycle_d")
 
 
 @dataclass(frozen=True)
@@ -259,7 +260,7 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
-    # Project-bound batch custody uses measured four-way project headroom.
+    # Project-bound batch custody uses measured five-way project headroom.
     "tests/tasks/test_task_import_batch_contract.py",
     "tests/tasks/test_task_import_batch_bindings.py",
     "tests/tasks/test_task_import_batches.py",
@@ -429,7 +430,7 @@ PROJECT_INTAKE_MODULES = (
 )
 
 # Checker delivery shares project dispatch ownership and the existing
-# four-way partition; exclusive placement exceeded the hosted execution cap.
+# five-way partition; exclusive placement exceeded the hosted execution cap.
 CHECKER_DELIVERY_MODULES = (
     "tests/checkers/default/test_contract.py",
     "tests/checkers/default/test_execution.py",
@@ -560,7 +561,7 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
-# Routing PREP proofs share the four-way project-policy partition.
+# Routing PREP proofs share the five-way project-policy partition.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
     "tests/authorization/post_submit_routing/test_prepared.py",

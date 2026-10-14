@@ -208,9 +208,11 @@ jobs:
           - project_lifecycle_b
           - project_lifecycle_c
           - project_lifecycle_d
+          - project_lifecycle_e
           - task_lifecycle_a
           - task_lifecycle_b
           - task_lifecycle_c
+          - task_lifecycle_d
 
     services:
       redis:
@@ -512,7 +514,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           coverage_files=(.ci/test-lanes/run/.coverage.*)
-          test "${#coverage_files[@]}" -eq 10
+          test "${#coverage_files[@]}" -eq 12
           for source in "${coverage_files[@]}"; do
             destination="$(basename "${source}")"
             test -f "${source}"
@@ -591,7 +593,7 @@ jobs:
               raise SystemExit("hosted evidence head drift")
 
           lanes = summary.get("lanes")
-          if not isinstance(lanes, list) or len(lanes) != 10:
+          if not isinstance(lanes, list) or len(lanes) != 12:
               raise SystemExit("invalid hosted lane inventory")
           collected: list[str] = []
           completed: list[str] = []
