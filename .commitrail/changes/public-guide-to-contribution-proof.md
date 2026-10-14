@@ -419,3 +419,33 @@ retained attempt is uncertain made the revoked-service case fail at its intended
 cleanup. No product implementation, authorization guard, CI limit or runtime
 assertion changed. The integrated test and documentation delta preserves the
 product/runtime source used by the successful connected run.
+
+## Direct and natural request replay lock repair
+
+A final bounded source trace identified `ARCH-567-REQUEST-REPLAY-LOCK-001`:
+direct manager replay locks the request operation before validating current
+AUTH, while a concurrent natural replay retains AUTH before locking that same
+operation. A stored request followed by those overlapping replay paths can form
+an AUTH/operation cycle. Retained facts remain safe, but PostgreSQL can abort a
+valid replay. The earlier diagnostic/compilation-phase races do not prove this
+intermediate request-replay boundary.
+
+Allowed repair files remain
+`backend/app/modules/projects/guide_compilation/service.py` and the existing
+automatic/authorized request PostgreSQL test owners. Discover a direct replay
+without a child lock, validate current authority through the existing owner,
+then lock and revalidate the exact operation before returning its receipt.
+Natural replay already holds authority before operation custody. Preserve
+current grant/revocation checks, exact actor/source/request matching, immutable
+receipts, one request/attempt/audit chain, and no new provider dispatch. Do not
+introduce replay authority caches, retry-on-deadlock behavior or another path.
+
+Required proof uses a committed request and independent sessions overlapping
+natural replay and direct operation-ID replay. Observe the intermediate lock
+wait and require both to finish with identical retained receipts and no duplicate
+facts. Restoring operation-before-AUTH ordering must fail that regression at its
+intended completion/deadlock assertion. Re-run affected authority/replay tests,
+security/architecture and QA/test-delta review, then refresh affected connected
+runtime proof and hosted checks. The previously successful connected run remains
+historical evidence for its exact source; it does not prove this subsequent
+product repair.
