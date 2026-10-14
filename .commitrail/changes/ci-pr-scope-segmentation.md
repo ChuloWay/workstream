@@ -71,9 +71,11 @@ test-only changes select every lane that owns nodes from the changed module;
 CLI and external-checker changes select their existing independent contracts;
 unrelated MCP/docs-only changes select no heavy Backend component.
 
-The required `Backend / test` status remains present for every run. Partial
-draft runs may pass only when every selected component succeeds. A draft cannot
-merge. Marking it ready emits a new pull-request event that selects all lanes,
+The required `test` status is reserved for ready PRs and main pushes. Draft
+runs publish `draft-test`, so their partial success cannot satisfy branch
+protection on the same commit after a ready transition. Both names come from
+the event context, independent of planner success. Partial draft runs may pass
+only when every selected component succeeds. Marking ready selects all lanes,
 the complete evidence merge, coverage diagnostics and API drill. Every later
 push to a ready PR also runs the full suite.
 
@@ -95,7 +97,7 @@ by its reusable workflow and is outside this lock-custody amendment.
 - [x] Main pushes and non-draft pull requests select all ten semantic lanes,
   authorization preflight, external checker, CLI contract and full aggregate.
 - [x] Draft MCP/docs-only changes start none of the heavy Backend components and
-  still produce the stable required status.
+  produce a separate `draft-test` status, never the required `test` status.
 - [x] Draft CLI-only, external-checker-only, backend test-only and backend
   runtime changes select their conservative expected components.
 - [x] Unknown backend test modules and CI-runner changes fail safe to every
@@ -130,6 +132,13 @@ by its reusable workflow and is outside this lock-custody amendment.
 | No test was deleted or deselected | Base-to-head diff and lane-catalogue ownership checks | No existing test deletion, skip or deselection. | Future catalogue changes remain guarded by the same ownership checks. |
 
 ## Review findings
+
+Takeover review found a same-commit transition gap: draft feedback used the
+required `test` context, whose completed result remains until dependency-gated
+full verification creates its replacement. Reserve that name for full runs and
+name draft feedback independently from trusted event state. Focused workflow
+proof must reject removal of this separation; no branch-protection change,
+test exclusion, or timeout increase is authorized by this repair.
 
 Initial CI/test review found that Git rename detection could hide the deleted
 backend source path when a file moved outside `backend/`. The selector now uses

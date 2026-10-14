@@ -126,14 +126,16 @@ contracts; unrelated MCP- or documentation-only changes start no heavy Backend
 component. Unknown backend test/support modules fail safe to all lanes. Marking
 a draft ready triggers the complete suite on the same head, and every later
 push while ready triggers it again. Draft feedback is not full-suite evidence
-and must never be cited as merge proof.
+and must never be cited as merge proof. Draft fan-in publishes `draft-test`,
+not the required `test` check. This prevents a green partial run from satisfying
+branch protection while full verification starts on the unchanged commit.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
 Authorization preflight runs alongside the selected lanes. On complete runs,
 the internal `full-suite` job requires preflight and every lane to succeed before
 validating evidence and coverage; failed, cancelled or skipped prerequisites
 remain blocking. The stable final `test` job then requires that full aggregate
-to succeed. On draft runs it instead requires every component selected by the
+to succeed. The separate `draft-test` result requires every component selected by the
 scope planner to succeed and requires unselected components to be skipped. This
 saves serial waiting on valid changes at the cost of lane work when preflight
 fails.
@@ -202,9 +204,9 @@ nodes directly with the admin URL while stripping application database URLs;
 every ordinary node remains behind isolated-runner custody and never receives
 the admin credential.
 
-Backend listens to `ready_for_review` and `converted_to_draft` so the required
-status changes between draft feedback and complete merge proof without an empty
-commit. Agent Gates remains independent and runs repository process and
+Backend listens to `ready_for_review` and `converted_to_draft` so feedback
+switches between separately named draft and full checks without an empty commit.
+Check names use event state even if scope planning fails. Agent Gates remains independent and runs repository process and
 documentation checks for each PR head; protected-branch review rules enforce
 exact-head human approval. Superseded runs for the same PR are cancelled.
 
@@ -228,8 +230,8 @@ non-symlink coverage files copied byte-for-byte for one literal
 `coverage combine`. Percentages are diagnostic, with no global or subsystem
 floor. The real API contract drill remains a separate isolated invocation inside
 the complete aggregate. The stable required `test` status contains no database
-or artifact work; it accepts only the exact selected draft results or the
-complete aggregate result.
+or artifact work; it accepts only the complete aggregate result. Draft results
+cannot fulfill this required context.
 
 ### Evidence bundle
 

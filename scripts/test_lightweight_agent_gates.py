@@ -244,7 +244,7 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow,
         )
         self.assertIn(
-            "  test:\n    if: ${{ always() }}\n"
+            "    if: ${{ always() }}\n"
             "    needs: [scope, auth-boundary-preflight, external-checker-runtime, "
             "lanes, minio-image, cli-public-contract, full-suite]",
             workflow,
@@ -556,6 +556,17 @@ class LightweightAgentGateTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertNotEqual(result.returncode, 0)
+
+    def test_draft_feedback_cannot_publish_the_required_full_suite_context(self) -> None:
+        workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
+        fan_in = workflow.split("\n  test:\n", 1)[1]
+        self.assertIn(
+            "    name: ${{ github.event_name == 'pull_request' "
+            "&& github.event.pull_request.draft && 'draft-test' || 'test' }}\n",
+            fan_in,
+        )
+        # Event state, not planner output, names even a failed-planner check.
+        self.assertIn("    if: ${{ always() }}\n", fan_in)
 
     def test_required_backend_status_accepts_only_the_exact_selected_scope(self) -> None:
         workflow = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")

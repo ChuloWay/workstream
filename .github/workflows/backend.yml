@@ -767,6 +767,7 @@ jobs:
           retention-days: 7
 
   test:
+    name: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft && 'draft-test' || 'test' }}
     if: ${{ always() }}
     needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, full-suite]
     runs-on: ubuntu-latest
