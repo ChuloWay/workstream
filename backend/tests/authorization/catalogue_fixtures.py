@@ -314,6 +314,7 @@ expected = {
     "artifact.task_import_source.read": ("project.task.manage", "PILOT-02A"),
     "project.task.screen": ("project.task.manage", "WS-ARCH-001-03C3"),
     "project.task.release": ("project.task.manage", "WS-ARCH-001-03C3"),
+    "project.task.revision.repair": ("project.task.manage", "PILOT-08"),
     "project.task.work_context.read": ("project.task.manage", "task-project-grant-authorization"),
     "operations.submission_gate.repair": (
         "operations.submission_gate.repair",
@@ -504,6 +505,7 @@ AUDIT_ALLOWED_ACTION_VALUES = {
     "artifact.task_import_source.read",
     "project.task.screen",
     "project.task.release",
+    "project.task.revision.repair",
     "project.task.work_context.read",
     "operations.task.start_override",
     "actor.admin_role_grant_history.read",

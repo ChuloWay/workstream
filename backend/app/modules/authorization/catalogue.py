@@ -115,6 +115,7 @@ class ActionId(StrEnum):
     PROJECT_TASK_IMPORT_BATCH_READ = "project.task.import_batch.read"
     PROJECT_TASK_SCREEN = "project.task.screen"
     PROJECT_TASK_RELEASE = "project.task.release"
+    PROJECT_TASK_REVISION_REPAIR = "project.task.revision.repair"
     TASK_CLAIM = "task.claim"
     TASK_START = "task.start"
     TASK_READ = "task.read"
@@ -301,6 +302,7 @@ class ActionOwner(StrEnum):
     PILOT_02A = "PILOT-02A"
     PILOT_02B = "PILOT-02B"
     PILOT_04 = "PILOT-04"
+    PILOT_08 = "PILOT-08"
     PILOT_10 = "PILOT-10"
 
     AUTH_07B = "WS-AUTH-001-07B"
@@ -579,6 +581,7 @@ ACTION_DEFINITIONS = (
     _active(ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_02A),
     _active(ActionId.PROJECT_TASK_SCREEN, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C3),
     _active(ActionId.PROJECT_TASK_RELEASE, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.ARCH_03C3),
+    _active(ActionId.PROJECT_TASK_REVISION_REPAIR, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.PILOT_08),
     _active(ActionId.PROJECT_TASK_WORK_CONTEXT_READ, PermissionId.PROJECT_TASK_MANAGE, ActionOwner.TASK_PROJECT_GRANT),
     _active(
         ActionId.OPERATIONS_TASK_START_OVERRIDE,
@@ -787,7 +790,7 @@ HISTORICAL_PERMISSION_IDS = PERMISSION_IDS - NEW_PERMISSION_IDS
 
 def _require_catalogue_counts() -> None:
     """Keep the closed action inventory and permission boundary exact."""
-    if len(PERMISSION_IDS) != 80 or len(ACTION_IDS) != 154:
+    if len(PERMISSION_IDS) != 80 or len(ACTION_IDS) != 155:
         raise RuntimeError("authorization catalogue count mismatch")
     if len(HISTORICAL_PERMISSION_IDS) != 49 or len(NEW_PERMISSION_IDS) != 31:
         raise RuntimeError("authorization permission boundary mismatch")
@@ -924,6 +927,7 @@ def _index_actions(definitions: tuple[ActionDefinition, ...]) -> MappingProxyTyp
         ActionId.TASK_CLAIM, ActionId.TASK_START, ActionId.TASK_WORK_CONTEXT_READ, ActionId.TASK_GUIDE_READ,
         ActionId.PROJECT_TASK_WORK_CONTEXT_READ, ActionId.OPERATIONS_TASK_START_OVERRIDE,
         ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,
+        ActionId.PROJECT_TASK_REVISION_REPAIR,
         ActionId.PROJECT_TASK_IMPORT, ActionId.PROJECT_TASK_IMPORT_BATCH_READ,
         ActionId.ARTIFACT_TASK_IMPORT_SOURCE_DECLARE, ActionId.ARTIFACT_TASK_IMPORT_SOURCE_UPLOAD,
         ActionId.ARTIFACT_TASK_IMPORT_SOURCE_READ,

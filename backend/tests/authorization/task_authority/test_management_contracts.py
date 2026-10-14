@@ -10,10 +10,103 @@ from pydantic import ValidationError
 
 from app.modules.audit.schemas import LifecycleAuditEventInput, LifecycleAuditEventType as Event
 from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.domain.task_authority import task_resource_guard
 from app.modules.authorization.runtime import PreparedAuthorizationHandleInvalid
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from tests.authorization.task_authority.test_audit_contract import event_fields
 from tests.authorization.task_authority.test_prepared import setup, prepare
+
+
+def repair_resource():
+    _, _, _, resource, _ = setup()
+    contributor_id = uuid4()
+    return resource.model_copy(update={
+        "task_status": "needs_revision",
+        "assigned_to": contributor_id,
+        "assignment_id": uuid4(),
+        "assignment_contributor_id": contributor_id,
+        "reason": "Correct the recorded preparation",
+        "idempotency_key": uuid4(),
+        "request_digest": "sha256:" + "b" * 64,
+        "revision_preparation_id": uuid4(),
+        "revision_preparation_sha256": "sha256:" + "c" * 64,
+        "revision_routing_manifest_id": uuid4(),
+    })
+
+
+@pytest.mark.parametrize("field", [
+    "task_status", "assigned_to", "assignment_id", "assignment_contributor_id",
+    "reason", "idempotency_key", "request_digest", "replay_assignment_id",
+    "replay_command_id", "revision_preparation_id", "revision_preparation_sha256",
+    "revision_routing_manifest_id",
+])
+def test_revision_repair_guard_requires_exact_active_assignment_and_preparation(field):
+    resource = repair_resource()
+    assert task_resource_guard(ActionId.PROJECT_TASK_REVISION_REPAIR, resource)
+    changed = {
+        "task_status": "ready", "assigned_to": uuid4(), "assignment_id": None,
+        "assignment_contributor_id": uuid4(), "reason": " ", "idempotency_key": None,
+        "request_digest": None, "replay_assignment_id": uuid4(), "replay_command_id": uuid4(),
+        "revision_preparation_id": None, "revision_preparation_sha256": None,
+        "revision_routing_manifest_id": None,
+    }
+    assert not task_resource_guard(
+        ActionId.PROJECT_TASK_REVISION_REPAIR, resource.model_copy(update={field: changed[field]})
+    )
+
+
+@pytest.mark.parametrize("status", [
+    "needs_revision", "submitted", "evaluation_pending", "review_pending", "accepted", "rejected",
+])
+def test_revision_repair_terminal_replay_requires_typed_committed_child(status):
+    resource = repair_resource().model_copy(update={"task_status": status})
+    action = ActionId.PROJECT_TASK_REVISION_REPAIR
+    if status != "needs_revision":
+        assert not task_resource_guard(action, resource)
+    assert task_resource_guard(
+        action, resource.model_copy(update={"revision_replay_preparation_id": uuid4()})
+    )
+
+
+@pytest.mark.parametrize("field", [
+    "revision_preparation_id", "revision_preparation_sha256", "revision_routing_manifest_id",
+    "revision_replay_preparation_id",
+])
+@pytest.mark.parametrize("action", [ActionId.PROJECT_TASK_CREATE, ActionId.TASK_READ])
+def test_other_task_actions_reject_revision_preparation_fields(action, field):
+    _, _, _, resource, _ = setup()
+    if action is ActionId.PROJECT_TASK_CREATE:
+        resource = resource.model_copy(update={
+            "task_status": "draft", "idempotency_key": uuid4(),
+            "request_digest": "sha256:" + "b" * 64,
+        })
+    assert task_resource_guard(action, resource)
+    injected = "sha256:" + "c" * 64 if field.endswith("sha256") else uuid4()
+    assert not task_resource_guard(action, resource.model_copy(update={field: injected}))
+
+
+@pytest.mark.parametrize("field", [
+    "revision_preparation_id", "revision_preparation_sha256", "revision_routing_manifest_id",
+    "revision_replay_preparation_id",
+])
+async def test_revision_repair_prepared_request_binds_preparation_fields(field):
+    _, repo, prepared, resource, evidence = setup()
+    repo.find_effective_grant = AsyncMock(return_value=repo.grant)
+    repair = repair_resource().model_copy(update={
+        "scope_project_id": resource.scope_project_id,
+        "actor_profile_id": resource.actor_profile_id,
+        "identity_link_id": resource.identity_link_id,
+    })
+    try:
+        handle, value = await prepare(prepared, repair, ActionId.PROJECT_TASK_REVISION_REPAIR)
+        changed = repair.model_copy(update={
+            field: "sha256:" + "d" * 64 if field.endswith("sha256") else uuid4()
+        })
+        with pytest.raises(PreparedAuthorizationHandleInvalid):
+            await prepared.consume(handle, ActionId.PROJECT_TASK_REVISION_REPAIR, value, changed)
+        assert not evidence.events
+    finally:
+        prepared.close()
 
 
 @pytest.mark.parametrize("field", [None, "resource_id", "scope_project_id", "request_digest"])

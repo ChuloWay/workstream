@@ -32,6 +32,7 @@ TASK_SUBMITTER_ACTIONS = frozenset(
 TASK_PROJECT_ROLE_ACTIONS = TASK_SUBMITTER_ACTIONS | TASK_PROJECT_ROLE_READ_ACTIONS
 TASK_MANAGER_ACTIONS = frozenset({
     ActionId.PROJECT_TASK_CREATE, ActionId.PROJECT_TASK_SCREEN, ActionId.PROJECT_TASK_RELEASE,
+    ActionId.PROJECT_TASK_REVISION_REPAIR,
 })
 TASK_IMPORT_BATCH_ACTIONS = frozenset({ActionId.PROJECT_TASK_IMPORT, ActionId.PROJECT_TASK_IMPORT_BATCH_READ})
 TASK_ACTIONS = TASK_PROJECT_ROLE_ACTIONS | TASK_MANAGER_ACTIONS | TASK_MANAGER_READ_ACTIONS | TASK_LOCKED_CONTEXT_READ_ACTIONS | {
@@ -59,6 +60,10 @@ class TaskAuthorityResourceContext(BaseModel):
     replay_assignment_id: UUID | None = None
     request_digest: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
     replay_command_id: UUID | None = None
+    revision_preparation_id: UUID | None = None
+    revision_preparation_sha256: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    revision_routing_manifest_id: UUID | None = None
+    revision_replay_preparation_id: UUID | None = None
 
 
 class TaskImportBatchResourceContext(BaseModel):
@@ -100,6 +105,37 @@ def parse_task_authority_binding(
 
 def task_resource_guard(action: ActionId, resource: TaskAuthorityResourceContext) -> bool:
     """No authority allow may substitute for assignment and task currentness."""
+    revision_fields = (
+        resource.revision_preparation_id,
+        resource.revision_preparation_sha256,
+        resource.revision_routing_manifest_id,
+        resource.revision_replay_preparation_id,
+    )
+    if action is ActionId.PROJECT_TASK_REVISION_REPAIR:
+        return (
+            all(value is not None for value in revision_fields[:3])
+            and (
+                resource.task_status == "needs_revision"
+                or (
+                    resource.revision_replay_preparation_id is not None
+                    and resource.task_status in {
+                        "submitted", "evaluation_pending", "review_pending", "accepted", "rejected",
+                    }
+                )
+            )
+            and resource.assignment_id is not None
+            and resource.assignment_contributor_id is not None
+            and resource.assigned_to == resource.assignment_contributor_id
+            and resource.reason is not None
+            and bool(resource.reason.strip())
+            and len(resource.reason) <= 1000
+            and resource.idempotency_key is not None
+            and resource.request_digest is not None
+            and resource.replay_assignment_id is None
+            and resource.replay_command_id is None
+        )
+    if any(value is not None for value in revision_fields):
+        return False
     if action in TASK_MANAGER_ACTIONS:
         if (resource.idempotency_key is None or resource.request_digest is None
                 or resource.replay_assignment_id is not None):
