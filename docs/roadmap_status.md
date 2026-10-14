@@ -21,8 +21,8 @@ not activate recognition writers, establish the local contributor journey or ass
 The REST reads traverse short-lived fixed membership with fresh authority on
 every page. The existing CLI consumes one public JSON or exact CSV response and
 cannot ship with this REST change: its closed JSON decoder rejects the new
-envelope and its CSV path ignores continuation. Issue #499 must reconcile both
-formats before the pagination change is ready.
+envelope and its CSV path ignores continuation. The remaining #497 CLI consumer
+integration must reconcile both formats before the pagination change is ready.
 
 ## Product Goal
 
@@ -245,8 +245,8 @@ operations with explicit retry keys and immutable receipts. Guide activation is
 separate. CLI contribution-evidence commands now provide self and authorized
 project reads, including exact server CSV downloads. Backend fixed-membership
 pagination is the intended REST outcome; the existing CLI consumer is an
-explicit ship blocker until issue #499 accepts and follows continuation in both
-formats.
+explicit ship blocker until the remaining #497 CLI consumer integration accepts
+and follows continuation in both formats.
 Explicit CLI ZIP preparation, admission-backed creation/replay, submission history
 and contributor checker findings now consume the public APIs. Preparation does
 not create a Submission; readiness recovery is an explicit same-key POST replay,
@@ -333,7 +333,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts; ART-07A1 metadata-only packet contract and REV-03B immutable normalized packet persistence with live ingest custody; REV-04A Review/finding/resolution and completed request storage | Future resolver proof; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
 | Review decision and revision | **Hidden acceptance core; runtime planned** | Review/revision policy identities and mutation authority, with `requires_second_review` fixed false through typed and database boundaries; REV-04A immutable Review storage; REV-04B source storage; REV-04C hidden source-neutral FinalAcceptance/TASK/CON participant; approved same-task revision-rebase semantics | ARCH-04E2-B supplies mandatory source AUTH and complete database/audit/outbox closure for hidden automated outcomes. Human decision authority/composition, revision preparation, replay and recovery remain |
 | Contribution and compensation truth | **Hidden shared participant plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage; obsolete guide-keyed payment storage and task-local payment fields removed; CON-07 source-neutral submitter participant and complete award sets; REV-04C composes it with FinalAcceptance/TASK effects in the caller transaction; 04F2 checker remediation creates no contribution or award. The bounded local public drill produced exactly one false-policy FinalAcceptance, submitter ContributionRecord and project-points award, with no Review | ARCH-04E2-B supplies exact routing authority/evidence, complete-set database closure and audit/outbox under REV-12A4A. Selected production request/completion delivery, 04F3 exact-cause replacement and 04F4 hidden retry are implemented; supported false-guide activation is implemented. Only actual Reviews create reviewer records. Obligation/root/ordinal custody remains deferred until fulfillment activation; no public recognition or fulfillment route is live |
-| Contribution evidence reads | **Public fixed-membership REST pages; CLI integration blocked** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities. Each page has fresh authority and one repeatable-read response transaction; selections through 100,000 contributions retain page-one membership behind signed scope/filter/format/limit-bound cursors, with complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV. CLI24 consumes one public response and saves exact server CSV privately without overwrite, but its closed JSON decoder rejects the paginated envelope and its CSV path ignores continuation | Issue #499 must reconcile both CLI formats before the REST pagination change can ship; no recognition mutation, fulfillment, payout or deployed-service claim |
+| Contribution evidence reads | **Public fixed-membership REST pages; CLI integration blocked** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities. Each page has fresh authority and one repeatable-read response transaction; selections through 100,000 contributions retain page-one membership behind signed scope/filter/format/limit-bound cursors, with complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV. CLI24 consumes one public response and saves exact server CSV privately without overwrite, but its closed JSON decoder rejects the paginated envelope and its CSV path ignores continuation | The remaining #497 CLI consumer integration must reconcile both formats before the REST pagination change can ship; issue #499 currently covers submission/status/findings rather than this export contract; no recognition mutation, fulfillment, payout or deployed-service claim |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove diagnostics during the release drill; no deployed monitoring claim |
 | Frontend and pilot | **Local runtime foundation; product pilot planned** | Checkout-isolated Docker Compose API, prefork Celery process, beat, PostgreSQL, Redis and MinIO stack with local Flow-HMAC identities, existing authority bootstrap/grants, configurable loopback ports and project-scoped state; a pinned offline sample image build and separate oracle were proved under gVisor; React + Vite + TypeScript stack decision | Benchmark representative project checker images and prove hosted isolation before choosing production limits; complete provider-backed guide compilation and activated-guide scoped task-denial proof on the base stack, implement only stable backed frontend surfaces, run the real internal pilot, repair findings, and complete release drills; Docker Desktop/macOS runtime proof remains |
@@ -1008,7 +1008,7 @@ Delivered foundations (bounded local journey proven; no deployment claim)
     active human self or covering PM / exact-project Finance -> JSON or CSV
     REST fixed membership -> signed JSON / CSV-header continuation, fresh AUTH per page
     existing CLI rejects the JSON envelope / ignores CSV continuation
-    -> issue #499 must reconcile both formats before this REST change can ship
+    -> the remaining #497 CLI consumer integration must reconcile both formats before this REST change can ship
     no recognition writer or fulfillment dependency
 
 Proven bounded local first-layer drill (scripted approved guide, local Flow-compatible auth)
@@ -1110,8 +1110,8 @@ v0.1 is not ready until all of the following are true:
   self or project authority per page and fixed membership for selections through
   100,000 contributions. Signed cursors bind caller/scope/filters/format/limit;
   excess selection refuses without partial output. The existing CLI cannot ship
-  with the paginated REST contract until issue #499 accepts the JSON envelope and
-  follows JSON and CSV continuation. Exported
+  with the paginated REST contract until the remaining #497 CLI consumer
+  integration accepts the JSON envelope and follows JSON and CSV continuation. Exported
   award quantities are earned facts, not proof of external payment.
 - Configure secured diagnostic collection with bounded retention and access,
   and prove API/Celery correlation, privacy and collector-outage behavior in

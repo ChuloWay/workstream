@@ -88,7 +88,8 @@ the retained page IDs through the existing owner ports.
 
 ### Not allowed
 
-- CLI production or consumer changes; issue #499 has separate ownership.
+- CLI production or consumer changes; this backend change does not assign or
+  implement that follow-up.
 - Contribution, award, policy, acceptance, review, task, artifact or economic
   mutation; fulfillment, payout, reconciliation, reputation or broad
   all-project export.
@@ -280,8 +281,8 @@ CSV row counts remain distinct from contribution counts.
 | Migration constraints and model parity | Exact real-PostgreSQL `test_snapshot_storage_bounds_model_parity_and_immutable_membership` after atomically seeding the baseline-required actor/identity pair | 1 passed in 143.69 seconds; database and role cleanup complete | Hosted schema lane remains |
 | Fixed 1,001-member storage/traversal and contended pruning | Isolated PostgreSQL execution of `test_real_postgres_retains_and_slices_1001_members_across_sessions` and `test_locked_expired_pruning_skips_contention_and_preserves_live_cursor` | 2 passed in 278.90 seconds through migration `0040_contribution_export_page`; database, role and container cleanup complete. The run used committed base `11db9d21dfe4ef119d9d7d1801c75921fd9708e1` plus the exact uncommitted test file later frozen in this change, SHA-256 `d54ae3a16b4489dd04e4041e554945631ffebe1be860a8c0a533cb0fb96c4b45`. | This is dirty-tree execution with content custody, not an exact committed-head run; hosted complete lane execution remains required |
 | Hosted failure diagnosis at draft head `84542bf37` | Inspect GitHub Actions run `38528310566` job steps and bounded logs | All ten semantic lanes stopped at the unchanged 80% docstring gate because the new pagination modules lowered total coverage to 79.9%; the added function documentation restores 80.2%. The CLI job's first evidence read returned 503 because its separate pytest root had not activated the required existing cursor-secret fixture. | Fresh hosted run required after the repaired head is pushed |
-| Focused real CLI/API contract after secret-fixture repair | Exact socket/PostgreSQL contribution evidence node with the independently built CLI | The backend now returns its successful JSON page, and the current CLI fails it as `invalid_api_response` because strict decoding does not admit `next_cursor`; database and role cleanup complete | Issue #499 must consume continuation or fail explicitly before this backend contract can ship or hosted CLI CI can pass |
-| CLI consumer continuation after main `24119122b` | Inspect `cli/internal/api/contribution_evidence.go` and `cli/internal/command/contribution_evidence.go` | JSON strict decoding has no `next_cursor`; both JSON and CSV perform one request, and CSV ignores `X-Workstream-Next-Cursor`. Issue #499 remains open and no separate continuation PR is open; its current issue body covers submission/status rather than this export contract. | The continuation correction still needs explicit CLI ownership before coordinated shipment; this change does not alter CLI production behavior |
+| Focused real CLI/API contract after secret-fixture repair | Exact socket/PostgreSQL contribution evidence node with the independently built CLI | The backend now returns its successful JSON page, and the current CLI fails it as `invalid_api_response` because strict decoding does not admit `next_cursor`; database and role cleanup complete | The remaining #497 CLI consumer integration must consume continuation or fail explicitly before this backend contract can ship or hosted CLI CI can pass |
+| CLI consumer continuation after main `24119122b` | Inspect `cli/internal/api/contribution_evidence.go` and `cli/internal/command/contribution_evidence.go` | JSON strict decoding has no `next_cursor`; both JSON and CSV perform one request, and CSV ignores `X-Workstream-Next-Cursor`. Issue #499 remains open and no separate continuation PR is open; its current issue body covers submission/status rather than this export contract. | Issue #497 retains ownership of the separate CLI correction before coordinated shipment; this change does not alter CLI production behavior |
 | Final hosted backend and CLI execution at `90d36d102` | GitHub Actions run `38551898443`, including one failed-job retry | The repaired schema lane and eight other backend lanes passed. `project_lifecycle_a` reached the 1,200-second lane limit twice with `interrupted=true` and no failing node or traceback; the unchanged lane passed at prior head `00771a387`. CLI passed 9 tests and failed only the public contribution-evidence node with `invalid_api_response`. | Aggregate remains failed by the incomplete project lane and the known CLI continuation incompatibility; no timeout increase or skipped test is introduced |
 
 ## Review findings
@@ -304,8 +305,9 @@ actor business row changes and continuations allocate no slot.
 Exact-candidate QA/test-delta review identified missing real-PostgreSQL coverage
 for 1,001-member storage/continuation and contended bounded pruning. The two
 focused regressions above now cover those boundaries. Its high-severity CLI
-integration finding remains valid and externally owned by issue #499; this
-backend change stays blocked from coordinated shipment until that consumer
+integration finding remains valid, and issue #497 owns the remaining
+export-continuation correction through a separate CLI implementation. This backend change stays blocked from
+coordinated shipment until that consumer
 accepts and follows the JSON and CSV continuation contracts.
 
 ## Reconciliation
@@ -313,10 +315,10 @@ accepts and follows the JSON and CSV continuation contracts.
 - Current-source reconciliation: the implementation is reconciled with main
   `24119122bf5b4284878996b7c655072e666d96e1`, including CLI25 submission and
   the merged MCP runtime dependency repair. Neither merge changed the
-  contribution evidence consumer; continuation remains an unresolved CLI
-  handoff associated with open issue #499, whose present scope does not itself
-  enumerate the export cursor/header contract.
-- Next usable boundary: CLI cursor traversal can consume the merged backend
-  contract in its separately owned change.
+  contribution evidence consumer; continuation remains an unresolved CLI handoff
+  within issue #497. Open issue #499 separately covers submission/status and does not enumerate this export
+  cursor/header contract.
+- Next usable boundary: the remaining #497 CLI cursor traversal change can
+  consume the merged backend contract.
 - Remaining risks: exact operational cost of 100,000-ID materialization and
   expiry pruning must be measured on PostgreSQL; no deployed-service claim.

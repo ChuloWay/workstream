@@ -479,8 +479,8 @@ freshly authorize every page, and expose continuation in JSON or the CSV
 response header. The current CLI commands consume one response page; large CLI
 traversal is separate work. This paginated REST contract cannot ship with that
 consumer: its closed JSON decoder rejects `next_cursor`, and CSV ignores the
-continuation header. Issue #499 must reconcile both formats before this backend
-change is ready. Earned awards are not proof of payment; these reads do not
+continuation header. The remaining #497 CLI consumer integration must reconcile both
+formats before this backend change is ready. Earned awards are not proof of payment; these reads do not
 activate unfinished lifecycle writers.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
