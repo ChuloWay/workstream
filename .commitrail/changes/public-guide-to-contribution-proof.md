@@ -175,9 +175,9 @@ lock. This is a product defect, not an inference failure.
 Additional allowed files are
 `backend/app/modules/projects/guide_compilation/service.py` and
 `backend/tests/projects/guide_compilation/test_automatic_request.py`.
-Use the existing ProjectRepository parent lock at the start of the request
-transaction, before replay classification, AUTH preparation and admission. Both
-automatic and correction requests use that transaction. Do not add a Project lock
+Use the existing ProjectRepository parent lock after prepared AUTH and before
+Guide/Setup admission. Both automatic and correction requests use that
+transaction; durable replay retains its existing authority validation. Do not add a Project lock
 to the shared manifest reader or weaken diagnostic/AUTH locks.
 
 The focused PostgreSQL regression pauses real attempt reservation immediately
@@ -200,9 +200,37 @@ required after PostgreSQL and connected-runtime proof.
 
 The isolated PostgreSQL automatic-request module completed 29 tests, including
 concurrent public latest-setup observation, replay, revocation and request custody.
-Database and MinIO cleanup completed. The pre-repair-method probe and connected
-runtime rerun remain pending; this focused result is not full journey proof.
+Database and MinIO cleanup completed. The pre-repair-method probe reproduced the intended deadlock/503 failure with
+cleanup complete. The connected runtime rerun stopped at external service health
+before product operations; this focused result is not full journey proof.
 The pure drill tests passed five cases, including source commitment substitutions
 and bounded observation without hiding terminal errors. Initial hosted
 `project_lifecycle_a` exceeded its 1,200-second bound, so full-suite evidence is
 incomplete and must be refreshed on the repaired candidate.
+
+## Lock-order review correction
+
+The first repair passed the automatic-service regression but put Project before
+AUTH. Focused architecture review traced a same-manager inversion against existing
+AUTH-first guide/policy mutations. It also confirmed public diagnostic reads lock
+that same actor after Project. The final bounded correction must therefore align
+both paths as actor/link authority custody before Project before Guide/Setup.
+
+Additional allowed files:
+- `backend/app/modules/authorization/kernel.py`: a narrow serialized-admin-read
+  actor prelock, using the existing owner repository; no authorization decision,
+  authority token, bypass, or cached grant is issued.
+- `backend/app/modules/projects/authorization_reads.py`: invoke that prelock
+  before diagnostic parent locks; retain final `require` on exact locked facts,
+  current grant validation and transactional authorization evidence.
+- `backend/tests/projects/diagnostic_read_fixtures.py` and
+  `backend/tests/projects/test_diagnostic_read_composition.py`: update the owner
+  fixture and prove prelocking cannot substitute for final authorization.
+- The already allowed automatic-request test module: add real same-manager
+  guide mutation versus public diagnostic-read concurrency, observe the
+  intermediate actor-lock wait, and prove omission of read prelocking recreates
+  the deadlock. Retain automatic reservation concurrency and revocation proofs.
+
+Existing human mutation ordering remains unchanged. No shared manifest reader,
+policy, action availability, or authorization permissions change. The narrow
+review recommendation above supersedes the earlier Project-before-AUTH plan.

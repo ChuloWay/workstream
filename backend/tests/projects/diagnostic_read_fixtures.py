@@ -34,7 +34,9 @@ def make_diagnostic_case() -> SimpleNamespace:
     return SimpleNamespace(
         project_id=project_id, guide_id=guide_id, target_id=target_id,
         project=project, guide=guide, target=target, repository=repository,
-        authorization=SimpleNamespace(require=AsyncMock()),
+        authorization=SimpleNamespace(
+            require=AsyncMock(), prelock_serialized_admin_read_actor=AsyncMock(),
+        ),
     )
 
 

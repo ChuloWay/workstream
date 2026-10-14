@@ -499,6 +499,7 @@ async def authorize_project_diagnostic_read(
     if action_id not in PROJECT_DIAGNOSTIC_TARGET_KIND_BY_ACTION:
         raise ValueError("unsupported project diagnostic read action")
 
+    await authorization.prelock_serialized_admin_read_actor(action_id)
     project = await repository.get_project(project_id, for_update=True)
     guide = await repository.lock_project_guide(guide_id) if project is not None else None
     if guide is not None and guide.project_id != project_id:

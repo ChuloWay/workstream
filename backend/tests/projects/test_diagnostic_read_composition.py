@@ -125,3 +125,41 @@ async def test_empty_diagnostic_collection_remains_readable(action: ActionId, me
     assert context.target_binding_digest == canonical_json_hash([])
     assert context.source_snapshot_id is None
     assert context.source_snapshot_hash is None
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_prelock_precedes_product_but_does_not_authorize():
+    """The actor lock cannot replace authorization of the final locked facts."""
+    case = make_diagnostic_case()
+    observed = []
+
+    async def prelock(action):
+        assert action is ActionId.PROJECT_SETUP_RUN_READ
+        observed.append("actor")
+
+    async def project(*args, **kwargs):
+        observed.append("project")
+        return case.project
+
+    async def deny(*args):
+        observed.append("decision")
+        raise PermissionError("final authority denied")
+
+    case.authorization.prelock_serialized_admin_read_actor.side_effect = prelock
+    case.repository.get_project.side_effect = project
+    case.authorization.require.side_effect = deny
+    with pytest.raises(PermissionError, match="final authority denied"):
+        await read_diagnostic(case, ActionId.PROJECT_SETUP_RUN_READ)
+    assert observed == ["actor", "project", "decision"]
+
+
+@pytest.mark.asyncio
+async def test_actor_prelock_rejects_mutation_before_database_access():
+    from unittest.mock import AsyncMock
+    from app.modules.authorization.kernel import AuthorizationService
+
+    service = object.__new__(AuthorizationService)
+    service._admin = SimpleNamespace(lock_request_actor=AsyncMock())
+    with pytest.raises(ValueError, match="unsupported serialized administrative read"):
+        await service.prelock_serialized_admin_read_actor(ActionId.PROJECT_CREATE)
+    service._admin.lock_request_actor.assert_not_awaited()

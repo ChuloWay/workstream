@@ -341,6 +341,15 @@ class AuthorizationService:
         self._sealed_prelocked: set[_PrelockedAuthority] = set()
         self._prepared_consumers: dict[object, object] = {}
 
+    async def prelock_serialized_admin_read_actor(self, action_id: ActionId) -> None:
+        """Order caller custody before product rows; final require still decides access."""
+        if action_id not in _SERIALIZED_ADMIN_READS:
+            raise ValueError("unsupported serialized administrative read")
+        if isinstance(self._context, HumanAuthorizationContext):
+            await self._admin.lock_request_actor(
+                self._context.identity_link_id, self._context.actor_profile_id
+            )
+
     def _register_prepared_consumer(
         self,
         owner: object,

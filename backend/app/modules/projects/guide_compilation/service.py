@@ -169,13 +169,6 @@ class GuideCompilationService:
         _require_identity_matches(facts, identity)
         try:
             async with self._session.begin():
-                # Match public diagnostics: parent custody precedes Guide/Setup.
-                # The attempt INSERT also needs Project through its foreign key.
-                project = await ProjectRepository(self._session).get_project(
-                    str(facts.project_id), for_update=True
-                )
-                if project is None:
-                    raise GuideCompilationIntegrityError("compilation project unavailable")
                 repository = GuideCompilationRepository(self._session)
                 existing = await self._existing_request(repository, actor, facts, origin)
                 if existing is not None:
@@ -186,6 +179,13 @@ class GuideCompilationService:
                 handle = await self._authorization.prepare_request(
                     actor=actor, facts=facts, origin=origin
                 )
+                # Match manager mutations and diagnostic reads: AUTH, then
+                # Project, then Guide/Setup and the attempt's parent FK locks.
+                project = await ProjectRepository(self._session).get_project(
+                    str(facts.project_id), for_update=True
+                )
+                if project is None:
+                    raise GuideCompilationIntegrityError("compilation project unavailable")
                 prepared_facts = facts
                 facts, correction_setup, replay = await self._admit_request(
                     repository, actor, prepared_facts, identity, origin
