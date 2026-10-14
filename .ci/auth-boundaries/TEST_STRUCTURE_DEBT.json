@@ -2,11 +2,11 @@
   "entries": [
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "9ecbae10581f61d2b93c13591d5edb80c9ea2e729b8dc005f918c32b34120c35",
-      "end_line": 1288,
+      "content_sha256": "14f0f643e7437294634e121c866759b5c3d3021aa63db181462255330d7be59e",
+      "end_line": 1279,
       "hard_limit": 1200,
       "kind": "production_file",
-      "observed_lines": 1288,
+      "observed_lines": 1279,
       "path": "backend/app/modules/authorization/kernel.py",
       "qualified_symbol": null,
       "removal_chunk": "WS-AUTH-003-CLOSE",
@@ -26,27 +26,27 @@
     },
     {
       "capability": "oversized_authorization_structure",
-      "content_sha256": "2252b6dc18c48b44661279069ffb85ffc84947830e72e9b1166c8204f73858f2",
-      "end_line": 479,
+      "content_sha256": "4ad42d0111fe9f8bf57d4d71042010603fca6779e5b5e6a65e869cb8a83379cb",
+      "end_line": 500,
       "hard_limit": 100,
       "kind": "production_function",
-      "observed_lines": 105,
+      "observed_lines": 102,
       "path": "backend/app/modules/authorization/kernel.py",
       "qualified_symbol": "AuthorizationService._prepare_prelocked",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 375
+      "start_line": 399
     },
     {
       "capability": "oversized_authorization_structure",
       "content_sha256": "85ac782c2bf9d5e7b5d1cf5435d9acc0bfdc7fce4002cfc85741a27d864b6490",
-      "end_line": 837,
+      "end_line": 828,
       "hard_limit": 100,
       "kind": "production_function",
       "observed_lines": 107,
       "path": "backend/app/modules/authorization/kernel.py",
       "qualified_symbol": "AuthorizationService._require_prelocked",
       "removal_chunk": "WS-AUTH-003-CLOSE",
-      "start_line": 731
+      "start_line": 722
     },
     {
       "capability": "oversized_authorization_structure",

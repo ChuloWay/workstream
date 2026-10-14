@@ -6,8 +6,8 @@ The goal remains **claim -> upload ZIP -> pre-submit feedback or immutable
 Submission -> automatic post-submit checking -> outcome**. For an eligible
 project with locked `human_review_required=false`, the outcome includes shared
 FinalAcceptance, the submitter ContributionRecord and applicable award facts.
-The bounded local public API and durable-worker journey passed under scripted
-approved-guide preconditions; hosted operation and human review remain separate.
+The bounded local public API and durable-worker journey starts from public
+guide inputs with recorded inference; hosted operation and human review remain separate.
 
 ### Delivered foundations
 
@@ -28,14 +28,17 @@ exact checker remediation. [ARCH-04E3-B](../WS-ARCH-001-04E3B.md) admits a
 complete false-policy guide only when its approved requirements have supported
 exact checks, with matching Python and PostgreSQL custody. It corrects REV's
 selected-production manifest. The integrated public API and durable-worker
-drill passed at `d5703d9c6` under scripted approved-guide preconditions and
-local Flow-compatible auth.
+drill now begins with public original-guide upload and task examples, real
+Celery setup using recorded inference, public review/revision configuration,
+separate manager approvals and Finance publication. See the [connected
+proof](../../../changes/public-guide-to-contribution-proof.md); local
+Flow-compatible auth remains an explicit limitation.
 
 ### Bounded local proof and remaining release boundary
 
 | Boundary | Current gap | Required proof |
 | --- | --- | --- |
-| First-layer integration drill | Passed at `d5703d9c6`: public claim/ZIP intake, PRE/POST, remediation, both locked policy outcomes, worker restart, late authority revocation and exact ContributionRecord/award evidence over PostgreSQL, MinIO, Redis, prefork Celery and Beat | Reproduce and operate with intended hosted identity and infrastructure. The local run used scripted approved-guide facts, a Flow-compatible local signer and development containers; live setup inference, human review, payment fulfillment and deployment remain separate |
+| First-layer integration drill | Connected public guide upload/setup/approval with recorded inference, then public claim/ZIP intake, PRE/POST, remediation, both locked policy outcomes, worker restart, late authority revocation and exact ContributionRecord/award evidence over PostgreSQL, MinIO, Redis, prefork Celery and Beat | Reproduce and operate with intended hosted identity and infrastructure. The local run used recorded inference, a Flow-compatible local signer and development containers; live setup inference, human review, payment fulfillment and deployment remain separate |
 
 Guide activation itself does not start REV. False/pass still needs the existing
 Operator-authorized LIVE REV generation at execution time. A known pre-effect

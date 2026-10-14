@@ -33,15 +33,27 @@ owner drill does not provide public contributor upload/CLI, false-guide
 activation or hosted gVisor deployment proof. Run it through the isolated-test
 runner so owned database, role and MinIO cleanup are checked.
 
-The companion `run_public_journey_probe.py` starts after a deliberately scripted
-canonical guide compilation and its separately approved policies. Its guide
-documents have fixture custody; the probe does not certify a live model call,
-real source-document upload, or a general-purpose work judge. It registers this
-directory's small deterministic PRE/POST checker image by its exact local
-registry digest. The tested human identities are stored actors with locally
-signed Flow-compatible tokens, not a hosted Flow Identity service.
+The companion `run_public_journey_probe.py` starts with public project/guide
+creation, original synthetic Markdown bytes and two task examples. The public
+upload dispatches real Celery setup. Its explicit `guide_worker` entry point
+selects a recorded inference adapter through the existing typed runtime port;
+production composition has no test switch. The adapter reads the actual scoped
+ART document grant and checks exact bytes, normalized examples and correction
+feedback. Stored source commitments and the runtime-observed canonical input
+hash must agree. This proves integration, not model reasoning or hosted inference.
 
-From that explicit precondition, the companion must use a live loopback API,
+The manager configures review/revision policies through public conditional PUTs,
+reads the proposal, separately approves PRE and POST, and activates the exact
+publicly discovered context. Finance creates and publishes ContributionPolicy
+through its public API. The human-review branch also exercises a manual setup
+correction, successor discovery, predecessor preservation and request replay.
+Infrastructure prerequisites are the immutable PRE/POST image registrations,
+local Flow-compatible human/service identities and, for the compensated branch,
+a project points unit and existing AUTH-governed adapter binding. They do not
+inject guide, proposal, policy, Task, Submission, acceptance or award facts.
+Locally signed tokens do not certify the hosted Flow Identity service.
+
+The companion uses a live loopback API,
 the public manager guide activation, project submitter grant, and task lifecycle, contributor ZIP
 preparation and canonical Submission POST, and a real Redis-backed prefork
 Celery worker and Beat scheduler for artifact and outbox delivery. The isolated
@@ -79,9 +91,28 @@ and API/worker/Beat processes belong to one disposable local run; the isolated-t
 runner owns database/role/MinIO namespace cleanup. This still does not certify
 hosted gVisor, arbitrary checker quality, live human review, or deployment.
 
-`run_public_journey_probe.py --fixture-bootstrap-only` is a narrow setup
-diagnostic for both approved draft policy modes and an ordinary Flow-linked
-contributor. Run it only against its own disposable isolated PostgreSQL database.
-It uses a placeholder checker digest and local fixture artifact namespace, so
-its database cannot be reused for the real-image MinIO drill. It stops before
-public activation, project role grants, HTTP, broker, or checker execution.
+Run from `backend/` with the backend environment installed, disposable PostgreSQL,
+MinIO, Redis and a local digest registry. Build `workstream-checker-service` from
+`external_checkers/Cargo.toml`; build/push this directory's Dockerfile and use its
+registry-resolved digest, not a tag. Set the supported isolated-runner admin URL
+and MinIO endpoint; the runner allocates and removes its own database, role,
+bucket and prefix. Redis and registry must be owned by this drill, and the caller
+must remove those containers after the run. Never use a deployment broker.
+
+```sh
+PYTHONPATH=.:tests:.. .venv/bin/python scripts/run_isolated_tests.py \
+  --metadata-json /tmp/guide-journey-cleanup.json --timeout-seconds 1500 \
+  --lane guide-journey -- \
+  .venv/bin/python ../experiments/pilot04_external_checker_runtime/run_public_journey_probe.py \
+  --image-reference 'localhost:<port>/<repository>@sha256:<manifest-digest>' \
+  --service-binary /absolute/path/to/workstream-checker-service \
+  --broker-url redis://127.0.0.1:<owned-port>/0 \
+  --work-dir /tmp/guide-journey-private-run
+```
+
+Use a new metadata path and work directory for each run. Diagnostics stay in the
+private work directory; the final JSON contains custody identifiers and outcomes,
+not guide contents, tokens or provider credentials. Check `cleanup_complete`,
+`database_cleanup_complete` and `minio_cleanup_complete` in the runner metadata.
+The drill stops owned API, worker, Beat and Rust processes even on failure.
+The removed approved-guide bootstrap mode is not an alternate entry path.

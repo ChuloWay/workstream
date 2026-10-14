@@ -27,7 +27,7 @@ from app.modules.authorization.domain.guide_manager_resources import guide_manag
 from app.modules.authorization.domain import adapter_bindings, checker_registry, checker_retry, contribution_policies, guide_compilation as compilation
 from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS as _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
-    CONTEXT_DIGEST_ACTIONS, EXACT_PROJECT_MANAGER_SCOPE_ACTIONS,
+    CONTEXT_DIGEST_ACTIONS,
     supports_prepared_denial,
 )
 from app.modules.authorization.domain.audit import CONTEXT_DIGEST_RESOURCE_TYPES
@@ -40,6 +40,7 @@ from app.modules.authorization.policy import ACTIVE_GUIDE_ADMIN_ROLES
 from app.modules.authorization.domain.read_dispatch import READ_ACTIONS, read_denial
 from app.modules.authorization.prepared_admin_authority import (
     lock_admin_mutation_authority, lock_project_create_authority,
+    lock_project_manager_authority,
     project_create_prelocked_denial,
 )
 from app.modules.authorization.repository import AdminAuthorizationRepository
@@ -180,6 +181,29 @@ _ADMIN_MUTATIONS = frozenset(
         ActionId.PROJECT_ROLE_GRANT_REVOKE,
     }
 ) | adapter_bindings.ADAPTER_BINDING_MUTATION_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_MUTATION_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | frozenset({ActionId.OPERATIONS_CHECKER_RETRY})
+
+
+def _prepared_admin_role_locker(action_id):
+    """Select the only supported prepared admin-role authority locker."""
+    if action_id in _ADMIN_MUTATIONS:
+        return lock_admin_mutation_authority
+    if action_id in _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS:
+        return lock_project_manager_authority
+    raise ValueError("unsupported prepared admin-role action")
+
+
+async def prelock_serialized_admin_read_actor(
+    authorization: AuthorizationService, action_id: ActionId
+) -> None:
+    """Order caller custody before product rows; final require still decides access."""
+    if action_id not in _SERIALIZED_ADMIN_READS:
+        raise ValueError("unsupported serialized administrative read")
+    if isinstance(authorization._context, HumanAuthorizationContext):
+        await authorization._admin.lock_request_actor(
+            authorization._context.identity_link_id,
+            authorization._context.actor_profile_id,
+        )
+
 
 _ARTIFACT_INTERNAL_RESOURCES = {
     ActionId.ARTIFACT_GUIDE_SOURCE_READ: (
@@ -432,13 +456,10 @@ class AuthorizationService:
                 context.actor_profile_id, context.identity_link_id
             )
             context = self._locked_human_context(locked, context)
-        elif action_id in _ADMIN_MUTATIONS:
-            context, grant = await lock_admin_mutation_authority(
-                self._admin, context, scope, action_id, action.permission_id, self._locked_human_context,
-            )
-        elif action_id in _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS:
-            context, grant = await self._prepare_project_manager(
-                context, action.permission_id, scope, action_id,
+        elif action_id in _ADMIN_MUTATIONS | _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS:
+            context, grant = await _prepared_admin_role_locker(action_id)(
+                self._admin, context, scope, action_id, action.permission_id,
+                self._locked_human_context,
             )
         elif action_id is ActionId.PROJECT_CREATE:
             context, grant = await lock_project_create_authority(
@@ -477,36 +498,6 @@ class AuthorizationService:
         )
         self._sealed_prelocked.add(authority)
         return authority
-
-    async def _prepare_project_manager(self, context, permission, scope, action_id):
-        """Lock the current human and covered manager grant before product resources."""
-        if (
-            not isinstance(context, HumanAuthorizationContext)
-            or scope.kind is not PreparedAuthorityScopeKind.PROJECT
-            or scope.project_id is None
-        ):
-            raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.SCOPE_NOT_AUTHORIZED)
-        if action_id is ActionId.PROJECT_GUIDE_ACTIVATE:
-            await self._admin.lock_control()
-        locked = await self._admin.lock_request_actor(
-            context.identity_link_id, context.actor_profile_id
-        )
-        context = self._locked_human_context(locked, context)
-        grant = await self._admin.find_effective_grant(
-            context.actor_profile_id,
-            permission,
-            scope_project_id=scope.project_id,
-            for_update=True,
-            allowed_roles=frozenset({AdminRole.PROJECT_MANAGER}),
-            exact_project_scope=(action_id in EXACT_PROJECT_MANAGER_SCOPE_ACTIONS),
-        )
-        if grant is None or (action_id in EXACT_PROJECT_MANAGER_SCOPE_ACTIONS and (
-            grant.scope_type != "project" or grant.scope_project_id != str(scope.project_id)
-        )):
-            raise PreparedAuthorizationUnsupported(
-                AuthorizationDenialCode.PERMISSION_NOT_GRANTED
-            )
-        return context, grant
 
     @staticmethod
     def _locked_human_context(locked, original) -> HumanAuthorizationContext:
