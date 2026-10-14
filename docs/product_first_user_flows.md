@@ -10,14 +10,15 @@ joint release complete. Earlier project/task/submission/checker behavior keeps
 its separately recorded implementation status.
 
 The detailed review flow below describes `human_review_required=true`, the
-default in the existing versioned ReviewPolicy setting. False is a separately
-planned post-check TASK handoff to authorized FinalAcceptance and CON, without
-human queues, leases, Reviews or reviewer contributions. Required checks and
-exact immutable evidence still apply. The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
-defines both triggers. Runtime remains unavailable until the same participant
-input/schema requires verified authority/evidence and gains routing/currentness and exact
-shared release proof. REV-04C supplies only the hidden mechanical
-FinalAcceptance/TASK/CON participant.
+default in the existing versioned ReviewPolicy setting. The selected backend
+composition implements the false-policy post-check TASK handoff to authorized
+FinalAcceptance and CON, without human queues, leases, Reviews or reviewer
+contributions. Required checks and exact immutable evidence still apply. The
+[shared acceptance contract](spec_review_lifecycle.md#finalacceptance) defines
+both triggers. New false/pass effects require an Operator-authorized live REV
+generation and verified authority, currentness and evidence through the shared
+FinalAcceptance/TASK/CON participant. The bounded local public durable-worker
+drill passed under scripted approved-guide preconditions; this is not a deployment claim.
 
 The first user flows prove that Workstream can run real work from intake to acceptance. These flows come before any advanced routing or settlement.
 
@@ -226,7 +227,7 @@ Acceptance:
 
 ## Flow 7: Accepted Work, FinalAcceptance, And Submitter Contribution
 
-Both planned triggers invoke one shared acceptance operation. The human branch:
+Both triggers use one shared acceptance operation. The planned human branch:
 
 1. Reviewer accepts task.
 2. The reviewer `completed_review` contribution created after the Review
@@ -251,8 +252,11 @@ reviewer award. Checker output remains evidence, not a human decision.
 
 Correctable checker failures follow ARCH-04F under the locked attempt context;
 infrastructure/setup uncertainty never accepts or invents a human revision.
-This false branch is planned, not currently enabled. Fulfillment remains
-post-commit for either trigger and cannot change accepted work.
+The selected backend composition enables this branch only under an
+Operator-authorized live REV generation; a typed pre-effect non-live refusal
+rolls back and uses bounded retry. The bounded local public drill passed under
+scripted approved-guide preconditions.
+Fulfillment remains post-commit for either trigger and cannot change accepted work.
 
 Acceptance:
 

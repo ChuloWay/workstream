@@ -32,3 +32,56 @@ verified bytes and restarted completion delivery with exact replay. This hidden
 owner drill does not provide public contributor upload/CLI, false-guide
 activation or hosted gVisor deployment proof. Run it through the isolated-test
 runner so owned database, role and MinIO cleanup are checked.
+
+The companion `run_public_journey_probe.py` starts after a deliberately scripted
+canonical guide compilation and its separately approved policies. Its guide
+documents have fixture custody; the probe does not certify a live model call,
+real source-document upload, or a general-purpose work judge. It registers this
+directory's small deterministic PRE/POST checker image by its exact local
+registry digest. The tested human identities are stored actors with locally
+signed Flow-compatible tokens, not a hosted Flow Identity service.
+
+From that explicit precondition, the companion must use a live loopback API,
+the public manager guide activation, project submitter grant, and task lifecycle, contributor ZIP
+preparation and canonical Submission POST, and a real Redis-backed prefork
+Celery worker and Beat scheduler for artifact and outbox delivery. The isolated
+run sets the supported artifact scan interval to 10 seconds and requires a
+retained scheduler audit before public intake; no manual scanner dispatch can
+make a preparation ready. After a bounded timeout, the probe may publish the
+exact pending verifier for private diagnosis and then unconditionally fails.
+OUTBOX keeps its production 60-second Beat scan. The probe only observes its
+ordinary first delivery and due retry through retained project-scoped worker
+attempts and dispatch decisions; it publishes a duplicate message only after
+acknowledgment to prove replay refusal.
+It checks actionable intake
+failure from both Workstream defaults and the selected external PRE image,
+verified immutable admission, a selected POST failure routed to
+`needs_revision` and an exact public replacement, and passing POST routing under
+both locked review modes. It checks exact false-mode FinalAcceptance and
+submitter contribution/award evidence and replay. The false-mode completion
+first runs while the acceptance lifecycle is legitimately in shadow, requiring
+one known safe OUTBOX retry with no governed effects. The probe stops the
+owned prefork worker, moves the authorized lifecycle to live, then restarts a
+fresh worker while Beat remains active; the same due event must succeed exactly
+once through ordinary scheduled delivery. It then moves the authorized
+lifecycle through draining, disabled, and shadow, submits a second public task,
+and waits for its real selected POST result and first known non-live completion
+retry. With the worker stopped, a Flow-linked access administrator publicly
+revokes the fixed routing service link. The lifecycle returns to live before a
+fresh worker starts; scheduled redelivery must close as an unknown invocation,
+with no second-task routing, acceptance, contribution, or award and no change
+to the first task's accepted evidence. This exercises revocation after checker
+I/O, not a fabricated checker result or direct database mutation. The phase-aware
+`post-rejected.txt` rule lives only in this small checker fixture. The drill
+must keep guide activation guards and database triggers
+enabled. PostgreSQL, MinIO, Redis, the digest registry, Rust checker service,
+and API/worker/Beat processes belong to one disposable local run; the isolated-test
+runner owns database/role/MinIO namespace cleanup. This still does not certify
+hosted gVisor, arbitrary checker quality, live human review, or deployment.
+
+`run_public_journey_probe.py --fixture-bootstrap-only` is a narrow setup
+diagnostic for both approved draft policy modes and an ordinary Flow-linked
+contributor. Run it only against its own disposable isolated PostgreSQL database.
+It uses a placeholder checker digest and local fixture artifact namespace, so
+its database cannot be reused for the real-image MinIO drill. It stops before
+public activation, project role grants, HTTP, broker, or checker execution.

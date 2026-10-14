@@ -29,14 +29,14 @@ from tests.post_submit_materialization_helpers import material_fixture
 from .support import delivery_fixture, outcome, state
 
 
-async def completion_delivery(h, handler=None):
+async def completion_delivery(h, handler=None, *, options=None):
     """Use real dispatcher authority and only a test-owned explicit registration."""
     await provision_router(h.factory)
     await delivery_fixture(h)
     return outbox_delivery(
         h.factory,
         authorization_factory=outbox_dispatch_authorization,
-        options=DeliveryOptions(),
+        options=options or DeliveryOptions(),
         registry=HandlerRegistry(
             [(COMPLETION_EVENT, 1, handler or evaluation_completion_handler(sessions=h.factory))]
         ),
@@ -139,6 +139,71 @@ async def test_completion_handler_false_commits_acceptance_before_ack(
         tmp_path, isolated_database_env, human_review_required=False, contribution_awards=awards
     ) as h:
         await commit_before_ack(h, monkeypatch, human=False, award_count=len(awards))
+
+
+@pytest.mark.parametrize("phase", ["disabled", "shadow", "draining"])
+async def test_false_completion_nonlive_retries_only_before_effects(
+    tmp_path, isolated_database_env, admin_access, phase,
+):
+    """A held non-live refusal is a bounded safe retry, then live delivery commits."""
+    from tests.reviews.lifecycle.transition_support import command_for, transition
+
+    await admin_access.signed.grant(admin_access.admin, admin_access.target)
+    if phase in {"shadow", "draining"}:
+        await transition(await command_for(admin_access.target.id, "shadow"))
+    if phase == "draining":
+        await transition(await command_for(admin_access.target.id, "live"))
+        await transition(await command_for(admin_access.target.id, "draining"))
+
+    async with routing_source(
+        tmp_path, isolated_database_env, human_review_required=False,
+        contribution_awards=("project_points",),
+    ) as h:
+        delivery = await completion_delivery(
+            h, options=DeliveryOptions(retry_base_seconds=1, retry_cap_seconds=1)
+        )
+        receipt = await delivery.deliver(
+            h.source["completion_event_id"], h.request.project_id, "not-live"
+        )
+        assert outcome(receipt)["delivery_state"] == "retryable"
+        assert outcome(receipt)["error_code"] == "RETRY_REQUESTED"
+        assert outcome(receipt)["invocation_unknown"] is False
+        async with h.factory() as session:
+            for table in (
+                "task_post_submit_routing_requests", "task_post_submit_routing_manifests",
+                "final_acceptances", "contribution_records", "compensation_awards",
+            ):
+                assert await session.scalar(text(f"SELECT count(*) FROM public.{table}")) == 0
+            assert await session.scalar(text(
+                "SELECT count(*) FROM public.audit_events "
+                "WHERE action_id='task.post_submit.route'"
+            )) == 0
+            assert await session.scalar(text(
+                "SELECT count(*) FROM public.outbox_events "
+                "WHERE event_type='TaskPostSubmitRouted'"
+            )) == 0
+            assert await session.scalar(text(
+                "SELECT status FROM public.workstream_tasks WHERE id=:id"
+            ), {"id": str(h.request.task_id)}) == "evaluation_pending"
+            assert await session.scalar(text(
+                "SELECT status FROM public.task_assignments WHERE id=:id"
+            ), {"id": str(h.request.assignment_id)}) == "active"
+            assert await session.scalar(text(
+                "SELECT status FROM public.submissions WHERE id=:id"
+            ), {"id": str(h.request.submission_id)}) == "submitted"
+
+        if phase == "draining":
+            await transition(await command_for(admin_access.target.id, "disabled"))
+            await transition(await command_for(admin_access.target.id, "shadow"))
+        elif phase == "disabled":
+            await transition(await command_for(admin_access.target.id, "shadow"))
+        await transition(await command_for(admin_access.target.id, "live"))
+        await asyncio.sleep(1.1)
+        redelivery = await delivery.deliver(
+            h.source["completion_event_id"], h.request.project_id, "after-live"
+        )
+        assert outcome(redelivery)["delivery_state"] == "acknowledged"
+        await assert_committed(h, human=False, award_count=1)
 
 
 @pytest.mark.parametrize("human", [True, False])

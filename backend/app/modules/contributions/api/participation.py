@@ -31,6 +31,10 @@ class ParticipationLifecycleFacts(Protocol):
     def generation(self) -> int:
         ...
 
+    @property
+    def new_effects_enabled(self) -> bool:
+        ...
+
 
 class ParticipationLifecycleFence(Protocol):
     """Acquire only the canonical lifecycle fence owned by external composition."""

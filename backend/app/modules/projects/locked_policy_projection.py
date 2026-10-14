@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from app.interfaces.project_agents import RequirementDisposition
 from app.modules.projects.api.locked_policy import (
     CanonicalJsonObject,
     ProjectLockedPolicyContextFacts,
@@ -38,7 +39,7 @@ def _policy_body(kind, row, selection, guide):
 
 
 def complete_context(locked, post_policy, post_custody, receipt, review, revision, project):
-    """Require exact activation and each approved output, without rerunning eligibility."""
+    """Require exact activation, approved outputs and false-mode requirement custody."""
     view = locked.view
     command = receipt.command
     if (
@@ -54,6 +55,12 @@ def complete_context(locked, post_policy, post_custody, receipt, review, revisio
     snapshot = CanonicalJsonObject.from_mapping(view.snapshot.manifest_json)
     if snapshot.sha256 != locked.target.source_snapshot_hash:
         raise ValueError("source manifest hash mismatch")
+    review_body = _policy_body("review", review, command.review, view.guide)
+    if not review.human_review_required and any(
+        item.disposition is RequirementDisposition.HUMAN_REVIEW
+        for item in locked.result.requirements
+    ):
+        raise ValueError("false review mode cannot satisfy a human-review requirement")
     return ProjectLockedPolicyContextFacts(
         project_id=locked.target.project_id,
         guide_id=locked.target.guide_id,
@@ -76,7 +83,7 @@ def complete_context(locked, post_policy, post_custody, receipt, review, revisio
         external_checker_policies=CanonicalJsonObject.from_mapping(
             approval.operation.effective_pre_submit_plan
         ),
-        review_policy=_policy_body("review", review, command.review, view.guide),
+        review_policy=review_body,
         review_semantics_format=review.semantics_format,
         revision_policy=_policy_body("revision", revision, command.revision, view.guide),
         project=ProjectDisplayFacts(

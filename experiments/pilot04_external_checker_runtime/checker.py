@@ -81,6 +81,14 @@ def main() -> int:
             "message": "The sample project rejects this fixture file.",
             "path": "project-rejected.txt",
         })
+    if (request["identity"]["phase"] == "post_submit"
+            and Path("/work/input/post-rejected.txt").exists()):
+        findings.append({
+            "code": "probe.post_rule_failed",
+            "level": "error",
+            "message": "The sample project requests a replacement for this fixture file.",
+            "path": "post-rejected.txt",
+        })
     body = {
         "schema_version": "external_checker_result.v1",
         "request_digest": request["request_digest"],

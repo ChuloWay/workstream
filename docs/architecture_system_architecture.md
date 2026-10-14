@@ -18,8 +18,10 @@ The review components and diagrams below describe the human branch. The versione
 existing ReviewPolicy boolean `human_review_required` defaults true; false
 permits separately authorized automated FinalAcceptance and submitter
 contribution, with no human queue/lease/Review or reviewer contribution. This
-does not make checker output acceptance authority. Its detailed source/CON
-runtime remains pending after the [policy-setting handoff](../.commitrail/changes/pre-review-plan-reconciliation.md#product-builder-handoff-implement-the-setting-next).
+does not make checker output acceptance authority. Selected production request
+and completion handlers route the false branch through the shared acceptance
+operation. New false/pass effects require an Operator-authorized live REV
+generation; a typed pre-effect non-live refusal rolls back and uses bounded retry.
 The separate ReviewPolicy field `requires_second_review` is fixed to `false` at
 typed input, locked lineage, and database boundaries. Second-review and
 adjudication behavior remain deferred.
@@ -289,8 +291,10 @@ submission or evidence semantics.
 
 Submission artifacts are hash-locked during successful submission creation.
 Selected request/completion handlers are registered for durable post-submit
-execution and governed outcomes. The complete public API and Celery service
-journey remains to be proved; the removed alternate checker worker is not dispatched. Any changed artifact requires a new
+execution and governed outcomes under exact service authority. The bounded local
+public API and Celery service drill passed under scripted approved-guide
+preconditions; the removed alternate
+checker worker is not dispatched. Any changed artifact requires a new
 submission version instead of mutating the old one.
 
 Every important lifecycle action creates an append-only audit event. State is readable from current records, and audit history explains how the system got there.

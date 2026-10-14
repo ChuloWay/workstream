@@ -446,9 +446,11 @@ owns the single FinalAcceptance schema, exclusive human/checker-policy source
 shapes, same-chain constraints, actor/authority provenance, currentness and
 transaction sequence. Both triggers use the same CON submitter operation; no
 new contribution type, synthetic Review or automatic reviewer award is added.
-REV-04C delivers the hidden mechanical transaction participant. The authority,
-currentness, audit/outbox and activation behavior is still planned runtime
-behavior, not enabled false-policy activation.
+REV-04C supplies the transaction participant. Selected production request and
+completion handlers route a supported false-policy result through its authority,
+currentness, audit/outbox and atomic outcome controls. A new false/pass effect
+requires a live REV generation; a pre-effect non-live refusal rolls back and uses
+bounded OUTBOX retry.
 
 CON MUST create `accepted_submission` only from the supplied locked
 FinalAcceptance and exact TaskAssignment. It MUST NOT infer submitter acceptance
@@ -1144,8 +1146,9 @@ REV-12A1 delivers its disabled generation-zero persistence and caller-root
 mutation fence. The [shared acceptance order](spec_review_lifecycle.md#implementation-order-and-required-proof)
 includes delivered hidden AUTH preparation, CON-07 participation, REV-04C
 FinalAcceptance/TASK/CON composition and ARCH-04E2-B mandatory persisted receipt
-custody and complete authorized outcomes. B8 supplies hidden completion delivery. Remediation and
-production composition remain pending. Actual CON root
+custody and complete authorized outcomes. B8 supplies completion delivery and the
+selected request/completion handlers are registered in production composition.
+False/pass effects require a live REV generation. Actual CON root
 storage and ordinal allocation remain required before either trigger creates
 fulfillment obligations; neither awards nor generic outbox rows substitute. REV-12A4A adds internal Operator transitions for the atomic-participant manifest.
 Later fulfillment drain work extends this same controller; it is not a prerequisite on live human
@@ -1283,9 +1286,10 @@ are delivered. The latter requires the actual AUTH decision on the same strict
 input, validates stored source authority, and stages FinalAcceptance, TASK/CON,
 applicable awards and audit/outbox together. Database closure rejects orphan
 allows and incomplete outcomes. The authorized acceptance/successor race is
-covered; B8 supplies hidden completion delivery with invocation, generation and
-commit-before-acknowledgment proof. Next prove remediation, then enable production
-composition and false-guide readiness. Conditional award facts remain atomic for paid and unpaid policies.
+covered; B8 supplies completion delivery with invocation, generation and
+commit-before-acknowledgment proof. Remediation and selected production composition
+are delivered. A complete supported false guide can activate when the approved
+inventory contains no `human_review` disposition. Conditional award facts remain atomic for paid and unpaid policies.
 The first-contribution manifest keeps fulfillment admission, dispatch and callbacks
 unavailable; obligation/root/ordinal/cutoff storage is required before a reviewed
 successor manifest enables fulfillment, not before this contribution path.

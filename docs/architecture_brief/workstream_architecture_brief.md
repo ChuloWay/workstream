@@ -27,19 +27,21 @@ context, every Submission immutable artifact lineage, every valid human
 decision an attributable Review and reviewer contribution, and every accepted
 task an immutable FinalAcceptance before the submitter contribution.
 
-The diagrams depict target architecture, not a fully connected live lifecycle.
-Canonical retained submission/checker history and public admission-backed ZIP
-preparation and Submission creation are delivered for initial work and exact
-checker remediation. Selected post-submit request/completion handlers and
-authorized outcomes are implemented. False-policy guide activation and the
-complete public API and Celery service drill remain pending. The lifecycle sequence depicts
-the target human-review branch, whose live queue and decision runtime remain
-separate. The versioned `human_review_required` defaults true in the locked
-ReviewPolicy; false uses shared authorized FinalAcceptance and submitter
-contribution without a synthetic Review or reviewer contribution. Checker
-success alone never authorizes acceptance. The
-[capability ledger](../roadmap_status.md) owns current status. The retained PDF
-precedes this source update.
+The diagrams depict target architecture, not a deployed or fully drilled live
+lifecycle. ARCH-02I-B exposes public ZIP preparation and admission-backed
+Submission creation for initial work and exact checker remediation. Canonical
+retained submission/checker history, durable post-submit execution,
+unfinished-attempt recovery and selected request/completion handlers are
+implemented. The lifecycle sequence depicts the planned human-review branch;
+its live queue and decision runtime remain separate. The locked ReviewPolicy
+defaults `human_review_required` to true. A complete supported false guide can
+activate when its approved inventory contains no `human_review` disposition.
+Eligible false-policy success uses shared authorized FinalAcceptance and
+submitter ContributionRecord without a synthetic Review or reviewer contribution.
+New false/pass effects require an Operator-authorized live REV generation;
+checker success alone cannot authorize acceptance. The bounded local public API
+and Celery service drill passed under scripted approved-guide preconditions. The [capability ledger](../roadmap_status.md)
+owns current status; the retained PDF predates this source.
 
 v0.1 is focused on proving the internal lifecycle:
 
@@ -131,7 +133,7 @@ checker/job boundary.
 | --- | --- |
 | React + Vite operations UI | Planned internal operations dashboard for project, task, submission, review, and compensation fulfillment workflows. Reputation UI remains deferred. |
 | FastAPI backend | API contracts, workflow rules, auth dependency, lifecycle guards, module orchestration, and audit writes. |
-| Celery worker boundary | Durable project setup and registered post-submit checker request/completion handlers. The complete public API and Celery service drill remains pending. FastAPI background tasks are not the Workstream product-job boundary. |
+| Celery worker boundary | Durable project setup and registered post-submit checker request/completion handlers. The bounded local public API and Celery service drill passed under scripted approved-guide preconditions. FastAPI background tasks are not the Workstream product-job boundary. |
 | CHECKERS | Delivered retained-history reads, durable selected PRE/POST execution and recovery, and exact service authority; selected request/completion handlers are registered. |
 | Storage interface | Keeps file/evidence semantics stable while local storage and the hosted AWS S3 profile implement the same provider-neutral port. |
 | Postgres | Durable record database for the full Workstream lifecycle. |
@@ -163,10 +165,13 @@ The backend component view zooms into the FastAPI container. It shows how the mo
 ## Lifecycle Sequence
 
 The sequence below shows the target v0.1 loop. Public manager guide activation,
-ZIP preparation and admission-backed Submission creation are delivered. Selected
-durable PRE/POST execution and governed completion routing are implemented; the
-complete public API and Celery service drill remains pending. Retained history does not execute
-checkers or authorize acceptance.
+public ZIP preparation and admission-backed initial/checker-remediation
+Submission creation are delivered. Durable post-submit execution/recovery has
+exact input, execute and finalize service authority, and selected
+request/completion handlers are registered in production composition. The
+bounded local public API and Celery service drill passed under scripted
+approved-guide preconditions; this is not a deployment claim.
+Retained history does not execute checkers or authorize acceptance.
 
 <div class="diagram sequence">
   <img src="images/task_lifecycle_sequence.png" alt="Workstream task lifecycle sequence diagram" />

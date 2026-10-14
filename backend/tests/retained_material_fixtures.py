@@ -203,7 +203,10 @@ async def _verify_admission(factory, store, namespace, settings, result):
         orchestrator = ArtifactStorageOrchestrator(
             session, store, namespace, settings, _AllowArtifactAuthority()
         )
-        assert await orchestrator.verify_object(UUID(job_id)) == "verified"
+        assert await orchestrator.verify_object(
+            UUID(job_id),
+            submission_task_contexts=task_submission_context_port(session),
+        ) == "verified"
         admission = await session.scalar(
             select(SubmissionBundleAdmission).where(
                 SubmissionBundleAdmission.put_attempt_id == str(result.put_attempt_id),

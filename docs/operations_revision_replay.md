@@ -4,8 +4,9 @@
 
 This is the planned v0.1 human revision operating contract. Human revision
 remains unavailable until its owning REV chunks, exact AUTH activation, and
-REV-13C joint release complete. Hidden checker-remediation replacement uses the
-existing intake and writer under locked rules; its public route remains pending.
+REV-13C joint release complete. Checker-remediation replacement uses the public
+preparation and admission-backed Submission operations under locked rules; it
+does not make human revision available.
 
 Revision replay preserves an immutable answer to three questions: what the
 reviewer required, how the submitter responded, and how a later reviewer

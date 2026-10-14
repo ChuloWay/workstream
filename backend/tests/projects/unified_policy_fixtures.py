@@ -196,12 +196,7 @@ async def create_standalone_unified_policy(
                                  PostPolicyApproval(target=derived.target, idempotency_key=uuid4()))
         _, policy = await publish_policy(sessions, command.project_id, contribution_awards=contribution_awards)
         activation = await activation_command(sessions, approved, policy)
-        if human_review_required:
-            await activate(sessions, actor, activation)
-        else:
-            from tests.tasks.post_submit_routing.false_policy_fixture import activate_false_prestate
-
-            await activate_false_prestate(sessions, actor, activation)
+        await activate(sessions, actor, activation)
     upstream = approved.target.upstream
     async with sessions() as session:
         effective = await session.get(EffectiveProjectSubmissionArtifactPolicy, str(upstream.effective_policy_id))

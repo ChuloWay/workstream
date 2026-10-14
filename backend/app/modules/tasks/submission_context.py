@@ -15,6 +15,7 @@ from app.modules.tasks.api.submission_context import (
     TaskSubmissionContextFacts,
     TaskSubmissionContextRequest,
     TaskSubmissionContextUnavailable,
+    TaskRetainedSubmissionParentsRequest,
 )
 from app.modules.tasks.repository import TaskRepository
 
@@ -26,6 +27,26 @@ class TaskSubmissionContextService:
         self._session = session
         self._tasks = TaskRepository(session)
         self._evaluations = evaluations
+
+    async def lock_retained_submission_parents(
+        self,
+        request: TaskRetainedSubmissionParentsRequest,
+    ) -> None:
+        """Lock immutable TASK parents without applying current submission policy."""
+        if not self._session.in_transaction() or self._session.in_nested_transaction():
+            raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
+        task = await self._tasks.lock_project_task(request.project_id, request.task_id)
+        assignment = await self._tasks.lock_accepted_assignment(
+            project_id=request.project_id,
+            task_id=request.task_id,
+            assignment_id=request.assignment_id,
+        )
+        if (
+            task is None
+            or assignment is None
+            or assignment.contributor_id != str(request.contributor_id)
+        ):
+            raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
 
     async def lock_submission_context(
         self, request: TaskSubmissionContextRequest,

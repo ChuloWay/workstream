@@ -65,11 +65,17 @@ authorized automated FinalAcceptance and submitter contribution after required
 post-submit checks pass, without human admission, a synthetic Review or a
 reviewer contribution. Its source/authority/CON design is defined in the
 [shared acceptance contract](spec_review_lifecycle.md#finalacceptance);
-REV-04C supplies its hidden FinalAcceptance/TASK/CON transaction participant,
+REV-04C supplies its FinalAcceptance/TASK/CON transaction participant,
 and ARCH-04E2-B binds actual routing authority, immutable evidence and complete
-atomic outcomes under currentness custody. B8 supplies hidden completion delivery. Checker remediation and selected production
-composition are delivered. Public initial and checker-remediation intake is
-exposed; false-guide activation and the complete public API and Celery service drill remain.
+atomic outcomes under currentness custody. B8 supplies completion delivery;
+selected request/completion handlers are registered. ARCH-02I-B exposes public
+ZIP preparation and admission-backed initial/checker-remediation Submission
+creation in OpenAPI. A complete supported false guide activates only when its
+approved requirement inventory contains no
+`human_review` disposition. New false/pass effects still require a live REV
+generation; a pre-effect non-live refusal rolls back and uses bounded retry.
+The bounded local public API and Celery service drill passed under scripted
+approved-guide preconditions; this does not establish hosted deployment.
 This amendment does not enable raw checker results to create acceptance or
 change the existing human branch's implementation contract.
 The ReviewPolicy field `requires_second_review` is fixed to `false` in v0.1.
@@ -276,8 +282,9 @@ In v0.1, this is enforced through:
 - contributor attestation
 - immutable submission versions
 - checker results bound to artifact hashes
-- human review before acceptance when the locked policy requires it; the
-  planned false branch requires separately authorized acceptance evidence
+- human review before acceptance when the locked policy requires it; the false
+  branch requires separately authorized acceptance evidence and a live REV
+  generation for new effects
 - immutable Review, finding, response, and resolution history on the human branch
 
 An explicit owner-agent execution workspace is later work.
@@ -328,7 +335,8 @@ old request/result decoders are removed.
 Contributor feedback contains bounded default/image findings and eligibility.
 It conceals scratch state, provider coordinates, credentials and raw checker
 output. Public contributor ZIP preparation and admission-backed Submission creation
-are implemented. CLI submit/status and the complete public API and Celery service drill remain.
+are implemented. CLI submit/status remains separate; the bounded local public API
+and Celery service drill passed under scripted approved-guide preconditions.
 
 ### Contribution Records
 
@@ -338,12 +346,12 @@ On the human branch, every valid recorded human Review creates an immutable revi
 FinalAcceptance only for `accept`; that fact, not direct inspection of
 `Review.decision`, sources one submitter `accepted_submission` contribution
 record. `needs_revision`, `reject`, and automated checker outcomes create no
-FinalAcceptance or submitter contribution by themselves. On the planned false
+FinalAcceptance or submitter contribution by themselves. On the false
 branch, an authorized automated decision creates FinalAcceptance and the
 submitter contribution through the shared atomic participant, never a reviewer
 contribution. The [shared acceptance contract](spec_review_lifecycle.md#finalacceptance)
-defines both triggers and their source/authority constraints. Runtime proof is
-required before activation; it is not a checker-owned write or fabricated Review.
+defines both triggers and their source/authority constraints. It is not a
+checker-owned write or fabricated Review.
 
 Contribution records are separate from compensation status. Each record freezes
 its exact review, submission, actor, policy, and artifact-hash lineage.

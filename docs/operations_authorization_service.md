@@ -123,8 +123,9 @@ approved and frozen policy checks.
 
 Task claim/start/work-context require current canonical authority and the applicable
 exact project grant. Token claims and eligibility rows are not authority.
-The API drill ends its task journey at that supported public boundary; hidden
-submission creation has separate proof.
+Public ZIP preparation and admission-backed Submission creation extend that
+journey. The bounded local public API and durable-worker drill passed under
+scripted approved-guide preconditions.
 
 ## Request And Error Context
 
@@ -272,8 +273,8 @@ failures roll back with retryable HTTP 503
 `task_authority_unavailable`. Initial identity resolution may reject a request
 before command execution under its own identity-error contract.
 
-Public admission-backed Submission creation uses its existing
-TASK-first context/assignment and AUTH transaction participants. The old public
+Public admission-backed Submission creation uses its existing TASK-first
+context/assignment and AUTH transaction participants. The old public
 packet POST and self-activated contributor-profile endpoint are removed. Stored
 contributor references and retained submission reads are preserved.
 
@@ -618,17 +619,23 @@ AdminRoleGrant-backed administrative mutations, the three active fixed-service
 ART foundation actions, Project Manager `artifact.guide_source.ingest`, and the
 fixed-service `artifact.guide_source.binding.create` and
 `artifact.guide_source.read`, contributor `artifact.submission_bundle.prepare`,
-hidden human `submission.create`, and fixed-service
+public human `submission.create`, and fixed-service
 `artifact.submission.binding.create` actions. AUTH-12F4 also supports
 Project Manager `project.guide_compilation.review_package.read`,
 `project.submission_artifact_policy.approve`, and
 `project.guide_compilation.correction.request`; POL-05B exposes these with
 exact Project Manager authority and manual correction dispatch. REV-12A4A also
 supports the internal `review.lifecycle.activation.manage` action as the sole
-active review exception. Human review and generic artifact-read remain planned,
-as does the public Submission cutover. The controller activates no public
-review route, routing, acceptance or payment delivery. Callers begin and own one root
-transaction and follow their owner's lock contract for participant rows and
+active review exception. Human review and generic artifact-read remain planned;
+initial and exact checker-remediation Submission creation is public. The
+controller registers no handler or public review route: its live generation must
+bind the current reviewed manifest for new false/pass effects through the
+registered selected completion handler. An upgrade does not renew an earlier
+live authorization. An authorized Operator must use the existing live → draining
+→ disabled → shadow → live transitions with the current manifest before new
+effects can proceed. Original transition receipts and committed acceptance replay
+remain unchanged; no migration invents authorization. Payment delivery remains
+unavailable. Callers begin and own one root transaction and follow their owner's lock contract for participant rows and
 `prepare`; REV-fenced operations acquire REV and any required TASK custody
 before preparation. They compose final locked facts and call `consume` with the
 independently expected ActionId and the same strict request/idempotency input,
@@ -1243,8 +1250,9 @@ changing these selectors: active and superseded guide selections remain frozen.
 omitted replacements preserve the exact predecessor's value. Every new version
 uses `semantics_format=v2` and hashes the explicit setting. Existing v1 rows
 retain their hashes and mean true; incomplete history remains incomplete.
-False may be saved in draft, but the current guide activation service explicitly
-rejects it until automated acceptance and contribution execution is available.
+False may be saved in draft. A complete supported guide may activate when its
+exact approved requirement inventory contains no `human_review` disposition.
+New false/pass acceptance effects still require an authorized live REV generation.
 An exact committed retry recovers the original response under the adopted
 WS-XINT-003-02B actor/request contract; it does not reselect today's policy or
 perform another mutation. An omitted setting differs from an explicit true in
@@ -1286,16 +1294,16 @@ locks project and policy resources. A nominal one-use handle binds the operation
 request, identity, session and root transaction. The complete CP07 facts digest is
 the exact digest saved in the allow event, mutation ledger and activation receipt.
 CP07 still owns complete-chain readiness, separate approvals, ContributionPolicy
-validation and atomic activation/supersession. `human_review_required=false`
-remains activation-blocked under the current capability guard.
+validation and atomic activation/supersession. A complete supported
+`human_review_required=false` guide activates only when its exact approved
+requirement inventory contains no `human_review` disposition.
 
 Exact replay acquires fresh live authority and validates the retained decision;
 it returns the original receipt without a second allow or activation. Supersession
 or later ContributionPolicy retirement does not rewrite that evidence. Revoked
 actor/link/grant authority denies replay. Composition without the explicit adapter
-continues to deny. CP08 delivers Task, Assignment and hidden Submission policy
-lineage. Public manager activation is delivered; approved-guide intake
-integration remains next.
+continues to deny. CP08 delivers Task, Assignment and Submission policy lineage.
+Public manager activation and approved-guide intake integration are delivered.
 
 ## Shared outbox dispatcher
 

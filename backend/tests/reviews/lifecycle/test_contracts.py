@@ -17,6 +17,7 @@ def test_lifecycle_snapshot_is_strict_and_frozen():
         singleton_id=new_record_id(),
         phase=JointLifecyclePhase.DISABLED,
         generation=0,
+        new_effects_enabled=False,
         created_at=datetime.now(UTC),
     )
     facts = JointLifecycleControlFacts(**values)
@@ -32,6 +33,9 @@ def test_lifecycle_snapshot_is_strict_and_frozen():
         {"singleton_id": str(values["singleton_id"])},
         {"phase": JointLifecyclePhase.LIVE},
         {"phase": "disabled"},
+        {"new_effects_enabled": True},
+        {"new_effects_enabled": 0},
+        {"new_effects_enabled": "false"},
         {"created_at": datetime.now()},
         {"authorized": True},
     ):

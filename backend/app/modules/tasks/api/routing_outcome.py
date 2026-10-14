@@ -5,6 +5,10 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, model_validator
 
 
+class TaskRoutingLifecycleDeferred(RuntimeError):
+    """Known pre-effect REV enablement refusal; the caller may retry after rollback."""
+
+
 class RoutingAuthorityFacts(BaseModel):
     """Actual decision identity and the exact resource context retained by TASK."""
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)

@@ -724,18 +724,18 @@ authorizes shared delivery mechanics; the reconciler authorizes the hidden
 assignment effect. Checker execute/finalize authority is implemented by
 ARCH-04D2. AUTH-19A registered `task.post_submit.route` and its fixed identity;
 ARCH-04E2-B activated the exact success consequences and ARCH-04F2 extends the
-same action to the closed checker-remediation consequence. This is hidden feature
-authority, not production handler registration. Named implementation boundaries
-must register typed parity, prove hidden behavior and activate only their exact
-manifests; a planning document does not grant a service permission.
+same action to the closed checker-remediation consequence. Feature authority and
+handler registration remain distinct: the selected production composition now
+registers request and completion handlers, while each phase still requires its
+exact fixed-service authority and manifest.
 
 | ActionId / PermissionId | Sole fixed identity | Exact target and guards | Current activation custodian |
 |---|---|---|---|
 | `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-02 authority/phase custody and Celery composition complete; feature handlers remain separate |
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B9 hidden handler/fence and ARCH-03C1 real feature authority/decision receipts complete; ARCH-03C2 atomic producer wiring and registration |
-| `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | Implemented by ARCH-04C/04D2; no dispatcher registration |
-| `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest, retained material and original execute receipt; fresh post-I/O authority and atomic evidence; current outputs are empty | Implemented by ARCH-04C/04D2; no dispatcher registration |
-| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state. `allow_review` with true permits only TASK `review_pending`; `allow_review` with false binds exact accepted TASK effects for shared FinalAcceptance. `needs_revision` under either mode permits only TASK remediation with the assignment active and no REV/CON effect. Never a human review decision or generic CON write | 04E2-B delivers canonical fixed-router PREP consumption and actual receipt custody for complete hidden success outcomes; ARCH-04F2 extends that same operation and receipt to exact checker remediation. SQL rejects orphan or incomplete outcomes and failure-to-acceptance substitution. B8 supplies hidden completion delivery; 04F3 adds hidden exact-cause replacement under existing AUTH actions; 04F4 adds separate hidden Operator retry authority through CHECKERS. Manager-visible setup-fault hold and 04E3 production registration remain. |
+| `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | Implemented by ARCH-04C/04D2 and invoked by the registered selected request handler |
+| `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest, retained material and original execute receipt; fresh post-I/O authority and atomic evidence; current outputs are empty | Implemented by ARCH-04C/04D2 and invoked by the registered selected request handler |
+| `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state. `allow_review` with true permits only TASK `review_pending`; `allow_review` with false binds exact accepted TASK effects for shared FinalAcceptance. `needs_revision` under either mode permits only TASK remediation with the assignment active and no REV/CON effect. Never a human review decision or generic CON write | 04E2-B delivers canonical fixed-router PREP consumption and actual receipt custody for complete outcomes; ARCH-04F2 extends that same operation and receipt to exact checker remediation. SQL rejects orphan or incomplete outcomes and failure-to-acceptance substitution. Selected request and completion handlers are registered in production composition. False/pass effects require a live REV generation; the typed pre-effect non-live refusal rolls back and uses bounded OUTBOX retry. 04F3 adds exact-cause replacement under existing AUTH actions; 04F4 adds separate Operator retry authority through CHECKERS. |
 
 Each action maps to the identically named permission in this table and only
 its singleton fixed-service row. Humans, dispatchers and unrelated services
@@ -924,8 +924,8 @@ REV-12A4A additionally issues PREP for internal
 `review.lifecycle.activation.manage`, the sole active review exception. Human
 review and generic artifact-read remain planned and issue no handle. ARCH-02I-B
 exposes public ZIP preparation and initial/checker-remediation Submission entry.
-The controller activates no public review route, routing,
-acceptance or payment delivery.
+The controller activates no public review route or human decision, acceptance
+or payment delivery.
 ARCH-04E1B-B6 retains the exact creation and binding decision IDs in their owner
 receipts. Fresh PREP authority validates those immutable events on replay,
 including exact actor/service, action, permission, project, resource and canonical
@@ -1622,8 +1622,9 @@ selectors and that digest, never the policy body or guide material.
 
 Replay validates the original event under fresh live authority and returns the
 original receipt without another activation or decision. Readiness and policy
-selection remain CP07 responsibilities; unavailable automated acceptance still
-blocks `human_review_required=false`. The existing exact-manager post-policy read
+selection remain CP07 responsibilities. A complete supported
+`human_review_required=false` guide activates only when the exact approved
+requirement inventory contains no `human_review` disposition. The existing exact-manager post-policy read
 also discloses activation selections, with the complete response bound to its
 authorization digest; this grants no Finance policy-body access.
 
@@ -1750,8 +1751,8 @@ execute/finalize receipts remain distinct and are read from their canonical owne
 An orphan allow or incomplete outcome cannot commit. A remediation source cannot
 authorize acceptance, FinalAcceptance, contribution or award effects. Exact
 replay rechecks live authority and the complete original tuple without issuing
-another allow or repairing effects. B8 supplies hidden completion delivery;
-production registration remains unavailable. Human acceptance-source authority
+another allow or repairing effects. Selected request and completion handlers are
+registered in production composition. Human acceptance-source authority
 is still future work; detached human receipts grant nothing.
 
 ARCH-04F3 uses existing `artifact.submission_bundle.prepare`,

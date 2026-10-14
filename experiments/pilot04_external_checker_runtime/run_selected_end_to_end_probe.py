@@ -27,6 +27,7 @@ from app.adapters.artifacts import (
 )
 from app.adapters.checkers import external_checker_execution_factory
 from app.adapters.outbox import production_outbox_delivery
+from app.adapters.tasks import task_submission_context_port
 from app.adapters.artifacts.internal_workers import shutdown_artifact_internal_runtime
 from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
@@ -292,7 +293,10 @@ async def _verify_prepared(fixture, settings, prepared):
         )
         outcome = await ArtifactStorageOrchestrator(
             session, fixture.store, fixture.namespace, settings, verifier
-        ).verify_object(UUID(job_id))
+        ).verify_object(
+            UUID(job_id),
+            submission_task_contexts=task_submission_context_port(session),
+        )
         if outcome != "verified":
             raise RuntimeError("fresh preparation verification did not complete")
     async with fixture.factory() as session:

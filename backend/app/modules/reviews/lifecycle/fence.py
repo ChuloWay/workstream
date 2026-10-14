@@ -4,7 +4,7 @@ import hashlib
 from contextlib import asynccontextmanager
 
 from pydantic import ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import literal_column, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -95,6 +95,10 @@ class PostgresJointLifecycleMutationFence:
                     JointLifecycleReleaseControl.id,
                     JointLifecycleReleaseControl.phase,
                     JointLifecycleReleaseControl.generation,
+                    literal_column(
+                        "public.joint_lifecycle_new_effects_enabled("
+                        "joint_lifecycle_release_control)"
+                    ).label("new_effects_enabled"),
                     JointLifecycleReleaseControl.created_at,
                 )
                 .where(JointLifecycleReleaseControl.singleton.is_(True))
@@ -108,6 +112,7 @@ class PostgresJointLifecycleMutationFence:
                 singleton_id=row.id,
                 phase=JointLifecyclePhase(row.phase),
                 generation=row.generation,
+                new_effects_enabled=row.new_effects_enabled,
                 created_at=row.created_at,
             )
         except (ValueError, ValidationError) as exc:

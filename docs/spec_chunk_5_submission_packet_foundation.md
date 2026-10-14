@@ -224,7 +224,7 @@ Chunk 5 writes task audit events with submission identifiers in `event_payload`.
 - Contributor-provided checker names, checker outcomes, evidence ids, and
   checker run ids are rejected by the API schema
 - no standalone JSON precheck route or response schema remains
-- blocking public ZIP preparation returns structured `pre_submission_checker_failed` feedback, creates no submission row or version, and emits no submission-created event
+- blocking public ZIP preparation returns `pre_submission_checker_failed` with bounded structured feedback, creates no submission row or version, and emits no submission-created event
 - Workstream stamps locked guide source snapshot ids/hashes, effective project submission artifact policy ids/hashes, project pre-submit checker policy ids/bundle hashes, and guide/checker/review/revision/contribution policy versions from task context
 - task moves to `SUBMITTED`
 - submitted packet is automatically locked and enters the current post-submit checker gate
