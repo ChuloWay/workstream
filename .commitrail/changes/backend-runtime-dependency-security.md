@@ -25,7 +25,7 @@ Resolve the current backend runtime dependency alerts before the hosted v0.1 rel
 
 ### Not allowed
 
-- Runtime source, API contracts, tests, schemas, migrations, authorization, storage semantics, or product lifecycle changes.
+- Runtime source, API contracts, product behavior tests, schemas, migrations, authorization, storage semantics, or product lifecycle changes.
 - `backend/pyproject.toml` constraint changes unless new resolver evidence first requires a reviewed plan amendment.
 - New CI jobs or workflows, path selection, lane count or family changes, timeout changes, test deletion or skipping, gate relaxation, dependency catalogue changes, unrelated upgrades, manual lock edits, alert dismissal, or public disclosure of private alert evidence.
 - MCP adapter dependency changes; they have a separate package boundary and change record.
@@ -61,7 +61,7 @@ The first exact-lock hosted run and its single unchanged failed-job probe both e
 | Lock has only intended resolver changes | `uv lock --check` plus base/head package and lock diff inspection | Passed on the reconciled head; four intended package selections changed and no package was added or removed | Canonical advisories and dashboard must be reconciled again after merge |
 | Patched graph installs cleanly | Fresh temporary `UV_PROJECT_ENVIRONMENT` with `uv sync --frozen --all-extras`, followed by installed-distribution and import inspection | Passed on the reconciled head | Hosted platform matrix remains CI custody |
 | Affected runtime behavior remains compatible | Backend lint plus focused and complete backend tests from the fresh frozen-lock environment, including owned PostgreSQL/S3 resources; pip-resolved hosted backend checks as supplemental compatibility evidence | Frozen-lock authentication/JWT selection: 60 passed; Ruff passed. The hosted workflow runs the complete suite from the exact frozen lock; GitHub checks retain its execution evidence | Pip-resolved runs predating this change are supplemental compatibility evidence only |
-| Exact-lock lane capacity is bounded without weakening the suite | One unchanged failed-job probe plus authenticated lane manifests and cleanup records, followed by structural ownership tests and a fresh complete hosted run | Shared A and project D repeated the cap with zero skip/deselect and complete cleanup; project A passed the probe. A reviewed whole-module rebalance preserves 8,899 unique nodes and the existing ten lane families | Timing projections are estimates until the fresh hosted run passes every lane and aggregate fan-in |
+| Exact-lock lane capacity is bounded without weakening the suite | One unchanged failed-job probe plus authenticated lane manifests and cleanup records, followed by structural ownership tests and a fresh complete hosted run | Shared A and project D repeated the cap with zero skip/deselect and complete cleanup; project A passed the probe. A reviewed whole-module rebalance preserves 8,899 unique nodes and the existing ten lanes | Timing projections are estimates until the fresh hosted run passes every lane and aggregate fan-in |
 
 ## Review findings
 
