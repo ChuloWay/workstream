@@ -29,7 +29,7 @@ async def test_snapshot_storage_bounds_model_parity_and_immutable_membership(iso
         await connection.execute("""
             INSERT INTO public.actor_profiles
               (id,actor_kind,status,provisioning_method,created_by)
-            VALUES ($1,'human','active','automatic_first_access',$1)
+            VALUES ($1,'human','active','automatic_first_access','snapshot-migration-test')
         """, actor)
         now = await connection.fetchval("SELECT clock_timestamp()")
         expiry = now + timedelta(hours=1)
