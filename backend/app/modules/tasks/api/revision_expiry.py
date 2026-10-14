@@ -1,0 +1,104 @@
+"""Exact scheduled revision-expiry target and TASK-owned effect authority."""
+
+from abc import ABC, abstractmethod
+from contextlib import AbstractAsyncContextManager
+from dataclasses import dataclass
+from typing import Protocol
+from uuid import UUID
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+
+from app.core.hashing import canonical_json_hash
+
+
+REVISION_EXPIRY_EVENT = "TaskRevisionExpiryRequested"
+REVISION_EXPIRED_EVENT = "TaskRevisionExpired"
+
+
+class TaskRevisionExpiryUnavailable(RuntimeError):
+    """Concealed invalid, stale, or denied expiry invocation."""
+
+
+class TaskRevisionExpiryTarget(BaseModel):
+    """The original committed failure; a repair may only change its current head."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    project_id: UUID
+    task_id: UUID
+    assignment_id: UUID
+    contributor_id: UUID
+    source_submission_id: UUID
+    routing_manifest_id: UUID
+    root_preparation_id: UUID
+    root_preparation_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    deadline_at: AwareDatetime
+
+
+class TaskRevisionExpiryAuthorityFacts(BaseModel):
+    """Locked current head and one exact OUTBOX invocation at DB deadline."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+    target: TaskRevisionExpiryTarget
+    head_preparation_id: UUID
+    head_preparation_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    delivery_event_id: UUID
+    delivery_generation: int = Field(ge=1, le=2147483647)
+    invocation_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    task_status: str
+    assignment_status: str
+
+def revision_expiry_resource_digest(facts: TaskRevisionExpiryAuthorityFacts) -> str:
+    facts = TaskRevisionExpiryAuthorityFacts.model_validate_json(facts.model_dump_json())
+    return canonical_json_hash({"resource_context": {
+        "resource_type": "task_authority", "resource_id": str(facts.target.task_id),
+        "scope_project_id": str(facts.target.project_id), "facts": facts.model_dump(mode="json"),
+    }})
+
+
+@dataclass(frozen=True, slots=True)
+class TaskRevisionExpiryAuthority:
+    actor_profile_id: UUID
+    decision_id: UUID
+    resource_context_digest: str
+
+
+class PreparedTaskRevisionExpiry(ABC):
+    def __reduce_ex__(self, _protocol):
+        raise TypeError("prepared revision-expiry authority is process-local")
+
+    @abstractmethod
+    async def consume(self, facts: TaskRevisionExpiryAuthorityFacts) -> TaskRevisionExpiryAuthority: ...
+
+
+class TaskRevisionExpiryAuthorizationPort(Protocol):
+    def prepare_revision_expiry(
+        self, facts: TaskRevisionExpiryAuthorityFacts,
+    ) -> AbstractAsyncContextManager[PreparedTaskRevisionExpiry]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class TaskRevisionExpiryEvidence:
+    facts: TaskRevisionExpiryAuthorityFacts
+    authority: TaskRevisionExpiryAuthority
+    receipt_id: UUID
+    audit_event_id: UUID
+    expired_at: AwareDatetime
+
+
+@dataclass(frozen=True, slots=True)
+class TaskRevisionExpiryReceiptSnapshot:
+    """TASK-owned immutable receipt facts supplied to AUDIT for replay validation."""
+
+    receipt_id: UUID
+    audit_event_id: UUID
+    authorization_decision_id: UUID
+    routing_manifest_id: UUID
+    source_submission_id: UUID
+    head_preparation_id: UUID
+    expired_at: AwareDatetime
+    authority_context: dict[str, object]
+
+
+class TaskRevisionExpiryAuditPort(Protocol):
+    async def read_expiry(self, receipt: TaskRevisionExpiryReceiptSnapshot) -> TaskRevisionExpiryEvidence | None: ...
+    async def record_expiry(self, evidence: TaskRevisionExpiryEvidence) -> UUID: ...

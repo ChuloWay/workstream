@@ -12,6 +12,8 @@ from app.modules.outbox.api import OutboxAppendInput, OutboxEventEnvelope
 from app.modules.tasks.api.accepted_effects import TaskAcceptedEffectsRequest
 from app.modules.tasks.models import Submission, WorkstreamTask
 from app.modules.tasks.revision.service import prepare_revision
+from app.modules.tasks.revision.expiry_event import revision_expiry_event
+from app.modules.tasks.revision.models import TaskRevisionPreparation
 from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.api.routing_outcome import RoutingAuthorityFacts, TaskRoutingOutcome
 from app.modules.tasks.post_submit_routing.requests import (
@@ -148,10 +150,18 @@ class TaskPostSubmitOutcome:
                     await self._session.flush()
                     if source.revision_candidate is None:
                         raise TaskRoutingRequestUnavailable("revision context unavailable")
-                    await prepare_revision(
+                    root = await prepare_revision(
                         self._session, manifest=stored, candidate=source.revision_candidate,
                         audit_event_id=audit_id,
                     )
+                    await self._outbox.append(revision_expiry_event(stored, root))
+                else:
+                    root = await self._session.scalar(select(TaskRevisionPreparation).where(
+                        TaskRevisionPreparation.routing_manifest_id == stored.id,
+                        TaskRevisionPreparation.sequence == 1,
+                    ))
+                    if root is not None:
+                        await self._outbox.require_existing(None, revision_expiry_event(stored, root))
             elif human:
                 task = await self._session.get(WorkstreamTask, str(source.source.task_id))
                 if not replay:

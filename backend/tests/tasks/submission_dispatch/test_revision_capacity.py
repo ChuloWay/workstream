@@ -23,6 +23,27 @@ from tests.tasks.test_public_submission_intake import _client, _payload
 from tests.test_submission_predecessor_custody import _fixture_revision_context
 
 
+async def _retain_pre_revision_source(h, source_id):
+    """Arrange an old source before preparations and expiry scheduling existed."""
+    async with h.factory() as session, session.begin():
+        # Run referential checks immediately so restoring a guard never races
+        # deferred trigger events from the fixture's exact-row deletion.
+        await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+        await session.execute(text("ALTER TABLE public.outbox_events DISABLE TRIGGER outbox_events_custody"))
+        removed = await session.execute(text("""
+            DELETE FROM public.outbox_events
+            WHERE event_type='TaskRevisionExpiryRequested'
+              AND idempotency_key=:key AND attempt_count=0
+              AND claimed_at IS NULL AND delivery_state='pending'
+            RETURNING event_id
+        """), {"key": f"task.revision.expire:{source_id}"})
+        assert len(removed.all()) == 1
+        await session.execute(text("ALTER TABLE public.outbox_events ENABLE TRIGGER outbox_events_custody"))
+        await session.execute(text("ALTER TABLE public.task_revision_preparations DISABLE TRIGGER revision_preparation_immutable"))
+        await session.execute(text("DELETE FROM public.task_revision_preparations WHERE id=:id"), {"id": h.revision_preparation_id})
+        await session.execute(text("ALTER TABLE public.task_revision_preparations ENABLE TRIGGER revision_preparation_immutable"))
+
+
 async def _fail_current_submission(h):
     """Complete the actual reserved successor using controlled external work failure."""
     async with h.factory() as session, session.begin():
@@ -303,10 +324,7 @@ async def test_pm_recovers_retained_source_and_repairs_without_resetting_window(
         # Arrange only the retained pre-preparation schema state in this owned
         # test database. The real source, authority, Task and evidence stay intact.
         # The protection itself is tested above; recovery runs with it enabled.
-        async with h.factory() as session, session.begin():
-            await session.execute(text("ALTER TABLE public.task_revision_preparations DISABLE TRIGGER revision_preparation_immutable"))
-            await session.execute(text("DELETE FROM public.task_revision_preparations WHERE id=:id"), {"id": h.revision_preparation_id})
-            await session.execute(text("ALTER TABLE public.task_revision_preparations ENABLE TRIGGER revision_preparation_immutable"))
+        await _retain_pre_revision_source(h, source_id)
         async with _client(h, monkeypatch, isolated_database_env) as client:
             route = f"/api/v1/projects/{h.request.project_id}/tasks/{h.request.task_id}/revision-context/repair"
             root_payload = {"routing_manifest_id": str(source_id), "reason": "Recover the retained revision source"}
@@ -380,10 +398,7 @@ async def test_pm_repair_refuses_superseded_checker_source(
                 if index:
                     # Represent a retained source without a preparation. Only
                     # fixture setup bypasses immutability; the request does not.
-                    async with h.factory() as session, session.begin():
-                        await session.execute(text("ALTER TABLE public.task_revision_preparations DISABLE TRIGGER revision_preparation_immutable"))
-                        await session.execute(text("DELETE FROM public.task_revision_preparations WHERE id=:id"), {"id": h.revision_preparation_id})
-                        await session.execute(text("ALTER TABLE public.task_revision_preparations ENABLE TRIGGER revision_preparation_immutable"))
+                    await _retain_pre_revision_source(h, source_id)
                 async with h.factory() as session:
                     before = (await session.execute(text(
                         "SELECT (SELECT count(*) FROM public.task_revision_preparations), "
@@ -402,17 +417,15 @@ async def test_pm_repair_refuses_superseded_checker_source(
 async def test_expired_retained_failure_recovers_without_a_new_window(
     tmp_path, isolated_database_env, monkeypatch,
 ):
-    """Real database time blocks an old failure without cancelling the task."""
+    """Database time blocks intake before the expiry worker delivers rejection."""
     from app.modules.tasks.revision.models import TaskRevisionPreparation
 
     async with remediation_source(tmp_path, isolated_database_env) as h:
         source_id = await _fixture_revision_context(h)
         # Model a retained source from before preparations existed, already past
         # its policy deadline. Restore every guard before exercising public APIs.
+        await _retain_pre_revision_source(h, source_id)
         async with h.factory() as session, session.begin():
-            await session.execute(text("ALTER TABLE public.task_revision_preparations DISABLE TRIGGER revision_preparation_immutable"))
-            await session.execute(text("DELETE FROM public.task_revision_preparations WHERE id=:id"), {"id": h.revision_preparation_id})
-            await session.execute(text("ALTER TABLE public.task_revision_preparations ENABLE TRIGGER revision_preparation_immutable"))
             await session.execute(text("ALTER TABLE public.task_post_submit_routing_manifests DISABLE TRIGGER task_routing_manifest_immutable"))
             anchor, deadline = (await session.execute(text("""
                 UPDATE public.task_post_submit_routing_manifests m
@@ -456,3 +469,89 @@ async def test_expired_retained_failure_recovers_without_a_new_window(
             assert await _creation_snapshot(h) == before
             async with h.factory() as session:
                 assert await session.scalar(text("SELECT status FROM public.workstream_tasks WHERE id=:id"), {"id": h.request.task_id}) == "needs_revision"
+
+
+async def test_expiry_allows_new_assignment_initial_at_next_global_version(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    """The same eligible contributor can claim again with a fresh round zero."""
+    from app.modules.artifacts.api import SubmissionBundlePreparationRequest
+    from app.modules.authorization.api import ActorIdentityFacts, ActorKind
+    from app.modules.tasks.revision.models import TaskRevisionPreparation
+    from app.modules.tasks.schemas import AdmissionBackedSubmissionResponse
+    from tests.archive_fixtures import byte_source
+    from tests.tasks.submission_dispatch.test_revision_expiry import expire_retained_revision
+    from tests.tasks.submission_lineage_support import _verified_admission
+
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        old_submission_id = h.created.submission_id
+        old_assignment_id = h.request.assignment_id
+        _, old_revision, _ = await expire_retained_revision(
+            h, monkeypatch=monkeypatch, isolated_database_env=isolated_database_env,
+        )
+        async with _client(h, monkeypatch, isolated_database_env) as client:
+            claim = await client.post(
+                f"/api/v1/tasks/{h.request.task_id}/claim",
+                headers={"Idempotency-Key": str(new_record_id())},
+            )
+            assert claim.status_code == 200, claim.text
+            new_assignment_id = UUID(claim.json()["assignment"]["id"])
+            assert new_assignment_id != old_assignment_id
+            started = await client.post(
+                f"/api/v1/tasks/{h.request.task_id}/start",
+                headers={"Idempotency-Key": str(new_record_id())},
+            )
+            assert started.status_code == 200, started.text
+
+            preparation = SubmissionBundlePreparationRequest(
+                actor=ActorIdentityFacts(
+                    h.actor_context.actor_profile_id,
+                    h.actor_context.identity_link_id,
+                    ActorKind.HUMAN,
+                ),
+                request_id=new_record_id(), correlation_id=new_record_id(),
+                task_id=h.request.task_id, assignment_id=new_assignment_id,
+                predecessor_submission_id=None, idempotency_key=new_record_id(),
+                summary=h.creation_request.summary,
+                contributor_attestation=h.creation_request.contributor_attestation,
+                media_type="application/zip", byte_source=byte_source(h.data),
+            )
+            admission_id = await _verified_admission(
+                h.factory, h.store, h.namespace, h.settings,
+                h.actor_context, preparation,
+            )
+            route = f"/api/v1/tasks/{h.request.task_id}/submissions"
+            created = await client.post(route, json=_payload(preparation, admission_id))
+            assert created.status_code == 201, created.text
+            assert created.json()["submission_version"] == 2
+            replay = await client.post(route, json=_payload(preparation, admission_id))
+            assert replay.status_code == 201 and replay.json() == created.json()
+
+        async with h.factory() as session:
+            submissions = (await session.scalars(select(Submission).where(
+                Submission.task_id == str(h.request.task_id),
+            ).order_by(Submission.version))).all()
+            assert [(row.version, row.task_assignment_id, row.supersedes_submission_id)
+                    for row in submissions] == [
+                (1, str(old_assignment_id), None),
+                (2, str(new_assignment_id), None),
+            ]
+            assert submissions[0].id == str(old_submission_id)
+            assert submissions[1].id == created.json()["submission_id"]
+            assert await session.scalar(text(
+                "SELECT public.submission_dispatch_valid(d) FROM public.submission_dispatches d "
+                "WHERE d.submission_id=:id"
+            ), {"id": submissions[1].id}) is True
+
+        h.created = AdmissionBackedSubmissionResponse.model_validate(created.json())
+        await _fail_current_submission(h)
+        async with h.factory() as session:
+            fresh = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+            old = await session.get(
+                TaskRevisionPreparation, UUID(old_revision["preparation_id"]),
+            )
+            assert fresh.assignment_id == str(new_assignment_id)
+            assert fresh.source_submission_version == 2
+            assert fresh.next_revision_round == 1
+            assert fresh.max_revision_rounds == old.max_revision_rounds == 2
+            assert fresh.requested_at > old.deadline_at

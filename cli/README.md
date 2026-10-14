@@ -691,6 +691,11 @@ CLI never follows finding paths or exposes provider/private management fields.
 History and findings lists fetch one page only; use the returned opaque cursor
 explicitly (up to 1024 characters; no local decoding). `--run` cannot be combined with pagination flags. Revision change
 summary is unavailable in the current public history API; the CLI does not invent it.
+History may show a source Submission as `rejected` with
+`status_reason=revision_deadline_expired` after the durable deadline worker
+closes its outstanding revision attempt. This is the server's status projection
+from an immutable expiration receipt, not a CLI inference or a change to the
+stored Submission. Other history rows have no status reason.
 
 The native process test uses real HTTP, PostgreSQL and local ART custody, with
 approved-policy/assignment prerequisites arranged by fixtures. It drives the real

@@ -116,6 +116,34 @@ def parse_task_authority_binding(
         raise invalid_error("invalid prepared authorization handle") from exc
 
 
+def _revision_repair_resource_guard(resource: TaskAuthorityResourceContext) -> bool:
+    """Require the exact current or committed-child replay shape for PM repair."""
+    return (
+        resource.revision_routing_manifest_id is not None
+        and ((resource.revision_preparation_id is None) ==
+             (resource.revision_preparation_sha256 is None))
+        and (
+            resource.task_status == "needs_revision"
+            or (
+                resource.revision_replay_preparation_id is not None
+                and resource.task_status in {
+                    "submitted", "evaluation_pending", "review_pending", "accepted", "rejected",
+                }
+            )
+        )
+        and resource.assignment_id is not None
+        and resource.assignment_contributor_id is not None
+        and resource.assigned_to == resource.assignment_contributor_id
+        and resource.reason is not None
+        and bool(resource.reason.strip())
+        and len(resource.reason) <= 1000
+        and resource.idempotency_key is not None
+        and resource.request_digest is not None
+        and resource.replay_assignment_id is None
+        and resource.replay_command_id is None
+    )
+
+
 def task_resource_guard(action: ActionId, resource: TaskAuthorityResourceContext) -> bool:
     """No authority allow may substitute for assignment and task currentness."""
     revision_fields = (
@@ -125,30 +153,7 @@ def task_resource_guard(action: ActionId, resource: TaskAuthorityResourceContext
         resource.revision_replay_preparation_id,
     )
     if action is ActionId.PROJECT_TASK_REVISION_REPAIR:
-        return (
-            resource.revision_routing_manifest_id is not None
-            and ((resource.revision_preparation_id is None) ==
-                 (resource.revision_preparation_sha256 is None))
-            and (
-                resource.task_status == "needs_revision"
-                or (
-                    resource.revision_replay_preparation_id is not None
-                    and resource.task_status in {
-                        "submitted", "evaluation_pending", "review_pending", "accepted", "rejected",
-                    }
-                )
-            )
-            and resource.assignment_id is not None
-            and resource.assignment_contributor_id is not None
-            and resource.assigned_to == resource.assignment_contributor_id
-            and resource.reason is not None
-            and bool(resource.reason.strip())
-            and len(resource.reason) <= 1000
-            and resource.idempotency_key is not None
-            and resource.request_digest is not None
-            and resource.replay_assignment_id is None
-            and resource.replay_command_id is None
-        )
+        return _revision_repair_resource_guard(resource)
     if any(value is not None for value in revision_fields):
         return False
     if action in TASK_MANAGER_ACTIONS:

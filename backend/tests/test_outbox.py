@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from collections.abc import AsyncIterator
 import json
 from pathlib import Path
@@ -98,6 +99,55 @@ def _unsafe_event(project_id: UUID, payload: object) -> OutboxAppendInput:
     values = valid.model_dump()
     values["payload"] = payload
     return OutboxAppendInput.model_construct(**values)
+
+
+def test_scheduled_outbox_requires_an_aware_deadline():
+    project = new_record_id()
+    deadline = datetime(2026, 10, 14, tzinfo=UTC)
+    assert _event(project, not_before_at=deadline).not_before_at == deadline
+    with pytest.raises(OutboxInputError, match="outbox_invalid_input"):
+        _event(project, not_before_at=deadline.replace(tzinfo=None))
+
+
+@pytest.mark.parametrize("hours", [-1, 168])
+async def test_scheduled_outbox_preserves_deadline_and_scans_only_due_work(outbox_factory, hours):
+    """A restart scan finds overdue work; early work and rescheduling are refused."""
+    from app.modules.outbox.delivery_repository import DeliveryRepository
+    from app.modules.outbox.models import OutboxEvent
+
+    factory, project = outbox_factory
+    async with factory() as session, session.begin():
+        now = await session.scalar(text("SELECT clock_timestamp()"))
+        deadline = now + timedelta(hours=hours)
+        event = _event(project, not_before_at=deadline)
+        receipt = await OutboxService(session).append(event)
+    async with factory() as session:
+        row = await session.get(OutboxEvent, receipt.event_id)
+        assert row.not_before_at == deadline
+        assert row.next_attempt_at == max(row.occurred_at, deadline)
+        candidates = await DeliveryRepository(session).candidates(
+            {(event.event_type, event.event_version)}, after=None, limit=100,
+        )
+        assert (receipt.event_id in {item.event_id for item in candidates.items}) == (hours < 0)
+    async with factory() as session, session.begin():
+        replay = await OutboxService(session).append(event)
+        assert replay.event_id == receipt.event_id
+        assert await OutboxService(session).require_existing(None, event) == receipt.event_id
+    with pytest.raises(OutboxIdempotencyConflict):
+        async with factory() as session, session.begin():
+            await OutboxService(session).require_existing(None, event.model_copy(update={
+                "idempotency_key": f"missing:{new_record_id()}",
+            }))
+    with pytest.raises(OutboxIdempotencyConflict):
+        async with factory() as session, session.begin():
+            await OutboxService(session).append(event.model_copy(update={
+                "not_before_at": deadline + timedelta(hours=1),
+            }))
+    with pytest.raises(DBAPIError, match="envelope is immutable"):
+        async with factory() as session, session.begin():
+            await session.execute(text(
+                "UPDATE public.outbox_events SET not_before_at=NULL WHERE event_id=:id"
+            ), {"id": receipt.event_id})
 
 
 def test_outbox_input_requires_closed_tokens_and_object_payload() -> None:
@@ -312,12 +362,13 @@ async def test_outbox_service_detaches_hostile_nested_container_failure() -> Non
         assert raised.value.__cause__ is None
 
 
-def test_outbox_validation_entry_points_preserve_valid_modes() -> None:
-    expected = _event(new_record_id(), payload={"marker": "safe"})
+@pytest.mark.parametrize("deadline", [None, datetime(2026, 10, 14, tzinfo=UTC)])
+def test_outbox_validation_entry_points_preserve_valid_modes(deadline) -> None:
+    expected = _event(new_record_id(), payload={"marker": "safe"}, not_before_at=deadline)
     adapter = TypeAdapter(OutboxAppendInput)
     python_value = OutboxAppendInput.model_validate(expected.model_dump())
     json_value = OutboxAppendInput.model_validate_json(json.dumps(expected.model_dump(mode="json")))
-    strings = expected.model_dump(mode="json")
+    strings = expected.model_dump(mode="json", exclude_none=True)
     strings["event_version"] = str(strings["event_version"])
     string_value = OutboxAppendInput.model_validate_strings(strings)
     adapter_python = adapter.validate_python(expected.model_dump())

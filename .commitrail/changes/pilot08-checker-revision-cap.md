@@ -45,8 +45,17 @@ handoff, and does not claim live human decision delivery before that owner lands
 - Affected current lifecycle specification, roadmap and this record.
 - TASK-owned timeout outcome and assignment release/reclaim, exact internal AUTH,
   audit and outbox participants, recurring durable worker scan and registration.
+- Shared OUTBOX immutable not-before append custody, exact logical-key read,
+  replay-safe expiry registration, bounded unknown-effect retry for the exact
+  expiry event type/version, initialization from PostgreSQL time, SQL projection
+  guards and immutable unknown-effect receipt truth. Other delivery rules remain.
 - Assignment-scoped revision accounting and new-claim intake across TASK/ART/
-  CHECKERS, preserving task-global immutable Submission ordering and evidence.
+  CHECKERS, preserving task-global immutable Submission ordering and evidence;
+  derive the local round from assignment submissions without a second counter.
+- TASK-owned bounded discovery of retained current revision sources, fixed-service
+  recovery authority, immutable root or exact missing-event registration, and
+  corresponding lifecycle audit/SQL closure. Discovery preserves the source
+  manifest's original deadline and never rebases the continuing task.
 - Reconcile the merged CLI submission/context commands with the revision contract.
 
 ### Not allowed
@@ -171,10 +180,18 @@ unrelated uniqueness or stale-lineage rejections.
 
 ## Reconciliation
 
-- Current-source reconciliation: main 82a46ff3 includes supported false activation;
-  #550 is no longer a dependency. Checker remediation now shares revision limits
-  by the explicit product decision, superseding the older human-only wording.
-- Remaining implementation in this PR: deadline handling, guarded complete-context
-  rebase, contributor change summary and repair, with the shared handoff for #554.
-- Remaining risks: cross-owner retained lineage and lock order require PostgreSQL
-  proof; live human decision creation is still a separate owner dependency.
+- Current-source reconciliation: merged main 2c1f7517c includes supported false
+  activation and the CLI submission journey. Checker remediation shares revision
+  limits by the explicit product decision, superseding the human-only wording.
+- The working candidate implements deadline handling, guarded complete-context
+  rebase, contributor change summaries and repair, assignment-scoped rounds,
+  atomic timeout receipts/outcomes and retained-source recovery. These are not
+  delivered capabilities until the complete candidate passes review and merges.
+- Interim validation: the CLI submission HTTP suite passed 14 tests. An isolated
+  PostgreSQL run proved due expiry, immutable submission preservation, assignment
+  release, rejected-status projection and outcome acknowledgement, then failed
+  retained-source recovery at audit input validation. This is partial evidence,
+  not final-head approval; recovery, crash/retry and concurrency checks remain.
+- Remaining risks: complete cross-owner retained lineage and lock-order proof,
+  final independent reviews and required CI. Live human decision creation remains
+  the separate #554 dependency.

@@ -87,11 +87,14 @@ class SubmissionPredecessorFacts:
 
     submission_id: UUID
     version: int
+    revision_round: int
 
     def __post_init__(self) -> None:
         """Reject non-positive or non-integer Submission versions."""
         if type(self.version) is not int or self.version < 1:
             raise ValueError("submission predecessor version is invalid")
+        if type(self.revision_round) is not int or self.revision_round < 1:
+            raise ValueError("submission predecessor revision round is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,6 +195,6 @@ def require_revision_capacity(
         != (policy_id, policy_generation, policy_hash)
     ):
         raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
-    # The predecessor's one-based version equals the next zero-based round.
-    if task.predecessor.version > max_revision_rounds:
+    # A global Submission version is not an assignment's revision allowance.
+    if task.predecessor.revision_round > max_revision_rounds:
         raise TaskSubmissionContextUnavailable("revision_limit_reached")

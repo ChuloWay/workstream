@@ -110,10 +110,18 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
     deadline_at = (predecessor.deadline_at if predecessor else
                    requested_at + timedelta(hours=candidate.revision_deadline_hours))
     limit = predecessor.max_revision_rounds if predecessor else candidate.max_revision_rounds
+    source_round = await session.scalar(select(func.count(Submission.id)).where(
+        Submission.task_assignment_id == manifest.assignment_id,
+        Submission.version <= manifest.submission_version,
+    ))
+    if source_round is None or source_round < 1 or (
+        predecessor is not None and source_round != predecessor.next_revision_round
+    ):
+        raise TaskSubmissionContextUnavailable("revision_context_changed")
     reason = None
-    if manifest.submission_version > limit or (
+    if source_round > limit or (
         candidate.target_max_revision_rounds is not None
-        and manifest.submission_version > candidate.target_max_revision_rounds
+        and source_round > candidate.target_max_revision_rounds
     ):
         reason = "revision_limit_reached"
     elif now >= deadline_at:
@@ -131,7 +139,8 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
         "predecessor_id": str(predecessor.id) if predecessor else None,
         "sequence": predecessor.sequence + 1 if predecessor else 1,
         "requested_at": requested_at.isoformat(), "deadline_at": deadline_at.isoformat(),
-        "next_revision_round": manifest.submission_version, "max_revision_rounds": limit,
+        "source_submission_version": manifest.submission_version,
+        "next_revision_round": source_round, "max_revision_rounds": limit,
         "outcome": outcome, "blocked_reason": reason,
         "candidate": candidate.model_dump(mode="json"),
         "previous_task_lineage": {
@@ -144,7 +153,8 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
         assignment_id=manifest.assignment_id, contributor_id=manifest.contributor_id,
         submission_id=manifest.submission_id, routing_manifest_id=manifest.id,
         predecessor_id=predecessor.id if predecessor else None,
-        sequence=packet["sequence"], next_revision_round=manifest.submission_version,
+        sequence=packet["sequence"], source_submission_version=manifest.submission_version,
+        next_revision_round=source_round,
         max_revision_rounds=limit, requested_at=requested_at, deadline_at=deadline_at,
         outcome=outcome, blocked_reason=reason, packet=packet,
         preparation_sha256=canonical_json_hash(packet),

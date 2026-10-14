@@ -84,12 +84,8 @@ class TaskPostSubmitSourceProposal(BaseModel):
         has_predecessor_version = self.predecessor_submission_version is not None
         if has_predecessor_id != has_predecessor_version:
             raise ValueError("routing source predecessor identity is incomplete")
-        if self.submission_version == 1:
-            if has_predecessor_id:
-                raise ValueError("initial routing source has a predecessor")
-            return self
         if not has_predecessor_id:
-            raise ValueError("successor routing source lacks a predecessor")
+            return self
         if self.predecessor_submission_id == self.submission_id:
             raise ValueError("routing source predecessor equals submission")
         if self.predecessor_submission_version != self.submission_version - 1:

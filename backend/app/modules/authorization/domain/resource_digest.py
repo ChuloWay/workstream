@@ -5,7 +5,9 @@ from app.modules.authorization.domain.post_submit_routing import PostSubmitRouti
 from app.modules.authorization.domain.post_submit import PostSubmitResourceContext, post_submit_digest
 from app.modules.authorization.domain.pre_submit import PreSubmitResourceContext
 from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
+from app.modules.authorization.domain.revision_expiry import RevisionExpiryResourceContext
 from app.modules.tasks.api.assignment_invalidation import assignment_invalidation_resource_digest
+from app.modules.tasks.api.revision_expiry import revision_expiry_resource_digest
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.api.outbox_dispatch import outbox_dispatch_resource_digest
 from app.modules.authorization.domain.guide_activation import ProjectGuideActivationResourceContext
@@ -37,6 +39,9 @@ def authorization_resource_digest(resource: BaseModel) -> str:
     if type(resource) is AssignmentInvalidationResourceContext:
         resource.validate_identity()
         return assignment_invalidation_resource_digest(resource.facts)
+    if type(resource) is RevisionExpiryResourceContext:
+        resource.exact_target()
+        return revision_expiry_resource_digest(resource.facts)
     if type(resource) is OutboxDispatchResourceContext:
         resource.validate_identity()
         return outbox_dispatch_resource_digest(resource.facts)

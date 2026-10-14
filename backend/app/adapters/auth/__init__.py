@@ -244,6 +244,20 @@ def assignment_invalidation_authorization(session: AsyncSession):
     return AssignmentInvalidationAuthorizationAdapter(session)
 
 
+def revision_expiry_authorization(session: AsyncSession):
+    """Bind TASK's deadline effect to canonical fixed-service AUTH."""
+    from app.modules.authorization.revision_expiry_authorization import RevisionExpiryAuthorizationAdapter
+
+    return RevisionExpiryAuthorizationAdapter(session)
+
+
+def revision_recovery_authorization(session: AsyncSession):
+    """Bind retained-window recovery to canonical fixed-service AUTH."""
+    from app.modules.authorization.revision_recovery_authorization import RevisionRecoveryAuthorizationAdapter
+
+    return RevisionRecoveryAuthorizationAdapter(session)
+
+
 def actor_lifecycle_service(session: AsyncSession):
     """Compose lifecycle evidence and exact assignment publication together."""
     from app.modules.authorization.lifecycle_service import ActorLifecycleService

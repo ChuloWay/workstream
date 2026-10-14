@@ -129,9 +129,59 @@ class TransactionalAssignmentInvalidationHandler:
             return HandlerOutcome.REJECT
 
 
+class TransactionalTaskRevisionExpiryHandler:
+    """Commit the exact TASK timeout effect before OUTBOX acknowledgement."""
+
+    def __init__(self, session_factory, *, observer, authorization_factory):
+        self._sessions = session_factory
+        self._observer, self._authorization = observer, authorization_factory
+
+    async def __call__(self, envelope):
+        from app.adapters.audit import task_revision_expiry_audit
+        from app.adapters.outbox import outbox_append, outbox_invocation_fence
+        from app.modules.tasks.api.revision_expiry import TaskRevisionExpiryUnavailable
+        from app.modules.tasks.revision.expiry import TaskRevisionExpiryOperation
+
+        try:
+            async with self._sessions() as session, session.begin():
+                outcome = await TaskRevisionExpiryOperation(
+                    session, observer=self._observer,
+                    fence=outbox_invocation_fence(session),
+                    authorization=self._authorization(session),
+                    audit=task_revision_expiry_audit(session),
+                    outbox=outbox_append(session),
+                ).expire(envelope)
+            return outcome
+        except TaskRevisionExpiryUnavailable:
+            return HandlerOutcome.REJECT
+
+
+class TransactionalTaskRevisionExpiredNoticeHandler:
+    """ACK the committed outcome only after exact TASK receipt and audit validation."""
+
+    def __init__(self, session_factory, *, observer):
+        self._sessions, self._observer = session_factory, observer
+
+    async def __call__(self, envelope):
+        from app.adapters.audit import task_revision_expiry_audit
+        from app.modules.tasks.api.revision_expiry import TaskRevisionExpiryUnavailable
+        from app.modules.tasks.revision.expired_notice import TaskRevisionExpiredNoticeOperation
+
+        try:
+            async with self._sessions() as session:
+                return await TaskRevisionExpiredNoticeOperation(
+                    session, observer=self._observer,
+                    audit=task_revision_expiry_audit(session),
+                ).acknowledge(envelope)
+        except TaskRevisionExpiryUnavailable:
+            return HandlerOutcome.REJECT
+
+
 __all__ = (
     "selected_pre_submit_task_guard",
     "TransactionalAssignmentInvalidationHandler",
+    "TransactionalTaskRevisionExpiryHandler",
+    "TransactionalTaskRevisionExpiredNoticeHandler",
     "task_commands",
     "task_service",
     "TransactionalSubmissionCreationCommand",
@@ -149,6 +199,28 @@ def task_service(session: AsyncSession, *, settings: Settings) -> TaskService:
     )
 
 
+def task_revision_recovery(session: AsyncSession):
+    """Compose the explicit retained-window recovery owner in one transaction."""
+    from app.adapters.audit import task_transition_audit
+    from app.adapters.auth import revision_recovery_authorization
+    from app.adapters.outbox import outbox_append
+    from app.adapters.projects import project_locked_policy_context_port
+    from app.modules.tasks.revision.recovery import TaskRevisionRecovery
+
+    return TaskRevisionRecovery(
+        session, projects=project_locked_policy_context_port(session),
+        authorization=revision_recovery_authorization(session),
+        audit=task_transition_audit(session), outbox=outbox_append(session),
+    )
+
+
+async def scan_task_revision_sources(factory, after):
+    """Compose one bounded TASK discovery page for the scheduled worker."""
+    from app.modules.tasks.revision.recovery_scan import scan_current_revision_sources
+
+    return await scan_current_revision_sources(factory, task_revision_recovery, after)
+
+
 def task_commands(
     session: AsyncSession,
     *,
@@ -160,6 +232,7 @@ def task_commands(
     """Compose TASK commands without exposing private product imports to delivery."""
     from app.adapters.artifacts import task_guide_documents_port
     from app.adapters.contributions import locked_compensation_terms_port
+    from app.adapters.outbox import outbox_append
 
     return AuthorizedTaskCommands(
         session,
@@ -169,6 +242,7 @@ def task_commands(
         contexts=task_service(session, settings=settings),
         guide_documents=task_guide_documents_port(session, settings),
         compensation_terms=locked_compensation_terms_port(session),
+        outbox=outbox_append(session),
     )
 
 

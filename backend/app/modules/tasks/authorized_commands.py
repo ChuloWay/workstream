@@ -43,6 +43,8 @@ from app.modules.tasks.api.submission_context import TaskSubmissionContextUnavai
 from app.modules.tasks.command_replay import TaskCommandReplay, TaskReplayConflict
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.revision.models import TaskRevisionPreparation
+from app.modules.tasks.revision.expiry_event import revision_expiry_event
+from app.modules.outbox.api import OutboxAppendPort
 from app.modules.tasks.revision.service import (
     RevisionRepairReceipt, candidate_from_packet, head_for_source, prepare_revision, project_current_revision,
     read_contributor_revision, select_candidate, snapshot,
@@ -139,6 +141,7 @@ class AuthorizedTaskCommands:
         contexts: TaskService,
         guide_documents: TaskGuideDocumentsPort,
         compensation_terms: LockedCompensationTermsPort | None = None,
+        outbox: OutboxAppendPort | None = None,
     ) -> None:
         self._session = session
         self._authorization = authorization
@@ -147,6 +150,7 @@ class AuthorizedTaskCommands:
         self._repo = TaskRepository(session, compensation_terms=compensation_terms)
         self._contexts = contexts
         self._guide_documents = guide_documents
+        self._outbox = outbox
         self._replay = TaskCommandReplay(session)
         self._transition_context_owner = object()
 
@@ -395,7 +399,7 @@ class AuthorizedTaskCommands:
                     or latest.id != parent.submission_id
                     or latest.task_assignment_id != assignment.id
                     or latest.contributor_id != assignment.contributor_id
-                    or latest.version != parent.next_revision_round):
+                    or latest.version != parent.source_submission_version):
                 await reject("revision_context_changed")
             manifest = await self._repo.read_routing_manifest(
                 manifest_id=parent.routing_manifest_id, project_id=project_id,
@@ -437,9 +441,9 @@ class AuthorizedTaskCommands:
                 await reject("revision_context_changed")
             if candidate.target is None:
                 await reject("revision_context_blocked")
-            if (manifest.submission_version > parent.max_revision_rounds
+            if (parent.next_revision_round > parent.max_revision_rounds
                     or candidate.target_max_revision_rounds is not None
-                    and manifest.submission_version > candidate.target_max_revision_rounds):
+                    and parent.next_revision_round > candidate.target_max_revision_rounds):
                 await reject("revision_limit_reached")
             if candidate.target == original.target:
                 await reject("revision_context_unchanged")
@@ -568,6 +572,9 @@ class AuthorizedTaskCommands:
                 )
             except TaskSubmissionContextUnavailable as exc:
                 raise TaskRevisionRepairError(exc.code) from exc
+            if self._outbox is None:
+                raise RuntimeError("revision expiry publication unavailable")
+            await self._outbox.append(revision_expiry_event(manifest, child))
             await self._audit.record_revision_repair(TaskRevisionRepairAuditFacts(
                 event_id=audit_event_id, project_id=project_id, task_id=task_id,
                 assignment_id=UUID(assignment.id), submission_id=UUID(latest.id),

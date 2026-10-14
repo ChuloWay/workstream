@@ -61,6 +61,8 @@ class TaskRevisionRepairAuditFacts:
     actor_profile_id: UUID
     authorization_decision_id: UUID
     reason: str
+    outbox_event_id: UUID | None = None
+    authorization_resource_digest: str | None = None
 
 
 class TaskTransitionAuditPort(Protocol):

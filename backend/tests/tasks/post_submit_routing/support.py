@@ -351,6 +351,7 @@ async def activate_successor_guide(h):
 
     from sqlalchemy import select
 
+    from app.adapters.checkers import external_checker_registry_reader
     from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
     from app.modules.actors.models import ActorIdentityLink, ActorProfile
     from app.modules.projects.api.post_policy import PostPolicyApproval
@@ -384,6 +385,11 @@ async def activate_successor_guide(h):
                 )
             )
         ).one()
+        registry_entries = await external_checker_registry_reader(session).list_entries()
+    pre_entries = tuple(entry for entry in registry_entries if entry.phase == "pre_submit")
+    post_entries = tuple(entry for entry in registry_entries if entry.phase == "post_submit")
+    assert len(registry_entries) == len(pre_entries) + len(post_entries)
+    assert len(pre_entries) <= 1 and len(post_entries) <= 1
     values.update(actor=as_uuid(setup_actor), link=as_uuid(setup_link))
     manager, grant = await seed_review_actor(h.factory, h.request.project_id)
     proposal = SubmissionArtifactPolicyProposal(
@@ -399,6 +405,8 @@ async def activate_successor_guide(h):
         manager,
         version="v2",
         artifact_proposal=proposal,
+        pre_submit_registry_entry=pre_entries[0] if pre_entries else None,
+        post_submit_registry_entry=post_entries[0] if post_entries else None,
     )
     await seed_selected_review_revision_inputs(h.factory, finalization, manager)
     _, derived = await prepare_post_policy(

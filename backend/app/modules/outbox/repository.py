@@ -29,15 +29,17 @@ class OutboxRepository:
         """Bind all persistence to the caller's exact session."""
         self._session = session
 
-    async def read_exact(self, event_id: UUID, value: OutboxAppendInput) -> OutboxEvent | None:
+    async def read_exact(self, event_id: UUID | None, value: OutboxAppendInput) -> OutboxEvent | None:
         """Qualify retained event identity and ownership before reading payload."""
-        return await self._session.scalar(select(OutboxEvent).where(
-            OutboxEvent.event_id == event_id,
+        statement = select(OutboxEvent).where(
             OutboxEvent.project_id == str(value.project_id),
             OutboxEvent.aggregate_type == value.aggregate_type,
             OutboxEvent.aggregate_id == value.aggregate_id,
             OutboxEvent.idempotency_key == value.idempotency_key,
-        ).execution_options(populate_existing=True))
+        )
+        if event_id is not None:
+            statement = statement.where(OutboxEvent.event_id == event_id)
+        return await self._session.scalar(statement.execution_options(populate_existing=True))
 
     async def reserve(
         self,
@@ -60,6 +62,7 @@ class OutboxRepository:
                 idempotency_key=value.idempotency_key,
                 payload=value.payload,
                 payload_digest=payload_digest,
+                not_before_at=value.not_before_at,
             )
             .on_conflict_do_nothing(index_elements=[OutboxEvent.idempotency_key])
             .returning(OutboxEvent.event_id)

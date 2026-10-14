@@ -96,6 +96,7 @@ def _outcome(
     cause: FinalizationCause,
     now: datetime,
     options: DeliveryOptions,
+    retry_unknown: bool = False,
 ) -> dict:
     """Map closed disposition to database-timed outcome with bounded backoff."""
     if type(cause) is not FinalizationCause:
@@ -112,6 +113,13 @@ def _outcome(
     state, code, retry = "dead_letter", "HANDLER_REJECTED", None
     if unknown:
         code = "INVOKE_OUTCOME_UNKNOWN"
+        if retry_unknown and claim.claim_generation < options.max_attempts:
+            state = "retryable"
+            delay = min(
+                options.retry_cap_seconds,
+                options.retry_base_seconds * 2 ** min(claim.claim_generation - 1, 30),
+            )
+            retry = now + timedelta(seconds=delay)
     elif cause is FinalizationCause.ACKNOWLEDGE:
         state, code = "acknowledged", None
     elif cause in (FinalizationCause.RETRY, FinalizationCause.EXPIRED):
@@ -364,7 +372,8 @@ class OutboxDelivery:
                 now = datetime.fromisoformat(
                     json.loads(attempt.outcome_json)["receipt_completed_at"]
                 )
-            value = _outcome(claim, attempt.invoked_at, cause, now, options)
+            retry_unknown = self._registry.can_retry_unknown(event.event_type, event.event_version)
+            value = _outcome(claim, attempt.invoked_at, cause, now, options, retry_unknown)
             proposed = DeliveryReceipt(
                 claim=claim, outcome_json=_encode(value), outcome_digest=canonical_json_hash(value)
             )
@@ -378,6 +387,7 @@ class OutboxDelivery:
                 cause,
                 datetime.fromisoformat(stored["receipt_completed_at"]),
                 options,
+                retry_unknown,
             )
             if _encode(expected) != completed.receipt.outcome_json:
                 raise DeliveryUnavailable("outbox_delivery_unavailable") from None
@@ -419,7 +429,10 @@ class OutboxDelivery:
                     raise DeliveryUnavailable("outbox_delivery_unavailable")
                 value = json.loads(receipt.outcome_json)
                 completed = datetime.fromisoformat(value["receipt_completed_at"])
-                expected = _outcome(claim, attempt.invoked_at, cause, completed, options)
+                expected = _outcome(
+                    claim, attempt.invoked_at, cause, completed, options,
+                    self._registry.can_retry_unknown(event.event_type, event.event_version),
+                )
                 if (
                     completed > now
                     or _encode(expected) != receipt.outcome_json
@@ -457,7 +470,7 @@ class OutboxDelivery:
         return receipt
 
     async def recover(self, event_id: UUID, project_id: UUID) -> DeliveryReceipt | None:
-        """Expired uninvoked work retries; expired invocation remains unknown."""
+        """Recover expired custody; only explicitly safe handlers retry unknown effects."""
         async with self._sessions() as session:
             event = await DeliveryRepository(session).event(event_id, project_id)
             now = await database_time(session)

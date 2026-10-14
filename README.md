@@ -970,6 +970,10 @@ previous Submissions and their evidence remain unchanged. A revision reruns full
 intake and acknowledges that exact preparation. The initial attempt is round 0;
 a limit of 2 permits revisions 1 and 2. Each fixable failure starts a fresh policy
 deadline, while replay and PM context repair preserve its original window.
+At expiry, PostgreSQL-timed outbox delivery records the outstanding attempt's
+rejection, releases its assignment and returns the task to ready. The next
+claimant starts round 0 with their own allowance. Original Submissions and
+findings remain immutable; scans and retries recover work after downtime.
 Checker remediation creates no Review or reviewer contribution. Live human
 Review decision composition remains separate work.
 

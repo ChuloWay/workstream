@@ -478,7 +478,7 @@ async def test_revision_repair_replay_and_current_source_failures(monkeypatch, c
         preparation_sha256=request.parent_preparation_sha256,
         routing_manifest_id=manifest_id, assignment_id=str(assignment_id),
         contributor_id=str(contributor_id), submission_id=str(submission_id),
-        next_revision_round=1, blocked_reason=None,
+        next_revision_round=1, source_submission_version=1, blocked_reason=None,
         deadline_at=now if case == "expired" else datetime.max.replace(tzinfo=UTC),
     )
     child = SimpleNamespace(

@@ -10,7 +10,7 @@ import hashlib
 import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import suppress
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -62,6 +62,7 @@ from app.modules.tasks.api import (
     TaskSubmissionContextRequest,
     TaskSubmissionContextUnavailable,
 )
+from app.modules.tasks.api.submission_context import require_revision_capacity
 from app.modules.tasks.models import (
     AuditEvent,
     EvidenceItem,
@@ -98,7 +99,7 @@ def _locked_task_context_references() -> TaskLockedProjectContextReferences:
 
 def test_task_submission_context_public_facts_are_immutable_and_consistent() -> None:
     """Reject mutation, invalid failures, and inconsistent lifecycle facts."""
-    predecessor = SubmissionPredecessorFacts(submission_id=new_record_id(), version=2)
+    predecessor = SubmissionPredecessorFacts(submission_id=new_record_id(), version=2, revision_round=2)
     facts = submission_context_facts(submitter_contribution_policy_version_id=UUID(int=100),
         task_id=new_record_id(),
         assignment_id=new_record_id(),
@@ -118,7 +119,9 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
     with pytest.raises(FrozenInstanceError):
         facts.status = "in_progress"  # type: ignore[misc]
     with pytest.raises(ValueError, match="version is invalid"):
-        SubmissionPredecessorFacts(submission_id=new_record_id(), version=0)
+        SubmissionPredecessorFacts(submission_id=new_record_id(), version=0, revision_round=1)
+    with pytest.raises(ValueError, match="revision round is invalid"):
+        SubmissionPredecessorFacts(submission_id=new_record_id(), version=3, revision_round=0)
     with pytest.raises(ValueError, match="reference is empty"):
         TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
             project_id=new_record_id(),
@@ -150,6 +153,34 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
             predecessor=None,
             locked_project_context=_locked_task_context_references(),
         )
+
+
+def test_revision_capacity_counts_current_assignment_instead_of_global_version() -> None:
+    """A later claimant's first failure permits its own revision round one."""
+    references = _locked_task_context_references()
+    facts = submission_context_facts(
+        task_id=new_record_id(), assignment_id=new_record_id(),
+        contributor_id=new_record_id(), status="needs_revision",
+        kind="checker_remediation",
+        predecessor=SubmissionPredecessorFacts(
+            submission_id=new_record_id(), version=5, revision_round=1,
+        ),
+        checker_remediation_manifest_id=new_record_id(),
+        locked_project_context=references,
+        submitter_contribution_policy_version_id=references.locked_contribution_policy_version_id,
+    )
+    lineage = facts.locked_policy
+    policy = dict(
+        project_id=references.project_id,
+        policy_id=lineage.locked_revision_policy_id,
+        policy_generation=lineage.locked_revision_policy_generation,
+        policy_hash=lineage.locked_revision_policy_hash,
+        max_revision_rounds=2,
+    )
+    require_revision_capacity(facts, **policy)
+    exhausted = replace(facts, predecessor=replace(facts.predecessor, revision_round=3))
+    with pytest.raises(TaskSubmissionContextUnavailable, match="revision_limit_reached"):
+        require_revision_capacity(exhausted, **policy)
 
 
 @pytest.mark.asyncio
@@ -208,6 +239,7 @@ async def test_task_repository_locks_initial_and_revision_submission_context() -
             MagicMock(
                 id=str(predecessor_id),
                 version=1,
+                task_assignment_id=str(assignment_id),
                 contributor_id=str(contributor_id),
             ),
         ]
@@ -272,7 +304,8 @@ async def test_task_repository_rejects_stale_submission_predecessor() -> None:
     repository = TaskRepository(session)
     repository.get_task = AsyncMock(return_value=task)
     repository.get_latest_submission_for_task = AsyncMock(
-        return_value=MagicMock(id=str(new_record_id()), version=1, contributor_id=str(contributor_id))
+        return_value=MagicMock(id=str(new_record_id()), version=1,
+                               task_assignment_id=str(assignment_id), contributor_id=str(contributor_id))
     )
 
     with pytest.raises(
@@ -306,6 +339,7 @@ async def test_task_repository_rejects_invalid_revision_lineage(
     predecessor = MagicMock(
         id=str(predecessor_id),
         version=1,
+        task_assignment_id=str(assignment_id),
         contributor_id=str(new_record_id()) if cross_contributor else str(contributor_id),
     )
     session = MagicMock()

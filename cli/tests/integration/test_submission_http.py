@@ -28,6 +28,7 @@ HISTORY = {
     "task_id": TASK,
     "version": 1,
     "status": "submitted",
+    "status_reason": None,
     "summary": "Work complete",
     "submitted_at": "2026-10-14T10:00:00Z",
     "locked_at": None,
@@ -400,6 +401,33 @@ def test_submission_history_and_findings_are_bounded_and_preserve_evidence(cli):
         assert result.returncode == 0 and json.loads(result.stdout) == CHECKER
         assert requests[-1][1] == f"/api/v1/submissions/{SUBMISSION}/checker-runs/{RUN}"
         assert len(requests) == 4
+
+
+def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
+    with http_fixture() as (origin, response, _):
+        for history in (
+            {key: value for key, value in HISTORY.items() if key != "status_reason"},
+            HISTORY,
+            HISTORY | {"status": "rejected", "status_reason": "revision_deadline_expired"},
+        ):
+            respond(response, history)
+            result = cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json")
+            assert result.returncode == 0 and json.loads(result.stdout) == history, result.stderr
+            text = cli(origin, TOKEN, "submission", "show", SUBMISSION)
+            assert text.returncode == 0, text.stderr
+            displayed = json.loads(text.stdout.splitlines()[0].split(": ", 1)[1])
+            assert displayed.get("status_reason") == history.get("status_reason")
+            respond(response, {"items": [history], "next_cursor": None})
+            page = cli(origin, TOKEN, "task", "submissions", TASK, "-o", "json")
+            assert page.returncode == 0 and json.loads(page.stdout)["items"] == [history]
+        for history in (
+            HISTORY | {"status_reason": "revision_deadline_expired"},
+            HISTORY | {"status": "rejected", "status_reason": "other"},
+            HISTORY | {"status": "rejected", "status_reason": ""},
+            HISTORY | {"status": "rejected", "status_reason": 1},
+        ):
+            respond(response, history)
+            assert_failure(cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json"), "invalid_api_response")
 
 
 def test_submission_reads_reject_substitution_private_fields_and_duplicate_identity(

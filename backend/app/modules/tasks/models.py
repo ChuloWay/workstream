@@ -670,7 +670,7 @@ class SubmissionDispatch(Base):
             ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"], ondelete="RESTRICT"),
         CheckConstraint("request_digest ~ '^sha256:[0-9a-f]{64}$' and "
                         "evaluation_request_digest ~ '^sha256:[0-9a-f]{64}$'", name="sha256_shapes"),
-        CheckConstraint("(submission_version = 1 and creation_kind = 'initial' and creation_status = 'in_progress' "
+        CheckConstraint("(submission_version > 0 and creation_kind = 'initial' and creation_status = 'in_progress' "
                         "and checker_remediation_manifest_id is null) "
                         "or (submission_version > 1 and creation_kind = 'checker_remediation' "
                         "and creation_status = 'needs_revision' and checker_remediation_manifest_id is not null)",

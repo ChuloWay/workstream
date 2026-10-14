@@ -1062,10 +1062,19 @@ There is no default handler. Registration requires a coroutine function, bound
 async method or async callable instance; synchronous handlers and factories reject
 before invocation. Claim expiry before invocation can retry with bounded
 exponential backoff; an explicit safe handler retry can also create another attempt.
-An exception, timeout, cancellation or crash after the invocation marker commits
-has unknown effects and stops in dead-letter on finalization/recovery. This includes
-a crash before the handler actually starts. The dispatcher neither silently retries
-unknown effects nor promises unconditional at-least-once handler entry. The deadline
+By default, an exception, timeout, cancellation or crash after the invocation marker
+commits has unknown effects and stops in dead-letter on finalization/recovery. This
+includes a crash before the handler actually starts. The enabled exceptions are
+`TaskRevisionExpiryRequested` and its read-only `TaskRevisionExpired` outcome notice,
+both version 1. Their explicitly replay-safe registrations permit bounded retries
+because TASK commits the effect and an immutable receipt
+atomically, fences each invocation, and replays that receipt without repeating the
+effect. The delivery receipt retains `invocation_unknown=true`; it does not claim
+the earlier call failed. PostgreSQL restricts unknown retryable outcomes to that
+exact pair of event types and version. Exhausting the attempt budget still dead-letters the
+request and remains an operational failure requiring resolution. Other handlers
+retain the default; the dispatcher does not promise unconditional at-least-once
+handler entry. The deadline
 is independent of handler cancellation cooperation: a timed-out call may still run
 physically, but its later result cannot replace the recorded unknown outcome.
 

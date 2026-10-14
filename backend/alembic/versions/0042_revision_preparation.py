@@ -50,7 +50,13 @@ def upgrade():
     """Keep historical facts valid and require exact new-effect revision receipts."""
     op.execute("SET LOCAL search_path=pg_catalog,public,pg_temp")
     _extend_repair_audit_contract()
-    op.execute("\nCREATE TABLE public.task_revision_preparations (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\ttask_id UUID NOT NULL, \n\tassignment_id UUID NOT NULL, \n\tcontributor_id UUID NOT NULL, \n\tsubmission_id UUID NOT NULL, \n\trouting_manifest_id UUID NOT NULL, \n\tpredecessor_id UUID, \n\tsequence INTEGER NOT NULL, \n\tnext_revision_round INTEGER NOT NULL, \n\tmax_revision_rounds INTEGER NOT NULL, \n\trequested_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tdeadline_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE DEFAULT clock_timestamp() NOT NULL, \n\tcreation_xid VARCHAR(20) DEFAULT pg_current_xact_id()::text NOT NULL, \n\toutcome VARCHAR(16) NOT NULL, \n\tblocked_reason VARCHAR(40), \n\tpacket JSONB NOT NULL, \n\tpreparation_sha256 VARCHAR(71) NOT NULL, \n\tauthorization_decision_id UUID NOT NULL, \n\taudit_event_id UUID NOT NULL, \n\tCONSTRAINT pk_task_revision_preparations PRIMARY KEY (id), \n\tCONSTRAINT ck_task_revision_preparations_id_uuid7 CHECK ((get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128), \n\tCONSTRAINT fk_revision_preparation_task_project FOREIGN KEY(task_id, project_id) REFERENCES workstream_tasks (id, project_id), \n\tCONSTRAINT fk_revision_preparation_assignment FOREIGN KEY(assignment_id, task_id, contributor_id) REFERENCES task_assignments (id, task_id, contributor_id), \n\tCONSTRAINT fk_revision_preparation_submission FOREIGN KEY(submission_id, task_id, next_revision_round) REFERENCES submissions (id, task_id, version), \n\tCONSTRAINT uq_revision_preparation_successor UNIQUE (predecessor_id), \n\tCONSTRAINT uq_revision_preparation_sequence UNIQUE (routing_manifest_id, sequence), \n\tCONSTRAINT ck_task_revision_preparations_positive_rounds CHECK (sequence > 0 and next_revision_round > 0 and max_revision_rounds > 0), \n\tCONSTRAINT ck_task_revision_preparations_chain_shape CHECK ((sequence = 1) = (predecessor_id IS NULL)), \n\tCONSTRAINT ck_task_revision_preparations_outcome CHECK (outcome in ('kept','rebased','blocked')), \n\tCONSTRAINT ck_task_revision_preparations_blocked_reason CHECK (blocked_reason is null or blocked_reason in ('context_blocked','revision_limit_reached','revision_deadline_expired')), \n\tCONSTRAINT ck_task_revision_preparations_blocked_shape CHECK ((outcome = 'blocked') = (blocked_reason IS NOT NULL)), \n\tCONSTRAINT ck_task_revision_preparations_digest CHECK (preparation_sha256 ~ '^sha256:[0-9a-f]{64}$'), \n\tCONSTRAINT ck_task_revision_preparations_deadline CHECK (deadline_at > requested_at), \n\tCONSTRAINT fk_task_revision_preparations_routing_manifest_id_task__85db FOREIGN KEY(routing_manifest_id) REFERENCES task_post_submit_routing_manifests (id) ON DELETE RESTRICT, \n\tCONSTRAINT fk_task_revision_preparations_predecessor_id_task_revis_ac5f FOREIGN KEY(predecessor_id) REFERENCES task_revision_preparations (id) ON DELETE RESTRICT, \n\tCONSTRAINT fk_task_revision_preparations_authorization_decision_id_4599 FOREIGN KEY(authorization_decision_id) REFERENCES audit_events (id) ON DELETE RESTRICT, \n\tCONSTRAINT fk_task_revision_preparations_audit_event_id_audit_events FOREIGN KEY(audit_event_id) REFERENCES audit_events (id) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED\n)\n\n")
+    op.execute("ALTER TABLE public.submission_dispatches DROP CONSTRAINT ck_submission_dispatches_creation_shape")
+    op.execute("""ALTER TABLE public.submission_dispatches ADD CONSTRAINT ck_submission_dispatches_creation_shape
+      CHECK ((submission_version > 0 AND creation_kind='initial' AND creation_status='in_progress'
+        AND checker_remediation_manifest_id IS NULL) OR
+        (submission_version > 1 AND creation_kind='checker_remediation'
+        AND creation_status='needs_revision' AND checker_remediation_manifest_id IS NOT NULL))""")
+    op.execute("\nCREATE TABLE public.task_revision_preparations (\n\tid UUID NOT NULL, \n\tproject_id UUID NOT NULL, \n\ttask_id UUID NOT NULL, \n\tassignment_id UUID NOT NULL, \n\tcontributor_id UUID NOT NULL, \n\tsubmission_id UUID NOT NULL, \n\trouting_manifest_id UUID NOT NULL, \n\tpredecessor_id UUID, \n\tsequence INTEGER NOT NULL, \n\tsource_submission_version INTEGER NOT NULL, \n\tnext_revision_round INTEGER NOT NULL, \n\tmax_revision_rounds INTEGER NOT NULL, \n\trequested_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tdeadline_at TIMESTAMP WITH TIME ZONE NOT NULL, \n\tcreated_at TIMESTAMP WITH TIME ZONE DEFAULT clock_timestamp() NOT NULL, \n\tcreation_xid VARCHAR(20) DEFAULT pg_current_xact_id()::text NOT NULL, \n\toutcome VARCHAR(16) NOT NULL, \n\tblocked_reason VARCHAR(40), \n\tpacket JSONB NOT NULL, \n\tpreparation_sha256 VARCHAR(71) NOT NULL, \n\tauthorization_decision_id UUID NOT NULL, \n\taudit_event_id UUID NOT NULL, \n\tCONSTRAINT pk_task_revision_preparations PRIMARY KEY (id), \n\tCONSTRAINT ck_task_revision_preparations_id_uuid7 CHECK ((get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128), \n\tCONSTRAINT fk_revision_preparation_task_project FOREIGN KEY(task_id, project_id) REFERENCES workstream_tasks (id, project_id), \n\tCONSTRAINT fk_revision_preparation_assignment FOREIGN KEY(assignment_id, task_id, contributor_id) REFERENCES task_assignments (id, task_id, contributor_id), \n\tCONSTRAINT fk_revision_preparation_submission FOREIGN KEY(submission_id, task_id, source_submission_version) REFERENCES submissions (id, task_id, version), \n\tCONSTRAINT uq_revision_preparation_successor UNIQUE (predecessor_id), \n\tCONSTRAINT uq_revision_preparation_sequence UNIQUE (routing_manifest_id, sequence), \n\tCONSTRAINT ck_task_revision_preparations_positive_rounds CHECK (sequence > 0 and source_submission_version > 0 and next_revision_round > 0 and max_revision_rounds > 0), \n\tCONSTRAINT ck_task_revision_preparations_chain_shape CHECK ((sequence = 1) = (predecessor_id IS NULL)), \n\tCONSTRAINT ck_task_revision_preparations_outcome CHECK (outcome in ('kept','rebased','blocked')), \n\tCONSTRAINT ck_task_revision_preparations_blocked_reason CHECK (blocked_reason is null or blocked_reason in ('context_blocked','revision_limit_reached','revision_deadline_expired')), \n\tCONSTRAINT ck_task_revision_preparations_blocked_shape CHECK ((outcome = 'blocked') = (blocked_reason IS NOT NULL)), \n\tCONSTRAINT ck_task_revision_preparations_digest CHECK (preparation_sha256 ~ '^sha256:[0-9a-f]{64}$'), \n\tCONSTRAINT ck_task_revision_preparations_deadline CHECK (deadline_at > requested_at), \n\tCONSTRAINT fk_task_revision_preparations_routing_manifest_id_task__85db FOREIGN KEY(routing_manifest_id) REFERENCES task_post_submit_routing_manifests (id) ON DELETE RESTRICT, \n\tCONSTRAINT fk_task_revision_preparations_predecessor_id_task_revis_ac5f FOREIGN KEY(predecessor_id) REFERENCES task_revision_preparations (id) ON DELETE RESTRICT, \n\tCONSTRAINT fk_task_revision_preparations_authorization_decision_id_4599 FOREIGN KEY(authorization_decision_id) REFERENCES audit_events (id) ON DELETE RESTRICT, \n\tCONSTRAINT fk_task_revision_preparations_audit_event_id_audit_events FOREIGN KEY(audit_event_id) REFERENCES audit_events (id) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED\n)\n\n")
     op.execute('CREATE UNIQUE INDEX uq_revision_preparation_root ON task_revision_preparations (routing_manifest_id) WHERE predecessor_id IS NULL')
     op.execute('ALTER TABLE public.task_revision_preparations ADD CONSTRAINT uq_revision_preparation_identity_digest UNIQUE (id, preparation_sha256)')
     op.execute("ALTER TABLE public.task_revision_preparations ADD COLUMN repair_actor_id uuid")
@@ -92,10 +98,10 @@ RETURNS boolean LANGUAGE sql STABLE SET search_path=pg_catalog,public,pg_temp AS
    WHERE m.id=p.routing_manifest_id AND m.project_id=p.project_id
      AND m.task_id=p.task_id AND m.assignment_id=p.assignment_id
      AND m.contributor_id=p.contributor_id AND m.submission_id=p.submission_id
-     AND m.submission_version=p.next_revision_round
+     AND m.submission_version=p.source_submission_version
      AND m.routing_recommendation='needs_revision'
      AND f.current_run_id=m.checker_run_id
-     AND s.task_id=p.task_id AND s.version=p.next_revision_round
+     AND s.task_id=p.task_id AND s.version=p.source_submission_version
      AND NOT EXISTS (SELECT 1 FROM public.submissions later
        WHERE later.task_id=p.task_id AND later.version>s.version)
      AND NOT EXISTS (SELECT 1 FROM public.task_revision_preparations child
@@ -183,7 +189,7 @@ DECLARE m public.task_post_submit_routing_manifests%ROWTYPE;
  a public.task_assignments%ROWTYPE;
  prior public.task_revision_preparations%ROWTYPE; policy public.revision_policies%ROWTYPE;
  c jsonb; target_limit integer; reason text; expected_outcome text; stamp jsonb;
- auth_context jsonb; auth_digest text;
+ auth_context jsonb; auth_digest text; source_round integer;
 BEGIN
  IF TG_OP <> 'INSERT' THEN
    RAISE EXCEPTION 'revision preparation is immutable' USING ERRCODE='55000';
@@ -193,7 +199,7 @@ BEGIN
  SELECT * INTO s FROM public.submissions WHERE id=NEW.submission_id;
  IF m.id IS NULL OR s.id IS NULL OR t.id IS NULL
   OR m.routing_recommendation<>'needs_revision' OR t.status<>'needs_revision'
-  OR ROW(NEW.project_id,NEW.task_id,NEW.assignment_id,NEW.contributor_id,NEW.submission_id,NEW.next_revision_round)
+  OR ROW(NEW.project_id,NEW.task_id,NEW.assignment_id,NEW.contributor_id,NEW.submission_id,NEW.source_submission_version)
      IS DISTINCT FROM ROW(m.project_id,m.task_id,m.assignment_id,m.contributor_id,m.submission_id,m.submission_version)
   OR NEW.creation_xid IS DISTINCT FROM pg_current_xact_id()::text
   OR NEW.preparation_sha256 IS DISTINCT FROM 'sha256:'||pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(public.project_guide_projection_canonical_json(NEW.packet),'UTF8')),'hex')
@@ -202,6 +208,7 @@ BEGIN
   OR (NEW.packet->>'routing_manifest_id')::uuid IS DISTINCT FROM NEW.routing_manifest_id
   OR (NEW.packet->>'predecessor_id')::uuid IS DISTINCT FROM NEW.predecessor_id
   OR (NEW.packet->>'sequence')::integer IS DISTINCT FROM NEW.sequence
+  OR (NEW.packet->>'source_submission_version')::integer IS DISTINCT FROM NEW.source_submission_version
   OR (NEW.packet->>'next_revision_round')::integer IS DISTINCT FROM NEW.next_revision_round
   OR (NEW.packet->>'max_revision_rounds')::integer IS DISTINCT FROM NEW.max_revision_rounds
   OR (NEW.packet->>'requested_at')::timestamptz IS DISTINCT FROM NEW.requested_at
@@ -213,6 +220,11 @@ BEGIN
   OR NOT (NEW.packet->'candidate' ? 'target')
   OR NOT (NEW.packet->'candidate' ? 'target_max_revision_rounds')
  THEN RAISE EXCEPTION 'revision preparation source differs' USING ERRCODE='23514'; END IF;
+ SELECT count(*) INTO source_round FROM public.submissions counted
+ WHERE counted.task_assignment_id=NEW.assignment_id
+   AND counted.version<=NEW.source_submission_version;
+ IF NEW.next_revision_round IS DISTINCT FROM source_round THEN
+   RAISE EXCEPTION 'revision assignment round differs' USING ERRCODE='23514'; END IF;
  c:=NEW.packet->'candidate';
  stamp:=public.revision_task_lineage(to_jsonb(s)) || jsonb_build_object('locked_contribution_policy_version_id',s.contribution_policy_version_id);
  IF c#>'{prior,lineage}' IS DISTINCT FROM stamp THEN
@@ -224,7 +236,7 @@ BEGIN
    OR a.accepted_at IS NULL OR a.released_at IS NOT NULL
    OR t.project_id<>NEW.project_id OR t.assigned_to<>NEW.contributor_id
    OR s.task_assignment_id<>NEW.assignment_id OR s.contributor_id<>NEW.contributor_id
-   OR s.version<>NEW.next_revision_round
+   OR s.version<>NEW.source_submission_version
    OR NOT public.task_routing_context_valid(m)
  THEN RAISE EXCEPTION 'revision current source differs' USING ERRCODE='23514'; END IF;
  IF NOT public.revision_routing_source_current(NEW.routing_manifest_id) THEN
@@ -252,9 +264,10 @@ BEGIN
    SELECT * INTO prior FROM public.task_revision_preparations WHERE id=NEW.predecessor_id;
    IF prior.id IS NULL OR prior.routing_manifest_id<>m.id OR NEW.sequence<>prior.sequence+1
     OR ROW(prior.project_id,prior.task_id,prior.assignment_id,prior.contributor_id,
-           prior.submission_id,prior.next_revision_round)
+           prior.submission_id,prior.source_submission_version,prior.next_revision_round)
        IS DISTINCT FROM ROW(NEW.project_id,NEW.task_id,NEW.assignment_id,
-                            NEW.contributor_id,NEW.submission_id,NEW.next_revision_round)
+                            NEW.contributor_id,NEW.submission_id,NEW.source_submission_version,
+                            NEW.next_revision_round)
     OR ROW(NEW.requested_at,NEW.deadline_at,NEW.max_revision_rounds)
        IS DISTINCT FROM ROW(prior.requested_at,prior.deadline_at,prior.max_revision_rounds)
    THEN RAISE EXCEPTION 'revision successor custody differs' USING ERRCODE='23514'; END IF;
@@ -293,8 +306,8 @@ BEGIN
        AND decision.event_type='SensitiveAuthorizationAllowed'
        AND decision.action_id='project.task.revision.repair'
        AND decision.permission_id='project.task.manage'
-       AND decision.resource_type='task_authority'
-       AND decision.resource_id=NEW.task_id::text
+       AND decision.resource_type='project'
+       AND decision.resource_id=NEW.project_id::text
        AND decision.project_id=NEW.project_id
        AND decision.actor_id=NEW.repair_actor_id::text
        AND decision.denial_code IS NULL
@@ -456,7 +469,7 @@ LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE t public.workstream_tasks%ROWTYPE; a public.task_assignments%ROWTYPE;
  p public.task_revision_preparations%ROWTYPE; prior public.submissions%ROWTYPE;
 BEGIN
- IF NEW.version=1 THEN RETURN NEW; END IF;
+ IF NEW.supersedes_submission_id IS NULL THEN RETURN NEW; END IF;
  SELECT * INTO t FROM public.workstream_tasks WHERE id=NEW.task_id FOR UPDATE;
  SELECT * INTO a FROM public.task_assignments WHERE id=NEW.task_assignment_id FOR UPDATE;
  SELECT * INTO prior FROM public.submissions WHERE id=NEW.supersedes_submission_id FOR UPDATE;
@@ -476,7 +489,7 @@ BEGIN
    OR a.project_id<>t.project_id OR a.contributor_id<>NEW.contributor_id
    OR a.submitter_contribution_policy_version_id<>NEW.contribution_policy_version_id
    OR t.locked_contribution_policy_version_id<>NEW.contribution_policy_version_id
-   OR prior.version<>p.next_revision_round OR NEW.version<>p.next_revision_round+1
+   OR prior.version<>p.source_submission_version OR NEW.version<>p.source_submission_version+1
    OR p.outcome='blocked'
    OR p.packet#>'{candidate,target,lineage}' IS DISTINCT FROM
       public.revision_submission_lineage(NEW)
@@ -498,11 +511,11 @@ CREATE FUNCTION public.guard_revision_submission_deadline() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE deadline timestamptz;
 BEGIN
- IF NEW.version=1 THEN RETURN NULL; END IF;
+ IF NEW.supersedes_submission_id IS NULL THEN RETURN NULL; END IF;
  SELECT p.deadline_at INTO deadline FROM public.task_revision_preparations p
    WHERE p.submission_id=NEW.supersedes_submission_id AND p.task_id=NEW.task_id
      AND p.assignment_id=NEW.task_assignment_id AND p.contributor_id=NEW.contributor_id
-     AND p.next_revision_round+1=NEW.version AND p.outcome IN ('kept','rebased')
+     AND p.source_submission_version+1=NEW.version AND p.outcome IN ('kept','rebased')
      AND p.packet#>'{candidate,target,lineage}'=public.revision_submission_lineage(NEW)
      AND EXISTS (SELECT 1 FROM public.task_post_submit_routing_manifests m
        JOIN public.checker_submission_fences f ON f.submission_id=m.submission_id
@@ -607,13 +620,13 @@ BEGIN
    OR p.id IS NULL OR p.preparation_sha256<>NEW.revision_preparation_sha256
    OR p.outcome='blocked'
    OR ROW(p.project_id,p.task_id,p.assignment_id,p.contributor_id,p.submission_id,
-          p.next_revision_round,p.routing_manifest_id)
+          p.source_submission_version,p.routing_manifest_id)
       IS DISTINCT FROM ROW(NEW.project_id,NEW.task_id,NEW.assignment_id,
         NEW.actor_profile_id,NEW.predecessor_submission_id,
         NEW.predecessor_submission_version,NEW.checker_remediation_manifest_id)
    OR t.id IS NULL OR t.status<>'needs_revision' OR t.assigned_to<>NEW.actor_profile_id
    OR a.id IS NULL OR a.status<>'active' OR a.released_at IS NOT NULL
-   OR predecessor.id IS NULL OR predecessor.version<>p.next_revision_round
+   OR predecessor.id IS NULL OR predecessor.version<>p.source_submission_version
    OR p.packet#>'{candidate,target,lineage}' IS DISTINCT FROM
       public.revision_task_lineage(to_jsonb(t))
    OR NOT EXISTS (SELECT 1 FROM public.task_post_submit_routing_manifests m

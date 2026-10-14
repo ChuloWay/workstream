@@ -354,7 +354,6 @@ def _consumption_values(*, binding=False, remediation=False):
 
 @pytest.mark.parametrize("remediation,changes", [
     (False, {"predecessor_submission_id": str(UUID(int=123)), "predecessor_submission_version": 1}),
-    (False, {"submission_version": 2}),
     (False, {"task_status": "needs_revision"}),
     (False, {"checker_remediation_manifest_id": str(UUID(int=456))}),
     (False, {"submission_kind": "checker_remediation"}),
@@ -376,7 +375,7 @@ def test_creation_authority_parser_rejects_inconsistent_lifecycle(remediation, c
         parse_consumption_binding(ActionId.SUBMISSION_CREATE, values | changes, ValueError)
 
 
-@pytest.mark.parametrize("remediation,version", [(False, 2), (True, 1), (True, 3)])
+@pytest.mark.parametrize("remediation,version", [(True, 1), (True, 3)])
 def test_binding_authority_parser_requires_exact_successor_version(remediation, version):
     values = _consumption_values(binding=True, remediation=remediation)
     action = ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE
@@ -384,3 +383,17 @@ def test_binding_authority_parser_requires_exact_successor_version(remediation, 
     assert valid.submission_version == (2 if remediation else 1)
     with pytest.raises(ValueError, match="invalid prepared authorization handle"):
         parse_consumption_binding(action, values | {"submission_version": version}, ValueError)
+
+
+@pytest.mark.parametrize("action,binding", [
+    (ActionId.SUBMISSION_CREATE, False),
+    (ActionId.ARTIFACT_SUBMISSION_BINDING_CREATE, True),
+])
+def test_initial_consumption_authority_accepts_later_global_version(action, binding):
+    """Initial means no predecessor in this assignment; TASK owns global sequencing."""
+    values = _consumption_values(binding=binding)
+    resource = parse_consumption_binding(
+        action, values | {"submission_version": 5}, ValueError,
+    )
+    assert resource.submission_version == 5
+    assert resource.predecessor_submission_id is None

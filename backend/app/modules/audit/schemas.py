@@ -190,6 +190,7 @@ class LifecycleAuditEventType(StrEnum):
     TASK_STARTED = "TaskStarted"
     TASK_START_OVERRIDDEN = "TaskStartOverridden"
     TASK_ASSIGNMENT_AUTHORITY_REVOKED = "TaskAssignmentAuthorityRevoked"
+    TASK_REVISION_EXPIRED = "TaskRevisionExpired"
     REVIEW_QUEUE_ENTRY_CREATED = "ReviewQueueEntryCreated"
     REVIEW_ROUTED_TO_PREFERRED_REVIEWER = "ReviewRoutedToPreferredReviewer"
     REVIEWER_PREFERENCE_EXPIRED = "ReviewerPreferenceExpired"
@@ -266,6 +267,7 @@ _LIFECYCLE_EVENT_ENTITY = {
             LifecycleAuditEventType.TASK_STARTED,
             LifecycleAuditEventType.TASK_START_OVERRIDDEN,
             LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
+            LifecycleAuditEventType.TASK_REVISION_EXPIRED,
         ),
         LifecycleAuditEntityType.TASK,
     ),
@@ -354,6 +356,14 @@ _LIFECYCLE_EVENT_REQUIRED_REFERENCES = {
             LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION,
         }
     ),
+    LifecycleAuditEventType.TASK_REVISION_EXPIRED: frozenset({
+        LifecycleAuditReferenceKind.ASSIGNMENT,
+        LifecycleAuditReferenceKind.SUBMISSION,
+        LifecycleAuditReferenceKind.ROUTING_MANIFEST,
+        LifecycleAuditReferenceKind.REVISION_PREPARATION,
+        LifecycleAuditReferenceKind.AUTHORIZATION_DECISION,
+        LifecycleAuditReferenceKind.OUTBOX_EVENT,
+    }),
     **dict.fromkeys(
         (
             LifecycleAuditEventType.TASK_CLAIMED,
@@ -412,6 +422,7 @@ class LifecycleAuditEventInput(BaseModel):
     references: dict[LifecycleAuditReferenceKind, UUID] = Field(default_factory=dict)
     manager_authority_facts: dict[str, object] | None = None
     assignment_invalidation_facts: dict[str, object] | None = None
+    revision_expiry_facts: dict[str, object] | None = None
     authorization_resource_digest: Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")] | None = None
 
     @model_validator(mode="before")
@@ -442,10 +453,22 @@ class LifecycleAuditEventInput(BaseModel):
             raise ValueError("manager event requires exact authority facts")
         if manager:
             self.manager_authority_facts = _manager_authority_facts(self)
-        if (manager or self.event_type in {
+        requires_resource_digest = manager or self.event_type in {
             LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
+            LifecycleAuditEventType.TASK_REVISION_EXPIRED,
             LifecycleAuditEventType.CHECKER_RETRY_REQUESTED,
-        }) != (self.authorization_resource_digest is not None):
+        }
+        optional_recovery_digest = (
+            self.event_type is LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED
+        )
+        if optional_recovery_digest and (
+            (self.authorization_resource_digest is None)
+            != (LifecycleAuditReferenceKind.OUTBOX_EVENT not in self.references)
+        ):
+            raise ValueError("revision recovery requires paired authority and expiry event")
+        if ((requires_resource_digest and self.authorization_resource_digest is None)
+                or (not requires_resource_digest and not optional_recovery_digest
+                    and self.authorization_resource_digest is not None)):
             raise ValueError("release requires its exact authorization digest")
         retry = self.event_type is LifecycleAuditEventType.CHECKER_RETRY_REQUESTED
         if retry != (self.operator_reason is not None):
@@ -465,6 +488,16 @@ class LifecycleAuditEventInput(BaseModel):
                 self.assignment_invalidation_facts = json.loads(encoded)
             except (TypeError, ValueError):
                 raise ValueError("invalid bounded assignment facts") from None
+        if (self.event_type is LifecycleAuditEventType.TASK_REVISION_EXPIRED) != (self.revision_expiry_facts is not None):
+            raise ValueError("revision expiry facts restricted to expiry")
+        if self.revision_expiry_facts is not None:
+            try:
+                encoded = json.dumps(self.revision_expiry_facts, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
+                if len(encoded.encode("utf-8")) > 4096:
+                    raise ValueError("oversized revision expiry facts")
+                self.revision_expiry_facts = json.loads(encoded)
+            except (TypeError, ValueError):
+                raise ValueError("invalid bounded revision expiry facts") from None
         if (self.event_type is LifecycleAuditEventType.TASK_CREATED) != (self.source_type is not None):
             raise ValueError("source type is required only for task creation")
         if (self.event_type in {LifecycleAuditEventType.TASK_SCREENED, LifecycleAuditEventType.TASK_RELEASED}) != (self.locked_lineage is not None):
@@ -488,6 +521,8 @@ class LifecycleAuditEventInput(BaseModel):
                 )
             if self.event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:
                 expected = (self.from_status, "ready") if self.from_status in {"claimed", "in_progress"} else None
+            if self.event_type is LifecycleAuditEventType.TASK_REVISION_EXPIRED:
+                expected = ("needs_revision", "ready")
             if self.event_type is LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED:
                 expected = (None, None)
                 if self.task_reason is None or self.reason is not LifecycleAuditReason.FACT_RECORDED:
@@ -537,6 +572,8 @@ class LifecycleAuditEventInput(BaseModel):
             entity_reference,
             *required_references,
         }
+        if optional_recovery_digest and self.authorization_resource_digest is not None:
+            allowed_references.add(LifecycleAuditReferenceKind.OUTBOX_EVENT)
         if set(self.references) != allowed_references:
             raise ValueError("lifecycle event requires exact canonical references")
         return self

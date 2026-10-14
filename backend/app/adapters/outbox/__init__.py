@@ -39,9 +39,12 @@ def production_outbox_delivery(session_factory):
     from app.adapters.auth import (
         outbox_dispatch_authorization,
         assignment_invalidation_authorization,
+        revision_expiry_authorization,
     )
     from app.adapters.tasks import (
         TransactionalAssignmentInvalidationHandler,
+        TransactionalTaskRevisionExpiryHandler,
+        TransactionalTaskRevisionExpiredNoticeHandler,
         evaluation_completion_handler,
         evaluation_request_handler,
     )
@@ -51,6 +54,7 @@ def production_outbox_delivery(session_factory):
         SELECTED_POST_HANDLER_TIMEOUT_SECONDS,
     )
     from app.modules.tasks.api.assignment_invalidation import ASSIGNMENT_INVALIDATION_EVENT
+    from app.modules.tasks.api.revision_expiry import REVISION_EXPIRY_EVENT, REVISION_EXPIRED_EVENT
 
     return outbox_delivery(
         session_factory,
@@ -64,6 +68,23 @@ def production_outbox_delivery(session_factory):
                         session_factory,
                         observer=CommittedInvocationReader(session_factory),
                         authorization_factory=assignment_invalidation_authorization,
+                    ),
+                ),
+                (
+                    REVISION_EXPIRY_EVENT,
+                    1,
+                    TransactionalTaskRevisionExpiryHandler(
+                        session_factory,
+                        observer=CommittedInvocationReader(session_factory),
+                        authorization_factory=revision_expiry_authorization,
+                    ),
+                ),
+                (
+                    REVISION_EXPIRED_EVENT,
+                    1,
+                    TransactionalTaskRevisionExpiredNoticeHandler(
+                        session_factory,
+                        observer=CommittedInvocationReader(session_factory),
                     ),
                 ),
                 (
@@ -81,7 +102,8 @@ def production_outbox_delivery(session_factory):
                     1,
                     evaluation_completion_handler(sessions=session_factory),
                 ),
-            ]
+            ],
+            replay_safe=frozenset({(REVISION_EXPIRY_EVENT, 1), (REVISION_EXPIRED_EVENT, 1)}),
         ),
         options=DeliveryOptions(),
         event_options={

@@ -7,7 +7,8 @@ from uuid import uuid4
 
 import pytest
 
-from app.modules.outbox.api import DeliveryOptions, HandlerOutcome, OutboxClaim
+from app.modules.outbox.api import DeliveryOptions, FinalizationCause, HandlerOutcome, OutboxClaim
+from app.modules.outbox.delivery import _outcome
 from app.modules.outbox.registry import HandlerRegistry
 
 
@@ -130,6 +131,51 @@ def test_registry_rejects_duplicates_and_has_no_default():
     assert registry.get("event", 1) is handler
     assert registry.get("event", 2) is None
     assert HandlerRegistry([]).get("event", 1) is None
+
+
+def test_registry_requires_explicit_registered_unknown_replay():
+    async def handler(envelope):
+        return HandlerOutcome.ACKNOWLEDGE
+
+    entries = [("TaskRevisionExpiryRequested", 1, handler)]
+    assert not HandlerRegistry(entries).can_retry_unknown("TaskRevisionExpiryRequested", 1)
+    registered = HandlerRegistry(
+        entries, replay_safe=frozenset({("TaskRevisionExpiryRequested", 1)}),
+    )
+    assert registered.can_retry_unknown("TaskRevisionExpiryRequested", 1)
+    assert not registered.can_retry_unknown("TaskRevisionExpiryRequested", 2)
+    with pytest.raises(ValueError, match="explicitly registered"):
+        HandlerRegistry(entries, replay_safe=frozenset({("MissingEvent", 1)}))
+    with pytest.raises(ValueError, match="explicitly registered"):
+        HandlerRegistry(entries, replay_safe={("TaskRevisionExpiryRequested", 1)})
+
+
+@pytest.mark.parametrize(
+    ("retry_unknown", "generation", "expected_state"),
+    [(False, 1, "dead_letter"), (True, 1, "retryable"), (True, 5, "dead_letter")],
+)
+def test_unknown_invocation_retries_only_with_registered_policy_and_capacity(
+    retry_unknown, generation, expected_state,
+):
+    claimed_at = datetime(2026, 10, 14, tzinfo=timezone.utc)
+    expires_at = claimed_at + timedelta(seconds=10)
+    completed_at = expires_at + timedelta(seconds=1)
+    claim = OutboxClaim(
+        event_id=uuid4(), project_id=uuid4(), payload_digest="sha256:" + "a" * 64,
+        claim_generation=generation, claim_owner="worker", claimed_at=claimed_at,
+        claim_expires_at=expires_at,
+    )
+    outcome = _outcome(
+        claim, claimed_at + timedelta(seconds=1), FinalizationCause.EXPIRED,
+        completed_at, DeliveryOptions(), retry_unknown=retry_unknown,
+    )
+    assert outcome["delivery_state"] == expected_state
+    assert outcome["error_code"] == "INVOKE_OUTCOME_UNKNOWN"
+    assert outcome["invocation_unknown"] is True
+    assert outcome["finalized_at"] == (
+        None if expected_state == "retryable" else completed_at.isoformat()
+    )
+    assert (outcome["next_attempt_at"] is not None) == (expected_state == "retryable")
 
 
 @pytest.mark.parametrize("field", ["claimed_at", "claim_expires_at"])

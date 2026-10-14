@@ -107,11 +107,17 @@ of the outstanding attempt, releases its assignment and returns the task to
 synthetic Review, contribution or award. Task/assignment changes, immutable
 timeout evidence, audit and outbox publication intent commit atomically.
 
-The recurring worker scan uses PostgreSQL server time and recovers overdue
+The recurring Celery scan uses PostgreSQL server time and recovers overdue
 opportunities after downtime. Duplicate deliveries and old jobs recheck exact
 source, assignment and status under TASK-first custody; they cannot reject a
 newer submission or release another claimant. A new claimant starts round 0
 with their own allowance while task-global Submission versions remain ordered.
+
+Expiry delivery is explicitly safe to retry after a Celery process crashes: the new
+invocation either performs the authorized transaction or acknowledges its exact
+immutable receipt. Retries retain the original deadline and use bounded backoff.
+An exhausted retry budget or rejected authority remains visible as dead-letter
+work requiring operator resolution; it must not be reported as a completed timeout.
 
 A blocked or invalid context preparation can be repaired only by appending one
 successor through covered-manager repair. For checker-rooted preparations,
@@ -121,10 +127,24 @@ successor through covered-manager repair. For checker-rooted preparations,
 Repair cannot bypass limit/deadline exhaustion. The contributor work-context
 read exposes the frozen change summary and current eligibility.
 
-If a retained routing manifest has no preparation, the same endpoint accepts
-`routing_manifest_id` and `reason` instead of the parent pair. This explicit
-manager operation records the missing root using the original failure's window;
-ordinary routing replay does not create it. An expired or exhausted source stays
+The recurring service scan discovers current retained failures missing preparation
+or scheduling. Fresh service authority freezes an unchanged context or a blocked
+root and schedules the original source-policy deadline; it cannot authorize a
+rebase. Exact already-scheduled work is a no-op.
+
+Before enabling this journey, provision `workstream.task.revision_expirer` through
+the existing authorized `POST /api/v1/service-actors` operation and keep its
+profile and identity link active. The principal covers only revision expiry and
+retained-window recovery. Run Celery Beat and Celery processes consuming both the
+default queue for `workstream.tasks.scan_retained_revisions` and the existing
+outbox delivery queue. The retained-source scan runs every 60 seconds; due events are dispatched
+by the existing outbox scan. A missing or inactive principal does not grant
+fallback authority: inspect scan failures and outbox dead-letter diagnostics.
+
+For explicit manager recovery, the same endpoint accepts `routing_manifest_id`
+and `reason` instead of the parent pair when the preparation is missing. It
+records the missing root using the original failure's window; ordinary routing
+replay does not create it. An expired or exhausted source stays
 blocked. Exact repair replay returns its original preparation identity and
 window after fresh authorization, with eligibility evaluated against the current
 source and preparation head.

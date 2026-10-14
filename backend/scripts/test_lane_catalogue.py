@@ -283,6 +283,8 @@ PROJECT_MODULES = (
     "tests/tasks/submission_dispatch/test_replacement_migration.py",
     "tests/tasks/submission_dispatch/test_replacement_creation.py",
     "tests/tasks/submission_dispatch/test_revision_capacity.py",
+    "tests/tasks/submission_dispatch/test_revision_expiry.py",
+    "tests/tasks/submission_dispatch/test_revision_recovery_postgresql.py",
     "tests/tasks/submission_dispatch/test_replay.py",
     "tests/tasks/submission_dispatch/test_rollback.py",
     "tests/tasks/submission_dispatch/test_storage.py",
@@ -460,6 +462,7 @@ CHECKER_DELIVERY_MODULES = (
 
 
 TASK_MODULES = (
+    "tests/tasks/submission_dispatch/test_revision_recovery_contracts.py",
     "tests/tasks/test_task_import_contract.py",
     "tests/test_task_import_sources.py",
     "tests/test_submission_predecessor_custody.py",
@@ -510,6 +513,7 @@ TASK_MODULES = (
     "tests/tasks/test_management_queue.py",
     "tests/tasks/test_task_detail.py",
     "tests/tasks/test_work_context.py",
+    "tests/tasks/test_revision_error_mapping.py",
     "tests/tasks/test_guide_documents.py",
     "tests/tasks/test_locked_context.py",
     "tests/tasks/test_submission_requirements.py",
