@@ -49,8 +49,10 @@ fixture writes for the connected setup path. No weakened AUTH/custody guards,
 new approval semantics, fallback routes, provider discovery, live model claim
 from recorded output, private project documents, CI gate changes, evaluator
 expansion, payment delivery, contributor lease work, frontend or CLI work.
-Checker registry and initial identity/service provisioning remain explicit
-isolated infrastructure preconditions and must not substitute for guide facts.
+Checker registry, initial identity/service provisioning, and the existing project
+points unit plus AUTH-governed adapter binding remain explicit isolated
+infrastructure preconditions. They cannot supply guide/policy facts, create
+awards, activate fulfillment, or justify new public routes.
 Held #492/#493/#496 remain held. Security #565 and pagination #497 are separate.
 
 ## Design and decisions
@@ -63,8 +65,14 @@ explicitly recorded test provider in the isolated worker entry point. The
 production composition must not gain a test switch or fallback constructor.
 The recorded provider opens exact ART-granted documents and returns the existing
 closed proposal schema; production owners perform compilation/finalization.
-Public reads supply every manager decision target. PRE approval and POST
-approval remain separate; Finance publishes ContributionPolicy through its
+The recorded provider must observe the exact normalized task examples, not
+merely read documents. Assert their retained hash on the guide and source
+snapshot, and the exact examples in the stored compilation context.
+Public reads supply every manager decision target. Public PUT review-policy and
+revision-policy operations set the exact true/false and revision configuration
+with If-Match and idempotency headers; replay preserves their identity and a
+stale selector cannot mutate them. PRE approval and POST approval remain
+separate; Finance publishes ContributionPolicy through its
 public owner and PM activates the exact context. Existing downstream public
 claim, preparation, submission, selected POST, retry/replay and outcome proof
 remain authoritative.
@@ -82,6 +90,8 @@ connected proof and regressions for discovered defects.
   compiled/approved/active row insertion supplies the public journey.
 - [ ] Setup stops at proposal; independent public PM PRE/POST approvals and
   Finance publication precede exact public activation, including replay.
+- [ ] Original task examples and their normalized hash/snapshot commitment
+  reach the actual worker runtime unchanged.
 - [ ] Source document, setup/proposal, policies, activation, Task, Submission,
   checker and outcome identifiers/hashes form one exact retained lineage.
 - [ ] Default true reaches `review_pending` without acceptance/economic facts;
@@ -119,3 +129,37 @@ connected proof and regressions for discovered defects.
 - Next usable boundary: #555 hosted operation and pilot after connected proof.
 - Remaining risks: Recorded inference proves integration, not model quality;
   local identity, MinIO and development container isolation are not deployment.
+
+## Focused failure-proof map
+
+All paths below are relative to `backend/tests/`. Run named existing nodes with
+`backend/.venv/bin/python -m scripts.run_isolated_tests --metadata-json
+/tmp/ws552-owner-proof.json --timeout-seconds 600 -- python -m pytest -q <nodes>`
+from `backend/`, with the supported isolated PostgreSQL/MinIO environment. No
+existing node is counted as connected public proof merely because it passes.
+
+| Boundary | Exact existing proof or planned connected observation | Expected effect boundary |
+|---|---|---|
+| Insufficient source | `projects/guide_compilation/proposals/test_postgresql.py::test_blocked_result_allows_correction_but_never_approval` | Blocked report, no approval; a canonical correction successor is permitted |
+| Uncertain provider | `projects/guide_compilation/test_hidden_orchestrator_postgresql.py::test_uncertain_provider_failure_never_redispatches` | PROVIDER_UNRESOLVED, one provider call, no invented success |
+| Accepted-result recovery | Same module `::test_accepted_result_recovers_without_a_second_provider_call` | Existing retained result resumes without additional inference |
+| Required missing capability | `projects/guide_activation/test_postgresql.py::test_checker_registration_requires_corrected_approval_before_activation` | No activation until registered implementation, corrected proposal and separate approvals |
+| Stale completion | `projects/guide_compilation/test_live_cutover_postgresql.py::test_stale_delivery_rejects_before_any_compilation_effect` | Before provider/configuration and before new audit/product effects |
+| Foreign-project reads | `projects/guide_compilation/proposals/test_public_api.py::test_public_package_denies_other_roles_and_scopes` | Public concealed denial under wrong grant/project |
+| Exact examples | `projects/guide_compilation/test_task_examples_postgresql.py::test_required_examples_reject_before_product_effects_then_exact_replay` plus new connected runtime comparison | Missing examples deny; normalized examples/hash reach worker unchanged |
+| Connected correction/replay | Planned `_public_guide_setup` in the updated runtime drill: one real PM correction, explicit dispatch, successor read, old-result preservation and exact request replay | Generation advances only once; source document/example commitment remains exact and stale source approval cannot activate |
+
+Run the extended real runtime proof using the existing isolated runner with
+`python ../experiments/pilot04_external_checker_runtime/run_public_journey_probe.py
+--image-reference <owned-digest> --service-binary <built-local-service>
+--broker-url <owned-loopback-redis> --work-dir <private-disposable-directory>`.
+Its two branches cover source upload, worker setup, public policy configuration,
+separate approval/publication, activation and downstream outcomes. This is an
+explicit recorded-provider local drill; #555 retains live hosted-provider proof.
+
+## Plan-review corrections
+
+The first review identified omitted compensation infrastructure prerequisites,
+public review/revision policy configuration, exact task-example observation and
+an insufficiently specific negative-proof map. The plan above now specifies
+all four; no production code was changed before resolving them.
