@@ -24,7 +24,7 @@ from tests.test_submission_predecessor_custody import _fixture_revision_context
 
 async def _fail_current_submission(h):
     """Complete the actual reserved successor using controlled external work failure."""
-    async with h.factory() as session:
+    async with h.factory() as session, session.begin():
         reserved = await evaluation_coordinator(session).read_reserved_evaluation(
             project_id=h.request.project_id, task_id=h.request.task_id,
             submission_id=h.created.submission_id,
