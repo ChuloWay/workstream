@@ -383,6 +383,13 @@ explicit caller retry keys and uncertain-outcome reporting without automatic ret
 governing guide/policy selectors, server action hints and locked intake rules.
 Hints do not grant authority; these CLI reads do not invoke the separate public
 submission upload and creation operations.
+`workstream task prepare` streams the contributor ZIP once with an explicit
+caller key; `task submit` separately consumes its ready admission and exact
+packet. Preparation never creates a Submission or automatically polls/retries.
+`task submissions`, `submission show` and `submission findings` read bounded
+public history and contributor checker evidence, not inferred acceptance.
+See the [submission command contract](cli/README.md#prepare-submit-and-inspect-contributor-work)
+for replay, packet-header restrictions and proof boundaries.
 `workstream task guide TASK_ID [--download DIR]` lists or downloads the original
 documents of the task's locked guide for its currently authorized assignee.
 Downloaded bytes are verified against their retained hash and size; task examples
@@ -433,7 +440,8 @@ uncertain writes are never automatically retried.
 --idempotency-key UUID` separately activates exactly selected, approved policies
 through the public manager API. It validates the immutable activation receipt;
 Workstream retains readiness, contribution-policy binding and supersession
-authority. It does not approve policies or enable false-review guide activation.
+authority. It does not approve policies or bypass activation readiness: supported
+false-review guides use the same backend-owned activation checks.
 `workstream project task create PROJECT_ID --input FILE --idempotency-key UUID`
 creates a draft; separate `project task screen PROJECT_ID TASK_ID` and
 `project task release PROJECT_ID TASK_ID --reason TEXT` commands each require

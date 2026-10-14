@@ -22,6 +22,7 @@ def cli(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[str]]:
         token: str,
         *args: str | bytes,
         extra_env: dict[str, str] | None = None,
+        process_timeout: float = 20,
     ) -> subprocess.CompletedProcess[str]:
         env = {
             key: value
@@ -37,7 +38,7 @@ def cli(tmp_path: Path) -> Callable[..., subprocess.CompletedProcess[str]]:
             capture_output=True,
             text=True,
             check=False,
-            timeout=20,
+            timeout=process_timeout,
         )
         assert not token or token not in result.stdout + result.stderr, (
             "credential leaked"

@@ -3,13 +3,9 @@ package command
 import (
 	"crypto/rand"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
-	"unicode"
-	"unicode/utf16"
 
 	"github.com/Flow-Research/workstream/cli/internal/api"
 	"github.com/spf13/cobra"
@@ -62,22 +58,7 @@ func addContributionEvidence(root, project *cobra.Command, client func() (*api.C
 				return err
 			}
 			if *output == "json" {
-				// Preserve the JSON value, but never emit literal C1/bidi/format
-				// controls supplied by arbitrary task titles or display names.
-				var safe strings.Builder
-				for _, r := range string(result.Raw) {
-					if r >= 0x7f && (unicode.IsControl(r) || unicode.Is(unicode.Cf, r)) {
-						if r <= 0xffff {
-							fmt.Fprintf(&safe, "\\u%04x", r)
-						} else {
-							hi, lo := utf16.EncodeRune(r)
-							fmt.Fprintf(&safe, "\\u%04x\\u%04x", hi, lo)
-						}
-					} else {
-						safe.WriteRune(r)
-					}
-				}
-				return writeJSON(stdout, json.RawMessage(safe.String()))
+				return writeSafeJSON(stdout, result.Raw)
 			}
 			return writeTaskContextFields(stdout, []contextField{{"Contributions (earned evidence, not payment status)", result.Raw}})
 		}
