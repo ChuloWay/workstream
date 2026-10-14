@@ -162,6 +162,7 @@ async def public_guide_setup(client, factory, human_review_required, call, token
     project = await call(client, "POST", "/api/v1/projects", token, 201,
                          headers={"Idempotency-Key": str(uuid4())},
                          json={"name": "Connected guide journey", "slug": "journey-" + uuid4().hex})
+    await seed_review_actor(factory, UUID(project["id"]), actor=manager)
     root = f"/api/v1/projects/{project['id']}/guides"
     body = {"version": "initial", "change_summary": "Original sample worker guide",
             "task_examples": TASK_EXAMPLES,

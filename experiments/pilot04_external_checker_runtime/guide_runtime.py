@@ -78,5 +78,3 @@ class RecordedGuideRuntime(E2EProjectGuideRuntime):
 def create_recorded_runtime(configuration):
     """Use the same typed adapter factory at the worker's external runtime seam."""
     return runtime_factory(RecordedGuideRuntime(configuration))(configuration)
-
-

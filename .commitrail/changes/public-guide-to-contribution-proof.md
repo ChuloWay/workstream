@@ -11,9 +11,10 @@ contributor journey. The first usable v0.1 path must start with original guide
 bytes and task examples, not injected approved policy rows. This is integration
 proof and owner-scoped defect repair, not a new setup or acceptance subsystem.
 
-## Current behavior
+## Starting behavior
 
-Main `82a46ff3c` includes #549 public intake and #550 false-guide activation.
+The starting base `82a46ff3c` included #549 public intake and #550 false-guide
+activation; reconciliation now includes main `2c1f7517c` and #570 CLI submission.
 `experiments/pilot04_external_checker_runtime/run_public_journey_probe.py` runs
 real API, MinIO, Redis, prefork workers, Beat and external checker images, but
 `_one_mode` arranges compilation and approved policy facts through `source_case`.
@@ -117,8 +118,8 @@ connected proof and regressions for discovered defects.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing shortcut identified | `_one_mode` and guide API drills inspected | Confirmed | Public composition not yet run |
-| Connected journey | Updated isolated public journey invocation (to be recorded) | Planned | No hosted Flow/S3/gVisor or live model claim |
+| Existing shortcut identified | `_one_mode` and guide API drills inspected | Confirmed and removed | Partial public runs exposed the bounded repairs below |
+| Connected journey | Updated isolated public journey invocation | Partial execution; full completion pending | No hosted Flow/S3/gVisor or live model claim |
 | Failure boundaries | Existing owner tests plus focused new drill tests | Planned | Exact nodes mapped below |
 | Repository integrity | Lint, boundaries, links, Commitrail, full hosted CI | Planned | No sampling or weakened gates |
 
@@ -331,3 +332,11 @@ Reconciliation with #570 retains its CLI navigation and this change's ARCH
 navigation; README and roadmap retain both changes. Backend code and tests are
 unchanged by that merge. The next complete runtime proof uses the reconciled
 candidate, and review must distinguish that proof from the earlier failed runs.
+
+The reconciled runtime passed setup finalization, then correctly denied the
+proposal read because its manager fixture had only system-scoped authority.
+Proposal review, correction, approval and activation require an exact-project
+manager grant. The initial authority fixture now grants that same manager the
+created project's scope before setup; no product authorization rule changes.
+This remains within the declared identity/grant infrastructure preconditions.
+The failed run completed database and MinIO cleanup and is not success evidence.
