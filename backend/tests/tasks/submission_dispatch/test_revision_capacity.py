@@ -1,10 +1,11 @@
 """Locked revision caps across real checker completion, intake, creation and SQL."""
 
+import asyncio
 import json
 from uuid import UUID
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.adapters.checkers import evaluation_coordinator
@@ -471,6 +472,50 @@ async def test_expired_retained_failure_recovers_without_a_new_window(
                 assert await session.scalar(text("SELECT status FROM public.workstream_tasks WHERE id=:id"), {"id": h.request.task_id}) == "needs_revision"
 
 
+async def _replay_old_expiry_after_new_failure(h, *, source_id, event_id, new_assignment_id):
+    """A lost ACK for the old release cannot affect the new assignment's window."""
+    from app.modules.tasks.revision.models import TaskRevisionExpiration, TaskRevisionPreparation
+
+    async with h.factory() as session:
+        new_window = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+        frozen = (
+            new_window.id, new_window.preparation_sha256,
+            new_window.requested_at, new_window.deadline_at,
+        )
+        before_receipts = await session.scalar(select(func.count(TaskRevisionExpiration.id)).where(
+            TaskRevisionExpiration.routing_manifest_id == source_id,
+        ))
+        assert before_receipts == 1
+        db_now = await session.scalar(select(func.clock_timestamp()))
+    remaining = (h.expiry_claim_expires_at - db_now).total_seconds()
+    await asyncio.sleep(max(0, remaining) + 0.2)
+    recovered = await h.expiry_delivery.recover(event_id, h.request.project_id)
+    assert recovered is not None
+    assert json.loads(recovered.outcome_json)["invocation_unknown"] is True
+    async with h.factory() as session:
+        event = await session.get(OutboxEvent, str(event_id))
+        db_now = await session.scalar(select(func.clock_timestamp()))
+        retry_delay = (event.next_attempt_at - db_now).total_seconds()
+    await asyncio.sleep(max(0, retry_delay) + 0.2)
+    redelivered = await h.expiry_delivery.deliver(
+        event_id, h.request.project_id, "old-expiry-after-new-claim",
+    )
+    assert redelivered is not None
+    assert json.loads(redelivered.outcome_json)["delivery_state"] == "acknowledged"
+    async with h.factory() as session:
+        window = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+        assert (window.id, window.preparation_sha256, window.requested_at, window.deadline_at) == frozen
+        assert await session.scalar(text(
+            "SELECT status FROM public.workstream_tasks WHERE id=:id"
+        ), {"id": h.request.task_id}) == "needs_revision"
+        assert (await session.execute(text(
+            "SELECT status,released_at FROM public.task_assignments WHERE id=:id"
+        ), {"id": new_assignment_id})).one() == ("active", None)
+        assert await session.scalar(select(func.count(TaskRevisionExpiration.id)).where(
+            TaskRevisionExpiration.routing_manifest_id == source_id,
+        )) == 1
+
+
 async def test_expiry_allows_new_assignment_initial_at_next_global_version(
     tmp_path, isolated_database_env, monkeypatch,
 ):
@@ -486,8 +531,9 @@ async def test_expiry_allows_new_assignment_initial_at_next_global_version(
     async with remediation_source(tmp_path, isolated_database_env) as h:
         old_submission_id = h.created.submission_id
         old_assignment_id = h.request.assignment_id
-        _, old_revision, _ = await expire_retained_revision(
+        old_source_id, old_revision, old_event_id = await expire_retained_revision(
             h, monkeypatch=monkeypatch, isolated_database_env=isolated_database_env,
+            ack_lost=True,
         )
         async with _client(h, monkeypatch, isolated_database_env) as client:
             claim = await client.post(
@@ -555,3 +601,7 @@ async def test_expiry_allows_new_assignment_initial_at_next_global_version(
             assert fresh.next_revision_round == 1
             assert fresh.max_revision_rounds == old.max_revision_rounds == 2
             assert fresh.requested_at > old.deadline_at
+        await _replay_old_expiry_after_new_failure(
+            h, source_id=old_source_id, event_id=old_event_id,
+            new_assignment_id=new_assignment_id,
+        )
