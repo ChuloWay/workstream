@@ -170,7 +170,7 @@ lane; the aggregate independently recollects and validates complete execution.
 There is no duplicate standalone inventory pass in each matrix job.
 Each lane receives a distinct
 runner-created database and role plus a distinct MinIO prefix custody record.
-Both shared-foundation jobs run in separate MinIO containers, use the actual
+All three shared-foundation jobs run in separate MinIO containers, use the actual
 `workstream-artifacts` test bucket, and receive distinct run prefixes; other
 lanes create, probe, and remove distinct buckets.
 The isolated-runner self-tests remain in the canonical manifest as the explicit

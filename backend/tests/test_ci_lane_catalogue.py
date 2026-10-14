@@ -193,6 +193,34 @@ def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
     ) <= modules_by_lane["schema_contracts"]
 
 
+def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
+    """A catalogue-internal move across semantic families must fail this contract."""
+    expected = {
+        "shared": (
+            230,
+            "60605cdc9660742267dccb762d8fe4644d2167b196970673a293abc6db66e84f",
+        ),
+        "project": (
+            185,
+            "59c31c9dd124179c47bf0a1ea4447e2ed81f720711019a8d129dc99658e01939",
+        ),
+        "task": (
+            73,
+            "b205b3bda1dd88e51c0772cce04468b30a239df23ead8e69dcfd871cbc9efedb",
+        ),
+    }
+    actual = {
+        "shared": catalogue.SHARED_FOUNDATION_MODULES,
+        "project": catalogue.PROJECT_PARTITIONED_MODULES,
+        "task": catalogue.TASK_MODULES,
+    }
+    for family, modules in actual.items():
+        count, digest = expected[family]
+        canonical = "\n".join(sorted(modules)) + "\n"
+        assert len(modules) == len(set(modules)) == count
+        assert hashlib.sha256(canonical.encode()).hexdigest() == digest
+
+
 def test_discovery_is_recursive_and_lexically_canonical(tmp_path: Path) -> None:
     tests = tmp_path / "tests"
     nested = tests / "nested"
