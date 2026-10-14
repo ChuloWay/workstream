@@ -417,6 +417,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     assert static_contracts.isdisjoint(shared_a | shared_b)
     assert {
         "tests/test_alembic.py",
+        "tests/migrations/test_contribution_export_snapshots.py",
         "tests/migrations/test_contribution_read_audit.py",
         "tests/test_database_reset.py",
         "tests/reviews/packet/test_storage.py",
