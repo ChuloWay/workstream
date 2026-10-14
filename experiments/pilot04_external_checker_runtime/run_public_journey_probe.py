@@ -726,7 +726,7 @@ async def _assert_revision(factory, *, project_id: UUID, task_id: str,
             _require(count == 0, "revision minted final or economic evidence")
 
 
-async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
+async def _assert_outcome(factory, *, guide_source, project_id: UUID, task_id: str,
                           submission_id: str, initial_submission_id: str,
                           contributor_id: UUID,
                           human_review_required: bool, expected_awards: int,
@@ -738,6 +738,13 @@ async def _assert_outcome(factory, *, project_id: UUID, task_id: str,
                  "governed Task outcome differs")
         _require(submission is not None and submission.submission_bundle_admission_id is not None,
                  "Submission lacks consumed immutable admission")
+        for field, expected in guide_source.evidence["locked_context"].items():
+            _require(str(getattr(task, field)) == str(expected)
+                     and str(getattr(submission, field)) == str(expected),
+                     f"{field} differs from the public guide approval")
+        _require(str(task.locked_contribution_policy_version_id)
+                 == guide_source.activation["contribution_policy_version_id"],
+                 "Task did not retain the publicly published ContributionPolicy")
         _require(submission.locked_post_submit_checker_policy_hash == task.locked_post_submit_checker_policy_hash,
                  "Submission POST policy differs from locked Task")
         _require(submission.contribution_policy_version_id == task.locked_contribution_policy_version_id,
@@ -1113,7 +1120,7 @@ async def _one_mode(client, factory, env, *,
                      and event.attempt_count == 2,
                      "known safe retry did not commit once after authorized live transition")
     outcome = await _assert_outcome(
-        factory, project_id=compilation.project_id, task_id=task_id,
+        factory, guide_source=compilation, project_id=compilation.project_id, task_id=task_id,
         submission_id=saved["submission_id"], initial_submission_id=first_submission_id,
         contributor_id=contributor.actor_profile_id,
         human_review_required=human_review_required,
@@ -1152,7 +1159,7 @@ async def _one_mode(client, factory, env, *,
     _require(await _outbox_snapshot(factory, completion_id) == before_delivery,
              "duplicate completion changed retained OUTBOX custody")
     again = await _assert_outcome(
-        factory, project_id=compilation.project_id, task_id=task_id,
+        factory, guide_source=compilation, project_id=compilation.project_id, task_id=task_id,
         submission_id=saved["submission_id"], initial_submission_id=first_submission_id,
         contributor_id=contributor.actor_profile_id,
         human_review_required=human_review_required,

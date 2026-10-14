@@ -4,9 +4,11 @@ from copy import deepcopy
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import AsyncMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from experiments.pilot04_external_checker_runtime.guide_evidence import verify_source_commitment
+from experiments.pilot04_external_checker_runtime import guide_polling
 
 
 class SourceEvidenceTests(unittest.TestCase):
@@ -48,6 +50,41 @@ class SourceEvidenceTests(unittest.TestCase):
         changed = self.attempt | {"canonical_input_hash": "sha256:" + "d" * 64}
         with self.assertRaisesRegex(AssertionError, "worker observed"):
             verify_source_commitment(self.source, changed, **self.expected)
+
+
+class SetupPollingTests(unittest.IsolatedAsyncioTestCase):
+    async def read(self, call):
+        with patch.object(guide_polling.asyncio, "sleep", new_callable=AsyncMock):
+            return await guide_polling.wait_for_guide_read(
+                None, "/same-setup", "local-token", lambda value: value["status"] == "policy_draft_ready", call,
+            )
+
+    async def test_inflight_unresolved_is_observed_without_retry_or_success(self):
+        ready = {"status": "policy_draft_ready", "error_code": None}
+        call = AsyncMock(side_effect=[
+            {"status": "dispatch_pending", "error_code": "provider_outcome_unresolved"}, ready,
+        ])
+        self.assertEqual(await self.read(call), ready)
+        self.assertEqual(call.await_count, 2)
+        self.assertTrue(all(item.args == (None, "GET", "/same-setup", "local-token", 200)
+                            for item in call.await_args_list))
+
+    async def test_uncertainty_never_becomes_success_at_deadline(self):
+        call = AsyncMock(return_value={"status": "dispatch_pending",
+                                       "error_code": "provider_outcome_unresolved"})
+        with self.assertRaisesRegex(AssertionError, "did not reach"):
+            await self.read(call)
+        self.assertEqual(call.await_count, 120)
+
+    async def test_terminal_errors_and_http_failure_are_not_hidden(self):
+        call = AsyncMock(return_value={"status": "failed", "error_code": "schema_invalid"})
+        with self.assertRaisesRegex(AssertionError, "schema_invalid"):
+            await self.read(call)
+        self.assertEqual(call.await_count, 1)
+        unavailable = AsyncMock(side_effect=RuntimeError("503/service_unavailable"))
+        with self.assertRaisesRegex(RuntimeError, "503/service_unavailable"):
+            await self.read(unavailable)
+        self.assertEqual(unavailable.await_count, 1)
 
 
 if __name__ == "__main__":

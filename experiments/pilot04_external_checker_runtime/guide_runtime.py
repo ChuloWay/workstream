@@ -24,63 +24,54 @@ class RecordedGuideRuntime(E2EProjectGuideRuntime):
     """Read real scoped documents and observe exact examples; return recorded rules."""
 
     async def compile_project_guide(self, context, capabilities):
-        print("recorded inference entered", file=sys.stderr)
-        try:
-            expected = validate_task_examples(TASK_EXAMPLES)
-            if context.task_examples != expected:
-                raise AssertionError("worker did not receive exact normalized task examples")
-            if context.correction_feedback is not None:
-                if context.correction_feedback.reason != CORRECTION_REASON:
-                    raise AssertionError("worker did not receive exact manager correction")
-            digest = "sha256:" + hashlib.sha256(GUIDE_BYTES).hexdigest()
-            if len(context.material.documents) != 1 or context.material.documents[0].sha256 != digest:
-                raise AssertionError("worker did not receive the uploaded original")
-            base = await super().compile_project_guide(context, capabilities)
-            refs = base.findings[0].evidence_refs
-            requirements, pre, post = [], [], []
-            for stage, binding_type, target in (
-                ("pre_submit", PreSubmissionBindingProposal, pre),
-                ("post_submit", PostSubmissionBindingProposal, post),
-            ):
-                entries = [d for d in context.checker_capabilities.definitions
-                           if d.selectable and d.phase == stage]
-                if len(entries) != 1:
-                    raise AssertionError("recorded guide requires one registered image per stage")
-                entry = entries[0]
-                key = "project." + stage
-                requirements.append(AtomicGuideRequirement(
-                    requirement_id=key, statement="Apply the registered project image rules.",
-                    disposition="supported_" + stage, evidence_refs=refs,
-                ))
-                target.append(binding_type(
-                    requirement_id=key, capability_id=entry.capability_id,
-                    capability_version=entry.capability_version, stage=stage,
-                ))
-            value = base.model_dump(mode="json")
-            value.update(
-                submission_artifact_policy=SubmissionArtifactPolicyProposal(
-                    maximum_file_size_bytes=1_000_000, maximum_package_size_bytes=5_000_000,
-                    required_artifacts=("task.toml",), required_evidence=("results",),
-                    attestation_terms=("rights_confirmed",),
-                ).model_dump(mode="json"),
-                requirements=[item.model_dump(mode="json") for item in requirements],
-                pre_submit_bindings=[item.model_dump(mode="json") for item in pre],
-                post_submit_bindings=[item.model_dump(mode="json") for item in post],
-                setup_notes=[
-                    "Recorded provider observed examples " + task_examples_hash(expected),
-                    "Recorded provider observed input sha256:" + hashlib.sha256(
-                        canonical_project_guide_compilation_context_bytes(context)
-                    ).hexdigest(),
-                ],
-            )
-            return ProjectGuideCompilationResult.model_validate(value)
-        except Exception as exc:
-            # Private drill diagnostics contain only exception class and source locations.
-            import traceback
-            print("recorded inference failure: " + type(exc).__name__, file=sys.stderr)
-            for frame in traceback.extract_tb(exc.__traceback__):
-                print(f"{frame.filename}:{frame.lineno}:{frame.name}", file=sys.stderr)
-            raise
+        expected = validate_task_examples(TASK_EXAMPLES)
+        if context.task_examples != expected:
+            raise AssertionError("worker did not receive exact normalized task examples")
+        if context.correction_feedback is not None:
+            if context.correction_feedback.reason != CORRECTION_REASON:
+                raise AssertionError("worker did not receive exact manager correction")
+        digest = "sha256:" + hashlib.sha256(GUIDE_BYTES).hexdigest()
+        if len(context.material.documents) != 1 or context.material.documents[0].sha256 != digest:
+            raise AssertionError("worker did not receive the uploaded original")
+        base = await super().compile_project_guide(context, capabilities)
+        refs = base.findings[0].evidence_refs
+        requirements, pre, post = [], [], []
+        for stage, binding_type, target in (
+            ("pre_submit", PreSubmissionBindingProposal, pre),
+            ("post_submit", PostSubmissionBindingProposal, post),
+        ):
+            entries = [d for d in context.checker_capabilities.definitions
+                       if d.selectable and d.phase == stage]
+            if len(entries) != 1:
+                raise AssertionError("recorded guide requires one registered image per stage")
+            entry = entries[0]
+            key = "project." + stage
+            requirements.append(AtomicGuideRequirement(
+                requirement_id=key, statement="Apply the registered project image rules.",
+                disposition="supported_" + stage, evidence_refs=refs,
+            ))
+            target.append(binding_type(
+                requirement_id=key, capability_id=entry.capability_id,
+                capability_version=entry.capability_version, stage=stage,
+            ))
+        value = base.model_dump(mode="json")
+        value.update(
+            submission_artifact_policy=SubmissionArtifactPolicyProposal(
+                maximum_file_size_bytes=1_000_000, maximum_package_size_bytes=5_000_000,
+                required_artifacts=("task.toml",), required_evidence=("results",),
+                attestation_terms=("rights_confirmed",),
+            ).model_dump(mode="json"),
+            requirements=[item.model_dump(mode="json") for item in requirements],
+            pre_submit_bindings=[item.model_dump(mode="json") for item in pre],
+            post_submit_bindings=[item.model_dump(mode="json") for item in post],
+            setup_notes=[
+                "Recorded provider observed examples " + task_examples_hash(expected),
+                "Recorded provider observed input sha256:" + hashlib.sha256(
+                    canonical_project_guide_compilation_context_bytes(context)
+                ).hexdigest(),
+            ],
+        )
+        return ProjectGuideCompilationResult.model_validate(value)
 
 
 

@@ -1,7 +1,6 @@
 """Public guide input, worker output, separate approvals and policy publication."""
 
 from dataclasses import dataclass
-import asyncio
 import hashlib
 from types import SimpleNamespace
 from uuid import UUID, uuid4
@@ -12,6 +11,7 @@ from app.modules.authorization.api import ActorIdentityFacts
 from app.modules.projects.api.task_examples import task_examples_hash, validate_task_examples
 from tests.projects.guide_compilation.proposals.pg_support import seed_review_actor
 from experiments.pilot04_external_checker_runtime.guide_evidence import verify_source_commitment
+from experiments.pilot04_external_checker_runtime.guide_polling import wait_for_guide_read
 from experiments.pilot04_external_checker_runtime.guide_inputs import (
     GUIDE_BYTES, TASK_EXAMPLES, CORRECTION_REASON,
 )
@@ -24,17 +24,6 @@ class PublicGuideSource:
     manager: ActorIdentityFacts
     activation: dict
     evidence: dict
-
-
-async def _wait_read(client, path, token, predicate, call):
-    for _ in range(120):
-        value = await call(client, "GET", path, token, 200)
-        if predicate(value):
-            return value
-        if value.get("error_code"):
-            raise AssertionError("guide worker failed: " + str(value["error_code"]))
-        await asyncio.sleep(1)
-    raise AssertionError("public guide setup did not reach the expected state")
 
 
 async def _public_policy_settings(client, root, token, human_review_required, call):
@@ -125,7 +114,7 @@ async def _approve_policies(client, compilation_root, token, call):
                         token, 200, headers=headers, json=body)
     if replay != approved:
         raise AssertionError("PRE approval replay changed receipt")
-    package = await _wait_read(client, compilation_root + "/proposal", token,
+    package = await wait_for_guide_read(client, compilation_root + "/proposal", token,
                                lambda v: v["post_submit_policy_id"] is not None, call)
     post_root = compilation_root + f"/post-submission-policies/{package['post_submit_policy_id']}"
     post = await call(client, "GET", post_root, token, 200)
@@ -188,14 +177,14 @@ async def public_guide_setup(client, factory, human_review_required, call, token
     await call(client, "POST", upload, token, 202,
                headers={"Idempotency-Key": str(uuid4()), "Content-Type": "text/markdown"},
                content=GUIDE_BYTES)
-    setup = await _wait_read(client, root + "/setup-runs/latest", token,
+    setup = await wait_for_guide_read(client, root + "/setup-runs/latest", token,
                              lambda v: v["status"] == "policy_draft_ready", call)
     compilation_root = root + f"/compilations/{setup['finalized_compilation_id']}"
     initial = await call(client, "GET", compilation_root + "/proposal", token, 200)
     initial_setup = setup
     if human_review_required:
         correction = await _correct_public_proposal(client, compilation_root, initial, token, call)
-        setup = await _wait_read(client, root + "/setup-runs/latest", token,
+        setup = await wait_for_guide_read(client, root + "/setup-runs/latest", token,
             lambda v: v["status"] == "policy_draft_ready"
             and v["setup_generation"] == initial_setup["setup_generation"] + 1, call)
         if (setup["source_snapshot_id"] != initial_setup["source_snapshot_id"]
@@ -219,4 +208,20 @@ async def public_guide_setup(client, factory, human_review_required, call, token
         "review", "revision", "expected_previous_active_guide_id", "expected_previous_active_guide_generation",
     )}, **context["contribution"]}
     evidence = await _source_evidence(factory, guide, setup, post["proposal"])
+    target, upstream = post["target"], post["target"]["upstream"]
+    evidence["locked_context"] = {
+        "locked_guide_version": guide["version"],
+        "locked_guide_source_snapshot_id": setup["source_snapshot_id"],
+        "locked_guide_source_snapshot_hash": target["proposal"]["source_snapshot_hash"],
+        "locked_effective_project_submission_artifact_policy_id": upstream["effective_policy_id"],
+        "locked_effective_project_submission_artifact_policy_hash": upstream["effective_policy_hash"],
+        "locked_pre_submit_checker_policy_id": upstream["pre_submit_policy_id"],
+        "locked_pre_submit_checker_bundle_hash": upstream["pre_submit_bundle_hash"],
+        "locked_post_submit_checker_policy_id": target["policy_id"],
+        "locked_post_submit_checker_policy_hash": target["policy_hash"],
+        **{f"locked_{kind}_policy_{field}": context[kind][source_field]
+           for kind in ("review", "revision")
+           for field, source_field in (("id", "policy_id"), ("generation", "generation"),
+                                       ("hash", "policy_hash"))},
+    }
     return PublicGuideSource(UUID(project["id"]), UUID(guide["id"]), manager, activation, evidence)

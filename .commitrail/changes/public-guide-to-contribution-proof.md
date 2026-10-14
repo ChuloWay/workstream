@@ -164,3 +164,45 @@ The first review identified omitted compensation infrastructure prerequisites,
 public review/revision policy configuration, exact task-example observation and
 an insufficiently specific negative-proof map. The plan above now specifies
 all four; no production code was changed before resolving them.
+
+## Connected-drill defect repair
+
+The isolated connected drill reproduced PostgreSQL SQLSTATE `40P01`: the
+public latest-setup read held Project and waited for Guide, while compilation
+reservation held Guide and its attempt INSERT waited for the Project foreign-key
+lock. This is a product defect, not an inference failure.
+
+Additional allowed files are
+`backend/app/modules/projects/guide_compilation/service.py` and
+`backend/tests/projects/guide_compilation/test_automatic_request.py`.
+Use the existing ProjectRepository parent lock at the start of the request
+transaction, before replay classification, AUTH preparation and admission. Both
+automatic and correction requests use that transaction. Do not add a Project lock
+to the shared manifest reader or weaken diagnostic/AUTH locks.
+
+The focused PostgreSQL regression pauses real attempt reservation immediately
+before INSERT, starts the authorized public latest-setup read, observes its lock
+wait from an independent session, then releases reservation. Both operations must
+finish, with one attempt, one request operation and one request authorization
+event. Removing the parent lock must make that same scenario fail. Inspect shared
+request/replay consumers for ordering conflicts; preserve caller transaction and
+exact replay behavior.
+
+Separately, the drill poller must observe the existing in-flight
+`provider_outcome_unresolved` marker until completion or its bounded deadline.
+It must not retry HTTP 503 or other terminal errors. Focused pure tests cover
+in-flight completion, bounded unresolved state and propagation of real failures.
+This repair retains the original L1 reviewers and introduces no new subsystem.
+The bounded plan replay passed before implementation; final code review remains
+required after PostgreSQL and connected-runtime proof.
+
+## Focused repair verification
+
+The isolated PostgreSQL automatic-request module completed 29 tests, including
+concurrent public latest-setup observation, replay, revocation and request custody.
+Database and MinIO cleanup completed. The pre-repair-method probe and connected
+runtime rerun remain pending; this focused result is not full journey proof.
+The pure drill tests passed five cases, including source commitment substitutions
+and bounded observation without hiding terminal errors. Initial hosted
+`project_lifecycle_a` exceeded its 1,200-second bound, so full-suite evidence is
+incomplete and must be refreshed on the repaired candidate.

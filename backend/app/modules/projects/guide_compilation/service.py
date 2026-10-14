@@ -7,6 +7,7 @@ from typing import Any, Literal
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.projects.models import ProjectSetupRun
+from app.modules.projects.repository import ProjectRepository
 
 from app.interfaces.project_agents import (
     ProjectGuideCompilationContext,
@@ -168,6 +169,13 @@ class GuideCompilationService:
         _require_identity_matches(facts, identity)
         try:
             async with self._session.begin():
+                # Match public diagnostics: parent custody precedes Guide/Setup.
+                # The attempt INSERT also needs Project through its foreign key.
+                project = await ProjectRepository(self._session).get_project(
+                    str(facts.project_id), for_update=True
+                )
+                if project is None:
+                    raise GuideCompilationIntegrityError("compilation project unavailable")
                 repository = GuideCompilationRepository(self._session)
                 existing = await self._existing_request(repository, actor, facts, origin)
                 if existing is not None:
