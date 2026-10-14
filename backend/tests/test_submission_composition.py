@@ -205,6 +205,7 @@ async def test_fresh_authority_denial_precedes_art_and_mutation(revocation):
 
     class Repository:
         async def get_task(self, task_id, **kwargs): return _task()
+        async def get_latest_submission_for_task(self, task_id): return None
         async def add_submission(self, submission): persisted.append(submission)
 
     service._repository = Repository()
@@ -246,6 +247,7 @@ async def test_invalid_admission_result_denies_before_lineage_and_final_authorit
 
     class Repository:
         async def get_task(self, task_id, **kwargs): return _task()
+        async def get_latest_submission_for_task(self, task_id): return None
         async def add_submission(self, submission): persisted.append(submission)
 
     service._repository = Repository()
@@ -291,6 +293,7 @@ async def test_policy_failure_closes_prepared_authority_before_any_submission_or
     )
     service._repository = SimpleNamespace(
         get_task=AsyncMock(return_value=_task()), add_submission=AsyncMock(),
+        get_latest_submission_for_task=AsyncMock(return_value=None),
     )
     with pytest.raises(ValueError, match="custody changed"):
         await service.create(request)

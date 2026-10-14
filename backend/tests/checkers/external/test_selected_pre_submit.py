@@ -972,6 +972,7 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
         task_id=request.task_id,
         assignment_id=assignment_id,
         checker_remediation_manifest_id=new_record_id(),
+        revision_context=SimpleNamespace(preparation_id=new_record_id(), preparation_sha256=SHA),
         predecessor=SimpleNamespace(
             submission_id=predecessor.submission_id,
             version=predecessor.submission_version,
@@ -1037,6 +1038,8 @@ async def test_selected_admission_binds_unchanged_work_to_current_task_rules(
         assert reservation.admission_lineage is not None
         assert reservation.admission_lineage.semantic_manifest_body == (request.manifest.as_dict())
         assert reservation.admission_lineage.packet_sha256 == request.packet.sha256
+        assert reservation.admission_lineage.revision_preparation_id == task.revision_context.preparation_id
+        assert reservation.admission_lineage.revision_preparation_sha256 == task.revision_context.preparation_sha256
         assert reservation.admission_lineage.checker_remediation_manifest_id == (
             task.checker_remediation_manifest_id
         )

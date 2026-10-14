@@ -141,9 +141,9 @@ class TaskRevisionExpiryOperation:
             head_preparation_id=head.id, head_preparation_sha256=head.preparation_sha256,
             deadline_at=target.deadline_at, expired_at=expired_at,
             delivery_event_id=envelope.claim.event_id,
-            authorization_decision_id=authority.decision_id,
+            authorization_decision_id=str(authority.decision_id),
             authority_context=facts.model_dump(mode="json"),
-            audit_event_id=audit_event_id,
+            audit_event_id=str(audit_event_id),
         )
         outcome = await self._outbox.append(revision_expired_event(receipt))
         if outcome.disposition is not OutboxAppendDisposition.CREATED:

@@ -190,8 +190,8 @@ and missing-root recovery cases at `10d2e01ad541656adfcf326aab2cff4751b531d0`
 (4 passed), and four service-authority, stored-resource, direct-SQL custody and
 participant-rollback cases at `c6e18927a0c98c6e1ae69a45da66a73a88dd5e97`
 (4 passed). Both isolated runs exited successfully and confirmed isolated database/role
-cleanup. Their runners did not provision or probe a MinIO provider. Their TASK, ART, OUTBOX and fixed-service custody code is
-unchanged in the main reconciliation; the incoming AUTH change extracts human
+cleanup. Their runners did not provision or probe a MinIO provider. Those runs preceded the later expiry audit-reference ORM representation repair
+and its notice comparison through the typed receipt snapshot; the incoming AUTH change extracts human
 manager authority and orders guide reads. These are focused runtime proofs,
 not an exact-final-head full-suite claim.
 
@@ -218,3 +218,16 @@ manager-closure action has no runtime alias; historical audit data remains intac
 
 Required hosted checks and independent review on the final PR head remain the
 merge evidence. Local test counts alone do not establish full-suite completion.
+
+
+Hosted run `38591662471` at `f918bbe1102c5ca22e26ff8b5fb6cd6cf1835ad8`
+exposed affected integration fixtures still bypassing preparation acknowledgement,
+stale projection/guard inventories, and mismatched ORM audit-reference UUID
+representation. The repair keeps native PostgreSQL UUID storage, aligns the ORM
+with AUDIT's string representation and compares typed notice snapshots. Tests
+construct canonical revision contexts, retain exact denial/rollback assertions,
+and upgrade historical schemas before running current runtime owners. The
+identifier-generation inventory retains the same two transport-token owners
+with their current expression fingerprints. This failed run is diagnostic
+evidence, not merge approval; replacement focused proofs and full required CI
+must pass on the repaired head.

@@ -200,7 +200,10 @@ async def test_work_context_public_projections(task_client, monkeypatch):
         assert response.status_code == 200, response.text
         body = response.json()
         fields = (COMMON | MANAGEMENT) if management else CONTRIBUTOR
-        assert set(body) == CONTEXT | (set() if management else {"lifecycle", "guide_documents", "revision_context"})
+        assert set(body) == CONTEXT | (set() if management else {"lifecycle", "guide_documents"})
+        # Initial claimed work has no revision preparation. The public route
+        # excludes None; prepared revision contexts are covered by their journey.
+        assert "revision_context" not in body
         assert set(body["task"]) == fields
         for name in fields - {"created_at", "updated_at", "deadline_at", "compensation"}:
             assert body["task"][name] == stored["id" if name == "task_id" else name], name

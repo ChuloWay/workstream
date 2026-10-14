@@ -331,6 +331,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/tasks/test_task_import_contract.py",
             "tests/test_task_import_sources.py",
             "tests/test_submission_predecessor_custody.py",
+            "tests/tasks/submission_dispatch/test_predecessor_receipt.py",
             "tests/authorization/task_queues/test_authority.py",
             "tests/authorization/task_queues/test_contracts.py",
             "tests/authorization/task_queues/test_transactions.py",

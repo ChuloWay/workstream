@@ -468,6 +468,7 @@ TASK_MODULES = (
     "tests/tasks/test_task_import_contract.py",
     "tests/test_task_import_sources.py",
     "tests/test_submission_predecessor_custody.py",
+    "tests/tasks/submission_dispatch/test_predecessor_receipt.py",
     "tests/checkers/execution/test_completion_contract.py",
     "tests/tasks/post_submit_routing/test_remediation.py",
     "tests/tasks/post_submit_routing/test_remediation_storage.py",

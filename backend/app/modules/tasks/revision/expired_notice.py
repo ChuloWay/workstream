@@ -39,9 +39,10 @@ class TaskRevisionExpiredNoticeOperation:
                 or envelope.idempotency_key != expected.idempotency_key
                 or payload != expected.payload):
             return HandlerOutcome.REJECT
-        evidence = await self._audit.read_expiry(expiry_receipt_snapshot(receipt))
+        snapshot = expiry_receipt_snapshot(receipt)
+        evidence = await self._audit.read_expiry(snapshot)
         if (evidence is None or evidence.receipt_id != receipt.id
-                or evidence.audit_event_id != receipt.audit_event_id
-                or evidence.authority.decision_id != receipt.authorization_decision_id):
+                or evidence.audit_event_id != snapshot.audit_event_id
+                or evidence.authority.decision_id != snapshot.authorization_decision_id):
             raise TaskRevisionExpiryUnavailable("revision expiry outcome evidence differs")
         return HandlerOutcome.ACKNOWLEDGE

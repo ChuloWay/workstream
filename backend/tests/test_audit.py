@@ -1213,6 +1213,8 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
             LifecycleAuditEventType.TASK_START_OVERRIDDEN,
             LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED,
             LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED,
+            LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
+            LifecycleAuditEventType.TASK_REVISION_EXPIRED,
         },
         LifecycleAuditEntityType.REVIEW_QUEUE_ENTRY: {
             LifecycleAuditEventType.REVIEW_QUEUE_ENTRY_CREATED,
@@ -1335,6 +1337,48 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
                     LifecycleAuditReferenceKind.ROUTING_MANIFEST: new_record_id(),
                 })
                 transition.update(from_status="evaluation_pending", to_status="review_pending")
+            if event_type in {
+                LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
+                LifecycleAuditEventType.TASK_REVISION_EXPIRED,
+            }:
+                references.update({reference: new_record_id() for reference in (
+                    LifecycleAuditReferenceKind.SUBMISSION,
+                    LifecycleAuditReferenceKind.ROUTING_MANIFEST,
+                    LifecycleAuditReferenceKind.REVISION_PREPARATION,
+                )})
+                if event_type is LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED:
+                    transition.update(reason=LifecycleAuditReason.FACT_RECORDED,
+                                      from_status=None, to_status=None)
+                else:
+                    from datetime import UTC, datetime
+                    from app.modules.tasks.api.revision_expiry import (
+                        TaskRevisionExpiryAuthorityFacts, TaskRevisionExpiryTarget,
+                        revision_expiry_resource_digest,
+                    )
+                    references[LifecycleAuditReferenceKind.OUTBOX_EVENT] = new_record_id()
+                    facts = TaskRevisionExpiryAuthorityFacts(
+                        target=TaskRevisionExpiryTarget(
+                            project_id=references[LifecycleAuditReferenceKind.PROJECT],
+                            task_id=entity_id,
+                            assignment_id=references[LifecycleAuditReferenceKind.ASSIGNMENT],
+                            contributor_id=new_record_id(),
+                            source_submission_id=references[LifecycleAuditReferenceKind.SUBMISSION],
+                            routing_manifest_id=references[LifecycleAuditReferenceKind.ROUTING_MANIFEST],
+                            root_preparation_id=references[LifecycleAuditReferenceKind.REVISION_PREPARATION],
+                            root_preparation_sha256="sha256:" + "a" * 64,
+                            deadline_at=datetime.now(UTC),
+                        ),
+                        head_preparation_id=references[LifecycleAuditReferenceKind.REVISION_PREPARATION],
+                        head_preparation_sha256="sha256:" + "a" * 64,
+                        delivery_event_id=references[LifecycleAuditReferenceKind.OUTBOX_EVENT],
+                        delivery_generation=1, invocation_digest="sha256:" + "b" * 64,
+                        task_status="needs_revision", assignment_status="active",
+                    )
+                    transition.update(
+                        from_status="needs_revision", to_status="ready",
+                        revision_expiry_facts=facts.model_dump(mode="json"),
+                        authorization_resource_digest=revision_expiry_resource_digest(facts),
+                    )
             if event_type is LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED:
                 references[LifecycleAuditReferenceKind.AUTHORITY_INVALIDATION] = new_record_id()
                 transition["to_status"] = "ready"

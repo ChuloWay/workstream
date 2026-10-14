@@ -39,7 +39,6 @@ from app.core.config import get_settings
 from app.db import models as db_models
 from app.db import session as db_session
 from app.db.base import Base
-from app.db.errors import integrity_constraint_name
 from app.main import create_app
 from app.modules.actors.models import (
     ActorIdentityLink,
@@ -940,135 +939,114 @@ async def _submission_context_request_for_started_task(
     )
 
 
+async def _expire_retained_source_for_reclaim(factory, manifest_id):
+    """Age retained source setup, then run the real recovery and expiry owners."""
+    from app.adapters.auth import outbox_dispatch_authorization, revision_expiry_authorization
+    from app.adapters.outbox import outbox_delivery
+    from app.adapters.tasks import scan_task_revision_sources, TransactionalTaskRevisionExpiryHandler
+    from app.modules.outbox.api import DeliveryOptions
+    from app.modules.outbox.delivery import CommittedInvocationReader
+    from app.modules.outbox.models import OutboxEvent
+    from app.modules.outbox.registry import HandlerRegistry
+    from app.modules.tasks.api.revision_expiry import REVISION_EXPIRY_EVENT
+    from app.modules.tasks.revision.models import TaskRevisionPreparation
+    from tests.tasks.submission_dispatch.test_revision_capacity import _retain_pre_revision_source
+    from tests.tasks.submission_dispatch.test_revision_expiry import _provision_expirer
+
+    manifest_id = UUID(manifest_id)
+    async with factory() as session:
+        root = await session.scalar(select(TaskRevisionPreparation).where(
+            TaskRevisionPreparation.routing_manifest_id == manifest_id,
+            TaskRevisionPreparation.sequence == 1))
+        assert root is not None and root.predecessor_id is None
+        source = SimpleNamespace(factory=factory, revision_preparation_id=root.id)
+    await _retain_pre_revision_source(source, manifest_id)
+    async with factory() as session, session.begin():
+        await session.execute(text("ALTER TABLE public.task_post_submit_routing_manifests DISABLE TRIGGER task_routing_manifest_immutable"))
+        await session.execute(text("""
+            UPDATE public.task_post_submit_routing_manifests m
+            SET created_at=clock_timestamp()-make_interval(hours=>p.revision_deadline_hours+1)
+            FROM public.submissions s JOIN public.revision_policies p ON p.id=s.locked_revision_policy_id
+            WHERE m.id=:id AND s.id=m.submission_id
+        """), {"id": manifest_id})
+        await session.execute(text("ALTER TABLE public.task_post_submit_routing_manifests ENABLE TRIGGER task_routing_manifest_immutable"))
+    await _provision_expirer(factory)
+    recovered, _ = await scan_task_revision_sources(factory, None)
+    assert recovered == 1
+    async with factory() as session:
+        event = await session.scalar(select(OutboxEvent).where(
+            OutboxEvent.idempotency_key == f"task.revision.expire:{manifest_id}"))
+        assert event is not None
+        event_id, project_id = event.event_id, UUID(event.project_id)
+    handler = TransactionalTaskRevisionExpiryHandler(factory, observer=CommittedInvocationReader(factory),
+                                                    authorization_factory=revision_expiry_authorization)
+    delivery = outbox_delivery(factory, authorization_factory=outbox_dispatch_authorization,
+        registry=HandlerRegistry([(REVISION_EXPIRY_EVENT, 1, handler)],
+                                 replay_safe=frozenset({(REVISION_EXPIRY_EVENT, 1)})), options=DeliveryOptions())
+    delivered = await delivery.deliver(event_id, project_id, "retained-context-reclaim")
+    assert delivered is not None and json.loads(delivered.outcome_json)["delivery_state"] == "acknowledged"
+
+
 @pytest.mark.asyncio
 async def test_task_repository_postgresql_submission_context_state_matrix(
-    task_client: AsyncClient,
-    task_database_env: str,
-    monkeypatch: pytest.MonkeyPatch,
+    task_client: AsyncClient, task_database_env: str, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Prove TASK context facts and crossed-state failures against PostgreSQL."""
-    project = await create_active_project(task_client)
+    """Current initial/revision contexts reject crossed states and assignment heads."""
+    from tests.checkers.external.support import post_registry_spec
+    project = await create_active_project(task_client, post_submit_registry_spec=post_registry_spec())
     subject = "worker-submission-context"
     task = await create_started_task(task_client, project["id"], monkeypatch, subject)
     contributor_id = await actor_id(subject)
     initial_request = await _submission_context_request_for_started_task(task["id"], contributor_id)
-
-    async with db_session.get_session_factory()() as session:
+    factory = db_session.get_session_factory()
+    async with factory() as session:
         initial, source = await TaskRepository(session).select_submission_context(initial_request)
-        assert source is None
-        assert initial.kind == "initial"
-        assert initial.status == "in_progress"
-        assert initial.predecessor is None
-
-    async with db_session.get_session_factory()() as session:
-        await session.execute(
-            update(WorkstreamTask)
-            .where(WorkstreamTask.id == task["id"])
-            .values(status="needs_revision")
-        )
-        await session.commit()
-    async with db_session.get_session_factory()() as session:
-        with pytest.raises(
-            TaskSubmissionContextUnavailable,
-            match="task_submission_context_invalid",
-        ):
+        assert source is None and initial.kind == "initial"
+        assert initial.status == "in_progress" and initial.predecessor is None
+    # Malformed stored-state probes are caller-owned and rolled back. They do
+    # not invent committed revision history or bypass preparation/expiry guards.
+    async with factory() as session, session.begin():
+        await session.execute(update(WorkstreamTask).where(WorkstreamTask.id == task["id"]).values(status="needs_revision"))
+        with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_context_invalid"):
             await TaskRepository(session).select_submission_context(initial_request)
-
-    async with db_session.get_session_factory()() as session:
-        await session.execute(
-            update(WorkstreamTask)
-            .where(WorkstreamTask.id == task["id"])
-            .values(status="in_progress")
-        )
-        await session.commit()
-    set_dev_actor(monkeypatch, roles="worker", subject=subject)
-    submission_id = await seed_retained_submission(
-        task["id"], complete_submission_payload(),
-    )
-    submission_response = await task_client.get(
-        f"/api/v1/submissions/{submission_id}", headers=auth_headers(),
-    )
-    assert submission_response.status_code == 200, submission_response.text
-    predecessor = submission_response.json()
-
-    async with db_session.get_session_factory()() as session:
-        await session.execute(
-            update(WorkstreamTask)
-            .where(WorkstreamTask.id == task["id"])
-            .values(status="needs_revision")
-        )
-        await session.commit()
+        await session.rollback()
+    submission_id = await seed_retained_submission(task["id"], complete_submission_payload())
     revision_request = await _submission_context_request_for_started_task(
-        task["id"], contributor_id, predecessor_submission_id=predecessor["id"]
-    )
-    async with db_session.get_session_factory()() as session:
+        task["id"], contributor_id, predecessor_submission_id=submission_id)
+    async with factory() as session, session.begin():
+        await session.execute(update(WorkstreamTask).where(WorkstreamTask.id == task["id"]).values(status="needs_revision"))
         with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_context_invalid"):
             await TaskRepository(session).select_submission_context(revision_request)
-
-    stale_request = TaskSubmissionContextRequest(
-        task_id=revision_request.task_id,
-        assignment_id=revision_request.assignment_id,
-        contributor_id=revision_request.contributor_id,
-        predecessor_submission_id=new_record_id(),
-    )
-    async with db_session.get_session_factory()() as session:
-        with pytest.raises(
-            TaskSubmissionContextUnavailable,
-            match="task_submission_predecessor_changed",
-        ):
+        await session.rollback()
+    manifest_id = await route_retained_checker_remediation(submission_id)
+    async with factory() as session:
+        revision, _ = await TaskRepository(session).select_submission_context(revision_request)
+        assert revision.kind == "checker_remediation"
+        assert revision.predecessor.submission_id == UUID(submission_id)
+        stale_request = replace(revision_request, predecessor_submission_id=new_record_id())
+        with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_predecessor_changed"):
             await TaskRepository(session).select_submission_context(stale_request)
-
-    async with db_session.get_session_factory()() as session:
-        await session.execute(
-            update(WorkstreamTask)
-            .where(WorkstreamTask.id == task["id"])
-            .values(status="in_progress")
-        )
-        await session.commit()
-    async with db_session.get_session_factory()() as session:
-        with pytest.raises(
-            TaskSubmissionContextUnavailable,
-            match="task_submission_context_invalid",
-        ):
+    async with factory() as session, session.begin():
+        await session.execute(update(WorkstreamTask).where(WorkstreamTask.id == task["id"]).values(status="in_progress"))
+        with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_context_invalid"):
             await TaskRepository(session).select_submission_context(revision_request)
-
+        await session.rollback()
+    await _expire_retained_source_for_reclaim(factory, manifest_id)
     replacement_subject = "worker-submission-context-replacement"
-    replacement_contributor_id = await seed_task_test_actor(replacement_subject)
-    replacement_assignment_id = str(new_record_id())
-    async with db_session.get_session_factory()() as session:
-        await session.execute(
-            update(TaskAssignment)
-            .where(TaskAssignment.id == str(revision_request.assignment_id))
-            .values(status="released")
-        )
-        stored_task = await session.get(WorkstreamTask, task["id"])
-        session.add(TaskAssignment(
-            id=replacement_assignment_id, task_id=stored_task.id,
-            project_id=stored_task.project_id, contributor_id=replacement_contributor_id,
-            assigned_by=stored_task.created_by, status="active",
-            submitter_contribution_policy_version_id=stored_task.locked_contribution_policy_version_id,
-        ))
-        await session.execute(
-            update(WorkstreamTask)
-            .where(WorkstreamTask.id == task["id"])
-            .values(
-                assigned_to=replacement_contributor_id,
-                status="needs_revision",
-            )
-        )
-        await session.commit()
-    cross_contributor_request = TaskSubmissionContextRequest(
-        task_id=revision_request.task_id,
-        assignment_id=UUID(replacement_assignment_id),
-        contributor_id=UUID(replacement_contributor_id),
-        predecessor_submission_id=revision_request.predecessor_submission_id,
-    )
-    async with db_session.get_session_factory()() as session:
-        with pytest.raises(
-            TaskSubmissionContextUnavailable,
-            match="task_submission_context_invalid",
-        ):
+    replacement = await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], replacement_subject)
+    claimed = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
+    assert claimed.status_code == 200, claimed.text
+    started = await task_client.post(f"/api/v1/tasks/{task['id']}/start", headers=auth_headers())
+    assert started.status_code == 200, started.text
+    replacement_request = await _submission_context_request_for_started_task(task["id"], replacement["actor_profile_id"])
+    async with factory() as session:
+        fresh, source = await TaskRepository(session).select_submission_context(replacement_request)
+        assert source is None and fresh.kind == "initial" and fresh.predecessor is None
+        cross_contributor_request = replace(replacement_request, predecessor_submission_id=UUID(submission_id))
+        with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_predecessor_changed"):
             await TaskRepository(session).select_submission_context(cross_contributor_request)
+        with pytest.raises(TaskSubmissionContextUnavailable, match="task_submission_context_invalid"):
+            await TaskRepository(session).select_submission_context(revision_request)
 
 
 @pytest.mark.asyncio
@@ -1219,30 +1197,17 @@ def test_task_locked_context_constraints_bind_task_submission_and_hashes() -> No
         assert [column.name for column in constraint.columns] == local_columns
 
     expected_submission_constraints = {
-        "fk_submissions_task_locked_source_snapshot_hash": [
-            "task_id",
+        "fk_submissions_locked_source_snapshot_hash": [
             "locked_guide_source_snapshot_id",
             "locked_guide_source_snapshot_hash",
         ],
-        "fk_submissions_task_locked_effective_policy_hash": [
-            "task_id",
+        "fk_submissions_locked_effective_policy_hash": [
             "locked_effective_project_submission_artifact_policy_id",
             "locked_effective_project_submission_artifact_policy_hash",
-        ],
-        "fk_submissions_task_locked_pre_submit_checker_hash": [
-            "task_id",
-            "locked_pre_submit_checker_policy_id",
-            "locked_pre_submit_checker_bundle_hash",
         ],
         "fk_submissions_locked_pre_submit_checker_hash": [
             "locked_pre_submit_checker_policy_id",
             "locked_pre_submit_checker_bundle_hash",
-        ],
-        "fk_submissions_task_locked_post_submit_policy_hash": [
-            "task_id",
-            "locked_post_submit_checker_policy_id",
-            "locked_post_submit_checker_policy_version",
-            "locked_post_submit_checker_policy_hash",
         ],
         "fk_submissions_locked_post_submit_policy_hash": [
             "locked_post_submit_checker_policy_id",
@@ -1257,6 +1222,12 @@ def test_task_locked_context_constraints_bind_task_submission_and_hashes() -> No
             if constraint.name == constraint_name
         )
         assert [column.name for column in constraint.columns] == local_columns
+        assert all(element.column.table.name != "workstream_tasks" for element in constraint.elements)
+
+    # Retained Submission locks belong to immutable owners. Updating a current
+    # TASK context must not invalidate the historical Submission through an FK.
+    assert not any((constraint.name or "").startswith("fk_submissions_task_locked_")
+                   for constraint in Submission.__table__.foreign_key_constraints)
 
     assert {
         "ix_workstream_tasks_locked_source_snapshot",
@@ -2439,7 +2410,19 @@ async def test_database_rejects_checker_run_without_post_submit_policy_context(
     from app.modules.checkers.execution_repository import stored_request, request_text
     source_id = await seed_retained_checker_run(stored_id, state="queued")
     async with db_session.get_session_factory()() as session:
+        constraints = await (await session.connection()).run_sync(
+            lambda connection: inspect(connection).get_foreign_keys("checker_runs", schema="public"))
+        policy_fields = ["locked_post_submit_checker_policy_id",
+                         "locked_post_submit_checker_policy_version",
+                         "locked_post_submit_checker_policy_hash"]
+        by_name = {constraint["name"]: constraint for constraint in constraints}
+        assert by_name["fk_checker_runs_locked_post_submit_policy_hash"]["constrained_columns"] == policy_fields
+        assert by_name["fk_checker_runs_locked_post_submit_policy_hash"]["referred_table"] == "checker_policies"
+        assert by_name["fk_checker_runs_submission_locked_post_submit_policy_hash"]["constrained_columns"] == ["submission_id", *policy_fields]
+        assert by_name["fk_checker_runs_submission_locked_post_submit_policy_hash"]["referred_table"] == "submissions"
         source = await session.get(db_models.CheckerRun, source_id)
+        original_policy = [getattr(source, field) for field in policy_fields]
+        assert all(value is not None for value in original_policy)
         values = {column.name: getattr(source,column.name) for column in db_models.CheckerRun.__table__.columns}
         request = change_request(stored_request(source), evaluation_generation=2, evaluation_request_id=new_record_id())
         values.update(id=str(new_record_id()), result_id=str(new_record_id()), evaluation_request_id=str(request.evaluation_request_id),
@@ -2447,8 +2430,12 @@ async def test_database_rejects_checker_run_without_post_submit_policy_context(
                       locked_post_submit_checker_policy_id=None, locked_post_submit_checker_policy_version=None,
                       locked_post_submit_checker_policy_hash=None)
         session.add(db_models.CheckerRun(**values))
-        with pytest.raises(IntegrityError, match="checker request ownership or policy mismatch"):
+        with pytest.raises(IntegrityError, match="checker task context differs"):
             await session.flush()
+        await session.rollback()
+        assert await session.get(db_models.CheckerRun, values["id"]) is None
+        retained = await session.get(db_models.CheckerRun, source_id)
+        assert [getattr(retained, field) for field in policy_fields] == original_policy
 
 
 async def test_retained_submission_versions_are_readable_without_exposing_packet_hashes(
@@ -2755,6 +2742,11 @@ async def test_database_enforces_unique_submission_version(
     body = stored_response.json()
 
     async with db_session.get_session_factory()() as session:
+        constraints = await (await session.connection()).run_sync(
+            lambda connection: inspect(connection).get_unique_constraints("submissions", schema="public"))
+        unique_versions = next(constraint for constraint in constraints
+                               if constraint["name"] == "uq_submissions_task_version")
+        assert unique_versions["column_names"] == ["task_id", "version"]
         persisted = await session.get(Submission, body["id"])
         assert persisted is not None
         task = await session.get(WorkstreamTask, persisted.task_id)
@@ -2768,9 +2760,13 @@ async def test_database_enforces_unique_submission_version(
             artifact_hash_manifest=persisted.artifact_hash_manifest,
             supersedes_submission_id=None,
         ))
-        with pytest.raises(IntegrityError) as rejected:
+        # Consecutive lineage now rejects the duplicate before the physical
+        # unique constraint above is reached; both protections remain present.
+        with pytest.raises(IntegrityError, match="submission_revision_lineage_invalid"):
             await session.commit()
-        assert integrity_constraint_name(rejected.value) == "uq_submissions_task_version"
+        await session.rollback()
+        assert list(await session.scalars(select(Submission.id).where(
+            Submission.task_id == started_task["id"]))) == [stored_id]
 
 
 async def test_worker_cannot_create_screen_or_release_tasks(

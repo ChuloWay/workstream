@@ -81,6 +81,8 @@ def _lineage(request: SubmissionAdmissionConsumptionRequest):
         predecessor_submission_id=None,
         predecessor_submission_version=None,
         checker_remediation_manifest_id=None,
+        revision_preparation_id=None,
+        revision_preparation_sha256=None,
         pre_submit_evidence_set_id=None,
         selected_pre_submit_run_id=str(new_record_id()),
         identity_link_id=str(new_record_id()),
