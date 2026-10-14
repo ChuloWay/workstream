@@ -34,6 +34,9 @@ source.
   move source-wide Ruff/docstring checks to the existing preflight job once.
 - `backend/scripts/select_ci_scope.py` and focused tests: deterministically map
   an exact base-to-head changed-file set to conservative draft CI components.
+- `backend/scripts/behavior_ownership.py` and
+  `.ci/behavior-ownership/partition.v1.json`: register the new selector as an
+  eligible shared CI-control module in the repository-owned partition.
 - `scripts/test_lightweight_agent_gates.py`: prove trigger, status, empty-scope,
   partial-scope and full-suite fan-in behavior.
 - `docs/operations_backend_testing.md`: document draft feedback versus required
@@ -104,6 +107,7 @@ execute once and remain required.
 | Required fan-in rejects missing selected proof | Focused selector/workflow tests and embedded shell truth-table probes | Passed, including failure, cancellation, skip and unexpected-success cases. | Branch-protection configuration remains repository-admin state. |
 | Complete merge proof is unchanged | `pytest` lane catalogue, runner and evidence contract modules | 137 passed. | Hosted ready-PR Backend execution remains required. |
 | Repository process/docs remain valid | Markdown, stale-contract and reviewer-contract checks | Passed; 200 Agent Gates tests passed locally, with only the same 9 pre-existing macOS Bash 3 subtest failures seen on base. | Hosted Linux is authoritative for that host-specific probe. |
+| Behavior-ownership partition remains exact | `python -m scripts.behavior_ownership validate` plus focused ownership tests | Selector is registered as one shared eligible target; validation passes. | Future eligible modules remain fail-closed through the same partition gate. |
 | No test was deleted or deselected | Base-to-head diff and lane-catalogue ownership checks | No existing test deletion, skip or deselection. | Future catalogue changes remain guarded by the same ownership checks. |
 
 ## Review findings
@@ -117,6 +121,11 @@ without discriminating the intended failure. The loop is restored to its
 full-suite owner, while the new fan-in probe now exercises success, failure,
 cancellation, skip, unknown and unexpected-success outcomes for every selected
 component.
+
+The first hosted ready-PR run then rejected the new selector as an unregistered
+eligible module in the exact behavior-ownership partition. The selector is now
+registered as one shared CI-control target, the partition digest is renewed,
+and the partition validator plus its 160 focused tests pass.
 
 ## Reconciliation
 
