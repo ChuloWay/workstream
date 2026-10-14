@@ -36,7 +36,7 @@ Use the normal `uv` resolver with a package-specific upgrade so unaffected locke
 - [x] Every MCP alert in the issue snapshot resolves outside its affected range using a supported patched version corroborated by canonical advisories.
 - [x] `uv` regenerates the lock reproducibly through a package-specific upgrade, with no manual lock editing, unrelated dependency additions, or unrelated version churn.
 - [x] A fresh isolated environment installs from the frozen MCP lock with runtime and development dependencies.
-- [ ] Existing MCP authentication, gateway, protocol, packaging, lint, typecheck, unit, contract-drift, and hosted integration checks preserve required behavior without skips or weakened assertions; the MCP frozen-lock package/container lanes provide exact adapter-lock custody while pip-resolved backend integration remains supplemental.
+- [x] Existing MCP authentication, gateway, protocol, packaging, lint, typecheck, unit, contract-drift, and hosted integration checks preserve required behavior without skips or weakened assertions; the MCP frozen-lock package/container lanes provide exact adapter-lock custody while pip-resolved backend integration remains supplemental.
 - [x] The final branch reconciles current `main` and open PR #518 before push so its MCP package work is neither overwritten nor misrepresented.
 - [x] Public records and PR text contain no credentials, private dashboard links, private alert identifiers, or non-public exploit detail.
 
@@ -54,9 +54,9 @@ Use the normal `uv` resolver with a package-specific upgrade so unaffected locke
 | Plan is bounded and executable | Internal plan review against the base lock, SDK owner graph, and issue #565 contract | Passed with low residual risks | Hosted package/container and integration proof remained pending at plan review |
 | Lock has only intended resolver changes | Package-specific `uv lock --upgrade-package pyjwt`; `uv lock --check`; base/head package-set and lock diff inspection | Passed; one transitive package changed version and no package was added or removed | Canonical advisories and dashboard must be reconciled again after merge |
 | Patched graph installs cleanly | Fresh temporary `UV_PROJECT_ENVIRONMENT` with `uv sync --frozen --extra dev`; installed-version inspection | Passed | Hosted platform and integration matrices remain CI custody |
-| MCP source behavior remains compatible | Frozen-lock Ruff, strict mypy, and non-integration suite | Passed: Ruff and mypy clean; 367 passed, with the two custody-split tests executed separately below | Hosted container and integration matrices remain CI custody |
-| Installed wheel is independent | Build sdist and wheel; install the wheel in a fresh environment; run `test_package_independence.py` with that interpreter | Passed: wheel import probe and focused test both passed | Hosted package lane remains pending |
-| MCP contracts match the backend | Run `test_contract_drift.py` with the isolated backend interpreter supplying live OpenAPI | Passed: 11 passed | Pip-resolved hosted backend integration is supplemental and does not establish exact backend-lock custody |
+| MCP source behavior remains compatible | Frozen-lock Ruff, strict mypy, and non-integration suite locally and in the hosted package lane | Passed: Ruff and mypy clean; 367 passed, with the two custody-split tests executed separately below | Exact-head internal review remains pending |
+| Installed wheel and container are independent | Build sdist and wheel; install the wheel in a fresh environment; run `test_package_independence.py` with that interpreter; build and exercise the independent container | Passed locally and in the hosted package lane; the focused wheel test passed | The wheel intentionally resolves from its declared owner constraints rather than claiming lock custody |
+| MCP contracts match the backend | Run `test_contract_drift.py` with a backend interpreter supplying live OpenAPI; run hosted real API-to-MCP lifecycle parity | Passed locally and in hosted CI: contract comparison and both isolated lifecycle suites passed | Pip-resolved hosted backend integration is supplemental and does not establish exact backend-lock custody |
 
 ## Review findings
 
@@ -67,4 +67,4 @@ The bounded plan review passed with low residual risks. It required explicit sep
 - Current-source reconciliation: Based on `main` at `82a46ff3c5f21e3cdf762cf505d61d84531a7c80`; PR #518 overlaps the MCP package area and must be reconciled before the final push.
 - Roadmap impact: None. This repair changes a selected transitive dependency version without changing an MCP capability, exposure, completed scope, remaining product gate, or next product dependency.
 - Next usable boundary: Merge this MCP repair, re-read the default-branch alert dashboard, and retain explicit ownership of any remaining snapshot alert.
-- Remaining risks: Hosted package/container and real-API checks, exact-head internal review, and post-merge default-branch alert reconciliation remain pending.
+- Remaining risks: Exact-head internal review and post-merge default-branch alert reconciliation remain pending.
