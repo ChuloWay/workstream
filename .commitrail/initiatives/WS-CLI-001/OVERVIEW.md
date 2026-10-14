@@ -29,6 +29,7 @@
   [WS-CLI-001-22](WS-CLI-001-22.md), Finance current policy discovery and exact retained-version inspection;
   [WS-CLI-001-23](WS-CLI-001-23.md), Finance draft creation, rule replacement, publication and retirement;
   [WS-CLI-001-24](WS-CLI-001-24.md), self/project contribution evidence and exact private CSV export;
+  [WS-CLI-001-25](WS-CLI-001-25.md), explicit public ZIP preparation, Submission replay/history and contributor checker findings;
   [PILOT-13](../../changes/pilot13-assigned-task-guide-documents.md), assigned-task locked-guide listing/download;
   [PILOT-02](../../changes/pilot02-bulk-transitions-cli.md), explicit CSV conversion,
   source custody, atomic import, batch status and whole-batch screen/release.
@@ -54,7 +55,8 @@ contributor writes, with server-owned fresh authority, assignment and lineage.
 Exact caller keys support manual replay; uncertainty never triggers automatic retries.
 `task context TASK_ID` and `task requirements TASK_ID` read governing guide,
 policy selectors, server action hints and locked intake rules. Hints are not
-authority; these reads do not expose the hidden submission intake.
+authority; intake uses the separate public `task prepare` and `task submit`
+commands. Submission history and checker findings have separate bounded reads.
 `project create --name TEXT --slug TEXT --idempotency-key UUID` creates a draft
 shell through the public POST. The API owns system-scoped creation authority
 and committed recovery; guide upload, approval and activation are not added.
@@ -237,9 +239,12 @@ CLIs. Keep the package independent of backend and MCP runtime dependencies.
    Remaining commands are selected only from currently public, usable API
    contracts not already owned by another initiative. PILOT-02 batch CLI is
    delivered in this package; reuse it rather than duplicate it.
-   Submission awaits its public contract; unfinished
-   review/revision is not current CLI implementation scope.
-25. **Optional TUI:** Add a focused public queue/evidence view after its API
+25. **WS-CLI-001-25 / PILOT-12:** Public ZIP preparation with exact caller key,
+   separate admission-backed creation/replay, and bounded submission/checker
+   history. No automatic retry/polling or inferred acceptance. Revision-change
+   summary awaits #495's public field; full public setup integration is #552.
+   Unfinished human review/revision is not current CLI implementation scope.
+26. **Optional TUI:** Add a focused public queue/evidence view after its API
    workflow is complete. Never require a TUI for agents or scripts.
 
 ## Risks and proof
