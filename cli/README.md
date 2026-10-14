@@ -87,8 +87,10 @@ Submitter/Reviewer grant alone does not authorize project export.
 Both commands accept `--type accepted_submission|completed_review` and aware
 RFC3339 `--recorded-from` (inclusive) / `--recorded-before` (exclusive) filters.
 Times are normalized to UTC microsecond precision before dispatch. Omitted
-filters select all authorized records. The server refuses selections above
-1,000 contributions: narrow the filters; the CLI never truncates or paginates.
+filters select all authorized records. The paginated REST change exposes JSON
+`next_cursor` and CSV `X-Workstream-Next-Cursor` for selections through 100,000.
+The current CLI consumer does not yet accept or follow either continuation, so
+it cannot ship with that backend change until issue #499 reconciles both formats.
 
 Text and JSON retain every public source/acceptance identity and award, including
 exact decimal strings and unpaid empty award sets. These are **earned facts,

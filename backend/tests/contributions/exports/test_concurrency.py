@@ -1,6 +1,7 @@
 """Real late-commit visibility and public grant revocation at the response fence."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -8,8 +9,14 @@ from sqlalchemy import event, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from app.core.config import decode_pagination_cursor_hmac_secret, get_settings
+from app.core.identifiers import new_record_id
 from app.modules.authorization.admin_service import AdminRoleGrantService
 from app.modules.authorization.repository import AdminAuthorizationRepository
+from app.modules.contributions.api.records import ContributionReadRequest
+from app.modules.contributions.records.pagination import (
+    ContributionExportCursorCodec, contribution_export_query_digest,
+)
 from app.modules.contributions.records.read_service import ContributionReadService
 from app.modules.contributions.records.read_repository import ContributionReadRepository
 from tests.auth_concurrency_support import wait_for_named_database_lock
@@ -18,6 +25,134 @@ from tests.contributions.records.support import (
 )
 from tests.tasks.post_submit_routing.outcome_support import authorized_routing_source, apply_outcome
 from .support import export_path, export_audits, prepared_reviewer_sibling
+
+
+async def test_real_postgres_retains_and_slices_1001_members_across_sessions(
+    tmp_path, auth_database_env, admin_access, monkeypatch,
+):
+    """Real PostgreSQL owns the 1,001-ID array; only unrelated fact projection is substituted."""
+    async with reviewer_contribution_source(tmp_path, auth_database_env) as h:
+        reader = await admin_access.signed.actor("postgres-1001-member-reader")
+        request = ContributionReadRequest(
+            audience="project", actor_profile_id=reader.id,
+            project_id=h.reviewer_record.project_id, limit=1000,
+        )
+        secret = get_settings().pagination_cursor_hmac_secret
+        assert secret is not None
+        codec = ContributionExportCursorCodec(decode_pagination_cursor_hmac_secret(secret))
+        digest = contribution_export_query_digest(request)
+        members = tuple(new_record_id() for _ in range(1001))
+
+        async with h.factory() as session, session.begin():
+            snapshot = await ContributionReadRepository(
+                session, cursor_codec=codec,
+            )._allocate_snapshot(reader.id, digest, members)
+            snapshot_id, expires_at = snapshot.id, snapshot.expires_at
+
+        async with h.factory() as session:
+            stored = await session.scalar(text("""
+                SELECT member_ids FROM public.contribution_export_snapshots WHERE id=:id
+            """), {"id": snapshot_id})
+        assert tuple(stored) == members
+
+        cursor = codec.encode(
+            query_digest=digest, snapshot_id=snapshot_id,
+            next_offset=1000, expires_at=expires_at,
+        )
+
+        async def return_selected_ids(repository, selected, ids):
+            return ids
+
+        monkeypatch.setattr(ContributionReadRepository, "_load_records", return_selected_ids)
+        async with h.factory() as session, session.begin():
+            continuation = await ContributionReadRepository(
+                session, cursor_codec=codec,
+            ).read(request.model_copy(update={"cursor": cursor}))
+
+        traversed = tuple(stored[:1000]) + continuation.records
+        assert continuation.records == (members[-1],)
+        assert continuation.next_cursor is None
+        assert traversed == members and len(set(traversed)) == 1001
+
+
+async def test_locked_expired_pruning_skips_contention_and_preserves_live_cursor(
+    tmp_path, auth_database_env, admin_access, monkeypatch,
+):
+    """A locked stale row cannot block bounded pruning or delete a live traversal."""
+    async with reviewer_contribution_source(tmp_path, auth_database_env) as h:
+        async with h.factory() as session, session.begin():
+            await insert_record(session, h.reviewer_record)
+        sibling = await prepared_reviewer_sibling(h)
+        async with h.factory() as session, session.begin():
+            await insert_record(session, sibling)
+        project = h.reviewer_record.project_id
+        reader = await admin_access.signed.actor("locked-prune-project-reader")
+        await admin_access.signed.grant(
+            admin_access.admin, reader, role="project_manager", project_id=project,
+        )
+        path = export_path(project)
+        first = await admin_access.signed.client.get(
+            path, params={"limit": 1}, headers=reader.headers,
+        )
+        assert first.status_code == 200 and first.json()["next_cursor"], first.text
+        live_cursor = first.json()["next_cursor"]
+
+        created = datetime.now(UTC) - timedelta(hours=2)
+        expires = created + timedelta(hours=1)
+        locked_id, available_id = new_record_id(), new_record_id()
+        async with h.factory() as session, session.begin():
+            live = (await session.execute(text("""
+                SELECT id,query_digest,member_ids FROM public.contribution_export_snapshots
+                WHERE actor_profile_id=:actor
+            """), {"actor": str(reader.id)})).mappings().one()
+            for snapshot_id, slot in ((locked_id, 2), (available_id, 3)):
+                await session.execute(text("""
+                    INSERT INTO public.contribution_export_snapshots
+                      (id,actor_profile_id,allocation_slot,query_digest,member_ids,created_at,expires_at)
+                    VALUES (:id,:actor,:slot,:digest,CAST(:members AS uuid[]),:created,:expires)
+                """), {
+                    "id": snapshot_id, "actor": str(reader.id), "slot": slot,
+                    "digest": live["query_digest"], "members": live["member_ids"],
+                    "created": created, "expires": expires,
+                })
+
+        calls = []
+        original_delete = ContributionReadRepository._delete_expired
+
+        async def observed_delete(repository, **kwargs):
+            removed = await original_delete(repository, **kwargs)
+            calls.append((kwargs["limit"], removed))
+            return removed
+
+        monkeypatch.setattr(ContributionReadRepository, "_delete_expired", observed_delete)
+        lock_session = h.factory()
+        await lock_session.begin()
+        try:
+            await lock_session.execute(text("""
+                SELECT id FROM public.contribution_export_snapshots WHERE id=:id FOR UPDATE
+            """), {"id": locked_id})
+            pruned = await asyncio.wait_for(admin_access.signed.client.get(
+                path, headers=reader.headers,
+            ), timeout=30)
+            assert pruned.status_code == 200, pruned.text
+            async with h.factory() as session:
+                remaining = set((await session.scalars(text("""
+                    SELECT id FROM public.contribution_export_snapshots
+                    WHERE actor_profile_id=:actor
+                """), {"actor": str(reader.id)})).all())
+            assert locked_id in remaining and available_id not in remaining
+            assert live["id"] in remaining
+            assert sum(removed for _, removed in calls) <= 25
+        finally:
+            await lock_session.rollback()
+            await lock_session.close()
+
+        continued = await admin_access.signed.client.get(
+            path, params={"limit": 1, "cursor": live_cursor}, headers=reader.headers,
+        )
+        assert continued.status_code == 200, continued.text
+        assert [item["contribution_id"] for item in continued.json()["items"]] == [str(sibling.id)]
+        assert continued.json()["next_cursor"] is None
 
 
 async def test_two_session_fifth_slot_race_returns_one_page_and_generic_capacity(

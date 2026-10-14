@@ -972,12 +972,15 @@ and null for completed-review records. Separate `acceptance_review_id` and
 `acceptance_routing_manifest_id` retain the acceptance's exclusive trigger source;
 they never replace the contribution's own exclusive source references.
 
-The response includes contribution, contributor, project, task, Submission,
-artifact hash, policy-version and source identities, task source/display facts,
-and every immutable award ID, instrument, unit and exact decimal quantity. An
-unpaid record has `awards: []`. No field asserts payout, payment or fulfillment;
-adapter bindings and provider credentials are not exported. Quantity strings
-preserve exact decimal values without binary floats or rounding.
+The JSON response envelope contains `exported_at`, `items`, and nullable
+`next_cursor`. A present, non-null cursor means another page exists; null ends
+the traversal. Each item includes contribution, contributor, project, task,
+Submission, artifact hash, policy-version and source identities, task
+source/display facts, and every immutable award ID, instrument, unit and exact
+decimal quantity. An unpaid record has `awards: []`. No field asserts payout,
+payment or fulfillment; adapter bindings and provider credentials are not
+exported. Quantity strings preserve exact decimal values without binary floats
+or rounding.
 
 Each page uses one fresh PostgreSQL REPEATABLE READ transaction selected
 before the first AUTH query. Current human profile/link, selected grant and
@@ -1006,7 +1009,7 @@ normalized type/time filters, output format, page limit, ordering, snapshot,
 next offset and database expiry. Raw contribution, award, source, label and grant
 facts are absent. Every continuation freshly authorizes before cursor decoding
 or snapshot lookup, so revocation is concealed under the existing read contract.
-Malformed, forged, substituted, missing and access-expired cursors receive one
+Malformed, forged, substituted, access-expired, or missing-state cursors receive one
 generic 422 response after successful scope authorization. Cursors can replay
 the same membership page until access expiry; failed later pages leave the
 already committed snapshot available for retry.

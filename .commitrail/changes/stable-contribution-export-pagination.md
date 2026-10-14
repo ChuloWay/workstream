@@ -82,6 +82,7 @@ the retained page IDs through the existing owner ports.
   activate the existing pagination-secret fixture for the real API contract;
   no CLI implementation or consumer behavior changes.
 - Affected current contract text in `README.md`,
+  `cli/README.md`,
   `docs/spec_contribution_compensation.md`,
   `docs/spec_authorization_service.md`, and `docs/roadmap_status.md`.
 
@@ -277,6 +278,7 @@ CSV row counts remain distinct from contribution counts.
 | Migration graph and schema fingerprint | Isolated PostgreSQL migration through `0040_contribution_export_page`; public schema fingerprint `a14b2b41d5c2e3a450105ad8283720490116545c376404c6507c9054b9986bac` | Passed; owned temporary database cleaned | Migration constraint/index tests remain |
 | Focused PostgreSQL owner/API proof | 39 selected export, migration and graph tests split only after two host-pressure timeouts | First 24 passed before the second timeout; its 25th node later passed alone and the already completed 26th passed; the remaining selection produced 12 passes and one fixture-only failure, then the repaired migration node passed alone in 143.69 seconds. The earlier broad runs remain incomplete and are not reported as one clean passing batch. | Hosted complete lane execution remains required; one earlier authorization node failure had no captured traceback and did not reproduce alone, so its cause is unknown |
 | Migration constraints and model parity | Exact real-PostgreSQL `test_snapshot_storage_bounds_model_parity_and_immutable_membership` after atomically seeding the baseline-required actor/identity pair | 1 passed in 143.69 seconds; database and role cleanup complete | Hosted schema lane remains |
+| Fixed 1,001-member storage/traversal and contended pruning | Isolated PostgreSQL execution of `test_real_postgres_retains_and_slices_1001_members_across_sessions` and `test_locked_expired_pruning_skips_contention_and_preserves_live_cursor` | 2 passed in 278.90 seconds through migration `0040_contribution_export_page`; database, role and container cleanup complete. The run used committed base `11db9d21dfe4ef119d9d7d1801c75921fd9708e1` plus the exact uncommitted test file later frozen in this change, SHA-256 `d54ae3a16b4489dd04e4041e554945631ffebe1be860a8c0a533cb0fb96c4b45`. | This is dirty-tree execution with content custody, not an exact committed-head run; hosted complete lane execution remains required |
 | Hosted failure diagnosis at draft head `84542bf37` | Inspect GitHub Actions run `38528310566` job steps and bounded logs | All ten semantic lanes stopped at the unchanged 80% docstring gate because the new pagination modules lowered total coverage to 79.9%; the added function documentation restores 80.2%. The CLI job's first evidence read returned 503 because its separate pytest root had not activated the required existing cursor-secret fixture. | Fresh hosted run required after the repaired head is pushed |
 | Focused real CLI/API contract after secret-fixture repair | Exact socket/PostgreSQL contribution evidence node with the independently built CLI | The backend now returns its successful JSON page, and the current CLI fails it as `invalid_api_response` because strict decoding does not admit `next_cursor`; database and role cleanup complete | Issue #499 must consume continuation or fail explicitly before this backend contract can ship or hosted CLI CI can pass |
 | CLI consumer continuation after main `2c1f7517c` | Inspect `cli/internal/api/contribution_evidence.go` and `cli/internal/command/contribution_evidence.go` | JSON strict decoding has no `next_cursor`; both JSON and CSV perform one request, and CSV ignores `X-Workstream-Next-Cursor` | Issue #499 remains a coordinated ship blocker; this change does not alter CLI production behavior |
@@ -297,6 +299,13 @@ count-and-insert quota. It also found that the human-read wrapper would suppress
 existing canonical service DENY evidence. The repaired design uses a database
 unique five-slot allocation fence and the rate-control-only dependency; no
 actor business row changes and continuations allocate no slot.
+
+Exact-candidate QA/test-delta review identified missing real-PostgreSQL coverage
+for 1,001-member storage/continuation and contended bounded pruning. The two
+focused regressions above now cover those boundaries. Its high-severity CLI
+integration finding remains valid and externally owned by issue #499; this
+backend change stays blocked from coordinated shipment until that consumer
+accepts and follows the JSON and CSV continuation contracts.
 
 ## Reconciliation
 
