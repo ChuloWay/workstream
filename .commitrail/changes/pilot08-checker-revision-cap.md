@@ -142,7 +142,9 @@ head rather than a partial rebase. Replays never reselect active policy.
 - Human review focus: off-by-one semantics, locked policy custody, concealment,
   replay and SQL enforcement; complete-context atomicity, authorized recovery and immutable history.
 
-## Historical cap-stage evidence (`49ca2fbf8`)
+## Evidence
+
+### Historical cap-stage evidence (`49ca2fbf8`)
 
 This table describes only the earlier cap stage, not the complete revision,
 rebase, deadline and recovery implementation in this PR.
