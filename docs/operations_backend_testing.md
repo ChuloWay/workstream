@@ -178,9 +178,15 @@ partition exact node IDs from the remaining authorization, artifact, API, and
 infrastructure modules. Every collected test node, including each Alembic and
 shared-foundation node, belongs to exactly one lane.
 
-Each matrix job binds its checkout to `GITHUB_SHA`, installs the backend and
-starts MinIO. Authorization preflight installs and asserts exact Ruff `0.15.22`,
-then runs source-wide lint and docstring checks once for the selected run. The
+Each affected Backend job binds its checkout to `GITHUB_SHA`, installs pinned
+`uv 0.10.7`, recreates the backend environment with
+`uv sync --frozen --all-extras`, and runs subsequent Python, Ruff, pytest,
+docstring and coverage commands through `uv run --frozen`. Its download cache is
+keyed by `backend/uv.lock` and the workflow, but the environment itself is never
+restored from cache. This makes hosted proof use the exact selected backend lock
+without changing any lane or gate. Each matrix job then starts MinIO.
+Authorization preflight asserts the lock-selected Ruff `0.15.22`, then runs
+source-wide lint and docstring checks once for the selected run. The
 runner discovers, validates and collects the full canonical inventory before
 executing its one lane; the complete aggregate independently recollects and
 validates complete execution.

@@ -25,13 +25,20 @@ Hub image source instead of the exhausted ECR mirror; this change addresses the
 remaining avoidable fan-out and repeated setup rather than adding another image
 source.
 
+The Backend preflight, semantic lanes and aggregate API job also install from
+the manifest with independent `pip` resolution. That means a hosted green run
+does not prove the exact dependency graph selected by `backend/uv.lock`, which
+is required for lock-only dependency maintenance such as PR #568.
+
 ## Bounded change
 
 ### Allowed
 
 - `.github/workflows/backend.yml`: add a fail-closed scope planner; run selected
   components for draft PRs; preserve the complete suite for ready PRs and main;
-  move source-wide Ruff/docstring checks to the existing preflight job once.
+  move source-wide Ruff/docstring checks to the existing preflight job once;
+  install a pinned `uv` tool and run preflight, semantic lanes and aggregate API
+  proof from a fresh frozen all-extras backend lock environment.
 - `backend/scripts/select_ci_scope.py` and focused tests: deterministically map
   an exact base-to-head changed-file set to conservative draft CI components.
 - `backend/scripts/behavior_ownership.py` and
@@ -47,7 +54,8 @@ source.
 
 - No test deletion, skip, deselection, timeout increase, coverage or assertion
   weakening.
-- No product, backend runtime, dependency, migration or authorization change.
+- No product, backend runtime, locked dependency version, migration or
+  authorization change.
 - No path-based exemption for ready pull requests or main pushes.
 - No passing required status when an expected selected component failed,
   cancelled or was skipped.
@@ -75,6 +83,13 @@ fail-closed fan-in. Full runs require the aggregate job to succeed. Source-wide
 Ruff and docstring checks move from each lane to authorization preflight so they
 execute once and remain required.
 
+Each affected Backend job installs pinned `uv 0.10.7`, performs
+`uv sync --frozen --all-extras`, and executes every subsequent Python, Ruff,
+pytest, docstring and coverage command through `uv run --frozen`. The cache
+contains only uv downloads and is keyed by the exact backend lock plus workflow;
+the environment itself is recreated for every job. CLI packaging remains owned
+by its reusable workflow and is outside this lock-custody amendment.
+
 ## Acceptance criteria
 
 - [x] Main pushes and non-draft pull requests select all ten semantic lanes,
@@ -91,6 +106,9 @@ execute once and remain required.
   combination and the real API drill.
 - [x] Ruff and docstring checks execute once per relevant run, remain required,
   and are absent from semantic lane jobs.
+- [x] Backend preflight, every semantic lane and the full-suite/API fan-in
+  install from `backend/uv.lock` with frozen all-extras resolution, and focused
+  workflow tests reject unlocked installs or commands escaping that environment.
 
 ## Risk and review routing
 
@@ -108,6 +126,7 @@ execute once and remain required.
 | Complete merge proof is unchanged | `pytest` lane catalogue, runner and evidence contract modules | 137 passed. | Hosted ready-PR Backend execution remains required. |
 | Repository process/docs remain valid | Markdown, stale-contract and reviewer-contract checks | Passed; 200 Agent Gates tests passed locally, with only the same 9 pre-existing macOS Bash 3 subtest failures seen on base. | Hosted Linux is authoritative for that host-specific probe. |
 | Behavior-ownership partition remains exact | `python -m scripts.behavior_ownership validate` plus focused ownership tests | Selector is registered as one shared eligible target; validation passes. | Future eligible modules remain fail-closed through the same partition gate. |
+| Hosted Backend commands use the selected lock | Workflow regression tests require pinned `uv`, `uv sync --frozen --all-extras`, lock-keyed download caches and `uv run --frozen` for every affected command | Local workflow, YAML, Ruff and focused regression checks pass after current-main reconciliation; hosted exact-head proof remains required. | Hosted runner and package-index availability remain external. |
 | No test was deleted or deselected | Base-to-head diff and lane-catalogue ownership checks | No existing test deletion, skip or deselection. | Future catalogue changes remain guarded by the same ownership checks. |
 
 ## Review findings
@@ -127,8 +146,17 @@ eligible module in the exact behavior-ownership partition. The selector is now
 registered as one shared CI-control target, the partition digest is renewed,
 and the partition validator plus its 160 focused tests pass.
 
+Later review identified that the affected Backend jobs still resolved the
+manifest independently of the selected lock, so hosted CI could not prove a
+lock-only dependency repair. The workflow now recreates a frozen all-extras uv
+environment in each affected job and binds all subsequent commands to it. The
+download cache remains an optimization only and cannot replace or mutate that
+fresh environment.
+
 ## Reconciliation
 
-- Current-source reconciliation: Based on current main `945dd2bf9`, including the merged Docker Hub service-image source and ten-lane full-suite contract.
+- Current-source reconciliation: Merged current main `82a46ff3c`, including the
+  first-layer acceptance changes, and preserved its ten-lane catalogue,
+  behavior-ownership partition and Backend proof contracts.
 - Next usable boundary: Measure draft feedback and full ready-PR runtime after hosted execution; rebalance lanes only in a separate measured change if still needed.
 - Remaining risks: GitHub-hosted runner and registry availability remain external dependencies; no product roadmap capability changes.
