@@ -146,9 +146,18 @@ class CheckerRun(Base):
     __table_args__ = (
         CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
         ForeignKeyConstraint(
-            ["task_id", "locked_guide_version"],
-            ["workstream_tasks.id", "workstream_tasks.locked_guide_version"],
-            name="fk_checker_runs_task_locked_guide",
+            ["project_id", "locked_guide_version", "locked_review_policy_id",
+             "locked_review_policy_generation", "locked_review_policy_hash"],
+            ["review_policies.project_id", "review_policies.guide_version", "review_policies.id",
+             "review_policies.policy_generation", "review_policies.policy_hash"],
+            name="fk_checker_runs_review_policy_lineage",
+        ),
+        ForeignKeyConstraint(
+            ["project_id", "locked_guide_version", "locked_revision_policy_id",
+             "locked_revision_policy_generation", "locked_revision_policy_hash"],
+            ["revision_policies.project_id", "revision_policies.guide_version", "revision_policies.id",
+             "revision_policies.policy_generation", "revision_policies.policy_hash"],
+            name="fk_checker_runs_revision_policy_lineage",
         ),
         ForeignKeyConstraint(
             [
@@ -162,36 +171,6 @@ class CheckerRun(Base):
                 "checker_policies.policy_hash",
             ],
             name="fk_checker_runs_locked_post_submit_policy_hash",
-        ),
-        ForeignKeyConstraint(
-            [
-                "task_id",
-                "locked_review_policy_id",
-                "locked_review_policy_generation",
-                "locked_review_policy_hash",
-            ],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_review_policy_id",
-                "workstream_tasks.locked_review_policy_generation",
-                "workstream_tasks.locked_review_policy_hash",
-            ],
-            name="fk_checker_runs_task_locked_review_policy",
-        ),
-        ForeignKeyConstraint(
-            [
-                "task_id",
-                "locked_revision_policy_id",
-                "locked_revision_policy_generation",
-                "locked_revision_policy_hash",
-            ],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_revision_policy_id",
-                "workstream_tasks.locked_revision_policy_generation",
-                "workstream_tasks.locked_revision_policy_hash",
-            ],
-            name="fk_checker_runs_task_locked_revision_policy",
         ),
         ForeignKeyConstraint(
             ["submission_id", "task_id", "submission_version"],

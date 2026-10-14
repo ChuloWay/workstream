@@ -405,89 +405,14 @@ class Submission(Base):
             name="fk_submissions_assignment_identity",
         ),
         ForeignKeyConstraint(
-            ["task_id", "locked_guide_version"],
-            ["workstream_tasks.id", "workstream_tasks.locked_guide_version"],
-            name="fk_submissions_task_locked_guide",
+            ["locked_review_policy_id", "locked_review_policy_generation", "locked_review_policy_hash"],
+            ["review_policies.id", "review_policies.policy_generation", "review_policies.policy_hash"],
+            name="fk_submissions_review_policy_lineage",
         ),
         ForeignKeyConstraint(
-            [
-                "task_id",
-                "locked_post_submit_checker_policy_id",
-                "locked_post_submit_checker_policy_version",
-                "locked_post_submit_checker_policy_hash",
-            ],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_post_submit_checker_policy_id",
-                "workstream_tasks.locked_post_submit_checker_policy_version",
-                "workstream_tasks.locked_post_submit_checker_policy_hash",
-            ],
-            name="fk_submissions_task_locked_post_submit_policy_hash",
-        ),
-        ForeignKeyConstraint(
-            [
-                "task_id",
-                "locked_review_policy_id",
-                "locked_review_policy_generation",
-                "locked_review_policy_hash",
-            ],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_review_policy_id",
-                "workstream_tasks.locked_review_policy_generation",
-                "workstream_tasks.locked_review_policy_hash",
-            ],
-            name="fk_submissions_task_locked_review_policy",
-        ),
-        ForeignKeyConstraint(
-            [
-                "task_id",
-                "locked_revision_policy_id",
-                "locked_revision_policy_generation",
-                "locked_revision_policy_hash",
-            ],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_revision_policy_id",
-                "workstream_tasks.locked_revision_policy_generation",
-                "workstream_tasks.locked_revision_policy_hash",
-            ],
-            name="fk_submissions_task_locked_revision_policy",
-        ),
-        ForeignKeyConstraint(
-            ["task_id", "locked_guide_source_snapshot_id", "locked_guide_source_snapshot_hash"],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_guide_source_snapshot_id",
-                "workstream_tasks.locked_guide_source_snapshot_hash",
-            ],
-            name="fk_submissions_task_locked_source_snapshot_hash",
-        ),
-        ForeignKeyConstraint(
-            [
-                "task_id",
-                "locked_effective_project_submission_artifact_policy_id",
-                "locked_effective_project_submission_artifact_policy_hash",
-            ],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_effective_project_submission_artifact_policy_id",
-                "workstream_tasks.locked_effective_project_submission_artifact_policy_hash",
-            ],
-            name="fk_submissions_task_locked_effective_policy_hash",
-        ),
-        ForeignKeyConstraint(
-            [
-                "task_id",
-                "locked_pre_submit_checker_policy_id",
-                "locked_pre_submit_checker_bundle_hash",
-            ],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_pre_submit_checker_policy_id",
-                "workstream_tasks.locked_pre_submit_checker_bundle_hash",
-            ],
-            name="fk_submissions_task_locked_pre_submit_checker_hash",
+            ["locked_revision_policy_id", "locked_revision_policy_generation", "locked_revision_policy_hash"],
+            ["revision_policies.id", "revision_policies.policy_generation", "revision_policies.policy_hash"],
+            name="fk_submissions_revision_policy_lineage",
         ),
         ForeignKeyConstraint(
             ["locked_guide_source_snapshot_id", "locked_guide_source_snapshot_hash"],
