@@ -187,10 +187,19 @@ def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
         "tests/test_database_reset.py",
         "tests/authorization/post_submit/test_receipt_custody.py",
         "tests/authorization/post_submit/test_migration.py",
+        "tests/reviews/packet/test_storage.py",
+        "tests/reviews/lifecycle/test_contracts.py",
+        "tests/reviews/lifecycle/test_storage.py",
+        "tests/reviews/lifecycle/test_transition_storage.py",
+        "tests/reviews/lifecycle/test_fence.py",
+        "tests/reviews/lifecycle/test_migration.py",
+        "tests/reviews/acceptance/test_contracts.py",
+        "tests/reviews/acceptance/test_storage.py",
+        "tests/reviews/acceptance/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
     } | static_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(
         catalogue.TASK_ROUTING_REQUEST_MODULES
-    ) <= modules_by_lane["schema_contracts"]
+    ) == modules_by_lane["schema_contracts"]
 
 
 def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
