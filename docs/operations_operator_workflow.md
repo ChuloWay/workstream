@@ -3,9 +3,11 @@
 ## Status
 
 Existing project and task operations retain their owning implementation status.
-Review, revision, FinalAcceptance, and review-sourced contribution behavior
-below is planned and unavailable until its owning REV/CON chunks, exact AUTH
-activation, and REV-13 joint release complete.
+Human review and its revision/contribution behavior below remain planned until
+owning REV chunks, exact AUTH activation and the joint release complete. Checker
+revision preparation, PM repair and durable timeout rejection/release are
+implemented through TASK. Automated acceptance has its separately recorded
+availability; see the capability ledger.
 
 Contributor, management and operational task queues have exact-authorized public
 reads with distinct fields and signed pagination. Contributor/Manager detail and
@@ -140,15 +142,24 @@ For `needs_revision`, REV instead sets the Task to `needs_revision`, keeps the
 same TaskAssignment `active`, and creates no FinalAcceptance or submitter
 contribution. `closed/review_rejected` is not a canonical task state.
 
-## Planned Revision Recovery
+## Revision Recovery
 
-- A covered Project Manager may append a revision-context repair successor.
-- A covered Project Manager may explicitly cancel a reached limit/deadline
-  obligation; the system never auto-rejects it.
-- An Operator may close only an evidence-linked legacy revision with no
-  Review/root.
-- These commands remain unavailable until AUTH activation and REV-13. Operator
-  authority never records a human Review or adjudication decision.
+- A covered Project Manager may append an exact context-repair successor;
+  checker-rooted repair is public and human-rooted integration remains planned.
+- Each committed `needs_revision` starts a fresh PostgreSQL-time window using
+  the failed attempt's locked RevisionPolicy. Only immutable resubmission ends
+  it. Repair, upload, replay and infrastructure retry preserve the window.
+- At expiry, the authorized durable TASK worker records an immutable rejection
+  receipt, marks the assignment `revision_expired`, releases it and returns the
+  task to `ready` without Review or economic facts. Cap exhaustion refuses a
+  successor but leaves its deadline in force. A new claimant starts round 0.
+- Checker expiry/recovery is implemented. #554 owns future human decision
+  integration with the same intended policy. Provision the exact expirer
+  service and run Beat/outbox workers as described in
+  [Revision Replay](operations_revision_replay.md#limits-and-recovery).
+- Planned Operator closure applies only to evidence-linked unrecoverable
+  historical human context. Operator authority never records a human Review
+  or adjudication decision.
 
 ## Lessons Learned
 

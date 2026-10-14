@@ -14,6 +14,7 @@ class RevisionRecoveryResourceContext(TaskAuthorityResourceContext):
 
     @model_validator(mode="after")
     def require_recovery_source(self):
+        """Require one assigned revision source and paired optional root evidence."""
         if (
             self.task_status != "needs_revision"
             or self.assigned_to is None
@@ -34,6 +35,7 @@ class RevisionRecoveryResourceContext(TaskAuthorityResourceContext):
 
 
 def parse_revision_recovery_binding(action, request, invalid_error):
+    """Parse only recovery actions into the closed retained-source resource."""
     if action is not ActionId.TASK_REVISION_RECOVER:
         return None
     try:

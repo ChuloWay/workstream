@@ -34,6 +34,7 @@ def scan_retained_revisions(after=None):
 
 
 async def _scan_page(after):
+    """Recover one bounded page and always dispose the per-task DB pool."""
     engine = create_async_engine(get_database_url(), pool_pre_ping=True)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     try:

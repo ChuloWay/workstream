@@ -13,7 +13,7 @@ reviewer required, how the submitter responded, and how a later reviewer
 resolved each issue. No participant edits a prior Review, finding, response, or
 resolution.
 
-## Review-Rooted Preparation
+## Source-Rooted Preparation
 
 Human revision begins from one immutable `Review(needs_revision)`. Checker
 remediation begins from the exact authorized current CheckerRun failure and its
@@ -21,7 +21,9 @@ routing manifest. Both require a frozen next-attempt preparation; checker
 remediation never fabricates a Review, finding, reviewer contribution or human
 actor.
 
-Before contributor access, Workstream appends a RevisionContextPreparation. It
+Before contributor access, Workstream appends the source's immutable preparation:
+TASK-owned `TaskRevisionPreparation` for checker remediation, or the planned
+Review-rooted `RevisionContextPreparation` for genuine human decisions. It
 compares the prior Submission's complete stamped governing context with the
 currently active applicable Project Guide/source, submission-artifact,
 pre-submit/post-submit checker, review, revision, task-template/task-execution,
@@ -35,14 +37,14 @@ and submitter ContributionPolicy context:
 The preparation keeps every exact component match and rebases every changed
 valid component as one selected context. Any missing, incomplete, inconsistent,
 revoked, or unsafe component blocks the whole preparation. It freezes the
-selected context, context digest, prior Submission, originating Review, source
-and target TaskAssignments, prior/next submitter ContributionPolicyVersion, and
+selected context, context digest, prior Submission, exact routing manifest or
+originating Review, source and target TaskAssignments, prior/next submitter ContributionPolicyVersion, and
 change summary. Task Context returns the validated head, not moving selectors.
 No rebase occurs during review; the reviewer reads the context stamped on the
 leased Submission.
 
 The completed reviewer contribution uses the originating ReviewLease version.
-Successful human revision preparation may atomically rebase the continuing
+Successful revision preparation may atomically rebase the continuing
 Task and TaskAssignment for the next submission attempt. Earlier Submissions
 and ReviewLeases remain immutable; the next Submission and ReviewLease use the
 rebased version. The decision,
@@ -95,14 +97,18 @@ new ReviewFinding on the later Review.
 
 ## Limits And Recovery
 
-The initial Submission is round 0; a limit of 2 permits revisions 1 and 2.
+Each assignment's initial Submission is round 0; a limit of 2 permits revisions
+1 and 2. Checker and future human Review triggers use the same deadline policy;
+#554 owns genuine human decision integration.
 Each committed contributor-fixable failure starts a fresh window using the
 failed attempt's locked policy and database time. Eligibility ends at the exact
 deadline. Infrastructure retries spend no round; duplicate delivery, replay and
-context repair preserve the original window. A reached revision limit or
+context repair preserve the original window. Only the next immutable Submission
+commit ends it; upload or a ready admission alone does not. A reached revision limit or
 deadline blocks further preparation and
 `submission.create`. At expiry, the durable timeout operation records rejection
-of the outstanding attempt, releases its assignment and returns the task to
+of the outstanding attempt in an immutable `TaskRevisionExpiration` receipt,
+marks its assignment `revision_expired` with a release timestamp and returns the task to
 `ready`. It preserves original Submission and finding evidence and creates no
 synthetic Review, contribution or award. Task/assignment changes, immutable
 timeout evidence, audit and outbox publication intent commit atomically.
@@ -121,7 +127,7 @@ work requiring operator resolution; it must not be reported as a completed timeo
 
 A blocked or invalid context preparation can be repaired only by appending one
 successor through covered-manager repair. For checker-rooted preparations,
-`POST /projects/{project_id}/tasks/{task_id}/revision-context/repair` takes
+`POST /api/v1/projects/{project_id}/tasks/{task_id}/revision-context/repair` takes
 `parent_preparation_id`, `parent_preparation_sha256`, a bounded `reason`, and an
 `Idempotency-Key`. It records the exact parent and authorized child atomically.
 Repair cannot bypass limit/deadline exhaustion. The contributor work-context

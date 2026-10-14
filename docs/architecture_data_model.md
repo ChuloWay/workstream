@@ -53,7 +53,9 @@ Task
       ReviewEvidenceArtifact
       FindingResolution
     FinalAcceptance (one accepting Review or authorized TASK routing source)
-    RevisionContextPreparation
+    RevisionContextPreparation (planned human Review source)
+    TaskRevisionPreparation (checker routing source)
+    TaskRevisionExpiration (immutable deadline rejection receipt)
     SubmissionFindingResponse
   ContributionRecord
     CompensationAward
@@ -364,7 +366,7 @@ guide source material, submission artifact policy, pre-submit checker
 generation rules, post-submit checker policy, review policy, revision policy,
 and their guide-bound contracts. Contribution policy publication is independent
 of guide versioning. A published version affects work only when a later guide
-activation binds it or controlled human-revision preparation atomically rebases
+activation binds it or controlled checker/human revision preparation atomically rebases
 the continuing Task and TaskAssignment for the next attempt. Ordinary task and
 review claims only copy the already-locked attempt lineage; prior Submissions,
 ReviewLeases, Reviews, ContributionRecords, and CompensationAwards never drift.
@@ -1191,8 +1193,14 @@ Fields:
 - `reviewer_reassignment_rule`
 - `created_at`
 
-Limit or deadline exhaustion blocks further preparation and submission; it does
-not synthesize a reject Review. Complete next-attempt context selection is
+Revision rounds are assignment-scoped: initial round 0, then at most
+`max_revision_rounds` replacements. Each committed `needs_revision` starts a
+fresh PostgreSQL-time window using the failed attempt's locked policy. Only
+immutable resubmission ends it. Cap exhaustion refuses a successor; expiry
+retains an immutable rejection receipt, releases the outstanding assignment
+and returns the task to `ready` without a reject Review or economic facts.
+Checker-triggered enforcement is implemented; #554 owns future human decision
+integration under the same intended policy. Complete next-attempt context selection is
 deterministic: exact prior component matches keep, every changed valid active
 guide/policy component rebases together, and missing or unsafe active context
 blocks for manager repair.
@@ -1501,9 +1509,11 @@ column preserves historical attribution rather than current authority.
 
 At initial claim, `submitter_contribution_policy_version_id` must equal the
 Task's locked version. It remains fixed throughout that submission attempt.
-Future human `needs_revision` complete-context preparation must replace the
-current write-once guards before rebasing the continuing assignment field; ordinary publication,
-task claim, submission, and review claim cannot change it.
+TASK's exact authorized complete-context revision preparation may atomically
+rebase it for the next attempt while retaining prior/next immutable lineage.
+Checker preparation implements this boundary; #554 owns the future genuine
+human Review trigger. Ordinary publication, task claim, submission and review
+claim cannot change it.
 
 ## Submission
 
@@ -1581,11 +1591,12 @@ exact revision policy identities, provider references, package hashes, or
 artifact manifests. Submitter award eligibility is governed by the
 TaskAssignment-selected `ContributionPolicyVersion` for the exact attempt and
 is not contributor-supplied. Submission creation stamps that identifier
-immutably before any later rebase can change the continuing assignment. Human
-revision preparation records prior/next policy lineage before it may update
+immutably before any later rebase can change the continuing assignment. Checker
+or human revision preparation records prior/next policy lineage before it may update
 that selector; publication alone cannot.
 
-Version 1 has no replacement cause. For a current checker-remediation replacement,
+Each assignment's initial round 0 has no replacement cause; its task-global
+Submission version may exceed 1 after an earlier assignment's timeout. For a current checker-remediation replacement,
 TASK selects the exact authorized `needs_revision` routing manifest for the
 immediate predecessor and its current completed CheckerRun. The server-selected
 `checker_remediation_manifest_id` travels through ART's pre-submit evidence and
@@ -1991,7 +2002,7 @@ Project Guide and policy selector: guide identity/version/activation sequence,
 source snapshot, submission-artifact policy, effective project policy,
 pre-submit and post-submit checker policies, ReviewPolicy, RevisionPolicy,
 task-template/task-execution context, and the ContributionPolicyVersion in the
-attempt's locked context. At this human revision boundary, TASK validates the
+attempt's locked context. At this controlled revision boundary, TASK validates the
 complete currently active project context through owner ports, including CON's
 policy-validation port. An exact component match is kept;
 every changed valid component is rebased together for the next attempt. Missing,
@@ -2001,7 +2012,7 @@ validated complete chain head. No context rebase occurs during active review;
 the reviewer reads the context stamped on the leased Submission.
 
 Publication never silently rebases award eligibility during active or completed
-work. After a human `needs_revision`, revision preparation records prior and
+work. After a committed checker or human `needs_revision`, revision preparation records prior and
 next `ContributionPolicyVersion` references and atomically updates the
 continuing Task and TaskAssignment only for the next submission attempt when
 the complete current context changed. Prior Submissions, ReviewLeases, Reviews,
@@ -2011,6 +2022,54 @@ Submission stamps the rebased version, and its ReviewLease copies that version.
 The contributor and reviewer history show prior/next guide, policy—including
 ContributionPolicyVersion—identity, activation sequence where applicable,
 direction, reason, and change summary.
+
+## TaskRevisionPreparation
+
+TASK's implemented checker-rooted immutable preparation is distinct from the
+planned Review-rooted record above. It binds exact project/task/assignment/
+contributor/Submission references, the authorized `routing_manifest_id`,
+`source_submission_version`, `next_revision_round`, `max_revision_rounds`,
+PostgreSQL `requested_at` and `deadline_at`, and a complete prior/target context
+packet. The packet retains guide activation operation/generation/time custody;
+it does not claim the planned activation-sequence fields above are live.
+`outcome` is `kept`, `rebased` or `blocked`; `blocked_reason` distinguishes
+`context_blocked`, `revision_limit_reached` and `revision_deadline_expired`.
+
+`preparation_sha256` freezes that packet and source/window facts. Exactly one
+root belongs to a routing manifest; `predecessor_id` and consecutive `sequence`
+form a non-branching immutable repair chain. Each repair retains its actor,
+idempotency key, request digest, bounded reason, exact AUTH resource facts and
+audit references. Fresh authorization is required for replay. The original
+source deadline survives repair and retained-source recovery.
+
+The authorized contributor work-context read exposes the exact current head
+ID/digest, source Submission/manifest, local round/limit, original timestamps,
+frozen prior/target snapshots and at most eight contributor-safe component
+changes. `disposition` projects current readiness, blocked context, reached
+limit or elapsed deadline using PostgreSQL time. Intake acknowledges the exact
+head and digest in headers; ART evidence/admission and TASK final creation bind
+that acknowledgement. New writes reject stale sources, heads, caps or windows.
+
+## TaskRevisionExpiration
+
+TASK's immutable checker-window rejection receipt binds project/task/assignment/
+contributor, source Submission and routing manifest, exact root/head preparation
+IDs and digests, original `deadline_at`, PostgreSQL `expired_at`, delivery and
+outcome event IDs, AUTH decision/resource facts and audit event. There is one
+receipt per routing manifest. Scheduled OUTBOX intent freezes `not_before_at`
+at the original deadline; due delivery revalidates current source, assignment,
+head and authority under TASK-first locks.
+
+Receipt, assignment `revision_expired`/release timestamp, Task `ready`/cleared
+assignee, audit and outcome outbox intent commit together. The source Submission
+row stays unchanged; history projects `rejected` with
+`status_reason=revision_deadline_expired` from the receipt. A new claimant starts
+round 0 with an independent allowance while task-global Submission versions
+remain consecutive. Exact replay recovers the same receipt; stale delivery cannot
+reject a successor or release a newer assignment. Expiry creates no Review,
+FinalAcceptance, ContributionRecord, CompensationAward or fulfillment record.
+The recurring authorized scan recovers missing roots/scheduling and overdue
+work using the original source-policy deadline, without an automatic rebase.
 
 ## FinalAcceptance
 

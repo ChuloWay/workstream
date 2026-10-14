@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "c6bc364e9aa3565a4bd7d026f2fa6625aed883e6c302118d18be8ace871e8546",
+  "canonical_sha256": "17732f8c534e37651c1dfa36625e171f67aa482a6739570e17d3341b1cf44192",
   "components": {
     "schemas": {
       "AdminRole": {
@@ -149,6 +149,8 @@
           "actor.identity_link.revoke",
           "actor.identity_link.reactivate",
           "task.assignment.authority_reconcile",
+          "task.revision.expire",
+          "task.revision.recover",
           "task.post_submit.route",
           "checker.pre_submit.execute",
           "checker.pre_submit.finalize",
@@ -428,7 +430,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "authorization.admin_role_definitions.read",
-    "backend_git_sha": "3fde44797607d4c187dc62f93876e6ae70d5c555",
+    "backend_git_sha": "7326dc95e59f59fc9f6dee438857091e73c370aa",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/authorization/admin-role-definitions"

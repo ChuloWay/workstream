@@ -121,7 +121,9 @@ Acceptance-affecting checker implementation changes must be tied to visible guid
 
 ## Revision rounds and deadline
 
-The initial Submission is round 0. `max_revision_rounds = 2` permits two
+Each assignment's initial Submission is round 0. Checker and genuine human
+`needs_revision` use the same intended deadline policy; human decision
+integration remains #554 work. `max_revision_rounds = 2` permits two
 resubmissions, rounds 1 and 2. Each committed contributor-fixable failure starts
 a fresh window using that failed attempt's locked `revision_deadline_hours`.
 The database supplies the timestamp; eligibility ends at the exact deadline.

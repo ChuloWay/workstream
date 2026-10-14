@@ -25,12 +25,14 @@ class TaskRevisionExpiryOperation:
     """Release the exact overdue assignment without changing its Submission."""
 
     def __init__(self, session, *, observer, fence, authorization, audit, outbox):
+        """Use owner ports and the caller session for one atomic expiry effect."""
         self._session, self._repo = session, TaskRepository(session)
         self._observer, self._fence = observer, fence
         self._authorization, self._audit = authorization, audit
         self._outbox = outbox
 
     async def expire(self, envelope: OutboxEventEnvelope) -> HandlerOutcome:
+        """Revalidate TASK-first custody, then expire or replay the exact window."""
         if not self._session.in_transaction() or self._session.in_nested_transaction():
             raise TaskRevisionExpiryUnavailable("revision expiry requires a root transaction")
         try:

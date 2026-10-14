@@ -130,7 +130,9 @@ contributor-correctable result through the existing TASK/AUTH operation to
 `needs_revision` under either locked ReviewPolicy mode. PILOT-08 enforces the task-locked revision cap at public preparation, new
 Submission creation and PostgreSQL insertion (initial round 0, then at most the
 configured number of revisions). Each committed fixable failure freezes a fresh
-policy deadline and a complete kept/rebased/blocked revision context. Contributor
+policy deadline and a complete kept/rebased/blocked revision context. Only
+committed immutable resubmission ends the old window; upload and ready admission
+do not. Contributor
 work-context reads expose the change summary and exact acknowledgement; PM repair
 appends a guarded successor without resetting the window. Exact committed replay
 preserves original facts. A PostgreSQL-timed outbox request records timeout rejection, releases the expired assignment and returns the task to ready. New claimants start their own round-0 allowance; earlier evidence remains immutable. 04F3 supplies replacement intake through the canonical
@@ -250,7 +252,9 @@ remains separate work.
 Explicit CLI ZIP preparation, admission-backed creation/replay, submission history
 and contributor checker findings now consume the public APIs. Preparation does
 not create a Submission; readiness recovery is an explicit same-key POST replay,
-not a polling GET. Revision-change summaries await their public field. Native
+not a polling GET. PILOT-08 exposes frozen revision-change summaries through
+contributor task context and requires the exact preparation acknowledgement for
+checker-remediation intake. Native
 proof uses fixture-arranged prerequisites; #552 owns full public setup integration.
 No public project-list
 route is invented.
@@ -331,7 +335,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Immutable Submission creation | **Public admission-backed entry with explicit CLI consumption** | Canonical POST derives contributor identity and consumes a ready admission for initial work or exact checker remediation; durable pre-submit reservation and same-key ready recovery without rerunning checks or PUT; TASK-owned atomic creation with exact assignment ContributionPolicyVersion, locked policy lineage and service/database checked-packet custody; fixed-service artifact binding; exact replay, authority, concurrency and rollback proof. CLI creation/replay and bounded history use these public owners | Bounded local public durable-runtime drill passed; full public setup integration, live human-review revision and hosted operation remain separate |
 | Post-submission evaluation and governed outcome | **Selected external execution and production completion routing** | Immutable approved image bindings, Rust service/SDK and typed ART callback grants; exact verified input custody, bounded normalized JSON results and phase authority. Production outbox request/completion handlers run selected images and preserve exact restart/replay. True-policy success reaches review_pending; false-policy success invokes shared authorized FinalAcceptance and atomically creates the submitter ContributionRecord and complete frozen award set. Contributor-correctable failures retain exact remediation causes; Operator retry retains fresh authority and no spent contributor round. The bounded local public API/Celery drill passed both branches, prefork Celery process restart and late authority revocation | Live human review and contributor revision surfaces are separate. Unsupported or human-review-only approved requirements block false activation. New false/pass effects require LIVE REV bound to the current reviewed manifest; a known pre-effect refusal retries within the existing OUTBOX budget, then dead-letters if exhausted. True handoff has no REV/CON prerequisite. Hosted operation and deployment remain unproven |
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts; ART-07A1 metadata-only packet contract and REV-03B immutable normalized packet persistence with live ingest custody; REV-04A Review/finding/resolution and completed request storage | Future resolver proof; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
-| Review decision and revision | **Hidden acceptance core; runtime planned** | Review/revision policy identities and mutation authority, with `requires_second_review` fixed false through typed and database boundaries; REV-04A immutable Review storage; REV-04B source storage; REV-04C hidden source-neutral FinalAcceptance/TASK/CON participant; approved same-task revision-rebase semantics | ARCH-04E2-B supplies mandatory source AUTH and complete database/audit/outbox closure for hidden automated outcomes. Human decision authority/composition remains; checker-driven revision has cap/deadline enforcement, atomic complete-context rebase, contributor acknowledgement and PM repair and durable timeout rejection/release/reclaim |
+| Review decision and revision | **Checker revision implemented; human decisions planned** | Review/revision policy identities and mutation authority, with `requires_second_review` fixed false through typed and database boundaries; REV-04A immutable Review storage; REV-04B source storage; REV-04C hidden source-neutral FinalAcceptance/TASK/CON participant; approved same-task revision-rebase semantics | ARCH-04E2-B supplies mandatory source AUTH and complete database/audit/outbox closure for hidden automated outcomes. Human decision authority/composition remains; checker-driven revision has cap/deadline enforcement, atomic complete-context rebase, contributor acknowledgement and PM repair and durable timeout rejection/release/reclaim |
 | Contribution and compensation truth | **Hidden shared participant plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage; obsolete guide-keyed payment storage and task-local payment fields removed; CON-07 source-neutral submitter participant and complete award sets; REV-04C composes it with FinalAcceptance/TASK effects in the caller transaction; 04F2 checker remediation creates no contribution or award. The bounded local public drill produced exactly one false-policy FinalAcceptance, submitter ContributionRecord and project-points award, with no Review | ARCH-04E2-B supplies exact routing authority/evidence, complete-set database closure and audit/outbox under REV-12A4A. Selected production request/completion delivery, 04F3 exact-cause replacement and 04F4 hidden retry are implemented; supported false-guide activation is implemented. Only actual Reviews create reviewer records. Obligation/root/ordinal custody remains deferred until fulfillment activation; no public recognition or fulfillment route is live |
 | Contribution evidence reads | **Public bounded REST and CLI reads** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities; one fresh repeatable-read response with one narrowly bounded serialization-conflict retry and fresh authority, complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV; 1,000-contribution maximum refuses excess without truncation. CLI24 consumes both public reads and saves exact server CSV privately without overwrite | Stable fixed-membership paginated list remains separate; no recognition mutation, fulfillment, payout or deployed-service claim |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
@@ -554,7 +558,8 @@ cannot be reused as post-submission review-gate evidence. See the
   [CLI submission and findings](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-25.md)
   adds public ZIP preparation, separate admission-backed creation/replay and bounded
   history/checker reads. Findings are not acceptance. Full public setup integration,
-  hosted operation and the pending revision-change-summary field remain separate.
+  hosted operation remain separate. PILOT-08 supplies the public contributor
+  revision-context summary, acknowledgement and history timeout projection.
   [PILOT-02 batch CLI](../.commitrail/changes/pilot02-bulk-transitions-cli.md)
   shares the binary and adds explicit source/import/status/screen/release with
   local CSV conversion. Evidence export works independently of task origin;
@@ -881,7 +886,8 @@ The broader v0.1 sequence below retains later scope:
 6. **Complete revision and operations.** Checker replacement enforces caps
    with initial round 0, fresh per-failure deadlines, complete-context rebase,
    exact contributor acknowledgement, PM repair and durable timeout release/reclaim. Each assignment has its own revision allowance. Connect genuine human Review
-   decisions to the controlled revision boundary when that owner lands; preserve
+   decisions to the same locked-policy window and controlled revision boundary
+   through #554; preserve
    prior attempts and reviewer economic evidence. Finish remaining recovery,
    fulfillment, reconciliation, audit, release controls, and legacy cleanup.
 7. **Release proof.** The isolated six-service local stack is available; use it
@@ -1017,7 +1023,9 @@ Proven bounded local first-layer drill (scripted approved guide, local Flow-comp
   -> public triggers reached the selected completion outcomes
        |
        +-- contributor-correctable failure -> TASK needs_revision (no REV/CON)
+       |                                    -> frozen revision context + acknowledgement
        |                                    -> exact-cause replacement intake
+       |                                    -> expired window: rejection receipt + release -> ready
        |
        +-- locked true -> review_pending -> human Review (later runtime)
        |                                    | accept
@@ -1096,8 +1104,11 @@ v0.1 is not ready until all of the following are true:
   permissive generation can replace a supported manifest.
 - A reviewer can claim only that admitted version, access only its bounded
   packet, and record one immutable final decision.
-- `needs_revision` safely continues or rebases the same assignment while
-  preserving every earlier attempt; `reject` and `accept` have their exact
+- Genuine human `needs_revision` must join the implemented controlled-revision
+  boundary through #554 with the same assignment rounds and locked-policy
+  PostgreSQL window. Only immutable resubmission ends it; timeout retains
+  rejection evidence, releases the exact assignment and returns to ready.
+  Every earlier attempt stays immutable; `reject` and `accept` retain their
   distinct effects.
 - Every final review atomically creates the reviewer ContributionRecord;
   `accept` additionally creates FinalAcceptance and the submitter record.

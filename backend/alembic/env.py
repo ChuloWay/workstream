@@ -97,6 +97,8 @@ def do_run_migrations(connection: Connection) -> None:
             ("0041_revision_lineage",),
             ("0042_revision_preparation",),
             ("0043_outbox_not_before",),
+            ("0044_task_revision_expiry",),
+            ("0045_revision_expiry_retry",),
             (_CURRENT_HEAD_REVISION,),
         ):
             raise RuntimeError(_RECREATE_GUIDANCE)

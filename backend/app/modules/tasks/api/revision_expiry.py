@@ -48,6 +48,7 @@ class TaskRevisionExpiryAuthorityFacts(BaseModel):
     assignment_status: str
 
 def revision_expiry_resource_digest(facts: TaskRevisionExpiryAuthorityFacts) -> str:
+    """Hash the exact validated invocation and TASK scope consumed by AUTH."""
     facts = TaskRevisionExpiryAuthorityFacts.model_validate_json(facts.model_dump_json())
     return canonical_json_hash({"resource_context": {
         "resource_type": "task_authority", "resource_id": str(facts.target.task_id),
@@ -57,27 +58,36 @@ def revision_expiry_resource_digest(facts: TaskRevisionExpiryAuthorityFacts) -> 
 
 @dataclass(frozen=True, slots=True)
 class TaskRevisionExpiryAuthority:
+    """Consumed fixed-service decision bound to one expiry resource digest."""
     actor_profile_id: UUID
     decision_id: UUID
     resource_context_digest: str
 
 
 class PreparedTaskRevisionExpiry(ABC):
+    """Process-local authority that must be consumed against the locked facts."""
     def __reduce_ex__(self, _protocol):
+        """Prevent serialization of a live authorization capability."""
         raise TypeError("prepared revision-expiry authority is process-local")
 
     @abstractmethod
-    async def consume(self, facts: TaskRevisionExpiryAuthorityFacts) -> TaskRevisionExpiryAuthority: ...
+    async def consume(self, facts: TaskRevisionExpiryAuthorityFacts) -> TaskRevisionExpiryAuthority:
+        """Consume fresh authority for the identical locked expiry facts."""
+        ...
 
 
 class TaskRevisionExpiryAuthorizationPort(Protocol):
+    """Prepare fixed-service authority within the caller-owned transaction."""
     def prepare_revision_expiry(
         self, facts: TaskRevisionExpiryAuthorityFacts,
-    ) -> AbstractAsyncContextManager[PreparedTaskRevisionExpiry]: ...
+    ) -> AbstractAsyncContextManager[PreparedTaskRevisionExpiry]:
+        """Bind one delivery generation and its original revision deadline."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
 class TaskRevisionExpiryEvidence:
+    """Atomic audit facts for the retained rejection and assignment release."""
     facts: TaskRevisionExpiryAuthorityFacts
     authority: TaskRevisionExpiryAuthority
     receipt_id: UUID
@@ -100,5 +110,10 @@ class TaskRevisionExpiryReceiptSnapshot:
 
 
 class TaskRevisionExpiryAuditPort(Protocol):
-    async def read_expiry(self, receipt: TaskRevisionExpiryReceiptSnapshot) -> TaskRevisionExpiryEvidence | None: ...
-    async def record_expiry(self, evidence: TaskRevisionExpiryEvidence) -> UUID: ...
+    """Record and verify expiry evidence without reading private TASK models."""
+    async def read_expiry(self, receipt: TaskRevisionExpiryReceiptSnapshot) -> TaskRevisionExpiryEvidence | None:
+        """Verify retained audit evidence against the immutable TASK receipt."""
+        ...
+    async def record_expiry(self, evidence: TaskRevisionExpiryEvidence) -> UUID:
+        """Append the expiry audit in the same transaction as the TASK effect."""
+        ...

@@ -13,6 +13,8 @@ from app.adapters.tasks import scan_task_revision_sources, task_revision_recover
 from app.core.identifiers import new_record_id
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.revision.models import TaskRevisionPreparation
+from app.modules.tasks.repository import TaskRepository
+from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.post_submit_routing.support import activate_successor_guide
 from tests.tasks.submission_dispatch.test_revision_capacity import _retain_pre_revision_source
@@ -175,3 +177,109 @@ async def test_discovery_registers_missing_root_event_once_under_race(
                   AND event_payload->'references'->>'routing_manifest_id'=:source
             """), {"source": str(source_id)})
             assert repairs == 1
+
+
+async def test_concurrent_missing_root_recovery_commits_one_complete_effect(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    """Two actual recoveries wait on TASK before creating the absent root."""
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        source_id = await _fixture_revision_context(h)
+        await _retain_pre_revision_source(h, source_id)
+        service_actor = await _provision_expirer(h.factory)
+        async with h.factory() as session:
+            custody_before = (await session.execute(text("""
+                SELECT to_jsonb(t),to_jsonb(a),to_jsonb(s)
+                FROM public.workstream_tasks t
+                JOIN public.task_assignments a ON a.id=:assignment
+                JOIN public.submissions s ON s.id=:submission WHERE t.id=:task
+            """), {"assignment": h.request.assignment_id,
+                   "submission": h.created.submission_id, "task": h.request.task_id})).one()
+            repairs_before = await session.scalar(text("""
+                SELECT count(*) FROM public.audit_events
+                WHERE event_type='TaskRevisionContextRepaired'
+                  AND event_payload->'references'->>'routing_manifest_id'=:source
+            """), {"source": str(source_id)})
+
+        held, release = asyncio.Event(), asyncio.Event()
+        first_name = f"revision-root-first-{new_record_id().hex}"
+        waiter_name = f"revision-root-second-{new_record_id().hex}"
+        original_lock = TaskRepository.lock_project_task
+
+        async def ordered_lock(repository, *args, **kwargs):
+            current = asyncio.current_task()
+            if current.get_name() == waiter_name:
+                await repository._session.execute(text(
+                    "SELECT set_config('application_name',:name,true)"
+                ), {"name": waiter_name})
+            task = await original_lock(repository, *args, **kwargs)
+            if current.get_name() == first_name:
+                held.set()
+                await asyncio.wait_for(release.wait(), 15)
+            return task
+
+        async def recover():
+            async with h.factory() as session, session.begin():
+                return await task_revision_recovery(session).recover(source_id)
+
+        contenders = []
+        with monkeypatch.context() as patch:
+            patch.setattr(TaskRepository, "lock_project_task", ordered_lock)
+            try:
+                contenders.append(asyncio.create_task(recover(), name=first_name))
+                await asyncio.wait_for(held.wait(), 15)
+                contenders.append(asyncio.create_task(recover(), name=waiter_name))
+                await asyncio.wait_for(wait_for_named_database_lock(
+                    isolated_database_env, waiter_name,
+                ), 15)
+                assert not contenders[1].done()
+                release.set()
+                assert await asyncio.wait_for(asyncio.gather(*contenders), 30) == [True, False]
+            finally:
+                release.set()
+                for contender in contenders:
+                    if not contender.done():
+                        contender.cancel()
+                await asyncio.gather(*contenders, return_exceptions=True)
+
+        async with h.factory() as session:
+            roots = (await session.scalars(select(TaskRevisionPreparation).where(
+                TaskRevisionPreparation.routing_manifest_id == source_id,
+            ))).all()
+            assert len(roots) == 1
+            root = roots[0]
+            assert root.sequence == 1 and root.predecessor_id is None
+            assert root.repair_actor_id == service_actor
+            assert root.repair_idempotency_key == source_id
+            events = (await session.scalars(select(OutboxEvent).where(
+                OutboxEvent.idempotency_key == f"task.revision.expire:{source_id}",
+            ))).all()
+            assert len(events) == 1
+            assert events[0].not_before_at == root.deadline_at
+            assert events[0].payload["root_preparation_id"] == str(root.id)
+            assert events[0].payload["root_preparation_sha256"] == root.preparation_sha256
+            # The loser must return before AUTH/audit writes as well as before
+            # preparation and outbox insertion.
+            assert await session.scalar(text("""
+                SELECT count(*) FROM public.audit_events
+                WHERE action_id='task.revision.recover'
+            """)) == 1
+            assert await session.scalar(text("""
+                SELECT count(*) FROM public.audit_events
+                WHERE event_type='TaskRevisionContextRepaired'
+                  AND event_payload->'references'->>'routing_manifest_id'=:source
+            """), {"source": str(source_id)}) == repairs_before + 1
+            repair = (await session.execute(text("""
+                SELECT event_payload->'references'->>'revision_preparation_id',
+                       event_payload->'references'->>'outbox_event_id'
+                FROM public.audit_events WHERE id=:id
+            """), {"id": root.audit_event_id})).one()
+            assert repair == (str(root.id), str(events[0].event_id))
+            assert (await session.execute(text("""
+                SELECT to_jsonb(t),to_jsonb(a),to_jsonb(s)
+                FROM public.workstream_tasks t
+                JOIN public.task_assignments a ON a.id=:assignment
+                JOIN public.submissions s ON s.id=:submission WHERE t.id=:task
+            """), {"assignment": h.request.assignment_id,
+                   "submission": h.created.submission_id,
+                   "task": h.request.task_id})).one() == custody_before

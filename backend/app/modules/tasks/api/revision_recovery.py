@@ -12,6 +12,7 @@ RECOVERY_REASON = "Recover retained revision window"
 
 @dataclass(frozen=True, slots=True)
 class TaskRevisionRecoveryFacts:
+    """Exact retained source and optional root authorized for service repair."""
     project_id: UUID
     task_id: UUID
     assignment_id: UUID
@@ -24,4 +25,7 @@ class TaskRevisionRecoveryFacts:
 
 
 class TaskRevisionRecoveryAuthorizationPort(Protocol):
-    async def authorize(self, facts: TaskRevisionRecoveryFacts) -> tuple[UUID, TaskAuthorityDecision]: ...
+    """Authorize recovery without granting policy rebase authority."""
+    async def authorize(self, facts: TaskRevisionRecoveryFacts) -> tuple[UUID, TaskAuthorityDecision]:
+        """Return the fixed service actor and consumed source-bound decision."""
+        ...

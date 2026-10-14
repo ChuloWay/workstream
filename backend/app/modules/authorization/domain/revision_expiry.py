@@ -11,6 +11,7 @@ from app.modules.tasks.api.revision_expiry import TaskRevisionExpiryAuthorityFac
 
 
 class RevisionExpiryResourceContext(BaseModel):
+    """Closed AUTH resource binding the target and locked invocation facts."""
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
     resource_type: Literal["task_authority"] = "task_authority"
     resource_id: UUID
@@ -19,6 +20,7 @@ class RevisionExpiryResourceContext(BaseModel):
 
     @model_validator(mode="after")
     def exact_target(self):
+        """Reject a resource selector that differs from the scheduled TASK target."""
         if (self.resource_id != self.facts.target.task_id
                 or self.scope_project_id != self.facts.target.project_id):
             raise ValueError("revision expiry authority target differs")
@@ -26,6 +28,7 @@ class RevisionExpiryResourceContext(BaseModel):
 
 
 def revision_expiry_resource(facts):
+    """Normalize exact TASK facts into the closed expiry authority resource."""
     facts = TaskRevisionExpiryAuthorityFacts.model_validate_json(facts.model_dump_json())
     return RevisionExpiryResourceContext(
         resource_id=facts.target.task_id, scope_project_id=facts.target.project_id, facts=facts,
@@ -33,6 +36,7 @@ def revision_expiry_resource(facts):
 
 
 def parse_revision_expiry_binding(action, request, invalid_error):
+    """Parse only expiry actions and conceal malformed resource input."""
     if action is not ActionId.TASK_REVISION_EXPIRE:
         return None
     try:

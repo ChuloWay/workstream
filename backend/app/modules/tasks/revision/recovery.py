@@ -24,6 +24,7 @@ class TaskRevisionRecovery:
     """Caller owns the root transaction; this operation locks TASK before dependents."""
 
     def __init__(self, session, *, projects, authorization, audit, outbox):
+        """Share the root transaction across source recovery and all owner ports."""
         self._session = session
         self._repo = TaskRepository(session)
         self._projects, self._authorization = projects, authorization

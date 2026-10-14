@@ -81,7 +81,6 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
-        "0046_revision_recovery",
         "0045_revision_expiry_retry",
         "0044_task_revision_expiry",
         "0043_outbox_not_before",
@@ -252,22 +251,41 @@ def test_repeated_upgrade_head_preserves_current_database(
     assert after == before
 
 
+@pytest.mark.parametrize("installed_revision", [
+    "0038_task_batch_transitions",
+    "0044_task_revision_expiry",
+    "0045_revision_expiry_retry",
+])
 def test_preceding_head_upgrades_to_current_without_recreation(
-    isolated_database_env: str, migration_lock
+    isolated_database_env: str, migration_lock, installed_revision: str,
 ) -> None:
-    """A database at the merged batch-transition head upgrades without recreation."""
+    """Each supported installed predecessor resumes without recreation or data loss."""
     config = _alembic_config()
     with migration_lock():
         asyncio.run(
             _execute(isolated_database_env, "drop schema public cascade; create schema public")
         )
-        command.upgrade(config, "0038_task_batch_transitions")
+        command.upgrade(config, installed_revision)
+        asyncio.run(_execute(
+            isolated_database_env,
+            "create table migration_resume_sentinel(id integer primary key, value text not null); "
+            "insert into migration_resume_sentinel values (1,'preserve-me')",
+        ))
         before = asyncio.run(_database_snapshot(isolated_database_env))
-        assert before["versions"] == ["0038_task_batch_transitions"]
+        assert before["versions"] == [installed_revision]
         command.upgrade(config, HEAD_REVISION)
         after = asyncio.run(_database_snapshot(isolated_database_env))
         command.upgrade(config, "head")
         repeated = asyncio.run(_database_snapshot(isolated_database_env))
+        async def retained_sentinel() -> str:
+            connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+            try:
+                return await connection.fetchval("select value from migration_resume_sentinel where id=1")
+            finally:
+                await connection.close()
+
+        assert asyncio.run(retained_sentinel()) == "preserve-me"
+        asyncio.run(_execute(isolated_database_env, "drop table migration_resume_sentinel"))
     assert after["versions"] == [HEAD_REVISION]
     assert after["reference_rows"] == before["reference_rows"]
     assert repeated == after

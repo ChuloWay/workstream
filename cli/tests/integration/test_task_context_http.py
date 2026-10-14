@@ -257,31 +257,44 @@ def test_context_reads_preserve_wire_complete_output_and_optional_fields(cli):
         assert result.returncode == 0 and json.loads(result.stdout) == requirements
 
 
-def test_revision_context_accepts_absent_null_and_valid_projection_but_rejects_bad_lineage(cli):
+def test_revision_context_accepts_absent_null_and_valid_projection_but_rejects_bad_lineage(
+    cli,
+):
     with http_fixture() as (origin, response, _):
         for revision in (None, REVISION_CONTEXT):
             value = deepcopy(CONTEXT)
             value["revision_context"] = deepcopy(revision)
             response["body"] = json.dumps(value).encode()
             result = cli(origin, TOKEN, "task", "context", TASK, "-o", "json")
-            assert result.returncode == 0 and json.loads(result.stdout) == value, result.stderr
+            assert result.returncode == 0 and json.loads(result.stdout) == value, (
+                result.stderr
+            )
             text_result = cli(origin, TOKEN, "task", "context", TASK)
             assert text_result.returncode == 0, text_result.stderr
             if revision is None:
                 assert "Revision context:" not in text_result.stdout
             else:
-                assert json.loads(text_result.stdout.split("Revision context: ", 1)[1]) == revision
+                assert (
+                    json.loads(text_result.stdout.split("Revision context: ", 1)[1])
+                    == revision
+                )
         for change in (
             {"preparation_sha256": "sha256:" + "B" * 64},
             {"sequence": 0},
             {"disposition": "accepted"},
-            {"prior": REVISION_SNAPSHOT | {"lineage": REVISION_LINEAGE | {"unknown": "secret"}}},
+            {
+                "prior": REVISION_SNAPSHOT
+                | {"lineage": REVISION_LINEAGE | {"unknown": "secret"}}
+            },
             {"changes": [{"component": "unknown", "before": "a", "after": "b"}]},
         ):
             value = deepcopy(CONTEXT)
             value["revision_context"] = deepcopy(REVISION_CONTEXT) | change
             response["body"] = json.dumps(value).encode()
-            assert_failure(cli(origin, TOKEN, "task", "context", TASK, "-o", "json"), "invalid_api_response")
+            assert_failure(
+                cli(origin, TOKEN, "task", "context", TASK, "-o", "json"),
+                "invalid_api_response",
+            )
 
 
 @pytest.mark.parametrize(

@@ -142,26 +142,44 @@ def test_explicit_prepare_replay_then_create_preserves_packet_and_bytes(cli, tmp
         )
 
 
-def test_revision_prepare_requires_and_replays_exact_acknowledgement_headers(cli, tmp_path):
+def test_revision_prepare_requires_and_replays_exact_acknowledgement_headers(
+    cli, tmp_path
+):
     path = tmp_path / "revision.zip"
     path.write_bytes(b"PK\x03\x04revision")
     pair = (
-        "--revision-preparation-id", REVISION_PREPARATION,
-        "--revision-preparation-sha256", REVISION_DIGEST,
+        "--revision-preparation-id",
+        REVISION_PREPARATION,
+        "--revision-preparation-sha256",
+        REVISION_DIGEST,
     )
     with http_fixture() as (origin, response, requests):
         for args in (
             ("--predecessor", SUBMISSION),
             pair,
-            ("--predecessor", SUBMISSION, "--revision-preparation-id", REVISION_PREPARATION),
-            ("--predecessor", SUBMISSION, "--revision-preparation-sha256", REVISION_DIGEST),
+            (
+                "--predecessor",
+                SUBMISSION,
+                "--revision-preparation-id",
+                REVISION_PREPARATION,
+            ),
+            (
+                "--predecessor",
+                SUBMISSION,
+                "--revision-preparation-sha256",
+                REVISION_DIGEST,
+            ),
             ("--predecessor", SUBMISSION, *pair[:-1], "sha256:" + "A" * 64),
         ):
-            assert_failure(cli(origin, TOKEN, *prepare_args(path), *args), "invalid_arguments", 2)
+            assert_failure(
+                cli(origin, TOKEN, *prepare_args(path), *args), "invalid_arguments", 2
+            )
         assert requests == []
         respond(response, preparation("ready"), 202)
         for _ in range(2):
-            result = cli(origin, TOKEN, *prepare_args(path), "--predecessor", SUBMISSION, *pair)
+            result = cli(
+                origin, TOKEN, *prepare_args(path), "--predecessor", SUBMISSION, *pair
+            )
             assert result.returncode == 0, result.stderr
         assert len(requests) == 2
         for headers in response["request_headers"]:
@@ -408,18 +426,23 @@ def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
         for history in (
             {key: value for key, value in HISTORY.items() if key != "status_reason"},
             HISTORY,
-            HISTORY | {"status": "rejected", "status_reason": "revision_deadline_expired"},
+            HISTORY
+            | {"status": "rejected", "status_reason": "revision_deadline_expired"},
         ):
             respond(response, history)
             result = cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json")
-            assert result.returncode == 0 and json.loads(result.stdout) == history, result.stderr
+            assert result.returncode == 0 and json.loads(result.stdout) == history, (
+                result.stderr
+            )
             text = cli(origin, TOKEN, "submission", "show", SUBMISSION)
             assert text.returncode == 0, text.stderr
             displayed = json.loads(text.stdout.splitlines()[0].split(": ", 1)[1])
             assert displayed.get("status_reason") == history.get("status_reason")
             respond(response, {"items": [history], "next_cursor": None})
             page = cli(origin, TOKEN, "task", "submissions", TASK, "-o", "json")
-            assert page.returncode == 0 and json.loads(page.stdout)["items"] == [history]
+            assert page.returncode == 0 and json.loads(page.stdout)["items"] == [
+                history
+            ]
         for history in (
             HISTORY | {"status_reason": "revision_deadline_expired"},
             HISTORY | {"status": "rejected", "status_reason": "other"},
@@ -427,7 +450,10 @@ def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
             HISTORY | {"status": "rejected", "status_reason": 1},
         ):
             respond(response, history)
-            assert_failure(cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json"), "invalid_api_response")
+            assert_failure(
+                cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json"),
+                "invalid_api_response",
+            )
 
 
 def test_submission_reads_reject_substitution_private_fields_and_duplicate_identity(

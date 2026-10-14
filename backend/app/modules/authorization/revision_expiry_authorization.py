@@ -14,10 +14,13 @@ from app.modules.tasks.api.revision_expiry import TaskRevisionExpiryAuthority, T
 
 
 class _PreparedExpiry:
+    """Consume one process-local prepared handle against fresh locked facts."""
     def __init__(self, authority, handle, caller_input):
+        """Retain the transaction-local authority and exact prepared request."""
         self._authority, self._handle, self._input = authority, handle, caller_input
 
     async def consume(self, facts):
+        """Revalidate fixed-service authority before the expiry effect is written."""
         try:
             resource = revision_expiry_resource(facts)
             decision = await self._authority.service.consume(
@@ -32,11 +35,14 @@ class _PreparedExpiry:
 
 
 class RevisionExpiryAuthorizationAdapter:
+    """Adapt the fixed revision-expirer identity to TASK expiry authority."""
     def __init__(self, session):
+        """Use the caller session so authorization and expiry commit together."""
         self._session = session
 
     @asynccontextmanager
     async def prepare_revision_expiry(self, facts):
+        """Prepare the exact event, source and project binding for consumption."""
         try:
             resource = revision_expiry_resource(facts)
             async with fixed_service_prepared_authorization(

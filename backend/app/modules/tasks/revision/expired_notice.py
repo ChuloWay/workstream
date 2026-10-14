@@ -13,9 +13,11 @@ class TaskRevisionExpiredNoticeOperation:
     """Acknowledge only a notice bound to the exact durable TASK receipt and audit."""
 
     def __init__(self, session, *, observer, audit):
+        """Bind read-only receipt validation to the current delivery observer."""
         self._session, self._observer, self._audit = session, observer, audit
 
     async def acknowledge(self, envelope: OutboxEventEnvelope) -> HandlerOutcome:
+        """Accept only the exact committed receipt and matching audit evidence."""
         try:
             envelope = OutboxEventEnvelope.model_validate(envelope)
             payload = json.loads(envelope.payload_json)

@@ -10,10 +10,13 @@ from app.modules.tasks.api.revision_recovery import RECOVERY_REASON
 
 
 class RevisionRecoveryAuthorizationAdapter:
+    """Authorize retained-source recovery using the fixed expirer identity."""
     def __init__(self, session):
+        """Use the caller session so authority and recovery commit atomically."""
         self._session = session
 
     async def authorize(self, facts):
+        """Consume source-bound recovery authority without impersonating a PM."""
         async with fixed_service_prepared_authorization(
             self._session, service_identity=ServiceIdentity.TASK_REVISION_EXPIRER,
             request_id=facts.routing_manifest_id, correlation_id=facts.routing_manifest_id,

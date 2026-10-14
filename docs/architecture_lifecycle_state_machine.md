@@ -184,10 +184,11 @@ inconsistent, revoked, or unsafe context blocks the whole preparation for
 Project Manager repair. Changed context atomically rebases the continuing Task
 and TaskAssignment for the next submission attempt. The prior Submission,
 completed Review, ReviewLease, contribution, and award do not change.
-Hidden checker-caused remediation remains a distinct CheckerRun-rooted path,
-keeps the Task's locked context, and
-creates no Review, ReviewFinding, preparation, reviewer contribution, or
-synthetic human actor. The corrected Submission links its immediate predecessor
+Checker-caused remediation uses a distinct TASK-owned `TaskRevisionPreparation`
+rooted in its exact CheckerRun routing manifest. The same complete-context
+comparison keeps, atomically rebases or blocks the next attempt. It creates no
+Review, ReviewFinding, human-Review-rooted preparation, reviewer contribution,
+or synthetic human actor. The corrected Submission links its immediate predecessor
 and ART admission; ART evidence/admission and the TASK dispatch retain the exact
 server-selected `checker_remediation_manifest_id` and AUTH receipts. That
 manifest identifies the authorized predecessor CheckerRun. A later retry cannot
@@ -250,9 +251,11 @@ Required side effects:
 
 ### CANCELLED
 
-The task is cancelled before acceptance. An authorized revision-limit/deadline
-or legacy-context closure uses this state with a bounded reason, releases the
-assignment, and creates no synthetic Review or contribution.
+The task is cancelled before acceptance. Planned evidence-linked closure of
+unrecoverable historical human context uses this state with a bounded reason,
+releases the assignment and creates no synthetic Review or contribution.
+Normal revision timeout retains rejection evidence and returns the task to
+`READY` after releasing the outstanding assignment.
 
 ## Allowed Transitions
 
@@ -272,7 +275,8 @@ EVALUATION_PENDING -> ACCEPTED (locked false policy and authorized shared accept
 REVIEW_PENDING -> NEEDS_REVISION
 REVIEW_PENDING -> REJECTED
 NEEDS_REVISION -> SUBMITTED
-NEEDS_REVISION -> CANCELLED
+NEEDS_REVISION -> READY (durable timeout rejection and assignment release)
+NEEDS_REVISION -> CANCELLED (unrecoverable historical human context)
 DRAFT -> CANCELLED
 SCREENING -> CANCELLED
 READY -> CANCELLED
@@ -316,9 +320,19 @@ submission v2 -> accepted
 Each resubmission must link to the prior submission it supersedes.
 
 Each submitted version keeps its own stamped guide and policy context. A later
-human revision may rebase every changed valid component to the complete current
+checker or human revision may rebase every changed valid component to the complete current
 applicable context. The immutable preparation records that next-attempt context
 and never rewrites an earlier Submission, Review, contribution, or award.
+
+Each assignment starts at round 0 with its own revision allowance. Every
+committed `needs_revision` freezes a fresh PostgreSQL-time window using the
+failed attempt's locked RevisionPolicy. Only a committed immutable successor
+Submission ends the prior window. Cap exhaustion refuses a successor; expiry
+records rejection in an immutable receipt, marks the assignment
+`revision_expired`, releases it and returns TASK to `READY` atomically with
+AUTH/audit/outbox evidence. No economic facts are created. Checker-triggered
+expiry is implemented; #554 owns future human decision integration using the
+same policy. Stale jobs cannot release a newer assignment.
 
 ## Revision Replay
 

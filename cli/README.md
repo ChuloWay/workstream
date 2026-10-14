@@ -690,12 +690,23 @@ checker runs/results. Run status is not human review or final acceptance, and th
 CLI never follows finding paths or exposes provider/private management fields.
 History and findings lists fetch one page only; use the returned opaque cursor
 explicitly (up to 1024 characters; no local decoding). `--run` cannot be combined with pagination flags. Revision change
-summary is unavailable in the current public history API; the CLI does not invent it.
+summary is available through `task context` as `revision_context.changes`,
+not in the current public history rows.
 History may show a source Submission as `rejected` with
 `status_reason=revision_deadline_expired` after the durable deadline worker
 closes its outstanding revision attempt. This is the server's status projection
 from an immutable expiration receipt, not a CLI inference or a change to the
 stored Submission. Other history rows have no status reason.
+
+Each assignment's initial attempt is round 0; a limit of 2 permits revisions
+1 and 2. Every committed `needs_revision` starts a fresh PostgreSQL-time window
+from the failed attempt's locked policy. Only immutable resubmission ends it;
+ZIP upload, a ready admission, explicit replay, infrastructure retry and manager
+repair preserve its original deadline. Cap exhaustion blocks a new attempt;
+expiry retains rejection evidence and returns the task to `ready` after releasing
+the old assignment, without economic facts. A new claimant receives their own
+round-0 allowance. Checker revision is implemented; genuine human decision
+integration remains #554 work under the same intended policy.
 
 The native process test uses real HTTP, PostgreSQL and local ART custody, with
 approved-policy/assignment prerequisites arranged by fixtures. It drives the real

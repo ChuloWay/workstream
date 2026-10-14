@@ -562,7 +562,7 @@ ReviewLease.reviewer_contribution_policy_version_id
 Review claim performs no CON lookup or current-policy selection.
 
 REV owns ReviewLease schema, claim composition, and status effects. CON owns
-policy validation at guide activation and the controlled human-revision rebase,
+policy validation at guide activation and the controlled checker/human revision rebase,
 not ordinary review-claim selection.
 
 ### Freeze invariants
@@ -572,8 +572,8 @@ not ordinary review-claim selection.
   ContributionRecord, or CompensationAward.
 - Suspension races MUST be resolved with explicit locks and both-order tests.
 - Missing, draft, ambiguous, crossed-project, or incomplete policy state blocks
-  guide activation/task readiness or the controlled human-revision rebase.
-- Human revision preparation MUST rebase changed award eligibility with every
+  guide activation/task readiness or the controlled checker/human revision rebase.
+- Controlled revision preparation MUST rebase changed award eligibility with every
   changed applicable context component on the continuing Task/TaskAssignment
   for the next attempt. The completed Review and reviewer contribution keep the
   prior ReviewLease version; the next Submission and ReviewLease use the
