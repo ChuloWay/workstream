@@ -1,7 +1,7 @@
 # [PILOT-08] — Enforce the locked checker revision cap
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Reject checker-remediation submissions beyond the task’s locked revision allowance before PRE execution and at immutable Submission creation.
 
 ## Intent
@@ -49,13 +49,13 @@ unchanged. Submission version minus one is the consumed revision number.
 
 ## Acceptance criteria
 
-- [ ] max=2 permits initial0, revision1 and revision2; the next attempt receives
+- [x] max=2 permits initial0, revision1 and revision2; the next attempt receives
   revision_limit_reached without PRE/provider work or durable creation effects.
-- [ ] The final new-write boundary also enforces the cap; an old ready admission
+- [x] The final new-write boundary also enforces the cap; an old ready admission
   cannot bypass it. Exact committed replay remains successful.
-- [ ] Direct SQL cannot insert an over-cap Submission; rollback leaves prior
+- [x] Direct SQL cannot insert an over-cap Submission; rollback leaves prior
   immutable facts unchanged.
-- [ ] Existing stale-cause and concurrent replacement tests still pass.
+- [x] Existing stale-cause and concurrent replacement tests still pass.
 
 ## Risk and review routing
 
@@ -68,10 +68,27 @@ unchanged. Submission version minus one is the consumed revision number.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner reuse | TASK/ART/PROJECTS source inspection | Reuses existing locked-context calls | Runtime proof pending |
+| Existing owner reuse | TASK/ART/PROJECTS source inspection and focused tests | Reuses existing locked-context calls; authority and exact replay preserved | Deadline/rebase remain out of scope |
 | Schema delta | PostgreSQL 16 canonical catalog comparison | Only new guard function, namespace identity and trigger differ; removing them reproduces the predecessor hash | Hosted repetition required |
 
+Focused verification of the implementation recorded at `49ca2fbf8`:
+
+- `pytest -q tests/architecture/test_module_boundaries.py tests/test_ci_lane_catalogue.py tests/test_submission_composition.py tests/tasks/submission_dispatch/test_revision_capacity.py`: 111 passed, no skips/deselections. Isolated PostgreSQL database cleanup completed.
+- Earlier replacement, public-intake and Alembic checks: nine passed. The new cap journey also passed together with composition checks before the scalar-boundary repair.
+- Removing only the application cap makes the new regression fail at the expected 409 refusal (actual 500). The probe wrapper incorrectly expected 422; this proves regression sensitivity, not the cause or contract of the fallback response.
+- Ruff, markdown links, stale review/wording and Commitrail validation passed.
+
+The isolated runner captured parent SHA `df05787d4` before the repair was
+committed; the tested working-tree changes are recorded in `49ca2fbf8`. No
+implementation edits followed that commit. Hosted full-suite evidence remains
+a PR merge gate rather than a claim established by focused test counts.
+
 ## Review findings
+
+CI also identified an invalid PROJECTS import in the TASK public API and an
+unregistered regression module. The helper now accepts scalar locked-policy
+facts projected by its existing callers, and the test has explicit CI lane
+ownership. The dedicated boundary and lane checks pass.
 
 Scope review identified mutable TASK-lock foreign keys on retained attempt
 records as a prerequisite for later rebase. This PR does not change those keys.
