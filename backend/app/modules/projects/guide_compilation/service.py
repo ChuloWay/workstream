@@ -7,6 +7,7 @@ from typing import Any, Literal
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.projects.models import ProjectSetupRun
+from app.modules.projects.repository import ProjectRepository
 
 from app.interfaces.project_agents import (
     ProjectGuideCompilationContext,
@@ -171,13 +172,28 @@ class GuideCompilationService:
                 repository = GuideCompilationRepository(self._session)
                 existing = await self._existing_request(repository, actor, facts, origin)
                 if existing is not None:
+                    observed_operation_id = existing.operation_id
                     await self._authorization.validate_request_replay(
                         actor=actor, facts=facts, origin=origin
                     )
-                    return await _request_receipt(repository, existing)
+                    locked = await repository.matching_request_operation(
+                        actor=actor, facts=facts, origin=origin, lock=True
+                    )
+                    if locked is None or locked.operation_id != observed_operation_id:
+                        raise GuideCompilationIntegrityError(
+                            "compilation request custody is missing"
+                        )
+                    return await _request_receipt(repository, locked)
                 handle = await self._authorization.prepare_request(
                     actor=actor, facts=facts, origin=origin
                 )
+                # Match manager mutations and diagnostic reads: AUTH, then
+                # Project, then Guide/Setup and the attempt's parent FK locks.
+                project = await ProjectRepository(self._session).get_project(
+                    str(facts.project_id), for_update=True
+                )
+                if project is None:
+                    raise GuideCompilationIntegrityError("compilation project unavailable")
                 prepared_facts = facts
                 facts, correction_setup, replay = await self._admit_request(
                     repository, actor, prepared_facts, identity, origin
@@ -200,11 +216,11 @@ class GuideCompilationService:
             return await self._recover_request(actor=actor, facts=facts, origin=origin)
 
     async def _existing_request(self, repository, actor, facts, origin):
-        """Lock a direct operation replay only when the caller supplied its UUIDv7 ID."""
+        """Discover a direct replay before acquiring AUTH and its operation lock."""
         if facts.operation_id.version != 7:
             return None
         return await repository.matching_request_operation(
-            actor=actor, facts=facts, origin=origin, lock=True
+            actor=actor, facts=facts, origin=origin, lock=False
         )
 
     async def _admit_request(self, repository, actor, prepared_facts, identity, origin):
@@ -325,6 +341,21 @@ class GuideCompilationService:
             await self._session.flush()
         return await _request_receipt(repository, operation)
 
+    async def _lock_execution(
+        self,
+        repository: GuideCompilationRepository,
+        actor: ActorIdentityFacts,
+        facts: ProjectGuideCompilationExecutePreflightFacts,
+    ) -> tuple[ProjectGuideCompilationRequestOperation, ProjectGuideCompilationAttempt]:
+        """Retain service authority and parent custody before compilation children."""
+        await self._authorization.authorize_execute_preflight(actor=actor, facts=facts)
+        project = await ProjectRepository(self._session).get_project(
+            str(facts.project_id), for_update=True
+        )
+        if project is None:
+            raise GuideCompilationIntegrityError("compilation project unavailable")
+        return await _locked_exact(repository, facts)
+
     async def fence_dispatch(
         self,
         *,
@@ -335,7 +366,7 @@ class GuideCompilationService:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
-            operation, attempt = await _locked_exact(repository, facts)
+            operation, attempt = await self._lock_execution(repository, actor, facts)
             if attempt.status == "compilation_provider_uncertain":
                 return _dispatch_receipt(operation, attempt, dispatch_permitted=False)
             if attempt.status != "compilation_reserved":
@@ -345,7 +376,6 @@ class GuideCompilationService:
                     classification=await repository.recovery_classification(attempt.id),
                     dispatch_permitted=False,
                 )
-            await self._authorization.authorize_execute_preflight(actor=actor, facts=facts)
             attempt = await repository.mark_provider_uncertain(attempt.id)
             receipt = _dispatch_receipt(operation, attempt, dispatch_permitted=True)
         return receipt
@@ -362,10 +392,9 @@ class GuideCompilationService:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
-            operation, attempt = await _locked_exact(repository, facts)
+            operation, attempt = await self._lock_execution(repository, actor, facts)
             if attempt.status != "compilation_provider_uncertain":
                 raise GuideCompilationIntegrityError("provider outcome is not recordable")
-            await self._authorization.authorize_execute_preflight(actor=actor, facts=facts)
             attempt = await repository.accept_result(
                 attempt_id=attempt.id, context=context, result=result
             )
@@ -383,10 +412,9 @@ class GuideCompilationService:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
-            operation, attempt = await _locked_exact(repository, facts)
+            operation, attempt = await self._lock_execution(repository, actor, facts)
             if attempt.status != "compilation_provider_uncertain":
                 raise GuideCompilationIntegrityError("provider outcome is not recordable")
-            await self._authorization.authorize_execute_preflight(actor=actor, facts=facts)
             attempt = await repository.mark_invalid_terminal(
                 attempt_id=attempt.id, failure_code=failure_code
             )
@@ -404,7 +432,7 @@ class GuideCompilationService:
         self._require_fresh_session()
         async with self._session.begin():
             repository = GuideCompilationRepository(self._session)
-            operation, attempt = await _locked_exact(repository, facts)
+            operation, attempt = await self._lock_execution(repository, actor, facts)
             if attempt.status == "compilation_persisted":
                 return await _persisted_receipt(repository, operation, attempt)
             if attempt.status != "provider_result_accepted":

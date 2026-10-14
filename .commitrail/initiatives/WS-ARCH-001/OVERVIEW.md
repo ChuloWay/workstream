@@ -23,11 +23,13 @@
   A known pre-effect non-live
   refusal retries within the existing OUTBOX budget; exhaustion dead-letters
   without automatic reopen. The default-true handoff remains independent of REV.
-- Local proof: the public API and durable-worker drill passed at `d5703d9c6`
-  through both policy branches, restart, revocation and exact contribution
-  evidence under scripted approved-guide preconditions and local Flow-compatible
-  auth. Next usable boundary: reproduce and operate that path with intended
-  hosted identity and infrastructure. See the [current delivery
+- Local proof: the [connected public guide drill](../../changes/public-guide-to-contribution-proof.md)
+  starts with original upload and task examples, real Celery setup using recorded
+  inference, public review/revision settings, separate PRE/POST approvals and
+  Finance publication. Both review-policy branches retain restart,
+  revocation and exact contribution evidence under local Flow-compatible auth.
+  Next usable boundary: configured live inference and intended hosted identity
+  and infrastructure. See the [current delivery
   plan](planning/PLAN.md#first-complete-contributor-milestone) and [change
   map](planning/CHUNK_MAP.md).
 - Later scope: live human review/revision, payment fulfillment, external

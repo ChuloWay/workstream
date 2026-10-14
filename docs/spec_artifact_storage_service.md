@@ -1836,5 +1836,5 @@ evaluation request. ARCH-04E1B-B7 consumes that request through the selected
 handler and existing exact-byte materializer. Selected request/completion handlers
 are registered in production composition, and ARCH-02I-B exposes public ZIP
 preparation plus admission-backed initial/checker-remediation Submission
-creation. The bounded local public API and Celery service drill passed under
-scripted approved-guide preconditions.
+creation. The bounded local public API and Celery service drill starts from public guide
+inputs with recorded inference.

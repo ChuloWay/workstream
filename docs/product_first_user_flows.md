@@ -19,7 +19,7 @@ contributions. Required checks and exact immutable evidence still apply. The
 both triggers. New false/pass effects require an Operator-authorized live REV
 generation and verified authority, currentness and evidence through the shared
 FinalAcceptance/TASK/CON participant. The bounded local public durable-worker
-drill passed under scripted approved-guide preconditions; this is not a deployment claim.
+drill starts from public guide inputs with recorded inference; this is not a deployment claim.
 
 The first user flows prove that Workstream can run real work from intake to acceptance. These flows come before any advanced routing or settlement.
 
@@ -261,8 +261,8 @@ Correctable checker failures follow ARCH-04F under the locked attempt context;
 infrastructure/setup uncertainty never accepts or invents a human revision.
 The selected backend composition enables this branch only under an
 Operator-authorized live REV generation; a typed pre-effect non-live refusal
-rolls back and uses bounded retry. The bounded local public drill passed under
-scripted approved-guide preconditions.
+rolls back and uses bounded retry. The bounded local public drill starts from public
+guide inputs with recorded inference.
 Fulfillment remains post-commit for either trigger and cannot change accepted work.
 
 Acceptance:

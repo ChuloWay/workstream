@@ -21,7 +21,7 @@ operation so an exact current contributor-correctable result reaches
 production composition and ARCH-02I-B public entry are delivered. ARCH-04E3-B
 admits complete false guides with supported approved checks and no `human_review`
 disposition under matching Python/PostgreSQL custody. The bounded local
-public/worker drill passed using scripted approved-guide facts; it did not
+public/worker drill starts from public guide inputs with recorded inference; it did not
 exercise live setup inference. Setup-fault handling and live human review/revision
 are separate work.
 
@@ -97,11 +97,13 @@ Exact pre-cutover work record: [`STATUS.md`](pre-cutover/STATUS.md),
 - Delivered storage: [REV-03B](../WS-REV-001/WS-REV-001-03B.md) freezes exact
   lease packets with normalized live guide ingests; no resolver or byte authority.
   [REV-04A](../WS-REV-001/WS-REV-001-04A.md) adds complete immutable Review, findings, resolutions and completed request storage; no decision runtime.
-- Local proof: the first-layer public/worker drill passed across Submission
-  entry and selected completion under scripted approved-guide preconditions.
-  Next usable boundary: exercise the existing connected setup/activation and
-  intake flow with its configured provider, then reproduce the path with
-  intended hosted identity and infrastructure.
+- Local proof: the first-layer public/worker drill now starts from public guide inputs
+  with recorded inference before Submission entry and selected completion;
+  both policy outcomes, restart/replay, late authority revocation and cleanup passed.
+  The [connected guide proof](../../changes/public-guide-to-contribution-proof.md)
+  includes original bytes, task examples, real Celery setup using recorded
+  inference and public separate approvals. Next usable boundary: configured
+  live inference and intended hosted identity and infrastructure.
   Setup-fault handling is later safety work. The delivered remediation handoff is independent of REV/CON;
   live human review/revision and payment delivery stay deferred.
 - Governing sources: project-guide specifications, authorization and

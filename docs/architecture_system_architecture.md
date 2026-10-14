@@ -292,8 +292,8 @@ submission or evidence semantics.
 Submission artifacts are hash-locked during successful submission creation.
 Selected request/completion handlers are registered for durable post-submit
 execution and governed outcomes under exact service authority. The bounded local
-public API and Celery service drill passed under scripted approved-guide
-preconditions; the removed alternate
+public API and Celery service drill starts from public guide inputs with recorded
+inference; the removed alternate
 checker worker is not dispatched. Any changed artifact requires a new
 submission version instead of mutating the old one.
 

@@ -707,3 +707,155 @@ async def test_automatic_replay_holds_authority_until_receipt_classification(
             if not task.done():
                 task.cancel()
         await asyncio.gather(*pending, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_reservation_and_public_setup_read_share_parent_lock_order(
+    automatic_source, project_client, project_database_env, monkeypatch
+):
+    """An intermediate status read cannot deadlock the attempt's parent FK lock."""
+    import asyncio
+    from uuid import uuid4
+
+    from app.modules.projects import router
+    from app.modules.projects.guide_compilation.repository import GuideCompilationRepository
+    from tests.auth_concurrency_support import wait_for_named_database_lock
+    from tests.projects.client_fixtures import auth_headers
+
+    factory, actor, setup_id, snapshot = automatic_source
+    await create_committed_document_fixture(snapshot["id"])
+    held, release = asyncio.Event(), asyncio.Event()
+    waiter_name = "guide-reservation-read-" + uuid4().hex
+    pids = {}
+    reserve = GuideCompilationRepository.reserve_attempt
+    diagnostic = router.authorize_project_diagnostic_read
+
+    async def paused_reserve(repository, *args, **kwargs):
+        pids["reservation"] = await repository._session.scalar(text("select pg_backend_pid()"))
+        held.set()
+        await release.wait()
+        return await reserve(repository, *args, **kwargs)
+
+    async def named_diagnostic(**kwargs):
+        session = kwargs["repository"]._session
+        pids["read"] = await session.scalar(text("select pg_backend_pid()"))
+        await session.execute(
+            text("select set_config('application_name', :name, true)"),
+            {"name": waiter_name},
+        )
+        return await diagnostic(**kwargs)
+
+    monkeypatch.setattr(GuideCompilationRepository, "reserve_attempt", paused_reserve)
+    monkeypatch.setattr(router, "authorize_project_diagnostic_read", named_diagnostic)
+
+    async def request():
+        async with factory() as session:
+            return await automatic_service(session, actor).request_automatic(
+                actor=actor, setup_run_id=setup_id
+            )
+
+    tasks = [asyncio.create_task(request())]
+    try:
+        await asyncio.wait_for(held.wait(), timeout=30)
+        tasks.append(asyncio.create_task(project_client.get(
+            f"/api/v1/projects/{snapshot['project_id']}/guides/{snapshot['guide_id']}/setup-runs/latest",
+            headers=auth_headers(),
+        )))
+        await asyncio.wait_for(wait_for_named_database_lock(
+            project_database_env, waiter_name,
+            expected_blocker_pid=pids["reservation"],
+        ), timeout=15)
+        assert pids["read"] != pids["reservation"]
+        assert not tasks[1].done()
+        release.set()
+        receipt, response = await asyncio.wait_for(asyncio.gather(*tasks), timeout=30)
+        assert response.status_code == 200, response.text
+        assert response.json()["id"] == str(setup_id)
+        assert receipt is not None
+    finally:
+        release.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    async with factory() as session:
+        for table in (
+            "project_guide_compilation_attempts",
+            "project_guide_compilation_request_operations",
+        ):
+            assert await session.scalar(text(f"select count(*) from {table}")) == 1
+        assert await session.scalar(text(
+            "select count(*) from audit_events "
+            "where action_id='project.guide_compilation.request_automatic'"
+        )) == 1
+
+
+@pytest.mark.asyncio
+async def test_manager_mutation_and_diagnostic_read_lock_actor_before_project(
+    automatic_source, project_client, project_database_env, monkeypatch
+):
+    """A status read cannot hold Project while waiting on the mutating manager."""
+    import asyncio
+    from uuid import uuid4
+
+    from app.modules.projects import router
+    from app.modules.projects.repository import ProjectRepository
+    from tests.auth_concurrency_support import wait_for_named_database_lock
+    from tests.projects.client_fixtures import auth_headers
+
+    _, _, setup_id, snapshot = automatic_source
+    held, release = asyncio.Event(), asyncio.Event()
+    waiter_name = "guide-manager-read-" + uuid4().hex
+    pids = {}
+    get_project = ProjectRepository.get_project
+    diagnostic = router.authorize_project_diagnostic_read
+
+    async def paused_project(repository, project_id, *, for_update=False):
+        if (for_update and asyncio.current_task().get_name() == "manager-mutation"
+                and not held.is_set()):
+            pids["mutation"] = await repository._session.scalar(text("select pg_backend_pid()"))
+            held.set()
+            await release.wait()
+        return await get_project(repository, project_id, for_update=for_update)
+
+    async def named_diagnostic(**kwargs):
+        session = kwargs["repository"]._session
+        pids["read"] = await session.scalar(text("select pg_backend_pid()"))
+        await session.execute(
+            text("select set_config('application_name', :name, true)"),
+            {"name": waiter_name},
+        )
+        return await diagnostic(**kwargs)
+
+    monkeypatch.setattr(ProjectRepository, "get_project", paused_project)
+    monkeypatch.setattr(router, "authorize_project_diagnostic_read", named_diagnostic)
+    payload = complete_guide_payload()
+    payload["version"] = "manager-lock-successor"
+    tasks = [asyncio.create_task(
+        create_guide(project_client, snapshot["project_id"], payload), name="manager-mutation"
+    )]
+    try:
+        await asyncio.wait_for(held.wait(), timeout=30)
+        tasks.append(asyncio.create_task(project_client.get(
+            f"/api/v1/projects/{snapshot['project_id']}/guides/{snapshot['guide_id']}/setup-runs/latest",
+            headers=auth_headers(),
+        )))
+        await asyncio.wait_for(wait_for_named_database_lock(
+            project_database_env, waiter_name,
+            expected_blocker_pid=pids["mutation"],
+        ), timeout=15)
+        assert pids["read"] != pids["mutation"]
+        assert not tasks[1].done()
+        release.set()
+        guide, response = await asyncio.wait_for(asyncio.gather(*tasks), timeout=30)
+        assert guide["id"] != snapshot["guide_id"]
+        assert guide["version"] == payload["version"]
+        assert response.status_code == 200, response.text
+        assert response.json()["id"] == str(setup_id)
+    finally:
+        release.set()
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
