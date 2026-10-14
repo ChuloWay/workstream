@@ -1252,8 +1252,6 @@ class ProjectService:
             raise GuideActivationBlocked(
                 "review and revision policy semantics are incomplete"
             ) from exc
-        if not review_policy.human_review_required:
-            raise GuideActivationBlocked("automated acceptance is unavailable")
         if not set(review_policy.allowed_decisions).issubset(ALLOWED_REVIEW_DECISIONS):
             raise GuideActivationBlocked("review policy contains invalid decisions")
         if (

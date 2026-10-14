@@ -319,7 +319,7 @@ Internal services may only create new runs/results or transition a run status th
 - artifact manifest hash follows the canonical SHA-256 JSON algorithm
 - equivalent manifests with different entry or key order hash identically
 - duplicate artifact names are rejected
-- public ZIP preparation rejects invalid intake without creating a Submission and returns bounded structured feedback; ART retains the evidence
+- public ZIP preparation rejects invalid intake with bounded structured feedback and no Submission; ART retains canonical evidence
 - pre-submit result cannot be reused as post-submit gate proof
 - checker results are tied to one checker run
 - canonical status/severity values are enforced by schemas/service constants

@@ -37,6 +37,7 @@ from app.modules.tasks.api.submission_context import (
     TaskSubmissionContextRequest,
     TaskSubmissionContextStatus,
     TaskSubmissionContextUnavailable,
+    TaskRetainedSubmissionParentsRequest,
 )
 from app.modules.tasks.api.submission_command import (
     SubmissionCreationAuthorizationPort,
@@ -143,6 +144,7 @@ __all__ = (
     "TaskSubmissionContextRequest",
     "TaskSubmissionContextStatus",
     "TaskSubmissionContextUnavailable",
+    "TaskRetainedSubmissionParentsRequest",
     "SubmissionCreationAuthorizationPort",
     "SubmissionCreationAuthorityFacts",
     "SubmissionCreationPreparationFacts",

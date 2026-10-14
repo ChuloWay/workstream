@@ -3,8 +3,12 @@
 from contextlib import asynccontextmanager
 
 from app.adapters.reviews import final_acceptance_participant
-from app.modules.reviews.api.acceptance import FinalAcceptanceInput, FinalAcceptanceRequest
-from app.modules.tasks.api.routing_outcome import RoutingEconomicFacts
+from app.modules.reviews.api.acceptance import (
+    FinalAcceptanceInput, FinalAcceptanceNotLive, FinalAcceptanceRequest,
+)
+from app.modules.tasks.api.routing_outcome import (
+    RoutingEconomicFacts, TaskRoutingLifecycleDeferred,
+)
 
 
 class RoutingAcceptanceAdapter:
@@ -32,7 +36,10 @@ class _PreparedAdapter:
 
     async def require_new(self):
         """Delegate new-effect availability to the held REV capability."""
-        await self._prepared.require_new()
+        try:
+            await self._prepared.require_new()
+        except FinalAcceptanceNotLive as exc:
+            raise TaskRoutingLifecycleDeferred("routing lifecycle is not live") from exc
 
     async def participate(self, source, effects, authority, authorized_generation):
         """Bind real routing authority and return only committed-shape economic facts."""

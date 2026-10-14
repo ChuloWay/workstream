@@ -866,10 +866,7 @@ async def _published_continuation_snapshots(factory):
     async def publish(put_id):
         published.append(str(put_id))
 
-    from unittest.mock import patch
-
-    with patch("app.adapters.artifacts.internal_workers.get_session_factory", return_value=factory):
-        count = await scan_guide_setup_continuations(publish)
+    count = await scan_guide_setup_continuations(publish)
     assert count == len(published)
     snapshots = set()
     async with factory() as session:

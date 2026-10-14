@@ -38,6 +38,16 @@ class TaskSubmissionContextRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class TaskRetainedSubmissionParentsRequest:
+    """Immutable submission parent identity retained after selected PRE."""
+
+    project_id: UUID
+    task_id: UUID
+    assignment_id: UUID
+    contributor_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
 class TaskLockedProjectContextReferences:
     """Immutable project-policy references locked onto one TASK row."""
 
@@ -141,3 +151,9 @@ class TaskSubmissionContextPort(Protocol):
         request: TaskSubmissionContextRequest,
     ) -> TaskSubmissionContextFacts:
         """Lock and return exact TASK-owned lifecycle facts."""
+
+    async def lock_retained_submission_parents(
+        self,
+        request: TaskRetainedSubmissionParentsRequest,
+    ) -> None:
+        """Lock retained TASK parents without reauthorizing current lifecycle."""

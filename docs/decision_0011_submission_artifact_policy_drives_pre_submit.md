@@ -266,7 +266,7 @@ POST /api/v1/tasks/{id}/submission-bundle-preparations
 }
 ```
 
-After the canonical public intake cutover there is no independently invocable precheck route and no
+There is no independently invocable precheck route and no
 reusable client-owned manifest input. The bounded result is returned only to the authorized actor in
 that same request. A passing preparation later returns an admission identity;
 `POST /api/v1/tasks/{id}/submissions` consumes that verified ready admission under its

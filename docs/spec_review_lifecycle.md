@@ -63,19 +63,20 @@ enum, policy entity or adjudication setting is introduced. The
 [shared acceptance contract](#finalacceptance) below defines both triggers;
 queue, lease and human-decision sections apply only to the human branch. The
 [policy setting](../.commitrail/changes/pre-review-plan-reconciliation.md#delivered-policy-setting-implementation)
-is persisted and versioned; false activation remains unavailable.
+is persisted and versioned. A false guide can activate when its approved
+requirements have supported exact PRE/POST registrations and no `human_review`
+disposition. Activation does not enable REV; false/pass acceptance later requires
+an Operator-authorized live REV generation.
 The distinct `requires_second_review` field is fixed to `false` at policy input,
 immutable lineage and PostgreSQL boundaries. It does not activate another
 review decision or adjudication path.
-The hidden source-neutral CON submitter participant and complete frozen award-set
-port are delivered. REV-04C now composes one source-neutral FinalAcceptance,
-TASK accepted/completed effects and that CON outcome inside the caller's root
-transaction. This is a hidden mechanical participant, not the complete
-authorized `SharedFinalAcceptanceOperation`: no production authority, routing
-handler, currentness guarantee or route is implemented or enabled. In particular,
-`allow_review` retains its human-admission meaning, and a checker pass alone
-does not authorize FinalAcceptance. No synthetic human Review or ReviewLease
-may be used for the false branch.
+The source-neutral CON submitter participant and complete frozen award-set port
+are delivered. REV-04C composes one source-neutral FinalAcceptance, TASK
+accepted/completed effects and that CON outcome inside the caller's root
+transaction. Selected production routing binds the current CheckerRun and
+locked policy to the authorized `SharedFinalAcceptanceOperation` for the false
+branch. A checker pass alone does not authorize FinalAcceptance. No synthetic
+human Review or ReviewLease may be used for the false branch.
 
 The human-review shipping branch is:
 
@@ -285,7 +286,8 @@ earlier Submission and ReviewLease lineage remains immutable.
 Only a durable, final, current post-submit CheckerRun outcome of `allow_review`
 may admit the exact immutable Submission to human review. Admission records the
 exact CheckerRun ID and verified binding facts through the authority-hardened TASK-owned canonical `allow_review` manifest
-delivered by ARCH-04E2-B; B8 supplies hidden completion delivery; automatic production delivery remains pending. The manifest binds the
+delivered by ARCH-04E2-B; selected production completion delivery invokes that
+outcome. The manifest binds the
 current evaluation generation/result and immutable Submission; it does not
 replace CHECKERS truth or grant review authority. REV validates the current
 TASK handoff through its public port before recording admission. A retry, supersession, or
@@ -297,7 +299,8 @@ entry or make REV admission a prerequisite of the TASK transition. Its false
 branch instead binds the exact `TaskAcceptedEffectsRequest` for the future shared
 FinalAcceptance operation, with no Review, ReviewLease or reviewer contribution.
 ARCH-04E2-B now authorizes both branches through the complete hidden outcome
-operation. B8 supplies hidden completion delivery; production registration remains unavailable.
+operation. Selected production request and completion delivery are registered;
+false/pass still requires an Operator-authorized live REV generation.
 
 Checker routing is not human judgment. A final needs-remediation CHECKER result
 is consumed by the TASK-owned ARCH-04F handler, which moves the Task to
@@ -513,9 +516,16 @@ effects, FinalAcceptance, contributions, awards, audit, and outbox together.
 `FinalAcceptance` is one internal immutable REV fact, created by one shared
 acceptance operation. There is no public/manual creation API, independent
 materialization action, second decision entity or automated acceptance engine.
-The hidden REV-04C participant writes this fact and composes TASK/CON effects.
-ARCH-04E2-B invokes it in the complete hidden authorized false-policy outcome.
-Production routing/acceptance and human decision runtime remain unavailable.
+The REV-04C participant writes this fact and composes TASK/CON effects.
+ARCH-04E2-B invokes it in the authorized false-policy outcome. Selected
+production completion delivery can invoke that outcome while the reviewed REV
+generation is live. Human decision runtime remains unavailable.
+If a false/pass completion reaches a held REV generation that is disabled,
+shadow or draining before any routing effects, delivery returns the shared
+OUTBOX bounded retry disposition after transaction rollback. Operators should
+make REV live before false-policy production work. Exhausted attempts dead-letter;
+this contract adds no automatic dead-letter reopening. Uncertain handler effects
+retain OUTBOX's UNKNOWN disposition.
 
 | Trigger | Required source | Result |
 |---|---|---|
@@ -618,10 +628,10 @@ its future composition must verify the actual `review.decision` authority.
 The migration refusal and preservation proof is in
 `tests/tasks/post_submit_routing/test_outcome_migration.py`.
 
-ARCH-04E2-B proves the complete hidden false-policy outcome using explicitly
-seeded, internally valid false guide lineage and real routing AUTH. It creates no
-Review. B8 supplies hidden completion delivery. The public guide guard still denies
-false; remediation and production composition must pass before it can admit false.
+ARCH-04E2-B proves the complete false-policy outcome with real routing AUTH. It
+creates no Review. Selected production completion delivery invokes that outcome.
+The public guide guard admits a supported approved false guide with exact
+checker coverage; a new false/pass acceptance still requires live REV custody.
 
 ### Shared transaction and dependency direction
 
@@ -684,8 +694,9 @@ Extract foundations from existing owner work, not a new initiative:
    accepted-effects Protocol are delivered after CHECKERS-04C facts, without a
    general routing publication writer/reader, current pointer or handler. Its
    bounded exact-source verifier is used by REV-04C. One manifest stores the locked `human_review_required` branch; it is
-   not restricted to human admission. False proof is scalar transport only
-   while activation remains unavailable. This schema precedes the REV source FK.
+   not restricted to human admission. False activation is admitted only for a
+   complete approved requirement inventory and supported exact checkers. This
+   schema precedes the REV source FK.
 2. [ART-07A1](../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) supplies
    the metadata-only packet contract. REV-03B normalized packet persistence is
    delivered. REV-04A immutable Review-source storage and REV-04B shared FinalAcceptance
@@ -724,9 +735,12 @@ Extract foundations from existing owner work, not a new initiative:
    acquires the existing REV fence before TASK and later AUTH; true acquires no
    REV/CON participant. Exact replay retains IDs and cannot repair partial facts.
    Pre-authority outcomes are refused on upgrade without rewriting them.
-   The hidden ARCH-04E1B-B8 completion handler consumes this operation and
-   acknowledges only after commit. Prove 04F remediation before 04E3 registers
-   the connected production runtime and enables false-guide readiness. Live
+   The ARCH-04E1B-B8 completion handler consumes this operation and acknowledges
+   only after commit. Remediation is delivered, selected request/completion
+   handlers are registered in production composition, and a complete supported
+   false guide can activate when its approved inventory contains no `human_review`
+   disposition. New false/pass effects require a live REV generation; a typed
+   pre-effect non-live refusal rolls back and uses bounded retry. Live
    human review/revision and fulfillment remain separate work.
 
 These are dependency slices of existing work, expanded into bounded records
@@ -745,7 +759,7 @@ Remaining implementation tests:
 | AUTH `test_post_submit_route_acceptance_custody` | Wrong service/action/resource, unavailable authority, copied event and wrong transaction deny before product effects |
 | REV/AUTH `test_shared_acceptance_lifecycle_activation_and_drain` | Same registered Operator command establishes a generation through legal adjacent transitions; real enabled-writer observations, cutoff races, restart and safe stop; fabricated zero observations, unlisted writer or human-surface exposure denies |
 | CON `test_shared_acceptance_atomic_rollback` | Fail after staged task/acceptance/contribution/award/audit/outbox writes; every row/effect rolls back in both branches; valid control commits once |
-| PROJECTS `test_false_activation_requires_supported_acceptance` | An approved human_review requirement disposition, missing required output contract or unavailable shared composition blocks activation; no silent reclassification; supported complete configuration activates only after runtime proof |
+| PROJECTS false activation and locked-context tests | An approved `human_review` requirement disposition, missing exact checker coverage or unavailable activation authority blocks activation; no silent reclassification; a complete supported guide activates through the real authority and PostgreSQL custody path. At false/pass execution, the locked approved inventory is rechecked and economic effects still require a live REV generation |
 
 Proposed test homes are `backend/tests/test_shared_final_acceptance.py` (REV),
 `backend/tests/test_task_post_submit_routing.py` (TASK),

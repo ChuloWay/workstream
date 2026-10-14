@@ -34,6 +34,7 @@ from app.core.config import (
     get_settings,
 )
 from app.core.observability import ObservabilityMiddleware, ObservabilityRuntime
+from app.db.session import get_session_factory
 from app.interfaces.artifacts import ArtifactStoreBootstrap, ArtifactStoreNamespaceClaim
 
 MAX_VALIDATION_ERRORS = 20
@@ -128,6 +129,7 @@ async def _validate_artifact_storage_namespace_at_startup(
     return await validate_artifact_storage_namespace_at_startup(
         bootstrap,
         settings,
+        get_session_factory(),
     )
 
 

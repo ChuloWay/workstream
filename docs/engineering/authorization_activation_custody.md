@@ -70,12 +70,12 @@ use the fixed `workstream.checker.post_submit` identity and phase-specific recei
 [ART-07A1](../../.commitrail/initiatives/WS-ART-001/WS-ART-001-07A1.md) delivers
 metadata-only packet types without authority or a resolver. REV-03B normalized
 packet storage, REV-04A immutable Review source storage, REV-04B FinalAcceptance
-storage, CON-03C persistence, CON-07 participation and REV-04C hidden shared
+storage, CON-03C persistence, CON-07 participation and REV-04C shared
 acceptance/TASK/CON composition are delivered. ARCH-04E2-B supplies mandatory
 actual AUTH receipts, database complete-effect custody, shared audit/outbox and
-currentness protection under the scoped lifecycle controller. B8 supplies hidden completion delivery
-consuming that committed operation. Remediation is next; production registration
-remains separate.
+currentness protection under the scoped lifecycle controller. B8 supplies completion
+delivery consuming that committed operation. Remediation is delivered and selected
+request/completion handlers are registered in production composition.
 
 Runtime owner `WS-XINT-002-07` retains catalogue custody. The only approved
 v0.1 availability transition is 07A packet materialization. Evidence binding
@@ -326,9 +326,9 @@ phases without rewriting contribution or award facts.
 
 This is not acceptance authority. The initial manifest refuses retained
 pre-authority FinalAcceptance rows before entering live. ARCH-04E2-B supplies
-mandatory source receipts and complete atomic consequences in a hidden operation.
-B8 supplies hidden completion delivery. Production routing, human review and
-payment delivery remain unavailable.
+mandatory source receipts and complete atomic consequences in the canonical
+operation. B8 supplies completion delivery, and selected production routing is
+registered. Human review and payment delivery remain unavailable.
 Obligation roots, ordinals and cutoff/drain machinery are deferred until
 fulfillment activation; conditional awards remain atomic in the first path.
 
@@ -337,9 +337,9 @@ with caller-owned rollback and current-completion replay checks. It does not
 construct acceptance-source commitments or consume receipt-shaped values as
 AUTH evidence. ARCH-04E2-A strict preparation and nominal fixed-router adapter are
 delivered through canonical PREP. ARCH-04E2-B activates this exact action only
-inside the hidden complete outcome, with actual immutable AUTH-event/service
-verification and atomic source publication. No production routing handler is
-registered.
+inside the complete outcome, with actual immutable AUTH-event/service
+verification and atomic source publication. Selected request and completion
+routing handlers are registered in production composition.
 
 
 PILOT-02B owns the distinct TASK actions `project.task.import` and

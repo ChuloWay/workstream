@@ -87,6 +87,7 @@ from app.modules.projects.api import (
     ProjectLockedPolicyContextUnavailable,
 )
 from app.modules.tasks.api import (
+    TaskRetainedSubmissionParentsRequest,
     TaskSubmissionContextFacts,
     TaskSubmissionContextPort,
     TaskSubmissionContextRequest,
@@ -273,8 +274,70 @@ class SubmissionBundleAdmissionPublisher:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def lock_retained_submission_parents(
+        self,
+        *,
+        verification_job_id: str,
+        task_contexts: TaskSubmissionContextPort | None,
+    ) -> TaskRetainedSubmissionParentsRequest | None:
+        """Take TASK's retained parent locks before any terminal ART lock."""
+        with self._session.no_autoflush:
+            row = (
+                await self._session.execute(
+                    select(
+                        ArtifactPutAttempt.producer_request_type,
+                        SubmissionBundleDurableIntent.selected_request_json,
+                    )
+                    .select_from(ArtifactVerificationJob)
+                    .join(
+                        ArtifactPutAttempt,
+                        ArtifactPutAttempt.id
+                        == ArtifactVerificationJob.originating_put_attempt_id,
+                    )
+                    .outerjoin(
+                        SubmissionBundleDurableIntent,
+                        SubmissionBundleDurableIntent.put_attempt_id
+                        == ArtifactPutAttempt.id,
+                    )
+                    .where(ArtifactVerificationJob.id == verification_job_id)
+                )
+            ).one_or_none()
+        if row is None:
+            raise SubmissionBundleAdmissionPublicationError(
+                "verification job is unavailable"
+            )
+        if row.producer_request_type != "submission_bundle":
+            return None
+        if task_contexts is None:
+            raise RuntimeError("submission verification TASK composition is unavailable")
+        try:
+            selected = SelectedPreSubmitReservationFacts.from_canonical_body(
+                row.selected_request_json
+            )
+        except (TypeError, ValueError) as exc:
+            raise SubmissionBundleAdmissionPublicationError(
+                "selected PRE request snapshot is invalid"
+            ) from exc
+        request = TaskRetainedSubmissionParentsRequest(
+            project_id=selected.project_id,
+            task_id=selected.task_id,
+            assignment_id=selected.assignment_id,
+            contributor_id=selected.actor_profile_id,
+        )
+        try:
+            await task_contexts.lock_retained_submission_parents(request)
+        except TaskSubmissionContextUnavailable as exc:
+            raise SubmissionBundleAdmissionPublicationError(
+                "selected PRE retained TASK identity is invalid"
+            ) from exc
+        return request
+
     async def publish_verified(
-        self, *, verification_job_id: str, verification_receipt_id: str
+        self,
+        *,
+        verification_job_id: str,
+        verification_receipt_id: str,
+        retained_parents: TaskRetainedSubmissionParentsRequest | None,
     ) -> SubmissionBundleAdmission | None:
         """Publish only submission-bundle lineage; ignore other producer types."""
         job = await self._session.scalar(
@@ -305,13 +368,6 @@ class SubmissionBundleAdmissionPublisher:
             raise SubmissionBundleAdmissionPublicationError("durable intent is unavailable")
         if intent.pre_submit_evidence_set_id is not None or intent.selected_pre_submit_run_id is None:
             raise SubmissionBundleAdmissionPublicationError("external PRE durable intent is unavailable")
-        existing = await self._session.scalar(
-            select(SubmissionBundleAdmission)
-            .where(SubmissionBundleAdmission.durable_intent_id == intent.id)
-            .with_for_update()
-        )
-        if existing is not None:
-            return existing
         try:
             selected = SelectedPreSubmitReservationFacts.from_canonical_body(
                 intent.selected_request_json
@@ -320,6 +376,25 @@ class SubmissionBundleAdmissionPublisher:
             raise SubmissionBundleAdmissionPublicationError(
                 "selected PRE request snapshot is invalid"
             ) from exc
+        locked_parents = TaskRetainedSubmissionParentsRequest(
+            project_id=selected.project_id,
+            task_id=selected.task_id,
+            assignment_id=selected.assignment_id,
+            contributor_id=selected.actor_profile_id,
+        )
+        if retained_parents is None:
+            raise RuntimeError("submission verification TASK composition is unavailable")
+        if locked_parents != retained_parents:
+            raise SubmissionBundleAdmissionPublicationError(
+                "selected PRE retained TASK identity changed"
+            )
+        existing = await self._session.scalar(
+            select(SubmissionBundleAdmission)
+            .where(SubmissionBundleAdmission.durable_intent_id == intent.id)
+            .with_for_update()
+        )
+        if existing is not None:
+            return existing
         terminal = intent.selected_terminal_json
         if (
             selected.admission_lineage is None

@@ -5,9 +5,12 @@
 These are target v0.1 states, not a claim of live route availability. The locked
 ReviewPolicy selects the success route: true requires human review; false
 uses the [same shared acceptance operation](spec_review_lifecycle.md#finalacceptance)
-after required post-submit checks pass. Hidden authorized success outcomes and
-their AUTH/database custody are delivered; production registration and public
-false-policy activation remain unavailable.
+after required post-submit checks pass. Authorized success outcomes and their
+AUTH/database custody are delivered, selected request/completion handlers are
+registered in production composition, and supported false-policy guides can
+activate. New false/pass effects still require a live REV generation. This is
+not a deployment claim; the bounded local public drill is recorded in the
+[capability ledger](roadmap_status.md).
 
 ```text
 DRAFT

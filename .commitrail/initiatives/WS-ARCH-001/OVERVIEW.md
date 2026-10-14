@@ -14,10 +14,20 @@
   The two executable catalogues were removed. A successful true result moves
   TASK to `review_pending` without a REV queue; eligible false completion uses
   shared FinalAcceptance/TASK/CON participation, with no Review or reviewer
-  contribution. Current registration does not establish deployed worker readiness.
-- Next usable boundary: false-guide activation/readiness remains planned. A
-  realistic public API and durable-worker drill must prove the complete first journey and exact
-  contribution evidence before claiming it usable. See the [current delivery
+  contribution. [ARCH-02I-B](WS-ARCH-001-02IB.md) exposes public initial and
+  checker-remediation Submission entry. [ARCH-04E3-B](WS-ARCH-001-04E3B.md)
+  admits complete false-policy guides with supported approved checks and
+  corrects REV's selected-production manifest. New false/pass effects require
+  an Operator-authorized LIVE REV generation bound to the current reviewed
+  manifest; an older live authorization requires renewed Operator transitions.
+  A known pre-effect non-live
+  refusal retries within the existing OUTBOX budget; exhaustion dead-letters
+  without automatic reopen. The default-true handoff remains independent of REV.
+- Local proof: the public API and durable-worker drill passed at `d5703d9c6`
+  through both policy branches, restart, revocation and exact contribution
+  evidence under scripted approved-guide preconditions and local Flow-compatible
+  auth. Next usable boundary: reproduce and operate that path with intended
+  hosted identity and infrastructure. See the [current delivery
   plan](planning/PLAN.md#first-complete-contributor-milestone) and [change
   map](planning/CHUNK_MAP.md).
 - Later scope: live human review/revision, payment fulfillment, external
@@ -25,7 +35,7 @@
   classifier emits `allow_review`, `needs_revision` or `not_evaluated`; selected
   completion rejects `task_setup_blocked`. A future setup-fault path must retain
   the Submission and locked rules without contributor penalty, but it is not a
-  prerequisite to the current first-layer connections.
+  prerequisite to the proven local first-layer drill.
 - Governing sources: `docs/architecture_lockdown.md`, accepted ADRs, current
   code, migrations, tests and the [capability ledger](../../../docs/roadmap_status.md).
 - Preserve: exact AUTH receipts, locked lineage, immutable evidence, atomic

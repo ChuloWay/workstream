@@ -30,6 +30,7 @@ async def test_fence_requires_root_transaction(clean_postgres_database):
                     await fence.acquire(invalid)
             facts = await fence.acquire(0)
             assert facts.generation == 0 and facts.phase == "disabled"
+            assert facts.new_effects_enabled is False
             assert session.in_transaction()
         assert not session.in_transaction()
 

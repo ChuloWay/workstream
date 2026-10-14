@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
@@ -64,7 +64,10 @@ from app.modules.artifacts.selected_pre_submit_admission import (
     bind_selected_pre_submit_admission,
     build_selected_pre_submit_reservation,
 )
-from app.modules.artifacts.submission_admission import SubmissionBundleAdmissionPublisher
+from app.modules.artifacts.submission_admission import (
+    SubmissionBundleAdmissionPublicationError,
+    SubmissionBundleAdmissionPublisher,
+)
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspector,
     SubmissionArchiveLimits,
@@ -209,6 +212,15 @@ def _selected_admission_publisher_fixture(selected):
         observed_byte_count=attempt.byte_count,
     )
     session = SimpleNamespace(
+        no_autoflush=nullcontext(),
+        execute=AsyncMock(
+            return_value=SimpleNamespace(
+                one_or_none=lambda: SimpleNamespace(
+                    producer_request_type="submission_bundle",
+                    selected_request_json=selected.canonical_body(),
+                )
+            )
+        ),
         scalar=AsyncMock(
             side_effect=[
                 job,
@@ -225,7 +237,7 @@ def _selected_admission_publisher_fixture(selected):
         add=Mock(),
         flush=AsyncMock(),
     )
-    return session, job, verification
+    return session, job, verification, intent
 
 
 def _limits() -> ArtifactPreparationLimits:
@@ -655,13 +667,28 @@ async def test_selected_pre_terminal_publishes_self_contained_ready_admission(
     assert (
         SelectedPreSubmitAdmissionLineage.from_canonical_body(lineage.canonical_body()) == lineage
     )
-    session, job, verification = _selected_admission_publisher_fixture(selected)
-
-    admission = await SubmissionBundleAdmissionPublisher(session).publish_verified(
+    session, job, verification, _ = _selected_admission_publisher_fixture(selected)
+    task_contexts = SimpleNamespace(lock_retained_submission_parents=AsyncMock())
+    publisher = SubmissionBundleAdmissionPublisher(session)
+    retained_parents = await publisher.lock_retained_submission_parents(
         verification_job_id=job.id,
-        verification_receipt_id=verification.id,
+        task_contexts=task_contexts,
     )
 
+    admission = await publisher.publish_verified(
+        verification_job_id=job.id,
+        verification_receipt_id=verification.id,
+        retained_parents=retained_parents,
+    )
+
+    task_contexts.lock_retained_submission_parents.assert_awaited_once_with(
+        retained_parents
+    )
+    assert retained_parents is not None
+    assert retained_parents.project_id == selected.project_id
+    assert retained_parents.task_id == selected.task_id
+    assert retained_parents.assignment_id == selected.assignment_id
+    assert retained_parents.contributor_id == selected.actor_profile_id
     assert admission.checker_remediation_manifest_id == (
         str(lineage.checker_remediation_manifest_id) if replacement else None
     )
@@ -674,6 +701,74 @@ async def test_selected_pre_terminal_publishes_self_contained_ready_admission(
         == selected.admission_lineage.post_submit_policy_sha256
     )
     assert admission.selected_post_submit_policy_body == post_policy
+
+
+@pytest.mark.asyncio
+async def test_selected_pre_publication_requires_exact_retained_task_identity() -> None:
+    _, _, selected = _selected_admission_reservation()
+    session, job, verification, intent = _selected_admission_publisher_fixture(selected)
+    task_contexts = SimpleNamespace(lock_retained_submission_parents=AsyncMock())
+    publisher = SubmissionBundleAdmissionPublisher(session)
+    retained_parents = await publisher.lock_retained_submission_parents(
+        verification_job_id=job.id,
+        task_contexts=task_contexts,
+    )
+    assert retained_parents is not None
+    intent.selected_request_json = replace(
+        selected,
+        actor_profile_id=new_record_id(),
+    ).canonical_body()
+
+    with pytest.raises(
+        SubmissionBundleAdmissionPublicationError,
+        match="retained TASK identity changed",
+    ):
+        await publisher.publish_verified(
+            verification_job_id=job.id,
+            verification_receipt_id=verification.id,
+            retained_parents=retained_parents,
+        )
+
+    session.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_selected_pre_publication_requires_task_port_before_terminal_reads() -> None:
+    _, _, selected = _selected_admission_reservation()
+    session, job, _, _ = _selected_admission_publisher_fixture(selected)
+
+    with pytest.raises(RuntimeError, match="TASK composition is unavailable"):
+        await SubmissionBundleAdmissionPublisher(
+            session
+        ).lock_retained_submission_parents(
+            verification_job_id=job.id,
+            task_contexts=None,
+        )
+
+    session.scalar.assert_not_awaited()
+    session.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_selected_pre_task_lock_failure_propagates_before_terminal_reads() -> None:
+    _, _, selected = _selected_admission_reservation()
+    session, job, _, _ = _selected_admission_publisher_fixture(selected)
+    task_contexts = SimpleNamespace(
+        lock_retained_submission_parents=AsyncMock(
+            side_effect=RuntimeError("injected TASK database failure")
+        )
+    )
+
+    with pytest.raises(RuntimeError, match="injected TASK database failure"):
+        await SubmissionBundleAdmissionPublisher(
+            session
+        ).lock_retained_submission_parents(
+            verification_job_id=job.id,
+            task_contexts=task_contexts,
+        )
+
+    session.scalar.assert_not_awaited()
+    session.add.assert_not_called()
 
 
 @pytest.mark.asyncio

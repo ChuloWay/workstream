@@ -44,6 +44,10 @@ class FinalAcceptanceConflict(RuntimeError):
     """Exact source, lineage, or complete prior effects are unavailable."""
 
 
+class FinalAcceptanceNotLive(FinalAcceptanceConflict):
+    """A held REV generation refuses new effects before source mutation."""
+
+
 class FinalAcceptanceRequest(BaseModel):
     """Exact proposed effects; values alone grant no source authority."""
 
