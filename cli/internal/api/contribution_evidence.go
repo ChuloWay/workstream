@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const maxContributionBytes = 32 * 1024 * 1024
@@ -71,7 +72,6 @@ type ContributionAward struct {
 var contributionRequired = []string{"contribution_id", "project_id", "task_id", "submission_id", "contributor_id", "contribution_type", "artifact_hash", "contribution_policy_version_id", "policy_version_number", "recorded_at", "task_title", "source_type", "awards"}
 var contributionNullable = []string{"contributor_display_name", "source_review_id", "source_review_lease_id", "source_final_acceptance_id", "source_task_assignment_id", "accepted_at", "acceptance_source", "acceptance_review_id", "acceptance_routing_manifest_id", "source_ref", "external_task_id"}
 var contributionQuantity = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+)?$`)
-var contributionCursor = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // The backend owns selection and authority. Normalize time precision to the
 // public Python datetime contract before sending and checking the same filters.
@@ -158,9 +158,10 @@ func (c *Client) writeContributions(
 		if err != nil {
 			return err
 		}
-		if (pageNumber > 0 && len(page.items) == 0) ||
-			len(page.items) > maxContributionRecords-total ||
-			(page.nextCursor != nil && len(page.items) != contributionPageLimit) {
+		updatedTotal, valid := advanceContributionTraversal(
+			pageNumber, total, len(page.items), page.nextCursor != nil,
+		)
+		if !valid {
 			return &Failure{Code: "invalid_api_response"}
 		}
 		for _, item := range page.items {
@@ -179,8 +180,8 @@ func (c *Client) writeContributions(
 				}
 				seenAwards[awardID] = true
 			}
-			total++
 		}
+		total = updatedTotal
 
 		if pageNumber == 0 {
 			firstExportedAt = page.exportedAt
@@ -310,7 +311,19 @@ func (c *Client) contributionCSVPage(
 }
 
 func (c *Client) validContributionCursor(value string) bool {
-	return len(value) <= 512 && contributionCursor.MatchString(value) && c.safeMetadata(value)
+	return value != "" && utf8.ValidString(value) && utf8.RuneCountInString(value) <= 512 &&
+		c.safeMetadata(value)
+}
+
+func advanceContributionTraversal(
+	pageNumber, total, pageItems int, continues bool,
+) (int, bool) {
+	if pageNumber < 0 || pageNumber >= maxContributionPages || total < 0 || pageItems < 0 ||
+		(pageNumber > 0 && pageItems == 0) || pageItems > maxContributionRecords-total ||
+		(continues && (pageItems != contributionPageLimit || pageNumber == maxContributionPages-1)) {
+		return total, false
+	}
+	return total + pageItems, true
 }
 
 func writeContributionBytes(destination io.Writer, value []byte) error {

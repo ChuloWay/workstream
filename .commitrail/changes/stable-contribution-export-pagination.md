@@ -293,28 +293,21 @@ values, empty/oversized cursors, cycles, more than 100 pages or more than
    bounded traversal that follows opaque continuations, stages complete output,
    and preserves the existing self/project command, filters, JSON shape and
    exact server CSV bytes without exposing pagination controls.
-6. Prove a 1,001-item traversal through the built CLI and an actual HTTP socket,
-   plus hostile multi-page JSON/CSV responses, exact-once contribution/award
-   ordering, unsafe terminal text escaping, unchanged filters/limit, cursor
-   bounds/cycles and later-page failure without publication. Compose that
-   consumer proof with the existing real-PostgreSQL 1,001-member retained-array
-   test and its separate A/B/L late-commit test; do not fabricate 1,001 source
-   rows or substitute the database owner in the public CLI fixture.
-7. Extend the real CLI/socket/PostgreSQL fixture with one base canonical Review
-   source plus 1,000 batch-cloned Review source graphs. Submission versions,
-   checker runs, closed queue entries and leases, packet manifests, Review facts
-   with recomputed aggregate digests, and ContributionRecords all remain under
-   their live database foreign-key, unique and check constraints. Traverse the
-   resulting 1,001 records through the actual JSON route and built CLI at the
-   production 1,000 limit. Then start a CSV traversal as a separate manager,
-   pause its actual second `ContributionReadService.read` before canonical AUTH,
-   revoke the grant, and prove concealed denial with no stdout, final file or
-   retained temporary output. Do not substitute the route cursor, page size,
-   membership repository or projection owners.
-8. Run focused pure, AUTH, migration and isolated PostgreSQL export proofs;
+6. Prove a 1,001-item traversal through the built CLI and a real TCP HTTP
+   server with hostile multi-page JSON/CSV responses, exact-once
+   contribution/award ordering, unsafe terminal text escaping, unchanged
+   filters/limit, cursor bounds/cycles and later-page failure without
+   publication. Compose that consumer proof with the existing real-PostgreSQL
+   1,001-member retained-array and public route continuation/revocation proofs
+   and the separate A/B/L late-commit test. Do not fabricate 1,001 source rows,
+   substitute a database owner, change the production page bound, or add a test
+   control to the public CLI fixture. The composition boundary is explicit:
+   the built CLI's second request does not traverse a 1,001-record canonical
+   PostgreSQL source graph in one test.
+7. Run focused pure, AUTH, migration and isolated PostgreSQL export proofs;
    then run lint, type checks, boundary/Commitrail/markdown/stale-wording gates
    and full CI without skips or threshold changes.
-9. Reconcile current main, update the affected current docs/roadmap claims, freeze
+8. Reconcile current main, update the affected current docs/roadmap claims, freeze
    a clean candidate, and run exact-head architecture, security, QA, test-delta
    and documentation reviews before PR readiness.
 
@@ -338,6 +331,8 @@ values, empty/oversized cursors, cycles, more than 100 pages or more than
 | Final hosted backend and CLI execution at `90d36d102` | GitHub Actions run `38551898443`, including one failed-job retry | The repaired schema lane and eight other backend lanes passed. `project_lifecycle_a` reached the 1,200-second lane limit twice with `interrupted=true` and no failing node or traceback; the unchanged lane passed at prior head `00771a387`. CLI passed 9 tests and failed only the public contribution-evidence node with `invalid_api_response`. | This prior head remained failed by the incomplete project lane and then-unresolved CLI continuation; no timeout increase or skipped test was introduced |
 | Exact hosted execution before guide-proof reconciliation at `d97a07afa` | GitHub Actions Backend run `38579957976`, MCP run `38579957924`, and Agent Gates run `38579957956` | All three backend preflights, all ten semantic lanes including schema and `project_lifecycle_a`, MCP package/real API, and Agent Gates passed. CLI passed 9 tests and failed only the public contribution-evidence node with `invalid_api_response`. | Aggregate failed only on the known issue #497 CLI incompatibility; this evidence is exact for `d97a07afa`, before main `80be49391` merged the guide-proof AUTH/PROJECTS lock corrections |
 | Built CLI traversal and failure boundaries | `cd cli && go test ./... && go vet ./... && go build -o /tmp/workstream-497-cli ./cmd/workstream && WORKSTREAM_CLI_EXECUTABLE=/tmp/workstream-497-cli ../backend/.venv/bin/python -m pytest -q tests/integration/test_contribution_evidence.py` | Go test/vet passed and 12 built-process tests passed in 127.76 seconds. JSON and CSV each traversed 1,001 contributions; exact zero/one/two awards, unchanged limit/filter queries, first-page timestamp, cursor hiding, terminal escaping, malformed/oversized/ambiguous/cyclic cursor and empty-continuation refusal, cross-page record/award uniqueness, and later-page 404 with no stdout/final CSV were proved through the built executable and real TCP server. | Real backend behavior remains covered by the existing PostgreSQL/API proofs; exact clean candidate CI remains |
+| Canonical 1,001-source public CLI feasibility | Benchmark the existing canonical `prepared_reviewer_sibling` owner path with only 10 additional Review sources under the real PostgreSQL fixture | The bounded run failed after 262.49 seconds with a PostgreSQL deadlock among concurrent project-policy locks and reached the 300-second isolated-run limit. Each source requires a task, assignment, admitted submission, completed checker, queue, lease, packet, Review and decision request; direct terminal graph cloning was separately rejected by the live checker lifecycle trigger (`checker attempt must start queued`). | There is no bounded exact-test composition of built CLI page two plus 1,001 canonical source graphs. The focused CLI, PostgreSQL snapshot, public route and fresh-AUTH proofs remain separate and this record does not claim otherwise. |
+| Focused CLI review-repair replay | `cd cli && go test ./internal/api ./internal/command && go vet ./internal/api ./internal/command`; independently build `/tmp/workstream-497-cli`; run `tests/integration/test_contribution_evidence.py` with that executable | Go test/vet passed; all 12 built-process tests passed in 69.24 seconds. The replay includes unchanged filters on every continuation, opaque Unicode JSON cursor URL encoding, changed CSV header refusal, exact traversal caps, and staged JSON write failure with no output or retained temporary file. | This is exact source-content proof before the repair commit; hosted full CLI and exact-head reviews remain. |
 
 ## Review findings
 
