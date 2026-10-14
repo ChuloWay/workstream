@@ -1,7 +1,9 @@
 """Real service, stored-event and SQL custody failures leave no expiry effect."""
 
+import asyncio
+
 import pytest
-from sqlalchemy import text
+from sqlalchemy import insert, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,6 +29,7 @@ from app.modules.tasks.api.revision_expiry import REVISION_EXPIRED_EVENT, TaskRe
 from app.modules.tasks.revision.expiry import TaskRevisionExpiryOperation
 from app.modules.tasks.revision.models import TaskRevisionExpiration
 from app.modules.tasks.repository import TaskRepository
+from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.tasks.post_submit_routing.remediation_support import remediation_source, no_economic_effects
 from tests.tasks.submission_dispatch.test_revision_capacity import _retain_pre_revision_source
 from tests.tasks.submission_dispatch.test_revision_expiry import (
@@ -51,7 +54,9 @@ async def _snapshot(h):
             ("task_revision_expirations", "TRUE"),
             ("audit_events", "action_id IN ('task.revision.expire','task.revision.recover') "
              "OR event_type IN ('TaskRevisionExpired','TaskRevisionContextRepaired')"),
-            ("outbox_events", "event_type='TaskRevisionExpired'"),
+            ("outbox_events", "event_type='TaskRevisionExpired' OR "
+             "(event_type='TaskRevisionExpiryRequested' "
+             "AND idempotency_key LIKE 'task.revision.expire:%')"),
         ):
             evidence.append(await session.scalar(text(
                 f"SELECT coalesce(jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text),'[]'::jsonb) "
@@ -114,17 +119,20 @@ async def _invocation(h, event_id):
     return envelope
 
 
-def _revoke_at_consume(monkeypatch, actor_id, action):
-    original = PreparedAuthorizationService.consume
+def _revoke_before_authority_lock(monkeypatch, actor_id, action):
+    original = PreparedAuthorizationService.prepare
     observed = []
 
-    async def revoke(service, handle, action_id, *args, **kwargs):
+    async def revoke(service, action_id, *args, **kwargs):
         if action_id == action:
+            # The fixed-service context has already resolved an active link.
+            # AUTH must refresh its status when taking prepared row custody.
+            assert service._context.identity_link_status.value == "active"
             await _invalidate_service(service._session, actor_id, "revoked")
             observed.append(action_id)
-        return await original(service, handle, action_id, *args, **kwargs)
+        return await original(service, action_id, *args, **kwargs)
 
-    monkeypatch.setattr(PreparedAuthorizationService, "consume", revoke)
+    monkeypatch.setattr(PreparedAuthorizationService, "prepare", revoke)
     return observed
 
 
@@ -151,15 +159,71 @@ async def test_recovery_requires_exact_active_service_and_fresh_consume(
                     await task_revision_recovery(session).recover(source_id)
             assert await _snapshot(h) == before
         with monkeypatch.context() as patch:
-            consumed = _revoke_at_consume(patch, actor_id, ActionId.TASK_REVISION_RECOVER)
+            refreshed = _revoke_before_authority_lock(patch, actor_id, ActionId.TASK_REVISION_RECOVER)
             with pytest.raises((AuthorizationDenied, PreparedAuthorizationUnsupported)):
                 async with h.factory() as session, session.begin():
                     await task_revision_recovery(session).recover(source_id)
-            assert consumed == [ActionId.TASK_REVISION_RECOVER]
+            assert refreshed == [ActionId.TASK_REVISION_RECOVER]
         assert await _snapshot(h) == before
-        # The unchanged real service can recover the same source after every denial.
+        original_consume = PreparedAuthorizationService.consume
+        revoker_name = f"revision-service-revoker-{new_record_id().hex}"
+        revokers = []
+
+        async def revoke_independently():
+            async with h.factory() as session, session.begin():
+                await session.execute(text(
+                    "SELECT set_config('application_name',:name,true)"
+                ), {"name": revoker_name})
+                await _invalidate_service(session, actor_id, "revoked")
+
+        async def consume_under_retained_lock(service, handle, action_id, *args, **kwargs):
+            if action_id == ActionId.TASK_REVISION_RECOVER:
+                revokers.append(asyncio.create_task(revoke_independently()))
+                await asyncio.wait_for(wait_for_named_database_lock(
+                    isolated_database_env, revoker_name,
+                ), 15)
+                assert not revokers[0].done()
+            return await original_consume(service, handle, action_id, *args, **kwargs)
+
+        try:
+            with monkeypatch.context() as patch:
+                patch.setattr(PreparedAuthorizationService, "consume", consume_under_retained_lock)
+                async with h.factory() as session, session.begin():
+                    assert await task_revision_recovery(session).recover(source_id) is True
+                    assert len(revokers) == 1 and not revokers[0].done()
+            # The competing revocation can commit only after recovery commits.
+            await asyncio.wait_for(revokers[0], 15)
+        finally:
+            for revoker in revokers:
+                if not revoker.done():
+                    revoker.cancel()
+            await asyncio.gather(*revokers, return_exceptions=True)
+        async with h.factory() as session:
+            assert await session.scalar(text(
+                "SELECT status FROM public.actor_identity_links WHERE actor_profile_id=:actor"
+            ), {"actor": actor_id}) == "revoked"
+        # Arrange a lost, unclaimed scheduling intent while retaining its committed
+        # root/audit; this is the same retained-source fixture as discovery tests.
         async with h.factory() as session, session.begin():
-            assert await task_revision_recovery(session).recover(source_id) is True
+            await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+            await session.execute(text(
+                "ALTER TABLE public.outbox_events DISABLE TRIGGER outbox_events_custody"
+            ))
+            removed = (await session.execute(text("""
+                DELETE FROM public.outbox_events
+                WHERE event_type='TaskRevisionExpiryRequested' AND idempotency_key=:key
+                  AND attempt_count=0 AND claimed_at IS NULL AND delivery_state='pending'
+                RETURNING event_id
+            """), {"key": f"task.revision.expire:{source_id}"})).all()
+            assert len(removed) == 1
+            await session.execute(text(
+                "ALTER TABLE public.outbox_events ENABLE TRIGGER outbox_events_custody"
+            ))
+        before = await _snapshot(h)
+        with pytest.raises((AuthorizationDenied, PreparedAuthorizationUnsupported)):
+            async with h.factory() as session, session.begin():
+                await task_revision_recovery(session).recover(source_id)
+        assert await _snapshot(h) == before
 
 
 async def test_expiry_denies_invalid_service_and_committed_resource_substitution(
@@ -196,11 +260,11 @@ async def test_expiry_denies_invalid_service_and_committed_resource_substitution
         assert denied.value.denial_code is AuthorizationDenialCode.PERMISSION_NOT_GRANTED
         assert await _snapshot(h) == before
         with monkeypatch.context() as patch:
-            consumed = _revoke_at_consume(patch, actor_id, ActionId.TASK_REVISION_EXPIRE)
+            refreshed = _revoke_before_authority_lock(patch, actor_id, ActionId.TASK_REVISION_EXPIRE)
             with pytest.raises(TaskRevisionExpiryUnavailable, match="authority unavailable"):
                 async with h.factory() as session, session.begin():
                     await _expiry_operation(h, session).expire(envelope)
-            assert consumed == [ActionId.TASK_REVISION_EXPIRE]
+            assert refreshed == [ActionId.TASK_REVISION_EXPIRE]
         assert await _snapshot(h) == before
         async with remediation_source(
             tmp_path / "foreign", isolated_database_env,
@@ -325,17 +389,29 @@ async def test_receipt_sql_binding_deferred_closure_and_immutability(
             ("head_preparation_sha256", "sha256:" + "0" * 64),
             ("authorization_decision_id", foreign_decision),
         ):
-            original_add = AsyncSession.add
+            original_flush = AsyncSession.flush
             attempted = []
 
-            def substitute(session, instance, **kwargs):
-                if isinstance(instance, TaskRevisionExpiration):
-                    setattr(instance, field, value)
+            async def substitute(session, *args, **kwargs):
+                pending = [row for row in session.new if isinstance(row, TaskRevisionExpiration)]
+                if pending:
+                    assert len(pending) == 1
+                    receipt = pending[0]
+                    values = {
+                        column.name: getattr(receipt, column.name)
+                        for column in TaskRevisionExpiration.__table__.columns
+                        if column.server_default is None
+                    }
+                    values[field] = value
+                    session.expunge(receipt)
                     attempted.append(field)
-                return original_add(session, instance, **kwargs)
+                    # Bypass ORM admission and emit a typed SQL INSERT while
+                    # retaining actual AUTH/outbox staging and SQL guards.
+                    await session.execute(insert(TaskRevisionExpiration.__table__).values(**values))
+                return await original_flush(session, *args, **kwargs)
 
             with monkeypatch.context() as patch:
-                patch.setattr(AsyncSession, "add", substitute)
+                patch.setattr(AsyncSession, "flush", substitute)
                 with pytest.raises(DBAPIError, match="revision expiry source or authority differs"):
                     async with h.factory() as session, session.begin():
                         await _expiry_operation(h, session).expire(envelope)

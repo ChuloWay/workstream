@@ -1,6 +1,7 @@
 """Durable revision expiry keeps the old Submission and releases its assignment."""
 
 from datetime import UTC, datetime, timedelta
+from contextlib import asynccontextmanager
 import asyncio
 import json
 import traceback
@@ -20,7 +21,7 @@ from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
 from app.modules.outbox.api import DeliveryOptions
 from app.modules.outbox.api import HandlerOutcome
-from app.modules.outbox.delivery import CommittedInvocationReader
+from app.modules.outbox.delivery import CommittedInvocationReader, OutboxDelivery
 from app.modules.outbox.models import OutboxEvent
 from app.modules.outbox.registry import HandlerRegistry
 from app.modules.tasks.api.revision_expiry import REVISION_EXPIRED_EVENT, REVISION_EXPIRY_EVENT
@@ -443,30 +444,34 @@ async def test_final_submission_commit_boundary_serializes_expiry(
         prepared, admission_id = await _ready_expiry_race_replacement(h)
         before = await _creation_snapshot(h)
         staged, release = asyncio.Event(), asyncio.Event()
+        holder_pid = []
         expiry_name = f"expiry-commit-wait-{new_record_id().hex}"
         original_create = TaskSubmissionCreationService.create
-        original_lock = TaskRepository.lock_project_task
+        original_authority = OutboxDelivery._authority
 
         async def pause_staged_creation(service, request):
             # Execute actual creation, verified consumption, evaluation and
             # outbox append; retain its root transaction before deferred checks.
             result = await original_create(service, request)
             assert result.submission_version == 2
+            holder_pid.append(await service._session.scalar(text("SELECT pg_backend_pid()")))
             staged.set()
             await asyncio.wait_for(release.wait(), 75)
             return result
 
-        async def named_expiry_lock(repository, *args, **kwargs):
-            await repository._session.execute(text(
+        @asynccontextmanager
+        async def named_delivery_authority(delivery, session, **selectors):
+            await session.execute(text(
                 "SELECT set_config('application_name',:name,true)"
             ), {"name": expiry_name})
-            return await original_lock(repository, *args, **kwargs)
+            async with original_authority(delivery, session, **selectors) as authority:
+                yield authority
 
         pending = []
         async with _client(h, monkeypatch, isolated_database_env) as client:
             with monkeypatch.context() as patch:
                 patch.setattr(TaskSubmissionCreationService, "create", pause_staged_creation)
-                patch.setattr(TaskRepository, "lock_project_task", named_expiry_lock)
+                patch.setattr(OutboxDelivery, "_authority", named_delivery_authority)
                 try:
                     pending.append(asyncio.create_task(client.post(
                         f"/api/v1/tasks/{h.request.task_id}/submissions",
@@ -494,8 +499,11 @@ async def test_final_submission_commit_boundary_serializes_expiry(
                         pending.append(asyncio.create_task(h.expiry_delivery.deliver(
                             event_id, h.request.project_id, "deferred-final-expiry-proof",
                         )))
+                        # Fully staged creation also holds owner custody used by
+                        # OUTBOX's claim. Observe its real wait before release.
                         await asyncio.wait_for(wait_for_named_database_lock(
                             isolated_database_env, expiry_name,
+                            expected_blocker_pid=holder_pid[0],
                         ), 15)
                         assert not pending[1].done()
                         release.set()

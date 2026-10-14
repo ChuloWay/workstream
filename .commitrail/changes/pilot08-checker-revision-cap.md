@@ -74,6 +74,10 @@ Reviews, findings, reviewer contributions or human actors.
 - Remove the superseded planned cap/deadline manager-closure action, its contract,
   exclusive tests and current documentation. Retain historical migration/audit
   evidence; current audit reads use stored strings and need no compatibility alias.
+- Extract affected ART/REV custody-documentation invariants from the oversized
+  authorization test module into their domain test module, preserve exact assertion
+  mappings, and shrink the existing structural-debt entry; no new exception or
+  limit change.
 - Add focused service-denial, stored-resource substitution, direct-SQL receipt
   custody and participant-failure rollback proofs for expiry and recovery.
 

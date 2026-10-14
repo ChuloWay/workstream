@@ -1,0 +1,708 @@
+{
+  "schema": "workstream.auth-assertion-map.v1",
+  "chunk_id": "pilot08-custody-documentation",
+  "mappings": [
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2300:2300:b59741dd4e8e0adbf15a39b5f96ab3de25c282674e27d82990b393dab58ec524",
+      "old_content_sha256": "b59741dd4e8e0adbf15a39b5f96ab3de25c282674e27d82990b393dab58ec524",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2300,
+        2300
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2295:2295:c4b22d5252de658f5f6402bb9b1186f8963d9e9d6f194bc9f34895e657ba6494",
+      "old_content_sha256": "c4b22d5252de658f5f6402bb9b1186f8963d9e9d6f194bc9f34895e657ba6494",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2295,
+        2295
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2269:2269:bbd8fbbaf1c4f7cfcf10bdde272684b6b3e8d636421bc2fc52d46cbe7a0c723f",
+      "old_content_sha256": "bbd8fbbaf1c4f7cfcf10bdde272684b6b3e8d636421bc2fc52d46cbe7a0c723f",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2269,
+        2269
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2286:2289:01d0798de54362fa24f749f5484515f282a7c6aa7aeea9c22f023821be1fdbd7",
+      "old_content_sha256": "01d0798de54362fa24f749f5484515f282a7c6aa7aeea9c22f023821be1fdbd7",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2286,
+        2289
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2297:2297:de066daeb7b9c9ee90faf6337815ba58080ce67e8866de9044d43c804de4101a",
+      "old_content_sha256": "de066daeb7b9c9ee90faf6337815ba58080ce67e8866de9044d43c804de4101a",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2297,
+        2297
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2296:2296:066e8c5e47313e41bd1d4df4e55d7550911702b5965951802d4ceb31987476f6",
+      "old_content_sha256": "066e8c5e47313e41bd1d4df4e55d7550911702b5965951802d4ceb31987476f6",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2296,
+        2296
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2270:2273:0663822ae1d2f0a5d5ba4172f68b3c1a53ac5ffa9de94d05829812c31ffd06e5",
+      "old_content_sha256": "0663822ae1d2f0a5d5ba4172f68b3c1a53ac5ffa9de94d05829812c31ffd06e5",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2270,
+        2273
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2284:2284:2e590a06c6e5723fbacf82dd00d120f9fc4cd5eeb12a5a08debcade5e35b3b34",
+      "old_content_sha256": "2e590a06c6e5723fbacf82dd00d120f9fc4cd5eeb12a5a08debcade5e35b3b34",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2284,
+        2284
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2299:2299:8f27f5fc316fd9573cd543fcd0436fa40f26d408146c70116792e2d4bbdd9a9f",
+      "old_content_sha256": "8f27f5fc316fd9573cd543fcd0436fa40f26d408146c70116792e2d4bbdd9a9f",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2299,
+        2299
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2298:2298:ab6e2ea1613532743d1043f930111115403ec8eff4ae9c260c272b66e7681996",
+      "old_content_sha256": "ab6e2ea1613532743d1043f930111115403ec8eff4ae9c260c272b66e7681996",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2298,
+        2298
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "old_assertion_id": "assertion:2294:2294:e6d87af022fb2d6a6eb5e53a251071c9ee39fef64c453f76d85c9fcdf2ffc3de",
+      "old_content_sha256": "e6d87af022fb2d6a6eb5e53a251071c9ee39fef64c453f76d85c9fcdf2ffc3de",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2294,
+        2294
+      ],
+      "old_test_node": "tests/test_authorization.py::test_art_custody_documentation_matches_the_independent_activation_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "old_assertion_id": "assertion:2326:2326:bbd8fbbaf1c4f7cfcf10bdde272684b6b3e8d636421bc2fc52d46cbe7a0c723f",
+      "old_content_sha256": "bbd8fbbaf1c4f7cfcf10bdde272684b6b3e8d636421bc2fc52d46cbe7a0c723f",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2326,
+        2326
+      ],
+      "old_test_node": "tests/test_authorization.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "old_assertion_id": "assertion:2354:2354:c4b22d5252de658f5f6402bb9b1186f8963d9e9d6f194bc9f34895e657ba6494",
+      "old_content_sha256": "c4b22d5252de658f5f6402bb9b1186f8963d9e9d6f194bc9f34895e657ba6494",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2354,
+        2354
+      ],
+      "old_test_node": "tests/test_authorization.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "old_assertion_id": "assertion:2346:2349:509dcc08166b110d4b83323cedb66b1387e13a75763634d07e1746c70289e000",
+      "old_content_sha256": "509dcc08166b110d4b83323cedb66b1387e13a75763634d07e1746c70289e000",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2346,
+        2349
+      ],
+      "old_test_node": "tests/test_authorization.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "old_assertion_id": "assertion:2327:2330:0663822ae1d2f0a5d5ba4172f68b3c1a53ac5ffa9de94d05829812c31ffd06e5",
+      "old_content_sha256": "0663822ae1d2f0a5d5ba4172f68b3c1a53ac5ffa9de94d05829812c31ffd06e5",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2327,
+        2330
+      ],
+      "old_test_node": "tests/test_authorization.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "old_assertion_id": "assertion:2356:2356:71c7f3e8b9efb800465f9b62f17d88bb2bdeaf250cad1a561256ac7ec3caf39e",
+      "old_content_sha256": "71c7f3e8b9efb800465f9b62f17d88bb2bdeaf250cad1a561256ac7ec3caf39e",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2356,
+        2356
+      ],
+      "old_test_node": "tests/test_authorization.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "old_assertion_id": "assertion:2355:2355:a8088906eb6b4c4b041592966da1849481944014c2e373bd819941503b4c9fbc",
+      "old_content_sha256": "a8088906eb6b4c4b041592966da1849481944014c2e373bd819941503b4c9fbc",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2355,
+        2355
+      ],
+      "old_test_node": "tests/test_authorization.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    },
+    {
+      "invariant_category": "current_documentation_exact_authorization_custody",
+      "new_test_node": "tests/authorization/test_custody_documentation.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "old_assertion_id": "assertion:2344:2344:2e590a06c6e5723fbacf82dd00d120f9fc4cd5eeb12a5a08debcade5e35b3b34",
+      "old_content_sha256": "2e590a06c6e5723fbacf82dd00d120f9fc4cd5eeb12a5a08debcade5e35b3b34",
+      "old_revision": "75caaadcfaafbb23fe78eaf6fdc5ae125f5262db",
+      "old_source_span": [
+        2344,
+        2344
+      ],
+      "old_test_node": "tests/test_authorization.py::test_rev_custody_documentation_matches_the_independent_catalogue_fixture",
+      "security_dimensions": {
+        "concurrency": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "lock_order": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "denial_side_effects": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "replay": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "revocation": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "evidence": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "transaction_ownership": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        },
+        "concealment": {
+          "not_applicable_reason": "This domain proof compares documentation to the independent custody catalogue; it does not execute authority, persistence, or concurrent operations."
+        }
+      },
+      "target_layer": "domain"
+    }
+  ]
+}
