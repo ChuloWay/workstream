@@ -7,9 +7,27 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"unicode/utf8"
 )
 
 const maxSubmissionReadBytes = 2 * 1024 * 1024
+
+// History has a different public cursor bound from ready/manager task lists.
+// Preserve that distinction without changing existing task-list semantics.
+func validSubmissionCursor(cursor string) bool {
+	return cursor != "" && utf8.ValidString(cursor) && utf8.RuneCountInString(cursor) <= 1024
+}
+
+func submissionPageQuery(limit int, cursor *string) (string, error) {
+	query, err := taskPageQuery(limit, nil)
+	if err != nil || cursor == nil {
+		return query, err
+	}
+	if !validSubmissionCursor(*cursor) {
+		return "", errors.New("history cursor must contain 1–1024 valid UTF-8 characters")
+	}
+	return query + "&cursor=" + url.QueryEscape(*cursor), nil
+}
 
 type SubmissionEvidence struct {
 	ID    string   `json:"id"`
@@ -107,7 +125,7 @@ func (c *Client) TaskSubmissions(ctx context.Context, task string, limit int, cu
 	if !submissionSelector(task) {
 		return result, errors.New("task must be a UUID")
 	}
-	query, err := taskPageQuery(limit, cursor)
+	query, err := submissionPageQuery(limit, cursor)
 	if err != nil {
 		return result, err
 	}
@@ -118,7 +136,7 @@ func (c *Client) TaskSubmissions(ctx context.Context, task string, limit int, cu
 	var page SubmissionPage
 	fields, err := contextObject(raw, &page, []string{"items"}, nil)
 	if err != nil || !requiredNullable(fields, "next_cursor") || page.Items == nil || len(page.Items) > limit ||
-		(page.Cursor != nil && (!validTaskCursor(*page.Cursor) || len(page.Items) == 0)) || !c.safeMutationResponse(raw) {
+		(page.Cursor != nil && (!validSubmissionCursor(*page.Cursor) || len(page.Items) == 0)) || !c.safeMutationResponse(raw) {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
 	var items []json.RawMessage
@@ -190,7 +208,7 @@ func (c *Client) SubmissionFindings(ctx context.Context, submission, run string,
 		path += "/" + url.PathEscape(run)
 	} else {
 		var err error
-		query, err = taskPageQuery(limit, cursor)
+		query, err = submissionPageQuery(limit, cursor)
 		if err != nil {
 			return nil, err
 		}
@@ -212,7 +230,7 @@ func (c *Client) SubmissionFindings(ctx context.Context, submission, run string,
 	var page SubmissionCheckerPage
 	fields, err := contextObject(raw, &page, []string{"items"}, nil)
 	if err != nil || !requiredNullable(fields, "next_cursor") || page.Items == nil || len(page.Items) > limit ||
-		(page.Cursor != nil && (!validTaskCursor(*page.Cursor) || len(page.Items) == 0)) {
+		(page.Cursor != nil && (!validSubmissionCursor(*page.Cursor) || len(page.Items) == 0)) {
 		return nil, bad
 	}
 	var items []json.RawMessage

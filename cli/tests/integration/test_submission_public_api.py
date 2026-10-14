@@ -37,6 +37,8 @@ from app.modules.artifacts.models import SubmissionBundleAdmission  # noqa: E402
 from app.modules.authorization.models import ProjectRoleGrant  # noqa: E402
 from tests.test_artifact_admission import _context, _seed_human_actor  # noqa: E402
 from tests.submission_preparation_auth_helpers import install_submitter_grant  # noqa: E402
+from tests.project_create_fixtures import seed_historical_project  # noqa: E402
+from app.core.identifiers import new_record_id  # noqa: E402
 
 
 @asynccontextmanager
@@ -75,7 +77,10 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
         async with _client(h, monkeypatch, isolated_database_env) as direct:
             async with socket_api(direct._transport.app) as origin:
                 async def call(*args, denied=None):
-                    result = await asyncio.to_thread(cli, origin, "public-intake-token", "-o", "json", *args)
+                    # PRE runs real bounded intake work before responding; the
+                    # default 20s fake-peer budget is not its processing contract.
+                    result = await asyncio.to_thread(cli, origin, "public-intake-token", "-o", "json", *args,
+                                                     process_timeout=90 if args[:2] == ("task", "prepare") else 20)
                     if denied is not None:
                         assert result.returncode == 1 and result.stdout == "", result.stderr
                         assert json.loads(result.stderr)["error"]["status"] == denied
@@ -128,22 +133,32 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
                     stored_run = await session.get(CheckerRun, run["id"])
                     assert stored_run.evaluation_request_id == receipt["evaluation_request_id"]
                 foreign_context = _context()
+                other_project_context = _context()
+                other_project = new_record_id()
                 async with h.factory.begin() as session:
                     await _seed_human_actor(session, foreign_context)
+                    await _seed_human_actor(session, other_project_context)
+                    await seed_historical_project(session, project_id=str(other_project),
+                        name="Other CLI project", slug=f"cli-other-{other_project}")
                     await install_submitter_grant(await session.connection(), {
                         "project": str(h.project_id), "actor": str(foreign_context.actor_profile_id),
                     })
+                    await install_submitter_grant(await session.connection(), {
+                        "project": str(other_project), "actor": str(other_project_context.actor_profile_id),
+                    })
                 # A different authenticated actor with a real same-project
                 # Submitter grant still cannot reuse this assignment/history.
-                with monkeypatch.context() as foreign_patch:
-                    async with _client(h, foreign_patch, isolated_database_env,
-                        subject=f"human-{foreign_context.actor_profile_id}") as foreign:
-                        async with socket_api(foreign._transport.app) as foreign_origin:
-                            for args in (submit, ("submission", "show", submission_id),
-                                         ("submission", "findings", submission_id)):
-                                result = await asyncio.to_thread(cli, foreign_origin, "public-intake-token", "-o", "json", *args)
-                                assert result.returncode == 1 and result.stdout == "", result.stderr
-                                assert json.loads(result.stderr)["error"]["status"] == 404
+                for actor in (foreign_context, other_project_context):
+                    with monkeypatch.context() as foreign_patch:
+                        async with _client(h, foreign_patch, isolated_database_env,
+                            subject=f"human-{actor.actor_profile_id}") as foreign:
+                            async with socket_api(foreign._transport.app) as foreign_origin:
+                                for args in (submit, ("submission", "show", submission_id),
+                                             ("submission", "findings", submission_id),
+                                             ("task", "submissions", str(h.task_id))):
+                                    result = await asyncio.to_thread(cli, foreign_origin, "public-intake-token", "-o", "json", *args)
+                                    assert result.returncode == 1 and result.stdout == "", result.stderr
+                                    assert json.loads(result.stderr)["error"]["status"] == 404
                 async with h.factory.begin() as session:
                     profile = await session.get(ActorProfile, str(h.context.actor_profile_id))
                     profile.status = "suspended"
@@ -153,6 +168,7 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
                 await call(*submit, denied=404)
                 await call("submission", "show", submission_id, denied=404)
                 await call("submission", "findings", submission_id, denied=404)
+                await call("task", "submissions", str(h.task_id), denied=404)
                 # Arrange a different invalidation independently: restore the
                 # actor and revoke its exact project grant, preserving provenance.
                 async with h.factory.begin() as session:
@@ -174,3 +190,5 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
                     grant.revoked_at = datetime.now(UTC)
                 await call(*submit, denied=404)
                 await call("submission", "show", submission_id, denied=404)
+                await call("submission", "findings", submission_id, denied=404)
+                await call("task", "submissions", str(h.task_id), denied=404)

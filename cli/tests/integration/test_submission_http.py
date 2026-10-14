@@ -2,6 +2,7 @@
 
 import copy
 import json
+import os
 from urllib.parse import parse_qs, urlsplit
 
 from test_http_boundary import TOKEN, assert_failure, http_fixture
@@ -102,6 +103,18 @@ def test_prepare_detects_file_change_and_never_confirms_success(cli, tmp_path):
             assert_failure(result, "submission_source_changed")
             assert json.loads(result.stderr)["error"]["outcome_unknown"] is True
             assert len(requests) == 1
+
+
+def test_preparation_rejects_empty_nonregular_and_oversized_sources_without_request(cli, tmp_path):
+    empty, oversized, pipe = (tmp_path / name for name in ("empty.zip", "large.zip", "pipe.zip"))
+    empty.touch()
+    with oversized.open("wb") as stream:
+        stream.truncate(512 * 1024 * 1024 + 1)  # Sparse; never allocates a huge upload.
+    os.mkfifo(pipe)
+    with http_fixture() as (origin, _, requests):
+        for path in (empty, tmp_path, pipe, oversized):
+            assert_failure(cli(origin, TOKEN, *prepare_args(path)), "invalid_arguments", 2)
+        assert requests == []
 
 
 def test_submission_uncertain_responses_are_not_retried(cli, tmp_path):
@@ -220,3 +233,48 @@ def test_submission_reads_reject_substitution_private_fields_and_duplicate_ident
                        {"attempt_number": None}, {"raw_output": "private"}):
             respond(response, CHECKER | change)
             assert_failure(cli(origin, TOKEN, "submission", "findings", SUBMISSION, "--run", RUN, "-o", "json"), "invalid_api_response")
+
+
+def test_history_cursor_contract_preserves_1024_characters_without_widening_task_lists(cli):
+    selections = (("task", "submissions", TASK), ("submission", "findings", SUBMISSION))
+    with http_fixture() as (origin, response, requests):
+        for args, item in zip(selections, (HISTORY, CHECKER), strict=True):
+            for cursor in ("a" * 513, "b" * 1024, "é" * 1024):
+                respond(response, {"items": [item], "next_cursor": cursor})
+                result = cli(origin, TOKEN, *args, "--cursor", cursor, "-o", "json")
+                assert result.returncode == 0, result.stderr
+                assert json.loads(result.stdout)["next_cursor"] == cursor
+                assert parse_qs(urlsplit(requests[-1][1]).query)["cursor"] == [cursor]
+            before = len(requests)
+            assert_failure(cli(origin, TOKEN, *args, "--cursor", "a" * 1025, "-o", "json"), "invalid_arguments", 2)
+            assert len(requests) == before
+            respond(response, {"items": [item], "next_cursor": "a" * 1025})
+            assert_failure(cli(origin, TOKEN, *args, "-o", "json"), "invalid_api_response")
+        before = len(requests)
+        assert_failure(cli(origin, TOKEN, "task", "ready", TASK, "--cursor", "a" * 513, "-o", "json"), "invalid_arguments", 2)
+        assert len(requests) == before
+
+
+def test_submission_response_caps_reject_otherwise_valid_oversized_json(cli, tmp_path):
+    path = tmp_path / "submission.zip"
+    path.write_bytes(b"zip")
+    cap = 2 * 1024 * 1024
+    cases = (
+        (prepare_args(path), preparation(), 202),
+        (("submission", "show", SUBMISSION, "-o", "json"), HISTORY, 200),
+        (("task", "submissions", TASK, "-o", "json"), {"items": [HISTORY], "next_cursor": None}, 200),
+        (("submission", "findings", SUBMISSION, "--run", RUN, "-o", "json"), CHECKER, 200),
+        (("submission", "findings", SUBMISSION, "-o", "json"), {"items": [CHECKER], "next_cursor": None}, 200),
+    )
+    with http_fixture() as (origin, response, requests):
+        for args, value, status in cases:
+            respond(response, value, status)
+            control = cli(origin, TOKEN, *args)
+            assert control.returncode == 0, control.stderr
+            # JSON whitespace leaves the independently valid projection intact.
+            # Removing the transport cap must make this counterexample succeed.
+            response["body"] = b" " * (cap + 1) + response["body"]
+            result = cli(origin, TOKEN, *args)
+            assert_failure(result, "invalid_api_response")
+            assert json.loads(result.stderr)["error"].get("outcome_unknown", False) == (status == 202)
+        assert len(requests) == len(cases) * 2

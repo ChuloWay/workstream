@@ -674,7 +674,7 @@ findings. After creation, `submission findings` reads contributor-visible durabl
 checker runs/results. Run status is not human review or final acceptance, and the
 CLI never follows finding paths or exposes provider/private management fields.
 History and findings lists fetch one page only; use the returned opaque cursor
-explicitly. `--run` cannot be combined with pagination flags. Revision change
+explicitly (up to 1024 characters; no local decoding). `--run` cannot be combined with pagination flags. Revision change
 summary is unavailable in the current public history API; the CLI does not invent it.
 
 The native process test uses real HTTP, PostgreSQL and local ART custody, with
