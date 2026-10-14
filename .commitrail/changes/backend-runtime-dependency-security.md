@@ -18,17 +18,19 @@ Resolve the current backend runtime dependency alerts before the hosted v0.1 rel
 
 - `.commitrail/changes/backend-runtime-dependency-security.md`: this standalone intent, scope, evidence, and review record.
 - `backend/uv.lock`: resolver-generated updates only for the exact affected packages and metadata that the selected resolver must regenerate.
+- `.github/workflows/backend.yml`: use the frozen backend lock in the three existing backend install paths and commands, retaining every job, lane, timeout, service, gate, and fan-in.
+- `scripts/test_lightweight_agent_gates.py`: guard exact lock freshness, frozen all-extras installation, frozen command execution, and unchanged gate structure.
 
 ### Not allowed
 
 - Runtime source, API contracts, tests, schemas, migrations, authorization, storage semantics, or product lifecycle changes.
 - `backend/pyproject.toml` constraint changes unless new resolver evidence first requires a reviewed plan amendment.
-- CI or workflow changes, dependency catalogue changes, unrelated upgrades, manual lock edits, alert dismissal, or public disclosure of private alert evidence.
+- New CI jobs or workflows, path selection, lane or timeout changes, gate relaxation, dependency catalogue changes, unrelated upgrades, manual lock edits, alert dismissal, or public disclosure of private alert evidence.
 - MCP adapter dependency changes; they have a separate package boundary and change record.
 
 ## Design and decisions
 
-Use the normal `uv` resolver with package-specific upgrades so unaffected locked versions remain fixed. Inspect the resulting package/version set against the base lock and reject unrelated dependency additions or version churn. Preserve the existing manifest ranges because they already admit the supported fixes. A manual lock edit was rejected because it would bypass resolver custody; a combined backend/MCP PR was rejected because their package graphs and behavior evidence differ.
+Use the normal `uv` resolver with package-specific upgrades so unaffected locked versions remain fixed. Inspect the resulting package/version set against the base lock and reject unrelated dependency additions or version churn. Preserve the existing manifest ranges because they already admit the supported fixes. A manual lock edit was rejected because it would bypass resolver custody; a combined backend/MCP PR was rejected because their package graphs and behavior evidence differ. The hosted suite must execute this exact graph: pin the already reviewed `uv` version, reject stale manifest/lock pairs with `uv lock --check`, install all extras with `uv sync --frozen --all-extras`, and run every existing backend command through `uv run --frozen`. This narrowly transplants PR #566's frozen-install semantics without its draft path-selection feature; later reconciliation must preserve the lock-freshness check.
 
 ## Acceptance criteria
 
@@ -36,7 +38,7 @@ Use the normal `uv` resolver with package-specific upgrades so unaffected locked
 - [x] Every backend alert in the issue snapshot resolves outside its affected range using supported patched versions corroborated by canonical advisories.
 - [x] `uv` regenerates the lock reproducibly through package-specific upgrades, with no manual lock editing, unrelated dependency additions, or unrelated version churn.
 - [x] A fresh isolated environment installs from the frozen backend lock with all runtime, agent, and development dependencies.
-- [ ] Existing authentication/JWT, Alembic, HTTP/storage, lint, and the complete backend suite run from the fresh frozen-lock environment without skips or weakened assertions; pip-resolved hosted backend lanes remain supplemental compatibility evidence rather than exact-lock custody.
+- [ ] Existing authentication/JWT, Alembic, HTTP/storage, lint, and the complete backend suite run from the fresh frozen-lock environment without skips or weakened assertions; pip-resolved hosted backend lanes remain supplemental compatibility evidence rather than exact-lock custody. All existing hosted jobs, ten semantic lanes, timeouts, services, evidence validation, API E2E, and fan-in remain required.
 - [ ] Public records and PR text contain no credentials, private dashboard links, private alert identifiers, or non-public exploit detail.
 
 ## Risk and review routing
@@ -64,4 +66,4 @@ The original exact-head review passed for the bounded resolver delta. Reconcilia
 - Current-source reconciliation: Based on `main` at `24119122bf5b4284878996b7c655072e666d96e1`; open dependency PRs were inspected for overlapping lock paths before implementation.
 - Roadmap impact: None. This repair changes selected dependency versions without changing a capability, exposure, completed scope, remaining product gate, or next product dependency.
 - Next usable boundary: Merge this backend repair, re-read the default-branch alert dashboard, and retain explicit ownership of any remaining snapshot alert.
-- Remaining risks: Complete-suite execution from this exact frozen lock, hosted checks on the reconciled head, and exact-head reconciliation review remain pending. PR #566 demonstrates a frozen-lock CI path, but its merge is not a product or repository dependency for this repair.
+- Remaining risks: Complete-suite execution from this exact frozen lock, hosted checks on the reconciled head, and exact-head reconciliation review remain pending. This repair reuses only PR #566's frozen-install semantics; PR #566 remains independently responsible for draft path selection, and later reconciliation must retain `uv lock --check`.
