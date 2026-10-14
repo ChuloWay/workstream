@@ -55,7 +55,7 @@ outside v0.1.
 ## Status Vocabulary
 
 The public automated-acceptance journey has passed a bounded local v0.1 drill
-under scripted approved-guide preconditions, local Flow-compatible auth and
+from public guide inputs with recorded inference, local Flow-compatible auth and
 real PostgreSQL, MinIO, Redis, prefork Celery and Beat. ARCH-04E3-B admits
 complete false-policy guides with supported approved checks. Selected production
 completion reached the governed outcome under a LIVE REV generation. The
@@ -120,7 +120,7 @@ draft post-policy read; Finance publication remains separate. Task policy
 lineage, public ZIP preparation and admission-backed immutable Submission creation
 are implemented for initial work and exact checker remediation. Their complete
 public API and Celery service journey passed its bounded local drill under
-scripted approved-guide preconditions. TASK
+public guide inputs and recorded inference. TASK
 now reserves and replays exact post-submit routing requests internally. Hidden
 AUTH binds those requests to exact source and branch consequences through
 canonical PREP. The hidden authorized outcome operation commits source custody
@@ -311,8 +311,8 @@ cannot be reused as post-submission review-gate evidence. See the
 | --- | --- | --- | --- |
 | Identity and actor resolution | **Live foundation** | Flow-token verification; canonical ActorProfile and ActorIdentityLink; human/service separation; lifecycle controls; canonical `/actors/me` self-read with duplicate `/auth/me` removed; suspension denies both self-read and self-update | Final end-to-end operational and conformance proof |
 | Authorization kernel | **Live foundation** | Closed action/permission catalogues; deny-by-default evaluation; grants; fixed services; rate controls; opaque transaction-bound PREP; atomic decision evidence | Activate only the remaining owner-proven TASK, checker, REV, and CON boundaries; remove obsolete authority after replacement paths are live |
-| Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; exact run-scoped setup reads and assigned-task locked-original reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and public exact-authorized CP07 activation | The local contributor drill used scripted approved-guide facts; prove live setup and enabled document readers in the intended environment |
-| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | The bounded local contributor drill passed using scripted approved-guide facts; live model setup and hosted operation remain separate |
+| Project Guide source custody | **Live foundation** | Guide creation declares documents and task examples; public document upload; immutable internal metadata snapshots; exact run-scoped setup reads and assigned-task locked-original reads; S3-backed originals and isolated agent document inspection; exact document generation through separate manager approvals and public exact-authorized CP07 activation | Public original upload, task examples, Celery setup and separate approvals are connected locally with recorded inference; prove configured live inference and readers in the intended environment |
+| Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | The bounded local contributor drill passed from public guide inputs with recorded inference; live model setup and hosted operation remain separate |
 | Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors; immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | The bounded local public drill passed; policy publication alone does not create a contribution, and hosted operation remains unproven |
 | Task readiness and claim | **Foundation with grant-backed manager and contributor commands** | Task records, assignments and locked work context; guide-bound ContributionPolicyVersion locked before `READY` and copied to TaskAssignment; detached project/guide display; public project-scoped ready, management and operational queues with distinct current grant authority and signed bounded live pagination; public contributor/management detail with exact project and assignment authority; separate current live work-context projections with exact receipt-selected review/revision/ContributionPolicy identities and no obsolete economic fields; explicit management/operational/audit locked-context projections using one historical resolver, with separate public manager, system-Operator and Audit Authority access; immutable contributor/management requirements using one historical translator, with public exact Contributor and Manager authority; bounded public Audit Authority lifecycle evidence with atomic project/task scoping and exact transition references; public manager create/screen/release use exact covered Project Manager authority, atomic audit and replay; claim/start/contributor context use exact-project Submitter grants; assigned context lists documents only and distinct `task.guide.read` verifies locked originals before delivery; separate manager context and system-Operator start; durable claim/start retry receipts with fresh authority and exact assignment checks; hidden exact-assignment invalidation with committed cause verification, delivery fencing, exact fixed-service authority and decision-bound immutable release evidence; atomic authority-loss publication and registered prefork delivery; PILOT-14 exposes both locked contribution types in ready rows and Contributor detail for active exact-project Submitters or Reviewers as unpaid or exact instrument/unit/quantity awards, without Finance binding facts; claim/start remain Submitter-only | The bounded local public durable-runtime journey passed; intended hosted operation remains unproven |
 | Bulk task import | **Public backend and CLI batch journey** | PILOT-02A supplies exact source custody; PILOT-02B imports 1..500 verified JSON rows under one immutable native batch, retains per-Task AUTH/TaskCreated facts, recovers exact original IDs with fresh authority and exposes batch status; actual 200-row, rollback, concurrent-wait and SQL-custody controls pass on PostgreSQL/MinIO. PILOT-02C adds atomic whole-batch screen/release with fresh per-Task authority, locked guide/policy custody and explicit CLI/CSV commands | No remaining PILOT-02 implementation gate; deployment and full contributor-lifecycle proof are separate |
@@ -804,7 +804,7 @@ The broader v0.1 sequence below retains later scope:
    mode. 04F3 adds hidden exact-cause replacement intake and 04F4 hidden
    Operator retry. PILOT-04 selected production registration and ARCH-02I-B
    public entry and ARCH-04E3-B supported false-guide activation are delivered;
-   the bounded local public drill passed under scripted approved-guide preconditions.
+   the bounded local public drill passed from public guide inputs with recorded inference.
    True routing may proceed after its own prerequisites to publish the exact TASK
    manifest and move `evaluation_pending -> review_pending` when no blocking
    failure exists; this does not write the REV queue. The delivered shared
@@ -852,7 +852,7 @@ The broader v0.1 sequence below retains later scope:
    POST consumes it. The local drill exercised those APIs with selected durable
    PRE/POST Celery services, false-policy activation, remediation, bounded retry,
    prefork Celery process restart, late authority revocation and exact contribution evidence.
-   It used scripted approved-guide facts, local Flow-compatible auth and
+   It used public guide inputs and recorded inference, local Flow-compatible auth and
    development containers; hosted operation is the next boundary.
 4. **Start the live REV path.** Reuse the packet, Review and FinalAcceptance
    storage completed before the automated path. Admit only canonical
@@ -927,7 +927,7 @@ images return bounded schema-validated JSON results; generated output-file
 write/binding authority remains unavailable. ARCH-04C supplies CHECKERS reservation/currentness; ARCH-04D2 supplies
 execute/finalize authority. ARCH-02I-B exposes public ZIP preparation and
 admission-backed Submission creation; the complete public API and Celery
-service drill passed under scripted approved-guide preconditions.
+service drill passed from public guide inputs with recorded inference.
 
 ## Critical Dependency Map
 
@@ -995,8 +995,10 @@ Delivered foundations (bounded local journey proven; no deployment claim)
     CLI24 consumes both reads / exact CSV; fixed-membership pagination remains
     no recognition writer or fulfillment dependency
 
-Proven bounded local first-layer drill (scripted approved guide, local Flow-compatible auth)
-  Real public API + PostgreSQL/MinIO/Redis/prefork Celery/Beat service drill
+Proven bounded local first-layer drill (public guide inputs, recorded inference, local Flow-compatible auth)
+  Original guide + examples -> recorded Celery setup -> separate PRE/POST approval
+  + public review/revision settings + Finance publication -> exact guide activation
+  -> public API + PostgreSQL/MinIO/Redis/prefork Celery/Beat contributor journey
   -> public triggers reached the selected completion outcomes
        |
        +-- contributor-correctable failure -> TASK needs_revision (no REV/CON)
@@ -1036,12 +1038,12 @@ and award history never changes.
 
 v0.1 is not ready until all of the following are true:
 
-- Prove the connected public activation-to-intake journey: the manager
-  activation boundary and admission-backed intake are delivered, while the
-  bounded local contributor drill began with scripted approved-guide facts.
-  A separate release drill must exercise the existing connected
-  setup/activation-to-intake flow with its configured provider and approved
-  guide and policy identities/hashes, including ContributionPolicyVersion.
+- Reproduce the connected guide-to-contribution journey with the intended
+  hosted identity, inference provider and infrastructure. The bounded local
+  drill now covers original upload, task examples, recorded async inference,
+  public review/revision configuration, separate PRE/POST approvals, Finance
+  publication, activation and both policy outcomes. It does not establish live
+  model quality or deployment readiness. See the [connected proof](../.commitrail/changes/public-guide-to-contribution-proof.md).
 - A task cannot enter `READY` without that complete locked context.
 - A contributor can claim and prepare one ZIP under the locked pre-submit
   policy. Blocking intake failures return feedback and create no Submission;
@@ -1257,7 +1259,7 @@ ARCH-04E1B-B6 proof: [atomic Submission, exact receipts and initial request cust
 
 ARCH-04E1B-B7 proof: [hidden request delivery and invocation custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB7.md). B8 supplied hidden completion routing; PILOT-04 adds selected production composition and ARCH-02I-B adds public intake.
 
-REV-12A4A proof: [scoped lifecycle control and payment-delivery deferral](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A4A.md). ARCH-04E2-B supplies exact source receipts; B8 completion delivery, the 04F2 zero-REV/CON remediation handoff, 04F3 hidden replacement intake and 04F4 hidden Operator retry are implemented. ARCH-02I-B supplies public entry and ARCH-04E3-B supported false-guide activation; the bounded local public durable-runtime drill passed under scripted approved-guide preconditions. Setup-fault handling is later safety work.
+REV-12A4A proof: [scoped lifecycle control and payment-delivery deferral](../.commitrail/initiatives/WS-REV-001/WS-REV-001-12A4A.md). ARCH-04E2-B supplies exact source receipts; B8 completion delivery, the 04F2 zero-REV/CON remediation handoff, 04F3 hidden replacement intake and 04F4 hidden Operator retry are implemented. ARCH-02I-B supplies public entry and ARCH-04E3-B supported false-guide activation; the bounded local public durable-runtime drill passed from public guide inputs with recorded inference. Setup-fault handling is later safety work.
 
 ARCH-04E2-B proof: [hidden authorized outcome custody](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E2B.md). B8 supplies hidden completion delivery; selected production composition is implemented, and ARCH-04E3-B supports false-guide activation under exact approved requirements custody.
 

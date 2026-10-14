@@ -36,7 +36,7 @@ journey from public source documents to contribution facts.
   their current supported contracts.
 - Focused drill tests under `scripts/test_public_guide_journey*.py` or existing
   affected test owners; root tests must not silently require a backend install.
-- This record, README, affected current roadmap and ARCH navigation: connected
+- This record, README, affected current roadmap and ARCH/POL navigation: connected
   local proof versus hosted deployment and held evaluator work.
 - Product fixes only after a concrete integration failure is reproduced and its
   exact owner/files, requirement and discriminating regression are added here
@@ -67,7 +67,8 @@ The recorded provider opens exact ART-granted documents and returns the existing
 closed proposal schema; production owners perform compilation/finalization.
 The recorded provider must observe the exact normalized task examples, not
 merely read documents. Assert their retained hash on the guide and source
-snapshot, and the exact examples in the stored compilation context.
+snapshot, and bind the runtime-observed full input to the stored compilation
+input hash (raw compilation context is not stored).
 Public reads supply every manager decision target. Public PUT review-policy and
 revision-policy operations set the exact true/false and revision configuration
 with If-Match and idempotency headers; replay preserves their identity and a
@@ -118,7 +119,7 @@ connected proof and regressions for discovered defects.
 |---|---|---|---|
 | Existing shortcut identified | `_one_mode` and guide API drills inspected | Confirmed | Public composition not yet run |
 | Connected journey | Updated isolated public journey invocation (to be recorded) | Planned | No hosted Flow/S3/gVisor or live model claim |
-| Failure boundaries | Existing owner tests plus focused new drill tests | Planned | Map exact nodes during implementation |
+| Failure boundaries | Existing owner tests plus focused new drill tests | Planned | Exact nodes mapped below |
 | Repository integrity | Lint, boundaries, links, Commitrail, full hosted CI | Planned | No sampling or weakened gates |
 
 ## Reconciliation
@@ -133,8 +134,8 @@ connected proof and regressions for discovered defects.
 ## Focused failure-proof map
 
 All paths below are relative to `backend/tests/`. Run named existing nodes with
-`backend/.venv/bin/python -m scripts.run_isolated_tests --metadata-json
-/tmp/ws552-owner-proof.json --timeout-seconds 600 -- python -m pytest -q <nodes>`
+`.venv/bin/python -m scripts.run_isolated_tests --metadata-json
+/tmp/ws552-owner-proof.json --timeout-seconds 600 -- .venv/bin/python -m pytest -q tests/<node-path>`
 from `backend/`, with the supported isolated PostgreSQL/MinIO environment. No
 existing node is counted as connected public proof merely because it passes.
 
