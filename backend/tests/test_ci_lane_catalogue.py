@@ -77,7 +77,8 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
     assert set(catalogue.CHECKER_DELIVERY_MODULES) == delivery
     groups = (
         delivery,
-        set(catalogue.ROUTING_AUTH_PREPARATION_MODULES),
+        set(catalogue.ROUTING_AUTH_PREPARATION_MODULES)
+        - set(catalogue.PROJECT_BC_REBALANCED_MODULES),
     )
     for modules in groups:
         assert not modules & set(catalogue.TASK_MODULES)
@@ -285,11 +286,43 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
             "tests/test_api_drill_repairs.py",
         }
     )
-    assert modules_by_lane["project_lifecycle_a"] == partitioned_project_modules
-    assert modules_by_lane["project_lifecycle_b"] == partitioned_project_modules
-    project_intake_modules = partitioned_project_modules | set(catalogue.PROJECT_INTAKE_MODULES)
-    assert modules_by_lane["project_lifecycle_c"] == project_intake_modules
-    assert modules_by_lane["project_lifecycle_d"] == project_intake_modules
+    four_way_project_modules = partitioned_project_modules - set(
+        catalogue.PROJECT_BC_REBALANCED_MODULES + catalogue.PROJECT_ABC_REBALANCED_MODULES
+    )
+    assert set(catalogue.PROJECT_BC_REBALANCED_MODULES) == {
+        "tests/projects/guide_compilation/finalization/test_contracts.py",
+        "tests/authorization/post_submit_routing/test_contracts.py",
+    }
+    assert set(catalogue.PROJECT_ABC_REBALANCED_MODULES) == {
+        "tests/projects/guide_compilation/finalization/test_lineage.py",
+    }
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module]
+        == catalogue.PROJECT_BC_REBALANCED_LANES
+        for module in catalogue.PROJECT_BC_REBALANCED_MODULES
+    )
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module]
+        == catalogue.PROJECT_ABC_REBALANCED_LANES
+        for module in catalogue.PROJECT_ABC_REBALANCED_MODULES
+    )
+    assert modules_by_lane["project_lifecycle_a"] == (
+        four_way_project_modules | set(catalogue.PROJECT_ABC_REBALANCED_MODULES)
+    )
+    assert modules_by_lane["project_lifecycle_b"] == (
+        four_way_project_modules
+        | set(catalogue.PROJECT_BC_REBALANCED_MODULES)
+        | set(catalogue.PROJECT_ABC_REBALANCED_MODULES)
+    )
+    assert modules_by_lane["project_lifecycle_c"] == (
+        four_way_project_modules
+        | set(catalogue.PROJECT_BC_REBALANCED_MODULES)
+        | set(catalogue.PROJECT_ABC_REBALANCED_MODULES)
+        | set(catalogue.PROJECT_INTAKE_MODULES)
+    )
+    assert modules_by_lane["project_lifecycle_d"] == (
+        four_way_project_modules | set(catalogue.PROJECT_INTAKE_MODULES)
+    )
     assert (
         modules_by_lane["task_lifecycle_a"]
         == modules_by_lane["task_lifecycle_b"]
@@ -372,7 +405,17 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
     )
     shared_a = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[0]]
     shared_b = modules_by_lane[catalogue.PARTITIONED_SHARED_LANES[1]]
-    assert shared_a == shared_b == set(catalogue.SHARED_FOUNDATION_MODULES)
+    assert shared_a == set(catalogue.SHARED_FOUNDATION_PARTITIONED_MODULES)
+    assert shared_b == shared_a | set(catalogue.SHARED_FOUNDATION_B_OWNED_MODULES)
+    assert set(catalogue.SHARED_FOUNDATION_B_OWNED_MODULES) == {
+        "tests/test_authorization.py",
+        "tests/authorization/task_authority/test_prepared.py",
+    }
+    assert not set(catalogue.SHARED_FOUNDATION_B_OWNED_MODULES) & shared_a
+    assert all(
+        module not in catalogue.PARTITION_LANES_BY_MODULE
+        for module in catalogue.SHARED_FOUNDATION_B_OWNED_MODULES
+    )
     assert "tests/tasks/evaluation_delivery/test_worker_materialization.py" in shared_a
     assert "tests/artifacts/test_review_packet_contract.py" in shared_a
     assert "tests/authorization/task_authority/test_management_participants.py" in shared_a
@@ -453,7 +496,7 @@ def test_measured_hotspots_have_explicit_semantic_owners() -> None:
         "tests/test_authorization.py",
         "tests/test_guide_artifacts.py",
         "tests/test_mutation_policy.py",
-    } <= shared_a
+    } <= shared_a | shared_b
 
 
 def test_discovery_is_recursive_and_lexically_canonical(tmp_path: Path) -> None:
@@ -894,14 +937,21 @@ def test_routing_authorization_proofs_use_the_project_partition():
         "tests/authorization/post_submit_routing/test_prepared.py",
     }
     assert set(catalogue.ROUTING_AUTH_PREPARATION_MODULES) == expected
-    for lane in LANES:
-        assert set(lane.modules) & expected == (
-            expected if lane.name in catalogue.PARTITIONED_PROJECT_LANES else set()
-        )
-    assert all(
-        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_LANES
-        for module in expected
-    )
+    expected_candidates = {
+        "tests/authorization/post_submit_routing/test_contracts.py": (
+            "project_lifecycle_b",
+            "project_lifecycle_c",
+        ),
+        "tests/authorization/post_submit_routing/test_prepared.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_b",
+            "project_lifecycle_c",
+            "project_lifecycle_d",
+        ),
+    }
+    for module, candidates in expected_candidates.items():
+        assert catalogue.PARTITION_LANES_BY_MODULE[module] == candidates
+        assert tuple(lane.name for lane in LANES if module in lane.modules) == candidates
 
 
 def test_shared_acceptance_owner_proofs_are_in_partitioned_project_lanes():

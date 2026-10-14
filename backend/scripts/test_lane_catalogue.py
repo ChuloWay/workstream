@@ -558,21 +558,63 @@ ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_prepared.py",
 )
 
+SHARED_FOUNDATION_B_OWNED_MODULES = (
+    "tests/test_authorization.py",
+    "tests/authorization/task_authority/test_prepared.py",
+)
+SHARED_FOUNDATION_PARTITIONED_MODULES = tuple(
+    module
+    for module in SHARED_FOUNDATION_MODULES
+    if module not in SHARED_FOUNDATION_B_OWNED_MODULES
+)
+
+PROJECT_BC_REBALANCED_MODULES = (
+    "tests/projects/guide_compilation/finalization/test_contracts.py",
+    "tests/authorization/post_submit_routing/test_contracts.py",
+)
+PROJECT_ABC_REBALANCED_MODULES = (
+    "tests/projects/guide_compilation/finalization/test_lineage.py",
+)
+PROJECT_BC_REBALANCED_LANES = ("project_lifecycle_b", "project_lifecycle_c")
+PROJECT_ABC_REBALANCED_LANES = (
+    "project_lifecycle_a",
+    "project_lifecycle_b",
+    "project_lifecycle_c",
+)
+PROJECT_PARTITIONED_MODULES = (
+    PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES
+)
+PROJECT_FOUR_WAY_MODULES = tuple(
+    module
+    for module in PROJECT_PARTITIONED_MODULES
+    if module not in PROJECT_BC_REBALANCED_MODULES + PROJECT_ABC_REBALANCED_MODULES
+)
+
 PARTITION_GROUPS = (
-    (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
-    (
-        PARTITIONED_PROJECT_LANES,
-        PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
-    ),
+    (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_PARTITIONED_MODULES),
+    (PARTITIONED_PROJECT_LANES, PROJECT_FOUR_WAY_MODULES),
     (PARTITIONED_PROJECT_INTAKE_LANES, PROJECT_INTAKE_MODULES),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
     module: names for names, modules in PARTITION_GROUPS for module in modules
 }
+PARTITION_LANES_BY_MODULE.update(
+    {
+        **{module: PROJECT_BC_REBALANCED_LANES for module in PROJECT_BC_REBALANCED_MODULES},
+        **{module: PROJECT_ABC_REBALANCED_LANES for module in PROJECT_ABC_REBALANCED_MODULES},
+    }
+)
 
 LANES = (
-    *(TestLane(name, SHARED_FOUNDATION_MODULES) for name in PARTITIONED_SHARED_LANES),
+    *(
+        TestLane(
+            name,
+            SHARED_FOUNDATION_PARTITIONED_MODULES
+            + (SHARED_FOUNDATION_B_OWNED_MODULES if name == "shared_foundations_b" else ()),
+        )
+        for name in PARTITIONED_SHARED_LANES
+    ),
     TestLane(
         "schema_contracts",
         (
@@ -608,9 +650,9 @@ LANES = (
     *(
         TestLane(
             name,
-            PROJECT_MODULES
-            + CHECKER_DELIVERY_MODULES
-            + ROUTING_AUTH_PREPARATION_MODULES
+            PROJECT_FOUR_WAY_MODULES
+            + (PROJECT_BC_REBALANCED_MODULES if name in PROJECT_BC_REBALANCED_LANES else ())
+            + (PROJECT_ABC_REBALANCED_MODULES if name in PROJECT_ABC_REBALANCED_LANES else ())
             + (PROJECT_INTAKE_MODULES if name in PARTITIONED_PROJECT_INTAKE_LANES else ()),
         )
         for name in PARTITIONED_PROJECT_LANES
