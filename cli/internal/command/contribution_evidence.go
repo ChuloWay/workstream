@@ -58,7 +58,7 @@ func addContributionEvidence(root, project *cobra.Command, client func() (*api.C
 				return err
 			}
 			if *output == "json" {
-				return writeJSON(stdout, result.Raw)
+				return writeSafeJSON(stdout, result.Raw)
 			}
 			return writeTaskContextFields(stdout, []contextField{{"Contributions (earned evidence, not payment status)", result.Raw}})
 		}

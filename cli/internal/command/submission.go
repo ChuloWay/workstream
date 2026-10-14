@@ -48,7 +48,7 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 					return err
 				}
 				if *output == "json" {
-					return writeJSON(stdout, result.Raw)
+					return writeSafeJSON(stdout, result.Raw)
 				}
 				return writeTaskContextFields(stdout, []contextField{{"Submission receipt (not acceptance)", result.Value}})
 			}
@@ -67,7 +67,7 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 				return err
 			}
 			if *output == "json" {
-				return writeJSON(stdout, result.Raw)
+				return writeSafeJSON(stdout, result.Raw)
 			}
 			if err := writeTaskContextFields(stdout, []contextField{{"Preparation receipt (no Submission created)", result.Value}}); err != nil {
 				return err
@@ -101,7 +101,7 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 			return err
 		}
 		if *output == "json" {
-			return writeJSON(stdout, result.Raw)
+			return writeSafeJSON(stdout, result.Raw)
 		}
 		return writeTaskContextFields(stdout, []contextField{{"Submission history", result.Value}, {"Revision change summary", "unavailable in the current public API"}})
 	}
@@ -117,7 +117,7 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 			return err
 		}
 		if *output == "json" {
-			return writeJSON(stdout, result.Raw)
+			return writeSafeJSON(stdout, result.Raw)
 		}
 		return writeTaskContextFields(stdout, []contextField{{"Submission", result.Value}, {"Revision change summary", "unavailable in the current public API"}})
 	}})
@@ -144,7 +144,7 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 			return err
 		}
 		if *output == "json" {
-			return writeJSON(stdout, raw)
+			return writeSafeJSON(stdout, raw)
 		}
 		return writeTaskContextFields(stdout, []contextField{{"Checker evidence (not acceptance)", raw}})
 	}

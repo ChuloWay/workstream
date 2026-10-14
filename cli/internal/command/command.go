@@ -192,6 +192,11 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 }
 
 func writeJSON(w io.Writer, raw json.RawMessage) error {
+	_, err := fmt.Fprintln(w, string(bytes.TrimSpace(raw)))
+	return err
+}
+
+func writeSafeJSON(w io.Writer, raw json.RawMessage) error {
 	// Preserve JSON values while keeping literal C1/bidi/format controls out
 	// of terminals. JSON already escapes C0 controls inside strings.
 	var safe strings.Builder
@@ -229,7 +234,7 @@ func writeFailure(w io.Writer, output string, f api.Failure) {
 			Error api.Failure `json:"error"`
 		}{Error: f})
 		if err == nil {
-			_ = writeJSON(w, raw)
+			_ = writeSafeJSON(w, raw)
 		}
 		return
 	}
