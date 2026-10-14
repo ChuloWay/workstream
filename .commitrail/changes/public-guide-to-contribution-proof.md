@@ -234,3 +234,48 @@ Additional allowed files:
 Existing human mutation ordering remains unchanged. No shared manifest reader,
 policy, action availability, or authorization permissions change. The narrow
 review recommendation above supersedes the earlier Project-before-AUTH plan.
+
+## AUTH structural repair
+
+CI caught pre-lock growth in the oversized authorization kernel while checking
+the lock-order correction. This bounded repair extracts the existing
+project-manager preparation without changing its lock order, control-lock rule,
+allowed role or exact-project guard.
+
+- Allowed files: `backend/app/modules/authorization/kernel.py`,
+  `backend/app/modules/authorization/prepared_admin_authority.py`, the generated
+  `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`, and this change record.
+- Prohibited changes: authorization policy, action classification, lock order,
+  role or scope semantics, test-structure thresholds, validator behavior,
+  exceptions, and new compatibility paths or aliases.
+- Acceptance: `lock_project_manager_authority` has the same call shape as the
+  existing admin locker; a kernel-local fail-closed selector admits only the
+  current admin-mutation and guide-bound manager action sets; `_prepare_prelocked`
+  uses one uniform locker call; the superseded method is removed; both the
+  kernel file and frozen `_prepare_prelocked` debt genuinely shrink; generated
+  debt inventory and focused authority behavior remain in parity. The diagnostic
+  actor prelock is the module-level AUTH function
+  `prelock_serialized_admin_read_actor(authorization, action_id)`, retaining its
+  closed read-action check and human actor/link lock without expanding the
+  kernel's public class-method contract or issuing a decision, token or grant.
+- Risk remains L1 because authorization locking is touched. Architecture and
+  security review from the parent repair remain required; add focused CI-integrity
+  review for the generated debt transition. QA/test-delta, documentation and
+  product-operations review remain attached to the parent change.
+- Human review focus: source-equivalent lock/control/grant ordering, the closed
+  selector union, unchanged guide-manager denial semantics, genuine debt shrink,
+  and no CI policy relaxation.
+
+The approved plan is to move `_prepare_project_manager` unchanged into the
+existing prepared-admin authority owner as `lock_project_manager_authority`,
+then select it or `lock_admin_mutation_authority` through
+`_prepared_admin_role_locker(action_id)`. Unknown actions raise `ValueError`
+before any repository access. Existing public prepared consumers continue to
+enter through `_prepare_prelocked`; no separate method consumer or alias remains.
+The project diagnostic caller switches directly to the module function in its
+separately owned integration delta; no compatibility class method remains.
+The structural validator, focused pure prepared guide/compilation authority
+tests, compilation and lint provide local evidence. Focused PostgreSQL and
+CI-integrity review run after integration with the lead candidate.
+This extraction changes no capability, exposure or delivery claim in
+`docs/roadmap_status.md`, so the roadmap needs no edit for this scoped commit.
