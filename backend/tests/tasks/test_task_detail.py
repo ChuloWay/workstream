@@ -231,12 +231,13 @@ async def test_task_detail_management_states(task_client):
 
 async def test_task_detail_owned_states(task_client, monkeypatch):
     project = await create_active_project(task_client)
-    task = await create_ready_task(task_client, project["id"])
+    tasks = {state: await create_ready_task(task_client, project["id"]) for state in sorted(STATES)}
     grant = await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], "detail-states")
-    claimed = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
-    assert claimed.status_code == 200, claimed.text
     factory, seen = db_session.get_session_factory(), set()
-    for state in STATES:
+    for state, task in tasks.items():
+        # Each historical read state has independent custody, without a receipt-free release.
+        claimed = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
+        assert claimed.status_code == 200, claimed.text
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, task["id"])
             assert row.locked_contribution_policy_version_id is not None

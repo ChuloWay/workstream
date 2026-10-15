@@ -259,13 +259,21 @@ async def test_work_context_public_projections(task_client, monkeypatch):
 async def test_work_context_owned_state_matrix(task_client, monkeypatch):
     project = await create_active_project(task_client)
     draft = await create_draft_task(task_client, project["id"])
-    task = await create_started_task(task_client, project["id"], monkeypatch)
-    denied = await task_client.get(f"/api/v1/tasks/{draft['id']}/work-context", headers=auth_headers())
-    assert denied.status_code == 404 and denied.json()["error"]["code"] == "project_authorization_resource_not_found"
     states = {state for edge in ALLOWED_TASK_TRANSITIONS for state in edge}
     assert states == {"draft", "screening", "ready", "claimed", "in_progress", "submitted", "evaluation_pending", "review_pending", "needs_revision"}
+    tasks = {state: await create_ready_task(task_client, project["id"]) for state in sorted(states)}
+    await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], "worker-one")
+    set_dev_actor(monkeypatch, roles="worker", subject="worker-one")
+    denied = await task_client.get(f"/api/v1/tasks/{draft['id']}/work-context", headers=auth_headers())
+    assert denied.status_code == 404 and denied.json()["error"]["code"] == "project_authorization_resource_not_found"
     factory, seen = db_session.get_session_factory(), set()
-    for state in states:
+    for state, task in tasks.items():
+        # Start a separate assignment per projection state; never invent terminal transitions.
+        for action in ("claim", "start"):
+            transition = await task_client.post(
+                f"/api/v1/tasks/{task['id']}/{action}", headers=auth_headers(), json={"reason": action},
+            )
+            assert transition.status_code == 200, transition.text
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, task["id"])
             assert row.locked_contribution_policy_version_id is not None
