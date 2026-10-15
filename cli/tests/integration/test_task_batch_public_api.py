@@ -204,7 +204,10 @@ async def test_200_row_csv_source_import_screen_release_and_fresh_denial(
         raw = json_path.read_bytes()
         converted_rows = json.loads(raw)["tasks"]
         assert all("acceptance_criteria" not in row for row in converted_rows[::2])
-        assert all(row["acceptance_criteria"] == "Accurate, complete work" for row in converted_rows[1::2])
+        assert all(
+            row["acceptance_criteria"] == "Accurate, complete work"
+            for row in converted_rows[1::2]
+        )
         commitment = "sha256:" + hashlib.sha256(raw).hexdigest()
         assert converted["sha256"] == commitment and converted["byte_count"] == len(raw)
         source = await successful(

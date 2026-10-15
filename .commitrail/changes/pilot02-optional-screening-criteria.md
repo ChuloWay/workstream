@@ -32,6 +32,10 @@ Allowed files:
   its byte-custody, replay or revoked-authority assertions.
 - `docs/spec_chunk_4_task_queue_assignment.md`, `docs/roadmap_status.md`: clarify
   optional task criteria across SCREEN/RELEASE and record the delivered repair.
+- `docs/operations_queue_policy.md`, `docs/operations_project_operating_manual.md`,
+  `docs/operations_operator_workflow.md`, `docs/product_first_user_flows.md`: align
+  current operator/readiness guidance with optional task-local criteria and
+  mandatory guide-governed requirements.
 - `.commitrail/changes/pilot02-bulk-transitions-cli.md`: reconcile only its
   current outcome paragraph with this correction; retain historical evidence.
 - This change record.

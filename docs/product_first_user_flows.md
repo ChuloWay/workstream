@@ -106,7 +106,10 @@ Acceptance:
 ## Flow 2: Project Manager Creates A Task
 
 1. A covered Project Manager selects the active project.
-2. The Project Manager creates a task with title, description, source reference, acceptance criteria, rejection criteria, deadline, and difficulty.
+2. The Project Manager creates a draft with title and description, plus any
+   applicable source reference, task-local acceptance/rejection criteria,
+   deadline and difficulty. Task-local criteria are optional supplementary text;
+   the project guide supplies governed acceptance requirements.
 3. Workstream validates the task source and reviewability fields, then confirms the task fits the active project guide and policy bundle.
 4. Task enters `SCREENING`.
 5. Screening locks the guide source snapshot id/hash, effective project
@@ -118,8 +121,10 @@ Acceptance:
 
 Acceptance:
 
-- Missing required fields block `SCREENING`.
-- Missing required fields block `READY`.
+- Blank title/description or missing active-guide custody blocks `SCREENING`.
+- Missing required policy locks or release validation blocks `READY`.
+- Omitted/null task-local acceptance criteria do not block either transition;
+  this does not waive the locked guide or its approved policies.
 - Task shows project guide, required artifacts, generated project pre-submit
   checker policy summary, permission-appropriate post-submit checker policy
   summary, review policy, and revision policy. After claim, the contributor sees
