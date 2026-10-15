@@ -78,7 +78,10 @@ contributor revision window. They retain bounded durable recovery semantics.
   marker: its two DDL mutation paths explicitly roll back, while the ordinary
   fixture verifies the canonical schema and rebuilds plus fails if either leaks.
   Rebalance only retained-pause, revision-expiry, and task-batch nodes from the
-  resulting complete phase evidence.
+  resulting complete phase evidence. After both 3bad hosted attempts timed out
+  project C with only the `test_projects.py` tail left, route the three measured
+  pause-race waits to project D. This removes about 102 seconds from C while
+  projecting D at about 865 seconds from its measured 714-second pass.
   Preserve every test node, all 13
   required lanes and existing timeouts; affected current
   specifications/runbooks/README and roadmap. Remove

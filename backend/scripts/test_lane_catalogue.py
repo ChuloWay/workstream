@@ -613,9 +613,8 @@ PROJECT_MODULE_LANE_OVERRIDES = {
         "project_lifecycle_d",
     ),
     "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
-        "project_lifecycle_a",
-        "project_lifecycle_c",
-        "project_lifecycle_e",
+        # All three measured waits fit D while removing C's repeated timeout cause.
+        "project_lifecycle_d",
     ),
     "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
     "tests/tasks/submission_dispatch/test_revision_expiry.py": (

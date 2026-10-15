@@ -270,11 +270,7 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
             "project_lifecycle_c",
             "project_lifecycle_d",
         ),
-        "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
-            "project_lifecycle_a",
-            "project_lifecycle_c",
-            "project_lifecycle_e",
-        ),
+        "tests/tasks/submission_dispatch/test_revision_pause_races.py": ("project_lifecycle_d",),
         "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
         "tests/tasks/submission_dispatch/test_revision_expiry.py": (
             "project_lifecycle_a",
@@ -303,7 +299,7 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     )
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "67cbfd2fb1776b98ba8f6ff50735f601bbde10705808bfe67fe54f3544cd9d60"
+        "e9d89d4942836a9b5fcfd445c78538ae7e0d9e4613b638f83bdf56c0d7335317"
     )
 
 
@@ -323,13 +319,13 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
     retained_module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
     expected = {
         f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[False]": (
-            "project_lifecycle_c"
+            "project_lifecycle_d"
         ),
         f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[True]": (
-            "project_lifecycle_a"
+            "project_lifecycle_d"
         ),
         f"{pause_module}::test_expiry_beats_real_pm_repair_waiting_for_task_past_deadline": (
-            "project_lifecycle_c"
+            "project_lifecycle_d"
         ),
         f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]": (
             "project_lifecycle_a"
