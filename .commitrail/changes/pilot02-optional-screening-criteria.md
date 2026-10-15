@@ -37,7 +37,8 @@ Allowed files:
   current operator/readiness guidance with optional task-local criteria and
   mandatory guide-governed requirements.
 - `docs/spec_chunk_8_submission_artifact_policy_checkers.md`,
-  `docs/template_project_guide.md`, `docs/architecture_checker_framework.md`:
+  `docs/template_project_guide.md`, `docs/architecture_checker_framework.md`,
+  `docs/template_checker_policy.md`, `docs/architecture_data_model.md`:
   distinguish optional task-local criteria
   from mandatory guide-level acceptance requirements, including the retired
   checker record's misleading current-screening statement.
@@ -153,3 +154,9 @@ contracts. Runtime code and tests are unchanged. The roadmap already records thi
 optional-criteria behavior; no additional capability or roadmap change is needed.
 The linked current checker framework also qualifies missing acceptance
 requirements as guide-level, not omitted optional task-local criteria.
+
+The linked-document review also found current policy-template and data-model
+passages still presenting the removed criteria-presence checker as selectable.
+Their affected POST contract sections now describe the existing approved external
+bindings and explicitly preserve optional task-local criteria. Retained predecessor
+body provenance remains documented; no runtime or stored data changes are made.
