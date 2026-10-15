@@ -142,7 +142,15 @@ Workstream assigns the immutable submission version server-side. The contributor
 
 Automated checks are running inside the pre-review gate.
 
-`pre_review_gate` is a checker phase and audit label, not a separate v0.1 task status. The persisted task remains `evaluation_pending` until authorized routing moves it to `review_pending`, `needs_revision`, the internal `task_setup_blocked` repair route, or `accepted` through the shared acceptance operation for successful required checks under the locked `human_review_required=false` policy.
+`pre_review_gate` is a checker phase and audit label, not a separate v0.1 task
+status. The persisted task remains `evaluation_pending` until authorized routing
+moves it to `review_pending` or, when another revision is permitted,
+`needs_revision`. Final-attempt failure instead closes the exhausted assignment
+and returns the Task to `ready`. Successful required checks under the locked
+`human_review_required=false` policy reach `accepted` through the shared
+acceptance operation. The current completion classifier cannot
+emit `task_setup_blocked`; a manager-visible setup-fault hold remains future
+safety work, as recorded in the [capability ledger](roadmap_status.md).
 
 ### REVIEW_PENDING
 

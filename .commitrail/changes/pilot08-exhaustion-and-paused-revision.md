@@ -79,13 +79,15 @@ contributor revision window. They retain bounded durable recovery semantics.
   fixture verifies the canonical schema and rebuilds plus fails if either leaks.
   Rebalance only retained-pause, revision-expiry, task-batch, pause-race, and
   `test_projects.py` nodes from measured hosted evidence. Keep `test_projects.py`
-  across B/E and the three-node revision-clock module in B. Move only the three
-  pause-race deadline cases from E to A: on bf0f31, A completed in 690.1 seconds,
-  while E reached its unchanged 1200-second limit twice, leaving respectively
-  125 and 98 unchanged `test_projects.py` cases unfinished. All affected revision
-  cases completed. The move separates real deadline waits from E's project tail;
-  it does not change their SQL sleeps, fixture semantics, or assertions. All
-  other lane ownership remains unchanged. Measured capacity motivates this
+  across B/E and the three-node revision-clock module in B. Distribute the three
+  pause-race deadline cases across the existing A/C/D/E owner tuple, which places
+  the current cases separately on D, C and E. Keeping all three on E left 125
+  then 98 unchanged project-tail cases unfinished on bf0f31. Moving them together
+  to A left 16 unchanged tail cases unfinished on af3815, despite completing all
+  three races. Historical runs measure each race at approximately 51 seconds;
+  distributing them avoids concentrating that fixed wait cost. Preserve main's
+  additional static architecture partition changes from merged #574. Other
+  project ownership remains unchanged. Measured capacity motivates this
   allocation and does not replace full hosted qualification.
   Preserve every test node, all 13
   required lanes and existing timeouts; affected current
@@ -197,6 +199,6 @@ name or passing source inspection is not a runtime qualification.
 
 ## Reconciliation
 
-- Current-source reconciliation: follows merged #569 and preserves main's 13-lane CI and immutable history. The user's final decision removes every contributor-count limit or repeated-failure PM hold.
+- Current-source reconciliation: follows merged #569 and #574, preserving optional task-local criteria, isolated owned-state read fixtures, main's static architecture partition and the 13-lane CI, plus immutable revision history. The user's final decision removes every contributor-count limit or repeated-failure PM hold.
 - Next usable boundary: human review and merge of this complete follow-up; future human-review trigger integration remains #554 and hosted-broker rehearsal remains #555.
 - Merge qualification requires retained-data, API, concurrency, independent review and full CI evidence for the final candidate. This record describes the intended merged behavior and does not authorize merge or deployment.

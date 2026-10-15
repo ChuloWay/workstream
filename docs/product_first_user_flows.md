@@ -106,7 +106,10 @@ Acceptance:
 ## Flow 2: Project Manager Creates A Task
 
 1. A covered Project Manager selects the active project.
-2. The Project Manager creates a task with title, description, source reference, acceptance criteria, rejection criteria, deadline, and difficulty.
+2. The Project Manager creates a draft with title and description, plus any
+   applicable source reference, task-local acceptance/rejection criteria,
+   deadline and difficulty. Task-local criteria are optional supplementary text;
+   the project guide supplies governed acceptance requirements.
 3. Workstream validates the task source and reviewability fields, then confirms the task fits the active project guide and policy bundle.
 4. Task enters `SCREENING`.
 5. Screening locks the guide source snapshot id/hash, effective project
@@ -118,8 +121,10 @@ Acceptance:
 
 Acceptance:
 
-- Missing required fields block `SCREENING`.
-- Missing required fields block `READY`.
+- Blank title/description or missing active-guide custody blocks `SCREENING`.
+- Missing required policy locks or release validation blocks `READY`.
+- Omitted/null task-local acceptance criteria do not block either transition;
+  this does not waive the locked guide or its approved policies.
 - Task shows project guide, required artifacts, generated project pre-submit
   checker policy summary, permission-appropriate post-submit checker policy
   summary, review policy, and revision policy. After claim, the contributor sees
@@ -155,8 +160,9 @@ Acceptance:
    as `revision_exhausted`, and returns the Task to `ready` atomically, without a
    revision preparation or deadline. Both outcomes retain `CheckerResult`
    lineage and create no Review or reviewer contribution.
-5. Setup or provenance defects keep the Task `evaluation_pending` on the
-   internal `task_setup_blocked` repair route.
+5. A manager-visible hold for setup faults is planned safety work, not a
+   current route: the selected completion classifier cannot emit
+   `task_setup_blocked`. It is not a prerequisite for this first journey.
 6. For locked `human_review_required=true`, only a durable, final, current `CheckerRun` outcome of `allow_review` admits
    the exact immutable Submission with verified binding facts and moves the
    Task to `REVIEW_PENDING`.

@@ -22,14 +22,16 @@ async def test_task_read_contributor_visibility(admin_access, kind):
     assert (await request()).status_code == 200
     factory = db_session.get_session_factory()
     states = {state for transition in ALLOWED_TASK_TRANSITIONS for state in transition}
-    assert len(states) == 9
-    # Each read fixture starts from its own authorized claim; it does not release
-    # a failed assignment without the required immutable terminal evidence.
-    for state in sorted(states):
+    assert states == {"draft", "screening", "ready", "claimed", "in_progress", "submitted",
+                      "evaluation_pending", "review_pending", "needs_revision"}
+    seen_tasks = set()
+    # Adjacent revision/ready cases must not fabricate an expiry transition.
+    for state in ("needs_revision", "ready", *sorted(states - {"needs_revision", "ready"})):
         target = await create_task(admin_access, project, manager)
         claimed = await client.post(f"/api/v1/tasks/{target}/claim", headers=actor.headers | {"Idempotency-Key": str(uuid4())})
         assert claimed.status_code == 200, claimed.text
         assignment_id = claimed.json()["assignment"]["id"]
+        seen_tasks.add(target)
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, str(target))
             row.status = state
@@ -45,6 +47,7 @@ async def test_task_read_contributor_visibility(admin_access, kind):
         assert response.status_code == 200, (state, response.text)
         if kind.endswith("detail"):
             assert response.json()["status"] == state
+    assert len(seen_tasks) == len(states) == 9
     other = await admin_access.signed.actor("other-owner")
     cases = {
         "wrong_contributor": ("claimed", str(actor.id), str(other.id), "active"),

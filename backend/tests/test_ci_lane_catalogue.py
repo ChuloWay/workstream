@@ -42,6 +42,27 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     )
 
 
+def test_architecture_inspections_share_capacity_without_losing_nodes() -> None:
+    modules = {
+        "tests/test_artifact_architecture.py",
+        "tests/architecture/test_module_boundaries.py",
+        "tests/architecture/test_test_structure_boundary.py",
+    }
+    schema = next(lane for lane in LANES if lane.name == "schema_contracts")
+    assert modules.isdisjoint(schema.modules)
+    for module in modules:
+        assert catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_SHARED_LANES
+        assert (
+            tuple(lane.name for lane in LANES if module in lane.modules)
+            == catalogue.PARTITIONED_SHARED_LANES
+        )
+    nodes = [f"{module}::test_inspection[{index}]" for module in modules for index in range(256)]
+    manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
+    assert Counter(row["nodeid"] for row in manifest["nodes"]) == Counter(nodes)
+    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_SHARED_LANES)
+    assert runner.build_manifest("a" * 40, nodes) == manifest
+
+
 def test_checker_delivery_and_routing_preparation_partition_every_node_once() -> None:
     delivery = {
         "tests/checkers/default/test_contract.py",
@@ -278,7 +299,12 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
             "project_lifecycle_c",
             "project_lifecycle_d",
         ),
-        "tests/tasks/submission_dispatch/test_revision_pause_races.py": ("project_lifecycle_a",),
+        "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_c",
+            "project_lifecycle_d",
+            "project_lifecycle_e",
+        ),
         "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
         "tests/tasks/submission_dispatch/test_revision_expiry.py": (
             "project_lifecycle_a",
@@ -307,7 +333,7 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     )
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "a55cc1abb93d7fca45852fb1316c6d87e1b4a7da1d7b79dfafe92648cea7a898"
+        "bb7886806a7e8db1a41b78af6ca04959303b162ddc5f204e7042df1ce3b4877b"
     )
 
 
@@ -327,13 +353,13 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
     retained_module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
     expected = {
         f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[False]": (
-            "project_lifecycle_a"
+            "project_lifecycle_d"
         ),
         f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[True]": (
-            "project_lifecycle_a"
+            "project_lifecycle_c"
         ),
         f"{pause_module}::test_expiry_beats_real_pm_repair_waiting_for_task_past_deadline": (
-            "project_lifecycle_a"
+            "project_lifecycle_e"
         ),
         f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]": (
             "project_lifecycle_a"

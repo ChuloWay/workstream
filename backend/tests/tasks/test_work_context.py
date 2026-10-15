@@ -262,27 +262,29 @@ async def test_work_context_owned_state_matrix(task_client, monkeypatch):
     states = {state for edge in ALLOWED_TASK_TRANSITIONS for state in edge}
     assert states == {"draft", "screening", "ready", "claimed", "in_progress", "submitted", "evaluation_pending", "review_pending", "needs_revision"}
     tasks = {state: await create_ready_task(task_client, project["id"]) for state in sorted(states)}
-    await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], "worker-one")
-    set_dev_actor(monkeypatch, roles="worker", subject="worker-one")
+    grant = await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], "worker-one")
     denied = await task_client.get(f"/api/v1/tasks/{draft['id']}/work-context", headers=auth_headers())
     assert denied.status_code == 404 and denied.json()["error"]["code"] == "project_authorization_resource_not_found"
     factory, seen = db_session.get_session_factory(), set()
-    for state, task in tasks.items():
-        # Start a separate assignment per projection state; never invent terminal transitions.
-        for action in ("claim", "start"):
-            transition = await task_client.post(
-                f"/api/v1/tasks/{task['id']}/{action}", headers=auth_headers(), json={"reason": action},
-            )
-            assert transition.status_code == 200, transition.text
+    seen_tasks = set()
+    for state in ("needs_revision", "ready", *sorted(states - {"needs_revision", "ready"})):
+        task = tasks[state]
+        claim = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
+        assert claim.status_code == 200, claim.text
+        assignment_id = claim.json()["assignment"]["id"]
+        start = await task_client.post(f"/api/v1/tasks/{task['id']}/start", headers=auth_headers())
+        assert start.status_code == 200, start.text
+        seen_tasks.add(task["id"])
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, task["id"])
             assert row.locked_contribution_policy_version_id is not None
             row.status = state  # Projection fixture only; preserves full locked custody and active assignment.
         async with factory() as session:
             row = await session.get(WorkstreamTask, task["id"])
-            assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == row.id))
+            assignment = await session.get(TaskAssignment, assignment_id)
+            assert assignment.task_id == row.id
             assert row.status == state and assignment.status == "active"
-            assert row.assigned_to == assignment.contributor_id
+            assert row.assigned_to == assignment.contributor_id == grant["actor_profile_id"]
             assert row.locked_contribution_policy_version_id == assignment.submitter_contribution_policy_version_id
         response = await task_client.get(f"/api/v1/tasks/{task['id']}/work-context", headers=auth_headers())
         assert response.status_code == 200, (state, response.text)
@@ -290,7 +292,7 @@ async def test_work_context_owned_state_matrix(task_client, monkeypatch):
         assert body["task"]["status"] == state
         assert body["lifecycle"] == {"assigned_to_current_actor": True, "next_actions": ["start"] if state == "claimed" else []}
         seen.add(body["task"]["status"])
-    assert seen == states
+    assert seen == states and len(seen_tasks) == len(states) == 9
 
 
 @pytest.mark.parametrize("management", (False, True))

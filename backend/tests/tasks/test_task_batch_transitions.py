@@ -16,6 +16,7 @@ from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink
 from app.modules.authorization.models import AdminRoleGrant
 from app.modules.authorization.runtime import ActorKind, ActorStatus, HumanAuthorizationContext, IdentityLinkStatus
+from app.modules.projects.models import ProjectGuide
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.models import AuditEvent, TaskCommandReceipt, WorkstreamTask
 from app.modules.tasks.service import TaskService, TaskValidationError
@@ -75,6 +76,55 @@ async def _success_facts(project):
             AuditEvent.action_id.in_(["project.task.screen", "project.task.release"]),
         )))
         return tasks, roots, members, receipts, lifecycle, allows
+
+
+@pytest.mark.parametrize("mode", ["single", "bulk"])
+async def test_optional_criteria_survive_public_import_screen_release(import_source_client, mode):
+    """Guide-governed briefs need no invented task-local acceptance text."""
+    client = import_source_client
+    project = (await create_active_project(client, slug="optional-" + uuid4().hex))["id"]
+    value = document(3)
+    for row in value["tasks"]:
+        row["title"] = "Repair the supplied Python worker"
+        row["description"] = "Investigate the intermittent crash and repair the supplied worker."
+    value["tasks"][1]["acceptance_criteria"] = None
+    supplied = "Preserve the documented billing rules."
+    value["tasks"][2]["acceptance_criteria"] = supplied
+    source = await _verified_source(client, project, value)
+    imported = await client.post(_batch_path(project), headers=auth_headers(), json={"source_id": source["source_id"]})
+    assert imported.status_code == 201, imported.text
+    batch = imported.json()
+    task_ids = [row["id"] for row in batch["tasks"]]
+    async with db_session.get_session_factory()() as session:
+        guide = (await session.scalars(select(ProjectGuide).where(
+            ProjectGuide.project_id == project, ProjectGuide.status == "active",
+        ))).one()
+        expected_guide = guide.version
+        expected_policy = guide.contribution_policy_version_id
+    assert expected_policy is not None
+
+    for operation, status in (("screen", "screening"), ("release", "ready")):
+        paths = ([_path(project, batch, operation)] if mode == "bulk" else
+                 [f"/api/v1/tasks/{task_id}/{operation}" for task_id in task_ids])
+        for path in paths:
+            key, payload = auth_headers(), {"reason": "Approve briefs under the project guide"}
+            result = await client.post(path, headers=key, json=payload)
+            assert result.status_code == 200, result.text
+            before = await _success_facts(project)
+            replay = await client.post(path, headers=key, json=payload)
+            assert replay.status_code == 200 and replay.json() == result.json(), replay.text
+            after = await _success_facts(project)
+            assert before[:-1] == after[:-1]
+            assert len(after[-1] - before[-1]) == (3 if mode == "bulk" else 1)
+        async with db_session.get_session_factory()() as session:
+            for task_id, criteria in zip(task_ids, [None, None, supplied], strict=True):
+                task = await session.get(WorkstreamTask, task_id)
+                assert task.status == status
+                assert task.acceptance_criteria == criteria
+                assert task.locked_guide_version == expected_guide
+                assert task.locked_contribution_policy_version_id == expected_policy
+    facts = await _success_facts(project)
+    assert len(facts[3]) == len(facts[4]) == 6
 
 
 @pytest.mark.parametrize("count", [200, 500])

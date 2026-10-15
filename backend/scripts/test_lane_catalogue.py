@@ -618,8 +618,11 @@ PROJECT_MODULE_LANE_OVERRIDES = {
         "project_lifecycle_d",
     ),
     "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
-        # A has measured headroom after the large project module moved to B/E.
+        # Current waits hash one each to C/D/E, leaving inflated A and busy B clear.
         "project_lifecycle_a",
+        "project_lifecycle_c",
+        "project_lifecycle_d",
+        "project_lifecycle_e",
     ),
     "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
     "tests/tasks/submission_dispatch/test_revision_expiry.py": (
