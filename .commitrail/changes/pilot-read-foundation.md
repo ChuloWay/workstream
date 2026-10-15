@@ -92,7 +92,9 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   feedback findings, successful preparation feedback, revision context round)
   and their integration fixtures.
 - Update the authorization OpenAPI field-set assertions, the CI lane catalogue
-  for the new test modules, the journey probe's outcome assertions, the Alembic
+  for the new test modules (moving the public batch-transition journeys to the
+  schema lane once `project_lifecycle_c` exceeded its 1200-second execution
+  deadline), the journey probe's outcome assertions, the Alembic
   environment head pin, and current docs (README revision-round sentence,
   checker framework, data model, lifecycle state machine, first-user flows,
   roadmap).

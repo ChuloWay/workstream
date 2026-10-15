@@ -214,7 +214,7 @@ def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
         runner.ADMIN_RUNNER_MODULE,
     } | static_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(
         catalogue.TASK_ROUTING_REQUEST_MODULES
-    ) == modules_by_lane["schema_contracts"]
+    ) | set(catalogue.TASK_BATCH_TRANSITION_MODULES) == modules_by_lane["schema_contracts"]
 
 
 def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
@@ -225,8 +225,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "5b03621152431541df7c85861e26c80f333ce25d81274faf77632ea377a8eaef",
         ),
         "project": (
-            191,
-            "329382a2e965236f44c87d1e0d8af1b49e1ab0777f23bb16746ba8b1db2da9f2",
+            190,
+            "01a2feb99328e223131f8723ef16aec580468be80fa4d3a88d5ec37128f657b2",
         ),
         "task": (
             76,
@@ -656,6 +656,16 @@ def test_routing_request_proofs_use_schema_lane_with_measured_headroom():
         "tests/tasks/post_submit_routing/test_request_storage.py",
     }
     assert set(catalogue.TASK_ROUTING_REQUEST_MODULES) == expected
+    for lane in LANES:
+        assert set(lane.modules) & expected == (
+            expected if lane.name == "schema_contracts" else set()
+        )
+    assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
+
+
+def test_batch_transition_journeys_use_schema_lane_with_measured_headroom():
+    expected = {"tests/tasks/test_task_batch_transitions.py"}
+    assert set(catalogue.TASK_BATCH_TRANSITION_MODULES) == expected
     for lane in LANES:
         assert set(lane.modules) & expected == (
             expected if lane.name == "schema_contracts" else set()

@@ -276,7 +276,6 @@ PROJECT_MODULES = (
     "tests/tasks/test_task_import_batch_bindings.py",
     "tests/tasks/test_task_import_batches.py",
     "tests/tasks/test_task_batch_transition_contract.py",
-    "tests/tasks/test_task_batch_transitions.py",
     "tests/contributions/test_export_csv.py",
     "tests/contributions/test_export_projection.py",
     "tests/authorization/test_contribution_read_scope.py",
@@ -563,6 +562,10 @@ TASK_ROUTING_REQUEST_MODULES = (
     "tests/tasks/post_submit_routing/test_request_storage.py",
 )
 
+# The public batch-transition journeys use schema capacity after the project
+# partition reached its hosted execution deadline (project_lifecycle_c).
+TASK_BATCH_TRANSITION_MODULES = ("tests/tasks/test_task_batch_transitions.py",)
+
 # Core diagnostics stay on the schema/architecture lane with measured hosted
 # headroom; the shared and task lanes are already closest to the hard cap.
 OBSERVABILITY_MODULES = (
@@ -621,6 +624,7 @@ LANES = (
             "tests/test_test_lane_evidence.py",
             "tests/test_merge_test_lane_evidence.py",
             *TASK_ROUTING_REQUEST_MODULES,
+            *TASK_BATCH_TRANSITION_MODULES,
             *OBSERVABILITY_MODULES,
             ADMIN_RUNNER_MODULE,
         ),

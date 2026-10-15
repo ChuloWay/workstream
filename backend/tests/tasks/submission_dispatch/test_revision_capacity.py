@@ -174,32 +174,31 @@ async def test_two_revisions_then_public_and_sql_refusal(
             assert rows[2].supersedes_submission_id == rows[1].id
 
 
-async def test_coverage_returns_spend_no_round_but_keep_the_first_window(
+async def test_coverage_return_leaves_the_full_revision_allowance(
     tmp_path, isolated_database_env, monkeypatch,
 ):
-    """Coverage returns v1/v2 cost no round, so v3 is still the initial attempt.
+    """Under one allowed revision, a coverage return v1 leaves v2 as the initial attempt.
 
-    Failures v3/v4/v5 then use the two locked revisions and a sixth is refused.
+    Failed v2 and v3 then spend round zero and the single revision; a fourth
+    attempt is refused. Counting the coverage return would refuse v3 instead.
     """
     from app.modules.tasks.schemas import AdmissionBackedSubmissionResponse
     from app.modules.tasks.revision.models import TaskRevisionPreparation
 
     async with remediation_source(
         tmp_path, isolated_database_env, human_review_required=False, findings=COVERAGE_GAP,
+        max_revision_rounds=1,
     ) as h:
         await _fixture_revision_context(h)
         async with h.factory() as session:
             first = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
-            first_window = (first.requested_at, first.deadline_at)
+            first_start = first.requested_at
             window_length = first.deadline_at - first.requested_at
-            assert (first.next_revision_round, first.max_revision_rounds) == (0, 2)
+            assert (first.next_revision_round, first.max_revision_rounds) == (0, 1)
         route = f"/api/v1/tasks/{h.request.task_id}/submissions"
         async with _client(h, monkeypatch, isolated_database_env) as client:
-            # The same gap again: still round zero, and the first window, not a new one.
-            # Then contributor failures spend the initial attempt and both locked rounds.
-            for version, findings, expected_round in (
-                (2, COVERAGE_GAP, 0), (3, None, 1), (4, None, 2), (5, None, 3),
-            ):
+            # Contributor failures each start a fresh window and spend a round.
+            for version, expected_round in ((2, 1), (3, 2)):
                 h.data = revision_archive(h.data)
                 prepared, admission = await _ready_replacement(h, h.data)
                 payload = _payload(prepared, admission)
@@ -208,23 +207,20 @@ async def test_coverage_returns_spend_no_round_but_keep_the_first_window(
                 assert response.json()["submission_version"] == version
                 h.created = AdmissionBackedSubmissionResponse.model_validate(response.json())
                 saved_payload, saved_response = payload, response.json()
-                await _fail_current_submission(h, findings=findings)
+                await _fail_current_submission(h)
                 async with h.factory() as session:
                     window = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
                     assert window.next_revision_round == expected_round
-                    if findings:
-                        assert (window.requested_at, window.deadline_at) == first_window
-                    else:
-                        assert window.requested_at > first_window[0]
-                        assert window.deadline_at - window.requested_at == window_length
+                    assert window.requested_at > first_start
+                    assert window.deadline_at - window.requested_at == window_length
             async with h.factory() as session:
                 assert (await session.execute(text(
                     "SELECT array_agg(attempt_status ORDER BY version), "
                     "array_agg(coalesce(status_reason, '-') ORDER BY version) "
                     "FROM public.submissions"
                 ))).one() == (
-                    ["needs_revision"] * 5,
-                    ["checker_coverage_incomplete", "checker_coverage_incomplete", "-", "-", "-"],
+                    ["needs_revision"] * 3,
+                    ["checker_coverage_incomplete", "-", "-"],
                 )
 
             before = await _creation_snapshot(h)
