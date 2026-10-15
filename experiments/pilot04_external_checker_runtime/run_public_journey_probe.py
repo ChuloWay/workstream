@@ -570,6 +570,10 @@ async def _ready_admission(client, factory, task_id: str, assignment_id: str,
             headers=headers, content=archive,
         )
         status = result["submission_bundle_preparation_status"]
+        _require(
+            bool(result["pre_submission_results"]),
+            "admitted intake omitted its feedback",
+        )
         if status == "ready":
             _require(result["admission_id"] is not None, "ready intake omitted admission")
             if await _scan_audit_count(factory) > scans_before:
