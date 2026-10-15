@@ -79,8 +79,11 @@ Contributors must not see:
 
 ## Recovery Contract
 
-Blocking checker outcomes are not overridden into review readiness. Registered
-Operator retry or covered Project Manager repair is allowed only with:
+Blocking checker outcomes are not overridden into review readiness. Current
+selected completed results are `allow_review` or `needs_revision`; infrastructure
+failure is `not_evaluated` and may use the implemented authorized Operator retry.
+The classifier cannot emit `task_setup_blocked`; manager-visible setup-fault hold
+and repair remain future safety work. Existing Operator retry requires:
 
 - actor
 - matched grant and permission
@@ -90,8 +93,7 @@ Operator retry or covered Project Manager repair is allowed only with:
 - reason
 - evidence
 
-Recovery creates a new attempt or repaired setup state and preserves every
-prior checker result. It cannot create a human review decision.
+Operator retry creates a new attempt and preserves every prior checker result. It cannot create a human review decision.
 
 ## Review Cadence
 

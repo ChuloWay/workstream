@@ -38,10 +38,15 @@ Allowed files:
   mandatory guide-governed requirements.
 - `docs/spec_chunk_8_submission_artifact_policy_checkers.md`,
   `docs/template_project_guide.md`, `docs/architecture_checker_framework.md`,
-  `docs/template_checker_policy.md`, `docs/architecture_data_model.md`:
-  distinguish optional task-local criteria
+  `docs/template_checker_policy.md`, `docs/architecture_data_model.md`,
+  `docs/architecture_lockdown.md`, `docs/architecture_lifecycle_state_machine.md`,
+  `docs/decision_0009_review_decisions_are_canonical.md`,
+  `docs/diagrams/task_lifecycle_sequence.md`: distinguish optional task-local criteria
   from mandatory guide-level acceptance requirements, including the retired
-  checker record's misleading current-screening statement.
+  checker record's misleading current-screening statement. Reconcile the same
+  current documents and user-flow guidance with the selected classifier's lack
+  of a `task_setup_blocked` outcome; manager-visible setup-fault hold is planned,
+  not implemented routing.
 - `.commitrail/changes/pilot02-bulk-transitions-cli.md`: reconcile only its
   current outcome paragraph with this correction; retain historical evidence.
 - `backend/tests/authorization/task_reads/test_visibility.py`,
@@ -181,3 +186,19 @@ No production guard, lifecycle behavior, test selection or timeout changes.
 Validate all four affected cases with real PostgreSQL/MinIO and rerun hosted CI.
 The separate project-C lane hit its unchanged deadline with 459/470 completed
 and no assertion failure; its previous successful run took 1,149 seconds.
+
+## Canonical-name and routing-tense correction
+
+A further review found the retired criteria-presence checker in the architecture
+lockdown's canonical names and planned setup-fault routing described as live in
+the checker framework. Remove the retired canonical entry, retain mandatory
+guide acceptance requirements and optional task-local criteria, and reconcile
+the same routing claim across the current framework, lifecycle/data model,
+user-flow, policy template, canonical review-decision ADR and sequence diagram.
+Preserve the implemented human/automated acceptance distinction while qualifying
+hosted readiness separately. The selected classifier emits `allow_review` or
+`needs_revision` for completed results; infrastructure failure is `not_evaluated`.
+Retained `task_setup_blocked` contracts/history do not activate that outcome. The
+roadmap already records manager-visible setup-fault hold as future safety work;
+no roadmap capability change or runtime change is needed. Historical build
+records remain preserved.

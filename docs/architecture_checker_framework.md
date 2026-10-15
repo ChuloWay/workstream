@@ -521,9 +521,13 @@ Draft packet
 -> commit final CheckerRun result/recommendation, normalized JSON evidence and completion event
 -> TASK consumes the current result: true -> review_pending; eligible locked false -> shared FinalAcceptance/TASK/CON/awards atomically
 -> TASK projects an exact current contributor-fixable failure as needs_revision with the retained manifest recommendation and no Review
--> project/setup faults remain internal task_setup_blocked, never contributor blame
 -> if checker infrastructure fails: keep in checker retry handling
 ```
+
+Planned setup-fault handling is separate from this implemented routing: the
+current completion classifier cannot emit `task_setup_blocked`. A manager-visible
+hold for non-contributor-fixable project faults remains future safety work, as
+recorded in the [capability ledger](roadmap_status.md).
 
 The checker run must bind to one immutable submission version. If the contributor uploads a replacement file, the platform creates a new submission version and reruns checks.
 
@@ -587,11 +591,14 @@ an unfinished one. A new authorized terminal retry preserves prior evidence
 and supersedes it through the coordinated currentness protocol, never by
 replaying an old success or bypassing the Operator boundary.
 
-If a checker finds missing locked guide or policy context, missing acceptance
-requirements in the locked project guide, or another task setup defect that is
-not contributor-fixable, the run uses `task_setup_blocked`. Omitted or null
-optional task-local `acceptance_criteria` alone is not a setup defect. That route is internal to covered Project Managers and
-authorized Operators and must not be shown to contributors as a revision request.
+Planned setup-fault handling would retain non-contributor-fixable defects, such
+as missing locked guide/policy context or missing guide-level acceptance
+requirements, for authorized manager investigation rather than contributor
+revision. The current completion classifier does not emit `task_setup_blocked`,
+and that manager-visible hold is not implemented. Retained contracts or history
+containing the token do not activate the route. Omitted or null optional
+task-local `acceptance_criteria` alone is not a setup defect; guide-level
+acceptance requirements remain mandatory.
 
 ## Readiness Proof — Target Contract
 

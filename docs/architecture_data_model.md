@@ -1666,9 +1666,11 @@ History derives `attempt_number` from that generation and
 an independently mutable stored flag. Current-result consumers hold the caller
 transaction while checking this fence; an old event is not perpetual authority.
 
-Completed routing is `allow_review`, `needs_revision` or `task_setup_blocked`,
-derived from the locked blocking severities and complete member set. Unfinished
-or infrastructure-failed runs use `not_evaluated`. `allow_review` means no
+The current completion classifier derives `allow_review` or `needs_revision`
+from the complete locked external member set. Retained contracts/history may
+contain `task_setup_blocked`, but the classifier cannot emit it and a
+manager-visible setup-fault hold remains future safety work. Unfinished or
+infrastructure-failed runs use `not_evaluated`. `allow_review` means no
 blocking evaluation finding, never acceptance: later TASK routing follows the
 locked human-review requirement, including shared authorized acceptance when
 false. No human Review is invented for that branch.

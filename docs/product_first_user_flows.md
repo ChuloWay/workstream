@@ -156,8 +156,9 @@ Acceptance:
 3. Results are saved with `passed`, `warning`, or `failed`, plus severity, message, and evidence.
 4. Contributor-fixable checker failures route the Task to `NEEDS_REVISION` with
    `CheckerResult` lineage and no Review or reviewer contribution.
-5. Setup or provenance defects keep the Task `evaluation_pending` on the
-   internal `task_setup_blocked` repair route.
+5. A manager-visible hold for setup faults is planned safety work, not a
+   current route: the selected completion classifier cannot emit
+   `task_setup_blocked`. It is not a prerequisite for this first journey.
 6. For locked `human_review_required=true`, only a durable, final, current `CheckerRun` outcome of `allow_review` admits
    the exact immutable Submission with verified binding facts and moves the
    Task to `REVIEW_PENDING`.
