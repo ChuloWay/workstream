@@ -62,7 +62,7 @@ async def test_retained_blocked_clock_pauses_once_or_stays_due(
                         +make_interval(secs=>:historical_window_seconds) AS created_at
                     FROM public.submissions s
                     JOIN public.revision_policies p ON p.id=s.locked_revision_policy_id
-                    WHERE s.id=:historical_submission_id
+                    WHERE s.id=CAST(:historical_submission_id AS uuid)
                 """).bindparams(
                     historical_window_seconds=window_seconds,
                     historical_submission_id=manifest.submission_id,
