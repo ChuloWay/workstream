@@ -20,25 +20,28 @@ async def test_task_read_contributor_visibility(admin_access, kind):
     async def request(target=task):
         return await client.get(path(kind, project, target), headers=actor.headers)
     assert (await request()).status_code == 200
-    claimed = await client.post(f"/api/v1/tasks/{task}/claim", headers=actor.headers | {"Idempotency-Key": str(uuid4())})
-    assert claimed.status_code == 200, claimed.text
-    assignment_id = claimed.json()["assignment"]["id"]
     factory = db_session.get_session_factory()
     states = {state for transition in ALLOWED_TASK_TRANSITIONS for state in transition}
     assert len(states) == 9
-    for state in states:
+    # Each read fixture starts from its own authorized claim; it does not release
+    # a failed assignment without the required immutable terminal evidence.
+    for state in sorted(states):
+        target = await create_task(admin_access, project, manager)
+        claimed = await client.post(f"/api/v1/tasks/{target}/claim", headers=actor.headers | {"Idempotency-Key": str(uuid4())})
+        assert claimed.status_code == 200, claimed.text
+        assignment_id = claimed.json()["assignment"]["id"]
         async with factory() as session, session.begin():
-            row = await session.get(WorkstreamTask, str(task))
+            row = await session.get(WorkstreamTask, str(target))
             row.status = state
         async with factory() as independent:
-            stored = await independent.get(WorkstreamTask, str(task))
+            stored = await independent.get(WorkstreamTask, str(target))
             assignment = await independent.get(TaskAssignment, assignment_id)
             assert stored.status == state
             assert stored.assigned_to == str(actor.id)
             assert (assignment.task_id, assignment.contributor_id, assignment.status) == (
-                str(task), str(actor.id), "active",
+                str(target), str(actor.id), "active",
             )
-        response = await request()
+        response = await request(target)
         assert response.status_code == 200, (state, response.text)
         if kind.endswith("detail"):
             assert response.json()["status"] == state

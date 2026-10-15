@@ -6,9 +6,10 @@ from datetime import timedelta
 
 import pytest
 from alembic import command
-from sqlalchemy import select, text
+from sqlalchemy import DateTime, select, text
 
 from app.adapters.tasks import task_post_submit_outcome, task_revision_recovery
+from app.modules.tasks.post_submit_routing import outcome as routing_outcome
 from app.modules.tasks.revision.models import TaskRevisionPreparation
 from tests.migration_revision_fixtures import insert_0047_preparation, retained_revision_rows
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
@@ -19,25 +20,10 @@ pytestmark = pytest.mark.postgres_schema_contract
 
 
 async def _old_blocked_preparation(
-    session, *, manifest, candidate, audit_event_id, window_seconds,
+    session, *, manifest, candidate, audit_event_id,
 ):
-    """Arrange a bounded historical window, then use the fully guarded old writer."""
-    await session.execute(text(
-        "ALTER TABLE public.task_post_submit_routing_manifests "
-        "DISABLE TRIGGER task_routing_manifest_immutable"
-    ))
-    await session.execute(text("""
-        UPDATE public.task_post_submit_routing_manifests m
-        SET created_at=clock_timestamp()-make_interval(hours=>p.revision_deadline_hours)
-            +make_interval(secs=>:seconds)
-        FROM public.submissions s JOIN public.revision_policies p ON p.id=s.locked_revision_policy_id
-        WHERE m.id=:id AND s.id=m.submission_id
-    """), {"id": manifest.id, "seconds": window_seconds})
-    await session.execute(text(
-        "ALTER TABLE public.task_post_submit_routing_manifests "
-        "ENABLE TRIGGER task_routing_manifest_immutable"
-    ))
-    await session.refresh(manifest)
+    """Use the original guarded writer with its database-selected historical time."""
+    await session.refresh(manifest, attribute_names=["created_at"])
     # Historical system discovery could retain a blocked target without PM rebase.
     blocked = candidate.model_copy(update={
         "target": None, "target_post_policy_json": None, "target_max_revision_rounds": None,
@@ -67,14 +53,25 @@ async def test_retained_blocked_clock_pauses_once_or_stays_due(
         await asyncio.to_thread(command.upgrade, _alembic_config(), "0047_revision_recovery")
         async with remediation_source(tmp_path, isolated_database_env) as h:
             window_seconds = 60 if already_due else 600
+            original_manifest = routing_outcome._manifest
 
-            async def old_writer(session, **kwargs):
-                return await _old_blocked_preparation(
-                    session, **kwargs, window_seconds=window_seconds,
-                )
+            def old_manifest(*args, **kwargs):
+                manifest = original_manifest(*args, **kwargs)
+                manifest.created_at = text("""
+                    SELECT clock_timestamp()-make_interval(hours=>p.revision_deadline_hours)
+                        +make_interval(secs=>:historical_window_seconds) AS created_at
+                    FROM public.submissions s
+                    JOIN public.revision_policies p ON p.id=s.locked_revision_policy_id
+                    WHERE s.id=:historical_submission_id
+                """).bindparams(
+                    historical_window_seconds=window_seconds,
+                    historical_submission_id=manifest.submission_id,
+                ).columns(created_at=DateTime(timezone=True)).scalar_subquery()
+                return manifest
 
             with monkeypatch.context() as patch:
-                patch.setattr("app.modules.tasks.post_submit_routing.outcome.prepare_revision", old_writer)
+                patch.setattr(routing_outcome, "_manifest", old_manifest)
+                patch.setattr(routing_outcome, "prepare_revision", _old_blocked_preparation)
                 async with h.factory() as session, session.begin():
                     outcome = await task_post_submit_outcome(session, h.factory).apply(
                         h.envelope, current_generation=None,

@@ -135,7 +135,8 @@ async def test_retained_cap_recovery_releases_once_and_preserves_exact_routing_r
                         VALUES (:id,:task,:source)
                     """), {"id": new_record_id(), "task": h.request.task_id, "source": h.created.submission_id})
             assert rejected.value.orig.sqlstate == "23514"
-            assert "ck_revision_expiration_source_not_exhausted" in str(rejected.value)
+            database_error = rejected.value.orig.__cause__
+            assert database_error.constraint_name == "ck_revision_expiration_source_not_exhausted"
             assert await _snapshot(h) == before
             async with h.factory() as session:
                 await session.begin()
