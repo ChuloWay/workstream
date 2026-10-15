@@ -70,6 +70,15 @@ contributor revision window. They retain bounded durable recovery semantics.
   measured lanes. `backend/scripts/run_test_lanes.py` may change only that
   membership validation and deterministic tuple selection; collection,
   execution, timeout, isolation, evidence, and cleanup behavior remain fixed.
+  In `test_revision_clock_sql.py` and `test_revision_pause_races.py`, use one
+  45-second fixture window for the four real PostgreSQL deadline waits after the
+  staged transaction or named lock is observed. Keep the actual database sleep,
+  deadline crossing, lock participants, rollback, and durable-state assertions.
+  In `contributions/records/test_storage.py`, remove the module-wide schema-owner
+  marker: its two DDL mutation paths explicitly roll back, while the ordinary
+  fixture verifies the canonical schema and rebuilds plus fails if either leaks.
+  Rebalance only retained-pause, revision-expiry, and task-batch nodes from the
+  resulting complete phase evidence.
   Preserve every test node, all 13
   required lanes and existing timeouts; affected current
   specifications/runbooks/README and roadmap. Remove
@@ -145,6 +154,19 @@ modules named in scope took 178.34 seconds in that predecessor and distribute
 their exact nodes across the three existing shared-foundation lanes. The four
 project modules named in scope may move only between project lanes to preserve
 the unchanged execution time budget.
+
+Hosted run `38725245210` completed project A/B/D in 1,117.857/1,136.996/
+1,022.338 seconds. Project E completed all 506 tests in 1,175.11 seconds before
+the unchanged 1,200-second runner deadline interrupted finalization; project C
+reached 421/474 with no failure. Its exact 53-node tail cost 56.56 phase seconds
+in the preceding complete artifact. Four new real-deadline calls consumed about
+126, 126, and 248 seconds across A and C. The contribution-record storage module
+spent 94.01 setup/teardown seconds across 13 completed A/B/D/E nodes because its
+module marker rebuilt the full schema twice per node. The bounded fixture and
+marker changes retain the same tests and proof boundaries while removing those
+measured fixed costs. Exact hash replay then assigns the measured expiry loads
+across A/E/C/B/D and task-batch loads across E/D/A/B/C; it does not select tests
+from runtime timing or change the lane inventory.
 
 Fresh migration capture validates every installed SQL/PLpgSQL function before
 recording the schema fingerprint. PostgreSQL proofs exercise actual transactions,

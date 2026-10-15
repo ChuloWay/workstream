@@ -258,15 +258,16 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
 def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
     expected = {
         "tests/tasks/test_task_batch_transitions.py": (
+            "project_lifecycle_e",
+            "project_lifecycle_d",
             "project_lifecycle_a",
             "project_lifecycle_b",
-            "project_lifecycle_d",
-            "project_lifecycle_e",
+            "project_lifecycle_c",
         ),
         "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_a",),
         "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
-            "project_lifecycle_c",
             "project_lifecycle_a",
+            "project_lifecycle_c",
             "project_lifecycle_d",
         ),
         "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
@@ -277,9 +278,10 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
         "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
         "tests/tasks/submission_dispatch/test_revision_expiry.py": (
             "project_lifecycle_a",
+            "project_lifecycle_e",
+            "project_lifecycle_c",
             "project_lifecycle_b",
             "project_lifecycle_d",
-            "project_lifecycle_e",
         ),
     }
     assert catalogue.PROJECT_MODULE_LANE_OVERRIDES == expected
@@ -301,7 +303,7 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     )
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "b37f93192b0f7afd90f200153cc817e6e4a73d9b20db0e8906013c8c23d3eb17"
+        "67cbfd2fb1776b98ba8f6ff50735f601bbde10705808bfe67fe54f3544cd9d60"
     )
 
 
@@ -330,10 +332,25 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
             "project_lifecycle_c"
         ),
         f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]": (
-            "project_lifecycle_c"
+            "project_lifecycle_a"
         ),
         f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[True]": (
             "project_lifecycle_d"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py::test_due_expiry_and_ready_final_submission_wait_for_task_lock": (
+            "project_lifecycle_b"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py::test_final_submission_commit_boundary_serializes_expiry[False]": (
+            "project_lifecycle_a"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py::test_final_submission_commit_boundary_serializes_expiry[True]": (
+            "project_lifecycle_c"
+        ),
+        "tests/tasks/test_task_batch_transitions.py::test_public_source_import_screen_release_complete_journey[500]": (
+            "project_lifecycle_a"
+        ),
+        "tests/tasks/test_task_batch_transitions.py::test_public_source_import_screen_release_complete_journey[200]": (
+            "project_lifecycle_b"
         ),
     }
     rows = runner.build_manifest("a" * 40, list(reversed(expected)))["nodes"]
@@ -586,22 +603,20 @@ def test_partition_rejects_wrong_owner_pair(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_partition_accepts_exact_noncanonical_owner_order() -> None:
-    module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
+    module = "tests/tasks/test_task_batch_transitions.py"
     declared = catalogue.PARTITION_LANES_BY_MODULE[module]
     attached = tuple(lane.name for lane in LANES if module in lane.modules)
 
     assert declared == (
-        "project_lifecycle_c",
-        "project_lifecycle_a",
+        "project_lifecycle_e",
         "project_lifecycle_d",
-    )
-    assert attached == (
         "project_lifecycle_a",
+        "project_lifecycle_b",
         "project_lifecycle_c",
-        "project_lifecycle_d",
     )
-    node = f"{module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]"
-    assert runner.build_manifest("a" * 40, [node])["nodes"][0]["lane"] == declared[0]
+    assert attached == catalogue.PARTITIONED_PROJECT_LANES
+    node = f"{module}::test_public_source_import_screen_release_complete_journey[500]"
+    assert runner.build_manifest("a" * 40, [node])["nodes"][0]["lane"] == declared[2]
 
 
 @pytest.mark.parametrize("mutation", ("missing", "duplicate", "foreign"))

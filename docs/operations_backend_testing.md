@@ -161,6 +161,10 @@ shared-foundation node, belongs to exactly one lane.
 An explicit per-module owner tuple may order its eligible lanes for measured
 distribution. The manifest builder rejects missing, duplicate, or foreign lane
 membership before using that order for the exact-node hash.
+PostgreSQL schema-contract markers are reserved for tests that own persistent
+schema replacement. Transaction-local DDL that explicitly rolls back uses the
+ordinary isolated fixture, whose teardown verifies the canonical schema and
+rebuilds plus fails if a mutation escapes.
 
 The backend preflight, semantic lanes and aggregate job check the manifest
 against its lock with `uv lock --check`, install `uv sync --frozen --all-extras`,

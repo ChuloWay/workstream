@@ -598,16 +598,18 @@ PROJECT_PARTITIONED_MODULES = (
 # exact lane ownership so their waits and large fixtures do not collide.
 PROJECT_MODULE_LANE_OVERRIDES = {
     "tests/tasks/test_task_batch_transitions.py": (
+        # Tuple order spreads the measured 500/200-row cases away from E.
+        "project_lifecycle_e",
+        "project_lifecycle_d",
         "project_lifecycle_a",
         "project_lifecycle_b",
-        "project_lifecycle_d",
-        "project_lifecycle_e",
+        "project_lifecycle_c",
     ),
     "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_a",),
     "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
-        # Tuple order intentionally sends the two measured historical cases to C/D.
-        "project_lifecycle_c",
+        # The measured historical cases land on A/D after the deadline-wait repair.
         "project_lifecycle_a",
+        "project_lifecycle_c",
         "project_lifecycle_d",
     ),
     "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
@@ -617,10 +619,12 @@ PROJECT_MODULE_LANE_OVERRIDES = {
     ),
     "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
     "tests/tasks/submission_dispatch/test_revision_expiry.py": (
+        # Five residues split the prior B collision while preserving project custody.
         "project_lifecycle_a",
+        "project_lifecycle_e",
+        "project_lifecycle_c",
         "project_lifecycle_b",
         "project_lifecycle_d",
-        "project_lifecycle_e",
     ),
 }
 
