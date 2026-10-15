@@ -154,7 +154,10 @@ deterministic partition mechanism for the remaining TASK and checker nodes. The 
 isolated-runner contracts. The
 `shared_foundations_a`, `shared_foundations_b`, and `shared_foundations_c` lanes deterministically
 partition exact node IDs from the remaining authorization, artifact, API, and
-infrastructure modules. Every collected test node, including each Alembic and
+infrastructure modules. This includes the database-independent repository inspections
+in `test_artifact_architecture.py`, `architecture/test_module_boundaries.py`, and
+`architecture/test_test_structure_boundary.py`; schema, reset and isolated-runner
+contracts stay in `schema_contracts`. Every collected test node, including each Alembic and
 shared-foundation node, belongs to exactly one lane.
 
 The backend preflight, semantic lanes and aggregate job check the manifest

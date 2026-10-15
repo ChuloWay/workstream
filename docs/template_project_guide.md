@@ -97,7 +97,9 @@ Describe the output form in human-readable language. The enforced artifact list,
 
 ## Acceptance Criteria
 
-Define measurable criteria for accepted work.
+Define the mandatory project-level acceptance requirements as measurable criteria
+for accepted work. Tasks follow these requirements under their locked guide and
+policies; they do not have to repeat them in task-local criteria.
 
 ## Rejection Criteria
 
@@ -115,12 +117,16 @@ Define prohibited behavior, tools, copied material, generated artifacts, confide
 
 - title
 - description
-- acceptance criteria
 - required output
 - skill tags
 - task type
 - estimated time when known
 - deadline
+
+Task-local `acceptance_criteria` is optional and may be omitted or null, including
+during import, screening and release. When supplied, it must satisfy the task
+field type and length limits. Its absence does not remove the mandatory
+guide-level acceptance requirements above.
 
 ## Required Submission Fields
 

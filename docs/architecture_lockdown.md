@@ -383,9 +383,13 @@ These ideas remain architecture-compatible, but they are not part of the first b
 
 ## Canonical Names
 
+Task-local `acceptance_criteria` is optional and may be omitted or null. The
+project guide must still define acceptance requirements; tasks retain their
+locked guide and policy identities. A missing optional task field alone is not
+a setup defect.
+
 Use these names consistently:
 
-- `check_acceptance_criteria_present`
 - `ContributionRecord`
 - `ContributionPolicyVersion`
 - `CompensationAward`

@@ -1075,48 +1075,29 @@ runs copy that same body/hash. Later changes to a project's policy do not rewrit
 those locked facts. Project policy versions describe changes to project rules;
 they do not select different software readers.
 
-Initial v0.1 has one supported body, compiler and catalogue. Earlier development
-representations reject; no migration reader, translation or fallback preserves
-them. Retained data and immutable evidence are not deleted or rewritten by this
-cleanup. New setup generations use the current contract; any data disposition
-requires separate authorization.
+The current compiler projects the exact approved external POST policy. Its
+canonical body contains:
 
-The canonical body contains:
+- `schema_version`: `external_post_submit_policy.v1`
+- ordered `entries` containing the exact approved external POST bindings
+- `policy_sha256`, committing the canonical body without that digest field
 
-- `schema_version`: `post_submit_checker_policy`
-- `compiler_version`: `workstream-post-submit-compiler`
-- `project_id` and `guide_version`
-- `catalogue_id`, `catalogue_source_version`, `catalogue_schema_version` and
-  `catalogue_manifest_sha256`
-- ordered `entries`, with checker ID, definition/implementation identity,
-  classification and closed configuration
-- `blocking_severities`
+Each binding contains its `requirement_id`, `stage`, immutable `registry`
+publication, `configuration` and `configuration_sha256`. Registry phase,
+configuration schema, exact selected identities and hashes are validated. All
+approved POST entries are required; an empty approved binding set is valid.
+The [current checker framework](architecture_checker_framework.md#post-submit-compiler-boundary)
+defines this contract.
 
-Each mandatory entry has classification `platform_default`. The eight defaults
-cannot be omitted, reordered or reclassified. The sole selectable structural
-addition is `check_acceptance_criteria_present`, classified as `project_required`
-or `project_warning`. Default/required/warning/execution lists are derived from
-these entries; they are not another serialized policy body. Existing persisted
-required/warning/blocking summaries must exactly match the parsed canonical body
-at setup continuation, activation, task locking/reading, submission validation
-and execution. A recomputed hash cannot make an unsupported body valid.
+The earlier built-in catalogue, eight-default body and selectable
+`check_acceptance_criteria_present` implementation are removed. Retained
+predecessor bodies preserve their original entries and hashes as immutable
+provenance only, without a runtime decoder, translation or fallback executor.
+Retained data is not deleted or rewritten by this cleanup.
 
-Each entry has this shape (illustrative entry, not a complete policy):
-
-```json
-{
-  "checker_id": "check_submission_packet",
-  "definition_version": "v0.1",
-  "implementation_version": "workstream-structural",
-  "classification": "platform_default",
-  "configuration": {}
-}
-```
-
-The compiler rejects unknown selections, conflicting classifications, invalid
-configuration, missing defaults and weakened blocking severities. The floor is
-`critical` and `high`; projects may add stricter severities. Raw structural
-warnings remain distinct from policy-adjusted blocking outcomes.
+Task-local `acceptance_criteria` may be omitted or null through screening and
+release; its absence alone is not a setup defect. The project guide must still
+define the acceptance requirements, and exact guide/policy locks remain required.
 
 Post-submit checker policy governs durable internal checker runs after a submission is finalized. It does not replace the generated project pre-submit checker policy.
 
@@ -1685,9 +1666,11 @@ History derives `attempt_number` from that generation and
 an independently mutable stored flag. Current-result consumers hold the caller
 transaction while checking this fence; an old event is not perpetual authority.
 
-Completed routing is `allow_review`, `needs_revision` or `task_setup_blocked`,
-derived from the locked blocking severities and complete member set. Unfinished
-or infrastructure-failed runs use `not_evaluated`. `allow_review` means no
+The current completion classifier derives `allow_review` or `needs_revision`
+from the complete locked external member set. Retained contracts/history may
+contain `task_setup_blocked`, but the classifier cannot emit it and a
+manager-visible setup-fault hold remains future safety work. Unfinished or
+infrastructure-failed runs use `not_evaluated`. `allow_review` means no
 blocking evaluation finding, never acceptance: later TASK routing follows the
 locked human-review requirement, including shared authorized acceptance when
 false. No human Review is invented for that branch.
