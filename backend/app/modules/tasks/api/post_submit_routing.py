@@ -16,6 +16,7 @@ from pydantic import (
 
 from app.core.hashing import canonical_json_hash
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+from app.modules.tasks.api.revision import RevisionCandidate
 
 _Sha256 = Annotated[StrictStr, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
 _PositiveVersion = Annotated[StrictInt, Field(ge=1, le=2_147_483_647)]
@@ -83,12 +84,8 @@ class TaskPostSubmitSourceProposal(BaseModel):
         has_predecessor_version = self.predecessor_submission_version is not None
         if has_predecessor_id != has_predecessor_version:
             raise ValueError("routing source predecessor identity is incomplete")
-        if self.submission_version == 1:
-            if has_predecessor_id:
-                raise ValueError("initial routing source has a predecessor")
-            return self
         if not has_predecessor_id:
-            raise ValueError("successor routing source lacks a predecessor")
+            return self
         if self.predecessor_submission_id == self.submission_id:
             raise ValueError("routing source predecessor equals submission")
         if self.predecessor_submission_version != self.submission_version - 1:
@@ -183,6 +180,7 @@ class TaskRoutingSourcePreparation(BaseModel):
 
     request: TaskRoutingRequestFacts
     source: TaskPostSubmitSourceProposal
+    revision_candidate: RevisionCandidate | None = None
 
     @model_validator(mode="after")
     def matching_source(self) -> Self:

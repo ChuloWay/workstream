@@ -29,6 +29,12 @@ class OutboxEvent(Base):
 
     __tablename__ = "outbox_events"
     __table_args__ = (
+        CheckConstraint(
+            "not_before_at is null or (isfinite(not_before_at) and "
+            "(next_attempt_at is null or next_attempt_at >= not_before_at) and "
+            "(claimed_at is null or claimed_at >= not_before_at))",
+            name="not_before_delivery",
+        ),
         CheckConstraint("(get_byte(uuid_send(event_id), 6) >> 4) = 7 and (get_byte(uuid_send(event_id), 8) & 192) = 128", name="event_id_uuid7"),
         CheckConstraint(
             "event_type ~ '^[A-Za-z][A-Za-z0-9._:-]{0,127}$'",
@@ -170,6 +176,7 @@ class OutboxEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("statement_timestamp()")
     )
+    not_before_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delivery_state: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default=text("'pending'")
     )

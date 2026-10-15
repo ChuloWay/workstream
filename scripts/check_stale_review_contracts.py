@@ -162,9 +162,18 @@ RULES = (
     Rule(
         "SYNTHETIC_REJECT",
         re.compile(
-            r"\b(?:checker|artifact|storage|revision\s+(?:limit|deadline))\b"
+            r"\b(?:checker|artifact|storage|revision\s+limit)\b"
             r"[^.\n]{0,100}\b(?:creates?|records?|sets?|moves?)\b"
             r"[^.\n]{0,30}\b(?:reject|rejected)\b",
+            re.IGNORECASE,
+        ),
+    ),
+    Rule(
+        "TIMEOUT_SYNTHETIC_REVIEW",
+        re.compile(
+            r"\b(?:revision\s+deadline|timeout|expiry)\b[^.\n]{0,100}"
+            r"\b(?:creates?|fabricates?|inserts?)\b[^.\n]{0,60}"
+            r"\b(?:reject\s+Review|Review\s+(?:row|record|decision))\b",
             re.IGNORECASE,
         ),
     ),
@@ -182,10 +191,10 @@ RULES = (
         re.compile(
             r"\bauto_reject_after_limit\b[`\"']?\s*(?::|=)\s*"
             r"[`\"']?(?:true|1|yes)\b|"
-            r"\b(?:revision\s+(?:limit|deadline)|limit\s+or\s+deadline)\b"
-            r"[^.\n]{0,100}\b(?:automatically\s+reject(?:s|ed)?|auto-reject)\b|"
-            r"\b(?:automatically\s+reject(?:s|ed)?|auto-reject)\b[^.\n]{0,100}"
-            r"\brevision\s+(?:limit|deadline)\b",
+            r"\b(?:revision\s+limit|limit\s+or\s+deadline)\b"
+            r"[^.\n]{0,100}\b(?:automatically\s+reject(?:s|ed)?|auto-reject(?:s|ed)?)\b|"
+            r"\b(?:automatically\s+reject(?:s|ed)?|auto-reject(?:s|ed)?)\b[^.\n]{0,100}"
+            r"\brevision\s+limit\b",
             re.IGNORECASE,
         ),
     ),

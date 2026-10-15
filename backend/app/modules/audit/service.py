@@ -95,6 +95,9 @@ class LifecycleAuditParticipant:
             reason=(None if value.event_type.value == "TaskCreated" else
                     value.task_reason if value.task_reason is not None else value.reason.value),
             event_payload={"references": references,
+                           **({"authorization_resource_digest": value.authorization_resource_digest}
+                              if value.event_type.value == "TaskRevisionContextRepaired"
+                              and value.authorization_resource_digest is not None else {}),
                            **({"source_type": value.source_type} if value.source_type is not None else {}),
                            **(value.locked_lineage if value.locked_lineage is not None else {}),
                            **({"manager_authority_facts": value.manager_authority_facts,
@@ -103,6 +106,10 @@ class LifecycleAuditParticipant:
                 {"authorization_resource_digest": value.authorization_resource_digest,
                  "assignment_invalidation_facts": value.assignment_invalidation_facts}
                 if value.assignment_invalidation_facts is not None else {}
+            ), **(
+                {"authorization_resource_digest": value.authorization_resource_digest,
+                 "revision_expiry_facts": value.revision_expiry_facts}
+                if value.revision_expiry_facts is not None else {}
             ), **(
                 {"operator_reason": value.operator_reason,
                  "authorization_resource_digest": value.authorization_resource_digest}

@@ -115,7 +115,6 @@ def test_source_rejects_equal_phase_receipts(successor: bool) -> None:
             "predecessor_submission_id": new_record_id(),
             "predecessor_submission_version": 1,
         },
-        {"submission_version": 2},
         {
             "submission_version": 3,
             "predecessor_submission_id": new_record_id(),
@@ -142,6 +141,12 @@ def test_source_accepts_exact_immediate_predecessor() -> None:
 
     assert source.predecessor_submission_id == predecessor_id
     assert source.predecessor_submission_version == source.submission_version - 1
+
+
+def test_source_accepts_new_assignment_initial_after_prior_task_versions() -> None:
+    source = TaskPostSubmitManifestFacts(**_source_values(submission_version=5))
+    assert source.predecessor_submission_id is None
+    assert source.predecessor_submission_version is None
 
 
 def test_source_rejects_its_own_submission_as_predecessor() -> None:

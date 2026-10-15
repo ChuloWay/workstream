@@ -36,6 +36,7 @@ OBSERVED_TASK_NAMES = frozenset(
     {
         OUTBOX_DELIVERY_TASK,
         "workstream.outbox.scan_pending",
+        "workstream.tasks.scan_retained_revisions",
         "workstream.project_setup.derive_post_policy",
         "workstream.project_setup.scan_post_policy_approvals",
         "workstream.project_setup.compile_project_guide",
@@ -107,6 +108,7 @@ def create_celery_app() -> Celery:
             "app.workers.project_setup",
             "app.workers.post_policy",
             "app.workers.outbox",
+            "app.workers.revision_recovery",
         ],
     )
     celery_app.conf.update(
@@ -122,6 +124,9 @@ def create_celery_app() -> Celery:
         beat_schedule={
             "outbox-delivery-recovery": {
                 "task": "workstream.outbox.scan_pending", "schedule": 60.0,
+            },
+            "retained-revision-recovery": {
+                "task": "workstream.tasks.scan_retained_revisions", "schedule": 60.0,
             },
             "post-policy-approval-recovery": {
                 "task": "workstream.project_setup.scan_post_policy_approvals",

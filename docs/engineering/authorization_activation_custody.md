@@ -133,7 +133,7 @@ unchanged until each exact XINT-003 activation wave.
 | `WS-AUTH-001-REV-09A` | `review.finding_response_evidence.ingest` |
 | `WS-AUTH-001-REV-11` | `review.lease.force_release`, `review.queue.routing.override`, `review.queue.routing.correct`, `review.queue.close`, `review.reconcile.run` |
 | `WS-AUTH-001-REV-12` | `review.artifact_reference.reconcile`, `review.projection.rebuild` |
-| `WS-XINT-003-08A` | `review.revision_context.repair`, `review.revision_obligation.close`, `review.revision_context.legacy_close` |
+| `WS-XINT-003-08A` | `review.revision_context.repair`, `review.revision_context.legacy_close` |
 | `WS-XINT-003-08B` | `review.lifecycle.activation.manage` |
 
 `WS-AUTH-001-REV-CUSTODY` atomically transfers these 19 rows with exact owner
@@ -141,10 +141,12 @@ cardinalities `2/5/3/1/1/5/2` in the table order above. The seven historical
 REV runtime owner values remain registered for those actions until their exact
 activation waves replace them. It changes no mapping or availability and
 adds no migration. These custodian labels alone grant no authority. Subsequent
-REV-12A4A activates only the internal `review.lifecycle.activation.manage` slice
-for exact system Operator transitions; the other 18 transferred actions remain
-planned and unavailable. Of the four 02C lifecycle registrations, only that
-controller action is active. PREP alone grants no lifecycle authority.
+REV-12A4A activates the internal `review.lifecycle.activation.manage` slice for
+exact system Operator transitions. That controller was one of four registrations
+added by 02C, separate from the 19 transferred historical review rows. PILOT-08
+retires the superseded planned manager-closure registration, leaving three 02C
+actions: the controller is active internally, while both revision-context actions
+remain planned and unavailable. PREP alone grants no lifecycle authority.
 
 The completed front-loaded readiness waves are:
 
@@ -164,7 +166,7 @@ The exact activation-wave replacement is:
 | `WS-XINT-003-04` | `review.context.read`, `review.chain.read` |
 | `WS-XINT-003-06` | `review.decision` |
 | `WS-XINT-003-07` | No availability change; extend the already XINT-002-owned preparation/Submission evaluators with the closed human-review revision context |
-| `WS-XINT-003-08A` | `review.queue.inspect`, `review.lease.force_release`, `review.queue.routing.override`, `review.queue.routing.correct`, `review.queue.close`, `review.revision_context.repair`, `review.revision_obligation.close`, `review.revision_context.legacy_close` |
+| `WS-XINT-003-08A` | `review.queue.inspect`, `review.lease.force_release`, `review.queue.routing.override`, `review.queue.routing.correct`, `review.queue.close`, `review.revision_context.repair`, `review.revision_context.legacy_close` |
 | `WS-XINT-003-08B` | `review.reconcile.run`, `review.artifact_reference.reconcile`, `review.projection.rebuild`, `review.lifecycle.activation.manage` |
 
 Evidence-upload actions remain future-intent-required and unavailable; they are
@@ -178,11 +180,12 @@ authority:
 
 | Registration chunk | Future activation chunk | Proposed ActionId -> PermissionId |
 |---|---|---|
-| `WS-XINT-003-02C` | `WS-XINT-003-08A` / `WS-XINT-003-08B` | `review.revision_context.repair` -> `project.task.manage`; `review.revision_context.legacy_close` -> `operations.reconcile.run`; `review.revision_obligation.close` -> `project.task.manage`; `review.lifecycle.activation.manage` -> `operations.reconcile.run` |
+| `WS-XINT-003-02C` | `WS-XINT-003-08A` / `WS-XINT-003-08B` | `review.revision_context.repair` -> `project.task.manage`; `review.revision_context.legacy_close` -> `operations.reconcile.run`; `review.lifecycle.activation.manage` -> `operations.reconcile.run` |
 
 `WS-XINT-003-02C` delivered availability-neutral AUTH readiness:
-it registered these four actions and the exact fixed-service identities/matrix
-before REV lifecycle implementation. `WS-XINT-003-02D` then published the
+it historically registered four actions and the exact fixed-service identities/
+matrix before REV lifecycle implementation. PILOT-08 retires the superseded
+planned manager-closure registration; the three retained mappings are above. `WS-XINT-003-02D` then published the
 closed identifier/digest-based PREP/read contracts. Neither chunk loads or
 implements REV lifecycle state, and the real kernel continues to deny every
 unavailable action. REV later supplies canonical facts, guards, loaders,
@@ -196,8 +199,10 @@ decision, audit, idempotency, or linked evidence references an added ActionId.
 Its proof includes populated refusal, empty safe downgrade, re-upgrade, and
 fresh replay.
 
-Counts are derived from trusted `main` when a gate executes. REV registration
-adds exactly four planned actions and zero active actions. WS-XINT-002-01
+Counts are derived from trusted `main` when a gate executes. Historical 02C REV
+registration added exactly four planned actions and zero active actions. After
+PILOT-08 retirement, three of those registrations remain, including the
+subsequently activated internal lifecycle controller. WS-XINT-002-01
 registers review-evidence binding under runtime owner `WS-XINT-002-07`; planned
 and unavailable. It may remain named in the closed
 `workstream.artifact.binding` static matrix, but 07A does not activate or extend

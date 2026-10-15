@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text, select, func
 from sqlalchemy.exc import DBAPIError
 
+from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
+from app.modules.tasks.api.submission_context import require_revision_capacity
 from app.modules.tasks.api import (
     SubmissionCreationAuthorizationPort,
     SubmissionCreationAuthorityFacts,
@@ -155,7 +157,12 @@ class TaskSubmissionCreationService:
                 predecessor_submission_id=request.predecessor_submission_id,
             )
         )
-        version = 1 if context.predecessor is None else context.predecessor.version + 1
+        # Version orders every Submission on the task; the revision allowance
+        # belongs to this assignment and is carried separately in the context.
+        latest_task_submission = await self._repository.get_latest_submission_for_task(task.id)
+        version = latest_task_submission.version + 1 if latest_task_submission else 1
+        if context.predecessor is not None and version != context.predecessor.version + 1:
+            raise SubmissionCreationUnavailable("submission creation is unavailable")
         submission_id = new_record_id()
         final = SubmissionCreationAuthorityFacts(
             task_id=preliminary.task_id,
@@ -170,6 +177,17 @@ class TaskSubmissionCreationService:
         prepared_authorization = await self._authorization.prepare(final)
         try:
             project = await self._contexts._load_locked_task_context(task)
+            if context.predecessor is not None:
+                selected_revision = project.facts.activation_receipt.command.revision
+                require_revision_capacity(
+                    context, project_id=project.facts.project_id,
+                    policy_id=selected_revision.policy_id,
+                    policy_generation=selected_revision.generation,
+                    policy_hash=selected_revision.policy_hash,
+                    max_revision_rounds=RevisionPolicySemantics.model_validate_json(
+                        project.facts.revision_policy.value,
+                    ).max_revision_rounds,
+                )
             submission = build_submission(
                 submission_id=str(submission_id), task=task,
                 contribution_policy_version_id=context.submitter_contribution_policy_version_id,

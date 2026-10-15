@@ -7,12 +7,18 @@ from typing import Literal, Protocol, get_args
 from uuid import UUID
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+from app.modules.tasks.api.revision import ContributorRevisionContext
+
 
 TaskSubmissionContextKind = Literal["initial", "checker_remediation"]
 TaskSubmissionContextStatus = Literal["in_progress", "needs_revision"]
 TaskSubmissionContextFailure = Literal[
     "task_submission_context_invalid",
     "task_submission_predecessor_changed",
+    "revision_limit_reached",
+    "revision_deadline_expired",
+    "revision_context_blocked",
+    "revision_context_changed",
 ]
 
 
@@ -81,11 +87,14 @@ class SubmissionPredecessorFacts:
 
     submission_id: UUID
     version: int
+    revision_round: int
 
     def __post_init__(self) -> None:
         """Reject non-positive or non-integer Submission versions."""
         if type(self.version) is not int or self.version < 1:
             raise ValueError("submission predecessor version is invalid")
+        if type(self.revision_round) is not int or self.revision_round < 1:
+            raise ValueError("submission predecessor revision round is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +112,8 @@ class TaskSubmissionContextFacts:
     locked_policy: TaskPolicyLineage
     acceptance_criteria: str | None
     checker_remediation_manifest_id: UUID | None = None
+    revision_context: ContributorRevisionContext | None = None
+    revision_context_required: bool = False
 
     def __post_init__(self) -> None:
         """Enforce the exact initial or checker-remediation lifecycle shape."""
@@ -157,3 +168,33 @@ class TaskSubmissionContextPort(Protocol):
         request: TaskRetainedSubmissionParentsRequest,
     ) -> None:
         """Lock retained TASK parents without reauthorizing current lifecycle."""
+
+
+def require_revision_capacity(
+    task: TaskSubmissionContextFacts, *, project_id: UUID, policy_id: UUID,
+    policy_generation: int, policy_hash: str, max_revision_rounds: int,
+) -> None:
+    """Apply the exact locked policy to a new attempt; initial work is round zero."""
+    if task.predecessor is None:
+        return
+    if task.revision_context_required and task.revision_context is None:
+        raise TaskSubmissionContextUnavailable("revision_context_blocked")
+    if (task.revision_context is not None and task.revision_context.outcome != "blocked"
+            and task.revision_context.target.lineage != task.locked_policy):
+        raise TaskSubmissionContextUnavailable("revision_context_changed")
+    if task.revision_context is not None and task.revision_context.disposition != "ready":
+        code = task.revision_context.disposition
+        raise TaskSubmissionContextUnavailable(
+            "revision_context_blocked" if code == "context_blocked" else code
+        )
+    locked = task.locked_policy
+    if (
+        task.locked_project_context.project_id != project_id
+        or (locked.locked_revision_policy_id, locked.locked_revision_policy_generation,
+            locked.locked_revision_policy_hash)
+        != (policy_id, policy_generation, policy_hash)
+    ):
+        raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
+    # A global Submission version is not an assignment's revision allowance.
+    if task.predecessor.revision_round > max_revision_rounds:
+        raise TaskSubmissionContextUnavailable("revision_limit_reached")

@@ -54,6 +54,10 @@ class PreparedTaskAuthorization:
             replay_assignment_id=facts.replay_assignment_id,
             request_digest=facts.request_digest,
             replay_command_id=facts.replay_command_id,
+            revision_preparation_id=facts.revision_preparation_id,
+            revision_preparation_sha256=facts.revision_preparation_sha256,
+            revision_routing_manifest_id=facts.revision_routing_manifest_id,
+            revision_replay_preparation_id=facts.revision_replay_preparation_id,
         )
 
     async def prepare(self, facts: TaskAuthorityFacts) -> object:

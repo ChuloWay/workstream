@@ -47,10 +47,11 @@ submission packet.
 
 Compensation is not submission input. The server stamps the continuing
 TaskAssignment's ContributionPolicyVersion on this exact Submission attempt;
-ReviewLease later copies that stamped version. Only a prior human
+ReviewLease later copies that stamped version. A prior checker or human
 `needs_revision` preparation may have atomically rebased the continuing Task
 and TaskAssignment for this next attempt; publication or submission input alone
-cannot change it.
+cannot change it. Checker preparation is implemented; genuine human Review
+integration remains #554 work.
 
 Workstream runs the single effective pre-submission plan against the uploaded
 outer ZIP in bounded scratch before creating the submission. The mounted
@@ -102,13 +103,25 @@ Any known contributor-facing context that helps explain the packet. The contribu
 
 ## Revision Replay
 
-Only required for resubmissions.
+For checker remediation, read the authorized task context and acknowledge its
+exact preparation ID/digest during ZIP preparation. The server retains that
+acknowledgement through admission and immutable Submission creation. The
+corrected ZIP addresses contributor-visible checker messages; this path requires
+no ReviewFinding response or contributor-supplied resolution status.
 
-Workstream provides prior and next guide/policy context for the revision. The contributor responds to the findings and changed requirements, but does not provide guide or policy versions manually.
+For future human-Review revision (#554), Workstream provides the complete frozen
+prior/next guide and policy context. Each unresolved blocking ReviewFinding
+requires one immutable bounded SubmissionFindingResponse; see the
+[human Revision Replay Template](template_revision_replay.md). The contributor
+supplies response text and evidence, while the later reviewer records the
+immutable FindingResolution. Neither path accepts guide/policy versions or
+finding closure as contributor authority.
 
-| Prior Finding | Fix Summary | Evidence | Status |
-| --- | --- | --- | --- |
-| `<finding>` | `<fix>` | `<evidence>` | `closed` |
+Each assignment starts at round 0. Every committed `needs_revision` starts a
+fresh PostgreSQL-time window under the failed attempt's locked policy. Only
+immutable resubmission ends it; upload, ready admission, replay and repair do
+not. Cap exhaustion refuses another attempt; expiry retains rejection evidence,
+releases the assignment and returns the task to `ready` without economic facts.
 
 ## Contributor Attestation
 

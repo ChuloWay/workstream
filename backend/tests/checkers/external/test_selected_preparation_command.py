@@ -131,7 +131,7 @@ def _command(runtime, actor):
         external_checker_policies=SimpleNamespace(value="{}"),
     )
     command._lock_authorized_context = AsyncMock(
-        return_value=(SimpleNamespace(predecessor=None, checker_remediation_manifest_id=None), project)
+        return_value=(SimpleNamespace(predecessor=None, checker_remediation_manifest_id=None, revision_context=None), project)
     )
     command._load_predecessor = AsyncMock(return_value=None)
     command._load_predecessor_rules = AsyncMock(return_value=None)

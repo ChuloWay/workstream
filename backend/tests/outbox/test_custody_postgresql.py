@@ -185,6 +185,38 @@ async def _write_paired_outcome(session, claim, value, *, decision=None):
     )
 
 
+async def test_generic_event_cannot_store_unknown_retry_outcome(delivery_harness):
+    """A valid retry receipt needs SQL's exact feature gate, not Python opt-in."""
+    h = delivery_harness
+    h.options = h.options.model_copy(update={"lease_seconds": 30, "handler_timeout_seconds": 20})
+    h.delivery = h.build()
+    claim = await h.claim()
+    await h.delivery._begin_invocation(claim)
+    async with h.factory() as session:
+        attempt = await DeliveryRepository(session).attempt(claim)
+        value = _outcome(
+            claim, attempt.invoked_at, FinalizationCause.UNKNOWN,
+            await database_time(session), h.options, retry_unknown=True,
+        )
+        assert value["delivery_state"] == "retryable"
+        assert value["invocation_unknown"] is True
+        assert await session.scalar(text(
+            "SELECT public.outbox_delivery_outcome_valid(:body,:digest,:claimed,:expires,:invoked)"
+        ), {
+            "body": _encode(value), "digest": canonical_json_hash(value),
+            "claimed": claim.claimed_at, "expires": claim.claim_expires_at,
+            "invoked": attempt.invoked_at,
+        }) is True
+        await session.rollback()
+        with pytest.raises(DBAPIError, match="outbox unknown retry is not registered"):
+            async with session.begin():
+                await _write_paired_outcome(session, claim, value)
+        assert (await DeliveryRepository(session).attempt(claim)).stage == "invoked"
+        assert (await session.get(OutboxEvent, claim.event_id)).delivery_state == "claimed"
+    receipt = await h.delivery.finalize(claim, FinalizationCause.UNKNOWN)
+    assert receipt.outcome_json is not None
+
+
 @pytest.mark.parametrize(
     "cause", [FinalizationCause.ACKNOWLEDGE, FinalizationCause.RETRY, FinalizationCause.REJECT]
 )

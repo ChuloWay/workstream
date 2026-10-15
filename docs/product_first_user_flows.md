@@ -4,9 +4,10 @@
 
 These flows describe the target v0.1 behavior, not a list of active endpoints.
 Use the [capability ledger](roadmap_status.md) for delivered and remaining work.
-The review and revision portions are the planned v0.1 contract and remain
-unavailable until their owning REV chunks, exact AUTH activation, and REV-13
-joint release complete. Earlier project/task/submission/checker behavior keeps
+Human review and its revision integration remain planned until the owning REV
+chunks, exact AUTH activation and joint release complete. Checker-triggered
+revision preparation, acknowledgement, PM repair and timeout rejection/release
+are implemented through TASK. Earlier project/task/submission/checker behavior keeps
 its separately recorded implementation status.
 
 The detailed review flow below describes `human_review_required=true`, the
@@ -222,8 +223,14 @@ Acceptance:
 - Context changes are visible before the contributor revises.
 - Each required finding has an immutable response and later resolution.
 - Revision count is tracked against the locked revision policy.
-- A reached limit/deadline blocks resubmission but never auto-rejects or
-  auto-closes the task; manager cancellation is a separate planned command.
+- Each assignment starts at round 0 with its own revision allowance.
+- Every committed `needs_revision` starts a fresh PostgreSQL-time window from
+  the failed attempt's locked policy; only immutable resubmission ends it.
+  Upload, replay, repair and infrastructure retry preserve the window.
+- Cap exhaustion refuses another attempt. At expiry, an immutable rejection
+  receipt, assignment release and return to `ready` commit atomically with
+  AUTH/audit/outbox evidence and no new economic facts. Checker expiry is
+  implemented; #554 owns the future genuine human trigger under the same policy.
 
 ## Flow 7: Accepted Work, FinalAcceptance, And Submitter Contribution
 

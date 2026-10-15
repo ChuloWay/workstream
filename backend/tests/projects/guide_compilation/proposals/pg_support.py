@@ -421,7 +421,7 @@ async def revoke_review_grant(factory, actor, grant):
 
 
 async def seed_selected_review_revision_inputs(
-    factory, command, actor, *, human_review_required=True
+    factory, command, actor, *, human_review_required=True, max_revision_rounds=2,
 ):
     """Select valid review/revision inputs through their authorized mutation owner."""
     from app.modules.actors.models import ActorProfile, ActorIdentityLink
@@ -453,7 +453,7 @@ async def seed_selected_review_revision_inputs(
         (
             "revision",
             RevisionPolicyInput(
-                max_revision_rounds=2,
+                max_revision_rounds=max_revision_rounds,
                 revision_deadline_hours=48,
                 allowed_resubmission_states=["needs_revision"],
             ),

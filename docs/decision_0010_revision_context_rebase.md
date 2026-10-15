@@ -1,4 +1,4 @@
-# ADR 0010: Human Revision Rebase Uses The Complete Active Project Context
+# ADR 0010: Revision Rebase Uses The Complete Active Project Context
 
 ## Status
 
@@ -23,8 +23,10 @@ Submitted attempts are immutable. Each submission remains evaluated against the
 locked project guide, checker policy, review policy, and revision policy
 versions stamped on that submission.
 
-After a human `needs_revision` Review, Workstream runs an immutable revision
-context preparation step before the contributor resumes. The task pipeline owns
+After a contributor-fixable checker failure or a human `needs_revision` Review,
+Workstream runs an immutable revision context preparation step before the
+contributor resumes. The trigger retains its genuine CheckerRun or Review
+provenance; a checker failure never creates a Review. The task pipeline owns
 the one Project Guide context used by the submitter and reviewer.
 `TaskAssignment` stores only `task_id` for guide-context linkage, while its
 separate submitter ContributionPolicyVersion selector follows the guarded rule
@@ -87,9 +89,8 @@ shows the guide transition without changing any prior Submission.
 
 Publication or activation alone never mutates an active assignment, prepared
 attempt, Submission, or ReviewLease. `accept` and `reject` finish under the
-exact context already frozen for that attempt. Human `needs_revision` is the
-only in-progress synchronization boundary for the complete next-attempt
-context.
+exact context already frozen for that attempt. A committed contributor-fixable failure is the in-progress synchronization
+boundary for the complete next-attempt context.
 
 The ReviewLease that produced `needs_revision` and its reviewer
 `completed_review` ContributionRecord remain governed by that lease's frozen
@@ -103,8 +104,9 @@ CompensationAwards are never rewritten.
 The human `needs_revision` Review, reviewer contribution and applicable award,
 task and assignment effects, initial kept/rebased/blocked preparation, audit and
 outbox effects, and contributor-visible state commit once or roll back together.
-Checker-caused remediation remains a separate CheckerRun-rooted path and does
-not perform this human revision rebase.
+Checker-caused remediation uses the same complete-context revision rules with
+CheckerRun-rooted source custody, without a Review or reviewer contribution.
+Live human decision composition remains a separate delivery dependency.
 
 Out-of-band guidance has no acceptance force until it is encoded in one of:
 
@@ -117,6 +119,34 @@ Out-of-band guidance has no acceptance force until it is encoded in one of:
 
 Acceptance-affecting checker implementation changes must be tied to visible guide, policy, or checker-policy context. When those changes affect a rebased revision attempt, the contributor-visible change summary must describe the new requirement without exposing private detection details.
 
+## Revision rounds and deadline
+
+Each assignment's initial Submission is round 0. Checker and genuine human
+`needs_revision` use the same intended deadline policy; human decision
+integration remains #554 work. `max_revision_rounds = 2` permits two
+resubmissions, rounds 1 and 2. Each committed contributor-fixable failure starts
+a fresh window using that failed attempt's locked `revision_deadline_hours`.
+The database supplies the timestamp; eligibility ends at the exact deadline.
+Infrastructure failures and provider retries do not spend a revision round.
+
+The immutable preparation freezes its source, deadline and complete target
+context. Duplicate delivery, exact replay and PM context repair retain the
+original window and cap. Repair appends one authorized successor to the exact
+current preparation; it cannot reset the deadline or rewrite previous evidence.
+Cap exhaustion refuses further revisions. At expiry, a durable worker records
+the outstanding attempt's rejection, releases its assignment and returns the
+task to `ready` in one transaction with audit and outbox evidence. Original
+Submissions and findings remain immutable. A recurring PostgreSQL-backed scan
+recovers overdue work after downtime; duplicate or stale jobs cannot expire a
+newer attempt or assignment. Resubmission and expiry serialize under TASK-first
+custody and use PostgreSQL time at the new-write boundary.
+
+Revision rounds belong to an assignment. A subsequent claimant starts at round
+0 with their own allowance; task-global Submission ordering remains immutable.
+Uploading ZIP bytes alone is not resubmission: the next immutable Submission
+must commit before the deadline. A seven-day policy is 168 hours, supplied by
+the failed attempt's locked RevisionPolicy.
+
 ## Consequences
 
 Positive:
@@ -126,7 +156,7 @@ Positive:
 - guide and policy updates can improve future revisions without mutating prior submissions
 - repeated lessons become durable guide, checker, review, revision, or template changes
 
-- contributors receive one coherent current context after a human revision
+- contributors receive one coherent current context after a controlled revision
   boundary instead of new guide requirements paired with stale economic terms
 - completed reviewer and award history remains governed by its original
   ReviewLease freeze

@@ -200,6 +200,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_auth_concurrency_observer.py",
     "tests/test_authorization.py",
     "tests/authorization/test_catalogue.py",
+    "tests/authorization/test_authorization_custody_documentation.py",
     "tests/authorization/test_acceptance_source_contracts.py",
     "tests/authorization/test_outbox_dispatch_contract.py",
     "tests/authorization/test_assignment_invalidation_contract.py",
@@ -290,6 +291,10 @@ PROJECT_MODULES = (
     "tests/tasks/submission_dispatch/test_migration.py",
     "tests/tasks/submission_dispatch/test_replacement_migration.py",
     "tests/tasks/submission_dispatch/test_replacement_creation.py",
+    "tests/tasks/submission_dispatch/test_revision_capacity.py",
+    "tests/tasks/submission_dispatch/test_revision_expiry.py",
+    "tests/tasks/submission_dispatch/test_revision_expiry_security.py",
+    "tests/tasks/submission_dispatch/test_revision_recovery_postgresql.py",
     "tests/tasks/submission_dispatch/test_replay.py",
     "tests/tasks/submission_dispatch/test_rollback.py",
     "tests/tasks/submission_dispatch/test_storage.py",
@@ -465,6 +470,9 @@ CHECKER_DELIVERY_MODULES = (
 
 
 TASK_MODULES = (
+    "tests/tasks/submission_dispatch/test_revision_recovery_contracts.py",
+    "tests/tasks/submission_dispatch/test_predecessor_receipt.py",
+    "tests/tasks/test_revision_error_mapping.py",
     "tests/tasks/test_task_import_contract.py",
     "tests/test_task_import_sources.py",
     "tests/test_submission_predecessor_custody.py",

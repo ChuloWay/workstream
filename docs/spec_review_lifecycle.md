@@ -267,18 +267,18 @@ Rows migrated from the pre-lineage schema are retained as
 `legacy_incomplete`. They remain readable for historical explanation but cannot
 satisfy readiness or activate future review behavior because no lease or
 preference semantics are invented from the removed `sla_hours` field. Policy
-rows reject update, delete, and truncate at the database boundary. The removed
-`auto_reject_after_limit` value is not lifecycle authority: reaching a revision
-limit or deadline blocks preparation and never auto-rejects or auto-closes a
-Task.
+rows reject update, delete, and truncate at the database boundary. The removed `auto_reject_after_limit` field grants no lifecycle authority.
+The governing RevisionPolicy supplies a positive revision allowance and deadline.
+Cap exhaustion blocks another attempt; the frozen deadline still governs durable
+TASK timeout rejection and assignment release as defined below.
 
 Project Guide activation binds one `ContributionPolicyVersion`; task readiness
 locks it before claimability. TaskAssignment copies that lock, Submission
 stamps the exact attempt value, and ReviewLease copies the Submission stamp
 without claim-time selection. Project Guide or policy
 publication alone changes no existing task, assignment, Submission, or lease.
-After a human `needs_revision`, complete-context preparation may atomically
-rebase the continuing Task and TaskAssignment for the next submission attempt;
+After a committed checker or human `needs_revision`, complete-context preparation
+may atomically rebase the continuing Task and TaskAssignment for the next submission attempt;
 earlier Submission and ReviewLease lineage remains immutable.
 
 ## Checker Admission
@@ -304,12 +304,27 @@ false/pass still requires an Operator-authorized live REV generation.
 
 Checker routing is not human judgment. A final needs-remediation CHECKER result
 is consumed by the TASK-owned ARCH-04F handler, which moves the Task to
-contributor-readable `needs_revision` in its own authorized transaction while
-retaining the Task's locked context. CHECKERS does not mutate TASK directly.
-This creates no Review,
-ReviewFinding, RevisionContextPreparation, reviewer contribution, or synthetic
-human actor, consumes no human revision round/deadline, and does not use D6
-closure. Checker remediation follows that exact CheckerRun lineage and must pass
+contributor-readable `needs_revision` and creates a TASK-owned checker-rooted
+revision preparation in the same authorized transaction. The preparation freezes
+the complete next-attempt context, including a guarded complete-context rebase
+when applicable, or records why revision is blocked. CHECKERS does not mutate
+TASK directly. This creates no Review, ReviewFinding, human-Review-rooted
+preparation, reviewer contribution or synthetic human actor, and does not use
+D6 closure. Checker replacements share the locked
+assignment-scoped revision allowance: the initial Submission is round 0; max_revision_rounds=2
+permits rounds 1 and 2, for three Submissions total. Infrastructure retries and
+replay create no Submission and consume no round. ART preparation and new TASK
+creation refuse revision_limit_reached with HTTP 409 before new effects; SQL
+also rejects over-cap inserts. The task remains needs_revision with its earlier
+evidence intact. Reaching the cap does not itself reject the outstanding attempt;
+its original revision deadline still applies. Each committed fixable failure
+starts a fresh window from PostgreSQL time and the failed attempt's locked
+RevisionPolicy. Only a committed immutable successor Submission ends that window;
+ZIP upload, ready admission, repair and infrastructure retry do not. At expiry,
+TASK atomically records an immutable rejection receipt, releases the
+assignment and returns the task to ready with audit and outbox evidence. A new
+assignment starts its own round 0 while global Submission versions remain
+consecutive. Checker remediation follows that exact CheckerRun lineage and must pass
 the normal submission/checker spine before human review.
 
 Queue schema migration performs no blanket historical backfill. A later audited
@@ -819,14 +834,17 @@ transaction does not write a reputation side effect.
 
 ADR 0010 is additive to immutable revised submissions. The task pipeline owns
 the single Project Guide context used for both task execution and human review.
-TaskAssignment stores only `task_id`; it does not duplicate a guide/context
-lock. Each Submission stamps the exact guide ID, version, immutable per-project
+TaskAssignment retains task/contributor/status attribution and its frozen
+submitter ContributionPolicyVersion; the Task owns the complete governing
+context. Each Submission stamps the exact guide ID, version, immutable per-project
 activation sequence, source snapshot, and task-execution policy IDs, versions,
 and hashes used for that attempt.
 
-Controlled revision preparation applies only after an immutable human
-`Review(needs_revision)`. Checker-caused remediation remains the distinct
-CheckerRun-rooted path above and performs no guide rebase or human finding replay.
+Human revision preparation is rooted in an immutable `Review(needs_revision)`;
+its decision integration remains separate work. Checker-caused remediation uses
+the distinct CheckerRun-rooted TASK preparation described above. Both use the
+complete-context comparison; checker remediation never replays human findings
+or fabricates a Review.
 
 Revision preparation compares the prior Submission's complete stamped context
 with the project's complete currently active applicable guide and policy
@@ -890,12 +908,14 @@ after corrected checker admission.
 
 A planned human-Review Submission N+1 links its immediate predecessor, exact
 preparation head, required bounded response text, and target TaskAssignment.
-The hidden checker-remediation Submission N+1 instead uses the exact authorized
+The checker-remediation Submission N+1 instead uses the exact authorized
 needs-revision routing manifest for the predecessor's current completed
 CheckerRun. Its `checker_remediation_manifest_id` is retained by ART evidence and
 admission, TASK dispatch and exact AUTH receipts; Submission links the admission
-and predecessor without a duplicate cause column. It keeps the Task's locked
-context and has no preparation or ReviewFinding response. Both paths rerun the
+and predecessor without a duplicate cause column. It acknowledges the exact
+current checker-rooted preparation ID and digest and stamps its frozen target
+context, including an authorized rebase. It requires no ReviewFinding response.
+Both paths rerun the
 existing finalization and checker spine. A new current `allow_review` creates a
 queue entry preferred to the reviewer who issued the prior human revision
 request. Corrected checker work enters ordinary open routing.
@@ -911,25 +931,39 @@ covered manager may assign a replacement against the durable human revision
 episode and append one preparation successor whose target TaskAssignment is the
 replacement. The old contributor cannot submit.
 
-## Revision Limits, Repair, And Legacy Recovery
+## Revision Limits, Repair, And Retained-Source Recovery
 
-Exact human Review revision-round counting, deadline anchor, and boundary require
-separate human approval before implementation. They are not inferred from
-checker retries, task SLA, current time, or archival examples. Approved values
-freeze on the Review-rooted episode and use database time.
+Checker and human `needs_revision` share one intended deadline and cap policy.
+Each assignment starts at round 0; a limit of 2 permits revisions 1 and 2.
+Each committed contributor-fixable failure starts a fresh window using
+PostgreSQL time and the failed attempt's exact locked RevisionPolicy. The
+checker-rooted path implements this policy. Genuine human Review decision
+integration remains #554 work; its future trigger must use the same policy with
+Review provenance rather than fabricate a checker cause.
 
-Reaching a revision limit or deadline blocks new revision preparation and
-`submission.create` with a stable policy error. It does not automatically reject
-or close the task. The task remains `needs_revision` and its assignment remains
-active until an authorized explicit command.
+A committed immutable successor Submission ends the predecessor's window.
+Upload, pre-submit checks, ready admission, duplicate delivery, exact replay,
+infrastructure retry and context repair do not end or reset it. The next
+committed `needs_revision` starts another window under that attempt's lock.
+Cap exhaustion refuses further preparation and creation while preserving the
+outstanding deadline; deadline exhaustion refuses a new attempt at the exact
+PostgreSQL boundary.
 
-A covered Project Manager may use the planned, reason-bound, idempotent
-`review.revision_obligation.close` command only after server-proven limit or
-deadline exhaustion. It sets the task to canonical `cancelled`, releases the
-assignment at database time, clears active-assignee projection, and closes any
-queue entry as administratively cancelled. It creates no Review,
-FinalAcceptance, ContributionRecord, award, fulfillment instruction, or
-reputation effect.
+At expiry, the TASK-owned durable operation appends an immutable rejection
+receipt for the outstanding attempt, marks its assignment `revision_expired`
+with a release timestamp, clears the assignee and returns the Task to `ready`.
+Task/assignment changes, AUTH evidence, audit and outbox intent commit atomically.
+It does not rewrite Submission or Review evidence, fabricate a reject Review,
+or create FinalAcceptance, ContributionRecord, award, fulfillment or reputation
+effects. A new claimant receives their own round-0 allowance while task-global
+Submission versions remain consecutive. TASK-first revalidation fences
+resubmission, duplicate expiry deliveries and stale delivery after reclaim. The recurring
+retained-source scan schedules the original source-policy window after downtime
+without selecting a new context or moving its deadline.
+
+Normal revision timeout uses TASK service authority. Reaching the revision cap
+refuses another attempt while preserving the current deadline; it does not
+provide a manager command to cancel the task.
 
 Blocked/revoked/invalid context preparation is repaired only through the
 planned `review.revision_context.repair` command. A covered Project Manager
@@ -964,8 +998,12 @@ actions:
 
 - registered planned `submission.create`;
 - 19 registered planned review actions; and
-- four then-unregistered approved REV actions, now registered but unavailable,
-  defined below.
+- four then-unregistered approved REV recovery/lifecycle actions.
+
+02C subsequently registered all four. PILOT-08 removes the superseded planned
+manager-closure action; three remain in the manifest below. Context repair and
+historical-context closure remain planned; `review.lifecycle.activation.manage`
+is active internally through REV-12A4A, with no public route.
 
 The registered planned `artifact.review_evidence.binding.create ->
 artifact.binding.create` service action is separate, unavailable, and not one
@@ -987,14 +1025,16 @@ review rows without changing availability, and `WS-AUTH-001-PREP` supplied the
 prepared mutation protocol. Historical aliases `WS-AUTH-001-REV-REG`,
 `WS-AUTH-001-REV-05/06/07/08/09A/11/12`, and
 `WS-AUTH-001-REV-LIFECYCLE` are superseded as delivery authority by canonical
-WS-XINT-003 custody. 02C registers the four additions unavailable; 02D publishes
-their fail-closed contracts; later exact XINT waves activate only merged hidden
-behavior. REV-13C alone exposes the coherent product surface.
+WS-XINT-003 custody. Historically, 02C registered four additions unavailable and
+02D published their fail-closed contracts; later exact XINT waves activate only
+merged hidden behavior. PILOT-08 retires the superseded planned manager-closure
+registration. REV-13C alone exposes the coherent product surface.
 
-## Four-Action Registration Manifest
+## Three-Action Recovery And Lifecycle Manifest
 
-Registration adds no PermissionId, activates nothing, and claims no hidden
-behavior already exists. All human actors below are canonical ActorProfile IDs;
+The three retained actions add no PermissionId. Their original registration did
+not activate behavior; lifecycle control now has its separately delivered
+internal activation, while both revision-context actions remain planned. All human actors below are canonical ActorProfile IDs;
 all mutations use AUTH PREP, final-fact recomposition, route/service-command
 transaction ownership, one commit, exact idempotency, and transaction-time
 revalidation.
@@ -1031,22 +1071,6 @@ revalidation.
 - Effects: task cancelled, assignment released, queue administratively closed;
   no synthetic Review, FinalAcceptance, or CON record.
 - Hidden behavior dependency: `WS-REV-001-11D`.
-
-### `review.revision_obligation.close`
-
-- Permission: existing `project.task.manage`.
-- Candidate: active covered Project Manager grant only; Operator authority does
-  not substitute.
-- Planned surface:
-  `POST /api/v1/tasks/{task_id}/revision-obligation/close`.
-- Resource facts: exact project, task, assignment, originating human
-  `needs_revision` Review, current preparation head, approved frozen
-  limit/deadline facts, and server proof of the selected reached cause.
-- CheckerRun-rooted remediation is not an eligible resource for this command.
-- Guards: exact current head/cause, task still `needs_revision`, and terminal
-  reason exactly `revision_limit_reached` or `revision_deadline_expired`;
-  missing, not-reached, stale, arbitrary, crossed, or cross-project input denies.
-- Hidden behavior dependency: `WS-REV-001-11B`.
 
 ### `review.lifecycle.activation.manage`
 

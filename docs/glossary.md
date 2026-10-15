@@ -255,8 +255,10 @@ A unit of work inside a project.
 
 The contributor-safe API projection of a task's guide, project summary, review
 policy, revision policy, and lifecycle state. Initial work reads the task's
-locked context. Human-review revision reads the validated immutable
-RevisionContextPreparation head and digest, not a moving active-guide pointer.
+locked context. Checker remediation reads the current immutable
+TaskRevisionPreparation head/digest, eligibility and change summary; planned
+human-review revision uses its genuine Review-rooted preparation. Both read a
+frozen context rather than a moving active-guide pointer.
 It does not expose source snapshot
 hashes, private source/import refs, compiled checker bundles, checker configs,
 Celery ids, or setup errors.
@@ -368,6 +370,24 @@ submitter ContributionPolicy versions; context digest; change summary; and
 `kept`, `rebased`, or `blocked` result. A human revision rebase records forward
 or backward direction where applicable and publishes one complete next-attempt
 context without rewriting prior work.
+
+## TaskRevisionPreparation
+
+The implemented immutable checker-rooted next-attempt context. TASK retains
+its exact routing manifest, prior Submission, assignment, complete prior/target
+context, original PostgreSQL-policy window, local round/cap, head digest and
+repair lineage. Contributor context exposes its bounded change summary and
+current eligibility; intake and creation bind the exact acknowledgement.
+Human Review integration remains separate work under the same revision policy.
+
+## TaskRevisionExpiration
+
+The immutable TASK rejection receipt for an outstanding revision deadline.
+It retains exact source/root/head, original deadline, expiration timestamp,
+AUTH/audit/outbox references and released assignment. TASK returns to `ready`;
+history projects the original Submission as rejected without editing its row.
+Timeout creates no Review or economic facts. Only committed immutable
+resubmission ends a window; replay, upload and repair cannot reset it.
 
 ## FinalAcceptance
 

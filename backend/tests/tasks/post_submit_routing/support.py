@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import select, text
 
 from app.adapters.checkers import evaluation_coordinator
+from app.adapters.tasks import task_submission_context_port
 from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorIdentityLink
@@ -16,7 +17,7 @@ from app.modules.checkers.models import CheckerRun
 from app.modules.projects.models import (
     ReviewPolicy,
 )
-from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.api import SubmissionCreationRequest, TaskSubmissionContextRequest
 from app.modules.tasks.api.post_submit_routing import TaskPostSubmitManifestFacts
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.models import Submission, SubmissionDispatch, TaskAssignment, WorkstreamTask
@@ -214,6 +215,7 @@ async def completed_source(
     storage_settings=None,
     contribution_awards=(),
     human_review_required=True,
+    max_revision_rounds=2,
     post_submit_registry_spec=None,
 ):
     """Yield one real authorized allow-review run and its valid source scalars."""
@@ -224,6 +226,7 @@ async def completed_source(
         storage_settings=storage_settings,
         contribution_awards=contribution_awards,
         human_review_required=human_review_required,
+        max_revision_rounds=max_revision_rounds,
         post_submit_registry_spec=post_submit_registry_spec,
     ) as h:
         await reserve(h)
@@ -241,6 +244,15 @@ async def completed_source(
 
 async def _create_submission(h, context, task_id, assignment_id, predecessor_id=None):
     """Admit the ZIP and create exact Submission lineage through owner services."""
+    async with h.factory() as session, session.begin():
+        current = await task_submission_context_port(session).lock_submission_context(
+            TaskSubmissionContextRequest(
+                task_id=task_id, assignment_id=assignment_id,
+                contributor_id=context.actor_profile_id,
+                predecessor_submission_id=predecessor_id,
+            )
+        )
+        revision = current.revision_context
     preparation = SubmissionBundlePreparationRequest(
         actor=ActorIdentityFacts(
             context.actor_profile_id,
@@ -252,6 +264,8 @@ async def _create_submission(h, context, task_id, assignment_id, predecessor_id=
         task_id=task_id,
         assignment_id=assignment_id,
         predecessor_submission_id=predecessor_id,
+        revision_preparation_id=str(revision.preparation_id) if revision else None,
+        revision_preparation_sha256=revision.preparation_sha256 if revision else None,
         idempotency_key=new_record_id(),
         summary=h.creation_request.summary,
         contributor_attestation=h.creation_request.contributor_attestation,
@@ -351,6 +365,7 @@ async def activate_successor_guide(h):
 
     from sqlalchemy import select
 
+    from app.adapters.checkers import external_checker_registry_reader
     from app.interfaces.project_agents import SubmissionArtifactPolicyProposal
     from app.modules.actors.models import ActorIdentityLink, ActorProfile
     from app.modules.projects.api.post_policy import PostPolicyApproval
@@ -384,6 +399,11 @@ async def activate_successor_guide(h):
                 )
             )
         ).one()
+        registry_entries = await external_checker_registry_reader(session).list_entries()
+    pre_entries = tuple(entry for entry in registry_entries if entry.phase == "pre_submit")
+    post_entries = tuple(entry for entry in registry_entries if entry.phase == "post_submit")
+    assert len(registry_entries) == len(pre_entries) + len(post_entries)
+    assert len(pre_entries) <= 1 and len(post_entries) <= 1
     values.update(actor=as_uuid(setup_actor), link=as_uuid(setup_link))
     manager, grant = await seed_review_actor(h.factory, h.request.project_id)
     proposal = SubmissionArtifactPolicyProposal(
@@ -399,6 +419,8 @@ async def activate_successor_guide(h):
         manager,
         version="v2",
         artifact_proposal=proposal,
+        pre_submit_registry_entry=pre_entries[0] if pre_entries else None,
+        post_submit_registry_entry=post_entries[0] if post_entries else None,
     )
     await seed_selected_review_revision_inputs(h.factory, finalization, manager)
     _, derived = await prepare_post_policy(

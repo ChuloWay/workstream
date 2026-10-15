@@ -10,6 +10,7 @@ class TaskAuthorityOperation(StrEnum):
     CREATE = "project.task.create"
     SCREEN = "project.task.screen"
     RELEASE = "project.task.release"
+    REVISION_REPAIR = "project.task.revision.repair"
     READ = "task.read"
     REQUIREMENTS = "task.submission_requirements.read"
     MANAGEMENT_READ = "project.task.read"
@@ -42,6 +43,10 @@ class TaskAuthorityFacts:
     replay_assignment_id: UUID | None = None
     request_digest: str | None = None
     replay_command_id: UUID | None = None
+    revision_preparation_id: UUID | None = None
+    revision_preparation_sha256: str | None = None
+    revision_routing_manifest_id: UUID | None = None
+    revision_replay_preparation_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)

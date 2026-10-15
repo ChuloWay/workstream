@@ -15,6 +15,8 @@ PUT = "018f0ebc-7966-7e8d-bc4d-1cae1e000013"
 ADMISSION = "018f0ebc-7966-7e8d-bc4d-1cae1e000014"
 SUBMISSION = "018f0ebc-7966-7e8d-bc4d-1cae1e000015"
 RUN = "018f0ebc-7966-7e8d-bc4d-1cae1e000016"
+REVISION_PREPARATION = "018f0ebc-7966-7e8d-bc4d-1cae1e000017"
+REVISION_DIGEST = "sha256:" + "a" * 64
 RECEIPT = {
     "submission_id": SUBMISSION,
     "submission_version": 1,
@@ -26,6 +28,7 @@ HISTORY = {
     "task_id": TASK,
     "version": 1,
     "status": "submitted",
+    "status_reason": None,
     "summary": "Work complete",
     "submitted_at": "2026-10-14T10:00:00Z",
     "locked_at": None,
@@ -137,6 +140,60 @@ def test_explicit_prepare_replay_then_create_preserves_packet_and_bytes(cli, tmp
             f"/api/v1/tasks/{TASK}/submissions",
             "Bearer " + TOKEN,
         )
+
+
+def test_revision_prepare_requires_and_replays_exact_acknowledgement_headers(
+    cli, tmp_path
+):
+    path = tmp_path / "revision.zip"
+    path.write_bytes(b"PK\x03\x04revision")
+    pair = (
+        "--revision-preparation-id",
+        REVISION_PREPARATION,
+        "--revision-preparation-sha256",
+        REVISION_DIGEST,
+    )
+    with http_fixture() as (origin, response, requests):
+        for args in (
+            ("--predecessor", SUBMISSION),
+            pair,
+            (
+                "--predecessor",
+                SUBMISSION,
+                "--revision-preparation-id",
+                REVISION_PREPARATION,
+            ),
+            (
+                "--predecessor",
+                SUBMISSION,
+                "--revision-preparation-sha256",
+                REVISION_DIGEST,
+            ),
+            ("--predecessor", SUBMISSION, *pair[:-1], "sha256:" + "A" * 64),
+        ):
+            assert_failure(
+                cli(origin, TOKEN, *prepare_args(path), *args), "invalid_arguments", 2
+            )
+        assert requests == []
+        respond(response, preparation("ready"), 202)
+        for _ in range(2):
+            result = cli(
+                origin, TOKEN, *prepare_args(path), "--predecessor", SUBMISSION, *pair
+            )
+            assert result.returncode == 0, result.stderr
+        assert len(requests) == 2
+        for headers in response["request_headers"]:
+            assert headers["X-Predecessor-Submission-Id"] == SUBMISSION
+            assert headers["X-Revision-Preparation-Id"] == REVISION_PREPARATION
+            assert headers["X-Revision-Preparation-Sha256"] == REVISION_DIGEST
+        respond(response, RECEIPT | {"submission_version": 2}, 201)
+        result = cli(origin, TOKEN, *submit_args(), "--predecessor", SUBMISSION)
+        assert result.returncode == 0, result.stderr
+        assert response["commands"][-1][2] == {
+            "assignment_id": ASSIGNMENT,
+            "predecessor_submission_id": SUBMISSION,
+            "admission_id": ADMISSION,
+        }
 
 
 def test_prepare_rejects_untransportable_packet_before_request(cli, tmp_path):
@@ -362,6 +419,41 @@ def test_submission_history_and_findings_are_bounded_and_preserve_evidence(cli):
         assert result.returncode == 0 and json.loads(result.stdout) == CHECKER
         assert requests[-1][1] == f"/api/v1/submissions/{SUBMISSION}/checker-runs/{RUN}"
         assert len(requests) == 4
+
+
+def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
+    with http_fixture() as (origin, response, _):
+        for history in (
+            {key: value for key, value in HISTORY.items() if key != "status_reason"},
+            HISTORY,
+            HISTORY
+            | {"status": "rejected", "status_reason": "revision_deadline_expired"},
+        ):
+            respond(response, history)
+            result = cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json")
+            assert result.returncode == 0 and json.loads(result.stdout) == history, (
+                result.stderr
+            )
+            text = cli(origin, TOKEN, "submission", "show", SUBMISSION)
+            assert text.returncode == 0, text.stderr
+            displayed = json.loads(text.stdout.splitlines()[0].split(": ", 1)[1])
+            assert displayed.get("status_reason") == history.get("status_reason")
+            respond(response, {"items": [history], "next_cursor": None})
+            page = cli(origin, TOKEN, "task", "submissions", TASK, "-o", "json")
+            assert page.returncode == 0 and json.loads(page.stdout)["items"] == [
+                history
+            ]
+        for history in (
+            HISTORY | {"status_reason": "revision_deadline_expired"},
+            HISTORY | {"status": "rejected", "status_reason": "other"},
+            HISTORY | {"status": "rejected", "status_reason": ""},
+            HISTORY | {"status": "rejected", "status_reason": 1},
+        ):
+            respond(response, history)
+            assert_failure(
+                cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json"),
+                "invalid_api_response",
+            )
 
 
 def test_submission_reads_reject_substitution_private_fields_and_duplicate_identity(

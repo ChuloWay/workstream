@@ -38,6 +38,14 @@ def require_single_preparation_headers(request: Request) -> None:
                 error_code="submission_preparation_headers_invalid",
                 error_message="Submission preparation headers invalid",
             )
+    for name in ("X-Revision-Preparation-Id", "X-Revision-Preparation-Sha256"):
+        if len(request.headers.getlist(name)) > 1:
+            raise StructuredHTTPException(
+                status_code=422,
+                detail="Submission preparation headers invalid",
+                error_code="submission_preparation_headers_invalid",
+                error_message="Submission preparation headers invalid",
+            )
 
 
 class SubmissionBundlePreparationResponse(BaseModel):
@@ -88,6 +96,12 @@ async def prepare_submission_bundle(
     predecessor_submission_id: Annotated[
         str | None, Header(alias="X-Predecessor-Submission-Id")
     ] = None,
+    revision_preparation_id: Annotated[
+        str | None, Header(alias="X-Revision-Preparation-Id")
+    ] = None,
+    revision_preparation_sha256: Annotated[
+        str | None, Header(alias="X-Revision-Preparation-Sha256")
+    ] = None,
 ) -> SubmissionBundlePreparationResponse | JSONResponse:
     """Run continuous ZIP preparation under fresh contributor authority."""
     try:
@@ -116,6 +130,8 @@ async def prepare_submission_bundle(
                 contributor_attestation=contributor_attestation or "",
                 media_type=request.headers.get("content-type", ""),
                 byte_source=request.stream(),
+                revision_preparation_id=revision_preparation_id,
+                revision_preparation_sha256=revision_preparation_sha256,
             )
         )
     except SubmissionBundlePreparationCheckFailed as exc:
@@ -136,8 +152,16 @@ async def prepare_submission_bundle(
         raise HTTPException(status_code=404, detail="Task not found") from exc
     except SubmissionBundlePreparationRejected as exc:
         code = str(exc)
+        if code in {"revision_limit_reached", "revision_deadline_expired", "revision_context_blocked", "revision_context_changed"}:
+            raise StructuredHTTPException(
+                status_code=409, detail=code, error_code=code, error_message=code,
+            ) from exc
         if code in {"submission_bundle_preparation_context_changed",
                     "submission_bundle_preparation_request_conflict"}:
             raise HTTPException(status_code=409, detail=code) from exc
+        if code in {"revision_acknowledgement_required", "revision_acknowledgement_invalid"}:
+            raise StructuredHTTPException(
+                status_code=422, detail=code, error_code=code, error_message=code,
+            ) from exc
         raise HTTPException(status_code=422, detail=code) from exc
     return SubmissionBundlePreparationResponse.model_validate(result, from_attributes=True)

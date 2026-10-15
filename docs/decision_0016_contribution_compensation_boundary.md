@@ -66,11 +66,15 @@ Guide activation validates and binds one policy version. Task readiness locks
 it before claimability; TaskAssignment copies that lock, each Submission stamps
 its attempt version, and ReviewLease copies the Submission stamp without
 claim-time selection. Later publication alone never mutates active
-work. After a human `needs_revision`, task-owned revision preparation may
-atomically rebase the continuing Task and TaskAssignment to the complete current
-context for the next submission attempt. The completed Review and reviewer
-award retain the prior lease version; the next Submission and ReviewLease use
-the rebased version. Prior contributions and awards are never rewritten.
+work. After checker or human `needs_revision`, task-owned revision preparation
+may atomically rebase the continuing Task and TaskAssignment to the complete
+current context for the next submission attempt. Checker preparation is
+implemented; genuine human Review integration remains #554 work under the same
+intended policy. Preparation commits the rebase; the next immutable Submission
+stamps that frozen target and consumes the revision round. Existing Submissions
+and checker evidence retain their original context. A completed human Review
+and reviewer award retain the prior lease version; a later ReviewLease copies
+the next Submission stamp. Prior contributions and awards are never rewritten.
 
 The owner-sized CP06/CP07/CP08 and ARCH replacements establish canonical policy
 binding and locked lineage. The [completed cleanup](../backend/alembic/versions/0023_remove_task_payment_policy.py)

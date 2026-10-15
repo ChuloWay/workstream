@@ -153,23 +153,14 @@ class PreSubmitEvidenceSet(Base):
             name="fk_pre_submit_evidence_task_project",
         ),
         ForeignKeyConstraint(
-            ["task_id", "guide_version"],
-            ["workstream_tasks.id", "workstream_tasks.locked_guide_version"],
-            name="fk_pre_submit_evidence_task_guide",
-        ),
-        ForeignKeyConstraint(
             ["guide_id", "project_id", "guide_version"],
             ["project_guides.id", "project_guides.project_id", "project_guides.version"],
             name="fk_pre_submit_evidence_guide_lineage",
         ),
         ForeignKeyConstraint(
-            ["task_id", "source_snapshot_id", "source_snapshot_sha256"],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_guide_source_snapshot_id",
-                "workstream_tasks.locked_guide_source_snapshot_hash",
-            ],
-            name="fk_pre_submit_evidence_task_source_snapshot",
+            ["source_snapshot_id", "source_snapshot_sha256"],
+            ["guide_source_snapshots.id", "guide_source_snapshots.bundle_hash"],
+            name="fk_pre_submit_evidence_source_snapshot_hash",
         ),
         ForeignKeyConstraint(
             ["predecessor_submission_id", "task_id", "predecessor_submission_version"],
@@ -181,22 +172,14 @@ class PreSubmitEvidenceSet(Base):
             name="remediation_shape",
         ),
         ForeignKeyConstraint(
-            ["task_id", "effective_policy_id", "locked_artifact_policy_sha256"],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_effective_project_submission_artifact_policy_id",
-                "workstream_tasks.locked_effective_project_submission_artifact_policy_hash",
-            ],
-            name="fk_pre_submit_evidence_task_artifact_policy",
+            ["effective_policy_id", "locked_artifact_policy_sha256"],
+            ["effective_project_submission_artifact_policies.id", "effective_project_submission_artifact_policies.effective_policy_hash"],
+            name="fk_pre_submit_evidence_effective_policy_hash",
         ),
         ForeignKeyConstraint(
-            ["task_id", "pre_submit_policy_id", "locked_checker_policy_sha256"],
-            [
-                "workstream_tasks.id",
-                "workstream_tasks.locked_pre_submit_checker_policy_id",
-                "workstream_tasks.locked_pre_submit_checker_bundle_hash",
-            ],
-            name="fk_pre_submit_evidence_task_checker_policy",
+            ["pre_submit_policy_id", "locked_checker_policy_sha256"],
+            ["pre_submit_checker_policies.id", "pre_submit_checker_policies.compiled_bundle_hash"],
+            name="fk_pre_submit_evidence_checker_policy_hash",
         ),
         CheckConstraint(
             "packet_sha256 is null or " + SHA256_CHECK.format(column="packet_sha256"),
@@ -1382,6 +1365,21 @@ class SubmissionBundleAdmission(Base):
             "(predecessor_submission_id is null) = (checker_remediation_manifest_id is null)",
             name="remediation_shape",
         ),
+        ForeignKeyConstraint(
+            ["revision_preparation_id", "revision_preparation_sha256"],
+            ["task_revision_preparations.id", "task_revision_preparations.preparation_sha256"],
+            name="fk_submission_bundle_admission_revision_preparation",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(revision_preparation_id is null) = (revision_preparation_sha256 is null)",
+            name="revision_preparation_shape",
+        ),
+        CheckConstraint(
+            "revision_preparation_sha256 is null or "
+            + SHA256_CHECK.format(column="revision_preparation_sha256"),
+            name="revision_preparation_digest",
+        ),
         CheckConstraint(
             "((put_operation_receipt_id is not null)::int + "
             "(put_observation_receipt_id is not null)::int) = 1",
@@ -1453,6 +1451,8 @@ class SubmissionBundleAdmission(Base):
         ForeignKey("task_post_submit_routing_manifests.id", ondelete="RESTRICT",
                    name="fk_submission_bundle_admissions_checker_remediation_manifest"),
     )
+    revision_preparation_id: Mapped[UUID | None] = mapped_column(Uuid())
+    revision_preparation_sha256: Mapped[str | None] = mapped_column(String(71))
     locked_policy_context_hash: Mapped[str] = mapped_column(String(71), nullable=False)
     guide_id: Mapped[str | None] = mapped_column(Uuid(as_uuid=False))
     guide_version: Mapped[str | None] = mapped_column(String(50))

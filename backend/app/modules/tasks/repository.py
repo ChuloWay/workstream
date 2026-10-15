@@ -9,7 +9,7 @@ from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.checkers.api.external_policy import validate_stored_external_post_policy
 from uuid import UUID
 
-from sqlalchemy import Row, Select, and_, or_, select, tuple_
+from sqlalchemy import Row, Select, and_, func, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.contributions.api import LockedCompensationTermsPort
@@ -109,6 +109,34 @@ class TaskRepository:
         self._session = session
         self._audit_repository = AuditRepository(session)
         self._compensation_terms = compensation_terms
+
+    async def list_current_revision_sources(
+        self, *, after: UUID | None, limit: int,
+    ) -> tuple[UUID, ...]:
+        """Page current TASK sources; recovery checks exact custody under locks."""
+        if not 1 <= limit <= 100:
+            raise ValueError("revision source page limit is invalid")
+        manifest = TaskPostSubmitRoutingManifest
+        statement = select(manifest.id).join(
+            WorkstreamTask, WorkstreamTask.id == manifest.task_id,
+        ).join(
+            TaskAssignment, TaskAssignment.id == manifest.assignment_id,
+        ).where(
+            manifest.routing_recommendation == "needs_revision",
+            WorkstreamTask.status == "needs_revision",
+            WorkstreamTask.assigned_to == manifest.contributor_id,
+            TaskAssignment.status == "active",
+            TaskAssignment.released_at.is_(None),
+            TaskAssignment.accepted_at.is_not(None),
+            TaskAssignment.contributor_id == manifest.contributor_id,
+            func.revision_routing_source_current(manifest.id).is_(True),
+        )
+        if after is not None:
+            statement = statement.where(manifest.id > after)
+        identifiers = (await self._session.scalars(
+            statement.order_by(manifest.id).limit(limit),
+        )).all()
+        return tuple(UUID(str(identifier)) for identifier in identifiers)
 
     async def _locked_compensation(
         self, project_id: UUID, version_ids: tuple[UUID, ...]
@@ -679,6 +707,17 @@ class TaskRepository:
             for_update=True,
             populate_existing=True,
         )
+        if latest_submission is None:
+            latest_assignment_submission = None
+        elif latest_submission.task_assignment_id == str(request.assignment_id):
+            latest_assignment_submission = latest_submission
+        else:
+            latest_assignment_submission = await self._session.scalar(
+                select(Submission).where(
+                    Submission.task_id == str(request.task_id),
+                    Submission.task_assignment_id == str(request.assignment_id),
+                ).order_by(Submission.version.desc()).limit(1)
+            )
         contributor_id = str(request.contributor_id)
         if (
             task is None
@@ -694,7 +733,10 @@ class TaskRepository:
         ):
             raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
 
-        latest_id = latest_submission.id if latest_submission is not None else None
+        latest_id = (
+            latest_assignment_submission.id
+            if latest_assignment_submission is not None else None
+        )
         requested_predecessor_id = (
             str(request.predecessor_submission_id)
             if request.predecessor_submission_id is not None
@@ -703,25 +745,42 @@ class TaskRepository:
         if latest_id != requested_predecessor_id:
             raise TaskSubmissionContextUnavailable("task_submission_predecessor_changed")
         if (
-            (task.status == "in_progress" and latest_submission is not None)
-            or (task.status == "needs_revision" and latest_submission is None)
+            (task.status == "in_progress" and latest_assignment_submission is not None)
+            or (task.status == "needs_revision" and latest_assignment_submission is None)
             or (
-                latest_submission is not None
-                and latest_submission.contributor_id != contributor_id
+                latest_assignment_submission is not None
+                and (
+                    latest_assignment_submission.contributor_id != contributor_id
+                    or latest_assignment_submission.id != (
+                        latest_submission.id if latest_submission is not None else None
+                    )
+                )
             )
         ):
             raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
 
+        if latest_submission is not None and latest_assignment_submission is None:
+            prior_assignment = await self._session.get(
+                TaskAssignment, latest_submission.task_assignment_id
+            )
+            if (prior_assignment is None or prior_assignment.status != "revision_expired"
+                    or prior_assignment.released_at is None):
+                raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
+            if await self._session.scalar(select(func.task_revision_expired_assignment_current(
+                UUID(str(prior_assignment.id)), UUID(str(latest_submission.id)),
+            ))) is not True:
+                raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
+
         remediation = None
-        if latest_submission is not None:
+        if latest_assignment_submission is not None:
             candidates = (await self._session.scalars(
                 select(TaskPostSubmitRoutingManifest).where(
                     TaskPostSubmitRoutingManifest.project_id == task.project_id,
                     TaskPostSubmitRoutingManifest.task_id == task.id,
                     TaskPostSubmitRoutingManifest.assignment_id == assignment.id,
                     TaskPostSubmitRoutingManifest.contributor_id == contributor_id,
-                    TaskPostSubmitRoutingManifest.submission_id == latest_submission.id,
-                    TaskPostSubmitRoutingManifest.submission_version == latest_submission.version,
+                    TaskPostSubmitRoutingManifest.submission_id == latest_assignment_submission.id,
+                    TaskPostSubmitRoutingManifest.submission_version == latest_assignment_submission.version,
                     TaskPostSubmitRoutingManifest.routing_recommendation == "needs_revision",
                 ).order_by(TaskPostSubmitRoutingManifest.evaluation_generation.desc()).limit(2)
             )).all()
@@ -770,12 +829,19 @@ class TaskRepository:
                 pre_submit_policy_id=UUID(task.locked_pre_submit_checker_policy_id),
                 pre_submit_policy_bundle_hash=task.locked_pre_submit_checker_bundle_hash,
             )
+            assignment_round = (
+                await self._session.scalar(select(func.count(Submission.id)).where(
+                    Submission.task_assignment_id == str(request.assignment_id),
+                    Submission.version <= latest_assignment_submission.version,
+                )) if latest_assignment_submission is not None else None
+            )
             predecessor = (
                 SubmissionPredecessorFacts(
-                    submission_id=UUID(latest_submission.id),
-                    version=latest_submission.version,
+                    submission_id=UUID(latest_assignment_submission.id),
+                    version=latest_assignment_submission.version,
+                    revision_round=assignment_round,
                 )
-                if latest_submission is not None
+                if latest_assignment_submission is not None
                 else None
             )
             facts = TaskSubmissionContextFacts(

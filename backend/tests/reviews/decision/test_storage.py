@@ -296,7 +296,15 @@ async def test_predecessor_chain(tmp_path, clean_postgres_database):
     from tests.reviews.decision.support import successor_source
     from sqlalchemy.exc import DBAPIError
 
-    async with review_source(tmp_path, clean_postgres_database) as h:
+    # The packetless gap is a real Submission and spends a revision too;
+    # all four Submissions need an approved allowance of three revisions.
+    async with review_source(tmp_path, clean_postgres_database, max_revision_rounds=3) as h:
+        async with h.factory() as session:
+            assert await session.scalar(text(
+                "SELECT p.max_revision_rounds FROM public.revision_policies p "
+                "JOIN public.workstream_tasks t ON t.locked_revision_policy_id=p.id "
+                "WHERE t.id=:id"
+            ), {"id": h.request.task_id}) == 3
         first = h.review.model_copy(update={"decision": "needs_revision", "findings": (finding(),)})
         async with h.factory() as session:
             await insert_review(session, first)
@@ -335,6 +343,8 @@ async def test_predecessor_chain(tmp_path, clean_postgres_database):
 
         # A new stored successor cannot branch back to an already-used predecessor.
         later = await successor_source(successor)
+        assert (first.submission_version, gap.request.submission_version,
+                resolving.submission_version, later.review.submission_version) == (1, 2, 3, 4)
         async with h.factory() as session:
             with pytest.raises(DBAPIError, match="uq_reviews_predecessor_review_id"):
                 await insert_review(
@@ -515,12 +525,8 @@ async def test_finding_carry_forward(tmp_path, clean_postgres_database):
                 with pytest.raises(DBAPIError, match=message):
                     await insert_review(session, bad)
                     await session.commit()
-        # Inherited-only needs_revision needs no duplicate new finding.
-        async with h.factory() as session:
-            await insert_review(session, next_review)
-            await session.commit()
-        third_h = await successor_source(next_h)
-        # Close 99 findings; exactly one unresolved finding remains for another round.
+        # Close 99 inherited findings and leave one for the second permitted
+        # correction. Inherited-only needs_revision needs no duplicate finding.
         results = tuple(
             r.model_copy(
                 update={
@@ -532,20 +538,14 @@ async def test_finding_carry_forward(tmp_path, clean_postgres_database):
             )
             for i, r in enumerate(unresolved)
         )
-        third = third_h.review.model_copy(
-            update={
-                "decision": "needs_revision",
-                "predecessor_review_id": next_review.id,
-                "resolutions": results,
-            }
-        )
+        next_review = next_review.model_copy(update={"resolutions": results})
         async with h.factory() as session:
-            await insert_review(session, third)
+            await insert_review(session, next_review)
             await session.commit()
-        final_h = await successor_source(third_h)
+        final_h = await successor_source(next_h)
         last = final_h.review.model_copy(
             update={
-                "predecessor_review_id": third.id,
+                "predecessor_review_id": next_review.id,
                 "resolutions": (
                     results[-1].model_copy(update={"id": new_record_id(), "result": "resolved"}),
                 ),

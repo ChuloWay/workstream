@@ -25,13 +25,17 @@ func addTaskContextReads(task *cobra.Command, client func() (*api.Client, error)
 				return writeJSON(stdout, result.Raw)
 			}
 			value := result.Value
-			return writeTaskContextFields(stdout, []contextField{
+			fields := []contextField{
 				{"Task", value.Task}, {"Project", value.Project}, {"Guide", value.Guide},
 				{"Review policy", value.ReviewPolicy}, {"Revision policy", value.RevisionPolicy},
 				{"Contribution policy version", value.ContributionPolicyVersionID},
 				{"Lifecycle (server hints, not authorization)", value.Lifecycle},
 				{"Guide documents", value.GuideDocuments},
-			})
+			}
+			if value.RevisionContext != nil {
+				fields = append(fields, contextField{"Revision context", value.RevisionContext})
+			}
+			return writeTaskContextFields(stdout, fields)
 		},
 	})
 	task.AddCommand(&cobra.Command{

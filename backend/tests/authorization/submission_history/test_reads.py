@@ -74,7 +74,8 @@ async def test_exact_route_action_and_grant(task_client, monkeypatch, audience):
         item = value["items"][0] if action.endswith("list") else value
         assert item["task_id"] == task
         assert ("contributor_id" in item) is (manager and action in {"task.submission.list", "submission.read"})
-        persisted = run_original if "checker" in action else original
+        # Expiry reason is a read projection, not a mutable Submission column.
+        persisted = run_original if "checker" in action else original | {"status_reason": None}
         nested = {"results", "evidence_items"}
         for field, returned in item.items():
             if field in nested:

@@ -79,9 +79,11 @@ directly.
 These values are server-owned. The task locks the guide-bound
 ContributionPolicyVersion before it becomes claimable; TaskAssignment copies
 that exact lock and task creators do not provide award fields directly.
-Publication cannot change existing work. A successful human `needs_revision`
-preparation may atomically rebase the continuing Task and TaskAssignment to the
-complete current guide context for the next submission attempt.
+Publication cannot change existing work. A successful checker or human
+`needs_revision` preparation may atomically rebase the continuing Task and
+TaskAssignment to the complete current guide context for the next submission
+attempt. Checker preparation is implemented; genuine human Review integration
+remains #554 work. Earlier immutable attempts retain their original policy.
 
 - submitter contribution policy version id:
 - contribution type: `accepted_submission`
