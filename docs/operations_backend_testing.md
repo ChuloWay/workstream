@@ -151,11 +151,16 @@ Measure final-report overhead alongside test execution when comparing allocation
 `task_lifecycle_a`, `task_lifecycle_b`, `task_lifecycle_c`, and
 `task_lifecycle_d` use the same
 deterministic partition mechanism for the remaining TASK and checker nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
-isolated-runner contracts. The
+isolated-runner contracts, together with database-backed migration, storage, and
+custody proofs. The
 `shared_foundations_a`, `shared_foundations_b`, and `shared_foundations_c` lanes deterministically
 partition exact node IDs from the remaining authorization, artifact, API, and
-infrastructure modules. Every collected test node, including each Alembic and
+infrastructure modules, including the pure static architecture and identifier
+inventory checks. Every collected test node, including each Alembic and
 shared-foundation node, belongs to exactly one lane.
+An explicit per-module owner tuple may order its eligible lanes for measured
+distribution. The manifest builder rejects missing, duplicate, or foreign lane
+membership before using that order for the exact-node hash.
 
 The backend preflight, semantic lanes and aggregate job check the manifest
 against its lock with `uv lock --check`, install `uv sync --frozen --all-extras`,

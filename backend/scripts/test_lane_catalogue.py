@@ -23,6 +23,15 @@ PARTITIONED_TASK_LANES = (
     "task_lifecycle_d",
 )
 
+STATIC_FOUNDATION_MODULES = (
+    "tests/test_artifact_architecture.py",
+    "tests/architecture/test_module_boundaries.py",
+    "tests/architecture/test_authorization_boundary.py",
+    "tests/architecture/test_test_structure_boundary.py",
+    "tests/test_identifier_inventory.py",
+    "tests/test_record_id_collection.py",
+)
+
 
 @dataclass(frozen=True)
 class TestLane:
@@ -265,7 +274,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/projects/review_policy/test_migration.py",
     "tests/projects/test_compensation_binding_eligibility.py",
     "tests/test_review_authorization_contracts.py",
-)
+) + STATIC_FOUNDATION_MODULES
 
 PROJECT_MODULES = (
     # Project-bound batch custody stays in the project semantic family.
@@ -488,7 +497,6 @@ TASK_MODULES = (
     "tests/tasks/post_submit_routing/test_remediation_storage.py",
     "tests/tasks/post_submit_routing/test_remediation_currentness.py",
     "tests/tasks/post_submit_routing/test_remediation_migration.py",
-
     # New completion proofs use TASK custody and its measured lane headroom.
     "tests/tasks/evaluation_delivery/test_completion.py",
     "tests/tasks/evaluation_delivery/test_completion_contracts.py",
@@ -595,20 +603,19 @@ PROJECT_MODULE_LANE_OVERRIDES = {
         "project_lifecycle_d",
         "project_lifecycle_e",
     ),
-    "tests/tasks/submission_dispatch/test_revision_clock_sql.py": (
-        "project_lifecycle_a",
-    ),
+    "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_a",),
     "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
-        "project_lifecycle_e",
+        # Tuple order intentionally sends the two measured historical cases to C/D.
+        "project_lifecycle_c",
+        "project_lifecycle_a",
+        "project_lifecycle_d",
     ),
     "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
-        "project_lifecycle_b",
+        "project_lifecycle_a",
         "project_lifecycle_c",
         "project_lifecycle_e",
     ),
-    "tests/tasks/submission_dispatch/test_revision_exhaustion.py": (
-        "project_lifecycle_d",
-    ),
+    "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
     "tests/tasks/submission_dispatch/test_revision_expiry.py": (
         "project_lifecycle_a",
         "project_lifecycle_b",
@@ -648,12 +655,6 @@ LANES = (
             "tests/reviews/acceptance/test_storage.py",
             "tests/reviews/acceptance/test_migration.py",
             "tests/test_database_reset.py",
-            "tests/test_artifact_architecture.py",
-            "tests/architecture/test_module_boundaries.py",
-            "tests/architecture/test_authorization_boundary.py",
-            "tests/architecture/test_test_structure_boundary.py",
-            "tests/test_identifier_inventory.py",
-            "tests/test_record_id_collection.py",
             "tests/test_ci_lane_catalogue.py",
             "tests/test_ci_test_lanes.py",
             "tests/test_test_lane_evidence.py",

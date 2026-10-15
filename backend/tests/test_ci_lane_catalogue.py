@@ -119,9 +119,7 @@ def test_project_intake_partitions_across_the_project_family() -> None:
     nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
     manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
     assert {row["nodeid"] for row in manifest["nodes"]} == set(nodes)
-    assert {row["lane"] for row in manifest["nodes"]} == set(
-        catalogue.PARTITIONED_PROJECT_LANES
-    )
+    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_PROJECT_LANES)
 
 
 def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
@@ -163,9 +161,7 @@ def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
     for lane_names, modules in expected_families:
         for name in lane_names:
             assert modules_by_lane[name] == {
-                module
-                for module in modules
-                if name in catalogue.PARTITION_LANES_BY_MODULE[module]
+                module for module in modules if name in catalogue.PARTITION_LANES_BY_MODULE[module]
             }
         assert all(catalogue.PARTITION_LANES_BY_MODULE[module] for module in modules)
         assert all(
@@ -173,20 +169,15 @@ def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
             for module in modules
         )
 
-    static_contracts = {
-        "tests/test_artifact_architecture.py",
-        "tests/architecture/test_module_boundaries.py",
-        "tests/architecture/test_authorization_boundary.py",
-        "tests/architecture/test_test_structure_boundary.py",
-        "tests/test_identifier_inventory.py",
-        "tests/test_record_id_collection.py",
+    schema_static_contracts = {
         "tests/test_ci_lane_catalogue.py",
         "tests/test_ci_test_lanes.py",
         "tests/test_test_lane_evidence.py",
         "tests/test_merge_test_lane_evidence.py",
     }
     partitioned_modules = set().union(*(set(modules) for _, modules in expected_families))
-    assert static_contracts.isdisjoint(partitioned_modules)
+    assert set(catalogue.STATIC_FOUNDATION_MODULES) <= set(catalogue.SHARED_FOUNDATION_MODULES)
+    assert schema_static_contracts.isdisjoint(partitioned_modules)
     assert {
         "tests/test_alembic.py",
         "tests/migrations/test_contribution_export_snapshots.py",
@@ -204,17 +195,44 @@ def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
         "tests/reviews/acceptance/test_storage.py",
         "tests/reviews/acceptance/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
-    } | static_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(
+    } | schema_static_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(
         catalogue.TASK_ROUTING_REQUEST_MODULES
     ) == modules_by_lane["schema_contracts"]
+
+
+def test_static_architecture_inventory_partitions_only_in_shared_foundations() -> None:
+    expected = {
+        "tests/test_artifact_architecture.py",
+        "tests/architecture/test_module_boundaries.py",
+        "tests/architecture/test_authorization_boundary.py",
+        "tests/architecture/test_test_structure_boundary.py",
+        "tests/test_identifier_inventory.py",
+        "tests/test_record_id_collection.py",
+    }
+    assert set(catalogue.STATIC_FOUNDATION_MODULES) == expected
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_SHARED_LANES
+        for module in expected
+    )
+    assert all(
+        tuple(lane.name for lane in LANES if module in lane.modules)
+        == catalogue.PARTITIONED_SHARED_LANES
+        for module in expected
+    )
+
+    nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
+    rows = runner.build_manifest("a" * 40, list(reversed(nodes)))["nodes"]
+
+    assert Counter(row["nodeid"] for row in rows) == Counter(nodes)
+    assert {row["lane"] for row in rows} == set(catalogue.PARTITIONED_SHARED_LANES)
 
 
 def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
     """A catalogue-internal move across semantic families must fail this contract."""
     expected = {
         "shared": (
-            231,
-            "2b4af700ea941ffddbd6f0789fff9227528deebc2b8dadbed9ec74d772ab8a91",
+            237,
+            "980cbd9fb01c7f8c870ef348cb2f56d2cfc200d810ec1e25c841338d4ae83be1",
         ),
         "project": (
             196,
@@ -245,20 +263,18 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
             "project_lifecycle_d",
             "project_lifecycle_e",
         ),
-        "tests/tasks/submission_dispatch/test_revision_clock_sql.py": (
-            "project_lifecycle_a",
-        ),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_a",),
         "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
-            "project_lifecycle_e",
+            "project_lifecycle_c",
+            "project_lifecycle_a",
+            "project_lifecycle_d",
         ),
         "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
-            "project_lifecycle_b",
+            "project_lifecycle_a",
             "project_lifecycle_c",
             "project_lifecycle_e",
         ),
-        "tests/tasks/submission_dispatch/test_revision_exhaustion.py": (
-            "project_lifecycle_d",
-        ),
+        "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
         "tests/tasks/submission_dispatch/test_revision_expiry.py": (
             "project_lifecycle_a",
             "project_lifecycle_b",
@@ -276,13 +292,16 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
 
 
 def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
-    canonical = "\n".join(
-        f"{module}:{','.join(catalogue.PARTITION_LANES_BY_MODULE[module])}"
-        for module in sorted(catalogue.PROJECT_PARTITIONED_MODULES)
-    ) + "\n"
+    canonical = (
+        "\n".join(
+            f"{module}:{','.join(catalogue.PARTITION_LANES_BY_MODULE[module])}"
+            for module in sorted(catalogue.PROJECT_PARTITIONED_MODULES)
+        )
+        + "\n"
+    )
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "a86f9cfebe0be6388ce19c0773ff241db350aa5fee6d1a0208e8471747522c03"
+        "b37f93192b0f7afd90f200153cc817e6e4a73d9b20db0e8906013c8c23d3eb17"
     )
 
 
@@ -305,16 +324,16 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
             "project_lifecycle_c"
         ),
         f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[True]": (
-            "project_lifecycle_b"
+            "project_lifecycle_a"
         ),
         f"{pause_module}::test_expiry_beats_real_pm_repair_waiting_for_task_past_deadline": (
             "project_lifecycle_c"
         ),
         f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]": (
-            "project_lifecycle_e"
+            "project_lifecycle_c"
         ),
         f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[True]": (
-            "project_lifecycle_e"
+            "project_lifecycle_d"
         ),
     }
     rows = runner.build_manifest("a" * 40, list(reversed(expected)))["nodes"]
@@ -566,6 +585,43 @@ def test_partition_rejects_wrong_owner_pair(monkeypatch: pytest.MonkeyPatch) -> 
         runner.build_manifest("a" * 40, [f"{project.modules[0]}::test_one"])
 
 
+def test_partition_accepts_exact_noncanonical_owner_order() -> None:
+    module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
+    declared = catalogue.PARTITION_LANES_BY_MODULE[module]
+    attached = tuple(lane.name for lane in LANES if module in lane.modules)
+
+    assert declared == (
+        "project_lifecycle_c",
+        "project_lifecycle_a",
+        "project_lifecycle_d",
+    )
+    assert attached == (
+        "project_lifecycle_a",
+        "project_lifecycle_c",
+        "project_lifecycle_d",
+    )
+    node = f"{module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]"
+    assert runner.build_manifest("a" * 40, [node])["nodes"][0]["lane"] == declared[0]
+
+
+@pytest.mark.parametrize("mutation", ("missing", "duplicate", "foreign"))
+def test_partition_rejects_inexact_ordered_owners(
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    module = catalogue.PROJECT_MODULES[0]
+    owners = catalogue.PARTITION_LANES_BY_MODULE[module]
+    changed = {
+        "missing": owners[:-1],
+        "duplicate": (*owners[:-1], owners[0]),
+        "foreign": (*owners[:-1], "schema_contracts"),
+    }[mutation]
+    monkeypatch.setitem(runner.PARTITION_LANES_BY_MODULE, module, changed)
+
+    with pytest.raises(LaneError, match="invalid_partition_lanes"):
+        runner.build_manifest("a" * 40, [f"{module}::test_one"])
+
+
 def test_direct_runner_cli_remains_runnable(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
@@ -761,10 +817,7 @@ def test_routing_authorization_proofs_use_the_project_partition():
     }
     assert set(catalogue.ROUTING_AUTH_PREPARATION_MODULES) == expected
     for module in expected:
-        assert (
-            catalogue.PARTITION_LANES_BY_MODULE[module]
-            == catalogue.PARTITIONED_PROJECT_LANES
-        )
+        assert catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_LANES
         assert tuple(lane.name for lane in LANES if module in lane.modules) == (
             catalogue.PARTITIONED_PROJECT_LANES
         )

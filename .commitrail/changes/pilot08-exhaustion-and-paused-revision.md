@@ -58,7 +58,19 @@ contributor revision window. They retain bounded durable recovery semantics.
   ownership and its exact behavior-partition registration. Balance the new
   wall-clock proofs and the existing `test_revision_expiry.py` and
   `test_task_batch_transitions.py` modules within the five project lanes, using
-  measured runtime. Preserve semantic owner families, every test node, all 13
+  measured runtime. The retained-pause and pause-race modules may likewise move
+  only among project lanes. To recover measured schema-lane headroom, move
+  exactly the six pure static architecture/inventory modules
+  `test_artifact_architecture.py`, `test_module_boundaries.py`,
+  `test_authorization_boundary.py`, `test_test_structure_boundary.py`,
+  `test_identifier_inventory.py`, and `test_record_id_collection.py` into the
+  existing shared-foundation partition. Permit the existing manifest builder to
+  use an explicit owner-tuple order only after validating the same exact unique
+  lane membership, so the two retained historical cases distribute to separate
+  measured lanes. `backend/scripts/run_test_lanes.py` may change only that
+  membership validation and deterministic tuple selection; collection,
+  execution, timeout, isolation, evidence, and cleanup behavior remain fixed.
+  Preserve every test node, all 13
   required lanes and existing timeouts; affected current
   specifications/runbooks/README and roadmap. Remove
   superseded cap-waits-for-expiry assertions and replace their real guarantees.
@@ -70,7 +82,8 @@ contributor revision window. They retain bounded durable recovery semantics.
   migration recreation or rewriting retained evidence, compatibility aliases or
   parallel lifecycle writers, fabricated Reviews or economic outcomes.
 - Human-review activation, model proxy or coding evaluator implementation,
-  general contributor claim leases, unrelated CI optimization, the separate
+  general contributor claim leases, CI optimization beyond the exact measured
+  ownership changes above, the separate
   optional-criteria screening repair (#489), deployment or automatic merge.
 - Weakened authority, mutable historical outcomes, skipped tests, increased CI
   timeouts, retry-until-green or unreviewed boundary exceptions.
@@ -124,9 +137,14 @@ reclaim, immutable history, real-participant rollback, direct-SQL denial,
 concurrent terminal deliveries, paused-clock precision and retained-window
 recovery. Existing task-detail transaction tests also protect caller-owned pending
 writes from read-triggered autoflush. The test inventory and behavior ownership
-partition include every new module without moving semantic owners or reducing
-required checks. The two existing project test modules named in scope may move
-only between project lanes to preserve the unchanged execution time budget.
+partition include every new module without reducing required checks. Hosted runs
+`38714469748` and `38719063430` showed broad schema-runner inflation rather than
+a stable hung node: the latter completed all but the final 84-node evidence
+module, which took 3.65 seconds in the passing predecessor. The six static
+modules named in scope took 178.34 seconds in that predecessor and distribute
+their exact nodes across the three existing shared-foundation lanes. The four
+project modules named in scope may move only between project lanes to preserve
+the unchanged execution time budget.
 
 Fresh migration capture validates every installed SQL/PLpgSQL function before
 recording the schema fingerprint. PostgreSQL proofs exercise actual transactions,

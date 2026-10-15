@@ -419,10 +419,10 @@ def build_manifest(tree_sha: str, nodes: list[str]) -> dict[str, Any]:
         candidates = lanes_by_module[module]
         partition_lanes = PARTITION_LANES_BY_MODULE.get(module)
         if partition_lanes is not None:
-            if tuple(candidates) != partition_lanes:
+            if len(candidates) != len(partition_lanes) or set(candidates) != set(partition_lanes):
                 raise LaneError("invalid_partition_lanes")
             digest = hashlib.sha256(node.encode("utf-8")).digest()
-            return candidates[digest[0] % len(candidates)]
+            return partition_lanes[digest[0] % len(partition_lanes)]
         if len(candidates) != 1:
             raise LaneError("ambiguous_lane_module")
         return candidates[0]
