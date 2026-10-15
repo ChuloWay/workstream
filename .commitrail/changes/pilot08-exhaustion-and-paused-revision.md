@@ -115,7 +115,7 @@ Human review focus: policy ownership, no invented retained-policy default,
 immediate exhaustion without a phantom window, exact paused-time accounting,
 automatic return to ready, terminal evidence and safe recovery.
 
-## Verification
+## Evidence
 
 The committed regressions cover zero/two-revision policies, immediate exhaustion,
 reclaim, immutable history, real-participant rollback, direct-SQL denial,
