@@ -622,6 +622,31 @@ def test_partition_rejects_inexact_ordered_owners(
         runner.build_manifest("a" * 40, [f"{module}::test_one"])
 
 
+def test_partition_rejects_coordinated_duplicate_owners(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
+    duplicate_owners = (
+        "project_lifecycle_a",
+        "project_lifecycle_a",
+        "project_lifecycle_c",
+    )
+    changed = tuple(
+        replace(
+            lane,
+            modules=tuple(item for item in lane.modules if item != module)
+            + (module,) * duplicate_owners.count(lane.name),
+        )
+        for lane in LANES
+    )
+    monkeypatch.setitem(runner.PARTITION_LANES_BY_MODULE, module, duplicate_owners)
+    monkeypatch.setattr(runner, "LANES", changed)
+    runner.validate_lane_inventory(runner.discover_test_modules(), lanes=changed)
+
+    with pytest.raises(LaneError, match="invalid_partition_lanes"):
+        runner.build_manifest("a" * 40, [f"{module}::test_one"])
+
+
 def test_direct_runner_cli_remains_runnable(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
