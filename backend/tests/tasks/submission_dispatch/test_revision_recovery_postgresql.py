@@ -92,8 +92,9 @@ async def test_unavailable_locked_policy_preserves_existing_root_event_recovery(
             assert len(events) == int(existing_root)
             if existing_root:
                 event = events[0]
+                assert event.project_id == str(expected.project_id)
                 for field in ("event_type", "event_version", "aggregate_type", "aggregate_id",
-                              "project_id", "correlation_id", "causation_event_id",
+                              "correlation_id", "causation_event_id",
                               "idempotency_key", "payload", "not_before_at"):
                     assert getattr(event, field) == getattr(expected, field), field
             assert await session.scalar(text("""
