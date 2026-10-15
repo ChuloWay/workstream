@@ -599,11 +599,12 @@ PROJECT_MODULE_LANE_OVERRIDES = {
         "project_lifecycle_a",
     ),
     "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
-        "project_lifecycle_a",
+        "project_lifecycle_e",
     ),
     "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
-        "project_lifecycle_a",
-        "project_lifecycle_d",
+        "project_lifecycle_b",
+        "project_lifecycle_c",
+        "project_lifecycle_e",
     ),
     "tests/tasks/submission_dispatch/test_revision_exhaustion.py": (
         "project_lifecycle_d",

@@ -249,11 +249,12 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
             "project_lifecycle_a",
         ),
         "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
-            "project_lifecycle_a",
+            "project_lifecycle_e",
         ),
         "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
-            "project_lifecycle_a",
-            "project_lifecycle_d",
+            "project_lifecycle_b",
+            "project_lifecycle_c",
+            "project_lifecycle_e",
         ),
         "tests/tasks/submission_dispatch/test_revision_exhaustion.py": (
             "project_lifecycle_d",
@@ -281,7 +282,7 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     ) + "\n"
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "06e9964f576d92d3d917d096d4f932814cb63136fe9d34a7480466dafbc73d89"
+        "a86f9cfebe0be6388ce19c0773ff241db350aa5fee6d1a0208e8471747522c03"
     )
 
 
@@ -297,6 +298,28 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
     assert len(rows) == len(nodes)
     for module, lane_names in catalogue.PROJECT_MODULE_LANE_OVERRIDES.items():
         assert {row["lane"] for row in rows if row["module"] == module} == set(lane_names)
+    pause_module = "tests/tasks/submission_dispatch/test_revision_pause_races.py"
+    retained_module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
+    expected = {
+        f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[False]": (
+            "project_lifecycle_c"
+        ),
+        f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[True]": (
+            "project_lifecycle_b"
+        ),
+        f"{pause_module}::test_expiry_beats_real_pm_repair_waiting_for_task_past_deadline": (
+            "project_lifecycle_c"
+        ),
+        f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]": (
+            "project_lifecycle_e"
+        ),
+        f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[True]": (
+            "project_lifecycle_e"
+        ),
+    }
+    rows = runner.build_manifest("a" * 40, list(reversed(expected)))["nodes"]
+
+    assert {row["nodeid"]: row["lane"] for row in rows} == expected
 
 
 def test_discovery_is_recursive_and_lexically_canonical(tmp_path: Path) -> None:
