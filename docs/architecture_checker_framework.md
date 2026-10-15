@@ -588,8 +588,9 @@ and supersedes it through the coordinated currentness protocol, never by
 replaying an old success or bypassing the Operator boundary.
 
 If a checker finds missing locked guide or policy context, missing acceptance
-criteria, or another task setup defect that is not contributor-fixable, the run uses
-`task_setup_blocked`. That route is internal to covered Project Managers and
+requirements in the locked project guide, or another task setup defect that is
+not contributor-fixable, the run uses `task_setup_blocked`. Omitted or null
+optional task-local `acceptance_criteria` alone is not a setup defect. That route is internal to covered Project Managers and
 authorized Operators and must not be shown to contributors as a revision request.
 
 ## Readiness Proof — Target Contract

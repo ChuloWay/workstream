@@ -37,7 +37,8 @@ Allowed files:
   current operator/readiness guidance with optional task-local criteria and
   mandatory guide-governed requirements.
 - `docs/spec_chunk_8_submission_artifact_policy_checkers.md`,
-  `docs/template_project_guide.md`: distinguish optional task-local criteria
+  `docs/template_project_guide.md`, `docs/architecture_checker_framework.md`:
+  distinguish optional task-local criteria
   from mandatory guide-level acceptance requirements, including the retired
   checker record's misleading current-screening statement.
 - `.commitrail/changes/pilot02-bulk-transitions-cli.md`: reconcile only its
@@ -150,3 +151,5 @@ omitted/null task-local criteria while retaining mandatory guide-level acceptanc
 requirements. The checker record retains its historical status and links current
 contracts. Runtime code and tests are unchanged. The roadmap already records this
 optional-criteria behavior; no additional capability or roadmap change is needed.
+The linked current checker framework also qualifies missing acceptance
+requirements as guide-level, not omitted optional task-local criteria.
