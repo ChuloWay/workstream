@@ -639,11 +639,10 @@ class TaskService:
         Raises:
             TaskValidationError: If one or more required fields are missing.
         """
-        required_fields = {"title", "description", "acceptance_criteria"}
+        required_fields = {"title", "description"}
         field_values = {
             "title": task.title,
             "description": task.description,
-            "acceptance_criteria": task.acceptance_criteria,
         }
         missing = [
             field

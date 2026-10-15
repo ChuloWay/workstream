@@ -1,10 +1,10 @@
 # PILOT-02 — Preserve optional task criteria through screening
 
 - Initiative: `None`
-- Durable disposition: `Planned`
+- Durable disposition: `Complete`
 - Intended merge outcome: Imported briefs without task-local acceptance criteria can complete authorized single or bulk screening and release under their locked project guide.
 
-## Intent and current behavior
+## Intent
 
 Issue [#489](https://github.com/Flow-Research/workstream/issues/489), F-021,
 identifies a contradiction in the delivered import journey. The canonical JSON
@@ -41,7 +41,7 @@ defaults, AUTH/grant changes, transaction or lock-order changes, imports or
 cross-owner dependencies, migrations, retained-data edits, checker changes,
 PILOT-08 revision work, CI selection/timeout changes, or weakened safeguards.
 
-## Design and acceptance
+## Acceptance criteria
 
 Use the existing SCREEN owner. Retain required title/description validation,
 approved active-guide resolution, exact frozen-policy stamping, installed-plan
@@ -61,7 +61,7 @@ No import normalization, placeholder criteria or second screening path is needed
   then passes with the repair. Local fixtures establish active-guide prerequisites;
   this is import-through-release proof, not a hosted whole-product pilot.
 
-## Risk and verification
+## Risk and review routing
 
 - Risk class: `L1` — bounded task-readiness contract correction.
 - Required reviewers: combined security/architecture and QA/test-delta/docs;
@@ -74,6 +74,18 @@ No import normalization, placeholder criteria or second screening path is needed
   Markdown links, Commitrail and full hosted Backend/CLI/Agent Gates checks.
   Preserve original test assertions except the explicitly obsolete criteria
   rejection behavior. Coverage remains diagnostic.
+
+## Evidence
+
+The new single and bulk public regressions were executed against the unchanged
+validator at test-only commit `41ae10a28`. Both reached SCREEN after successful
+verified import and failed specifically with HTTP 422, `task missing required
+fields: acceptance_criteria`. PostgreSQL/MinIO cleanup completed. An earlier
+five-minute attempt timed out during fixture work and is not counted as proof.
+
+The corrected candidate runs these same regressions, required-instruction and
+authority/rollback controls, and the existing built-CLI journey. Exact-head
+results and review/check disposition belong in the PR.
 
 ## Reconciliation
 

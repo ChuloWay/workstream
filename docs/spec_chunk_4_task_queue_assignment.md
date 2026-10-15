@@ -82,7 +82,12 @@ Each row has a required case-sensitive `external_task_id` (1..200 characters,
 no surrounding whitespace or control characters), nonblank `title` and
 `description`, and optional `task_type`, `difficulty`, `skill_tags`,
 `estimated_time_minutes`, `acceptance_criteria` and `rejection_criteria`. Text and collection bounds
-are part of the schema. External IDs must be unique inside the document;
+are part of the schema. Omitted or null task-local acceptance criteria remain
+optional through single and bulk SCREEN/RELEASE; the locked project guide
+supplies the governed requirements. Screening still requires nonblank title
+and description, active-guide custody and exact policy locks. Supplied criteria
+retain their schema type/length checks and exact text.
+External IDs must be unique inside the document;
 duplicate errors identify the zero-based row and the first duplicate's row.
 The parser accepts only strict UTF-8 JSON. It rejects a BOM, duplicate object
 members, non-finite numbers, NUL and unpaired surrogates. The source ceiling is 8 MiB.

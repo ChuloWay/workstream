@@ -185,7 +185,7 @@ async def test_200_row_csv_source_import_screen_release_and_fresh_denial(
                 title=f'Caption café, "{index}"',
                 description="Quoted\nmultilingual brief",
                 skill_tags="French;Arabic",
-                acceptance_criteria="Accurate, complete work",
+                acceptance_criteria="Accurate, complete work" if index % 2 else "",
                 rejection_criteria="Incomplete work",
             )
             writer.writerow(row)
@@ -202,6 +202,9 @@ async def test_200_row_csv_source_import_screen_release_and_fresh_denial(
             origin, "convert-csv", "--input", str(csv_path), "--out", str(json_path)
         )
         raw = json_path.read_bytes()
+        converted_rows = json.loads(raw)["tasks"]
+        assert all("acceptance_criteria" not in row for row in converted_rows[::2])
+        assert all(row["acceptance_criteria"] == "Accurate, complete work" for row in converted_rows[1::2])
         commitment = "sha256:" + hashlib.sha256(raw).hexdigest()
         assert converted["sha256"] == commitment and converted["byte_count"] == len(raw)
         source = await successful(
@@ -238,6 +241,9 @@ async def test_200_row_csv_source_import_screen_release_and_fresh_denial(
             row["status"] == "draft" and row["skill_tags"] == ["French", "Arabic"]
             for row in original["tasks"]
         )
+        assert [row["acceptance_criteria"] for row in original["tasks"]] == [
+            "Accurate, complete work" if index % 2 else None for index in range(200)
+        ]
         keys = {}
         for operation, state in (("screen", "screening"), ("release", "ready")):
             keys[operation] = str(uuid4())
