@@ -182,9 +182,10 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   and backfill is defence in depth. Terminal custody already makes a
   zero-failure `needs_revision` imply such a finding, so tests cannot
   discriminate the clause.
-- Observed outside scope: on the public bundle-preparation route, a body that
-  is not a ZIP raises `SubmissionArchiveRejectedError` as a 500 when the project
-  selects no pre-submit checker. Left for a separate change.
+- Observed outside scope: on the public bundle-preparation route, an upload
+  that is not a readable ZIP fails archive inspection before any pre-submit
+  check runs, and `SubmissionArchiveRejectedError` surfaces as a 500 instead of
+  actionable feedback. Left for a separate change.
 
 ## Reconciliation
 

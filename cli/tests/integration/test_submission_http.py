@@ -426,13 +426,34 @@ def test_submission_history_and_findings_are_bounded_and_preserve_evidence(cli):
         assert result.returncode == 0 and json.loads(result.stdout) == CHECKER
         assert requests[-1][1] == f"/api/v1/submissions/{SUBMISSION}/checker-runs/{RUN}"
         assert len(requests) == 4
-        coverage = CHECKER | {"results": [CHECKER["results"][0] | {
-            "id": ASSIGNMENT, "check_id": "coverage.files", "path": None, "line": None,
-            "status": "coverage_incomplete", "severity": "medium",
-        }]}
+        coverage = CHECKER | {
+            "results": [
+                CHECKER["results"][0]
+                | {
+                    "id": ASSIGNMENT,
+                    "check_id": "coverage.files",
+                    "path": None,
+                    "line": None,
+                    "status": "coverage_incomplete",
+                    "severity": "medium",
+                }
+            ]
+        }
         respond(response, coverage)
-        shown = cli(origin, TOKEN, "submission", "findings", SUBMISSION, "--run", RUN, "-o", "json")
-        assert shown.returncode == 0 and json.loads(shown.stdout) == coverage, shown.stderr
+        shown = cli(
+            origin,
+            TOKEN,
+            "submission",
+            "findings",
+            SUBMISSION,
+            "--run",
+            RUN,
+            "-o",
+            "json",
+        )
+        assert shown.returncode == 0 and json.loads(shown.stdout) == coverage, (
+            shown.stderr
+        )
 
 
 DECIDED = "2026-10-14T11:00:00Z"
@@ -448,7 +469,11 @@ def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
             | {
                 "status": "needs_revision",
                 "decided_at": DECIDED,
-                "finding_counts": {"blocking": 2, "warning": 1, "coverage_incomplete": 1},
+                "finding_counts": {
+                    "blocking": 2,
+                    "warning": 1,
+                    "coverage_incomplete": 1,
+                },
             },
             HISTORY
             | {
@@ -479,17 +504,34 @@ def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
             ]
         for history in (
             HISTORY | {"status_reason": "revision_deadline_expired"},
-            HISTORY | {"status": "rejected", "decided_at": DECIDED, "status_reason": "other"},
-            HISTORY | {"status": "rejected", "decided_at": DECIDED, "status_reason": ""},
+            HISTORY
+            | {"status": "rejected", "decided_at": DECIDED, "status_reason": "other"},
+            HISTORY
+            | {"status": "rejected", "decided_at": DECIDED, "status_reason": ""},
             HISTORY | {"status": "rejected", "decided_at": DECIDED, "status_reason": 1},
             HISTORY | {"status": "submitted"},
-            HISTORY | {"status": "accepted", "decided_at": DECIDED,
-                       "status_reason": "checker_coverage_incomplete"},
-            HISTORY | {"status": "needs_revision", "decided_at": DECIDED,
-                       "status_reason": "revision_deadline_expired"},
+            HISTORY
+            | {
+                "status": "accepted",
+                "decided_at": DECIDED,
+                "status_reason": "checker_coverage_incomplete",
+            },
+            HISTORY
+            | {
+                "status": "needs_revision",
+                "decided_at": DECIDED,
+                "status_reason": "revision_deadline_expired",
+            },
             HISTORY | {"status": "accepted"},
             HISTORY | {"decided_at": DECIDED},
-            HISTORY | {"finding_counts": {"blocking": -1, "warning": 0, "coverage_incomplete": 0}},
+            HISTORY
+            | {
+                "finding_counts": {
+                    "blocking": -1,
+                    "warning": 0,
+                    "coverage_incomplete": 0,
+                }
+            },
             HISTORY | {"finding_counts": {"blocking": 0, "warning": 0}},
             {key: value for key, value in HISTORY.items() if key != "status_reason"},
         ):
