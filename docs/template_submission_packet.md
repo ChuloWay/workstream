@@ -120,8 +120,8 @@ finding closure as contributor authority.
 Each assignment starts at round 0. Each fixable failure with another revision remaining starts a
 fresh PostgreSQL-time window under the failed attempt's locked policy. Only
 immutable resubmission ends it; upload, ready admission, replay and repair do
-not. Setup blocks pause the allowance and notify the PM; repair resumes only
-its remainder. Final-attempt failure immediately rejects and releases the
+not. Setup blocks pause the allowance and record durable PM attention, visible
+in the covered PM task detail; repair resumes only its remainder. Final-attempt failure immediately rejects and releases the
 assignment without another window. Timeout also returns the task to ready.
 Either permits any eligible contributor to claim a fresh assignment at round 0.
 

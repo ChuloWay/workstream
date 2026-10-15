@@ -49,7 +49,7 @@ type ContributorTaskDetail struct {
 	AcceptanceCriteria    *string            `json:"acceptance_criteria"`
 	RejectionCriteria     *string            `json:"rejection_criteria"`
 	Compensation          CompensationTerms  `json:"compensation"`
-	LastAssignmentOutcome *AssignmentOutcome `json:"last_assignment_outcome"`
+	LastAssignmentOutcome *AssignmentOutcome `json:"last_assignment_outcome,omitempty"`
 }
 
 var exactQuantity = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)

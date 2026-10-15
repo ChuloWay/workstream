@@ -108,6 +108,7 @@ LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE m public.task_post_submit_routing_manifests%ROWTYPE;
  s public.submissions%ROWTYPE; p public.revision_policies%ROWTYPE;
  t public.workstream_tasks%ROWTYPE; a public.task_assignments%ROWTYPE; actual_round bigint;
+ expected_status text;
 BEGIN
  IF TG_OP<>'INSERT' THEN
   RAISE EXCEPTION 'revision exhaustions are immutable' USING ERRCODE='55000'; END IF;
@@ -118,11 +119,12 @@ BEGIN
  SELECT * INTO p FROM public.revision_policies WHERE id=NEW.revision_policy_id;
  SELECT count(*)-1 INTO actual_round FROM public.submissions
   WHERE task_assignment_id=NEW.assignment_id AND version<=s.version;
+ expected_status:=CASE WHEN NEW.recovery_authority_context IS NULL THEN 'evaluation_pending'
+  ELSE 'needs_revision' END;
  IF t.id IS NULL OR a.id IS NULL OR s.id IS NULL OR m.id IS NULL OR p.id IS NULL
   OR NEW.creation_xid<>pg_current_xact_id()::text
   OR NEW.exhausted_at<m.created_at OR NEW.exhausted_at>clock_timestamp()
-  OR t.status<>CASE WHEN NEW.recovery_authority_context IS NULL THEN 'evaluation_pending'
-     ELSE 'needs_revision' END OR t.assigned_to IS DISTINCT FROM NEW.contributor_id
+  OR t.status<>expected_status OR t.assigned_to IS DISTINCT FROM NEW.contributor_id
   OR a.status<>'active' OR a.released_at IS NOT NULL OR a.accepted_at IS NULL
   OR ROW(a.task_id,a.project_id,a.contributor_id) IS DISTINCT FROM
      ROW(NEW.task_id,NEW.project_id,NEW.contributor_id)
@@ -331,6 +333,11 @@ def _paused_revision_clock() -> None:
         (deadline_at IS NOT NULL AND remaining_microseconds IS NULL) OR
         (deadline_at IS NULL AND remaining_microseconds IS NOT NULL AND remaining_microseconds > 0))""")
     _execute_sql("""
+CREATE FUNCTION public.revision_clock_interval(remaining_microseconds bigint)
+RETURNS interval LANGUAGE sql IMMUTABLE STRICT SET search_path=pg_catalog,public,pg_temp AS $$
+ SELECT make_interval(hours=>(remaining_microseconds/3600000000)::integer)
+  +(remaining_microseconds%3600000000)*interval '1 microsecond'
+$$;
 CREATE FUNCTION public.project_revision_preparation_clock() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 DECLARE prior public.task_revision_preparations%ROWTYPE;
@@ -377,7 +384,7 @@ BEGIN
    NEW.blocked_reason:='context_blocked';
   ELSE
    NEW.deadline_at:=CASE WHEN prior.deadline_at IS NULL THEN
-    observed+prior.remaining_microseconds*interval '1 microsecond' ELSE prior.deadline_at END;
+    observed+public.revision_clock_interval(prior.remaining_microseconds) ELSE prior.deadline_at END;
    NEW.blocked_reason:=NULL;
   END IF;
  END IF;
@@ -417,7 +424,7 @@ def _guard_preparation_clock() -> None:
        IS DISTINCT FROM ROW(prior.requested_at,prior.max_revision_rounds)
     OR (NEW.deadline_at IS NOT NULL AND NEW.deadline_at IS DISTINCT FROM
       CASE WHEN prior.deadline_at IS NULL THEN
-       NEW.clock_observed_at+prior.remaining_microseconds*interval '1 microsecond' ELSE prior.deadline_at END)
+       NEW.clock_observed_at+public.revision_clock_interval(prior.remaining_microseconds) ELSE prior.deadline_at END)
     OR (NEW.deadline_at IS NULL AND NEW.remaining_microseconds IS DISTINCT FROM
       CASE WHEN prior.deadline_at IS NULL THEN prior.remaining_microseconds ELSE
        floor(extract(epoch FROM (prior.deadline_at-NEW.clock_observed_at))*1000000)::bigint END)""")

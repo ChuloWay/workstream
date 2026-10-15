@@ -148,8 +148,9 @@ contribution. `closed/review_rejected` is not a canonical task state.
   checker-rooted repair is public and human-rooted integration remains planned.
 - Each fixable failure with another revision remaining starts a fresh PostgreSQL-time window using
   the failed attempt's locked RevisionPolicy. Only immutable resubmission ends
-  it. Setup-blocked rebase pauses the allowance and notifies the PM; repair
-  resumes only remaining time or preserves a running deadline. Upload, replay
+  it. Setup-blocked rebase pauses the allowance and publishes durable PM-attention
+  outbox evidence visible in the covered PM task detail; repair resumes only
+  remaining time or preserves a running deadline. Upload, replay
   and infrastructure retry do not spend time while paused or reset a window.
 - At expiry, the authorized durable TASK delivery handler records an immutable rejection
   receipt, marks the assignment `revision_expired`, releases it and returns the

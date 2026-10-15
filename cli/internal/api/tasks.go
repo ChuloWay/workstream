@@ -38,8 +38,8 @@ type TaskDetail struct {
 	ExternalTaskID        *string            `json:"external_task_id"`
 	CreatedBy             string             `json:"created_by"`
 	AssignedTo            *string            `json:"assigned_to"`
-	LastAssignmentOutcome *AssignmentOutcome `json:"last_assignment_outcome"`
-	RevisionContext       *RevisionContext   `json:"revision_context"`
+	LastAssignmentOutcome *AssignmentOutcome `json:"last_assignment_outcome,omitempty"`
+	RevisionContext       *RevisionContext   `json:"revision_context,omitempty"`
 }
 
 type TaskPage struct {

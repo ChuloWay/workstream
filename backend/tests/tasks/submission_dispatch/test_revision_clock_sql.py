@@ -4,6 +4,7 @@ import asyncio
 import json
 from uuid import UUID
 
+import asyncpg
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -17,6 +18,27 @@ from tests.tasks.post_submit_routing.support import activate_successor_guide
 from tests.tasks.submission_dispatch.test_revision_expiry import expire_retained_revision
 from tests.tasks.test_public_submission_intake import _client
 from tests.test_submission_predecessor_custody import _fixture_revision_context
+
+
+async def test_large_revision_allowance_preserves_every_microsecond(isolated_database_env):
+    """Resuming a valid large allowance cannot round through floating point."""
+    allowances = [2**53 + 1, (2**31 - 1) * 3_600_000_000 - 1]
+    connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
+    try:
+        rows = await connection.fetch("""
+            SELECT remaining,
+              extract(epoch FROM public.revision_clock_interval(remaining))*1000000 AS interval_us,
+              extract(epoch FROM ((timestamptz '2000-01-01 00:00:00+00'
+                +public.revision_clock_interval(remaining))
+                -timestamptz '2000-01-01 00:00:00+00'))*1000000 AS deadline_us
+            FROM unnest($1::bigint[]) AS remaining ORDER BY remaining
+        """, allowances)
+    finally:
+        await connection.close()
+    assert [row["remaining"] for row in rows] == allowances
+    for row in rows:
+        assert row["interval_us"] == row["remaining"]
+        assert row["deadline_us"] == row["remaining"]
 
 
 async def _clock_custody(h):

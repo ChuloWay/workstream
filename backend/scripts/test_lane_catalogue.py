@@ -293,6 +293,7 @@ PROJECT_MODULES = (
     "tests/tasks/submission_dispatch/test_replacement_creation.py",
     "tests/tasks/submission_dispatch/test_revision_capacity.py",
     "tests/tasks/submission_dispatch/test_revision_exhaustion.py",
+    "tests/tasks/submission_dispatch/test_revision_exhaustion_races.py",
     "tests/tasks/submission_dispatch/test_revision_pause.py",
     "tests/tasks/submission_dispatch/test_revision_pause_races.py",
     "tests/tasks/submission_dispatch/test_revision_clock_sql.py",

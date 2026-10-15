@@ -18,7 +18,9 @@ from tests.test_alembic import HEAD_REVISION, _alembic_config, _execute
 pytestmark = pytest.mark.postgres_schema_contract
 
 
-async def _old_blocked_preparation(session, *, manifest, candidate, audit_event_id):
+async def _old_blocked_preparation(
+    session, *, manifest, candidate, audit_event_id, window_seconds,
+):
     """Arrange a bounded historical window, then use the fully guarded old writer."""
     await session.execute(text(
         "ALTER TABLE public.task_post_submit_routing_manifests "
@@ -27,10 +29,10 @@ async def _old_blocked_preparation(session, *, manifest, candidate, audit_event_
     await session.execute(text("""
         UPDATE public.task_post_submit_routing_manifests m
         SET created_at=clock_timestamp()-make_interval(hours=>p.revision_deadline_hours)
-            +interval '60 seconds'
+            +make_interval(secs=>:seconds)
         FROM public.submissions s JOIN public.revision_policies p ON p.id=s.locked_revision_policy_id
         WHERE m.id=:id AND s.id=m.submission_id
-    """), {"id": manifest.id})
+    """), {"id": manifest.id, "seconds": window_seconds})
     await session.execute(text(
         "ALTER TABLE public.task_post_submit_routing_manifests "
         "ENABLE TRIGGER task_routing_manifest_immutable"
@@ -64,8 +66,15 @@ async def test_retained_blocked_clock_pauses_once_or_stays_due(
         await _execute(isolated_database_env, "drop schema public cascade; create schema public")
         await asyncio.to_thread(command.upgrade, _alembic_config(), "0047_revision_recovery")
         async with remediation_source(tmp_path, isolated_database_env) as h:
+            window_seconds = 60 if already_due else 600
+
+            async def old_writer(session, **kwargs):
+                return await _old_blocked_preparation(
+                    session, **kwargs, window_seconds=window_seconds,
+                )
+
             with monkeypatch.context() as patch:
-                patch.setattr("app.modules.tasks.post_submit_routing.outcome.prepare_revision", _old_blocked_preparation)
+                patch.setattr("app.modules.tasks.post_submit_routing.outcome.prepare_revision", old_writer)
                 async with h.factory() as session, session.begin():
                     outcome = await task_post_submit_outcome(session, h.factory).apply(
                         h.envelope, current_generation=None,
@@ -101,7 +110,7 @@ async def test_retained_blocked_clock_pauses_once_or_stays_due(
                     assert child.remaining_microseconds == (
                         root.deadline_at - child.clock_observed_at
                     ) // timedelta(microseconds=1)
-                    assert 0 < child.remaining_microseconds < 60_000_000
+                    assert 0 < child.remaining_microseconds < window_seconds * 1_000_000
                     assert child.outcome == "blocked" and child.blocked_reason == "context_blocked"
                     assert child.authorization_decision_id != root.authorization_decision_id
                     assert await session.scalar(text(

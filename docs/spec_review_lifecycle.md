@@ -951,8 +951,8 @@ infrastructure retry and context repair do not end or reset it. The next
 committed `needs_revision` starts another window under that attempt's lock.
 Final-attempt failure records immediate exhaustion, closes the assignment and
 returns the task to ready without a next preparation or window. A setup-blocked
-rebase pauses the clock and notifies the PM; repair resumes only the remaining
-allowance. Running-window expiry refuses new work at the exact PostgreSQL
+rebase pauses the clock and publishes durable PM-attention outbox evidence,
+visible in the covered PM task detail; repair resumes only the remaining allowance. Running-window expiry refuses new work at the exact PostgreSQL
 boundary. There is no contributor-count limit or repeated-failure hold.
 
 At expiry, the TASK-owned durable operation appends an immutable rejection
@@ -967,9 +967,9 @@ resubmission, duplicate expiry deliveries and stale delivery after reclaim. The 
 retained-source scan recovers the exact running or paused opportunity after
 downtime without choosing a new rebase or adding time.
 
-Normal revision timeout uses TASK service authority. Reaching the revision cap
-refuses another attempt while preserving the current deadline; it does not
-provide a manager command to cancel the task.
+Normal revision timeout uses TASK service authority. A fixable failure on the
+last permitted attempt closes the assignment immediately as exhausted, with no
+next preparation or deadline. The task returns to ready for a fresh claim.
 
 Blocked/revoked/invalid context preparation is repaired only through the
 planned `review.revision_context.repair` command. A covered Project Manager

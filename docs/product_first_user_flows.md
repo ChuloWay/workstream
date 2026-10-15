@@ -227,7 +227,8 @@ Acceptance:
 - Every fixable failure with a revision remaining starts a fresh PostgreSQL-time window from
   the failed attempt's locked policy; only immutable resubmission ends it.
   Upload, replay and infrastructure retry cannot reset the window. A setup block
-  pauses it and notifies the PM; repair resumes only the remaining allowance.
+  pauses it and records durable PM attention, visible in the covered PM task
+  detail; repair resumes only the remaining allowance.
 - Final-attempt failure immediately records exhaustion and returns the task to
   ready without another window. At expiry, an immutable rejection
   receipt, assignment release and return to `ready` commit atomically with

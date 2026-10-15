@@ -284,3 +284,55 @@ async def test_exhaustion_caller_and_real_participant_failures_roll_back_every_o
                 async with h.factory() as session, session.begin():
                     await session.execute(text(statement))
             assert await _snapshot(h) == final
+
+
+async def test_direct_sql_exhaustion_rejects_forged_receipts_and_partial_release(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    """Bypass ORM validation while preserving every database guard and participant."""
+    async with remediation_source(tmp_path, isolated_database_env, max_revision_rounds=0) as h:
+        before = await _snapshot(h)
+        for attack in ("source", "policy", "authority", "missing_closure"):
+            reached = []
+
+            async def insert_directly(session, *, receipt, task, assignment):
+                values = {column.key: getattr(receipt, column.key)
+                          for column in TaskRevisionExhaustion.__table__.columns
+                          if column.key not in {"created_at", "creation_xid"}}
+                if attack == "source":
+                    values["source_submission_id"] = str(new_record_id())
+                elif attack == "policy":
+                    values["revision_policy_generation"] += 1
+                elif attack == "authority":
+                    values["authorization_decision_id"] = str(await session.scalar(text(
+                        "SELECT id FROM public.audit_events WHERE id<>:decision ORDER BY id LIMIT 1"
+                    ), {"decision": receipt.authorization_decision_id}))
+                    assert values["authorization_decision_id"] != "None"
+                reached.append(attack)
+                # Core INSERT bypasses mapped-object validation and the canonical writer.
+                await session.execute(TaskRevisionExhaustion.__table__.insert().values(**values))
+                assert attack == "missing_closure", "forged receipt survived its INSERT guard"
+                assert await session.scalar(select(TaskRevisionExhaustion.id)) == receipt.id
+                # The valid receipt alone cannot commit a partial terminal outcome.
+                await session.execute(text("SET CONSTRAINTS revision_exhaustion_closure IMMEDIATE"))
+
+            expected = ("revision exhaustion closure unavailable" if attack == "missing_closure"
+                        else "revision exhaustion source or authority differs")
+            with monkeypatch.context() as patch:
+                patch.setattr("app.modules.tasks.revision.exhaustion.commit_exhaustion", insert_directly)
+                with pytest.raises(DBAPIError, match=expected):
+                    await _apply(h)
+            assert reached == [attack]
+            assert await _snapshot(h) == before
+        for statement, identity in (
+            ("UPDATE public.workstream_tasks SET status='ready',assigned_to=NULL WHERE id=:id",
+             h.request.task_id),
+            ("UPDATE public.task_assignments SET status='revision_exhausted',"
+             "released_at=clock_timestamp() WHERE id=:id", h.request.assignment_id),
+        ):
+            with pytest.raises(DBAPIError, match="revision exhaustion receipt required"):
+                async with h.factory() as session, session.begin():
+                    await session.execute(text(statement), {"id": identity})
+            assert await _snapshot(h) == before
+        # The same source remains usable through the complete canonical transaction.
+        await terminal_facts(h, await _apply(h), expected_round=0)

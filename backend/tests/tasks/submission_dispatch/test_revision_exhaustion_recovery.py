@@ -7,8 +7,10 @@ from types import SimpleNamespace
 from alembic import command
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 
 from app.adapters.tasks import task_revision_recovery
+from app.core.identifiers import new_record_id
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.runtime import AuthorizationDenied, PreparedAuthorizationUnsupported
 from app.modules.outbox.service import OutboxService
@@ -126,6 +128,15 @@ async def test_retained_cap_recovery_releases_once_and_preserves_exact_routing_r
             assert await _snapshot(h) == before
             await service_link_state(h.factory, ServiceIdentity.TASK_REVISION_EXPIRER, active=True)
             before = await _snapshot(h)
+            with pytest.raises(DBAPIError) as rejected:
+                async with h.factory() as session, session.begin():
+                    await session.execute(text("""
+                        INSERT INTO public.task_revision_expirations (id,source_submission_id)
+                        VALUES (:id,:source)
+                    """), {"id": new_record_id(), "source": h.created.submission_id})
+            assert rejected.value.orig.sqlstate == "23514"
+            assert "ck_revision_expiration_source_not_exhausted" in str(rejected.value)
+            assert await _snapshot(h) == before
             async with h.factory() as session:
                 await session.begin()
                 assert await task_revision_recovery(session).recover(source_id) is True
@@ -153,6 +164,9 @@ async def test_retained_cap_recovery_releases_once_and_preserves_exact_routing_r
                     TaskRevisionExhaustion.routing_manifest_id == source_id,
                 ))
                 assert receipt is not None and receipt.recovery_authority_context is not None
+                assert await session.scalar(text(
+                    "SELECT public.task_revision_exhaustion_complete(:id)"
+                ), {"id": receipt.id}) is True
                 assert receipt.revision_round == receipt.max_revision_rounds == 1
                 assert receipt.source_submission_id == str(h.created.submission_id)
                 state = (await session.execute(text("""
@@ -174,6 +188,10 @@ async def test_retained_cap_recovery_releases_once_and_preserves_exact_routing_r
                 await _history_rejects_source(h, client, h.created.submission_id)
                 h.created = await _submit_initial_after_reclaim(h, client)
                 assert h.created.submission_version == 3
+            async with h.factory() as session:
+                assert await session.scalar(text(
+                    "SELECT public.task_revision_exhaustion_complete(:id)"
+                ), {"id": receipt.id}) is True
             reclaimed = await _snapshot(h)
             assert await _apply(h, original_envelope) == routed.model_copy(update={"replayed": True})
             assert await _snapshot(h) == reclaimed

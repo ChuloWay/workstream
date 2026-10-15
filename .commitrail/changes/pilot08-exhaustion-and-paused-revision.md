@@ -46,7 +46,7 @@ contributor revision window. They retain bounded durable recovery semantics.
   assignment/submission lineage, repository guards, and authorized contributor/
   covered-PM reads. Extend existing owner operations and typed public ports.
 - AUTH/AUDIT/OUTBOX contracts, bindings, deferred closure and registered handlers
-  needed for the exact exhaustion/pause/release effects and PM notification custody.
+  needed for the exact exhaustion/pause/release effects and PM-attention outbox/read custody.
 - One forward migration chain after current main, ORM constraints/registration,
   schema fingerprint, preflight and retained-data upgrade proofs. Preserve old
   immutable policy/history bytes and identifiers; never invent PM authorization

@@ -142,7 +142,10 @@ async def test_expiry_beats_real_pm_repair_waiting_for_task_past_deadline(
             assert response.status_code == 409, response.text
             assert response.json()["error"]["code"] == "revision_deadline_expired"
         assert delivered is not None
-        assert json.loads(delivered.outcome_json)["delivery_state"] == "acknowledged"
+        assert json.loads(delivered.outcome_json)["delivery_state"] == "acknowledged", (
+            delivered.outcome_json, getattr(h, "expiry_handler_outcome", None),
+            getattr(h, "expiry_handler_error", None),
+        )
         state = await _revision_state(h)
         assert len(state[0]) == 1 and state[1]["status"] == "ready"
         assert state[2]["status"] == "revision_expired" and state[3] == 1 and state[4] == 1
