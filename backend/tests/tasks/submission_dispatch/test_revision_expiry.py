@@ -313,7 +313,7 @@ async def test_late_coverage_return_inherits_the_expired_window_and_expires_once
         first_id = h.created.submission_id
         first_source, first_window, first_event = await expire_retained_revision(
             h, monkeypatch=monkeypatch, isolated_database_env=isolated_database_env,
-            deliver=False, window_seconds=40,
+            deliver=False, window_seconds=75,
         )
         async with _client(h, monkeypatch, isolated_database_env) as client:
             prepared, admission = await _ready_replacement(h, revision_archive(h.data))
