@@ -16,10 +16,12 @@ import pytest
 from sqlalchemy import delete, text
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import (  # type: ignore[import-not-found]
+    AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
 
+from app.adapters.audit import task_transition_audit
 from app.modules.audit.repository import AuditRepository, LifecycleAuditConflict
 from app.modules.audit.schemas import (
     ActorReferenceKind,
@@ -32,6 +34,8 @@ from app.modules.audit.schemas import (
     LifecycleAuditReferenceKind,
 )
 from app.modules.audit.service import AuditService, LifecycleAuditParticipant
+from app.modules.tasks.api.authorization import TaskAuthorityDecision
+from app.modules.tasks.api.revision_exhaustion import TaskRevisionExhaustionAuditFacts
 from app.modules.tasks.models import AuditEvent
 from tests.assertion_helpers import assert_secret_not_retained
 
@@ -1197,6 +1201,55 @@ def _lifecycle_input(**overrides) -> LifecycleAuditEventInput:
     }
     values.update(overrides)
     return LifecycleAuditEventInput(**values)
+
+
+async def test_revision_exhaustion_adapter_stages_authorization_digest(monkeypatch) -> None:
+    ids = {key: new_record_id() for key in (
+        "event", "project", "task", "assignment", "submission", "routing_manifest",
+        "exhaustion_receipt", "actor", "outbox_event", "decision", "identity_link",
+    )}
+    digest = "sha256:" + "a" * 64
+    staged: list[AuditEvent] = []
+
+    async def stage(_repository: AuditRepository, event: AuditEvent) -> AuditEvent:
+        staged.append(event)
+        return event
+
+    monkeypatch.setattr(AuditRepository, "_add_validated_lifecycle_event", stage)
+    await task_transition_audit(cast(AsyncSession, object())).record_revision_exhaustion(
+        TaskRevisionExhaustionAuditFacts(
+            event_id=ids["event"],
+            project_id=ids["project"],
+            task_id=ids["task"],
+            assignment_id=ids["assignment"],
+            submission_id=ids["submission"],
+            routing_manifest_id=ids["routing_manifest"],
+            exhaustion_receipt_id=ids["exhaustion_receipt"],
+            actor_profile_id=ids["actor"],
+            outbox_event_id=ids["outbox_event"],
+            authority=TaskAuthorityDecision(
+                decision_id=ids["decision"],
+                identity_link_id=ids["identity_link"],
+                resource_context_digest=digest,
+                resource_context_json="{}",
+            ),
+        )
+    )
+
+    assert len(staged) == 1
+    assert staged[0].event_payload == {
+        "references": {
+            "project_id": str(ids["project"]),
+            "task_id": str(ids["task"]),
+            "assignment_id": str(ids["assignment"]),
+            "submission_id": str(ids["submission"]),
+            "routing_manifest_id": str(ids["routing_manifest"]),
+            "revision_exhaustion_id": str(ids["exhaustion_receipt"]),
+            "authorization_decision_id": str(ids["decision"]),
+            "outbox_event_id": str(ids["outbox_event"]),
+        },
+        "authorization_resource_digest": digest,
+    }
 
 
 
