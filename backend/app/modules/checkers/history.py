@@ -105,8 +105,7 @@ class CheckerHistoryRepository:
     async def read_finding_counts(self, submission_ids, *, manager):
         """Count (blocking, warning, coverage_incomplete) findings of each current completed run.
 
-        ``manager`` keeps the port symmetric with history reads; both audiences
-        see the same counts.
+        Contributors count only the findings their history read shows them.
         """
         counts = {UUID(str(submission_id)): (0, 0, 0) for submission_id in submission_ids}
         if not counts:
@@ -122,10 +121,17 @@ class CheckerHistoryRepository:
             CheckerRun, CheckerRun.id == CheckerSubmissionFence.current_run_id,
         ).join(
             CheckerResultFinding, CheckerResultFinding.checker_run_id == CheckerRun.id,
+        ).join(
+            CheckerResult, CheckerResult.id == CheckerResultFinding.checker_result_id,
         ).where(
             CheckerSubmissionFence.submission_id.in_([str(item) for item in counts]),
             CheckerRun.status == "completed",
         ).group_by(CheckerSubmissionFence.submission_id)
+        if not manager:
+            statement = statement.where(
+                CheckerResult.failure_category != "task_configuration",
+                CheckerRun.routing_recommendation != "task_setup_blocked",
+            )
         for row in (await self._session.execute(statement)).mappings():
             counts[UUID(str(row["submission_id"]))] = (
                 row["blocking"], row["warning"], row["coverage_incomplete"],

@@ -226,9 +226,9 @@ Acceptance:
 - Each assignment starts at round 0 with its own revision allowance.
 - Every committed `needs_revision` starts a fresh PostgreSQL-time window from
   the failed attempt's locked policy; only immutable resubmission ends it.
+  Upload, replay, repair and infrastructure retry preserve the window.
 - A checker coverage return spends no round; consecutive coverage returns keep
   the first return's window, so the same gap cannot return the work forever.
-  Upload, replay, repair and infrastructure retry preserve the window.
 - Cap exhaustion refuses another attempt. At expiry, an immutable rejection
   receipt, assignment release and return to `ready` commit atomically with
   AUTH/audit/outbox evidence and no new economic facts. Checker expiry is

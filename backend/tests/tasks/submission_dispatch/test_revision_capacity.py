@@ -52,7 +52,7 @@ COVERAGE_GAP = ({
 },)
 
 
-async def _fail_current_submission(h, *, findings=None):
+async def _fail_current_submission(h, *, findings=None, route=True):
     """Complete the actual reserved successor using controlled external work failure."""
     async with h.factory() as session, session.begin():
         reserved = await evaluation_coordinator(session).read_reserved_evaluation(
@@ -74,7 +74,8 @@ async def _fail_current_submission(h, *, findings=None):
         ))
         h.source = {"completion_event_id": event.event_id}
     h.envelope = await invoked_completion(h)
-    await _fixture_revision_context(h)
+    if route:
+        await _fixture_revision_context(h)
 
 
 async def test_two_revisions_then_public_and_sql_refusal(

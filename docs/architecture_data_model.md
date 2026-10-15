@@ -1608,13 +1608,13 @@ immutably before any later rebase can change the continuing assignment. Checker
 or human revision preparation records prior/next policy lineage before it may update
 that selector; publication alone cannot.
 
-Each assignment's initial round 0 has no replacement cause; a needs_revision
-attempt with `status_reason='checker_coverage_incomplete'` is excluded from
-every round count, so its replacement keeps the source's round. Consecutive
-coverage returns inherit the first coverage return's revision window
-(`requested_at`, `deadline_at`), which PostgreSQL also requires of the
-preparation. its task-global
-Submission version may exceed 1 after an earlier assignment's timeout. For a current checker-remediation replacement,
+Each assignment's initial round 0 has no replacement cause; its task-global
+Submission version may exceed 1 after an earlier assignment's timeout. A
+needs_revision attempt with `status_reason='checker_coverage_incomplete'` is
+excluded from every round count, so its replacement keeps the source's round.
+Consecutive coverage returns inherit the first coverage return's revision
+window (`requested_at`, `deadline_at`), which PostgreSQL also requires of the
+preparation. For a current checker-remediation replacement,
 TASK selects the exact authorized `needs_revision` routing manifest for the
 immediate predecessor and its current completed CheckerRun. The server-selected
 `checker_remediation_manifest_id` travels through ART's pre-submit evidence and

@@ -294,6 +294,77 @@ async def test_due_failure_auto_rejects_and_releases_with_immutable_receipt(
         await assert_backfill_matches_live(h.factory)
 
 
+async def test_late_coverage_return_inherits_the_expired_window_and_expires_once(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    """A second coverage return routed after the first deadline is blocked, not stuck.
+
+    Both coverage sources share one deadline: the superseded first source's
+    expiry acknowledges without effect and only the second attempt is rejected.
+    """
+    from app.modules.tasks.schemas import AdmissionBackedSubmissionResponse
+    from tests.tasks.submission_dispatch.test_revision_capacity import (
+        COVERAGE_GAP, _fail_current_submission,
+    )
+
+    async with remediation_source(
+        tmp_path, isolated_database_env, human_review_required=False, findings=COVERAGE_GAP,
+    ) as h:
+        first_id = h.created.submission_id
+        first_source, first_window, first_event = await expire_retained_revision(
+            h, monkeypatch=monkeypatch, isolated_database_env=isolated_database_env,
+            deliver=False, window_seconds=40,
+        )
+        async with _client(h, monkeypatch, isolated_database_env) as client:
+            prepared, admission = await _ready_replacement(h, revision_archive(h.data))
+            created = await client.post(
+                f"/api/v1/tasks/{h.request.task_id}/submissions", json=_payload(prepared, admission),
+            )
+            assert created.status_code == 201, created.text
+        h.created = AdmissionBackedSubmissionResponse.model_validate(created.json())
+        await _fail_current_submission(h, findings=COVERAGE_GAP, route=False)
+        deadline = datetime.fromisoformat(first_window["deadline_at"])
+        async with h.factory() as session:
+            remaining = (deadline - await session.scalar(select(func.clock_timestamp()))).total_seconds()
+        await asyncio.sleep(max(0, remaining) + 0.5)
+        second_source = await _fixture_revision_context(h)
+        async with h.factory() as session:
+            window = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+            # The inherited window has passed: routing commits a blocked preparation.
+            assert (window.outcome, window.blocked_reason, window.next_revision_round) == (
+                "blocked", "revision_deadline_expired", 0,
+            )
+            assert (window.requested_at, window.deadline_at) == (
+                datetime.fromisoformat(first_window["requested_at"]), deadline,
+            )
+            second_event = await session.scalar(select(OutboxEvent.event_id).where(
+                OutboxEvent.event_type == REVISION_EXPIRY_EVENT,
+                OutboxEvent.idempotency_key == f"task.revision.expire:{second_source}",
+            ))
+        for event_id in (first_event, second_event):
+            delivered = await h.expiry_delivery.deliver(
+                event_id, h.request.project_id, "shared-deadline-expiry",
+            )
+            assert delivered is not None
+            assert json.loads(delivered.outcome_json)["delivery_state"] == "acknowledged", (
+                delivered.outcome_json, getattr(h, "expiry_handler_error", None),
+            )
+        async with h.factory() as session:
+            receipts = (await session.scalars(select(TaskRevisionExpiration))).all()
+            assert [receipt.routing_manifest_id for receipt in receipts] == [second_source]
+            assert first_source != second_source
+            attempts = (await session.execute(text(
+                "SELECT id, attempt_status, status_reason FROM public.submissions ORDER BY version"
+            ))).all()
+            assert [(str(row[0]), row[1], row[2]) for row in attempts] == [
+                (str(first_id), "needs_revision", "checker_coverage_incomplete"),
+                (str(h.created.submission_id), "rejected", "revision_deadline_expired"),
+            ]
+            assert await session.scalar(text(
+                "SELECT status FROM public.workstream_tasks WHERE id=:id"
+            ), {"id": h.request.task_id}) == "ready"
+
+
 async def test_expiry_replays_one_receipt_when_effect_commits_before_ack(
     tmp_path, isolated_database_env, monkeypatch,
 ):

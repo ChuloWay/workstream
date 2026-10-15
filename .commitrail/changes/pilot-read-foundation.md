@@ -169,7 +169,22 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 
 ## Review findings
 
-Recorded after internal review.
+- All six tracks reported no High findings at the first candidate. The shared
+  Medium was that coverage returns, which spend no round, could loop without
+  bound. The human chose keeping the first return's window, and it is implemented
+  in Python and SQL.
+- The replay of the window change found no defect. Its Medium test gap (a
+  second return routed after the first deadline, plus a shared-deadline expiry)
+  is now covered. Contributor finding counts now use the same filters as
+  contributor history. The v1 refusal is proven for all three retained
+  sources.
+- Noted, not a defect: the stored-coverage-finding clause in the attempt guard
+  and backfill is defence in depth. Terminal custody already makes a
+  zero-failure `needs_revision` imply such a finding, so tests cannot
+  discriminate the clause.
+- Observed outside scope: on the public bundle-preparation route, a body that
+  is not a ZIP raises `SubmissionArchiveRejectedError` as a 500 when the project
+  selects no pre-submit checker. Left for a separate change.
 
 ## Reconciliation
 

@@ -168,8 +168,45 @@ async def test_empty_database_installs_execution_custody(isolated_database_env, 
             await conn.close()
 
 
+_V1_RESULT = '{"schema_version":"external_checker_result.v1"}'
+
+
+def _retained_v1_row(table, column, value):
+    """Insert one row carrying a v1 marker with every other required column filled.
+
+    Only this owned database's guards on that table are lifted: the row's owners
+    are not the claim, the marker is.
+    """
+    return f"""
+    DO $$ DECLARE c record; cols text; vals text; BEGIN
+      FOR c IN SELECT conname FROM pg_constraint
+        WHERE conrelid='public.{table}'::regclass AND contype IN ('f','c') LOOP
+        EXECUTE format('ALTER TABLE public.{table} DROP CONSTRAINT %I', c.conname);
+      END LOOP;
+      EXECUTE 'ALTER TABLE public.{table} DISABLE TRIGGER USER';
+      SELECT string_agg(quote_ident(column_name), ','), string_agg(CASE
+          WHEN column_name='{column}' THEN quote_literal('{value}')
+          WHEN data_type='uuid' THEN 'gen_random_uuid()'
+          WHEN data_type IN ('smallint','integer','bigint','numeric') THEN '0'
+          WHEN data_type='boolean' THEN 'false'
+          WHEN data_type LIKE 'timestamp%' THEN 'now()'
+          WHEN data_type IN ('json','jsonb') THEN quote_literal('{{}}')
+          ELSE quote_literal('x') END, ',')
+        INTO cols, vals FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='{table}' AND is_generated='NEVER'
+          AND ((is_nullable='NO' AND column_default IS NULL) OR column_name='{column}');
+      EXECUTE format('INSERT INTO public.{table} (%s) VALUES (%s)', cols, vals);
+      EXECUTE 'ALTER TABLE public.{table} ENABLE TRIGGER USER';
+    END $$"""
+
+
+@pytest.mark.parametrize(("table", "column", "value"), [
+    ("checker_results", "definition_version", "external_checker_result.v1"),
+    ("checker_runs", "result_json", _V1_RESULT),
+    ("selected_pre_submit_runs", "terminal_json", _V1_RESULT),
+])
 async def test_result_contract_upgrade_refuses_retained_v1_results(
-    isolated_database_env, migration_lock,
+    isolated_database_env, migration_lock, table, column, value,
 ):
     """0048 stops before any DDL when v1 result evidence would lose its contract."""
     import asyncpg
@@ -186,26 +223,7 @@ async def test_result_contract_upgrade_refuses_retained_v1_results(
         await asyncio.to_thread(command.upgrade, _config(), "0047_revision_recovery")
         conn = await asyncpg.connect(url)
         try:
-            # Represent one retained v1 member row in this owned database; its
-            # owner rows are not the claim, so only this table's guards are lifted.
-            async with conn.transaction():
-                await conn.execute("""
-                    DO $$ DECLARE c record; BEGIN
-                      FOR c IN SELECT conname FROM pg_constraint
-                        WHERE conrelid='public.checker_results'::regclass AND contype='f' LOOP
-                        EXECUTE format('ALTER TABLE public.checker_results DROP CONSTRAINT %I', c.conname);
-                      END LOOP;
-                    END $$""")
-                await conn.execute("ALTER TABLE public.checker_results DISABLE TRIGGER USER")
-                await conn.execute(
-                    "insert into checker_results (id, checker_run_id, task_id, submission_id,"
-                    " checker_name, status, severity, member_order, definition_version,"
-                    " implementation_version, code, failure_category, counters)"
-                    " values ($1,$2,$3,$4,'post','passed','info',0,"
-                    " 'external_checker_result.v1','1','ok','none','{}')",
-                    new_record_id(), new_record_id(), new_record_id(), new_record_id(),
-                )
-                await conn.execute("ALTER TABLE public.checker_results ENABLE TRIGGER USER")
+            await conn.execute(_retained_v1_row(table, column, value))
             schema = "select count(*) from information_schema.tables where table_schema='public'"
             tables = await conn.fetchval(schema)
             with pytest.raises(

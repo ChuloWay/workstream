@@ -613,7 +613,8 @@ same route from the stored result and locked policy. Pre-submit intake treats a
 coverage gap like any non-error finding: it is shown in feedback and does not
 block admission, because intake never decides acceptance. Run-level
 `warning_count` and `blocking_count` remain member counts; per-finding counts
-come from the stored findings.
+come from the stored findings, and contributors count only the findings their
+checker history shows them.
 
 ## Readiness Proof — Target Contract
 
