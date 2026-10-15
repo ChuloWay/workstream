@@ -52,7 +52,7 @@ Required before leaving:
 - source type recorded
 - title
 - description
-- acceptance criteria
+- project guide defines acceptance requirements; task-local criteria are optional
 - required output
 
 ### SCREENING
@@ -101,7 +101,8 @@ Required before entering:
 - `locked_contribution_policy_version_id` bound to the activated guide's
   same-project published, complete, binding-valid ContributionPolicyVersion
 - source reference recorded when imported
-- acceptance criteria frozen; a controlled new guide/task context follows its
+- guide-defined acceptance requirements frozen and supplied task-local criteria
+  retained; a controlled new guide/task context follows its
   owning policy/rebase path and never rewrites existing locked context
 
 ### CLAIMED
