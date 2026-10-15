@@ -11,8 +11,9 @@ from app.modules.actors.models import ActorProfile, ActorIdentityLink
 class ControlledSelectedExecution:
     """Return one request-bound selected result without replacing owner logic."""
 
-    def __init__(self, *, verdict="passed"):
+    def __init__(self, *, verdict="passed", findings=None):
         self.verdict = verdict
+        self.findings = findings
         self.requests = []
 
     async def execute(self, request, grant):
@@ -27,11 +28,13 @@ class ControlledSelectedExecution:
 
         assert type(grant) is ExternalCheckerMaterialGrant
         self.requests.append(request)
-        findings = () if self.verdict == "passed" else ({
+        findings = self.findings if self.findings is not None else (
+            () if self.verdict == "passed" else ({
+            "check_id": "post_evidence",
             "code": "post_evidence_failed",
             "level": "error",
             "message": "Post evidence failed.",
-        },)
+        },))
         result = make_external_checker_execution_result(
             request_digest=request.request_digest,
             registry_entry_id=request.registry.registry_entry_id,

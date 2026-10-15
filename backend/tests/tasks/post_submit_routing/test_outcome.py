@@ -31,6 +31,9 @@ async def test_true_branch_does_not_acquire_acceptance(tmp_path, isolated_databa
                 )
                 == "review_pending"
             )
+            assert (await session.execute(text(
+                "SELECT attempt_status,decided_at FROM public.submissions WHERE id=:id"
+            ), {"id": h.request.submission_id})).one() == ("review_pending", None)
             assert await session.scalar(text("SELECT count(*) FROM public.final_acceptances")) == 0
             assert (
                 await session.scalar(text("SELECT count(*) FROM public.contribution_records")) == 0
@@ -62,6 +65,11 @@ async def test_false_branch_records_one_acceptance_and_submitter_contribution(
                 )
                 == "accepted"
             )
+            # PostgreSQL copies the decision time from the FinalAcceptance evidence.
+            assert (await session.execute(text(
+                "SELECT s.attempt_status,s.decided_at=a.accepted_at FROM public.submissions s "
+                "JOIN public.final_acceptances a ON a.submission_id=s.id WHERE s.id=:id"
+            ), {"id": h.request.submission_id})).one() == ("accepted", True)
             assert await session.scalar(text("SELECT count(*) FROM public.final_acceptances")) == 1
             assert (
                 await session.scalar(text("SELECT count(*) FROM public.contribution_records")) == 1

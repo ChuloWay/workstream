@@ -20,7 +20,9 @@ from app.modules.checkers.api.evaluation_contract import (
     validate_stored_execution_result,
 )
 from app.modules.checkers.api.canonical_values import canonical_checker_bytes
-from app.modules.checkers.models import CheckerResult, CheckerRun, CheckerSubmissionFence
+from app.modules.checkers.models import (
+    CheckerResult, CheckerResultFinding, CheckerRun, CheckerSubmissionFence,
+)
 
 
 def require_transaction(session: AsyncSession) -> None:
@@ -145,9 +147,10 @@ class ExecutionRepository:
     async def write_members(self, run: CheckerRun, result: PostSubmissionExecutionResult) -> None:
         """Flush ordered closed results under the locked running parent."""
         for member in result.execution.external_members if result.execution else ():
+            member_id = str(new_record_id())
             self.session.add(
                 CheckerResult(
-                    id=str(new_record_id()),
+                    id=member_id,
                     checker_run_id=run.id,
                     task_id=run.task_id,
                     submission_id=run.submission_id,
@@ -170,4 +173,51 @@ class ExecutionRepository:
                     counters=[],
                 )
             )
+            for finding_order, finding in enumerate(member.result.findings):
+                self.session.add(
+                    CheckerResultFinding(
+                        id=str(new_record_id()),
+                        checker_result_id=member_id,
+                        checker_run_id=run.id,
+                        task_id=run.task_id,
+                        submission_id=run.submission_id,
+                        member_order=member.order,
+                        finding_order=finding_order,
+                        check_id=finding.check_id,
+                        code=finding.code,
+                        level=finding.level,
+                        path=finding.path,
+                        line=finding.line,
+                    )
+                )
         await self.session.flush()
+
+
+COVERAGE_HOLD_FAILURE_CODE = "coverage_incomplete"
+
+
+def retry_source_failure_code(run: CheckerRun) -> str | None:
+    """Return the retry cause of a finalized terminal run, or None when not retryable.
+
+    Two terminal outcomes are recoverable by an Operator retry: an
+    infrastructure failure, and a completed coverage hold that routed nowhere.
+    """
+    if (
+        run.finalize_evidence_id is None or run.result_json is None
+        or run.result_digest is None or run.completion_event_id is not None
+    ):
+        return None
+    result = stored_result(run)
+    if run.status == "infrastructure_failed":
+        if run.failure_code is None or result.outcome != "infrastructure_failed" or (
+            result.infrastructure_failure_code != run.failure_code
+        ):
+            return None
+        return run.failure_code
+    if (
+        run.status == "completed" and run.routing_recommendation == "task_setup_blocked"
+        and run.failure_code is None and result.outcome == "completed"
+    ):
+        return COVERAGE_HOLD_FAILURE_CODE
+    return None
+

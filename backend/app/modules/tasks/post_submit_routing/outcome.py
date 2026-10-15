@@ -11,6 +11,7 @@ from app.modules.checkers.api.execution import COMPLETION_EVENT, EvaluationCompl
 from app.modules.outbox.api import OutboxAppendInput, OutboxEventEnvelope
 from app.modules.tasks.api.accepted_effects import TaskAcceptedEffectsRequest
 from app.modules.tasks.models import Submission, WorkstreamTask
+from app.modules.tasks.submission_attempts import record_attempt_outcome
 from app.modules.tasks.revision.service import prepare_revision
 from app.modules.tasks.revision.expiry_event import revision_expiry_event
 from app.modules.tasks.revision.models import TaskRevisionPreparation
@@ -148,6 +149,10 @@ class TaskPostSubmitOutcome:
                 if not replay:
                     task.status = "needs_revision"
                     await self._session.flush()
+                    await record_attempt_outcome(
+                        self._session, submission_id=source.source.submission_id,
+                        task_id=source.source.task_id, outcome="needs_revision",
+                    )
                     if source.revision_candidate is None:
                         raise TaskRoutingRequestUnavailable("revision context unavailable")
                     root = await prepare_revision(
@@ -166,10 +171,21 @@ class TaskPostSubmitOutcome:
                 task = await self._session.get(WorkstreamTask, str(source.source.task_id))
                 if not replay:
                     task.status = "review_pending"
+                    await self._session.flush()
+                    await record_attempt_outcome(
+                        self._session, submission_id=source.source.submission_id,
+                        task_id=source.source.task_id, outcome="review_pending",
+                    )
             else:
                 economic = await acceptance.participate(
                     source, effects, receipt, authorized_generation
                 )
+                if not replay:
+                    await self._session.flush()
+                    await record_attempt_outcome(
+                        self._session, submission_id=source.source.submission_id,
+                        task_id=source.source.task_id, outcome="accepted",
+                    )
             await self._audit.record(
                 audit_event_id=audit_id,
                 source=source,

@@ -27,10 +27,12 @@ HISTORY = {
     "id": SUBMISSION,
     "task_id": TASK,
     "version": 1,
-    "status": "submitted",
+    "status": "evaluation_pending",
     "status_reason": None,
     "summary": "Work complete",
     "submitted_at": "2026-10-14T10:00:00Z",
+    "decided_at": None,
+    "finding_counts": {"blocking": 0, "warning": 0, "coverage_incomplete": 0},
     "locked_at": None,
     "supersedes_submission_id": None,
     "evidence_items": [],
@@ -50,6 +52,9 @@ CHECKER = {
         {
             "id": KEY,
             "checker_name": "quality",
+            "check_id": "quality.output",
+            "path": "src/out.txt",
+            "line": 4,
             "status": "failed",
             "severity": "error",
             "worker_message": "Fix \u202eunsafe\x1b text",
@@ -331,10 +336,12 @@ def test_preparation_feedback_is_closed_safe_and_not_a_submission(cli, tmp_path)
                 "status": "failed",
                 "findings": [
                     {
+                        "check_id": "quality.output",
                         "code": "quality",
                         "level": "error",
                         "message": "Fix \u202eunsafe\x1b text",
                         "path": "../../not-a-local-file",
+                        "line": 2,
                     }
                 ],
             }
@@ -419,15 +426,36 @@ def test_submission_history_and_findings_are_bounded_and_preserve_evidence(cli):
         assert result.returncode == 0 and json.loads(result.stdout) == CHECKER
         assert requests[-1][1] == f"/api/v1/submissions/{SUBMISSION}/checker-runs/{RUN}"
         assert len(requests) == 4
+        coverage = CHECKER | {"results": [CHECKER["results"][0] | {
+            "id": ASSIGNMENT, "check_id": "coverage.files", "path": None, "line": None,
+            "status": "coverage_incomplete", "severity": "medium",
+        }]}
+        respond(response, coverage)
+        shown = cli(origin, TOKEN, "submission", "findings", SUBMISSION, "--run", RUN, "-o", "json")
+        assert shown.returncode == 0 and json.loads(shown.stdout) == coverage, shown.stderr
+
+
+DECIDED = "2026-10-14T11:00:00Z"
 
 
 def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
     with http_fixture() as (origin, response, _):
         for history in (
-            {key: value for key, value in HISTORY.items() if key != "status_reason"},
             HISTORY,
+            HISTORY | {"status": "review_pending"},
+            HISTORY | {"status": "accepted", "decided_at": DECIDED},
             HISTORY
-            | {"status": "rejected", "status_reason": "revision_deadline_expired"},
+            | {
+                "status": "needs_revision",
+                "decided_at": DECIDED,
+                "finding_counts": {"blocking": 2, "warning": 1, "coverage_incomplete": 1},
+            },
+            HISTORY
+            | {
+                "status": "rejected",
+                "status_reason": "revision_deadline_expired",
+                "decided_at": DECIDED,
+            },
         ):
             respond(response, history)
             result = cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json")
@@ -445,9 +473,15 @@ def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
             ]
         for history in (
             HISTORY | {"status_reason": "revision_deadline_expired"},
-            HISTORY | {"status": "rejected", "status_reason": "other"},
-            HISTORY | {"status": "rejected", "status_reason": ""},
-            HISTORY | {"status": "rejected", "status_reason": 1},
+            HISTORY | {"status": "rejected", "decided_at": DECIDED, "status_reason": "other"},
+            HISTORY | {"status": "rejected", "decided_at": DECIDED, "status_reason": ""},
+            HISTORY | {"status": "rejected", "decided_at": DECIDED, "status_reason": 1},
+            HISTORY | {"status": "submitted"},
+            HISTORY | {"status": "accepted"},
+            HISTORY | {"decided_at": DECIDED},
+            HISTORY | {"finding_counts": {"blocking": -1, "warning": 0, "coverage_incomplete": 0}},
+            HISTORY | {"finding_counts": {"blocking": 0, "warning": 0}},
+            {key: value for key, value in HISTORY.items() if key != "status_reason"},
         ):
             respond(response, history)
             assert_failure(
@@ -481,12 +515,18 @@ def test_submission_reads_reject_substitution_private_fields_and_duplicate_ident
                 cli(origin, TOKEN, "task", "submissions", TASK, "-o", "json"),
                 "invalid_api_response",
             )
+        result = CHECKER["results"][0]
         for change in (
             {"submission_id": KEY},
             {"id": KEY},
             {"results": [None]},
             {"attempt_number": None},
             {"raw_output": "private"},
+            {"results": [result | {"line": 4, "path": None}]},
+            {"results": [result | {"line": 0}]},
+            {"results": [result | {"check_id": ""}]},
+            {"results": [{k: v for k, v in result.items() if k != "check_id"}]},
+            {"results": [result | {"status": "not_run"}]},
         ):
             respond(response, CHECKER | change)
             assert_failure(

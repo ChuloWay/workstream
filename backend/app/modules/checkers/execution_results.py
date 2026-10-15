@@ -28,8 +28,16 @@ def classify_result(
         return ResultClassification("not_evaluated", 0, 0, 0, 0)
     members = result.execution.external_members if result.execution else ()
     failed = sum(member.result.verdict == "failed" for member in members)
+    coverage_incomplete = any(
+        finding.level == "coverage_incomplete"
+        for member in members
+        for finding in member.result.findings
+    )
+    # A coverage gap is the checker's, not the contributor's: hold for an
+    # Operator instead of auto-accepting or spending a revision round.
     return ResultClassification(
-        "needs_revision" if failed else "allow_review",
+        "needs_revision" if failed else
+        "task_setup_blocked" if coverage_incomplete else "allow_review",
         sum(member.result.verdict == "passed" for member in members),
         0,
         failed,
@@ -41,4 +49,8 @@ RESULT_STATUS_MESSAGES = {
     "passed": ("Check passed.", None),
     "warning": ("Check reported a warning.", "Review the project guide and check findings."),
     "failed": ("Project check failed.", "Review the project guide and check findings."),
+    "coverage_incomplete": (
+        "Check could not evaluate part of the submission.",
+        None,
+    ),
 }

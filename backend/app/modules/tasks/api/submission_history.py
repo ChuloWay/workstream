@@ -47,6 +47,33 @@ class SubmissionEvidenceDescriptor(BaseModel):
     size_bytes: int | None
 
 
+class SubmissionFindingCounts(BaseModel):
+    """Finding counts of a submission's current completed post-submit run."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    blocking: int
+    warning: int
+    coverage_incomplete: int
+
+
+class SubmissionFindingCountsPort(Protocol):
+    """CHECKERS counts within submissions TASK already authorized and selected.
+
+    Each value is ``(blocking, warning, coverage_incomplete)``; plain integers keep
+    CHECKERS free of a public dependency back on TASK.
+    """
+
+    async def read_finding_counts(
+        self, submission_ids: tuple[UUID, ...], *, manager: bool,
+    ) -> dict[UUID, tuple[int, int, int]]: ...
+
+
+SubmissionAttemptStatus = Literal[
+    "evaluation_pending", "review_pending", "accepted", "needs_revision", "rejected",
+]
+SubmissionStatusReason = Literal["revision_deadline_expired"]
+
+
 class ContributorSubmissionHistory(BaseModel):
     """Fixed historical packet fields for its authorized contributor."""
 
@@ -54,10 +81,12 @@ class ContributorSubmissionHistory(BaseModel):
     id: UUID
     task_id: UUID
     version: int
-    status: str
-    status_reason: Literal["revision_deadline_expired"] | None = None
+    status: SubmissionAttemptStatus
+    status_reason: SubmissionStatusReason | None
     summary: str
     submitted_at: datetime
+    decided_at: datetime | None
+    finding_counts: SubmissionFindingCounts
     locked_at: datetime | None
     supersedes_submission_id: UUID | None
     evidence_items: list[SubmissionEvidenceDescriptor]

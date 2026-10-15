@@ -197,10 +197,12 @@ def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> 
         verdict="failed",
         findings=(
             ExternalCheckerFinding(
+                check_id="archive.paths",
                 code="archive.unsafe_path",
                 level="error",
                 message="archive contains an unsafe path",
                 path="../escape",
+                line=3,
             ),
         ),
         infrastructure_failure_code=None,
@@ -270,6 +272,7 @@ def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> 
 
     oversized_findings = tuple(
         ExternalCheckerFinding(
+            check_id="archive.size",
             code=f"archive.finding_{index}",
             level="warning",
             message="x" * 4096,
@@ -286,4 +289,35 @@ def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> 
             verdict="passed",
             findings=oversized_findings,
             infrastructure_failure_code=None,
+        )
+
+
+def test_v2_findings_carry_check_location_and_coverage_level() -> None:
+    finding = ExternalCheckerFinding(
+        check_id="coverage.files",
+        code="coverage.unreadable",
+        level="coverage_incomplete",
+        message="one file could not be evaluated",
+        path="src/main.rs",
+        line=12,
+    )
+    assert finding.model_dump(mode="json") == {
+        "check_id": "coverage.files",
+        "code": "coverage.unreadable",
+        "level": "coverage_incomplete",
+        "message": "one file could not be evaluated",
+        "path": "src/main.rs",
+        "line": 12,
+    }
+    with pytest.raises(ValidationError, match="line requires a path"):
+        ExternalCheckerFinding(
+            check_id="coverage.files", code="coverage.unreadable",
+            level="warning", message="m", line=4,
+        )
+    with pytest.raises(ValidationError):
+        ExternalCheckerFinding(code="coverage.unreadable", level="warning", message="m")
+    with pytest.raises(ValidationError):
+        ExternalCheckerFinding(
+            check_id="coverage.files", code="c", level="warning", message="m",
+            path="a", line=0,
         )

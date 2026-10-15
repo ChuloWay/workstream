@@ -438,7 +438,9 @@ async def _wait_known_retry(factory, event_id: UUID, project_id: UUID,
                 task = await session.get(WorkstreamTask, task_id)
                 submission = await session.get(Submission, submission_id)
                 _require(task.status == "evaluation_pending"
-                         and submission.status == "submitted",
+                         and submission.status == "submitted"
+                         and submission.attempt_status == "evaluation_pending"
+                         and submission.decided_at is None,
                          "non-live completion changed Task or Submission")
                 effects = await _project_effects_snapshot(session, project_id)
                 _require(effects == (prior_effects or {name: () for name in _GOVERNED_TABLES}),
@@ -709,6 +711,8 @@ async def _assert_revision(factory, *, project_id: UUID, task_id: str,
         source = await session.get(Submission, submission_id)
         _require(source is not None and source.status == "submitted",
                  "failed selected POST changed the immutable submitted source")
+        _require(source.attempt_status == "needs_revision" and source.decided_at is not None,
+                 "failed selected POST did not record the needs_revision attempt outcome")
         manifest = (await session.execute(text(
             "SELECT submission_id,checker_run_id,routing_recommendation "
             "FROM public.task_post_submit_routing_manifests "
@@ -738,6 +742,9 @@ async def _assert_outcome(factory, *, guide_source, project_id: UUID, task_id: s
                  "governed Task outcome differs")
         _require(submission is not None and submission.submission_bundle_admission_id is not None,
                  "Submission lacks consumed immutable admission")
+        _require(submission.attempt_status == ("review_pending" if human_review_required else "accepted")
+                 and (submission.decided_at is None) == human_review_required,
+                 "governed Submission attempt outcome differs")
         for field, expected in guide_source.evidence["locked_context"].items():
             _require(str(getattr(task, field)) == str(expected)
                      and str(getattr(submission, field)) == str(expected),

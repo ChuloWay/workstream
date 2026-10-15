@@ -223,8 +223,13 @@ async def test_due_failure_auto_rejects_and_releases_with_immutable_receipt(
     async with remediation_source(tmp_path, isolated_database_env) as h:
         async with h.factory() as session:
             source_before = await session.scalar(text(
-                "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                "SELECT to_jsonb(s)-ARRAY['attempt_status','status_reason','decided_at','updated_at'] "
+                "FROM public.submissions s WHERE id=:id"
             ), {"id": h.created.submission_id})
+            assert (await session.execute(text(
+                "SELECT attempt_status,status_reason,decided_at IS NOT NULL "
+                "FROM public.submissions WHERE id=:id"
+            ), {"id": h.created.submission_id})).one() == ("needs_revision", None, True)
         source_id, recovered, event_id = await expire_retained_revision(
             h, monkeypatch=monkeypatch, isolated_database_env=isolated_database_env,
         )
@@ -255,8 +260,15 @@ async def test_due_failure_auto_rejects_and_releases_with_immutable_receipt(
             ), {"key": f"task.revision.expired:{source_id}"}) == 1
             assert receipt.deadline_at <= receipt.expired_at
             assert await session.scalar(text(
-                "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                "SELECT to_jsonb(s)-ARRAY['attempt_status','status_reason','decided_at','updated_at'] "
+                "FROM public.submissions s WHERE id=:id"
             ), {"id": h.created.submission_id}) == source_before
+            # The expiry receipt, not the caller, supplies the rejection time and reason.
+            assert (await session.execute(text(
+                "SELECT attempt_status,status_reason,decided_at FROM public.submissions WHERE id=:id"
+            ), {"id": h.created.submission_id})).one() == (
+                "rejected", "revision_deadline_expired", receipt.expired_at,
+            )
             task = (await session.execute(text(
                 "SELECT status,assigned_to FROM public.workstream_tasks WHERE id=:id"
             ), {"id": h.request.task_id})).one()

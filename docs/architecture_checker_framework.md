@@ -40,10 +40,16 @@ Submission exists. Post-submit identity uses the immutable Submission,
 evaluation request and reservation, plus the current execution lease and its
 database expiry.
 
-The normalized result echoes the exact request, registry and phase identity.
-It is either `completed`, with closed findings and a passed/failed verdict, or
-`infrastructure_failed`, with one of the existing capacity, deadline, material,
-implementation or invalid-output codes. Missing images, crashes and malformed
+The normalized `external_checker_result.v2` echoes the exact request, registry
+and phase identity. It is either `completed`, with closed findings and a
+passed/failed verdict, or `infrastructure_failed`, with one of the existing
+capacity, deadline, material, implementation or invalid-output codes. Each
+finding names the `check_id` that produced it, a closed `code`, a level
+(`info`, `warning`, `error` or `coverage_incomplete`), a message and an
+optional `path` with an optional 1-based `line` inside that path. The verdict
+is `failed` exactly when an `error` finding exists; `coverage_incomplete`
+reports work the checker could not evaluate and never fails the verdict by
+itself. Missing images, crashes and malformed
 or oversized output cannot become a silent pass. This contract and the
 immutable registry are consumed by selected hidden PRE/POST owners through an
 explicit Rust service adapter. Production request/completion handlers are
@@ -592,6 +598,14 @@ criteria, or another task setup defect that is not contributor-fixable, the run 
 `task_setup_blocked`. That route is internal to covered Project Managers and
 authorized Operators and must not be shown to contributors as a revision request.
 
+A completed post-submit result with no failed member and at least one
+`coverage_incomplete` finding is classified `task_setup_blocked`. It publishes
+no completion event, so TASK routing, acceptance and revision do not run and the
+task stays `evaluation_pending`; a false ReviewPolicy cannot auto-accept work a
+checker could not fully evaluate. An authorized Operator retry accepts this
+terminal hold as its source, exactly as it accepts a terminal infrastructure
+failure. A result with failed members still routes to `needs_revision`.
+
 ## Readiness Proof — Target Contract
 
 Canonical readiness publication is pending. Its required contract stores proof
@@ -647,13 +661,17 @@ results have empty counters; selected image results use their closed JSON schema
 derived deterministically from the closed code; raw handler messages and arbitrary
 metadata are not retained.
 
-This is retained proof, not a live reviewer projection. Current contributor and
-Project Manager history reads expose only their fixed, permission-appropriate
-DTO fields. Future REV packet/current-work presentation must expose an authorized
-bounded subset after routing and review integration. The current contract does
-not include per-file findings, per-check evidence references, full logs or generated
-output artifacts. For example, a missing-required-file code identifies the failed
-rule but does not retain which path was missing or a missing-file counter.
+This is retained proof, not a live reviewer projection. Each selected-image
+finding is also stored as an immutable `checker_result_findings` row that the
+deferred terminal custody trigger compares with the stored result. Current
+contributor and Project Manager history reads list one entry per stored finding
+with its `check_id`, `path`, `line` and level-derived status (a member without
+findings keeps one entry), plus fixed, permission-appropriate messages; raw
+checker messages are not exposed. Contributors never see entries of a
+`task_setup_blocked` run. Future REV packet/current-work presentation must
+expose an authorized bounded subset after routing and review integration. The
+current contract does not include excerpts, per-check evidence references, full
+logs or generated output artifacts.
 
 Reviewer file inspection belongs to the planned lease-scoped ART capability bound
 to the exact `ReviewPacketManifest` and active `ReviewLease`; see
@@ -661,7 +679,7 @@ to the exact `ReviewPacketManifest` and active `ReviewLease`; see
 CHECKERS history does not grant artifact access. A reviewer uses the exact immutable
 Submission and locked context, with checker results as bounded provenance.
 
-A richer finding such as a path, location, excerpt, evidence reference or generated
+A richer finding such as an excerpt, evidence reference or generated
 output needs a typed capability-specific result/evidence schema, visibility rules,
 immutable custody and regression tests before the reviewer contract may promise
 it. This does not introduce a generic metadata store or another checker path.

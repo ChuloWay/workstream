@@ -2,20 +2,22 @@
 
 from uuid import UUID
 
-from sqlalchemy import case, select, tuple_
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.tasks.api.submission_history import SubmissionHistoryTarget
+from app.modules.tasks.api.submission_history import (
+    SubmissionFindingCounts, SubmissionFindingCountsPort, SubmissionHistoryTarget,
+)
 from app.modules.tasks.models import EvidenceItem, Submission, WorkstreamTask
-from app.modules.tasks.revision.models import TaskRevisionExpiration
 from app.modules.tasks.api.submission_history import ContributorSubmissionHistory, ManagementSubmissionHistory
 
 
 class SubmissionHistoryRepository:
     """Read only exact owner columns; caller owns authorization and transaction."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession, *, finding_counts: SubmissionFindingCountsPort):
         self._session = session
+        self._finding_counts = finding_counts
 
     def _targets(self, *, project_id, contributor_id):
         statement = select(
@@ -57,13 +59,11 @@ class SubmissionHistoryRepository:
 
     async def read(self, target, *, manager: bool, submission_id=None, limit=25, after=None):
         schema = ManagementSubmissionHistory if manager else ContributorSubmissionHistory
-        fields = [name for name in schema.model_fields if name not in {"evidence_items", "status", "status_reason"}]
+        computed = {"evidence_items", "status", "finding_counts"}
+        fields = [name for name in schema.model_fields if name not in computed]
         statement = select(
             *(getattr(Submission, name) for name in fields),
-            case((TaskRevisionExpiration.id.is_not(None), "rejected"), else_=Submission.status).label("status"),
-            case((TaskRevisionExpiration.id.is_not(None), "revision_deadline_expired"), else_=None).label("status_reason"),
-        ).outerjoin(TaskRevisionExpiration,
-            TaskRevisionExpiration.source_submission_id == Submission.id,
+            Submission.attempt_status.label("status"),
         ).where(
             Submission.task_id == str(target.task_id),
         )
@@ -74,10 +74,26 @@ class SubmissionHistoryRepository:
         if after is not None:
             statement = statement.where(tuple_(Submission.version, Submission.id) > (after[0], str(after[1])))
         rows = (await self._session.execute(statement.order_by(Submission.version, Submission.id).limit(limit + 1))).mappings().all()
-        values = []
-        for row in rows[:limit]:
-            evidence = (await self._session.execute(select(
-                EvidenceItem.id, EvidenceItem.type, EvidenceItem.label, EvidenceItem.size_bytes,
-            ).where(EvidenceItem.submission_id == row["id"]).order_by(EvidenceItem.id))).mappings().all()
-            values.append(schema(**row, evidence_items=[dict(item) for item in evidence]))
+        page = rows[:limit]
+        ids = tuple(UUID(str(row["id"])) for row in page)
+        evidence: dict[str, list[dict]] = {}
+        if ids:
+            for item in (await self._session.execute(select(
+                EvidenceItem.submission_id, EvidenceItem.id, EvidenceItem.type,
+                EvidenceItem.label, EvidenceItem.size_bytes,
+            ).where(EvidenceItem.submission_id.in_([str(item) for item in ids])).order_by(
+                EvidenceItem.submission_id, EvidenceItem.id,
+            ))).mappings():
+                values = dict(item)
+                evidence.setdefault(str(values.pop("submission_id")), []).append(values)
+        counts = await self._finding_counts.read_finding_counts(ids, manager=manager)
+        values = [
+            schema(
+                **row, evidence_items=evidence.get(str(row["id"]), []),
+                finding_counts=SubmissionFindingCounts(**dict(zip(
+                    ("blocking", "warning", "coverage_incomplete"), counts[UUID(str(row["id"]))],
+                ))),
+            )
+            for row in page
+        ]
         return values, len(rows) > limit

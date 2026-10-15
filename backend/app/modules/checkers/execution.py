@@ -334,7 +334,7 @@ class PostSubmissionExecutor:
                 )
                 completed_at = await repo.now()
                 await repo.write_members(run, result)
-                if result.outcome == "completed":
+                if result.outcome == "completed" and classification.routing != "task_setup_blocked":
                     reference = SelectedPostSubmitCurrentResultReference(
                         **result.model_dump(
                             include=set(SelectedPostSubmitCurrentResultReference.model_fields)

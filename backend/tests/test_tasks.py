@@ -1994,6 +1994,12 @@ async def test_full_task_claim_start_flow_writes_audit_events(
         assert decision.action_id == "task.claim"
         assert decision.actor_id == worker_actor_id
         assert decision.after_facts["allowed"] is True
+        start_event = next(event for event in events if event["to_status"] == "in_progress")
+        assignment = await session.get(TaskAssignment, claim.json()["assignment"]["id"])
+        # Claim time stays assigned_at; start is stamped once, after the claim.
+        assert assignment.started_at is not None
+        assert assignment.assigned_at <= assignment.started_at <= assignment.updated_at
+        assert abs((assignment.started_at - start_event["created_at"]).total_seconds()) < 5
     assert persisted_event is not None
     assert persisted_event.claim_snapshot == {}
 

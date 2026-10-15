@@ -6,6 +6,7 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import (
+    FetchedValue,
     Boolean,
     BigInteger,
     CheckConstraint,
@@ -324,10 +325,11 @@ class WorkstreamTask(Base):
     created_by: Mapped[str] = mapped_column(String(100), nullable=False)
     assigned_to: Mapped[str | None] = mapped_column(Uuid(as_uuid=False), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # PostgreSQL owns this stamp on every committed change, including raw SQL updates.
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
-        onupdate=func.now(),
+        server_onupdate=FetchedValue(),
     )
 
     assignments: Mapped[list[TaskAssignment]] = relationship(
@@ -360,6 +362,7 @@ class TaskAssignment(Base):
         UniqueConstraint(
             "id", "task_id", "contributor_id", name="uq_task_assignments_id_task_contributor"
         ),
+        Index("ix_task_assignments_contributor_updated", "contributor_id", "updated_at", "id"),
         Index(
             "uq_task_assignments_one_active_per_task",
             "task_id",
@@ -389,6 +392,13 @@ class TaskAssignment(Base):
     accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)
+    # Set once by the start transition; PostgreSQL guards it against the started task.
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # PostgreSQL owns this stamp on every committed change.
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+        server_onupdate=FetchedValue(),
+    )
 
     task: Mapped[WorkstreamTask] = relationship(back_populates="assignments", foreign_keys=[task_id])
 
@@ -399,6 +409,22 @@ class Submission(Base):
     __tablename__ = "submissions"
     __table_args__ = (
         CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        CheckConstraint(
+            "attempt_status in ('evaluation_pending','review_pending','accepted',"
+            "'needs_revision','rejected')",
+            name="attempt_status",
+        ),
+        CheckConstraint(
+            "(attempt_status in ('accepted','needs_revision','rejected')) = "
+            "(decided_at is not null)",
+            name="attempt_decision",
+        ),
+        CheckConstraint(
+            "status_reason is null or (attempt_status='rejected' and "
+            "status_reason='revision_deadline_expired')",
+            name="status_reason",
+        ),
+        Index("ix_submissions_contributor_updated", "contributor_id", "updated_at", "id"),
         ForeignKeyConstraint(
             ["task_assignment_id", "task_id", "contributor_id"],
             ["task_assignments.id", "task_assignments.task_id", "task_assignments.contributor_id"],
@@ -521,7 +547,20 @@ class Submission(Base):
         index=True,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Intake liveness fact used by evaluation, routing and replay guards; always "submitted".
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="submitted", index=True)
+    # Outcome of this attempt, written by the deciding owner and guarded by its evidence.
+    attempt_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default="evaluation_pending"
+    )
+    status_reason: Mapped[str | None] = mapped_column(String(40))
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), server_onupdate=FetchedValue()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(),
+        server_onupdate=FetchedValue(),
+    )
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     package_uri: Mapped[str | None] = mapped_column(String(1000))
     package_hash: Mapped[str | None] = mapped_column(String(128))

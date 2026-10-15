@@ -186,7 +186,7 @@ async def test_retry_sql_rejects_unreceipted_terminal_supersession(
         direct_successor = change_request(
             h.request, evaluation_request_id=new_record_id(), evaluation_generation=2,
         )
-        with pytest.raises(IntegrityError, match="terminal checker infrastructure retry requires Operator receipt"):
+        with pytest.raises(IntegrityError, match="terminal checker retry requires Operator receipt"):
             async with h.factory.begin() as session:
                 await evaluation_coordinator(session).reserve_current_evaluation(direct_successor)
         async with h.factory() as session:
@@ -222,7 +222,7 @@ async def test_retry_sql_rejects_crossed_receipt_with_real_authority_participant
             patch.setattr(AsyncSession, "add", omit_only_receipt)
             for field, crossed in substitutions:
                 captured.clear()
-                with pytest.raises(IntegrityError, match="checker retry receipt closure invalid|terminal checker infrastructure retry requires Operator receipt"):
+                with pytest.raises(IntegrityError, match="checker retry receipt closure invalid|terminal checker retry requires Operator receipt"):
                     async with h.factory.begin() as session:
                         created = await checker_retry_service(session, operator).retry(command)
                         assert len(captured) == 1
@@ -364,7 +364,7 @@ async def test_retry_sql_rejects_outbox_payload_with_false_digest(
 
         with monkeypatch.context() as patch:
             patch.setattr(OutboxService, "append", false_digest_append)
-            with pytest.raises(IntegrityError, match="checker retry receipt closure invalid|terminal checker infrastructure retry requires Operator receipt"):
+            with pytest.raises(IntegrityError, match="checker retry receipt closure invalid|terminal checker retry requires Operator receipt"):
                 async with h.factory.begin() as session:
                     await checker_retry_service(session, operator).retry(command)
         async with h.factory() as session:

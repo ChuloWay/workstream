@@ -1500,6 +1500,14 @@ Fields:
 - `accepted_at`
 - `released_at`
 - `status`
+- `started_at`
+- `updated_at`
+
+`assigned_at` is the claim time. The start transition sets `started_at` once,
+and PostgreSQL refuses it unless the assignment is active and its task is
+`in_progress` for that contributor. `updated_at` on TaskAssignment and
+WorkstreamTask is PostgreSQL-owned on every committed change, including raw SQL
+updates.
 
 The v0.1 baseline excludes the retired persisted human
 owner to `contributor_id`. The non-null `varchar(36)` value is protected by
@@ -1624,8 +1632,26 @@ Status:
 
 - submitted
 
-Submission status records the immutable packet version state. Task status carries
-evaluation, human review, revision, acceptance, and rejection lifecycle states.
+Submission `status` records the immutable packet version state and is the
+intake-liveness fact that evaluation, routing and replay guards check. Task
+status carries the task's evaluation, human review, revision, acceptance, and
+rejection lifecycle states.
+
+Attempt outcome (`attempt_status`, published as the read `status`):
+
+- `evaluation_pending` — created with the Submission and kept through
+  post-submit checks, infrastructure retries and coverage holds
+- `review_pending` — an `allow_review` routing manifest sent it to human review
+- `accepted` — a FinalAcceptance exists for this Submission
+- `needs_revision` — a `needs_revision` routing manifest exists
+- `rejected` — a revision expiration receipt names this Submission as its
+  source; `status_reason` is `revision_deadline_expired`
+
+The deciding owner requests each transition in its own transaction. A
+PostgreSQL guard refuses any transition without that owner's evidence, derives
+`decided_at` (and the reason) from it, and refuses edits to a recorded
+decision. `updated_at` is PostgreSQL-owned on every committed change. Human
+review decisions do not yet write outcomes.
 
 ## EvidenceItem
 

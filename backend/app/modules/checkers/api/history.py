@@ -6,15 +6,20 @@ from pydantic import BaseModel, ConfigDict
 
 
 CheckerStatus = Literal["queued", "running", "completed", "infrastructure_failed"]
-CheckerResultStatus = Literal["passed", "warning", "failed"]
+CheckerResultStatus = Literal["passed", "warning", "failed", "coverage_incomplete"]
 CheckerSeverity = Literal["info", "low", "medium", "high", "critical", "error"]
 CheckerRoutingRecommendation = Literal["not_evaluated", "allow_review", "needs_revision", "task_setup_blocked"]
 CheckerOutcomeSource = Literal["none", "auto_checker"]
 
 class ContributorCheckerResult(BaseModel):
+    """One stored finding, or one member that reported no findings."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
     id: UUID
     checker_name: str
+    check_id: str | None
+    path: str | None
+    line: int | None
     status: CheckerResultStatus
     severity: CheckerSeverity
     worker_message: str | None

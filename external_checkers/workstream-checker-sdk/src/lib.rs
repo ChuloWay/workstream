@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 pub const REQUEST_SCHEMA_VERSION: &str = "external_checker_request.v1";
-pub const RESULT_SCHEMA_VERSION: &str = "external_checker_result.v1";
+pub const RESULT_SCHEMA_VERSION: &str = "external_checker_result.v2";
 pub const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_RESULT_BYTES: usize = 65_536;
 
@@ -39,10 +39,22 @@ pub struct ValidatedRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Finding {
+    pub check_id: String,
     pub code: String,
     pub level: String,
     pub message: String,
     pub path: Option<String>,
+    pub line: Option<u64>,
+}
+
+/// Mirrors the Python `Identifier`: lowercase start, then `[a-z0-9_.-]`, at most 100.
+fn is_identifier(value: &str) -> bool {
+    let mut characters = value.chars();
+    value.len() <= 100
+        && characters.next().is_some_and(|first| first.is_ascii_lowercase())
+        && characters.all(|item| {
+            item.is_ascii_lowercase() || item.is_ascii_digit() || matches!(item, '_' | '.' | '-')
+        })
 }
 
 pub fn canonical_json(value: &Value) -> Result<String, ContractError> {
@@ -439,15 +451,21 @@ pub fn validate_result(value: &Value, request: &ValidatedRequest) -> Result<(), 
         let has_error = findings.iter().try_fold(false, |found, item| {
             let finding: Finding = serde_json::from_value(item.clone())
                 .map_err(|_| ContractError("finding is invalid"))?;
-            if finding.code.is_empty()
-                || finding.code.len() > 100
+            if !is_identifier(&finding.check_id)
+                || !is_identifier(&finding.code)
                 || finding.message.is_empty()
                 || finding.message.chars().count() > 4096
-                || !matches!(finding.level.as_str(), "info" | "warning" | "error")
+                || !matches!(
+                    finding.level.as_str(),
+                    "info" | "warning" | "error" | "coverage_incomplete"
+                )
                 || finding
                     .path
                     .as_ref()
                     .is_some_and(|path| path.is_empty() || path.chars().count() > 1000)
+                || finding
+                    .line
+                    .is_some_and(|line| finding.path.is_none() || !(1..=10_000_000).contains(&line))
             {
                 return Err(ContractError("finding is invalid"));
             }
@@ -735,10 +753,12 @@ mod tests {
         let mut unicode_result = result.clone();
         unicode_result["verdict"] = Value::String("failed".into());
         unicode_result["findings"] = serde_json::json!([{
+            "check_id": "unicode",
             "code": "unicode",
             "level": "error",
             "message": "汉".repeat(2_000),
             "path": "路".repeat(500),
+            "line": 7,
         }]);
         let mut body = unicode_result.as_object().unwrap().clone();
         body.remove("result_digest");
@@ -746,5 +766,33 @@ mod tests {
             Value::String(canonical_hash(&Value::Object(body)).unwrap());
         validate_result(&unicode_result, &request)
             .expect("character ceilings must match Python rather than UTF-8 bytes");
+
+        let resign = |mut value: Value| {
+            let mut body = value.as_object().unwrap().clone();
+            body.remove("result_digest");
+            value["result_digest"] = Value::String(canonical_hash(&Value::Object(body)).unwrap());
+            value
+        };
+        let mut coverage = result.clone();
+        coverage["findings"] = serde_json::json!([{
+            "check_id": "coverage.files",
+            "code": "coverage.unreadable",
+            "level": "coverage_incomplete",
+            "message": "one file could not be evaluated",
+            "path": "src/main.rs",
+            "line": null,
+        }]);
+        validate_result(&resign(coverage.clone()), &request)
+            .expect("coverage gaps alone keep a passed verdict");
+        let mut orphan_line = coverage.clone();
+        orphan_line["findings"][0]["path"] = Value::Null;
+        orphan_line["findings"][0]["line"] = serde_json::json!(3);
+        assert!(validate_result(&resign(orphan_line), &request).is_err());
+        let mut missing_check = coverage.clone();
+        missing_check["findings"][0].as_object_mut().unwrap().remove("check_id");
+        assert!(validate_result(&resign(missing_check), &request).is_err());
+        let mut uppercase_check = coverage;
+        uppercase_check["findings"][0]["check_id"] = Value::String("Coverage".into());
+        assert!(validate_result(&resign(uppercase_check), &request).is_err());
     }
 }

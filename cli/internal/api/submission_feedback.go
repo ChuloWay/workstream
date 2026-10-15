@@ -83,14 +83,21 @@ func preparationFeedback(raw json.RawMessage) (json.RawMessage, error) {
 			}
 			for _, f := range external.Findings {
 				var finding struct {
+					CheckID string  `json:"check_id"`
 					Code    string  `json:"code"`
 					Level   string  `json:"level"`
 					Message string  `json:"message"`
 					Path    *string `json:"path"`
+					Line    *int64  `json:"line"`
 				}
-				fields, e := contextObject(f, &finding, []string{"code", "level", "message"}, nil)
-				if e != nil || !requiredNullable(fields, "path") || finding.Code == "" || finding.Message == "" ||
-					(finding.Level != "info" && finding.Level != "warning" && finding.Level != "error") {
+				fields, e := contextObject(f, &finding, []string{"check_id", "code", "level", "message"}, nil)
+				if e != nil || !requiredNullable(fields, "path", "line") || finding.CheckID == "" || finding.Code == "" ||
+					finding.Message == "" || (finding.Line != nil && (finding.Path == nil || *finding.Line < 1)) {
+					return nil, bad
+				}
+				switch finding.Level {
+				case "info", "warning", "error", "coverage_incomplete":
+				default:
 					return nil, bad
 				}
 			}
