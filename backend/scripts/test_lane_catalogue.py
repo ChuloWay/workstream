@@ -34,6 +34,9 @@ class TestLane:
 
 
 SHARED_FOUNDATION_MODULES = (
+    "tests/test_artifact_architecture.py",
+    "tests/architecture/test_module_boundaries.py",
+    "tests/architecture/test_test_structure_boundary.py",
     "tests/reviews/lifecycle/test_transitions.py",
     "tests/reviews/lifecycle/test_authority_binding.py",
     "tests/artifacts/test_review_packet_contract.py",
@@ -610,10 +613,7 @@ LANES = (
             "tests/reviews/acceptance/test_storage.py",
             "tests/reviews/acceptance/test_migration.py",
             "tests/test_database_reset.py",
-            "tests/test_artifact_architecture.py",
-            "tests/architecture/test_module_boundaries.py",
             "tests/architecture/test_authorization_boundary.py",
-            "tests/architecture/test_test_structure_boundary.py",
             "tests/test_identifier_inventory.py",
             "tests/test_record_id_collection.py",
             "tests/test_ci_lane_catalogue.py",

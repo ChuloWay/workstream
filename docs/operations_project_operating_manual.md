@@ -440,13 +440,17 @@ External origin qualification and webhook drop notifications are future adapter 
 ## Task Release Checklist
 
 This is the target release checklist, not an inventory of current runtime guards.
-The contribution-policy lock described above is already enforced.
+The contribution-policy lock described above is already enforced. Task-local
+acceptance/rejection criteria are optional supplementary text; SCREEN and
+RELEASE accept omission/null while retaining required title/description, guide
+custody and policy locks.
 
 Before moving a task to `READY`:
 
 - task belongs to project
 - active guide version attached
-- acceptance criteria exist
+- nonblank task title and description exist
+- acceptance requirements are defined by the project guide
 - required output is explicit
 - submission artifact requirements are clear
 - the task has locked the guide-bound ContributionPolicyVersion, containing
@@ -468,7 +472,7 @@ The ready gate confirms:
 
 - guide version is active
 - task fits project scope
-- acceptance criteria are objective enough to review
+- the guide-defined acceptance requirements are objective enough to review
 - submission artifact requirements are clear
 - the task has locked the guide-bound, complete, binding-valid
   `ContributionPolicyVersion`; either role rule may be explicitly unpaid
@@ -543,7 +547,7 @@ Before review decision:
 
 - read the Project Guide identity/version/activation sequence stamped on the
   exact leased Submission; no guide rebase occurs during review
-- read task acceptance criteria
+- read locked guide acceptance requirements and any supplied task-local criteria
 - inspect checker results
 - inspect evidence
 - inspect prior findings if resubmission

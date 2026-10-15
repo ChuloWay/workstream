@@ -38,15 +38,16 @@ the reviewer decision contract. Authorization recovery never creates a review
 decision. Adjudication is a future separately approved lifecycle and adds no
 v0.1 decision or state.
 
-Checker routing recommendations use a separate contract. A checker can recommend that a submission is ready for review, needs contributor revision, needs checker retry handling, or cannot proceed because the task's locked setup is incomplete. A checker cannot accept or reject work.
+Checker routing recommendations use a separate contract. The current selected
+completion classifier emits `allow_review` or `needs_revision`; infrastructure
+failure is `not_evaluated` and follows the separately authorized retry owner.
+A checker cannot accept or reject work.
 
-Canonical checker routing recommendation values are:
-
-- not_evaluated
-- allow_review
-- needs_revision
-- checker_retry
-- task_setup_blocked
+Retained contracts and historical evidence also use `checker_retry` and
+`task_setup_blocked`. Their presence does not activate a selected production
+outcome. The current classifier cannot emit `task_setup_blocked`; a
+manager-visible setup-fault hold and repair workflow remain future safety work,
+as recorded in the [capability ledger](roadmap_status.md).
 
 `allow_review` must not be stored as `accept`. It is checker evidence of no
 blocking issue, not a product decision or permission. TASK reads the exact
@@ -56,12 +57,14 @@ under its own exact authority after validating all required evidence. Only an
 actual human Review stores an `accept` review decision. The false branch
 creates FinalAcceptance and the submitter contribution without any Review,
 ReviewLease or reviewer contribution. CHECKERS still cannot accept or reject
-work, and this planned branch remains unavailable until its runtime proof lands.
+work. Runtime activation remains governed by the reviewed lifecycle authorization;
+implemented behavior and hosted readiness are tracked separately in the
+[capability ledger](roadmap_status.md).
 
-`task_setup_blocked` must not be stored as `needs_revision`. It means the task's
-locked contract or policy context is incomplete, stale, or unsafe to review. An
-authorized covered Project Manager must repair or re-screen the task before
-contributor-facing revision or human review can continue.
+Retained `task_setup_blocked` evidence must not be relabeled as `needs_revision`.
+It denotes a problem with locked project setup, not contributor work. Future
+manager hold/repair must preserve that distinction and exact locked lineage;
+this decision does not authorize changing an already-submitted task's rules.
 
 `needs_revision` can appear in both contracts, but the source must be explicit:
 

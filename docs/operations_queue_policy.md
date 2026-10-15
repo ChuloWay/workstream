@@ -30,7 +30,8 @@ Owner:
 Exit requirement:
 
 - project guide attached
-- acceptance criteria present
+- nonblank task title and description
+- acceptance requirements defined by the project guide
 - required output defined
 
 ### Screening
@@ -47,7 +48,7 @@ Exit requirement:
 
 - project guide version locked
 - immutable guide source snapshot id/hash locked
-- acceptance criteria are concrete
+- locked guide acceptance requirements are concrete
 - effective project submission artifact policy hash locked
 - project `PreSubmitCheckerPolicy` compiled bundle hash locked
 - approved generated project `PostSubmitCheckerPolicy` is locked with matching
@@ -263,10 +264,14 @@ Every operating day starts with:
 
 ## Transition Guards
 
+Task-local acceptance and rejection criteria are optional supplementary text,
+not required Task fields for SCREEN or RELEASE. Omission/null does not waive
+the locked project guide or its approved policy requirements.
+
 | Transition | Required Records |
 | --- | --- |
-| `DRAFT -> SCREENING` | project id, locked guide candidate, task source/description fields, acceptance and rejection criteria |
-| `SCREENING -> READY` | screening decision, guide version lock, guide source snapshot id/hash lock, acceptance criteria, effective project submission artifact policy hash lock, project `PreSubmitCheckerPolicy` compiled bundle hash lock, approved generated project `PostSubmitCheckerPolicy` with matching provenance, review policy, revision policy, and immutable task-locked ContributionPolicyVersion |
+| `DRAFT -> SCREENING` | project id, locked guide candidate, nonblank task title/description and task source fields |
+| `SCREENING -> READY` | screening decision, guide version lock, guide source snapshot id/hash lock, guide-defined acceptance requirements, effective project submission artifact policy hash lock, project `PreSubmitCheckerPolicy` compiled bundle hash lock, approved generated project `PostSubmitCheckerPolicy` with matching provenance, review policy, revision policy, and immutable task-locked ContributionPolicyVersion |
 | `READY -> CLAIMED` | TaskAssignment copies the task's exact `locked_contribution_policy_version_id`; no active-policy lookup |
 | `IN_PROGRESS -> SUBMITTED` | blocking pre-submit checks passed against the exact outer ZIP, submission packet, server-generated submission-bundle manifest and verified admission binding, evidence references, contributor attestation |
 | `SUBMITTED -> EVALUATION_PENDING` | immutable submission version, locked post-submit checker policy id/version/hash/body copied from the task context |

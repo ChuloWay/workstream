@@ -1407,10 +1407,11 @@ async def test_screening_maps_unavailable_active_policy_context_to_controlled_er
         assert stored.locked_contribution_policy_version_id is None
 
 
-async def test_screening_rejects_missing_task_contract_fields(task_client: AsyncClient) -> None:
+@pytest.mark.parametrize("field", ["title", "description"])
+async def test_screening_rejects_missing_task_contract_fields(task_client: AsyncClient, field: str) -> None:
     project = await create_active_project(task_client)
     payload = complete_task_payload()
-    payload.pop("acceptance_criteria")
+    payload[field] = " \n"
     task = await create_draft_task(task_client, project["id"], payload)
 
     response = await task_client.post(
@@ -1420,7 +1421,11 @@ async def test_screening_rejects_missing_task_contract_fields(task_client: Async
     )
 
     assert response.status_code == 422
-    assert "acceptance_criteria" in response.json()["detail"]
+    assert field in response.json()["detail"]
+    async with db_session.get_session_factory()() as session:
+        stored = await session.get(WorkstreamTask, task["id"])
+        assert stored.status == "draft"
+        assert stored.locked_contribution_policy_version_id is None
 
 
 async def test_screening_locks_exact_activated_policy_context(

@@ -76,7 +76,9 @@ Reads authorized immutable and operational evidence without mutation.
 ## Task Creation Workflow
 
 1. Select the covered project.
-2. Create a draft with its title, description, acceptance criteria and skill tags.
+2. Create a draft with its title and description, adding task-local acceptance
+   criteria and skill tags when useful. Task-local criteria are optional,
+   including through screening/release; the guide supplies governed requirements.
    An active guide is not required to create the draft.
 3. Before screening and release, confirm the active approved guide and policies,
    including the required artifact outputs and a published ContributionPolicyVersion

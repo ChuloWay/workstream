@@ -42,6 +42,27 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     )
 
 
+def test_architecture_inspections_share_capacity_without_losing_nodes() -> None:
+    modules = {
+        "tests/test_artifact_architecture.py",
+        "tests/architecture/test_module_boundaries.py",
+        "tests/architecture/test_test_structure_boundary.py",
+    }
+    schema = next(lane for lane in LANES if lane.name == "schema_contracts")
+    assert modules.isdisjoint(schema.modules)
+    for module in modules:
+        assert catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_SHARED_LANES
+        assert (
+            tuple(lane.name for lane in LANES if module in lane.modules)
+            == catalogue.PARTITIONED_SHARED_LANES
+        )
+    nodes = [f"{module}::test_inspection[{index}]" for module in modules for index in range(256)]
+    manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
+    assert Counter(row["nodeid"] for row in manifest["nodes"]) == Counter(nodes)
+    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_SHARED_LANES)
+    assert runner.build_manifest("a" * 40, nodes) == manifest
+
+
 def test_checker_delivery_and_routing_preparation_partition_every_node_once() -> None:
     delivery = {
         "tests/checkers/default/test_contract.py",
@@ -120,9 +141,7 @@ def test_project_intake_partitions_across_the_project_family() -> None:
     nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
     manifest = runner.build_manifest("a" * 40, list(reversed(nodes)))
     assert {row["nodeid"] for row in manifest["nodes"]} == set(nodes)
-    assert {row["lane"] for row in manifest["nodes"]} == set(
-        catalogue.PARTITIONED_PROJECT_LANES
-    )
+    assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_PROJECT_LANES)
 
 
 def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
@@ -163,16 +182,10 @@ def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
     )
     for lane_names, modules in expected_families:
         assert all(modules_by_lane[name] == set(modules) for name in lane_names)
-        assert all(
-            catalogue.PARTITION_LANES_BY_MODULE[module] == lane_names
-            for module in modules
-        )
+        assert all(catalogue.PARTITION_LANES_BY_MODULE[module] == lane_names for module in modules)
 
     static_contracts = {
-        "tests/test_artifact_architecture.py",
-        "tests/architecture/test_module_boundaries.py",
         "tests/architecture/test_authorization_boundary.py",
-        "tests/architecture/test_test_structure_boundary.py",
         "tests/test_identifier_inventory.py",
         "tests/test_record_id_collection.py",
         "tests/test_ci_lane_catalogue.py",
@@ -208,8 +221,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
     """A catalogue-internal move across semantic families must fail this contract."""
     expected = {
         "shared": (
-            231,
-            "2b4af700ea941ffddbd6f0789fff9227528deebc2b8dadbed9ec74d772ab8a91",
+            234,
+            "5b03621152431541df7c85861e26c80f333ce25d81274faf77632ea377a8eaef",
         ),
         "project": (
             191,
@@ -671,10 +684,7 @@ def test_routing_authorization_proofs_use_the_project_partition():
     }
     assert set(catalogue.ROUTING_AUTH_PREPARATION_MODULES) == expected
     for module in expected:
-        assert (
-            catalogue.PARTITION_LANES_BY_MODULE[module]
-            == catalogue.PARTITIONED_PROJECT_LANES
-        )
+        assert catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_LANES
         assert tuple(lane.name for lane in LANES if module in lane.modules) == (
             catalogue.PARTITIONED_PROJECT_LANES
         )

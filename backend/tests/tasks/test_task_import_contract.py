@@ -63,6 +63,8 @@ def test_duplicate_ids_report_zero_based_row_index():
     ("estimated_time_minutes", True), ("estimated_time_minutes", "30"), ("estimated_time_minutes", 0),
     ("skill_tags", [" "]), ("skill_tags", [True]), ("source_ref", "s3://bucket/path"),
     ("description", "nul\x00"), ("title", "\ud800"),
+    ("acceptance_criteria", 42), ("acceptance_criteria", ["complete"]),
+    pytest.param("acceptance_criteria", "x" * 50001, id="oversized-acceptance-criteria"),
     ("import_batch_id", "client-chosen-id"), ("status", "ready"),
 ])
 def test_row_errors_are_indexed_and_server_custody_is_not_caller_input(field, value):
