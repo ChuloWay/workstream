@@ -36,6 +36,10 @@ Allowed files:
   `docs/operations_operator_workflow.md`, `docs/product_first_user_flows.md`: align
   current operator/readiness guidance with optional task-local criteria and
   mandatory guide-governed requirements.
+- `docs/spec_chunk_8_submission_artifact_policy_checkers.md`,
+  `docs/template_project_guide.md`: distinguish optional task-local criteria
+  from mandatory guide-level acceptance requirements, including the retired
+  checker record's misleading current-screening statement.
 - `.commitrail/changes/pilot02-bulk-transitions-cli.md`: reconcile only its
   current outcome paragraph with this correction; retain historical evidence.
 - `backend/scripts/test_lane_catalogue.py`: move only the three non-database
@@ -136,3 +140,13 @@ only the screening validator and its proof, not revision behavior. Reconcile
 shared TASK/spec/roadmap edits before merge. No local spreadsheet exports are
 present in this worktree. Hosted first-layer verification remains #555 after
 the known screening and revision corrections land.
+
+## External documentation correction
+
+The review of `c4e918306` found two remaining contradictory statements: the
+checker record described criteria as a current screening prerequisite, and the
+guide template listed them as a required task field. Both now explicitly permit
+omitted/null task-local criteria while retaining mandatory guide-level acceptance
+requirements. The checker record retains its historical status and links current
+contracts. Runtime code and tests are unchanged. The roadmap already records this
+optional-criteria behavior; no additional capability or roadmap change is needed.

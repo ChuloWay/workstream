@@ -282,7 +282,7 @@ If task setup checks fail, the durable checker run records:
 - `routing_recommendation = task_setup_blocked`
 - `outcome_source = auto_checker`
 
-Project setup checks include missing acceptance criteria or missing locked project/policy context. These are not worker revision outcomes.
+In this retired checker implementation, project setup checks included missing task-local acceptance criteria or missing locked project/policy context. These were not worker revision outcomes. Current task-local criteria are optional; the project guide must still define acceptance requirements.
 
 Routing priority is deterministic:
 
@@ -293,7 +293,14 @@ Routing priority is deterministic:
 
 When one checker run contains both task setup failures and worker-fixable submission failures, `task_setup_blocked` wins because the project manager must fix the task contract before the worker can receive a meaningful revision request.
 
-Chunk 8 documents `task_setup_blocked` in its schema and implements the routing contract, but normal API flows are expected to prevent task setup defects before submission. For example, current task screening requires acceptance criteria before a task can be released. Chunk 8 tests must verify the enum/source-of-truth contract and may verify task setup routing through controlled service/repository setup if no normal FastAPI path can produce a finalized submission with that defect. A later admin repair workflow can add a real API path for this route.
+This historical Chunk 8 contract used `task_setup_blocked` for task setup defects.
+Current screening requires title, description and approved guide/policy context;
+task-local `acceptance_criteria` may be omitted or null through screening and
+release. The project guide must define the acceptance requirements, and tasks
+retain their locked guide and policy identities. Omitted task-local criteria
+alone do not constitute a setup defect. See the current
+[TASK contract](spec_chunk_4_task_queue_assignment.md) and
+[checker framework](architecture_checker_framework.md) for implemented behavior.
 
 Chunk 9 owns applying the lifecycle transition.
 
