@@ -683,8 +683,10 @@ authority and immutable attempt/audit custody. `operations.submission_gate.repai
 remains unavailable. Neither grants a public override or bypasses checker results.
 
 Critical- and high-severity checker failures cannot be converted into review
-readiness by an administrative grant. A covered Project Manager may repair task
-setup under `project.task.manage`. Future Operator submission-gate repair and current hidden checker retry must
+readiness by an administrative grant. Covered Project Manager authority under
+`project.task.manage` remains limited to existing lifecycle/context-repair
+operations; it does not implement the future post-submit setup-fault hold.
+Future Operator submission-gate repair and current hidden checker retry must
 remain limited to their exact registered recovery purposes.
 
 Recovery requires:
