@@ -13,6 +13,7 @@ from app.modules.outbox.models import OutboxEvent
 from tests.checkers.execution.support import ControlledSelectedExecution, live_executor, reserve
 from tests.checkers.external.support import post_registry_spec
 from tests.post_submit_materialization_helpers import material_fixture
+from tests.tasks.post_submit_routing.backfill_support import assert_backfill_matches_live
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 
 COVERAGE = {
@@ -169,3 +170,29 @@ async def test_coverage_return_spends_no_revision_round(tmp_path, isolated_datab
         assert outcome == (
             "needs_revision", "checker_coverage_incomplete", True, 0, "needs_revision",
         )
+        await assert_backfill_matches_live(h.factory)
+
+
+async def test_coverage_gap_routes_to_review_pending_when_review_is_required(
+    tmp_path, isolated_database_env,
+):
+    async with remediation_source(
+        tmp_path, isolated_database_env, recommendation="allow_review",
+        human_review_required=True, findings=(COVERAGE,),
+    ) as h:
+        async with h.factory() as session, session.begin():
+            routed = await task_post_submit_outcome(session, h.factory).apply(
+                h.envelope, current_generation=None,
+            )
+        assert routed.routing_recommendation == "allow_review"
+        assert routed.final_acceptance_id is None
+        async with h.factory() as session:
+            outcome = (await session.execute(text("""
+                SELECT s.attempt_status, s.status_reason, s.decided_at,
+                  (SELECT count(*) FROM public.final_acceptances), t.status
+                FROM public.submissions s JOIN public.workstream_tasks t ON t.id=s.task_id
+                WHERE s.id=:id
+            """), {"id": h.request.submission_id})).one()
+        # Awaiting a reviewer is not a decision: no time, no reason, no acceptance.
+        assert outcome == ("review_pending", None, None, 0, "review_pending")
+        await assert_backfill_matches_live(h.factory)

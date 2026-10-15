@@ -177,6 +177,28 @@ _ROUND_COUNTS = {
     ),
     "public.guard_revision_preparation()": (
         (
+            " auth_context jsonb; auth_digest text; source_round integer;",
+            " auth_context jsonb; auth_digest text; source_round integer;\n"
+            " window_requested_at timestamptz; window_deadline_at timestamptz;",
+        ),
+        (
+            """   IF NEW.sequence<>1 OR NEW.requested_at IS DISTINCT FROM m.created_at
+    OR NEW.deadline_at IS DISTINCT FROM m.created_at + make_interval(hours=>policy.revision_deadline_hours)""",
+            """   -- Consecutive coverage returns keep the first return's revision window.
+   SELECT inherited.requested_at, inherited.deadline_at
+     INTO window_requested_at, window_deadline_at
+     FROM public.submissions previous
+     JOIN public.task_revision_preparations inherited ON inherited.submission_id=previous.id
+     WHERE s.status_reason='checker_coverage_incomplete'
+       AND previous.id=s.supersedes_submission_id
+       AND previous.status_reason='checker_coverage_incomplete'
+     ORDER BY inherited.sequence LIMIT 1;
+   IF NEW.sequence<>1
+    OR NEW.requested_at IS DISTINCT FROM coalesce(window_requested_at, m.created_at)
+    OR NEW.deadline_at IS DISTINCT FROM coalesce(window_deadline_at,
+         m.created_at + make_interval(hours=>policy.revision_deadline_hours))""",
+        ),
+        (
             """ WHERE counted.task_assignment_id=NEW.assignment_id
    AND counted.version<=NEW.source_submission_version;""",
             """ WHERE counted.task_assignment_id=NEW.assignment_id
@@ -202,7 +224,10 @@ UPDATE public.submissions s SET attempt_status='review_pending'
   WHERE m.submission_id=s.id AND m.routing_recommendation='allow_review'
     AND m.human_review_required;
 UPDATE public.submissions s SET attempt_status='needs_revision', decided_at=m.created_at,
-    status_reason=CASE WHEN r.failed_count=0 THEN 'checker_coverage_incomplete' END
+    status_reason=CASE WHEN r.failed_count=0 AND EXISTS (
+      SELECT 1 FROM public.checker_result_findings f
+      WHERE f.checker_run_id=r.id AND f.level='coverage_incomplete')
+      THEN 'checker_coverage_incomplete' END
   FROM public.task_post_submit_routing_manifests m
   JOIN public.checker_runs r ON r.id=m.checker_run_id
   WHERE m.submission_id=s.id AND m.routing_recommendation='needs_revision';
@@ -275,7 +300,10 @@ BEGIN
     NEW.decided_at := NULL; NEW.status_reason := NULL;
   ELSIF OLD.attempt_status='evaluation_pending' AND NEW.attempt_status='needs_revision' THEN
     -- A return without failed members is a checker coverage gap; it spends no round.
-    SELECT m.created_at, CASE WHEN r.failed_count=0 THEN 'checker_coverage_incomplete' END
+    SELECT m.created_at, CASE WHEN r.failed_count=0 AND EXISTS (
+        SELECT 1 FROM public.checker_result_findings f
+        WHERE f.checker_run_id=r.id AND f.level='coverage_incomplete')
+      THEN 'checker_coverage_incomplete' END
       INTO evidence_at, coverage_reason
       FROM public.task_post_submit_routing_manifests m
       JOIN public.checker_runs r ON r.id=m.checker_run_id

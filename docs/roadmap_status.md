@@ -132,7 +132,8 @@ and its governed effects atomically; B8 supplies hidden completion delivery.
 contributor-correctable result through the existing TASK/AUTH operation to
 `needs_revision` under either locked ReviewPolicy mode. PILOT-08 enforces the task-locked revision cap at public preparation, new
 Submission creation and PostgreSQL insertion (initial round 0, then at most the
-configured number of revisions). Each committed fixable failure freezes a fresh
+configured number of revisions; a checker coverage return spends no round and
+consecutive coverage returns keep the first return's window). Each committed fixable failure freezes a fresh
 policy deadline and a complete kept/rebased/blocked revision context. Only
 committed immutable resubmission ends the old window; upload and ready admission
 do not. Contributor

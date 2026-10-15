@@ -66,7 +66,9 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 - Record such a return as `needs_revision` with `status_reason`
   `checker_coverage_incomplete` and exclude it from every revision-round count
   (capacity guard, revision-preparation guard, TASK preparation, submission
-  context and replay), allowing `next_revision_round` 0.
+  context and replay), allowing `next_revision_round` 0. Consecutive coverage
+  returns keep the first return's revision window (Python and the PostgreSQL
+  preparation guard), so a repeated gap still reaches the revision deadline.
 - Add `attempt_status`, `status_reason`, `decided_at` and DB-maintained
   `updated_at` to `submissions`, set by the existing deciding operations
   (dispatch, post-submit routing, shared false-policy acceptance, revision
@@ -82,8 +84,9 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   feedback findings, revision context round) and their integration fixtures.
 - Update the authorization OpenAPI field-set assertions, the CI lane catalogue
   for the new test modules, the journey probe's outcome assertions, the Alembic
-  environment head pin, and current docs (README, checker framework, data model,
-  authorization spec, roadmap).
+  environment head pin, and current docs (README revision-round sentence,
+  checker framework, data model, lifecycle state machine, first-user flows,
+  roadmap).
 - Refuse the upgrade, before any DDL, when retained `external_checker_result.v1`
   evidence exists, as earlier migrations do for evidence that needs an explicit
   preservation design.
@@ -120,6 +123,10 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 - `check_id` is required in v2 so every stored finding is attributable to the
   check that produced it. `coverage_incomplete` is evidence about the checker,
   not the contributor, so it never costs a revision round.
+- A coverage return spends no round, which alone would let a persistent gap
+  return the work forever. Keeping the first return's window across
+  consecutive coverage returns bounds that loop with the existing revision
+  expiry instead of adding a separate coverage cap (human decision).
 - The review requirement is the task's locked ReviewPolicy, read through the
   PROJECTS port that TASK routing already uses. The completion coordinator
   returns the stored routing, which terminal custody already verified against
@@ -132,7 +139,9 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 - [ ] `coverage_incomplete` without errors reaches `review_pending` under a
   true ReviewPolicy and returns to the contributor under a false one, recorded
   as `checker_coverage_incomplete` with `next_revision_round` 0; it never
-  auto-accepts and never leaves the task in `evaluation_pending`.
+  auto-accepts and never leaves the task in `evaluation_pending`. Consecutive
+  coverage returns keep the first window, and later failures still spend the
+  full locked allowance.
 - [ ] Routing, false-policy acceptance and revision expiry write the matching
   `attempt_status`/`decided_at`/`status_reason` atomically; SQL rejects each
   transition without its evidence and rejects edits to a final status.

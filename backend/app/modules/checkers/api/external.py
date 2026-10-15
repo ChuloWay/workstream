@@ -526,8 +526,9 @@ ExternalCheckerFindingLevel = Literal["info", "warning", "error", "coverage_inco
 class ExternalCheckerFinding(ExternalCheckerValue):
     """Sanitized work result; policy later decides whether failure blocks.
 
-    ``coverage_incomplete`` reports work the checker could not evaluate. It is
-    evidence about the checker, never a contributor-fixable failure.
+    ``coverage_incomplete`` reports work the checker could not evaluate. It never
+    fails the verdict or costs a revision round; locked ReviewPolicy routing sends
+    it to a reviewer or back to the contributor.
     """
 
     check_id: Identifier
@@ -556,8 +557,8 @@ def safe_finding_path(path: str) -> bool:
     parts = path.split("/")
     return not (
         "\\" in path or path.startswith("/")
-        or any(ord(character) < 32 or ord(character) == 127
-               or unicodedata.category(character) == "Cf" for character in path)
+        or any(unicodedata.category(character) in {"Cc", "Cf", "Zl", "Zp"}
+               for character in path)
         or any(part in {"", ".", ".."} or part.endswith((" ", ".")) for part in parts)
         or ":" in parts[0]
     )

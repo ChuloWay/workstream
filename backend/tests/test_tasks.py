@@ -121,7 +121,7 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
     with pytest.raises(ValueError, match="version is invalid"):
         SubmissionPredecessorFacts(submission_id=new_record_id(), version=0, revision_round=1)
     with pytest.raises(ValueError, match="revision round is invalid"):
-        SubmissionPredecessorFacts(submission_id=new_record_id(), version=3, revision_round=0)
+        SubmissionPredecessorFacts(submission_id=new_record_id(), version=3, revision_round=-1)
     with pytest.raises(ValueError, match="reference is empty"):
         TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
             project_id=new_record_id(),

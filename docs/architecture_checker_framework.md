@@ -606,7 +606,9 @@ otherwise it is `needs_revision` and returns to the contributor. TASK records
 that return as `needs_revision` with `status_reason`
 `checker_coverage_incomplete`, and neither Python nor PostgreSQL counts it as a
 revision round, so the next attempt keeps its round. The normal revision
-deadline still applies. The deferred terminal-custody trigger recomputes the
+deadline still applies, and consecutive coverage returns keep the first
+return's revision window instead of starting a new one, so a checker that keeps
+reporting the same gap cannot return the work indefinitely. The deferred terminal-custody trigger recomputes the
 same route from the stored result and locked policy. Pre-submit intake treats a
 coverage gap like any non-error finding: it is shown in feedback and does not
 block admission, because intake never decides acceptance. Run-level

@@ -94,6 +94,30 @@ async def head_for_source(session, routing_manifest_id):
     ))
 
 
+async def _inherited_coverage_window(session, manifest):
+    """Consecutive coverage returns keep the first return's revision window.
+
+    A coverage return spends no revision round, so without this a checker that
+    keeps reporting the same gap could return the work forever. PostgreSQL
+    applies the same rule when it validates the preparation.
+    """
+    # Read columns, not ORM objects: the outcome reason was just written in SQL.
+    source = (await session.execute(select(
+        Submission.status_reason, Submission.supersedes_submission_id,
+    ).where(Submission.id == str(manifest.submission_id)))).one_or_none()
+    if source is None or source.status_reason != COVERAGE_RETURN_REASON:
+        return None
+    if source.supersedes_submission_id is None or await session.scalar(select(
+        Submission.status_reason,
+    ).where(Submission.id == source.supersedes_submission_id)) != COVERAGE_RETURN_REASON:
+        return None
+    return (await session.execute(select(
+        TaskRevisionPreparation.requested_at, TaskRevisionPreparation.deadline_at,
+    ).where(
+        TaskRevisionPreparation.submission_id == source.supersedes_submission_id,
+    ).order_by(TaskRevisionPreparation.sequence).limit(1))).one_or_none()
+
+
 async def prepare_revision(session, *, manifest, candidate, audit_event_id, predecessor=None,
                            authorization_decision_id=None, repair_receipt: RevisionRepairReceipt | None = None):
     """Freeze an authorized source once; caller retains all locks and owns commit."""
@@ -107,8 +131,9 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
     if predecessor is not None and repair_receipt is None:
         raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
     now = await session.scalar(select(func.clock_timestamp()))
-    requested_at = predecessor.requested_at if predecessor else manifest.created_at
-    deadline_at = (predecessor.deadline_at if predecessor else
+    window = predecessor or await _inherited_coverage_window(session, manifest)
+    requested_at = window.requested_at if window else manifest.created_at
+    deadline_at = (window.deadline_at if window else
                    requested_at + timedelta(hours=candidate.revision_deadline_hours))
     limit = predecessor.max_revision_rounds if predecessor else candidate.max_revision_rounds
     # A checker coverage return is not a revision round (PostgreSQL counts alike).

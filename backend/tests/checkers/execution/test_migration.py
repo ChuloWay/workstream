@@ -166,3 +166,54 @@ async def test_empty_database_installs_execution_custody(isolated_database_env, 
             }.isdisjoint(columns)
         finally:
             await conn.close()
+
+
+async def test_result_contract_upgrade_refuses_retained_v1_results(
+    isolated_database_env, migration_lock,
+):
+    """0048 stops before any DDL when v1 result evidence would lose its contract."""
+    import asyncpg
+    from app.db import session as db_session
+
+    await db_session.dispose_engine()
+    url = isolated_database_env.replace("+asyncpg", "")
+    with migration_lock():
+        conn = await asyncpg.connect(url)
+        try:
+            await conn.execute("drop schema public cascade; create schema public")
+        finally:
+            await conn.close()
+        await asyncio.to_thread(command.upgrade, _config(), "0047_revision_recovery")
+        conn = await asyncpg.connect(url)
+        try:
+            # Represent one retained v1 member row in this owned database; its
+            # owner rows are not the claim, so only this table's guards are lifted.
+            async with conn.transaction():
+                await conn.execute("""
+                    DO $$ DECLARE c record; BEGIN
+                      FOR c IN SELECT conname FROM pg_constraint
+                        WHERE conrelid='public.checker_results'::regclass AND contype='f' LOOP
+                        EXECUTE format('ALTER TABLE public.checker_results DROP CONSTRAINT %I', c.conname);
+                      END LOOP;
+                    END $$""")
+                await conn.execute("ALTER TABLE public.checker_results DISABLE TRIGGER USER")
+                await conn.execute(
+                    "insert into checker_results (id, checker_run_id, task_id, submission_id,"
+                    " checker_name, status, severity, member_order, definition_version,"
+                    " implementation_version, code, failure_category, counters)"
+                    " values ($1,$2,$3,$4,'post','passed','info',0,"
+                    " 'external_checker_result.v1','1','ok','none','{}')",
+                    new_record_id(), new_record_id(), new_record_id(), new_record_id(),
+                )
+                await conn.execute("ALTER TABLE public.checker_results ENABLE TRIGGER USER")
+            schema = "select count(*) from information_schema.tables where table_schema='public'"
+            tables = await conn.fetchval(schema)
+            with pytest.raises(
+                IntegrityError,
+                match="retained external checker v1 results require an explicit preservation design",
+            ):
+                await asyncio.to_thread(command.upgrade, _config(), "head")
+            assert await conn.fetchval("select version_num from alembic_version") == "0047_revision_recovery"
+            assert await conn.fetchval(schema) == tables
+        finally:
+            await conn.close()

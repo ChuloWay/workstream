@@ -326,6 +326,7 @@ def test_v2_findings_carry_check_location_and_coverage_level() -> None:
 @pytest.mark.parametrize("path", [
     "../x", "/etc/passwd", "a//b", "a/./b", "src\\main.rs", "dir/ ", "dir/.",
     "c:/x", "line\nbreak", "bidi\u202eexe.txt", "tab\tname", "",
+    "next\x85line", "para\u2029graph", "line\u2028sep",
 ])
 def test_finding_paths_must_be_safe_relative_archive_paths(path) -> None:
     with pytest.raises(ValidationError):

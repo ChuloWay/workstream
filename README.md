@@ -980,7 +980,9 @@ intake and acknowledges that exact preparation. Each assignment's initial
 attempt is round 0; a limit of 2 permits revisions 1 and 2. Each committed
 `needs_revision` starts a fresh PostgreSQL-time window from the failed attempt's
 locked policy. Only immutable resubmission ends it; upload, replay and PM context
-repair preserve its original window.
+repair preserve its original window. A checker coverage return
+(`checker_coverage_incomplete`) spends no round, but consecutive coverage
+returns keep the first return's window, so a repeated gap still expires.
 At expiry, PostgreSQL-timed outbox delivery records the outstanding attempt's
 rejection, releases its assignment and returns the task to ready. The next
 claimant starts round 0 with their own allowance. Original Submissions and
