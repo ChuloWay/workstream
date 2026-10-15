@@ -44,6 +44,11 @@ Allowed files:
   checker record's misleading current-screening statement.
 - `.commitrail/changes/pilot02-bulk-transitions-cli.md`: reconcile only its
   current outcome paragraph with this correction; retain historical evidence.
+- `backend/tests/authorization/task_reads/test_visibility.py`,
+  `backend/tests/tasks/test_task_detail.py`,
+  `backend/tests/tasks/test_work_context.py`: isolate each owned-state visibility
+  fixture in its own publicly created/claimed task, retaining all states,
+  audiences and negative cases without fabricating expiry transitions.
 - `backend/scripts/test_lane_catalogue.py`: move only the three non-database
   architecture inspection modules from the overloaded schema lane into the
   existing shared-foundation partition.
@@ -160,3 +165,19 @@ passages still presenting the removed criteria-presence checker as selectable.
 Their affected POST contract sections now describe the existing approved external
 bindings and explicitly preserve optional task-local criteria. Retained predecessor
 body provenance remains documented; no runtime or stored data changes are made.
+
+## Visibility fixture correction discovered during verification
+
+The fresh documentation-head CI run exposed an existing unordered-state fixture:
+`test_task_read_contributor_visibility` reused one claimed task across nine
+states, occasionally attempting `needs_revision -> ready` without an expiry
+receipt. PostgreSQL correctly rejected both public-read parametrizations.
+`test_task_detail_owned_states` and `test_work_context_owned_state_matrix` failed
+with the same pattern in the task-B lane. These tests inspect
+visibility, not lifecycle transitions. Use one publicly created/claimed task per
+state, deliberately visit `needs_revision` before `ready`, and retain exact
+persisted assignment/owner checks, all nine states and every negative case.
+No production guard, lifecycle behavior, test selection or timeout changes.
+Validate all four affected cases with real PostgreSQL/MinIO and rerun hosted CI.
+The separate project-C lane hit its unchanged deadline with 459/470 completed
+and no assertion failure; its previous successful run took 1,149 seconds.

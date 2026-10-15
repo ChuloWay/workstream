@@ -190,25 +190,30 @@ async def test_task_detail_management_states(task_client):
 
 async def test_task_detail_owned_states(task_client, monkeypatch):
     project = await create_active_project(task_client)
-    task = await create_ready_task(task_client, project["id"])
+    tasks = {state: await create_ready_task(task_client, project["id"]) for state in sorted(STATES)}
     grant = await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], "detail-states")
-    claimed = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
-    assert claimed.status_code == 200, claimed.text
     factory, seen = db_session.get_session_factory(), set()
-    for state in STATES:
+    seen_tasks = set()
+    for state in ("needs_revision", "ready", *sorted(STATES - {"needs_revision", "ready"})):
+        task = tasks[state]
+        claimed = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
+        assert claimed.status_code == 200, claimed.text
+        assignment_id = claimed.json()["assignment"]["id"]
+        seen_tasks.add(task["id"])
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, task["id"])
             assert row.locked_contribution_policy_version_id is not None
             row.status = state  # Includes locked draft; ordinary unassigned draft is tested separately.
         async with factory() as session:
             row = await session.get(WorkstreamTask, task["id"])
-            assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == row.id))
+            assignment = await session.get(TaskAssignment, assignment_id)
             assert row.status == state and assignment.status == "active"
+            assert assignment.task_id == row.id
             assert row.assigned_to == assignment.contributor_id == grant["actor_profile_id"]
             result = await read_once(session, READS[0], request_for(READS[0], project["id"], row.id, UUID(row.assigned_to)))
             assert result is not None and (result.task_id, result.status) == (UUID(row.id), state)
             seen.add(result.status)
-    assert seen == STATES and len(seen) == 9
+    assert seen == STATES and len(seen) == len(seen_tasks) == 9
 
 
 @pytest.mark.parametrize("method", READS)
