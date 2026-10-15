@@ -66,6 +66,7 @@ def _matches(record: OutboxEvent, value: OutboxAppendInput, digest: str) -> bool
         and record.idempotency_key == value.idempotency_key
         and record.payload_digest == digest
         and record.payload == value.payload
+        and record.not_before_at == value.not_before_at
     )
 
 
@@ -76,7 +77,7 @@ class OutboxService:
         """Bind the participant to one caller session; never commit or publish."""
         self._repository = OutboxRepository(session)
 
-    async def require_existing(self, event_id: UUID, value: OutboxAppendInput) -> None:
+    async def require_existing(self, event_id: UUID | None, value: OutboxAppendInput) -> UUID:
         """Validate exact immutable custody without inserting or locking delivery state."""
         validated = _validated_input(value)
         digest = canonical_json_hash(validated.payload)
@@ -86,6 +87,7 @@ class OutboxService:
             _raise_persistence_error()
         if record is None or not _matches(record, validated, digest):
             _raise_idempotency_conflict()
+        return UUID(str(record.event_id))
 
     async def append(self, value: OutboxAppendInput) -> OutboxAppendResult:
         """Create one event or return its exact idempotent replay."""

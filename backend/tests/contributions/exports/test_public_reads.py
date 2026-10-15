@@ -2,6 +2,7 @@
 
 import csv
 import json
+from datetime import UTC, datetime, timedelta
 from io import StringIO
 
 import pytest
@@ -9,14 +10,242 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 from app.core.identifiers import new_record_id
+from app.core.config import decode_pagination_cursor_hmac_secret, get_settings
 from app.db.session import get_session_factory
 from app.modules.actors.models import ActorIdentityLink
 from app.modules.actors.api import ServiceIdentity
+from app.modules.contributions.records.pagination import ContributionExportCursorCodec
 from tests.authentication.support import issue_asymmetric_token
-from tests.contributions.records.support import authorized_submitter_source, rows
+from tests.contributions.records.support import (
+    authorized_submitter_source, reviewer_contribution_source, insert_record,
+    award_values, insert_award, rows,
+)
 from tests.authorization.admin_access.support import create_project
-from .support import source_actor, export_path, export_audits
+from .support import source_actor, export_path, export_audits, prepared_reviewer_sibling
 from uuid import uuid4
+
+
+@pytest.mark.parametrize("paid", [False, True])
+async def test_project_json_and_csv_pages_have_the_same_complete_contributions(
+    tmp_path, auth_database_env, admin_access, paid,
+):
+    """A CSV award row never consumes another contribution's page position."""
+    async with reviewer_contribution_source(tmp_path, auth_database_env, paid=paid) as h:
+        async with h.factory() as session, session.begin():
+            await insert_record(session, h.reviewer_record)
+            for award in await award_values(session, h.reviewer_record):
+                await insert_award(session, award)
+        sibling = await prepared_reviewer_sibling(h)
+        async with h.factory() as session, session.begin():
+            await insert_record(session, sibling)
+            for award in await award_values(session, sibling):
+                await insert_award(session, award)
+        project = h.reviewer_record.project_id
+        reader = await admin_access.signed.actor(f"paged-project-reader-{paid}")
+        await admin_access.signed.grant(admin_access.admin, reader,
+                                       role="project_manager", project_id=project)
+        path = export_path(project)
+
+        json_items = []
+        cursor = None
+        for page_number in range(2):
+            params = {"limit": 1}
+            if cursor is not None:
+                params["cursor"] = cursor
+            response = await admin_access.signed.client.get(path, params=params, headers=reader.headers)
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert len(body["items"]) == 1
+            json_items.extend(body["items"])
+            cursor = body["next_cursor"]
+            assert bool(cursor) is (page_number == 0)
+
+        csv_rows = []
+        cursor = None
+        for page_number in range(2):
+            params = {"limit": 1, "format": "csv"}
+            if cursor is not None:
+                params["cursor"] = cursor
+            response = await admin_access.signed.client.get(path, params=params, headers=reader.headers)
+            assert response.status_code == 200, response.text
+            page_rows = list(csv.DictReader(StringIO(response.text, newline="")))
+            assert len({row["contribution_id"] for row in page_rows}) == 1
+            assert len(page_rows) == (2 if paid else 1)
+            csv_rows.extend(page_rows)
+            cursor = response.headers.get("X-Workstream-Next-Cursor")
+            assert bool(cursor) is (page_number == 0)
+
+        expected_ids = {str(h.reviewer_record.id), str(sibling.id)}
+        assert {item["contribution_id"] for item in json_items} == expected_ids
+        assert [row["contribution_id"] for row in csv_rows[::(2 if paid else 1)]] == [
+            item["contribution_id"] for item in json_items
+        ]
+        for item in json_items:
+            selected = [row for row in csv_rows if row["contribution_id"] == item["contribution_id"]]
+            assert {(row["award_id"], row["quantity"]) for row in selected if row["award_id"]} == {
+                (award["award_id"], award["quantity"]) for award in item["awards"]
+            }
+            if not paid:
+                assert item["awards"] == []
+                assert selected[0]["award_id"] == selected[0]["quantity"] == ""
+        assert len(await export_audits(h.factory)) == 4
+
+
+async def test_project_cursor_is_bound_to_caller_project_filters_format_and_limit(
+    tmp_path, auth_database_env, admin_access,
+):
+    async with reviewer_contribution_source(tmp_path, auth_database_env) as h:
+        async with h.factory() as session, session.begin():
+            await insert_record(session, h.reviewer_record)
+        sibling = await prepared_reviewer_sibling(h)
+        async with h.factory() as session, session.begin():
+            await insert_record(session, sibling)
+        project = h.reviewer_record.project_id
+        reader = await admin_access.signed.actor("cursor-project-reader")
+        other = await admin_access.signed.actor("cursor-other-reader")
+        foreign = await create_project("Cursor foreign project")
+        for actor, scope in ((reader, project), (reader, foreign), (other, project)):
+            await admin_access.signed.grant(admin_access.admin, actor,
+                                           role="project_manager", project_id=scope)
+        path = export_path(project)
+        first = await admin_access.signed.client.get(
+            path, params={"limit": 1}, headers=reader.headers,
+        )
+        assert first.status_code == 200, first.text
+        cursor = first.json()["next_cursor"]
+        assert cursor and len(first.json()["items"]) == 1
+        replay = await admin_access.signed.client.get(
+            path, params={"limit": 1, "cursor": cursor}, headers=reader.headers,
+        )
+        assert replay.status_code == 200, replay.text
+        repeated = await admin_access.signed.client.get(
+            path, params={"limit": 1, "cursor": cursor}, headers=reader.headers,
+        )
+        assert repeated.status_code == 200 and repeated.json()["items"] == replay.json()["items"]
+        assert repeated.json()["next_cursor"] == replay.json()["next_cursor"] is None
+        assert {first.json()["items"][0]["contribution_id"], replay.json()["items"][0]["contribution_id"]} == {
+            str(h.reviewer_record.id), str(sibling.id)
+        }
+
+        middle = len(cursor) // 2
+        altered = cursor[:middle] + ("A" if cursor[middle] != "A" else "B") + cursor[middle + 1:]
+        cases = (
+            (path, reader.headers, {"limit": 1, "cursor": altered}),
+            (path, reader.headers, {"limit": 1, "cursor": "x" * 513}),
+            (path, other.headers, {"limit": 1, "cursor": cursor}),
+            (export_path(foreign), reader.headers, {"limit": 1, "cursor": cursor}),
+            (path, reader.headers, {"limit": 1, "cursor": cursor,
+                                    "contribution_type": "accepted_submission"}),
+            (path, reader.headers, {"limit": 1, "cursor": cursor,
+                                    "recorded_from": "2026-01-01T00:00:00Z"}),
+            (path, reader.headers, {"limit": 1, "cursor": cursor, "format": "csv"}),
+            (path, reader.headers, {"limit": 2, "cursor": cursor}),
+        )
+        errors = []
+        for selected_path, headers, params in cases:
+            response = await admin_access.signed.client.get(selected_path, params=params, headers=headers)
+            assert response.status_code == 422, response.text
+            errors.append(response.json()["error"]["code"])
+        assert len(set(errors)) == 1
+        assert errors[0] == "contribution_export_cursor_invalid"
+
+
+async def test_expired_cursor_is_rejected_and_successful_first_page_prunes_its_slot(
+    tmp_path, auth_database_env, admin_access,
+):
+    """Expiry cannot be replayed; a committed later read reclaims the stale slot."""
+    async with reviewer_contribution_source(tmp_path, auth_database_env) as h:
+        async with h.factory() as session, session.begin():
+            await insert_record(session, h.reviewer_record)
+        sibling = await prepared_reviewer_sibling(h)
+        async with h.factory() as session, session.begin():
+            await insert_record(session, sibling)
+        project = h.reviewer_record.project_id
+        reader = await admin_access.signed.actor("expired-cursor-project-reader")
+        await admin_access.signed.grant(admin_access.admin, reader,
+                                       role="project_manager", project_id=project)
+        path = export_path(project)
+        first = await admin_access.signed.client.get(
+            path, params={"limit": 1}, headers=reader.headers,
+        )
+        assert first.status_code == 200 and first.json()["next_cursor"], first.text
+        original_cursor = first.json()["next_cursor"]
+        async with h.factory() as session, session.begin():
+            stored = (await session.execute(text("""
+                SELECT id,actor_profile_id,allocation_slot,query_digest,member_ids
+                FROM public.contribution_export_snapshots WHERE actor_profile_id=:actor
+            """), {"actor": str(reader.id)})).mappings().one()
+            await session.execute(text("""
+                DELETE FROM public.contribution_export_snapshots WHERE id=:id
+            """), {"id": stored["id"]})
+            created = datetime.now(UTC) - timedelta(hours=2)
+            expires = created + timedelta(hours=1)
+            await session.execute(text("""
+                INSERT INTO public.contribution_export_snapshots
+                  (id,actor_profile_id,allocation_slot,query_digest,member_ids,created_at,expires_at)
+                VALUES (:id,:actor,:slot,:digest,CAST(:members AS uuid[]),:created,:expires)
+            """), {"id": stored["id"], "actor": stored["actor_profile_id"],
+                   "slot": stored["allocation_slot"], "digest": stored["query_digest"],
+                   "members": stored["member_ids"], "created": created, "expires": expires})
+        secret = get_settings().pagination_cursor_hmac_secret
+        assert secret is not None
+        expired_cursor = ContributionExportCursorCodec(
+            decode_pagination_cursor_hmac_secret(secret),
+        ).encode(query_digest=stored["query_digest"], snapshot_id=stored["id"],
+                 next_offset=1, expires_at=expires)
+        expired = await admin_access.signed.client.get(
+            path, params={"limit": 1, "cursor": expired_cursor}, headers=reader.headers,
+        )
+        assert expired.status_code == 422, expired.text
+        assert expired.json()["error"]["code"] == "contribution_export_cursor_invalid"
+        fresh = await admin_access.signed.client.get(
+            path, params={"limit": 1}, headers=reader.headers,
+        )
+        assert fresh.status_code == 200 and fresh.json()["next_cursor"], fresh.text
+        async with h.factory() as session:
+            rows = (await session.execute(text("""
+                SELECT id,allocation_slot FROM public.contribution_export_snapshots
+                WHERE actor_profile_id=:actor
+            """), {"actor": str(reader.id)})).all()
+        assert len(rows) == 1 and rows[0][0] != stored["id"] and rows[0][1] == 1
+        for cursor in (original_cursor, expired_cursor):
+            replay = await admin_access.signed.client.get(
+                path, params={"limit": 1, "cursor": cursor}, headers=reader.headers,
+            )
+            assert replay.status_code == 422, replay.text
+            assert replay.json()["error"]["code"] == "contribution_export_cursor_invalid"
+
+
+async def test_revoked_project_reader_cannot_continue_even_with_a_malformed_cursor(
+    tmp_path, auth_database_env, admin_access,
+):
+    async with reviewer_contribution_source(tmp_path, auth_database_env) as h:
+        async with h.factory() as session, session.begin():
+            await insert_record(session, h.reviewer_record)
+        sibling = await prepared_reviewer_sibling(h)
+        async with h.factory() as session, session.begin():
+            await insert_record(session, sibling)
+        project = h.reviewer_record.project_id
+        reader = await admin_access.signed.actor("revoked-cursor-project-reader")
+        grant = await admin_access.signed.grant(admin_access.admin, reader,
+                                              role="project_manager", project_id=project)
+        first = await admin_access.signed.client.get(
+            export_path(project), params={"limit": 1}, headers=reader.headers,
+        )
+        assert first.status_code == 200 and first.json()["next_cursor"], first.text
+        revoked = await admin_access.signed.revoke(admin_access.admin, grant)
+        assert revoked.status_code == 200, revoked.text
+        for cursor in (first.json()["next_cursor"], "not-a-cursor", "x" * 513):
+            denied = await admin_access.signed.client.get(
+                export_path(project), params={"limit": 1, "cursor": cursor}, headers=reader.headers,
+            )
+            assert denied.status_code == 404, denied.text
+            assert denied.json()["error"]["code"] == "contribution_export_not_found"
+        evidence = await export_audits(h.factory)
+        assert [row["after_facts"]["allowed"] for row in evidence] == [
+            True, False, False, False,
+        ]
+        assert all(row["project_id"] is row["target_ref_id"] is None for row in evidence[1:])
 
 
 @pytest.mark.parametrize("instruments", [(), ("money",), ("money", "project_points")])

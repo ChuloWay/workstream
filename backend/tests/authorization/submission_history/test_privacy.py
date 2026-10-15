@@ -53,6 +53,8 @@ async def test_fixed_projection_and_selected_columns(task_client, monkeypatch, s
                 assert all(set(nested) == nested_fields for nested in item[nested_key])
                 if checker:
                     assert bool(item["results"]) == (state == "completed")
+                else:
+                    assert item["status_reason"] is None
                 # Actual selected columns, rather than searching predicates that
                 # legitimately compute a boolean inside PostgreSQL. No raw body,
                 # URI/hash, aggregate count, or receipt is loaded into Python.

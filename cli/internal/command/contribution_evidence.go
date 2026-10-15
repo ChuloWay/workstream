@@ -1,11 +1,15 @@
 package command
 
 import (
+	"bufio"
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"unicode"
+	"unicode/utf16"
 
 	"github.com/Flow-Research/workstream/cli/internal/api"
 	"github.com/spf13/cobra"
@@ -40,11 +44,9 @@ func addContributionEvidence(root, project *cobra.Command, client func() (*api.C
 				return err
 			}
 			if destination != "" {
-				body, err := apiClient.ContributionCSV(cmd.Context(), scoped, filters)
-				if err != nil {
-					return err
-				}
-				if err := publishContributionCSV(destination, body); err != nil {
+				if err := publishContributionCSV(destination, func(writer io.Writer) error {
+					return apiClient.ContributionCSV(cmd.Context(), scoped, filters, writer)
+				}); err != nil {
 					return err
 				}
 				if *output == "json" {
@@ -53,14 +55,21 @@ func addContributionEvidence(root, project *cobra.Command, client func() (*api.C
 				_, err = io.WriteString(stdout, "Contribution CSV saved (earned evidence, not payment status).\n")
 				return err
 			}
-			result, err := apiClient.Contributions(cmd.Context(), scoped, filters)
+			staged, err := stageContributionJSON(func(writer io.Writer) error {
+				return apiClient.Contributions(cmd.Context(), scoped, filters, writer)
+			})
 			if err != nil {
 				return err
 			}
+			defer os.Remove(staged.Name())
+			defer staged.Close()
 			if *output == "json" {
-				return writeSafeJSON(stdout, result.Raw)
+				return writeSafeContributionJSON(stdout, staged)
 			}
-			return writeTaskContextFields(stdout, []contextField{{"Contributions (earned evidence, not payment status)", result.Raw}})
+			if _, err := io.WriteString(stdout, "Contributions (earned evidence, not payment status): "); err != nil {
+				return err
+			}
+			return writeSafeContributionJSON(stdout, staged)
 		}
 		if scoped {
 			project.AddCommand(cmd)
@@ -70,7 +79,78 @@ func addContributionEvidence(root, project *cobra.Command, client func() (*api.C
 	}
 }
 
-func publishContributionCSV(destination string, body []byte) error {
+type contributionOutputWriter struct {
+	destination io.Writer
+	failure     error
+}
+
+func (w *contributionOutputWriter) Write(value []byte) (int, error) {
+	written, err := w.destination.Write(value)
+	if err == nil && written != len(value) {
+		err = io.ErrShortWrite
+	}
+	if err != nil && w.failure == nil {
+		w.failure = err
+	}
+	return written, err
+}
+
+func stageContributionJSON(write func(io.Writer) error) (*os.File, error) {
+	file, err := os.CreateTemp("", ".workstream-contributions-")
+	if err != nil {
+		return nil, commandError{"file_io_error", "cannot create private contribution output"}
+	}
+	cleanup := func() {
+		file.Close()
+		os.Remove(file.Name())
+	}
+	tracked := &contributionOutputWriter{destination: file}
+	if err := write(tracked); err != nil {
+		cleanup()
+		if tracked.failure != nil {
+			return nil, commandError{"file_io_error", "cannot stage contribution output"}
+		}
+		return nil, err
+	}
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		cleanup()
+		return nil, commandError{"file_io_error", "cannot read complete contribution output"}
+	}
+	return file, nil
+}
+
+func writeSafeContributionJSON(destination io.Writer, source io.Reader) error {
+	reader := bufio.NewReader(source)
+	writer := bufio.NewWriter(destination)
+	for {
+		r, _, err := reader.ReadRune()
+		if err == io.EOF {
+			if err := writer.WriteByte('\n'); err != nil {
+				return err
+			}
+			return writer.Flush()
+		}
+		if err != nil {
+			return err
+		}
+		if r >= 0x7f && (unicode.IsControl(r) || unicode.Is(unicode.Cf, r)) {
+			if r <= 0xffff {
+				if _, err := fmt.Fprintf(writer, "\\u%04x", r); err != nil {
+					return err
+				}
+			} else {
+				hi, lo := utf16.EncodeRune(r)
+				if _, err := fmt.Fprintf(writer, "\\u%04x\\u%04x", hi, lo); err != nil {
+					return err
+				}
+			}
+		} else if _, err := writer.WriteRune(r); err != nil {
+			return err
+		}
+	}
+}
+
+func publishContributionCSV(destination string, write func(io.Writer) error) error {
 	root, err := os.OpenRoot(filepath.Dir(destination))
 	if err != nil {
 		return commandError{"invalid_arguments", "cannot open CSV destination directory"}
@@ -87,7 +167,11 @@ func publishContributionCSV(destination string, body []byte) error {
 	}
 	defer root.Remove(temporary)
 	defer file.Close()
-	if _, err := file.Write(body); err != nil {
+	tracked := &contributionOutputWriter{destination: file}
+	if err := write(tracked); err != nil {
+		if tracked.failure == nil {
+			return err
+		}
 		return commandError{"file_io_error", "cannot write contribution CSV"}
 	}
 	if err := file.Sync(); err != nil {

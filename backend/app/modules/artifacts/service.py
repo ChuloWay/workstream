@@ -14,6 +14,7 @@ from app.core.identifiers import new_record_id
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.exc import IntegrityError
+from app.db.errors import integrity_constraint_name
 
 from app.core.config import Settings
 from app.core.hashing import canonical_json_hash
@@ -1314,6 +1315,39 @@ class ArtifactStorageOrchestrator:
         *,
         submission_task_contexts: TaskSubmissionContextPort | None = None,
     ) -> str:
+        claim_id, claim_generation = claimed.id, claimed.execution_generation
+        try:
+            return await self._complete_verification_transaction(
+                claim_id, claim_generation, executor_id, expected_facts, outcome,
+                observed_sha256, observed_size,
+                submission_task_contexts=submission_task_contexts,
+            )
+        except IntegrityError as exc:
+            if integrity_constraint_name(exc) != "ck_revision_admission_deadline_expired":
+                raise
+            # The failed root rolled back every verifier and admission effect.
+            # Recheck the same job fence under fresh authority and retain a
+            # terminal conflict instead of retrying an expired admission.
+            return await self._complete_verification_transaction(
+                claim_id, claim_generation, executor_id, expected_facts, outcome,
+                observed_sha256, observed_size,
+                submission_task_contexts=submission_task_contexts,
+                publication_conflict=True,
+            )
+
+    async def _complete_verification_transaction(
+        self,
+        claim_id: str,
+        claim_generation: int,
+        executor_id: UUID,
+        expected_facts: ArtifactVerificationAuthorityFacts,
+        outcome: str,
+        observed_sha256: str | None,
+        observed_size: int | None,
+        *,
+        submission_task_contexts: TaskSubmissionContextPort | None = None,
+        publication_conflict: bool = False,
+    ) -> str:
         from app.modules.artifacts.submission_admission import (
             SubmissionBundleAdmissionPublicationError,
             SubmissionBundleAdmissionPublisher,
@@ -1321,12 +1355,11 @@ class ArtifactStorageOrchestrator:
 
         publisher = SubmissionBundleAdmissionPublisher(self._session)
         retained_parents = None
-        publication_conflict = False
         async with self._session.begin():
-            if outcome == "verified":
+            if outcome == "verified" and not publication_conflict:
                 try:
                     retained_parents = await publisher.lock_retained_submission_parents(
-                        verification_job_id=claimed.id,
+                        verification_job_id=claim_id,
                         task_contexts=submission_task_contexts,
                     )
                 except SubmissionBundleAdmissionPublicationError:
@@ -1338,8 +1371,8 @@ class ArtifactStorageOrchestrator:
                 phase="terminal",
                 idempotency_key=executor_id,
             )
-            job = await self._repo.lock_verification_job(claimed.id)
-            if not _matching_job_fence(job, executor_id, claimed.execution_generation):
+            job = await self._repo.lock_verification_job(claim_id)
+            if not _matching_job_fence(job, executor_id, claim_generation):
                 self._authority.discard()
                 return "stale"
             assert job is not None
@@ -1350,7 +1383,7 @@ class ArtifactStorageOrchestrator:
                 return "conflict"
             content = await self._repo.lock_content(replica.content_id)
             terminal_facts = _verification_authority_facts(
-                job, replica, attempt, executor_id, claimed.execution_generation
+                job, replica, attempt, executor_id, claim_generation
             )
             if terminal_facts != expected_facts:
                 self._authority.discard()
@@ -2511,6 +2544,7 @@ class ArtifactAdmissionService:
                 "selected_pre_submit_locked_context_changed"
             ) from exc
         predecessor = task.predecessor
+        revision = task.revision_context
         if (
             task.contributor_id != reservation.actor_profile_id
             or task.task_id != reservation.task_id
@@ -2521,6 +2555,17 @@ class ArtifactAdmissionService:
             != lineage.predecessor_submission_version
             or task.checker_remediation_manifest_id
             != lineage.checker_remediation_manifest_id
+            or (predecessor is not None and (
+                revision is None or revision.disposition != "ready"
+                or revision.source_submission_id != predecessor.submission_id
+                or revision.source_routing_manifest_id != task.checker_remediation_manifest_id
+            ))
+            or lineage.revision_preparation_id != (
+                revision.preparation_id if revision is not None else None
+            )
+            or lineage.revision_preparation_sha256 != (
+                revision.preparation_sha256 if revision is not None else None
+            )
             or locked.project_id != reservation.project_id
             or locked.guide_id != lineage.guide_id
             or locked.guide_version != lineage.guide_version

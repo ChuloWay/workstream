@@ -11,7 +11,10 @@ from app.modules.outbox.api import OutboxHandler
 class HandlerRegistry:
     """Exact immutable registration set with no default or dynamic discovery."""
 
-    def __init__(self, entries: Iterable[tuple[str, int, OutboxHandler]]) -> None:
+    def __init__(
+        self, entries: Iterable[tuple[str, int, OutboxHandler]], *,
+        replay_safe: frozenset[tuple[str, int]] = frozenset(),
+    ) -> None:
         """Reject duplicate and malformed registrations during composition."""
         handlers = {}
         for event_type, version, handler in entries:
@@ -30,6 +33,13 @@ class HandlerRegistry:
             ):
                 raise ValueError("outbox registration is invalid")
             handlers[event_type, version] = handler
+        if (type(replay_safe) is not frozenset
+                or any(type(key) is not tuple or len(key) != 2
+                       or type(key[0]) is not str or type(key[1]) is not int
+                       for key in replay_safe)
+                or not replay_safe.issubset(handlers)):
+            raise ValueError("replay-safe handlers must be explicitly registered")
+        self._replay_safe = replay_safe
         self._handlers = MappingProxyType(handlers)
 
     @property
@@ -40,3 +50,7 @@ class HandlerRegistry:
     def get(self, event_type: str, version: int) -> OutboxHandler | None:
         """Unknown types remain unavailable, never inferred or acknowledged."""
         return self._handlers.get((event_type, version))
+
+    def can_retry_unknown(self, event_type: str, version: int) -> bool:
+        """Only explicitly receipt-idempotent handlers may repeat an unknown call."""
+        return (event_type, version) in self._replay_safe

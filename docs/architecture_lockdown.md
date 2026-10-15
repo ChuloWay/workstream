@@ -235,7 +235,7 @@ For guide and context resolution, TaskAssignment contributes only its `task_id`;
 it still retains required contributor, assignment, status, and frozen submitter
 contribution-policy attribution. Each immutable Submission stamps the exact
 Project Guide identity, version, and activation sequence used by that attempt.
-After a human `needs_revision` Review, preparation compares the complete prior
+After a committed checker or human `needs_revision`, preparation compares the complete prior
 stamped context with all applicable current guide and policy selectors. Exact
 component matches keep; every changed valid component rebases together;
 incomplete, inconsistent, revoked, or unsafe context blocks for manager repair.
@@ -266,8 +266,8 @@ is part of the complete governing work context. Guide activation binds one
 `ContributionPolicyVersion`; task readiness locks it before claimability, and
 TaskAssignment copies it, Submission stamps the attempt value, and ReviewLease
 copies that stamp without claim-time selection.
-Publication never silently changes existing work. A human `needs_revision`
-may atomically rebase the continuing Task and TaskAssignment for the next
+Publication never silently changes existing work. Checker or human
+`needs_revision` preparation may atomically rebase the continuing Task and TaskAssignment for the next
 submission attempt while the completed lease and prior history remain
 immutable. Either rule may be
 explicitly unpaid and therefore create no award.
@@ -383,9 +383,13 @@ These ideas remain architecture-compatible, but they are not part of the first b
 
 ## Canonical Names
 
+Task-local `acceptance_criteria` is optional and may be omitted or null. The
+project guide must still define acceptance requirements; tasks retain their
+locked guide and policy identities. A missing optional task field alone is not
+a setup defect.
+
 Use these names consistently:
 
-- `check_acceptance_criteria_present`
 - `ContributionRecord`
 - `ContributionPolicyVersion`
 - `CompensationAward`

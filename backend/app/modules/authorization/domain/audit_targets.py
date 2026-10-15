@@ -8,6 +8,7 @@ from app.modules.authorization.domain.post_submit_routing import PostSubmitRouti
 from app.modules.authorization.domain.post_submit import PostSubmitResourceContext
 from app.modules.authorization.domain.pre_submit import PreSubmitResourceContext
 from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
+from app.modules.authorization.domain.revision_expiry import RevisionExpiryResourceContext
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.guide_proposals import GuideProposalResourceContext
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
@@ -53,8 +54,8 @@ def project_authority_audit_target(
     if type(resource) is ReviewLifecycleActivationContract:
         return None, resource.resource_type, str(resource.resource_id), "joint_lifecycle_control", str(resource.resource_id)
     if type(resource) is TaskImportBatchResourceContext:
-        return (str(resource.scope_project_id), resource.resource_type, str(resource.resource_id),
-                resource.resource_type, str(resource.resource_id))
+        project_id, resource_id = str(resource.scope_project_id), str(resource.resource_id)
+        return project_id, resource.resource_type, resource_id, resource.resource_type, resource_id
     if type(resource) is ContributionProjectReadResourceContext:
         if matched_scope_project_id != resource.scope_project_id:
             return None
@@ -71,23 +72,17 @@ def project_authority_audit_target(
     if type(resource) is AssignmentInvalidationResourceContext:
         project_id = str(resource.scope_project_id)
         return project_id, "task", str(resource.resource_id), "project", project_id
+    if type(resource) is RevisionExpiryResourceContext:
+        project_id = str(resource.scope_project_id)
+        return project_id, "task", str(resource.resource_id), "project", project_id
     if isinstance(resource, (TaskAuthorityResourceContext, QueueReadResourceContext, HistoryReadResourceContext)):
         project_id = str(resource.scope_project_id)
         return project_id, "project", project_id, "project", project_id
     if isinstance(resource, ProjectCreateResourceContext):
-        return (
-            None, "project_create_operation", str(resource.resource_id),
-            "project", str(resource.requested_project_id),
-        )
+        return None, "project_create_operation", str(resource.resource_id), "project", str(resource.requested_project_id)
     if isinstance(resource, ExternalCheckerRegistryResourceContext):
         entry_id = str(resource.resource_id)
-        return (
-            None,
-            resource.resource_type,
-            entry_id,
-            resource.resource_type,
-            entry_id,
-        )
+        return None, resource.resource_type, entry_id, resource.resource_type, entry_id
     if type(resource) is CheckerRetryResourceContext:
         project_id = str(resource.project_id)
         return project_id, "checker_run", str(resource.resource_id), "project", project_id

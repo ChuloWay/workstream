@@ -5,8 +5,10 @@
 - Intended merge outcome: Covered Project Managers explicitly screen and release every immutable imported batch member atomically and use the public CLI for separate source/import/status/screen/release operations and local CSV conversion.
 
 Current outcome: delivered by [PR #543](https://github.com/Flow-Research/workstream/pull/543)
-after #542; [issue #489](https://github.com/Flow-Research/workstream/issues/489)
-is closed. Its final [hosted verification](https://github.com/Flow-Research/workstream/actions/runs/38383261833)
+after #542. The later [optional-criteria correction](pilot02-optional-screening-criteria.md)
+completes the screening gap identified in
+[issue #489](https://github.com/Flow-Research/workstream/issues/489), without
+changing this batch composition or its authority contract. Its original final [hosted verification](https://github.com/Flow-Research/workstream/actions/runs/38383261833)
 passed at `c4879e895`. The earlier source-specific failures, pending proof and
 repair instructions below are retained history, not unfinished implementation
 or current contribution gates. Deployment and the wider contributor lifecycle

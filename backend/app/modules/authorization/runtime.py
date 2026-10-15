@@ -33,6 +33,8 @@ from app.modules.authorization.domain.guide_mutations import (
 from app.modules.actors.api import ServiceIdentity
 from app.modules.authorization.domain.post_policy import PostPolicyResourceContext
 from app.modules.authorization.domain.assignment_invalidation import AssignmentInvalidationResourceContext
+from app.modules.authorization.domain.revision_expiry import RevisionExpiryResourceContext
+from app.modules.authorization.domain.revision_recovery import RevisionRecoveryResourceContext
 from app.modules.authorization.domain.outbox_dispatch import OutboxDispatchResourceContext
 from app.modules.authorization.domain.post_submit_routing import PostSubmitRoutingResourceContext
 from app.modules.authorization.domain.post_submit import PostSubmitResourceContext
@@ -1066,6 +1068,8 @@ AuthorizationResourceContext = (
     | ProjectSubmissionArtifactPolicyMutationResourceContext
     | PostPolicyResourceContext
     | AssignmentInvalidationResourceContext
+    | RevisionExpiryResourceContext
+    | RevisionRecoveryResourceContext
     | OutboxDispatchResourceContext
     | PreSubmitResourceContext
     | PostSubmitResourceContext

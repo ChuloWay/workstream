@@ -5,6 +5,7 @@ from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS, POST_
 from app.modules.authorization.domain.lifecycle import parse_lifecycle_prepare, lifecycle_matches
 from app.modules.authorization.prepared_routing_replay import validate_routing_replay
 from app.modules.authorization.prepared_lifecycle_replay import validate_lifecycle_replay
+from app.modules.authorization.fixed_service_revalidation import fixed_service_context_revalidator
 from app.modules.authorization.prepared_checker_retry_replay import validate_checker_retry_replay
 from app.modules.reviews.api.lifecycle import LifecycleTransitionCommand
 
@@ -72,6 +73,8 @@ from app.modules.authorization.domain.post_policy import PostPolicyResourceConte
 from app.modules.authorization.domain.assignment_invalidation import (
     AssignmentInvalidationResourceContext,
 )
+from app.modules.authorization.domain.revision_expiry import RevisionExpiryResourceContext
+from app.modules.authorization.domain.revision_recovery import RevisionRecoveryResourceContext
 from app.modules.authorization.domain.outbox_dispatch import (
     OutboxDispatchResourceContext,
 )
@@ -202,6 +205,8 @@ class _PreparedAuthorizationBinding:
     request_digest: str
     checker_retry_preparation: CheckerRetryPreparation | None = None
     assignment_invalidation_context: AssignmentInvalidationResourceContext | None = None
+    revision_expiry_context: RevisionExpiryResourceContext | None = None
+    revision_recovery_context: RevisionRecoveryResourceContext | None = None
     outbox_dispatch_digest: str | None = None
     post_submit_prepare_context: dict | None = None
     pre_submit_prepare_context: dict | None = None
@@ -609,6 +614,16 @@ class PreparedAuthorizationService:
             or issuance.binding.assignment_invalidation_context != final_resource_context
         ):
             raise PreparedAuthorizationHandleInvalid("invalid assignment reconciliation authority")
+        if expected_action_id is ActionId.TASK_REVISION_EXPIRE and (
+            type(final_resource_context) is not RevisionExpiryResourceContext
+            or issuance.binding.revision_expiry_context != final_resource_context
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid revision expiry authority")
+        if expected_action_id is ActionId.TASK_REVISION_RECOVER and (
+            type(final_resource_context) is not RevisionRecoveryResourceContext
+            or issuance.binding.revision_recovery_context != final_resource_context
+        ):
+            raise PreparedAuthorizationHandleInvalid("invalid revision recovery authority")
         if not lifecycle_matches(issuance.binding.lifecycle_command, final_resource_context):
             raise PreparedAuthorizationHandleInvalid("invalid lifecycle authority")
         if expected_action_id is ROUTE:
@@ -952,7 +967,7 @@ class PreparedAuthorizationService:
                 artifact_resource_type=artifact_resource[0],
                 artifact_resource_id=resource.resource_id,
             )
-        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, AssignmentInvalidationResourceContext, PreSubmitResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext)):
+        if isinstance(resource, (ProjectGuideProjectionResourceContext, PostPolicyResourceContext, OutboxDispatchResourceContext, AssignmentInvalidationResourceContext, RevisionExpiryResourceContext, RevisionRecoveryResourceContext, PreSubmitResourceContext, PostSubmitResourceContext, PostSubmitRoutingResourceContext)):
             return PreparedAuthorityScope(
                 kind=PreparedAuthorityScopeKind.PROJECT,
                 project_id=resource.scope_project_id,
@@ -1120,44 +1135,6 @@ async def fixed_service_action_context(
     ):
         raise PreparedAuthorizationUnsupported(AuthorizationDenialCode.PERMISSION_NOT_GRANTED)
     return context
-
-
-def fixed_service_context_revalidator(
-    repository: AdminAuthorizationRepository,
-    expected_identity: ServiceIdentity,
-):
-    """Build AUTH's canonical fixed-service lifecycle revalidator."""
-
-    async def revalidate(
-        original: ServiceAuthorizationContext,
-        _requested_action: ActionId,
-    ) -> ServiceAuthorizationContext | None:
-        locked = await repository.lock_request_actor(
-            original.identity_link_id, original.actor_profile_id
-        )
-        if locked is None:
-            return None
-        link, profile = locked
-        if (
-            profile.actor_kind != ActorKind.SERVICE.value
-            or profile.service_identity != expected_identity.value
-        ):
-            return None
-        try:
-            return ServiceAuthorizationContext(
-                actor_profile_id=UUID(profile.id),
-                actor_kind=ActorKind.SERVICE,
-                actor_status=ActorStatus(profile.status),
-                identity_link_id=UUID(link.id),
-                identity_link_status=IdentityLinkStatus(link.status),
-                service_identity=expected_identity,
-                request_id=original.request_id,
-                correlation_id=original.correlation_id,
-            )
-        except (TypeError, ValueError):
-            return None
-
-    return revalidate
 
 
 @asynccontextmanager

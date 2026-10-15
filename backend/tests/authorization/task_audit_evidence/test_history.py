@@ -23,7 +23,9 @@ async def test_all_task_states(admin_access, monkeypatch):
     monkeypatch.setattr(TaskService, "_load_locked_task_context", no_policy_read)
     states = {state for transition in ALLOWED_TASK_TRANSITIONS for state in transition}
     assert len(states) == 9
-    for state in sorted(states):
+    # Arrange retained states without pretending that a needs-revision window
+    # can be closed by an unaudited fixture UPDATE back to ready.
+    for state in sorted(states - {"needs_revision"}) + ["needs_revision"]:
         async with db_session.get_session_factory()() as session, session.begin():
             row = await session.get(WorkstreamTask, str(task))
             row.status = state

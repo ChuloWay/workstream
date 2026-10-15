@@ -69,6 +69,7 @@ def test_lane_namespaces_bind_real_s3_traffic_and_separate_other_lanes() -> None
     """Only shared lanes receive the application's hardcoded integration bucket."""
     shared_a = runner._minio_namespace("shared_foundations_a", "012345abcdef")
     shared_b = runner._minio_namespace("shared_foundations_b", "012345abcdef")
+    shared_c = runner._minio_namespace("shared_foundations_c", "012345abcdef")
     control_bucket, control_prefix = runner._minio_namespace(
         "project_lifecycle_a", "012345abcdef"
     )
@@ -83,8 +84,12 @@ def test_lane_namespaces_bind_real_s3_traffic_and_separate_other_lanes() -> None
         "workstream-artifacts",
         "ci/shared_foundations_b/012345abcdef",
     )
+    assert shared_c == (
+        "workstream-artifacts",
+        "ci/shared_foundations_c/012345abcdef",
+    )
     assert len({shared_a[0], control_bucket, execution_bucket}) == 3
-    assert len({shared_a[1], shared_b[1], control_prefix, execution_prefix}) == 4
+    assert len({shared_a[1], shared_b[1], shared_c[1], control_prefix, execution_prefix}) == 5
     with pytest.raises(runner.RunnerError, match="invalid_lane"):
         runner._minio_namespace("../foreign", "012345abcdef")
 
@@ -189,7 +194,7 @@ def test_minio_probe_cleans_up_and_preserves_async_cancellation(
         (
             lane.name,
             "workstream-artifacts"
-            if lane.name in {"shared_foundations_a", "shared_foundations_b"}
+            if lane.name in runner.S3_TRAFFIC_LANES
             else f"workstream-ci-{lane.name.replace('_', '-')}-012345abcdef",
         )
         for lane in LANES

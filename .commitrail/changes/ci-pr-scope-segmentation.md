@@ -80,7 +80,7 @@ reported as complete proof. No new selector/evidence service or paid runner.
   invalid paths, renames, empty/unavailable diffs and null-base main pushes.
 - Execute fan-in truth tables for success, failure, cancellation, skip, unknown
   and unexpected success. Preserve MCP result and MinIO retry custody.
-- Preserve all ten full-run lanes: exact fresh collection/completion once,
+- Preserve all thirteen full-run lanes from current main: exact fresh collection/completion once,
   no skips/deselections, cleanup, coverage artifacts, real API drill and
   no mixing of incompatible artifact attempts.
 - Check removed selected-mode imports, flags, artifacts and registrations have
@@ -124,8 +124,16 @@ hosted Linux proof remains required for every reviewable candidate.
 After simplification, 174 selector/catalogue/runner/evidence tests passed;
 the expanded draft/ready component matrix passed 47 tests, and 27 workflow
 integrity tests passed. These are historical pre-reconciliation results from
-before main `80be49391`; exact-head checks supersede them for readiness. Ruff,
+before main `25d5c068a`; exact-head checks supersede them for readiness. Ruff,
 links and Commitrail checks passed.
+
+Current-main reconciliation retains its expanded thirteen-lane capacity and
+Linux-only frozen dependency graph. The component selector builds its matrix
+from that canonical lane catalogue, so complete backend proof automatically
+requires every current lane without duplicating the lane list in the workflow.
+The PostgreSQL storage guard uses explicit failure branches for invalid mounts,
+capacity or write settings so Bash version differences cannot turn a failed
+predicate into a successful job.
 
 The marker plan received focused feasibility review: both actual schema
 mutations retain rebuild isolation; ordinary tests retain verified reset.

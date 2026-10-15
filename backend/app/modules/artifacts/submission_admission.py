@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from dataclasses import dataclass, field, replace
+import re
 from uuid import UUID
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
@@ -86,6 +87,8 @@ from app.modules.projects.api import (
     ProjectLockedPolicyContextRequest,
     ProjectLockedPolicyContextUnavailable,
 )
+from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
+from app.modules.tasks.api.submission_context import require_revision_capacity
 from app.modules.tasks.api import (
     TaskRetainedSubmissionParentsRequest,
     TaskSubmissionContextFacts,
@@ -104,6 +107,39 @@ def validate_submission_packet_headers(summary: str, attestation: str) -> None:
         raise SubmissionBundlePreparationRejected(
             "submission_bundle_packet_header_encoding_invalid"
         ) from exc
+
+
+def require_revision_preparation_acknowledgement(
+    task: TaskSubmissionContextFacts,
+    request: SubmissionBundlePreparationRequest,
+) -> None:
+    """Compare the contributor's explicit acknowledgement after fresh authority."""
+    supplied_id = request.revision_preparation_id
+    supplied_sha256 = request.revision_preparation_sha256
+    if task.predecessor is None:
+        if supplied_id is not None or supplied_sha256 is not None:
+            raise SubmissionBundlePreparationRejected("revision_acknowledgement_invalid")
+        return
+    context = task.revision_context
+    if context is None:
+        raise SubmissionBundlePreparationRejected("revision_context_changed")
+    if supplied_id is None and supplied_sha256 is None:
+        raise SubmissionBundlePreparationRejected("revision_acknowledgement_required")
+    if not isinstance(supplied_id, str) or not isinstance(supplied_sha256, str):
+        raise SubmissionBundlePreparationRejected("revision_acknowledgement_invalid")
+    try:
+        acknowledged_id = UUID(supplied_id)
+    except ValueError as exc:
+        raise SubmissionBundlePreparationRejected("revision_acknowledgement_invalid") from exc
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", supplied_sha256) is None:
+        raise SubmissionBundlePreparationRejected("revision_acknowledgement_invalid")
+    if (
+        context.source_submission_id != task.predecessor.submission_id
+        or context.source_routing_manifest_id != task.checker_remediation_manifest_id
+        or acknowledged_id != context.preparation_id
+        or supplied_sha256 != context.preparation_sha256
+    ):
+        raise SubmissionBundlePreparationRejected("revision_context_changed")
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,6 +501,8 @@ class SubmissionBundleAdmissionPublisher:
                 str(lineage.checker_remediation_manifest_id)
                 if lineage.checker_remediation_manifest_id is not None else None
             ),
+            revision_preparation_id=lineage.revision_preparation_id,
+            revision_preparation_sha256=lineage.revision_preparation_sha256,
             locked_policy_context_hash=lineage.locked_policy_context_hash,
             guide_id=str(lineage.guide_id), guide_version=lineage.guide_version,
             source_snapshot_id=str(lineage.source_snapshot_id),
@@ -697,6 +735,14 @@ class PreparedSubmissionBundlePreparationCommand:
                                 archive_sha256=prepared.commitment.sha256,
                                 archive_byte_count=prepared.commitment.byte_count,
                                 packet_sha256=packet.sha256,
+                                revision_preparation_id=(
+                                    task_context.revision_context.preparation_id
+                                    if task_context.revision_context is not None else None
+                                ),
+                                revision_preparation_sha256=(
+                                    task_context.revision_context.preparation_sha256
+                                    if task_context.revision_context is not None else None
+                                ),
                             )
                         ),
                         commitment=prepared.commitment,
@@ -875,6 +921,21 @@ class PreparedSubmissionBundlePreparationCommand:
             request=request,
             project_id=task.locked_project_context.project_id,
         )
+        try:
+            if task.predecessor is not None:
+                selected_revision = project.activation_receipt.command.revision
+                require_revision_capacity(
+                    task, project_id=project.project_id,
+                    policy_id=selected_revision.policy_id,
+                    policy_generation=selected_revision.generation,
+                    policy_hash=selected_revision.policy_hash,
+                    max_revision_rounds=RevisionPolicySemantics.model_validate_json(
+                        project.revision_policy.value,
+                    ).max_revision_rounds,
+                )
+        except TaskSubmissionContextUnavailable as exc:
+            raise SubmissionBundlePreparationRejected(exc.code) from exc
+        require_revision_preparation_acknowledgement(task, request)
         return task, project
 
     async def _lock_context(

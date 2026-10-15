@@ -344,7 +344,7 @@ status. Current changes receive review through [CONTRIBUTING.md](CONTRIBUTING.md
 - [ADR 0007: Execution Is Async-First](docs/decision_0007_async_first_execution.md)
 - [ADR 0008: Files Use An Object-Storage Abstraction](docs/decision_0008_object_storage_abstraction.md)
 - [ADR 0009: Review Decisions Are Canonical](docs/decision_0009_review_decisions_are_canonical.md)
-- [ADR 0010: Human Revision Rebase Uses The Complete Active Project Context](docs/decision_0010_revision_context_rebase.md)
+- [ADR 0010: Revision Rebase Uses The Complete Active Project Context](docs/decision_0010_revision_context_rebase.md)
 - [ADR 0011: Submission Artifact Policy Drives Pre-Submit Intake](docs/decision_0011_submission_artifact_policy_drives_pre_submit.md)
 - [ADR 0012: Workstream Owns Product Authorization](docs/decision_0012_workstream_authorization_service.md)
 - [ADR 0013: Immutable Artifact Storage Boundary](docs/decision_0013_immutable_artifact_storage_boundary.md)
@@ -476,8 +476,14 @@ All support human-readable and JSON output, using the caller's Flow token.
 `workstream contributions [--project UUID]` reads the caller's contribution
 evidence; `workstream project contributions PROJECT_ID` exports one authorized
 project. Both support recorded-time/type filters and `--csv FILE` for the exact
-server export, saved privately without overwrite. Earned awards are not proof
-of payment; these reads do not activate unfinished lifecycle writers.
+server export, saved privately without overwrite. The backing REST reads use
+signed fixed-membership cursors for selections up to 100,000 contributions,
+freshly authorize every page, and expose continuation in JSON or the CSV
+response header. The CLI follows continuation internally with the same filters,
+retains its existing complete JSON output shape, and publishes CSV only after
+every page validates. A later-page denial or malformed response leaves no
+partial stdout result or destination file. Earned awards are not proof of
+payment; these reads do not activate unfinished lifecycle writers.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
 
@@ -967,11 +973,21 @@ bar.
 
 Workstream is built as durable operational infrastructure. Project rules live
 in versioned guides and policies rather than chat memory. Each active attempt
-keeps its locked governing context. Hidden checker remediation keeps those
-rules and reruns full intake for a changed ZIP; it creates no Review or finding
-responses. Future human-Review revision preparation may rebase a complete valid
-context for the next attempt without silently mixing old and new rules.
-Changing or re-screening rules for already submitted work remains deferred.
+keeps its locked governing context. Contributor-fixable checker failure freezes
+one complete revision context and change summary for the continuing assignment;
+previous Submissions and their evidence remain unchanged. A revision reruns full
+intake and acknowledges that exact preparation. Each assignment's initial
+attempt is round 0; a limit of 2 permits revisions 1 and 2. Each committed
+`needs_revision` starts a fresh PostgreSQL-time window from the failed attempt's
+locked policy. Only immutable resubmission ends it; upload, replay and PM context
+repair preserve its original window.
+At expiry, PostgreSQL-timed outbox delivery records the outstanding attempt's
+rejection, releases its assignment and returns the task to ready. The next
+claimant starts round 0 with their own allowance. Original Submissions and
+findings remain immutable; scans and retries recover work after downtime.
+Checker remediation creates no Review or reviewer contribution. Live human
+Review decision composition remains #554 work under the same intended revision
+policy. Timeout creates no contribution, award or fulfillment facts.
 
 Lifecycle state is a ledger, not a loose label. Submitted artifacts remain
 immutable and hash-bound to their checks; findings, responses, resolutions,

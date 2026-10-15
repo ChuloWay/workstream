@@ -4,9 +4,10 @@
 
 These flows describe the target v0.1 behavior, not a list of active endpoints.
 Use the [capability ledger](roadmap_status.md) for delivered and remaining work.
-The review and revision portions are the planned v0.1 contract and remain
-unavailable until their owning REV chunks, exact AUTH activation, and REV-13
-joint release complete. Earlier project/task/submission/checker behavior keeps
+Human review and its revision integration remain planned until the owning REV
+chunks, exact AUTH activation and joint release complete. Checker-triggered
+revision preparation, acknowledgement, PM repair and timeout rejection/release
+are implemented through TASK. Earlier project/task/submission/checker behavior keeps
 its separately recorded implementation status.
 
 The detailed review flow below describes `human_review_required=true`, the
@@ -105,7 +106,10 @@ Acceptance:
 ## Flow 2: Project Manager Creates A Task
 
 1. A covered Project Manager selects the active project.
-2. The Project Manager creates a task with title, description, source reference, acceptance criteria, rejection criteria, deadline, and difficulty.
+2. The Project Manager creates a draft with title and description, plus any
+   applicable source reference, task-local acceptance/rejection criteria,
+   deadline and difficulty. Task-local criteria are optional supplementary text;
+   the project guide supplies governed acceptance requirements.
 3. Workstream validates the task source and reviewability fields, then confirms the task fits the active project guide and policy bundle.
 4. Task enters `SCREENING`.
 5. Screening locks the guide source snapshot id/hash, effective project
@@ -117,8 +121,10 @@ Acceptance:
 
 Acceptance:
 
-- Missing required fields block `SCREENING`.
-- Missing required fields block `READY`.
+- Blank title/description or missing active-guide custody blocks `SCREENING`.
+- Missing required policy locks or release validation blocks `READY`.
+- Omitted/null task-local acceptance criteria do not block either transition;
+  this does not waive the locked guide or its approved policies.
 - Task shows project guide, required artifacts, generated project pre-submit
   checker policy summary, permission-appropriate post-submit checker policy
   summary, review policy, and revision policy. After claim, the contributor sees
@@ -150,8 +156,9 @@ Acceptance:
 3. Results are saved with `passed`, `warning`, or `failed`, plus severity, message, and evidence.
 4. Contributor-fixable checker failures route the Task to `NEEDS_REVISION` with
    `CheckerResult` lineage and no Review or reviewer contribution.
-5. Setup or provenance defects keep the Task `evaluation_pending` on the
-   internal `task_setup_blocked` repair route.
+5. A manager-visible hold for setup faults is planned safety work, not a
+   current route: the selected completion classifier cannot emit
+   `task_setup_blocked`. It is not a prerequisite for this first journey.
 6. For locked `human_review_required=true`, only a durable, final, current `CheckerRun` outcome of `allow_review` admits
    the exact immutable Submission with verified binding facts and moves the
    Task to `REVIEW_PENDING`.
@@ -222,8 +229,14 @@ Acceptance:
 - Context changes are visible before the contributor revises.
 - Each required finding has an immutable response and later resolution.
 - Revision count is tracked against the locked revision policy.
-- A reached limit/deadline blocks resubmission but never auto-rejects or
-  auto-closes the task; manager cancellation is a separate planned command.
+- Each assignment starts at round 0 with its own revision allowance.
+- Every committed `needs_revision` starts a fresh PostgreSQL-time window from
+  the failed attempt's locked policy; only immutable resubmission ends it.
+  Upload, replay, repair and infrastructure retry preserve the window.
+- Cap exhaustion refuses another attempt. At expiry, an immutable rejection
+  receipt, assignment release and return to `ready` commit atomically with
+  AUTH/audit/outbox evidence and no new economic facts. Checker expiry is
+  implemented; #554 owns the future genuine human trigger under the same policy.
 
 ## Flow 7: Accepted Work, FinalAcceptance, And Submitter Contribution
 

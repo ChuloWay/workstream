@@ -37,6 +37,7 @@ async def test_upgrade_preserves_retained_owners_without_backfill(tmp_path, isol
                 await asyncio.to_thread(command.upgrade, _config(), current_schema_revision())
                 after = await snapshot()
                 added_columns = {
+                    "outbox_events": {"not_before_at"},
                     "submissions": {
                         "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
                     },
@@ -50,11 +51,13 @@ async def test_upgrade_preserves_retained_owners_without_backfill(tmp_path, isol
                         "pre_submit_policy_sha256", "effective_plan_sha256", "selected_rules_sha256",
                         "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
                         "packet_sha256", "semantic_manifest_body",
+                        "revision_preparation_id", "revision_preparation_sha256",
                     },
                 }
                 for table, columns_added in added_columns.items():
-                    retained_rows = sorted(json.loads(before.pop(table)), key=lambda row: row["id"])
-                    upgraded_rows = sorted(json.loads(after.pop(table)), key=lambda row: row["id"])
+                    identity = "event_id" if table == "outbox_events" else "id"
+                    retained_rows = sorted(json.loads(before.pop(table)), key=lambda row: row[identity])
+                    upgraded_rows = sorted(json.loads(after.pop(table)), key=lambda row: row[identity])
                     assert len(upgraded_rows) == len(retained_rows)
                     for retained, upgraded in zip(retained_rows, upgraded_rows, strict=True):
                         assert set(upgraded) == set(retained) | columns_added

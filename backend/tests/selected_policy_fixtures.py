@@ -13,6 +13,7 @@ async def approved_selected_policy_fixture(
     guide_version,
     contribution_awards=(),
     human_review_required=True,
+    max_revision_rounds=2,
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
 ):
@@ -27,6 +28,7 @@ async def approved_selected_policy_fixture(
         guide_version=guide_version,
         contribution_awards=contribution_awards,
         human_review_required=human_review_required,
+        max_revision_rounds=max_revision_rounds,
         artifact_proposal=SubmissionArtifactPolicyProposal(
             maximum_file_size_bytes=1_000_000,
             maximum_package_size_bytes=5_000_000,

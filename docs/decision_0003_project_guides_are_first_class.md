@@ -67,13 +67,17 @@ Blocking pre-submit failures prevent submission creation. They do not create dur
 
 Revision policy is not optional. It defines revision limits, revision deadlines,
 allowed resubmission states, and reviewer-return preference. Reaching a limit or
-deadline blocks further preparation and submission; it never creates a reject
-Review. A covered Project Manager may later use the reason-bound administrative
-closure defined by the active review lifecycle contract.
+deadline blocks further preparation and submission. Each assignment starts at
+round 0; every committed `needs_revision` starts a fresh PostgreSQL-time window
+under the failed attempt's locked policy. Only immutable resubmission ends it.
+At expiry, TASK retains an immutable rejection receipt, releases the assignment
+and returns to `ready` without a reject Review or economic facts. Checker
+remediation implements this policy; genuine human decision integration remains
+separate work under the same intended rules.
 
 Guide and policy changes do not silently mutate submitted attempts. A submitted
 attempt stays tied to the guide and policy versions stamped on that Submission.
-After a human `needs_revision` Review, preparation compares the prior
+After a committed checker or human `needs_revision`, preparation compares the prior
 Submission's complete stamped context with the project's complete applicable
 active Project Guide, submission/checker, review, revision, task-execution, and
 submitter ContributionPolicy context. Exact component matches are kept, every

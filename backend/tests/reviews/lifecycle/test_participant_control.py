@@ -278,6 +278,14 @@ async def test_0038_old_manifest_live_upgrade_denies_new_effects_until_renewed(
     assert await transition(old_live_command) == old_live_receipt
     assert await snapshot() == retained_lifecycle
 
+    # The retained 0039 control is unchanged; current runtime owners require
+    # their complete schema before exercising new submissions and acceptance.
+    await db_session.dispose_engine()
+    with migration_lock():
+        await asyncio.to_thread(alembic_command.upgrade, _migration_config(), "head")
+    assert await transition(old_live_command) == old_live_receipt
+    assert await snapshot() == retained_lifecycle
+
     async with authorized_routing_source(
         tmp_path, isolated_database_env
     ) as pending:

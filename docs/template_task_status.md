@@ -1,6 +1,7 @@
 # Task Status Template
 
-> Planned review/revision fields remain unavailable until their release gates.
+> Checker revision context and timeout receipts are implemented. Planned human
+> Review fields remain unavailable until their own release gates.
 
 ## Task
 
@@ -38,11 +39,13 @@
 - submitter `accepted_submission` ContributionRecord ID, sourced from
   FinalAcceptance only:
 
-## Reject Or Administrative Cancellation
+## Rejection, Revision Limits Or Administrative Cancellation
 
 - reject: source human Review ID, bounded reason, blocked TaskAssignment ID;
-- revision obligation cancellation: `revision_limit_reached` or
-  `revision_deadline_expired`, released assignment, no synthetic Review;
+- revision cap: `revision_limit_reached`, further resubmission refused, current
+  deadline and assignment retained;
+- revision timeout: `revision_deadline_expired`, immutable TASK rejection receipt,
+  released assignment, task returned to `ready`, no synthetic Review;
 - legacy revision cancellation: `legacy_revision_context_unrecoverable`,
   evidence-linked reconciliation finding, no synthetic Review.
 

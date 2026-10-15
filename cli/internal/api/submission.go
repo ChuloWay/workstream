@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 )
 
@@ -21,6 +22,14 @@ type SubmissionPacket struct {
 	Summary     *string `json:"summary,omitempty"`
 	Attestation *string `json:"contributor_attestation,omitempty"`
 }
+
+// RevisionAcknowledgement is preparation-only; it is not part of Submission JSON.
+type RevisionAcknowledgement struct {
+	PreparationID     string
+	PreparationSHA256 string
+}
+
+var revisionPreparationDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type PreparationReceipt struct {
 	PutAttemptID string  `json:"put_attempt_id"`
@@ -64,20 +73,28 @@ func submissionFailure(err error, preparation bool) error {
 	if errors.As(err, &failure) && failure.OutcomeUnknown {
 		failure.RecoveryHint = "Submission outcome unknown; inspect task submissions; replay only the same task, assignment, admission and packet"
 		if preparation {
-			failure.RecoveryHint = "preparation outcome unknown; explicitly replay only the same task, assignment, ZIP bytes, packet and idempotency key; no Submission was requested by this command"
+			failure.RecoveryHint = "preparation outcome unknown; explicitly replay only the same task, assignment, ZIP bytes, packet, revision acknowledgement and idempotency key; no Submission was requested by this command"
 		}
 	}
 	return err
 }
 
 // PrepareSubmission streams one regular ZIP once. A receipt is not a Submission.
-func (c *Client) PrepareSubmission(ctx context.Context, task, key string, packet SubmissionPacket, source *os.File) (Result[PreparationReceipt], error) {
+func (c *Client) PrepareSubmission(ctx context.Context, task, key string, packet SubmissionPacket, acknowledgement *RevisionAcknowledgement, source *os.File) (Result[PreparationReceipt], error) {
 	var result Result[PreparationReceipt]
 	if err := packet.validate(task); err != nil {
 		return result, err
 	}
 	if !submissionSelector(key) || source == nil {
 		return result, errors.New("preparation requires a caller UUID key and a regular ZIP file")
+	}
+	if packet.Predecessor == nil {
+		if acknowledgement != nil {
+			return result, errors.New("initial preparation cannot acknowledge a revision")
+		}
+	} else if acknowledgement == nil || !submissionSelector(acknowledgement.PreparationID) ||
+		!revisionPreparationDigest.MatchString(acknowledgement.PreparationSHA256) {
+		return result, errors.New("revision preparation requires its exact preparation ID and sha256 digest")
 	}
 	initial, err := source.Stat()
 	if err != nil || !initial.Mode().IsRegular() || initial.Size() <= 0 || initial.Size() > MaxGuideDocumentBytes {
@@ -95,6 +112,10 @@ func (c *Client) PrepareSubmission(ctx context.Context, task, key string, packet
 		if value != nil {
 			headers.Set(name, *value)
 		}
+	}
+	if acknowledgement != nil {
+		headers.Set("X-Revision-Preparation-Id", acknowledgement.PreparationID)
+		headers.Set("X-Revision-Preparation-Sha256", acknowledgement.PreparationSHA256)
 	}
 	response, err := c.openBodyRequest(ctx, c.guideHTTP, http.MethodPost,
 		"/api/v1/tasks/"+url.PathEscape(task)+"/submission-bundle-preparations", "",

@@ -483,6 +483,7 @@ class LightweightAgentGateTests(unittest.TestCase):
         )
         tool_install = 'python -m pip install "uv==0.10.7"'
         frozen_install = "uv sync --frozen --all-extras"
+        lock_check = "uv lock --check"
         cache_env = 'echo "UV_CACHE_DIR=${RUNNER_TEMP}/backend-uv-cache" >> "${GITHUB_ENV}"'
         job_blocks = (
             workflow.split("\n  auth-boundary-preflight:\n", 1)[1].split("\n  lanes:\n", 1)[0],
@@ -492,12 +493,16 @@ class LightweightAgentGateTests(unittest.TestCase):
         for job in job_blocks:
             self.assertEqual(job.count("Restore exact backend uv downloads from trusted cache"), 1)
             self.assertEqual(job.count(tool_install), 1)
+            self.assertEqual(job.count(lock_check), 1)
             self.assertEqual(job.count(frozen_install), 1)
+            self.assertLess(job.index(tool_install), job.index(lock_check))
+            self.assertLess(job.index(lock_check), job.index(frozen_install))
             self.assertEqual(job.count(cache_env), 1)
             self.assertLess(job.index("Restore exact backend uv downloads"), job.index(cache_env))
             self.assertLess(job.index(cache_env), job.index(tool_install))
             self.assertLess(job.index(tool_install), job.index(frozen_install))
         self.assertEqual(workflow.count(tool_install), 3)
+        self.assertEqual(workflow.count(lock_check), 3)
         self.assertEqual(workflow.count(frozen_install), 3)
         self.assertEqual(workflow.count(cache_env), 3)
         self.assertNotIn('python -m pip install -e ".[dev,agents]"', workflow)

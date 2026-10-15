@@ -52,7 +52,7 @@ def _arguments(name: str) -> dict[str, Any]:
 def _response(name: str) -> dict[str, Any]:
     # Representative entries use the backend's frozen catalogue totals.
     if name == "workstream_permissions_list":
-        return {"items": [{"permission_id": "actor.profile.read_any"}], "total": 80}
+        return {"items": [{"permission_id": "actor.profile.read_any"}], "total": 82}
     if name == "workstream_admin_roles_list":
         return {
             "items": [
@@ -207,6 +207,32 @@ def test_access_read_exact_get_wire_and_projection(adapter: Adapter, call: Call,
     assert request.headers["accept"] == "application/json"
     for header in ("idempotency-key", "if-match", "if-none-match", "x-actor-id", "content-type"):
         assert header not in request.headers
+
+
+@pytest.mark.parametrize("malformation", ["unknown_permission", "wrong_total"])
+def test_permission_catalogue_drift_still_fails_closed(
+    adapter: Adapter, call: Call, malformation: str,
+) -> None:
+    client, received, upstream = adapter
+    payload = {
+        "items": [
+            {"permission_id": "task.revision.expire"},
+            {"permission_id": "task.revision.recover"},
+        ],
+        "total": 82,
+    }
+    if malformation == "unknown_permission":
+        payload["items"][0]["permission_id"] = "task.revision.unknown"
+    else:
+        payload["total"] = 80
+    upstream["json"] = payload
+    response = call(client, name="workstream_permissions_list")
+    result = response.json()["result"]
+    assert result["isError"] is True
+    assert result["structuredContent"]["error"] == "invalid_api_response"
+    assert result["structuredContent"]["status"] == 502
+    assert "task.revision.unknown" not in response.text
+    assert len(received) == 1
 
 
 @pytest.mark.parametrize("name", GRANT_TOOLS)

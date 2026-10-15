@@ -51,7 +51,6 @@ class SubmissionCreationResourceContext(BaseModel):
         initial = (
             self.submission_kind == "initial"
             and self.task_status == "in_progress"
-            and self.submission_version == 1
             and self.predecessor_submission_id is None
             and self.checker_remediation_manifest_id is None
         )
@@ -119,11 +118,8 @@ class SubmissionBindingResourceContext(BaseModel):
             self.checker_remediation_manifest_id is None
         ):
             raise ValueError("submission binding remediation source is incomplete")
-        expected_version = (
-            1 if self.predecessor_submission_version is None
-            else self.predecessor_submission_version + 1
-        )
-        if self.submission_version != expected_version:
+        if (self.predecessor_submission_version is not None
+                and self.submission_version != self.predecessor_submission_version + 1):
             raise ValueError("submission binding successor version is inconsistent")
         return self
 

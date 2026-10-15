@@ -97,7 +97,9 @@ Describe the output form in human-readable language. The enforced artifact list,
 
 ## Acceptance Criteria
 
-Define measurable criteria for accepted work.
+Define the mandatory project-level acceptance requirements as measurable criteria
+for accepted work. Tasks follow these requirements under their locked guide and
+policies; they do not have to repeat them in task-local criteria.
 
 ## Rejection Criteria
 
@@ -115,12 +117,16 @@ Define prohibited behavior, tools, copied material, generated artifacts, confide
 
 - title
 - description
-- acceptance criteria
 - required output
 - skill tags
 - task type
 - estimated time when known
 - deadline
+
+Task-local `acceptance_criteria` is optional and may be omitted or null, including
+during import, screening and release. When supplied, it must satisfy the task
+field type and length limits. Its absence does not remove the mandatory
+guide-level acceptance requirements above.
 
 ## Required Submission Fields
 
@@ -233,13 +239,17 @@ Define:
 - maximum revision rounds:
 - revision deadline hours:
 - allowed resubmission states:
-- limit/deadline exhaustion behavior: block preparation and submission pending
-  reason-bound covered-manager closure; never synthesize reject
+- exhaustion behavior: cap refuses another attempt; expiry retains rejection
+  evidence, releases the assignment and returns the task to `ready` atomically
+  without a synthetic Review or economic facts
 - reviewer reassignment rule:
 
 Revision-policy activation and task screening require positive limit and
-deadline values. Exhaustion blocks further preparation and submission; it never
-auto-rejects, auto-closes, or fabricates a human review decision.
+deadline values. Each assignment starts at round 0 with its own allowance.
+Every committed `needs_revision` starts a fresh PostgreSQL-time window from the
+failed attempt's locked policy. Only immutable resubmission ends it; upload,
+replay and repair preserve it. Checker revision implements this policy; #554
+owns future human decision integration under the same intended rules.
 
 ## Acceptance Policy
 
@@ -286,7 +296,7 @@ Record only project-owner-supplied business terms and their durable source:
 This section is informational. It is not an active contribution award rule. Workstream
 publishes `ContributionPolicyVersion` independently. Guide activation binds one
 version; task readiness locks it, `TaskAssignment` copies it, Submission stamps
-the attempt value, and `ReviewLease` copies that stamp. After a human
+the attempt value, and `ReviewLease` copies that stamp. After checker or human
 `needs_revision`, complete-context preparation may
 atomically rebase the continuing Task and TaskAssignment for the next attempt;
 prior Submissions, ReviewLeases, contributions, and awards remain immutable.

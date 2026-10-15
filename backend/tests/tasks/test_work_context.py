@@ -3,7 +3,8 @@
 from dataclasses import FrozenInstanceError, asdict, replace
 from datetime import UTC, datetime
 import re
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
 from uuid import UUID
 from app.core.identifiers import new_record_id
 
@@ -24,11 +25,17 @@ from app.modules.tasks.schemas import (
     ContributorTaskLifecycle, ContributorTaskWorkContext, ManagementTaskWorkContext,
 )
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
+from app.modules.tasks.authorized_commands import TaskRevisionRepairError
+from app.modules.tasks.api.authorization import TaskAuthorityFacts, TaskAuthorityOperation, TaskAuthorityDenied
+from app.core.hashing import canonical_json_hash
 from app.modules.tasks.lifecycle import ALLOWED_TASK_TRANSITIONS
 from app.modules.tasks.models import AuditEvent, TaskAssignment, TaskCommandReceipt, WorkstreamTask
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.service import TaskService, TaskValidationError
 from app.modules.tasks import schemas
+from app.modules.tasks.schemas import TaskRevisionRepairRequest
+from app.modules.tasks.api.revision import RevisionCandidate, RevisionContextSnapshot
+from app.modules.tasks.revision.service import candidate_from_packet
 from tests.test_tasks import (
     task_database_env as task_database_env, task_client as task_client,
     create_active_project, create_ready_task, create_draft_task, create_started_task,
@@ -115,7 +122,7 @@ def test_work_context_openapi():
     schema = create_app().openapi()
     definitions = schema["components"]["schemas"]
     for route, name, fields, action in (
-        ("/api/v1/tasks/{task_id}/work-context", "ContributorTaskWorkContext", CONTEXT | {"lifecycle", "guide_documents"}, ACTIONS[0]),
+        ("/api/v1/tasks/{task_id}/work-context", "ContributorTaskWorkContext", CONTEXT | {"lifecycle", "guide_documents", "revision_context"}, ACTIONS[0]),
         ("/api/v1/projects/{project_id}/tasks/{task_id}/work-context", "ManagementTaskWorkContext", CONTEXT, ACTIONS[1]),
     ):
         operation = schema["paths"][route]["get"]
@@ -194,6 +201,9 @@ async def test_work_context_public_projections(task_client, monkeypatch):
         body = response.json()
         fields = (COMMON | MANAGEMENT) if management else CONTRIBUTOR
         assert set(body) == CONTEXT | (set() if management else {"lifecycle", "guide_documents"})
+        # Initial claimed work has no revision preparation. The public route
+        # excludes None; prepared revision contexts are covered by their journey.
+        assert "revision_context" not in body
         assert set(body["task"]) == fields
         for name in fields - {"created_at", "updated_at", "deadline_at", "compensation"}:
             assert body["task"][name] == stored["id" if name == "task_id" else name], name
@@ -235,22 +245,32 @@ async def test_work_context_public_projections(task_client, monkeypatch):
 async def test_work_context_owned_state_matrix(task_client, monkeypatch):
     project = await create_active_project(task_client)
     draft = await create_draft_task(task_client, project["id"])
-    task = await create_started_task(task_client, project["id"], monkeypatch)
-    denied = await task_client.get(f"/api/v1/tasks/{draft['id']}/work-context", headers=auth_headers())
-    assert denied.status_code == 404 and denied.json()["error"]["code"] == "project_authorization_resource_not_found"
     states = {state for edge in ALLOWED_TASK_TRANSITIONS for state in edge}
     assert states == {"draft", "screening", "ready", "claimed", "in_progress", "submitted", "evaluation_pending", "review_pending", "needs_revision"}
+    tasks = {state: await create_ready_task(task_client, project["id"]) for state in sorted(states)}
+    grant = await admit_and_grant_project_submitter(task_client, monkeypatch, project["id"], "worker-one")
+    denied = await task_client.get(f"/api/v1/tasks/{draft['id']}/work-context", headers=auth_headers())
+    assert denied.status_code == 404 and denied.json()["error"]["code"] == "project_authorization_resource_not_found"
     factory, seen = db_session.get_session_factory(), set()
-    for state in states:
+    seen_tasks = set()
+    for state in ("needs_revision", "ready", *sorted(states - {"needs_revision", "ready"})):
+        task = tasks[state]
+        claim = await task_client.post(f"/api/v1/tasks/{task['id']}/claim", headers=auth_headers())
+        assert claim.status_code == 200, claim.text
+        assignment_id = claim.json()["assignment"]["id"]
+        start = await task_client.post(f"/api/v1/tasks/{task['id']}/start", headers=auth_headers())
+        assert start.status_code == 200, start.text
+        seen_tasks.add(task["id"])
         async with factory() as session, session.begin():
             row = await session.get(WorkstreamTask, task["id"])
             assert row.locked_contribution_policy_version_id is not None
             row.status = state  # Projection fixture only; preserves full locked custody and active assignment.
         async with factory() as session:
             row = await session.get(WorkstreamTask, task["id"])
-            assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == row.id))
+            assignment = await session.get(TaskAssignment, assignment_id)
+            assert assignment.task_id == row.id
             assert row.status == state and assignment.status == "active"
-            assert row.assigned_to == assignment.contributor_id
+            assert row.assigned_to == assignment.contributor_id == grant["actor_profile_id"]
             assert row.locked_contribution_policy_version_id == assignment.submitter_contribution_policy_version_id
         response = await task_client.get(f"/api/v1/tasks/{task['id']}/work-context", headers=auth_headers())
         assert response.status_code == 200, (state, response.text)
@@ -258,7 +278,7 @@ async def test_work_context_owned_state_matrix(task_client, monkeypatch):
         assert body["task"]["status"] == state
         assert body["lifecycle"] == {"assigned_to_current_actor": True, "next_actions": ["start"] if state == "claimed" else []}
         seen.add(body["task"]["status"])
-    assert seen == states
+    assert seen == states and len(seen_tasks) == len(states) == 9
 
 
 @pytest.mark.parametrize("management", (False, True))
@@ -346,3 +366,184 @@ def test_work_context_obsolete_symbols_absent():
     assert not hasattr(TaskService, "_work_context_response")
     assert not hasattr(TaskService, "_worker_safe_task_response")
     assert not hasattr(AuthorizedTaskCommands, "work_context")
+
+
+def test_revision_repair_request_requires_exact_parent_and_bounded_reason():
+    values = dict(parent_preparation_id=new_record_id(),
+                  parent_preparation_sha256="sha256:" + "a" * 64, reason="Correct context")
+    assert TaskRevisionRepairRequest(**values).reason == "Correct context"
+    assert TaskRevisionRepairRequest(routing_manifest_id=new_record_id(), reason="Recover root").routing_manifest_id
+    for change in ({"parent_preparation_id": "not-a-uuid"},
+                   {"parent_preparation_sha256": "sha256:invalid"},
+                   {"reason": "  "}, {"reason": "😀" * 251}, {"extra": "unexpected"},
+                   {"routing_manifest_id": new_record_id()}):
+        with pytest.raises(ValidationError):
+            TaskRevisionRepairRequest(**(values | change))
+    with pytest.raises(ValidationError):
+        TaskRevisionRepairRequest(reason="Missing source")
+
+
+def test_revision_repair_decodes_serialized_strict_source_lineage():
+    from asyncpg.pgproto.pgproto import UUID as DriverUUID
+    from app.modules.tasks.revision.service import project_revision
+
+    lineage = {
+        name: new_record_id() if name.endswith("_id") else 1 if name.endswith("_generation")
+        else "sha256:" + "a" * 64 if name.endswith("_hash") else "v1"
+        for name in schemas.TaskPolicyLineage.model_fields
+    }
+    source = RevisionContextSnapshot(
+        guide_id=new_record_id(), activation_operation_id=new_record_id(),
+        activation_generation=1, activated_at=datetime.now(UTC),
+        lineage=schemas.TaskPolicyLineage(**lineage),
+    )
+    candidate = RevisionCandidate(
+        prior=source, target=source, target_post_policy_json="{}",
+        max_revision_rounds=2, revision_deadline_hours=24, target_max_revision_rounds=2,
+    )
+    packet = {"candidate": candidate.model_dump(mode="json")}
+    with pytest.raises(ValidationError):
+        RevisionCandidate.model_validate(packet["candidate"])
+    assert candidate_from_packet(packet) == candidate
+    preparation_id, predecessor_id, manifest_id, submission_id = (new_record_id() for _ in range(4))
+    row = SimpleNamespace(
+        id=DriverUUID(str(preparation_id)), predecessor_id=DriverUUID(str(predecessor_id)),
+        routing_manifest_id=DriverUUID(str(manifest_id)), submission_id=str(submission_id),
+        preparation_sha256="sha256:" + "b" * 64, packet=packet, sequence=2,
+        next_revision_round=1, max_revision_rounds=2, requested_at=datetime.now(UTC),
+        deadline_at=datetime.max.replace(tzinfo=UTC), outcome="kept", blocked_reason=None,
+    )
+    view = project_revision(row, datetime.now(UTC))
+    assert (view.preparation_id, view.predecessor_preparation_id,
+            view.source_routing_manifest_id, view.source_submission_id) == (
+                preparation_id, predecessor_id, manifest_id, submission_id,
+            )
+    assert type(view.preparation_id) is UUID
+
+
+@pytest.mark.parametrize(("disposition", "expected"), [
+    ("ready", "context_blocked"),
+    ("context_blocked", "context_blocked"),
+    ("revision_deadline_expired", "revision_deadline_expired"),
+    ("revision_limit_reached", "revision_limit_reached"),
+])
+async def test_revision_projection_stale_source_preserves_deadline_and_limit_priority(
+    monkeypatch, disposition, expected,
+):
+    from app.modules.tasks.revision.service import project_current_revision
+
+    class Session:
+        calls = 0
+
+        async def scalar(self, *_args, **_kwargs):
+            self.calls += 1
+            return False if self.calls == 1 else datetime.now(UTC)
+
+    view = SimpleNamespace(disposition=disposition)
+    view.model_copy = lambda *, update: SimpleNamespace(disposition=update["disposition"])
+    monkeypatch.setattr("app.modules.tasks.revision.service.project_revision", lambda *_: view)
+    session = Session()
+    result = await project_current_revision(session, SimpleNamespace(id=new_record_id()))
+    assert result.disposition == expected
+    assert session.calls == 2
+
+
+class _RevisionRepairSession:
+    def __init__(self, parent, child, now):
+        self.parent, self.child, self.now = parent, child, now
+        self.scalar_calls = 0
+
+    def begin(self):
+        return self
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        return False
+
+    async def scalar(self, _):
+        self.scalar_calls += 1
+        return self.child if self.scalar_calls == 1 else self.now
+
+    async def get(self, *_):
+        return self.parent
+
+
+@pytest.mark.parametrize("case", ["replay", "denied", "changed_head", "expired"])
+async def test_revision_repair_replay_and_current_source_failures(monkeypatch, case):
+    project_id, task_id, actor_id = new_record_id(), new_record_id(), new_record_id()
+    assignment_id, contributor_id, submission_id = new_record_id(), new_record_id(), new_record_id()
+    parent_id, child_id, manifest_id, key = (new_record_id() for _ in range(4))
+    now = datetime.now(UTC)
+    request = TaskRevisionRepairRequest(
+        parent_preparation_id=parent_id, parent_preparation_sha256="sha256:" + "a" * 64,
+        reason="Recover current revision context",
+    )
+    digest = canonical_json_hash({
+        "project_id": str(project_id), "task_id": str(task_id),
+        "parent_preparation_id": str(parent_id),
+        "parent_preparation_sha256": request.parent_preparation_sha256,
+        "reason": request.reason,
+    })
+    parent = SimpleNamespace(
+        id=parent_id, project_id=str(project_id), task_id=str(task_id),
+        preparation_sha256=request.parent_preparation_sha256,
+        routing_manifest_id=manifest_id, assignment_id=str(assignment_id),
+        contributor_id=str(contributor_id), submission_id=str(submission_id),
+        next_revision_round=1, source_submission_version=1, blocked_reason=None,
+        deadline_at=now if case == "expired" else datetime.max.replace(tzinfo=UTC),
+    )
+    child = SimpleNamespace(
+        id=child_id, project_id=str(project_id), task_id=str(task_id),
+        predecessor_id=parent_id, routing_manifest_id=manifest_id,
+        repair_request_digest=digest, repair_reason=request.reason,
+        repair_authority_context={}, assignment_id=str(assignment_id),
+        submission_id=str(submission_id), created_at=now,
+    ) if case in {"replay", "denied"} else None
+    task = SimpleNamespace(id=str(task_id), project_id=str(project_id),
+                           assigned_to=str(contributor_id), status="submitted" if child else "needs_revision")
+    assignment = SimpleNamespace(id=str(assignment_id), contributor_id=str(contributor_id),
+                                 status="active", accepted_at=now, released_at=None)
+    latest = SimpleNamespace(id=str(submission_id), task_assignment_id=str(assignment_id),
+                             contributor_id=str(contributor_id), version=1)
+    manifest = SimpleNamespace(id=manifest_id, routing_recommendation="needs_revision",
+                               assignment_id=str(assignment_id), contributor_id=str(contributor_id),
+                               submission_version=1)
+    session = _RevisionRepairSession(parent, child, now)
+    commands = AuthorizedTaskCommands.__new__(AuthorizedTaskCommands)
+    commands._session, commands._actor_id = session, actor_id
+    commands._repo = SimpleNamespace(
+        lock_project_task=AsyncMock(return_value=task),
+        lock_accepted_assignment=AsyncMock(return_value=assignment),
+        get_latest_submission_for_task=AsyncMock(return_value=latest),
+        read_routing_manifest=AsyncMock(return_value=manifest),
+    )
+    commands._facts = lambda *_: TaskAuthorityFacts(
+        TaskAuthorityOperation.REVISION_REPAIR, task_id, project_id, actor_id, task.status,
+        contributor_id, assignment_id, contributor_id, "sha256:" + "b" * 64,
+    )
+    commands._authorize_facts = AsyncMock(side_effect=TaskAuthorityDenied("denied")
+                                         if case == "denied" else None)
+    commands._audit = SimpleNamespace(record_revision_repair=AsyncMock())
+    projection = AsyncMock(return_value="current-eligibility")
+    monkeypatch.setattr("app.modules.tasks.authorized_commands.project_current_revision", projection)
+    monkeypatch.setattr("app.modules.tasks.authorized_commands.head_for_source",
+                        AsyncMock(return_value=parent if case != "changed_head" else SimpleNamespace(id=new_record_id())))
+    if case == "replay":
+        assert await commands.repair_revision_context(project_id, task_id, request, idempotency_key=key) == "current-eligibility"
+        projection.assert_awaited_once_with(session, child)
+        commands._authorize_facts.assert_awaited_once()
+        commands._repo.read_routing_manifest.assert_not_awaited()
+        commands._audit.record_revision_repair.assert_not_awaited()
+    elif case == "denied":
+        with pytest.raises(TaskAuthorityDenied):
+            await commands.repair_revision_context(project_id, task_id, request, idempotency_key=key)
+        commands._audit.record_revision_repair.assert_not_awaited()
+    else:
+        with pytest.raises(TaskRevisionRepairError) as caught:
+            await commands.repair_revision_context(project_id, task_id, request, idempotency_key=key)
+        assert caught.value.code == ("revision_context_changed" if case == "changed_head"
+                                     else "revision_deadline_expired")
+        commands._authorize_facts.assert_awaited_once()
+        commands._audit.record_revision_repair.assert_not_awaited()

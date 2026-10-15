@@ -168,6 +168,7 @@ jobs:
           set -euo pipefail
           python -m pip install "uv==0.10.7"
           test "$(uv --version)" = "uv 0.10.7"
+          uv lock --check
           uv sync --frozen --all-extras
           test "$(uv run --frozen ruff --version)" = "ruff 0.15.22"
 
@@ -319,6 +320,7 @@ jobs:
           set -euo pipefail
           python -m pip install "uv==0.10.7"
           test "$(uv --version)" = "uv 0.10.7"
+          uv lock --check
           uv sync --frozen --all-extras
 
       - name: Download source-pinned MinIO image
@@ -356,17 +358,25 @@ jobs:
           set -euo pipefail
           storage=$(docker exec "${POSTGRES_CONTAINER}" stat -f -c '%T %b %S' /var/lib/postgresql/data)
           read -r filesystem blocks block_size <<< "${storage}"
-          [[ -n "${filesystem}" && "${blocks}" =~ ^[0-9]+$ && "${block_size}" =~ ^[0-9]+$ ]]
+          if ! [[ -n "${filesystem}" && "${blocks}" =~ ^[0-9]+$ && "${block_size}" =~ ^[0-9]+$ ]]; then
+            exit 1
+          fi
           if [[ "${EXPECTED_PG_STORAGE}" == tmpfs ]]; then
-            [[ "${filesystem}" == tmpfs ]]
-            (( blocks * block_size == 2147483648 ))
+            if [[ "${filesystem}" != tmpfs ]] ||
+              (( blocks * block_size != 2147483648 )); then
+              exit 1
+            fi
           elif [[ "${EXPECTED_PG_STORAGE}" == disk ]]; then
-            [[ "${filesystem}" != tmpfs ]]
+            if [[ "${filesystem}" == tmpfs ]]; then
+              exit 1
+            fi
           else
             exit 1
           fi
           settings=$(docker exec "${POSTGRES_CONTAINER}" psql -U workstream -d workstream_test -At -c "SELECT current_setting('fsync'), current_setting('full_page_writes'), current_setting('synchronous_commit'), current_setting('data_directory')")
-          [[ "${settings}" == 'on|on|on|/var/lib/postgresql/data' ]]
+          if [[ "${settings}" != 'on|on|on|/var/lib/postgresql/data' ]]; then
+            exit 1
+          fi
           echo "PostgreSQL CI storage: ${filesystem}, bytes=$((blocks * block_size)); write settings: ${settings}"
 
       - name: Execute semantic lane ${{ matrix.lane }}
@@ -497,6 +507,7 @@ jobs:
           set -euo pipefail
           python -m pip install "uv==0.10.7"
           test "$(uv --version)" = "uv 0.10.7"
+          uv lock --check
           uv sync --frozen --all-extras
 
       - name: Download source-pinned MinIO image
@@ -578,7 +589,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           coverage_files=(.ci/test-lanes/run/.coverage.*)
-          test "${#coverage_files[@]}" -eq 10
+          test "${#coverage_files[@]}" -eq 13
           for source in "${coverage_files[@]}"; do
             destination="$(basename "${source}")"
             test -f "${source}"
@@ -657,7 +668,7 @@ jobs:
               raise SystemExit("hosted evidence head drift")
 
           lanes = summary.get("lanes")
-          if not isinstance(lanes, list) or len(lanes) != 10:
+          if not isinstance(lanes, list) or len(lanes) != 13:
               raise SystemExit("invalid hosted lane inventory")
           collected: list[str] = []
           completed: list[str] = []

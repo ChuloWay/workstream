@@ -106,6 +106,9 @@ def _replacement_request(h, data: bytes, *, predecessor_id: UUID, idempotency_ke
         task_id=h.request.task_id,
         assignment_id=h.request.assignment_id,
         predecessor_submission_id=predecessor_id,
+        revision_preparation_id=(str(h.revision_preparation_id)
+                                 if getattr(h, "revision_preparation_id", None) else None),
+        revision_preparation_sha256=getattr(h, "revision_preparation_sha256", None),
         idempotency_key=idempotency_key,
         summary=h.creation_request.summary,
         contributor_attestation=h.creation_request.contributor_attestation,
@@ -153,6 +156,11 @@ async def _fixture_revision_context(h):
         assert source["routing_recommendation"] == source["task_status"] == "needs_revision"
         assert source["assignment_status"] == "active" and source["complete"] is True
         await no_economic_effects(session)
+        from app.modules.tasks.revision.service import head_for_source
+        preparation = await head_for_source(session, result.routing_manifest_id)
+        assert preparation is not None
+        h.revision_preparation_id = preparation.id
+        h.revision_preparation_sha256 = preparation.preparation_sha256
     return result.routing_manifest_id
 
 
@@ -611,6 +619,35 @@ async def test_sql_selected_pre_reservation_rejects_superseded_checker_cause(
             await no_economic_effects(session)
 
 
+async def _assert_foreign_verified_admission_rejected(local, foreign, admission_id, before):
+    # Keep current preparation/cause binding intact, then substitute
+    # a real foreign verified PRE run to reach the original byte guard.
+    async with local.factory() as session:
+        foreign_run_id = await session.scalar(text("""
+            SELECT a.selected_pre_submit_run_id
+            FROM public.submission_bundle_admissions a
+            JOIN public.submissions s ON s.submission_bundle_admission_id=a.id
+            WHERE s.id=:submission
+        """), {"submission": foreign.created.submission_id})
+        assert foreign_run_id is not None
+    with pytest.raises(
+        IntegrityError, match="submission bundle admission verified lineage mismatch"
+    ) as verified_mismatch:
+        async with local.factory.begin() as session:
+            await session.execute(text("""
+                INSERT INTO public.submission_bundle_admissions
+                SELECT (pg_catalog.jsonb_populate_record(
+                    NULL::public.submission_bundle_admissions, to_jsonb(a)
+                    || pg_catalog.jsonb_build_object(
+                        'id',CAST(:new_id AS uuid),
+                        'selected_pre_submit_run_id',CAST(:run AS uuid)
+                    )
+                )).* FROM public.submission_bundle_admissions a WHERE a.id=:id
+            """), {"new_id": new_record_id(), "run": foreign_run_id, "id": admission_id})
+    assert verified_mismatch.value.orig.sqlstate == "23514"
+    assert await _snapshot(local) == before
+
+
 async def test_sql_selected_pre_reservation_and_admission_reject_foreign_routed_cause(
     tmp_path,
     isolated_database_env,
@@ -682,7 +719,7 @@ async def test_sql_selected_pre_reservation_and_admission_reject_foreign_routed_
             assert immutable.value.orig.sqlstate == "55000"
             assert await _snapshot(local) == before
             with pytest.raises(
-                IntegrityError, match="submission bundle admission verified lineage mismatch"
+                IntegrityError, match="revision admission context unavailable"
             ) as mismatch:
                 async with local.factory.begin() as session:
                     await session.execute(
@@ -700,6 +737,9 @@ async def test_sql_selected_pre_reservation_and_admission_reject_foreign_routed_
                     )
             assert mismatch.value.orig.sqlstate == "23514"
             assert await _snapshot(local) == before
+            await _assert_foreign_verified_admission_rejected(
+                local, foreign, admission_id, before,
+            )
             async with local.factory() as session:
                 admission = await session.get(SubmissionBundleAdmission, str(admission_id))
                 assert (
@@ -772,14 +812,14 @@ async def test_dispatch_commit_requires_current_predecessor_checker_fence(
                 lambda _session: FrozenTaskContextPort(),
             )
             with pytest.raises(
-                IntegrityError, match="replacement dispatch evaluation is not current",
+                IntegrityError, match="revision context unavailable for new submission",
             ):
                 async with h.factory() as session:
                     await compose_hidden_submission_creation_command(
                         session, h.actor_context, request_id=new_record_id(),
                         correlation_id=new_record_id(),
                     ).create(creation)
-            assert len(staged) == 1
+            assert staged == []  # The INSERT guard stops before any dispatch is staged.
             async with h.factory() as session:
                 assert await session.scalar(text("SELECT count(*) FROM public.submissions")) == 1
                 assert await session.scalar(text("SELECT count(*) FROM public.submission_dispatches")) == 1

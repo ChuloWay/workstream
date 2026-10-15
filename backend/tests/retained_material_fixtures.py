@@ -59,6 +59,7 @@ from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.actors.api import ServiceIdentity
 from app.modules.projects.locked_policy_repository import ProjectLockedPolicyRepository
 from app.modules.projects.models import EffectiveProjectSubmissionArtifactPolicy
+from app.modules.tasks.api.submission_context import TaskSubmissionContextRequest
 from tests.test_artifact_admission import _AllowArtifactAuthority, _context, _settings
 from tests.test_checker_materialization import _limits
 from tests.checkers.execution.support import provision_post_submit_service
@@ -115,7 +116,7 @@ def retained_archive_store(factory, namespace):
     return MemoryStore(namespace, objects=objects)
 
 
-def _submission_request(task, assignment, link, packet, predecessor_id, policy):
+def _submission_request(task, assignment, link, packet, predecessor_id, policy, revision_context):
     content = BytesIO()
     paths = {entry["path"] for entry in policy["required_artifacts"] if entry.get("required", True)}
     paths.update(
@@ -141,6 +142,8 @@ def _submission_request(task, assignment, link, packet, predecessor_id, policy):
         contributor_attestation=packet.worker_attestation,
         media_type="application/zip",
         byte_source=_bytes(content.getvalue()),
+        revision_preparation_id=(str(revision_context.preparation_id) if revision_context else None),
+        revision_preparation_sha256=(revision_context.preparation_sha256 if revision_context else None),
     )
     return context, request
 
@@ -229,7 +232,14 @@ async def retained_admission(
     """Prepare/check/publish/verify actual ZIP bytes for this existing assignment."""
     await provision_post_submit_service(factory, ServiceIdentity.ARTIFACT_MATERIALIZER)
     await provision_post_submit_service(factory, ServiceIdentity.CHECKER_PRE_SUBMIT)
-    async with factory() as session:
+    async with factory() as session, session.begin():
+        current = await task_submission_context_port(session).lock_submission_context(
+            TaskSubmissionContextRequest(
+                task_id=UUID(task.id), assignment_id=UUID(assignment.id),
+                contributor_id=UUID(task.assigned_to),
+                predecessor_submission_id=UUID(predecessor_id) if predecessor_id else None,
+            )
+        )
         persisted = await session.get(ArtifactStorageNamespace, "primary")
         namespace = ArtifactStorageNamespaceSpec(
             persisted.backend,
@@ -241,10 +251,14 @@ async def retained_admission(
         policy = (
             await session.get(
                 EffectiveProjectSubmissionArtifactPolicy,
-                task.locked_effective_project_submission_artifact_policy_id,
+                str(current.locked_project_context.effective_policy_id),
             )
         ).effective_policy
-    context, request = _submission_request(task, assignment, link, packet, predecessor_id, policy)
+    # A retained successor is still a new governed attempt: explicitly acknowledge
+    # its canonical current preparation, then let ART revalidate the binding.
+    context, request = _submission_request(
+        task, assignment, link, packet, predecessor_id, policy, current.revision_context,
+    )
     store = retained_archive_store(factory, namespace)
     with TemporaryDirectory(prefix="retained-material-") as directory:
         settings = _settings(Path(directory), maximum_bytes=1024 * 1024)

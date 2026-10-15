@@ -5,19 +5,23 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from typing import NoReturn
 from uuid import UUID
 from app.core.identifiers import new_record_id
 
 from pydantic import TypeAdapter
 
-from sqlalchemy import func
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncSessionTransaction
 
 from app.modules.contributions.api import LockedCompensationTermsPort
 from app.core.hashing import canonical_json_hash
 from app.db.errors import integrity_constraint_name
-from app.modules.projects.api.locked_policy import ProjectLockedPolicyContextFacts
+from app.modules.projects.api.locked_policy import (
+    ProjectLockedPolicyContextFacts, ProjectLockedPolicyContextRequest,
+    ProjectLockedPolicyContextUnavailable,
+)
 from app.modules.tasks.api.authorization import (
     TaskAuthorityDecision,
     TaskAuthorityFacts,
@@ -30,11 +34,23 @@ from app.modules.tasks.api.task_detail import (
 from app.modules.tasks.api.guide_documents import (
     TaskGuideDocumentsPort, TaskGuideDocumentNotFound, VerifiedTaskGuideRead, TaskGuideSelection,
 )
-from app.modules.tasks.api.transition_audit import TaskPolicyLineage, TaskTransitionAuditPort, TaskTransitionFacts
+from app.modules.tasks.api.transition_audit import (
+    TaskPolicyLineage, TaskRevisionRepairAuditFacts, TaskTransitionAuditPort, TaskTransitionFacts,
+)
 from app.modules.tasks.api.audit_evidence import AuditTaskEvidenceRequest, AuditTaskEvidencePage, TaskEvidenceInvalid
 from app.modules.tasks.models import TaskAssignment, TaskCommandReceipt, WorkstreamTask
+from app.modules.tasks.api.submission_context import TaskSubmissionContextUnavailable
 from app.modules.tasks.command_replay import TaskCommandReplay, TaskReplayConflict
 from app.modules.tasks.repository import TaskRepository
+from app.modules.tasks.revision.models import TaskRevisionPreparation
+from app.modules.tasks.revision.expiry_event import revision_expiry_event
+from app.modules.outbox.api import OutboxAppendPort
+from app.modules.tasks.revision.service import (
+    RevisionRepairReceipt, candidate_from_packet, head_for_source, prepare_revision, project_current_revision,
+    read_contributor_revision, select_candidate, snapshot,
+)
+from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
+from app.modules.tasks.api.revision import ContributorRevisionContext
 from app.modules.tasks.schemas import (
     ContributorTaskLifecycle, ContributorTaskWorkContext, ManagementTaskWorkContext,
     ContributorTaskSubmissionRequirements, ManagementTaskSubmissionRequirements,
@@ -43,6 +59,7 @@ from app.modules.tasks.schemas import (
     TaskCreate,
     ImportedTaskCreate,
     TaskResponse,
+    TaskRevisionRepairRequest,
     TaskWithAssignmentResponse,
 )
 from app.modules.tasks.service import (
@@ -51,6 +68,7 @@ from app.modules.tasks.service import (
     TaskAssignmentConflict,
     TaskNotFound,
     TaskProjectNotReady,
+    TaskServiceError,
     TaskService,
     TaskTransitionBlocked,
     TaskValidationError,
@@ -100,6 +118,16 @@ class TaskTransitionContextPreparation:
     owner: object
 
 
+class TaskRevisionRepairError(TaskServiceError):
+    """A stale or ineligible revision source cannot produce a repair child."""
+
+    status_code = 409
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code.replace("_", " "))
+
+
 class AuthorizedTaskCommands:
     """TASK owns state and assignment; AUTH owns permission and current grants."""
 
@@ -113,6 +141,7 @@ class AuthorizedTaskCommands:
         contexts: TaskService,
         guide_documents: TaskGuideDocumentsPort,
         compensation_terms: LockedCompensationTermsPort | None = None,
+        outbox: OutboxAppendPort | None = None,
     ) -> None:
         self._session = session
         self._authorization = authorization
@@ -121,6 +150,7 @@ class AuthorizedTaskCommands:
         self._repo = TaskRepository(session, compensation_terms=compensation_terms)
         self._contexts = contexts
         self._guide_documents = guide_documents
+        self._outbox = outbox
         self._replay = TaskCommandReplay(session)
         self._transition_context_owner = object()
 
@@ -266,6 +296,294 @@ class AuthorizedTaskCommands:
 
     async def release(self, task_id: UUID, reason: str | None, *, idempotency_key: UUID) -> TaskResponse:
         return await self._manage_transition(task_id, TaskAuthorityOperation.RELEASE, reason, idempotency_key)
+
+    async def repair_revision_context(
+        self, project_id: UUID, task_id: UUID, request: TaskRevisionRepairRequest,
+        *, idempotency_key: UUID,
+    ) -> ContributorRevisionContext:
+        """Map committed-child uniqueness races after the caller root rolls back."""
+        try:
+            return await self._repair_revision_context_root(
+                project_id, task_id, request, idempotency_key=idempotency_key,
+            )
+        except IntegrityError as exc:
+            name = integrity_constraint_name(exc)
+            if name == "uq_revision_repair_actor_key":
+                raise TaskReplayConflict("idempotency_mismatch") from exc
+            if name in {
+                "uq_revision_preparation_successor", "uq_revision_preparation_sequence",
+                "ck_revision_preparation_current_source",
+            }:
+                raise TaskRevisionRepairError("revision_context_changed") from exc
+            if name == "ck_revision_preparation_deadline_expired":
+                raise TaskRevisionRepairError("revision_deadline_expired") from exc
+            raise
+
+    async def _repair_revision_context_root(
+        self, project_id: UUID, task_id: UUID, request: TaskRevisionRepairRequest,
+        *, idempotency_key: UUID,
+    ) -> ContributorRevisionContext:
+        """Append one PM-authorized child to the current failure's frozen context."""
+        if request.routing_manifest_id is not None:
+            return await self._recover_missing_revision_root(
+                project_id, task_id, request, idempotency_key=idempotency_key,
+            )
+        request_digest = canonical_json_hash({
+            "project_id": str(project_id), "task_id": str(task_id),
+            "parent_preparation_id": str(request.parent_preparation_id),
+            "parent_preparation_sha256": request.parent_preparation_sha256,
+            "reason": request.reason,
+        })
+        async with self._session.begin():
+            task = await self._repo.lock_project_task(project_id, task_id)
+            if task is None:
+                raise TaskNotFound("task not found")
+            # The unique actor/key is the immutable repair receipt namespace.
+            prior_child = await self._session.scalar(select(TaskRevisionPreparation).where(
+                TaskRevisionPreparation.repair_actor_id == self._actor_id,
+                TaskRevisionPreparation.repair_idempotency_key == idempotency_key,
+            ).execution_options(populate_existing=True))
+            replay_conflict = prior_child is not None and (
+                prior_child.repair_request_digest != request_digest
+                or prior_child.task_id != task.id or prior_child.project_id != task.project_id
+                or prior_child.predecessor_id != request.parent_preparation_id
+                or prior_child.repair_reason != request.reason
+            )
+            parent = await self._session.get(TaskRevisionPreparation, request.parent_preparation_id)
+            if (parent is None or parent.task_id != task.id or parent.project_id != task.project_id
+                    or parent.preparation_sha256 != request.parent_preparation_sha256):
+                raise TaskNotFound("task not found")
+            if prior_child is not None and prior_child.routing_manifest_id != parent.routing_manifest_id:
+                replay_conflict = True
+            assignment = await self._repo.lock_accepted_assignment(
+                project_id=project_id, task_id=task_id,
+                assignment_id=UUID(parent.assignment_id),
+            )
+            if (assignment is None or assignment.contributor_id != parent.contributor_id
+                    or assignment.id != parent.assignment_id or task.assigned_to != assignment.contributor_id):
+                raise TaskNotFound("task not found")
+            latest = await self._repo.get_latest_submission_for_task(
+                task.id, for_update=True, populate_existing=True,
+            )
+            if latest is None:
+                raise TaskNotFound("task not found")
+            facts = replace(
+                self._facts(task, assignment, TaskAuthorityOperation.REVISION_REPAIR,
+                            request.reason, idempotency_key),
+                request_digest=request_digest,
+                revision_preparation_id=parent.id,
+                revision_preparation_sha256=parent.preparation_sha256,
+                revision_routing_manifest_id=parent.routing_manifest_id,
+                revision_replay_preparation_id=prior_child.id if prior_child is not None and not (
+                    prior_child.task_id != task.id or prior_child.project_id != task.project_id
+                    or prior_child.predecessor_id != parent.id
+                ) else None,
+            )
+
+            async def reject(code: str) -> NoReturn:
+                await self._authorize_facts(facts)
+                raise TaskRevisionRepairError(code)
+
+            if prior_child is not None:
+                await self._authorize_facts(facts)
+                if replay_conflict:
+                    raise TaskReplayConflict("idempotency_mismatch")
+                if (prior_child.assignment_id != assignment.id
+                        or prior_child.submission_id != parent.submission_id
+                        or prior_child.repair_authority_context is None):
+                    raise TaskReplayConflict("task_replay_state_changed")
+                return await project_current_revision(self._session, prior_child)
+
+            if (task.status != "needs_revision" or assignment.status != "active"
+                    or assignment.accepted_at is None or assignment.released_at is not None
+                    or latest.id != parent.submission_id
+                    or latest.task_assignment_id != assignment.id
+                    or latest.contributor_id != assignment.contributor_id
+                    or latest.version != parent.source_submission_version):
+                await reject("revision_context_changed")
+            manifest = await self._repo.read_routing_manifest(
+                manifest_id=parent.routing_manifest_id, project_id=project_id,
+                task_id=task_id, submission_id=UUID(latest.id),
+            )
+            if (manifest is None or manifest.routing_recommendation != "needs_revision"
+                    or manifest.assignment_id != assignment.id
+                    or manifest.contributor_id != assignment.contributor_id
+                    or manifest.submission_version != latest.version
+                    or (head := await head_for_source(self._session, manifest.id)) is None
+                    or head.id != parent.id):
+                await reject("revision_context_changed")
+            if parent.blocked_reason == "revision_limit_reached":
+                await reject("revision_limit_reached")
+            now = await self._session.scalar(select(func.clock_timestamp()))
+            if now >= parent.deadline_at:
+                await reject("revision_deadline_expired")
+            try:
+                historical = await self._contexts._project_contexts.lock_locked_policy_context(
+                    ProjectLockedPolicyContextRequest(
+                        project_id=project_id, guide_version=latest.locked_guide_version,
+                        source_snapshot_id=UUID(latest.locked_guide_source_snapshot_id),
+                        source_snapshot_hash=latest.locked_guide_source_snapshot_hash,
+                        effective_policy_id=UUID(latest.locked_effective_project_submission_artifact_policy_id),
+                        effective_policy_hash=latest.locked_effective_project_submission_artifact_policy_hash,
+                        pre_submit_policy_id=UUID(latest.locked_pre_submit_checker_policy_id),
+                        pre_submit_policy_bundle_hash=latest.locked_pre_submit_checker_bundle_hash,
+                    )
+                )
+                if not await self._session.scalar(
+                    select(func.revision_routing_source_current(manifest.id))
+                ):
+                    await reject("revision_context_changed")
+                candidate = await select_candidate(self._contexts._project_contexts, historical)
+                original = candidate_from_packet(parent.packet)
+            except (ProjectLockedPolicyContextUnavailable, ValueError, KeyError, TypeError):
+                await reject("revision_context_blocked")
+            if candidate.prior != original.prior or candidate.prior != snapshot(historical):
+                await reject("revision_context_changed")
+            if candidate.target is None:
+                await reject("revision_context_blocked")
+            if (parent.next_revision_round > parent.max_revision_rounds
+                    or candidate.target_max_revision_rounds is not None
+                    and parent.next_revision_round > candidate.target_max_revision_rounds):
+                await reject("revision_limit_reached")
+            if candidate.target == original.target:
+                await reject("revision_context_unchanged")
+            decision = await self._authorize_facts(facts)
+            audit_event_id = new_record_id()
+            try:
+                child = await prepare_revision(
+                    self._session, manifest=manifest, candidate=candidate,
+                    audit_event_id=audit_event_id, predecessor=parent,
+                    authorization_decision_id=decision.decision_id,
+                    repair_receipt=RevisionRepairReceipt(
+                        actor_id=self._actor_id, idempotency_key=idempotency_key,
+                        request_digest=request_digest, reason=request.reason, authority=decision,
+                    ),
+                )
+            except TaskSubmissionContextUnavailable as exc:
+                raise TaskRevisionRepairError(exc.code) from exc
+            if child.id == parent.id or child.outcome == "blocked":
+                raise TaskRevisionRepairError("revision_context_changed")
+            await self._audit.record_revision_repair(TaskRevisionRepairAuditFacts(
+                event_id=audit_event_id, project_id=project_id, task_id=task_id,
+                assignment_id=UUID(assignment.id), submission_id=UUID(latest.id),
+                routing_manifest_id=manifest.id, preparation_id=child.id,
+                actor_profile_id=self._actor_id, authorization_decision_id=decision.decision_id,
+                reason=request.reason,
+            ))
+            await self._session.flush()
+            return await project_current_revision(self._session, child)
+
+    async def _recover_missing_revision_root(
+        self, project_id: UUID, task_id: UUID, request: TaskRevisionRepairRequest,
+        *, idempotency_key: UUID,
+    ) -> ContributorRevisionContext:
+        """Recover one retained failure whose routing commit predates preparations."""
+        manifest_id = request.routing_manifest_id
+        request_digest = canonical_json_hash({
+            "project_id": str(project_id), "task_id": str(task_id),
+            "routing_manifest_id": str(manifest_id), "reason": request.reason,
+        })
+        async with self._session.begin():
+            task = await self._repo.lock_project_task(project_id, task_id)
+            if task is None:
+                raise TaskNotFound("task not found")
+            prior_root = await self._session.scalar(select(TaskRevisionPreparation).where(
+                TaskRevisionPreparation.repair_actor_id == self._actor_id,
+                TaskRevisionPreparation.repair_idempotency_key == idempotency_key,
+            ).execution_options(populate_existing=True))
+            manifest = await self._session.get(TaskPostSubmitRoutingManifest, manifest_id)
+            if (manifest is None or manifest.project_id != task.project_id
+                    or manifest.task_id != task.id or manifest.routing_recommendation != "needs_revision"):
+                raise TaskNotFound("task not found")
+            assignment = await self._repo.lock_accepted_assignment(
+                project_id=project_id, task_id=task_id, assignment_id=UUID(manifest.assignment_id),
+            )
+            if (assignment is None or assignment.contributor_id != manifest.contributor_id
+                    or task.assigned_to != assignment.contributor_id):
+                raise TaskNotFound("task not found")
+            latest = await self._repo.get_latest_submission_for_task(
+                task.id, for_update=True, populate_existing=True,
+            )
+            if latest is None:
+                raise TaskNotFound("task not found")
+            same_receipt = bool(
+                prior_root is not None and prior_root.task_id == task.id
+                and prior_root.project_id == task.project_id
+                and prior_root.routing_manifest_id == manifest.id
+                and prior_root.predecessor_id is None
+            )
+            facts = replace(
+                self._facts(task, assignment, TaskAuthorityOperation.REVISION_REPAIR,
+                            request.reason, idempotency_key),
+                request_digest=request_digest,
+                revision_preparation_id=None, revision_preparation_sha256=None,
+                revision_routing_manifest_id=manifest.id,
+                revision_replay_preparation_id=prior_root.id if same_receipt else None,
+            )
+            if prior_root is not None:
+                await self._authorize_facts(facts)
+                if (not same_receipt or prior_root.repair_request_digest != request_digest
+                        or prior_root.repair_reason != request.reason
+                        or prior_root.assignment_id != assignment.id
+                        or prior_root.submission_id != manifest.submission_id
+                        or prior_root.repair_authority_context is None):
+                    raise TaskReplayConflict("idempotency_mismatch")
+                return await project_current_revision(self._session, prior_root)
+            if (task.status != "needs_revision" or assignment.status != "active"
+                    or assignment.accepted_at is None or assignment.released_at is not None
+                    or latest.id != manifest.submission_id
+                    or latest.task_assignment_id != assignment.id
+                    or latest.contributor_id != assignment.contributor_id
+                    or latest.version != manifest.submission_version):
+                await self._authorize_facts(facts)
+                raise TaskRevisionRepairError("revision_context_changed")
+            try:
+                historical = await self._contexts._project_contexts.lock_locked_policy_context(
+                    ProjectLockedPolicyContextRequest(
+                        project_id=project_id, guide_version=latest.locked_guide_version,
+                        source_snapshot_id=UUID(latest.locked_guide_source_snapshot_id),
+                        source_snapshot_hash=latest.locked_guide_source_snapshot_hash,
+                        effective_policy_id=UUID(latest.locked_effective_project_submission_artifact_policy_id),
+                        effective_policy_hash=latest.locked_effective_project_submission_artifact_policy_hash,
+                        pre_submit_policy_id=UUID(latest.locked_pre_submit_checker_policy_id),
+                        pre_submit_policy_bundle_hash=latest.locked_pre_submit_checker_bundle_hash,
+                    )
+                )
+                candidate = await select_candidate(self._contexts._project_contexts, historical)
+            except (ProjectLockedPolicyContextUnavailable, ValueError, KeyError, TypeError):
+                await self._authorize_facts(facts)
+                raise TaskRevisionRepairError("revision_context_blocked") from None
+            existing = await head_for_source(self._session, manifest.id)
+            source_current = await self._session.scalar(
+                select(func.revision_routing_source_current(manifest.id))
+            )
+            decision = await self._authorize_facts(facts)
+            if existing is not None or not source_current:
+                raise TaskRevisionRepairError("revision_context_changed")
+            audit_event_id = new_record_id()
+            try:
+                child = await prepare_revision(
+                    self._session, manifest=manifest, candidate=candidate,
+                    audit_event_id=audit_event_id, authorization_decision_id=decision.decision_id,
+                    repair_receipt=RevisionRepairReceipt(
+                        actor_id=self._actor_id, idempotency_key=idempotency_key,
+                        request_digest=request_digest, reason=request.reason, authority=decision,
+                    ),
+                )
+            except TaskSubmissionContextUnavailable as exc:
+                raise TaskRevisionRepairError(exc.code) from exc
+            if self._outbox is None:
+                raise RuntimeError("revision expiry publication unavailable")
+            await self._outbox.append(revision_expiry_event(manifest, child))
+            await self._audit.record_revision_repair(TaskRevisionRepairAuditFacts(
+                event_id=audit_event_id, project_id=project_id, task_id=task_id,
+                assignment_id=UUID(assignment.id), submission_id=UUID(latest.id),
+                routing_manifest_id=manifest.id, preparation_id=child.id,
+                actor_profile_id=self._actor_id, authorization_decision_id=decision.decision_id,
+                reason=request.reason,
+            ))
+            await self._session.flush()
+            return await project_current_revision(self._session, child)
 
     async def _manage_transition(
         self, task_id: UUID, operation: TaskAuthorityOperation, reason: str | None, key: UUID,
@@ -657,6 +975,8 @@ class AuthorizedTaskCommands:
                 lifecycle=ContributorTaskLifecycle(
                     assigned_to_current_actor=own_assignment, next_actions=actions,
                 ),
+                revision_context=(await read_contributor_revision(self._session, task, assignment))
+                if own_assignment else None,
                 guide_documents=(await self._guide_documents.list(task_id, self._guide_request(task, context)))
                 if own_assignment else (),
             )

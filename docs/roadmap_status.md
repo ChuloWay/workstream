@@ -18,8 +18,9 @@ requests are the transient view of work currently under review.
 Bounded contribution evidence reads expose existing immutable work and award
 facts to the current human or authorized project exporter. These reads alone do
 not activate recognition writers, establish the local contributor journey or assert payment.
-The CLI consumes these public reads and exact CSV exports; fixed-membership
-pagination remains separate work.
+The REST reads traverse short-lived fixed membership with fresh authority on
+every page. The CLI follows JSON and exact CSV continuation internally, retains
+its complete public output shape and publishes only a fully validated traversal.
 
 ## Product Goal
 
@@ -129,10 +130,17 @@ canonical PREP. The hidden authorized outcome operation commits source custody
 and its governed effects atomically; B8 supplies hidden completion delivery.
 04F1 supplies verified current failure evidence; 04F2 routes an exact current
 contributor-correctable result through the existing TASK/AUTH operation to
-`needs_revision` under either locked ReviewPolicy mode. 04F3 adds hidden
-exact-cause replacement intake through the canonical ART/TASK writer, preserving
-the predecessor, locked policy and checker source while atomically creating the
-successor Submission and evaluation request. ARCH-04F4 adds hidden reason-bound Operator retry for an exact current terminal `infrastructure_failed` run through the existing CHECKERS coordinator and request handler, with immutable source, AUTH/audit/outbox custody and fresh-authorized historical replay. PILOT-04 registers selected request and completion handlers in production composition. ARCH-02I-B publishes ZIP preparation and the canonical admission-backed Submission POST in OpenAPI. Current completion classification has no `task_setup_blocked` path, so a manager-visible setup-fault hold is future safety work rather than a first-journey prerequisite.
+`needs_revision` under either locked ReviewPolicy mode. PILOT-08 enforces the task-locked revision cap at public preparation, new
+Submission creation and PostgreSQL insertion (initial round 0, then at most the
+configured number of revisions). Each committed fixable failure freezes a fresh
+policy deadline and a complete kept/rebased/blocked revision context. Only
+committed immutable resubmission ends the old window; upload and ready admission
+do not. Contributor
+work-context reads expose the change summary and exact acknowledgement; PM repair
+appends a guarded successor without resetting the window. Exact committed replay
+preserves original facts. A PostgreSQL-timed outbox request records timeout rejection, releases the expired assignment and returns the task to ready. New claimants start their own round-0 allowance; earlier evidence remains immutable. 04F3 supplies replacement intake through the canonical
+ART/TASK writer, preserving predecessor evidence and checker provenance while
+atomically creating the successor Submission and evaluation request. ARCH-04F4 adds hidden reason-bound Operator retry for an exact current terminal `infrastructure_failed` run through the existing CHECKERS coordinator and request handler, with immutable source, AUTH/audit/outbox custody and fresh-authorized historical replay. PILOT-04 registers selected request and completion handlers in production composition. ARCH-02I-B publishes ZIP preparation and the canonical admission-backed Submission POST in OpenAPI. Current completion classification has no `task_setup_blocked` path, so a manager-visible setup-fault hold is future safety work rather than a first-journey prerequisite.
 
 Exact assignment-invalidation authority, atomic originating publication and
 production delivery with enforced prefork topology are implemented. Manager task
@@ -151,7 +159,9 @@ rollback and recovery proof. PILOT-02B adds public atomic JSON-to-DRAFT import
 and native batch status, with immutable membership, fresh-authority exact-file
 replay and a real 200-row PostgreSQL/MinIO proof. PILOT-02C adds separate atomic
 batch screening/release and explicit CLI source/import/status commands, including
-local CSV conversion. These public backend/CLI capabilities do not imply deployment.
+local CSV conversion. Omitted/null task-local criteria remain optional through
+SCREEN/RELEASE under exact guide locks. These public backend/CLI capabilities
+do not imply deployment.
 ARCH-03D connects hidden intake through durable intent to the activated historical
 guide using canonical owner ports. ARCH-04B adds hidden verified Submission input
 with scoped async access. ARCH-04B2 adds hidden typed checker-output storage,
@@ -242,15 +252,17 @@ remain decisive; PM-only permission does not suffice. CLI draft creation, comple
 rule replacement, publication and retirement now use the existing public Finance
 operations with explicit retry keys and immutable receipts. Guide activation is
 separate. CLI contribution-evidence commands now provide self and authorized
-project reads, including exact server CSV downloads. Fixed-membership pagination
-remains separate work.
+project reads, including exact server CSV downloads. Backend fixed-membership
+pagination and the CLI's bounded internal traversal preserve complete selections
+through 100,000 contributions without exposing cursor controls.
 Explicit CLI ZIP preparation, admission-backed creation/replay, submission history
 and contributor checker findings now consume the public APIs. Preparation does
 not create a Submission; readiness recovery is an explicit same-key POST replay,
-not a polling GET. Revision-change summaries await their public field. Native
-proof uses fixture-arranged prerequisites; the separate #552 API and Celery drill
-connects public guide inputs to governed outcomes. Full native CLI
-setup-to-submission proof remains separate.
+not a polling GET. PILOT-08 exposes frozen revision-change summaries through
+contributor task context and requires the exact preparation acknowledgement for
+checker-remediation intake. Native CLI proof uses fixture-arranged prerequisites;
+the separate #552 API and Celery drill connects public guide inputs to governed
+outcomes. Full native CLI setup-to-submission proof remains separate.
 No public project-list
 route is invented.
 CLI write uncertainty is explicit and never automatically
@@ -324,15 +336,15 @@ cannot be reused as post-submission review-gate evidence. See the
 | Unified Project Guide compilation | **Live setup and manager proposal operations** | Committed original-document readiness dispatches one immutable attempt through Celery; complete result and crash/recovery custody; distinct pre/post proposals; deterministic sufficiency and submission-artifact-policy projections; immutable authorized setup finalization; public exact manager review, pre-submit approval and manual correction dispatch; automatic deterministic post-policy derivation, public complete policy read, separate approval and shared correction custody | The bounded local contributor drill starts from public guide inputs with recorded inference; live model setup and hosted operation remain separate |
 | Contribution policy administration | **Public Finance policy workflow; binding administration internal** | Internal Finance Authority adapter-binding lifecycle; public ContributionPolicy discovery/read/create/update/publish/retire with exact Finance Authority and recoverable draft selectors; immutable operation and event history; internal exact selected-version validation; CP07 binding with live exact-project manager authority of the selected published version to the active guide generation | The bounded local public drill passed; policy publication alone does not create a contribution, and hosted operation remains unproven |
 | Task readiness and claim | **Foundation with grant-backed manager and contributor commands** | Task records, assignments and locked work context; guide-bound ContributionPolicyVersion locked before `READY` and copied to TaskAssignment; detached project/guide display; public project-scoped ready, management and operational queues with distinct current grant authority and signed bounded live pagination; public contributor/management detail with exact project and assignment authority; separate current live work-context projections with exact receipt-selected review/revision/ContributionPolicy identities and no obsolete economic fields; explicit management/operational/audit locked-context projections using one historical resolver, with separate public manager, system-Operator and Audit Authority access; immutable contributor/management requirements using one historical translator, with public exact Contributor and Manager authority; bounded public Audit Authority lifecycle evidence with atomic project/task scoping and exact transition references; public manager create/screen/release use exact covered Project Manager authority, atomic audit and replay; claim/start/contributor context use exact-project Submitter grants; assigned context lists documents only and distinct `task.guide.read` verifies locked originals before delivery; separate manager context and system-Operator start; durable claim/start retry receipts with fresh authority and exact assignment checks; hidden exact-assignment invalidation with committed cause verification, delivery fencing, exact fixed-service authority and decision-bound immutable release evidence; atomic authority-loss publication and registered prefork delivery; PILOT-14 exposes both locked contribution types in ready rows and Contributor detail for active exact-project Submitters or Reviewers as unpaid or exact instrument/unit/quantity awards, without Finance binding facts; claim/start remain Submitter-only | The bounded local public durable-runtime journey passed; intended hosted operation remains unproven |
-| Bulk task import | **Public backend and CLI batch journey** | PILOT-02A supplies exact source custody; PILOT-02B imports 1..500 verified JSON rows under one immutable native batch, retains per-Task AUTH/TaskCreated facts, recovers exact original IDs with fresh authority and exposes batch status; actual 200-row, rollback, concurrent-wait and SQL-custody controls pass on PostgreSQL/MinIO. PILOT-02C adds atomic whole-batch screen/release with fresh per-Task authority, locked guide/policy custody and explicit CLI/CSV commands | No remaining PILOT-02 implementation gate; deployment and full contributor-lifecycle proof are separate |
+| Bulk task import | **Public backend and CLI batch journey** | PILOT-02A supplies exact source custody; PILOT-02B imports 1..500 verified JSON rows under one immutable native batch, retains per-Task AUTH/TaskCreated facts, recovers exact original IDs with fresh authority and exposes batch status; actual 200-row, rollback, concurrent-wait and SQL-custody controls pass on PostgreSQL/MinIO. PILOT-02C adds atomic whole-batch screen/release with fresh per-Task authority, locked guide/policy custody and explicit CLI/CSV commands. Optional task-local criteria remain optional through single/bulk screening and release; required instructions and guide locks remain enforced. | No remaining PILOT-02 implementation gate; deployment and full contributor-lifecycle proof are separate |
 | Contributor artifact preparation | **Public initial and checker-remediation entry** | One outer ZIP through the published preparation route; bounded scratch inspection; canonical manifest; shared evaluation-content capacity and exact locked-policy checks before attempts or durable intent; platform and project prechecks; unchanged-work rejection; durable put intent; verification; capacity-charged ready admission; final handoff validates the exact activated historical guide through owner ports; same-key ready replay does not repeat checker or PUT. CLI preparation, creation/replay and history consume these public owners | Bounded local public durable-runtime journey passed; full native CLI setup-to-submission proof and hosted operation remain separate |
 | Pre-submission intake checking | **Public selected entry with approved-guide lineage and bounded feedback** | One versioned Workstream default checker enforces safe ZIP/resource bounds, independently verified digest/manifest, high-confidence secret rejection and unchanged-work rejection. Missing summary/attestation produces warnings only. Approved project PRE checks are immutable digest-pinned images run by the Rust service on verified read-only ART material. Durable selected custody takes TASK before CHECKERS; only a complete pass grants admission to the existing atomic Submission transaction. Both executable catalogues are removed. CLI preparation prints bounded contributor failure details | Bounded local public Celery drill passed. Work findings create no Submission and preserve in_progress; infrastructure failures retain recoverable outcomes. Local Rust/MinIO proof uses runc/docker-dev; hosted gVisor integration and representative limits remain |
 | Immutable Submission creation | **Public admission-backed entry with explicit CLI consumption** | Canonical POST derives contributor identity and consumes a ready admission for initial work or exact checker remediation; durable pre-submit reservation and same-key ready recovery without rerunning checks or PUT; TASK-owned atomic creation with exact assignment ContributionPolicyVersion, locked policy lineage and service/database checked-packet custody; fixed-service artifact binding; exact replay, authority, concurrency and rollback proof. CLI creation/replay and bounded history use these public owners | Bounded local public durable-runtime drill passed; full native CLI setup-to-submission proof, live human-review revision and hosted operation remain separate |
-| Post-submission evaluation and governed outcome | **Selected external execution and production completion routing** | Immutable approved image bindings, Rust service/SDK and typed ART callback grants; exact verified input custody, bounded normalized JSON results and phase authority. Production outbox request/completion handlers run selected images and preserve exact restart/replay. True-policy success reaches review_pending; false-policy success invokes shared authorized FinalAcceptance and atomically creates the submitter ContributionRecord and complete frozen award set. Contributor-correctable failures retain exact remediation causes; Operator retry retains fresh authority and no spent contributor round. The bounded local public API/Celery drill passed both branches, prefork Celery process restart and late authority revocation | Live human review and contributor revision surfaces are separate. Unsupported or human-review-only approved requirements block false activation. New false/pass effects require LIVE REV bound to the current reviewed manifest; a known pre-effect refusal retries within the existing OUTBOX budget, then dead-letters if exhausted. True handoff has no REV/CON prerequisite. Hosted operation and deployment remain unproven |
+| Post-submission evaluation and governed outcome | **Selected external execution and production completion routing** | Immutable approved image bindings, Rust service/SDK and typed ART callback grants; exact verified input custody, bounded normalized JSON results and phase authority. Production outbox request/completion handlers run selected images and preserve exact restart/replay. True-policy success reaches review_pending; false-policy success invokes shared authorized FinalAcceptance and atomically creates the submitter ContributionRecord and complete frozen award set. Contributor-correctable failures retain exact remediation causes; Operator retry retains fresh authority and no spent contributor round. The bounded local public API/Celery drill passed both branches, prefork Celery process restart and late authority revocation | Live human review and human-triggered contributor revision remain separate #554 work. Unsupported or human-review-only approved requirements block false activation. New false/pass effects require LIVE REV bound to the current reviewed manifest; a known pre-effect refusal retries within the existing OUTBOX budget, then dead-letters if exhausted. True handoff has no REV/CON prerequisite. Hosted operation and deployment remain unproven |
 | Review queue and lease | **Hidden persistence foundation** | Queue/admission idempotency and ReviewLease/preference persistence; complete unavailable REV action/principal catalogue and typed AUTH contracts; ART-07A1 metadata-only packet contract and REV-03B immutable normalized packet persistence with live ingest custody; REV-04A Review/finding/resolution and completed request storage | Future resolver proof; canonical admission from `allow_review`; claim/lease/packet authority; lease copies the Submission-stamped policy version with no CON lookup |
-| Review decision and revision | **Hidden acceptance core; runtime planned** | Review/revision policy identities and mutation authority, with `requires_second_review` fixed false through typed and database boundaries; REV-04A immutable Review storage; REV-04B source storage; REV-04C hidden source-neutral FinalAcceptance/TASK/CON participant; approved same-task revision-rebase semantics | ARCH-04E2-B supplies mandatory source AUTH and complete database/audit/outbox closure for hidden automated outcomes. Human decision authority/composition, revision preparation, replay and recovery remain |
+| Review decision and revision | **Checker revision implemented; human decisions planned** | Review/revision policy identities and mutation authority, with `requires_second_review` fixed false through typed and database boundaries; REV-04A immutable Review storage; REV-04B source storage; REV-04C hidden source-neutral FinalAcceptance/TASK/CON participant; ARCH-04E2-B source AUTH and complete database/audit/outbox closure for hidden automated outcomes. PILOT-08 checker revision supplies assignment-scoped cap/deadline enforcement, atomic complete-context rebase, contributor acknowledgement, PM repair and durable timeout rejection/release/reclaim | Genuine human decision authority/composition and revision integration remain #554 work under the same intended policy; hosted operation remains unproven |
 | Contribution and compensation truth | **Hidden shared participant plus public policy administration** | ContributionPolicyVersion persistence; lifecycle-audit participant; adapter bindings; public Finance policy administration; REV-04B shared acceptance source storage; CON-03C immutable ContributionRecord/CompensationAward storage; obsolete guide-keyed payment storage and task-local payment fields removed; CON-07 source-neutral submitter participant and complete award sets; REV-04C composes it with FinalAcceptance/TASK effects in the caller transaction; 04F2 checker remediation creates no contribution or award. The bounded local public drill produced exactly one false-policy FinalAcceptance, submitter ContributionRecord and project-points award, with no Review | ARCH-04E2-B supplies exact routing authority/evidence, complete-set database closure and audit/outbox under REV-12A4A. Selected production request/completion delivery, 04F3 exact-cause replacement and 04F4 hidden retry are implemented; supported false-guide activation is implemented. Only actual Reviews create reviewer records. Obligation/root/ordinal custody remains deferred until fulfillment activation; no public recognition or fulfillment route is live |
-| Contribution evidence reads | **Public bounded REST and CLI reads** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities; one fresh repeatable-read response with one narrowly bounded serialization-conflict retry and fresh authority, complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV; 1,000-contribution maximum refuses excess without truncation. CLI24 consumes both public reads and saves exact server CSV privately without overwrite | Stable fixed-membership paginated list remains separate; no recognition mutation, fulfillment, payout or deployed-service claim |
+| Contribution evidence reads | **Public fixed-membership REST and complete CLI export** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities. Each page has fresh authority and one repeatable-read response transaction; selections through 100,000 contributions retain page-one membership behind signed scope/filter/format/limit-bound cursors, with complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV. The CLI follows JSON or CSV continuation internally with unchanged filters, validates cross-page order/identity, and publishes only the complete JSON result or one private no-overwrite CSV | No recognition mutation, fulfillment, payout, deployed-service or published-binary claim |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove diagnostics during the release drill; no deployed monitoring claim |
 | Frontend and pilot | **Local runtime foundation; product pilot planned** | Checkout-isolated Docker Compose API, prefork Celery process, beat, PostgreSQL, Redis and MinIO stack with local Flow-HMAC identities, existing authority bootstrap/grants, configurable loopback ports and project-scoped state; a pinned offline sample image build and separate oracle were proved under gVisor; React + Vite + TypeScript stack decision | Benchmark representative project checker images and prove hosted isolation before choosing production limits; complete provider-backed guide compilation and activated-guide scoped task-denial proof on the base stack, implement only stable backed frontend surfaces, run the real internal pilot, repair findings, and complete release drills; Docker Desktop/macOS runtime proof remains |
@@ -373,9 +385,10 @@ cannot be reused as post-submission review-gate evidence. See the
   skipped/deselected tests and requires behavior, boundary and real API proof.
   Coverage is diagnostic only, with no percentage gate or test-count target.
   Redundant coverage-only reruns are removed; their tests remain in full-suite lanes.
-  Its ten-lane allocation uses four project lanes, three task lanes, two
-  shared-foundation lanes and one schema lane. Database resets batch trigger
-  commands within the existing transaction while retaining full schema checks;
+  Its 13-lane allocation uses five project lanes, four task lanes, three
+  shared-foundation lanes and one schema lane. Backend preflight, suite and
+  aggregate commands use the checked, frozen dependency lock. Database resets
+  batch trigger commands within the existing transaction while retaining full schema checks;
   authorization preflight runs alongside lanes and remains mandatory at fan-in.
   Ordinary CI databases use bounded private RAM-backed storage with write
   settings verified; schema-contract and aggregate databases stay disk-backed.
@@ -450,8 +463,12 @@ cannot be reused as post-submission review-gate evidence. See the
   import-screen-release journeys, fresh replay, rollback, native waits, revocation
   and immutable custody, plus the built-CLI 200-row socket journey and equivalent
   CSV/JSON bytes and verified-source recovery. [PR #543](https://github.com/Flow-Research/workstream/pull/543)
-  delivered the context-reuse repairs and final native/hosted verification;
-  [issue #489](https://github.com/Flow-Research/workstream/issues/489) is closed.
+  delivered the context-reuse repairs and final native/hosted verification.
+  The [optional-criteria correction](../.commitrail/changes/pilot02-optional-screening-criteria.md)
+  completes the remaining screening gap from
+  [issue #489](https://github.com/Flow-Research/workstream/issues/489): omitted/null
+  task-local criteria survive single and bulk SCREEN/RELEASE under exact guide
+  locks, with supplied text preserved and required instructions still enforced.
   Correctness and completeness passed; the diagnostic CI timing target remains
   unmet. These results do not claim deployment or complete submission/review support.
   [CLI manager task browsing](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-04.md)
@@ -553,7 +570,8 @@ cannot be reused as post-submission review-gate evidence. See the
   [CLI submission and findings](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-25.md)
   adds public ZIP preparation, separate admission-backed creation/replay and bounded
   history/checker reads. Findings are not acceptance. Full public setup integration,
-  hosted operation and the pending revision-change-summary field remain separate.
+  hosted operation remain separate. PILOT-08 supplies the public contributor
+  revision-context summary, acknowledgement and history timeout projection.
   [PILOT-02 batch CLI](../.commitrail/changes/pilot02-bulk-transitions-cli.md)
   shares the binary and adds explicit source/import/status/screen/release with
   local CSV conversion. Evidence export works independently of task origin;
@@ -562,7 +580,8 @@ cannot be reused as post-submission review-gate evidence. See the
   lists exact locked originals in assigned contributor context and streams
   authorized, fully verified ART bytes. `task guide` lists or safely downloads
   them; setup examples remain private. Successor activation does not move a
-  task's locks; controlled human-revision rebase remains later work.
+  task's locks; a committed fixable failure prepares the next context and a
+  contributor-visible change summary. Live human decision composition remains later work.
   Built-binary HTTP
   integration and isolated real-API proof accompany
   the package. Further public commands, optional TUI and binary distribution
@@ -734,8 +753,9 @@ cannot be reused as post-submission review-gate evidence. See the
 - CP06 supplies internal caller-transaction validation of the exact selected
   ContributionPolicy version and its complete graph/resources. New guide binding
   requires the active current published selector. Controlled revision validates
-  the caller’s exact guide-bound version, not a newer global selector; downstream
-  guide custody and revision integration remain pending.
+  the caller’s exact guide-bound version, not a newer global selector. Guide
+  activation and checker revision preparation use that custody; genuine human
+  Review revision integration remains #554 work.
 - REV queue/admission and lease/preference persistence foundations are merged.
 - The governing rule is fixed: one ContributionPolicyVersion contains both the
   `accepted_submission` and `completed_review` rules. It is bound before task
@@ -875,9 +895,12 @@ The broader v0.1 sequence below retains later scope:
    operation already needed by the false branch. Every final decision records
    reviewer work; accept additionally records accepted submitter work. Do not
    duplicate the common persistence or submitter participant.
-6. **Complete revision and operations.** Preserve old attempts immutably;
-   rebase a continuing TaskAssignment only at the controlled human-revision
-   boundary when the complete governed context changed. Finish recovery,
+6. **Complete revision and operations.** Checker replacement enforces caps
+   with initial round 0, fresh per-failure deadlines, complete-context rebase,
+   exact contributor acknowledgement, PM repair and durable timeout release/reclaim. Each assignment has its own revision allowance. Connect genuine human Review
+   decisions to the same locked-policy window and controlled revision boundary
+   through #554; preserve
+   prior attempts and reviewer economic evidence. Finish remaining recovery,
    fulfillment, reconciliation, audit, release controls, and legacy cleanup.
 7. **Release proof.** The isolated six-service local stack is available; use it
     to expose stable APIs and frontend surfaces, exercise the complete path
@@ -1004,7 +1027,8 @@ Delivered foundations (bounded local journey proven; no deployment claim)
 
   PILOT-10A public bounded evidence reads over existing immutable CON/awards
     active human self or covering PM / exact-project Finance -> JSON or CSV
-    CLI24 consumes both reads / exact CSV; fixed-membership pagination remains
+    REST fixed membership -> signed JSON / CSV-header continuation, fresh AUTH per page
+    CLI follows continuation internally -> complete JSON or atomic private CSV
     no recognition writer or fulfillment dependency
 
 Proven bounded local first-layer drill (public guide inputs, recorded inference, local Flow-compatible auth)
@@ -1014,7 +1038,9 @@ Proven bounded local first-layer drill (public guide inputs, recorded inference,
   -> public triggers reached the selected completion outcomes
        |
        +-- contributor-correctable failure -> TASK needs_revision (no REV/CON)
+       |                                    -> frozen revision context + acknowledgement
        |                                    -> exact-cause replacement intake
+       |                                    -> expired window: rejection receipt + release -> ready
        |
        +-- locked true -> review_pending -> human Review (later runtime)
        |                                    | accept
@@ -1027,8 +1053,9 @@ Proven bounded local first-layer drill (public guide inputs, recorded inference,
                          fulfillment, reconciliation and release proof
 ```
 
-Human `needs_revision` follows controlled revision; `reject` records a rejected
-outcome. Every final human decision records reviewer work and any applicable
+Future genuine human `needs_revision` will use the same controlled revision
+boundary through #554; `reject` will record a rejected outcome. Every final
+human decision records reviewer work and any applicable
 reviewer award atomically; the false branch creates neither. Both acceptance
 triggers use the same operation. Shared acceptance persistence and hidden CON
 participation are separate foundations before false/pass routing activation; human
@@ -1042,7 +1069,7 @@ is not established by that evidence.
 No claim-time policy selection exists. A normal task claim copies the version
 already locked on the ready task. Review claim copies the version stamped on
 the admitted Submission. During `needs_revision`, the continuing assignment
-may rebase only after comparing and atomically preparing the complete newer
+may rebase only after comparing and atomically preparing the complete active
 governed context; earlier Submission, ReviewLease, Review, ContributionRecord,
 and award history never changes.
 
@@ -1093,8 +1120,11 @@ v0.1 is not ready until all of the following are true:
   permissive generation can replace a supported manifest.
 - A reviewer can claim only that admitted version, access only its bounded
   packet, and record one immutable final decision.
-- `needs_revision` safely continues or rebases the same assignment while
-  preserving every earlier attempt; `reject` and `accept` have their exact
+- Genuine human `needs_revision` must join the implemented controlled-revision
+  boundary through #554 with the same assignment rounds and locked-policy
+  PostgreSQL window. Only immutable resubmission ends it; timeout retains
+  rejection evidence, releases the exact assignment and returns to ready.
+  Every earlier attempt stays immutable; `reject` and `accept` retain their
   distinct effects.
 - Every final review atomically creates the reviewer ContributionRecord;
   `accept` additionally creates FinalAcceptance and the submitter record.
@@ -1105,10 +1135,12 @@ v0.1 is not ready until all of the following are true:
 - Fulfillment and recovery are idempotent, observable, reconcilable, and safe
   under durable-job, provider, transaction, and unknown-commit failures.
 - Contribution evidence reads retain complete source/award identities with fresh
-  self or project authority, one response snapshot and explicit over-limit refusal.
-  CLI access preserves those public contracts; fixed-membership pagination remains
-  later bounded work. Exported
-  award quantities are earned facts, not proof of external payment.
+  self or project authority per page and fixed membership for selections through
+  100,000 contributions. Signed cursors bind caller/scope/filters/format/limit;
+  excess selection refuses without partial output. The CLI follows continuation
+  internally, validates one complete traversal and publishes no partial JSON or
+  CSV result. Exported award quantities are earned facts, not proof of external
+  payment.
 - Configure secured diagnostic collection with bounded retention and access,
   and prove API/Celery correlation, privacy and collector-outage behavior in
   the release drill. Implemented instrumentation alone is not deployed monitoring.
@@ -1258,7 +1290,9 @@ remaining trace sequence is:
 - [PILOT-10A's bounded read/export record](../.commitrail/changes/pilot10-contribution-award-export.md)
   distinguishes public evidence reads from hidden recognition and deferred
   fulfillment. The [canonical read contract](spec_contribution_compensation.md#bounded-contribution-evidence-reads)
-  defines scope, limits, exact quantities, time semantics and CSV safeguards.
+  defines fixed membership, scope, limits, cursor authority, exact quantities,
+  time semantics and CSV safeguards. The current pagination outcome is recorded
+  in [Stable Contribution Export Pagination](../.commitrail/changes/stable-contribution-export-pagination.md).
 
 For implementation ownership and exact contracts, contributors can follow
 [Commitrail Engineering Index](../.commitrail/INDEX.md). For historical

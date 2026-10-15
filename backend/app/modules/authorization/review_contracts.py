@@ -100,11 +100,6 @@ class RevisionPreparationDirection(StrEnum):
     BACKWARD = "backward"
 
 
-class RevisionClosureCause(StrEnum):
-    """Only approved reasons for closing an exhausted revision obligation."""
-
-    LIMIT_REACHED = "revision_limit_reached"
-    DEADLINE_EXPIRED = "revision_deadline_expired"
 
 
 class RoutingMode(StrEnum):
@@ -549,28 +544,6 @@ class ReviewRevisionContextRepairContract(_RevisionEpisodeContract):
         return self
 
 
-class ReviewRevisionObligationCloseContract(_RevisionEpisodeContract):
-    """Covered-project closure facts for one proven exhausted obligation."""
-
-    action_id: Literal[ActionId.REVIEW_REVISION_OBLIGATION_CLOSE]
-    revision_policy_id: UUID
-    revision_policy_generation: int = Field(ge=1)
-    revision_policy_digest: str = Field(pattern=_DIGEST)
-    revision_round: int = Field(ge=1)
-    revision_limit: int | None = Field(default=None, ge=1)
-    revision_deadline: AwareDatetime | None = None
-    observed_at: AwareDatetime
-    reached_cause: RevisionClosureCause
-
-    @model_validator(mode="after")
-    def require_reached_boundary(self):
-        """Bind the selected closure cause to its frozen server-owned boundary."""
-        if self.reached_cause is RevisionClosureCause.LIMIT_REACHED:
-            if self.revision_limit is None or self.revision_round < self.revision_limit:
-                raise ValueError("revision limit is not reached")
-        elif self.revision_deadline is None or self.observed_at < self.revision_deadline:
-            raise ValueError("revision deadline is not reached")
-        return self
 
 
 class ReviewRevisionContextLegacyCloseContract(_ProjectContract):
@@ -610,7 +583,6 @@ ReviewAuthorizationResourceContract = (
     | ReviewArtifactReferenceReconcileContract
     | ReviewProjectionRebuildContract
     | ReviewRevisionContextRepairContract
-    | ReviewRevisionObligationCloseContract
     | ReviewRevisionContextLegacyCloseContract
     | ReviewLifecycleActivationContract
 )
@@ -689,10 +661,6 @@ REVIEW_AUTHORIZATION_CONTRACT_BY_ACTION = MappingProxyType(
         ),
         ActionId.REVIEW_REVISION_CONTEXT_REPAIR: ReviewAuthorizationContractSpec(
             ReviewContractExecution.PREPARED_HUMAN, (ReviewRevisionContextRepairContract,)
-        ),
-        ActionId.REVIEW_REVISION_OBLIGATION_CLOSE: ReviewAuthorizationContractSpec(
-            ReviewContractExecution.PREPARED_HUMAN,
-            (ReviewRevisionObligationCloseContract,),
         ),
         ActionId.REVIEW_REVISION_CONTEXT_LEGACY_CLOSE: ReviewAuthorizationContractSpec(
             ReviewContractExecution.PREPARED_OPERATOR,

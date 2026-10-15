@@ -74,3 +74,4 @@ jobs:
           scripts.test_commitrail_archive_batch
           scripts.test_commitrail_markdown_structure
           scripts.test_lightweight_agent_gates
+          scripts.test_stale_review_contracts

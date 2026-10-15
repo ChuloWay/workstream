@@ -4,10 +4,11 @@ import pytest
 from sqlalchemy import text
 
 from app.adapters.checkers import checker_retry_service
-from app.adapters.tasks import evaluation_completion_handler
+from app.adapters.tasks import evaluation_completion_handler, task_submission_context_port
 from app.core.identifiers import new_record_id
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable
 from app.modules.outbox.api import HandlerOutcome
+from app.modules.tasks.api import TaskSubmissionContextRequest
 from tests.authorization.post_submit_routing.support import provision_router
 from tests.checkers.external.support import post_registry_spec
 from tests.checkers.execution.support import ControlledSelectedExecution
@@ -79,6 +80,17 @@ async def test_retry_replays_after_real_later_submission_without_reopening_old_s
             assert remediation.routing_recommendation == remediation.task_status == "needs_revision"
             assert remediation.complete is True
 
+        async with h.factory.begin() as session:
+            current = await task_submission_context_port(session).lock_submission_context(
+                TaskSubmissionContextRequest(
+                    task_id=h.request.task_id, assignment_id=h.request.assignment_id,
+                    contributor_id=h.actor_context.actor_profile_id,
+                    predecessor_submission_id=h.created.submission_id,
+                )
+            )
+            assert current.revision_context is not None
+            h.revision_preparation_id = current.revision_context.preparation_id
+            h.revision_preparation_sha256 = current.revision_context.preparation_sha256
         prepared, admission_id = await _ready_replacement(h, revision_archive(h.data))
         later = await _create(h, _creation_request(h, prepared, admission_id))
 

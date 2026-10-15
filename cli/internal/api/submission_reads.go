@@ -36,15 +36,16 @@ type SubmissionEvidence struct {
 	Size  *big.Int `json:"size_bytes"`
 }
 type SubmissionHistory struct {
-	ID          string               `json:"id"`
-	Task        string               `json:"task_id"`
-	Version     *big.Int             `json:"version"`
-	Status      string               `json:"status"`
-	Summary     string               `json:"summary"`
-	SubmittedAt string               `json:"submitted_at"`
-	LockedAt    *string              `json:"locked_at"`
-	Predecessor *string              `json:"supersedes_submission_id"`
-	Evidence    []SubmissionEvidence `json:"evidence_items"`
+	ID           string               `json:"id"`
+	Task         string               `json:"task_id"`
+	Version      *big.Int             `json:"version"`
+	Status       string               `json:"status"`
+	StatusReason *string              `json:"status_reason,omitempty"`
+	Summary      string               `json:"summary"`
+	SubmittedAt  string               `json:"submitted_at"`
+	LockedAt     *string              `json:"locked_at"`
+	Predecessor  *string              `json:"supersedes_submission_id"`
+	Evidence     []SubmissionEvidence `json:"evidence_items"`
 }
 type SubmissionPage struct {
 	Items  []SubmissionHistory `json:"items"`
@@ -83,6 +84,7 @@ func decodeSubmission(raw json.RawMessage, task, submission string) (SubmissionH
 	if err != nil || !requiredNullable(fields, "locked_at", "supersedes_submission_id") ||
 		!validUUID(value.ID) || !validUUID(value.Task) || (task != "" && !sameUUID(value.Task, task)) ||
 		(submission != "" && !sameUUID(value.ID, submission)) || value.Version == nil || value.Version.Sign() <= 0 || value.Status == "" ||
+		(value.StatusReason != nil && (value.Status != "rejected" || *value.StatusReason != "revision_deadline_expired")) ||
 		!validTime(value.SubmittedAt) || (value.LockedAt != nil && !validTime(*value.LockedAt)) ||
 		(value.Predecessor != nil && (!validUUID(*value.Predecessor) || sameUUID(*value.Predecessor, value.ID))) || value.Evidence == nil {
 		return value, bad

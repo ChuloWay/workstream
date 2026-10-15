@@ -231,6 +231,7 @@ async def _material_fixture(
     provision_checker=True,
     contribution_awards=(),
     human_review_required=True,
+    max_revision_rounds=2,
     pre_submit_registry_spec=None,
     post_submit_registry_spec=None,
     post_scratch_root=None,
@@ -247,6 +248,7 @@ async def _material_fixture(
             guide_version="v1",
             contribution_awards=contribution_awards,
             human_review_required=human_review_required,
+            max_revision_rounds=max_revision_rounds,
             pre_submit_registry_spec=pre_submit_registry_spec,
             post_submit_registry_spec=post_submit_registry_spec,
         )

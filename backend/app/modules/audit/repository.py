@@ -101,6 +101,14 @@ class AuditRepository:
             )
         )
 
+    async def get_lifecycle_event(self, event_id: str) -> AuditEvent | None:
+        """Return one committed lifecycle effect within the caller transaction."""
+        return await self._session.scalar(
+            select(AuditEvent).where(
+                AuditEvent.id == event_id, AuditEvent.event_domain == "legacy_lifecycle"
+            )
+        )
+
     async def invalidation_chain(self, event_id: UUID):
         """Read immutable invalidation and cause together without authority locks."""
         cause = aliased(AuditEvent)
@@ -162,6 +170,7 @@ class AuditRepository:
                 LifecycleAuditEventType.TASK_STARTED.value,
                 LifecycleAuditEventType.TASK_START_OVERRIDDEN.value,
                 LifecycleAuditEventType.TASK_ASSIGNMENT_AUTHORITY_REVOKED.value,
+                LifecycleAuditEventType.TASK_REVISION_EXPIRED.value,
             )),
         )
         statement = select(

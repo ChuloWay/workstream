@@ -69,6 +69,24 @@ TASK_CHECKER_CLEANUP_TARGETS = frozenset({
     "backend/app/modules/authorization/domain/submission_history.py",
     "backend/app/modules/authorization/history_authorization.py",
 })
+PILOT_08_REVISION_TARGETS = frozenset({
+    "backend/app/modules/authorization/domain/revision_expiry.py",
+    "backend/app/modules/authorization/domain/revision_recovery.py",
+    "backend/app/modules/authorization/fixed_service_revalidation.py",
+    "backend/app/modules/authorization/revision_expiry_authorization.py",
+    "backend/app/modules/authorization/revision_recovery_authorization.py",
+    "backend/app/modules/tasks/api/revision.py",
+    "backend/app/modules/tasks/api/revision_expiry.py",
+    "backend/app/modules/tasks/api/revision_recovery.py",
+    "backend/app/modules/tasks/revision/expired_notice.py",
+    "backend/app/modules/tasks/revision/expiry.py",
+    "backend/app/modules/tasks/revision/expiry_event.py",
+    "backend/app/modules/tasks/revision/models.py",
+    "backend/app/modules/tasks/revision/recovery.py",
+    "backend/app/modules/tasks/revision/recovery_scan.py",
+    "backend/app/modules/tasks/revision/service.py",
+    "backend/app/workers/revision_recovery.py",
+})
 TASK_CHECKER_CLEANUP_REMOVED_TARGETS = frozenset({
     "backend/app/core/permissions.py",
     "backend/app/modules/tasks/authorization.py",
@@ -149,6 +167,7 @@ PILOT_10_EXPORT_TARGETS = frozenset({
     "backend/app/modules/contributions/api/records.py",
     "backend/app/modules/contributions/api/source_reads.py",
     "backend/app/modules/contributions/records/csv.py",
+    "backend/app/modules/contributions/records/pagination.py",
     "backend/app/modules/contributions/records/read_facts.py",
     "backend/app/modules/contributions/records/read_repository.py",
     "backend/app/modules/contributions/records/read_service.py",
@@ -901,6 +920,7 @@ def _validate_additive_partition_transition(
     additions = set(current_by_target) - set(trusted_targets)
     approved_additions = (
         AUTH_BOUNDARY_FOUNDATION_TARGETS | TASK_CHECKER_CLEANUP_TARGETS
+        | PILOT_08_REVISION_TARGETS
         | CON_02B_DELIVERY_TARGETS
         | AUTH_OUTBOX_02_TARGETS
         | ARCH_03C1_TARGETS

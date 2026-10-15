@@ -714,6 +714,14 @@
     },
     {
       "group": "auth",
+      "target": "backend/app/modules/authorization/domain/revision_expiry.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/domain/revision_recovery.py"
+    },
+    {
+      "group": "auth",
       "target": "backend/app/modules/authorization/domain/submission_history.py"
     },
     {
@@ -723,6 +731,10 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/domain/task_queues.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/fixed_service_revalidation.py"
     },
     {
       "group": "auth",
@@ -855,6 +867,14 @@
     {
       "group": "auth",
       "target": "backend/app/modules/authorization/review_contracts.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/revision_expiry_authorization.py"
+    },
+    {
+      "group": "auth",
+      "target": "backend/app/modules/authorization/revision_recovery_authorization.py"
     },
     {
       "group": "auth",
@@ -1135,6 +1155,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/contributions/records/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/pagination.py"
     },
     {
       "group": "lifecycle",
@@ -1634,6 +1658,18 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision_expiry.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision_recovery.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/routing_outcome.py"
     },
     {
@@ -1738,6 +1774,34 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/expired_notice.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/expiry.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/expiry_event.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/models.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/recovery.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/recovery_scan.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/service.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/router.py"
     },
     {
@@ -1835,6 +1899,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/workers/project_setup.py"
+    },
+    {
+      "group": "shared",
+      "target": "backend/app/workers/revision_recovery.py"
     },
     {
       "group": "lifecycle",
@@ -1949,7 +2017,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "5d4591fe61490db05b54bd545642d6a342cb0ffbc7a04d3a6e1092f37956805f",
+  "authority_digest": "90db4bfae2ce02f4a2e7be3df32ac1fb36bf9e91c9eea87974988da21b787fa4",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

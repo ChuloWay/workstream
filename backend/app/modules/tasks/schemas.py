@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+from app.modules.tasks.api.revision import ContributorRevisionContext
 from app.modules.tasks.api import ReadyTaskSummary, ManagementTaskSummary, OperationalTaskSummary
 
 from datetime import datetime
@@ -51,6 +52,7 @@ class ContributorTaskWorkContext(_TaskWorkContext):
     task: ContributorTaskDetail
     lifecycle: ContributorTaskLifecycle
     guide_documents: tuple[ContributorGuideDocument, ...]
+    revision_context: ContributorRevisionContext | None = None
 
     @model_validator(mode="after")
     def exact_task(self):
@@ -107,6 +109,30 @@ class TaskTransitionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     reason: str | None = Field(default=None, max_length=1000)
+
+
+class TaskRevisionRepairRequest(BaseModel):
+    """Exact frozen parent and PM explanation for one controlled repair."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    parent_preparation_id: UUID | None = None
+    parent_preparation_sha256: str | None = Field(default=None, pattern=r"^sha256:[0-9a-f]{64}$")
+    routing_manifest_id: UUID | None = None
+    reason: str = Field(min_length=1, max_length=1000)
+
+    @model_validator(mode="after")
+    def meaningful_reason(self):
+        if not self.reason.strip() or len(self.reason.strip().encode("utf-8")) > 1000:
+            raise ValueError("revision repair reason is required")
+        if not (
+            (self.parent_preparation_id is not None and self.parent_preparation_sha256 is not None
+             and self.routing_manifest_id is None)
+            or (self.parent_preparation_id is None and self.parent_preparation_sha256 is None
+                and self.routing_manifest_id is not None)
+        ):
+            raise ValueError("revision repair requires one exact parent or missing-root source")
+        return self
 
 
 class AdmissionBackedSubmissionCreate(BaseModel):

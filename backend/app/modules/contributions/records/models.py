@@ -3,7 +3,8 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint, Uuid, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, SmallInteger, String, UniqueConstraint, Uuid, text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -30,6 +31,8 @@ class ContributionRecord(Base):
         CheckConstraint("artifact_hash ~ '^sha256:[0-9a-f]{64}$'", name="artifact_hash"),
         UniqueConstraint("source_review_id"),
         UniqueConstraint("source_final_acceptance_id"),
+        Index("ix_contribution_records_project_recorded", "project_id", "created_at", "id"),
+        Index("ix_contribution_records_contributor_recorded", "contributor_id", "created_at", "id"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
@@ -65,3 +68,36 @@ class ContributionRecord(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
+
+
+class ContributionExportSnapshot(Base):
+    """Expiring CON-owned fixed membership; it grants no read authority."""
+
+    __tablename__ = "contribution_export_snapshots"
+    __table_args__ = (
+        CheckConstraint(
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
+            name="id_uuid7",
+        ),
+        CheckConstraint("query_digest ~ '^sha256:[0-9a-f]{64}$'", name="query_digest"),
+        CheckConstraint("allocation_slot between 1 and 5", name="allocation_slot"),
+        CheckConstraint(
+            "array_ndims(member_ids)=1 and array_lower(member_ids,1)=1 "
+            "and cardinality(member_ids) between 2 and 100000 "
+            "and array_position(member_ids, NULL) is null",
+            name="members_shape",
+        ),
+        CheckConstraint("expires_at=created_at + interval '1 hour'", name="expiry"),
+        UniqueConstraint("actor_profile_id", "allocation_slot", name="uq_contribution_export_snapshots_actor_slot"),
+        Index("ix_contribution_export_snapshots_expiry", "expires_at", "id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True)
+    actor_profile_id: Mapped[str] = mapped_column(
+        Uuid(as_uuid=False), ForeignKey("actor_profiles.id", ondelete="RESTRICT"), nullable=False,
+    )
+    allocation_slot: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    query_digest: Mapped[str] = mapped_column(String(71), nullable=False)
+    member_ids: Mapped[list[UUID]] = mapped_column(ARRAY(Uuid()), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

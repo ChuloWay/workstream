@@ -2,11 +2,12 @@
 
 from uuid import UUID
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import case, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.tasks.api.submission_history import SubmissionHistoryTarget
 from app.modules.tasks.models import EvidenceItem, Submission, WorkstreamTask
+from app.modules.tasks.revision.models import TaskRevisionExpiration
 from app.modules.tasks.api.submission_history import ContributorSubmissionHistory, ManagementSubmissionHistory
 
 
@@ -56,8 +57,14 @@ class SubmissionHistoryRepository:
 
     async def read(self, target, *, manager: bool, submission_id=None, limit=25, after=None):
         schema = ManagementSubmissionHistory if manager else ContributorSubmissionHistory
-        fields = [name for name in schema.model_fields if name != "evidence_items"]
-        statement = select(*(getattr(Submission, name) for name in fields)).where(
+        fields = [name for name in schema.model_fields if name not in {"evidence_items", "status", "status_reason"}]
+        statement = select(
+            *(getattr(Submission, name) for name in fields),
+            case((TaskRevisionExpiration.id.is_not(None), "rejected"), else_=Submission.status).label("status"),
+            case((TaskRevisionExpiration.id.is_not(None), "revision_deadline_expired"), else_=None).label("status_reason"),
+        ).outerjoin(TaskRevisionExpiration,
+            TaskRevisionExpiration.source_submission_id == Submission.id,
+        ).where(
             Submission.task_id == str(target.task_id),
         )
         if not manager:

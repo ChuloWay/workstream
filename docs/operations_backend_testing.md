@@ -42,7 +42,7 @@ unset WORKSTREAM_TEST_ADMIN_DATABASE_URL
 ```
 
 Run both phases for this sequential local diagnostic. Hosted CI instead
-uses ten independent matrix jobs, one per semantic lane, with a 20-minute lane
+uses 13 independent matrix jobs, one per semantic lane, with a 20-minute lane
 limit and a separate fail-closed fan-in job.
 
 The runner removes the admin URL before child launch, overwrites both child database URLs,
@@ -62,7 +62,7 @@ attribution across SQLAlchemy async switches using the repository configuration.
 This setting changes measurement, not test selection or exclusions.
 
 Backend and MCP coverage percentages do not gate merges. Backend combines the
-ten lane artifacts once for diagnostics, without subsystem/per-file quotas or
+13 lane artifacts once for diagnostics, without subsystem/per-file quotas or
 focused reruns to raise a number. Artifact integrity and complete test execution
 remain blocking. The old floor-computation CLI and unused quota-policy helpers
 are removed; their module retains the shared lexical test-safety owner.
@@ -112,7 +112,7 @@ If provisioning fails, confirm the local PostgreSQL provisioning credential can 
 ## Hosted component selection and complete backend proof
 
 The required GitHub check remains `Backend / test`. Every push to `main` and
-every cross-cutting or uncertain PR runs complete proof: ten matrix jobs each own a
+every cross-cutting or uncertain PR runs complete proof: thirteen matrix jobs each own a
 digest-pinned PostgreSQL service container, a pinned-source MinIO image, and
 exactly one dependency lane. A step-level curl health loop admits MinIO before
 collection. This is semantic fan-out, not arbitrary test-count sharding: lane
@@ -139,8 +139,8 @@ Base-branch edits also start a fresh run bound to the new base; ordinary PR
 title/body edits rerun as the conservative cost of subscribing to `edited`.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-Authorization preflight runs alongside all ten lanes when backend proof is
-required. The internal `full-suite` aggregate validates all ten lanes and
+Authorization preflight runs alongside all thirteen lanes when backend proof is
+required. The internal `full-suite` aggregate validates all thirteen lanes and
 requires preflight and supporting contracts before validating evidence and coverage;
 failed, cancelled or skipped required prerequisites remain blocking. Both final
 check names require every selected component to succeed and unselected
@@ -152,7 +152,7 @@ Assertion-map validation analyzes each exact historical revision/module once per
 invocation, then checks every referenced node and assertion against that analysis.
 It does not cache current source or reuse analysis across validation calls.
 
-The nine ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
+The twelve ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
 to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
 data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
 before tests. Real SQL, transaction, lock, isolation, and full hosted behavior
@@ -167,35 +167,32 @@ This is not a production configuration or proof of host-power-loss durability:
 [Docker tmpfs data disappears when the container stops](https://docs.docker.com/engine/storage/tmpfs/).
 An exhausted mount fails the job; it does not silently change storage or skip tests.
 
-The `project_lifecycle_a`, `project_lifecycle_b`, `project_lifecycle_c`, and
-`project_lifecycle_d` lanes
+The `project_lifecycle_a`, `project_lifecycle_b`, `project_lifecycle_c`,
+`project_lifecycle_d`, and `project_lifecycle_e` lanes
 partition PROJECT nodes, checker execution, materialization, evaluation capacity,
 output custody and routing AUTH preparation beside initial dispatch/delivery.
-All use the existing exact-node hash across four lanes. The
-[measurement record](../.commitrail/changes/backend-ci-measured-lane-balance.md)
-records the rejected seed-rebalance experiment: two hosted runs did not establish
-a repeatable speedup, so allocation remains unchanged. A retained three-lane
-run exhausted project C's 1,200-second cap with 92 nodes unfinished; prior passing
-runs had little remaining headroom. The fourth project lane increases execution
-capacity without changing the cap or canonical test union. Placing the entire
-checker delivery group exclusively on project A previously exhausted its cap.
-Two measured broad owners, `tests/test_projects.py` and
-`tests/test_guide_document_intake.py`, instead partition their nodes only across
-project C and D. The lane logs retain all setup/call/teardown phase durations,
+All use the existing exact-node hash across five lanes, including the broad
+project intake modules. The [capacity change record](../.commitrail/changes/backend-runtime-dependency-security.md)
+explains the measured expansion and removal of the superseded placement
+exceptions. The lane logs retain all setup/call/teardown phase durations,
 including phases below five milliseconds, for performance diagnosis. This output
 is bounded by the selected test inventory and remains diagnostic only: it cannot
 select tests or override completeness, cleanup or the unchanged execution deadline.
 Measure final-report overhead alongside test execution when comparing allocations.
-`task_lifecycle_a`, `task_lifecycle_b`, and `task_lifecycle_c` use the same
+`task_lifecycle_a`, `task_lifecycle_b`, `task_lifecycle_c`, and
+`task_lifecycle_d` use the same
 deterministic partition mechanism for the remaining TASK and checker nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
 isolated-runner contracts. The
-`shared_foundations_a` and `shared_foundations_b` lanes deterministically
+`shared_foundations_a`, `shared_foundations_b`, and `shared_foundations_c` lanes deterministically
 partition exact node IDs from the remaining authorization, artifact, API, and
-infrastructure modules. Every collected test node, including each Alembic and
+infrastructure modules. This includes the database-independent repository inspections
+in `test_artifact_architecture.py`, `architecture/test_module_boundaries.py`, and
+`architecture/test_test_structure_boundary.py`; schema, reset and isolated-runner
+contracts stay in `schema_contracts`. Every collected test node, including each Alembic and
 shared-foundation node, belongs to exactly one lane.
 
 Each affected Backend job binds its checkout to `GITHUB_SHA`, installs pinned
-`uv 0.10.7`, recreates the backend environment with
+`uv 0.10.7`, verifies the manifest with `uv lock --check`, recreates the backend environment with
 `uv sync --frozen --all-extras`, and runs subsequent Python, Ruff, pytest,
 docstring and coverage commands through `uv run --frozen`. Its download cache is
 keyed by `backend/uv.lock` and the workflow, but the environment itself is never
@@ -212,7 +209,7 @@ validates complete execution.
 There is no duplicate standalone inventory pass in each matrix job.
 Each lane receives a distinct
 runner-created database and role plus a distinct MinIO prefix custody record.
-Both shared-foundation jobs run in separate MinIO containers, use the actual
+All three shared-foundation jobs run in separate MinIO containers, use the actual
 `workstream-artifacts` test bucket, and receive distinct run prefixes; other
 lanes create, probe, and remove distinct buckets.
 The isolated-runner self-tests remain in the canonical manifest as the explicit
@@ -232,7 +229,7 @@ SHA, lane and numeric run attempt, containing its manifest, lane evidence,
 isolation record, and coverage data. On complete runs, the `full-suite` job
 runs with a fail-closed dependency guard, downloads available diagnostic
 bundles, then rejects any failed, cancelled, or skipped matrix result before
-fan-in. Fan-in selects the highest numeric attempt available for each of the ten declared
+fan-in. Fan-in selects the highest numeric attempt available for each of the thirteen declared
 lanes from separately downloaded artifact directories. It rejects malformed,
 foreign or future attempt names and never falls back from an incomplete or
 corrupt latest bundle to an older passing one. For the selected bundles it
@@ -260,7 +257,7 @@ Each executed lane uploads one seven-day bundle per attempt, and the final job
 uploads the reconciled `.ci/test-lanes` tree and downloaded diagnostics under its
 own attempt-specific artifact name. Older diagnostic artifacts are preserved.
 Its summary
-records the exact head, canonical node count, ten lane results, elapsed time,
+records the exact head, canonical node count, 13 lane results, elapsed time,
 and raw-file digests. Per-lane evidence records collected, completed, skipped,
 and deselected exact node IDs plus the bound resource-isolation metadata and
 coverage digest. Resource metadata is mode `0600`, omits credentials, and proves

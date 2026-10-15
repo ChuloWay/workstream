@@ -22,6 +22,7 @@ from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.models import Submission, SubmissionDispatch
 from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.service import TaskService
+from app.modules.tasks.revision.service import select_candidate
 
 
 class TaskRoutingSourcePreparer:
@@ -85,9 +86,9 @@ class TaskRoutingSourcePreparer:
                 and assignment.released_at is None
                 and assignment.accepted_at is not None
                 and submission.contributor_id == assignment.contributor_id == task.assigned_to
-                and submission.contribution_policy_version_id
-                == assignment.submitter_contribution_policy_version_id
-                == task.locked_contribution_policy_version_id
+                and (retained is not None or submission.contribution_policy_version_id
+                     == assignment.submitter_contribution_policy_version_id
+                     == task.locked_contribution_policy_version_id)
             )
         ):
             raise TaskRoutingRequestUnavailable("routing_source_unavailable")
@@ -102,7 +103,7 @@ class TaskRoutingSourcePreparer:
                 pre_submit_policy_bundle_hash=submission.locked_pre_submit_checker_bundle_hash,
             ))
             stamps = TaskService._policy_stamps(context)
-            if any(getattr(task, key) != value for key, value in stamps.items()):
+            if retained is None and any(getattr(task, key) != value for key, value in stamps.items()):
                 raise ValueError("task policy differs")
             fields = {}
             for key in TaskPolicyLineage.model_fields:
@@ -117,11 +118,15 @@ class TaskRoutingSourcePreparer:
                 value = getattr(task, key)
                 if key.endswith("_id"):
                     value = UUID(str(value))
-                if value != getattr(lineage, key):
+                if retained is None and value != getattr(lineage, key):
                     raise ValueError("submission policy differs")
             human_review_required = json.loads(context.review_policy.value)["human_review_required"]
         except (ProjectLockedPolicyContextUnavailable, ValueError, TypeError, KeyError) as exc:
             raise TaskRoutingRequestUnavailable("routing_source_unavailable") from exc
+        # Active PROJECT custody must precede retaining the CHECKERS fence.
+        candidate = (await select_candidate(self._projects, context)
+                     if retained is None and completion.routing_recommendation == "needs_revision"
+                     else None)
         request, verified = await self._requests._stage(event_id, completion)
         material = verified.material
         if not (
@@ -191,4 +196,4 @@ class TaskRoutingSourcePreparer:
                 "source"
             ) != source.model_dump(mode="json"):
                 raise TaskRoutingRequestUnavailable("routing_source_unavailable")
-        return TaskRoutingSourcePreparation(request=request, source=source)
+        return TaskRoutingSourcePreparation(request=request, source=source, revision_candidate=candidate)

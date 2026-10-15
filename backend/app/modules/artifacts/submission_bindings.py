@@ -302,6 +302,7 @@ class SubmissionAdmissionConsumptionService:
         context = request.task_context
         references = context.locked_project_context
         predecessor = context.predecessor
+        revision = context.revision_context
         return bool(
             admission.actor_profile_id == str(context.contributor_id)
             and admission.project_id == str(references.project_id)
@@ -313,6 +314,17 @@ class SubmissionAdmissionConsumptionService:
             == (predecessor.version if predecessor is not None else None)
             and admission.checker_remediation_manifest_id
             == context.checker_remediation_manifest_id
+            and (predecessor is None or (
+                revision is not None and revision.disposition == "ready"
+                and revision.source_submission_id == predecessor.submission_id
+                and revision.source_routing_manifest_id == context.checker_remediation_manifest_id
+            ))
+            and admission.revision_preparation_id == (
+                revision.preparation_id if revision is not None else None
+            )
+            and admission.revision_preparation_sha256 == (
+                revision.preparation_sha256 if revision is not None else None
+            )
             and admission.guide_version == references.guide_version
             and admission.source_snapshot_id == str(references.source_snapshot_id)
             and admission.source_snapshot_sha256 == references.source_snapshot_hash

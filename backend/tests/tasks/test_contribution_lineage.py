@@ -1,6 +1,7 @@
 """Exact initial TASK/assignment policy custody against migrated PostgreSQL."""
 
 from app.core.config import get_settings
+import json
 
 from uuid import UUID
 from app.core.identifiers import new_record_id
@@ -18,6 +19,7 @@ from tests.test_tasks import (
     create_active_project,
     create_started_task,
     create_ready_task,
+    create_draft_task,
 )
 from tests.projects.guide_activation.pg_support import publish_policy
 
@@ -110,6 +112,7 @@ async def test_task_stamp_rejects_valid_successor_context_direct_sql(task_client
 
     project = await create_active_project(task_client)
     task = await create_ready_task(task_client, project["id"])
+    draft = await create_draft_task(task_client, project["id"])
     created = await task_client.post(
         f"/api/v1/projects/{project['id']}/guides",
         headers=auth_headers(),
@@ -137,12 +140,22 @@ async def test_task_stamp_rejects_valid_successor_context_direct_sql(task_client
                 updates.append(f"{key}=CAST(:{key} AS json)")
             else:
                 updates.append(f"{key}=:{key}")
-        with pytest.raises(DBAPIError, match="task contribution stamp is immutable"):
+        with pytest.raises(DBAPIError, match="task revision context lacks current preparation"):
             async with session.begin_nested():
                 await session.execute(
                     text("UPDATE workstream_tasks SET " + ",".join(updates) + " WHERE id=:task_id"),
                     stamps | {"task_id": task["id"]},
                 )
+        # Draft lineage is allowed by the preparation guard, but inventing a
+        # contribution stamp outside initial screening remains forbidden.
+        with pytest.raises(DBAPIError, match="task contribution stamp is immutable"):
+            async with session.begin_nested():
+                await session.execute(text(
+                    "UPDATE public.workstream_tasks SET locked_contribution_policy_version_id=:stamp WHERE id=:id"
+                ), {"stamp": stamps["locked_contribution_policy_version_id"], "id": draft["id"]})
+        draft_row = await session.get(WorkstreamTask, draft["id"])
+        assert draft_row.locked_contribution_policy_version_id is None
+        assert draft_row.status == "draft"
         await session.refresh(original)
         assert original.locked_contribution_policy_version_id == old_stamp
         assert original.locked_guide_version == "v1"
@@ -202,30 +215,40 @@ async def test_submission_sql_requires_exact_initial_assignment_and_freezes_its_
             worker_attestation="SQL guard test",
             supersedes_submission_id=None,
         )
-        session.add(original)
-        await session.commit()
+        # Obtain a complete initial-row shape, then roll it back so each
+        # malformed INSERT tests assignment custody rather than a bogus round 2.
+        async with session.begin_nested() as staged:
+            session.add(original)
+            await session.flush()
+            initial_row = await session.scalar(text(
+                "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+            ), {"id": original.id})
+            await staged.rollback()
         stamp = original.contribution_policy_version_id
         assert stamp != other.contribution_policy_version_id
-        # Each clone preserves all unrelated fields and changes only the tested
-        # assignment/stamp. A fresh ID/version avoids uniqueness rejections.
-        for field, value in (
-            ("contribution_policy_version_id", str(other.contribution_policy_version_id)),
-            ("task_assignment_id", None),
-            ("task_assignment_id", str(new_record_id())),
-            ("contribution_policy_version_id", None),
+        # Policy changes fail exact TASK stamps first. Missing/unknown
+        # assignments retain the distinct assignment-stamp guard proof.
+        for field, value, error in (
+            ("contribution_policy_version_id", str(other.contribution_policy_version_id),
+             "submission task context differs"),
+            ("task_assignment_id", None, "submission contribution stamp differs from assignment"),
+            ("task_assignment_id", str(new_record_id()),
+             "submission contribution stamp differs from assignment"),
+            ("contribution_policy_version_id", None, "submission task context differs"),
         ):
-            with pytest.raises(
-                DBAPIError, match="submission contribution stamp differs from assignment"
-            ):
+            with pytest.raises(DBAPIError, match=error):
                 async with session.begin_nested():
                     await session.execute(
                         text(
                             "INSERT INTO submissions SELECT (jsonb_populate_record(NULL::submissions, "
-                            "to_jsonb(s) || jsonb_build_object('id',CAST(:id AS text),'version',2,"
-                            f"'{field}',CAST(:value AS text)))).* FROM submissions s WHERE id=:original"
+                            "CAST(:body AS jsonb) || jsonb_build_object('id',CAST(:id AS text),"
+                            f"'{field}',CAST(:value AS text)))).*"
                         ),
-                        dict(id=str(new_record_id()), value=value, original=original.id),
+                        dict(id=str(new_record_id()), value=value, body=json.dumps(initial_row)),
                     )
+            assert await session.scalar(select(Submission.id)) is None
+        session.add(original)
+        await session.commit()
         for field, value in (
             ("contribution_policy_version_id", other.contribution_policy_version_id),
             ("task_assignment_id", str(new_record_id())),

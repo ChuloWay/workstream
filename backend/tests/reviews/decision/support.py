@@ -8,7 +8,7 @@ from uuid import UUID
 
 from sqlalchemy import insert, select, text
 
-from app.adapters.tasks import submitted_bundle_port
+from app.adapters.tasks import submitted_bundle_port, task_submission_context_port
 from app.api.deps.authorization import compose_hidden_submission_creation_command
 from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorIdentityLink
@@ -25,6 +25,7 @@ from app.modules.reviews.decision.models import (
 from app.modules.reviews.decision.schemas import ReviewFindingInput, ReviewSourceInput
 from app.modules.reviews.packet.repository import ReviewPacketRepository
 from app.modules.tasks.api import SubmissionCreationRequest
+from app.modules.tasks.api.submission_context import TaskSubmissionContextRequest
 from app.modules.tasks.api.submitted_bundle import SubmittedBundleRequest
 from app.modules.tasks.models import Submission
 from tests.checkers.execution.support import live_executor, reserve
@@ -247,7 +248,7 @@ async def _admit_successor(h):
 
     await _route_replacement_cause(h)
 
-    async with h.factory() as session:
+    async with h.factory() as session, session.begin():
         prior = await session.get(Submission, str(h.request.submission_id))
         link = await session.scalar(
             select(ActorIdentityLink.id).where(
@@ -258,6 +259,15 @@ async def _admit_successor(h):
         context = _context(
             actor_profile_id=UUID(prior.contributor_id), identity_link_id=UUID(str(link))
         )
+        current = await task_submission_context_port(session).lock_submission_context(
+            TaskSubmissionContextRequest(
+                task_id=h.request.task_id, assignment_id=h.request.assignment_id,
+                contributor_id=context.actor_profile_id,
+                predecessor_submission_id=h.request.submission_id,
+            )
+        )
+        revision = current.revision_context
+        assert revision is not None and revision.source_submission_id == h.request.submission_id
 
     revised_bytes = BytesIO()
     with (
@@ -284,6 +294,8 @@ async def _admit_successor(h):
         contributor_attestation=h.creation_request.contributor_attestation,
         media_type="application/zip",
         byte_source=_bytes(revised_data),
+        revision_preparation_id=str(revision.preparation_id),
+        revision_preparation_sha256=revision.preparation_sha256,
     )
     admission_id = await _verified_admission(
         h.factory, h.store, h.namespace, h.settings, context, preparation

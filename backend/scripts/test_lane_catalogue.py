@@ -4,15 +4,24 @@ from dataclasses import dataclass
 
 ADMIN_RUNNER_MODULE = "tests/test_isolated_database_runner.py"
 SCHEMA_MODULE = "tests/test_alembic.py"
-PARTITIONED_SHARED_LANES = ("shared_foundations_a", "shared_foundations_b")
+PARTITIONED_SHARED_LANES = (
+    "shared_foundations_a",
+    "shared_foundations_b",
+    "shared_foundations_c",
+)
 PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_a",
     "project_lifecycle_b",
     "project_lifecycle_c",
     "project_lifecycle_d",
+    "project_lifecycle_e",
 )
-PARTITIONED_PROJECT_INTAKE_LANES = ("project_lifecycle_c", "project_lifecycle_d")
-PARTITIONED_TASK_LANES = ("task_lifecycle_a", "task_lifecycle_b", "task_lifecycle_c")
+PARTITIONED_TASK_LANES = (
+    "task_lifecycle_a",
+    "task_lifecycle_b",
+    "task_lifecycle_c",
+    "task_lifecycle_d",
+)
 
 
 @dataclass(frozen=True)
@@ -25,6 +34,9 @@ class TestLane:
 
 
 SHARED_FOUNDATION_MODULES = (
+    "tests/test_artifact_architecture.py",
+    "tests/architecture/test_module_boundaries.py",
+    "tests/architecture/test_test_structure_boundary.py",
     "tests/reviews/lifecycle/test_transitions.py",
     "tests/reviews/lifecycle/test_authority_binding.py",
     "tests/artifacts/test_review_packet_contract.py",
@@ -191,6 +203,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/test_auth_concurrency_observer.py",
     "tests/test_authorization.py",
     "tests/authorization/test_catalogue.py",
+    "tests/authorization/test_authorization_custody_documentation.py",
     "tests/authorization/test_acceptance_source_contracts.py",
     "tests/authorization/test_outbox_dispatch_contract.py",
     "tests/authorization/test_assignment_invalidation_contract.py",
@@ -258,7 +271,7 @@ SHARED_FOUNDATION_MODULES = (
 )
 
 PROJECT_MODULES = (
-    # Project-bound batch custody uses measured four-way project headroom.
+    # Project-bound batch custody stays in the project semantic family.
     "tests/tasks/test_task_import_batch_contract.py",
     "tests/tasks/test_task_import_batch_bindings.py",
     "tests/tasks/test_task_import_batches.py",
@@ -272,8 +285,7 @@ PROJECT_MODULES = (
     "tests/contributions/exports/test_public_reads.py",
     "tests/contributions/exports/test_failures.py",
     "tests/contributions/exports/test_concurrency.py",
-    # Atomic submission composition shares the existing multi-owner project lanes;
-    # task C and schema are close to their cap on the merged baseline.
+    # Atomic submission composition stays with its multi-owner project family.
     "tests/tasks/evaluation_delivery/test_custody.py",
     "tests/tasks/evaluation_delivery/test_delivery.py",
     "tests/tasks/evaluation_delivery/test_isolation.py",
@@ -282,6 +294,10 @@ PROJECT_MODULES = (
     "tests/tasks/submission_dispatch/test_migration.py",
     "tests/tasks/submission_dispatch/test_replacement_migration.py",
     "tests/tasks/submission_dispatch/test_replacement_creation.py",
+    "tests/tasks/submission_dispatch/test_revision_capacity.py",
+    "tests/tasks/submission_dispatch/test_revision_expiry.py",
+    "tests/tasks/submission_dispatch/test_revision_expiry_security.py",
+    "tests/tasks/submission_dispatch/test_revision_recovery_postgresql.py",
     "tests/tasks/submission_dispatch/test_replay.py",
     "tests/tasks/submission_dispatch/test_rollback.py",
     "tests/tasks/submission_dispatch/test_storage.py",
@@ -416,15 +432,13 @@ PROJECT_MODULES = (
     "tests/projects/test_retired_submission_derivation_route.py",
 )
 
-# Broad project intake keeps its deterministic node partition on project C and
-# D, leaving project A capacity for the completed checker retry proofs.
+# Broad project intake uses the same deterministic project-family partition.
 PROJECT_INTAKE_MODULES = (
     "tests/test_guide_document_intake.py",
     "tests/test_projects.py",
 )
 
-# Checker delivery shares project dispatch ownership and the existing
-# four-way partition; exclusive placement exceeded the hosted execution cap.
+# Checker delivery shares project dispatch ownership across the project family.
 CHECKER_DELIVERY_MODULES = (
     "tests/checkers/default/test_contract.py",
     "tests/checkers/default/test_execution.py",
@@ -459,6 +473,9 @@ CHECKER_DELIVERY_MODULES = (
 
 
 TASK_MODULES = (
+    "tests/tasks/submission_dispatch/test_revision_recovery_contracts.py",
+    "tests/tasks/submission_dispatch/test_predecessor_receipt.py",
+    "tests/tasks/test_revision_error_mapping.py",
     "tests/tasks/test_task_import_contract.py",
     "tests/test_task_import_sources.py",
     "tests/test_submission_predecessor_custody.py",
@@ -552,19 +569,22 @@ OBSERVABILITY_MODULES = (
     "tests/test_celery_observability.py",
 )
 
-# Routing PREP proofs share the four-way project-policy partition.
+# Routing PREP proofs share the project-policy family partition.
 ROUTING_AUTH_PREPARATION_MODULES = (
     "tests/authorization/post_submit_routing/test_contracts.py",
     "tests/authorization/post_submit_routing/test_prepared.py",
 )
 
+PROJECT_PARTITIONED_MODULES = (
+    PROJECT_MODULES
+    + CHECKER_DELIVERY_MODULES
+    + ROUTING_AUTH_PREPARATION_MODULES
+    + PROJECT_INTAKE_MODULES
+)
+
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
-    (
-        PARTITIONED_PROJECT_LANES,
-        PROJECT_MODULES + CHECKER_DELIVERY_MODULES + ROUTING_AUTH_PREPARATION_MODULES,
-    ),
-    (PARTITIONED_PROJECT_INTAKE_LANES, PROJECT_INTAKE_MODULES),
+    (PARTITIONED_PROJECT_LANES, PROJECT_PARTITIONED_MODULES),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
@@ -578,6 +598,7 @@ LANES = (
         (
             SCHEMA_MODULE,
             "tests/migrations/test_contribution_read_audit.py",
+            "tests/migrations/test_contribution_export_snapshots.py",
             "tests/authorization/post_submit/test_receipt_custody.py",
             "tests/authorization/post_submit/test_migration.py",
             "tests/reviews/packet/test_storage.py",
@@ -590,10 +611,7 @@ LANES = (
             "tests/reviews/acceptance/test_storage.py",
             "tests/reviews/acceptance/test_migration.py",
             "tests/test_database_reset.py",
-            "tests/test_artifact_architecture.py",
-            "tests/architecture/test_module_boundaries.py",
             "tests/architecture/test_authorization_boundary.py",
-            "tests/architecture/test_test_structure_boundary.py",
             "tests/test_identifier_inventory.py",
             "tests/test_record_id_collection.py",
             "tests/test_ci_lane_catalogue.py",
@@ -606,15 +624,6 @@ LANES = (
             ADMIN_RUNNER_MODULE,
         ),
     ),
-    *(
-        TestLane(
-            name,
-            PROJECT_MODULES
-            + CHECKER_DELIVERY_MODULES
-            + ROUTING_AUTH_PREPARATION_MODULES
-            + (PROJECT_INTAKE_MODULES if name in PARTITIONED_PROJECT_INTAKE_LANES else ()),
-        )
-        for name in PARTITIONED_PROJECT_LANES
-    ),
+    *(TestLane(name, PROJECT_PARTITIONED_MODULES) for name in PARTITIONED_PROJECT_LANES),
     *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
 )
