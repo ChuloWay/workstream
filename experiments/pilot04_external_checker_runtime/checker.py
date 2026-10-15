@@ -96,7 +96,7 @@ def main() -> int:
             "line": None,
         })
     body = {
-        "schema_version": "external_checker_result.v2",
+        "schema_version": "external_checker_result.v1",
         "request_digest": request["request_digest"],
         "registry_entry_id": request["registry"]["registry_entry_id"],
         "registry_entry_digest": request["registry"]["entry_digest"],

@@ -94,12 +94,46 @@ def submit_args():
     )
 
 
+INTAKE_FEEDBACK = [
+    {
+        "source": "workstream_default",
+        "check_id": "archive_safety",
+        "status": "passed",
+        "failure_code": None,
+        "finding_count": 0,
+    },
+    {
+        "source": "workstream_default",
+        "status": "warning",
+        "warning_code": "submission_summary_missing",
+    },
+    {
+        "source": "project_external_checker",
+        "requirement_id": "quality",
+        "registry_entry_id": RUN,
+        "registry_entry_digest": "sha256:" + "a" * 64,
+        "status": "passed",
+        "findings": [
+            {
+                "check_id": "coverage.files",
+                "code": "coverage.unreadable",
+                "level": "coverage_incomplete",
+                "message": "One file was not evaluated.",
+                "path": "results/vendor.bin",
+                "line": None,
+            }
+        ],
+    },
+]
+
+
 def preparation(status="stored_pending_verification"):
     return {
         "put_attempt_id": PUT,
         "admission_id": ADMISSION if status == "ready" else None,
         "submission_bundle_preparation_status": status,
         "replayed": status == "ready",
+        "pre_submission_results": INTAKE_FEEDBACK,
     }
 
 
@@ -145,6 +179,46 @@ def test_explicit_prepare_replay_then_create_preserves_packet_and_bytes(cli, tmp
             f"/api/v1/tasks/{TASK}/submissions",
             "Bearer " + TOKEN,
         )
+
+
+def test_admitted_preparation_shows_nonblocking_intake_feedback(cli, tmp_path):
+    path = tmp_path / "submission.zip"
+    path.write_bytes(b"PK\x03\x04feedback")
+    human = prepare_args(path)[:-2]
+    with http_fixture() as (origin, response, requests):
+        respond(response, preparation("ready"), 202)
+        result = cli(origin, TOKEN, *human)
+        assert result.returncode == 0, result.stderr
+        assert "Intake feedback: warning submission_summary_missing" in result.stdout
+        assert (
+            "Intake feedback: coverage_incomplete coverage.files results/vendor.bin: "
+            "One file was not evaluated." in result.stdout
+        )
+        # An admitted receipt cannot carry blocking results or omit its feedback.
+        blocked_check = copy.deepcopy(INTAKE_FEEDBACK)
+        blocked_check[0] |= {
+            "status": "failed",
+            "failure_code": "secret_detected",
+            "finding_count": 1,
+        }
+        error_finding = copy.deepcopy(INTAKE_FEEDBACK)
+        error_finding[2]["findings"][0]["level"] = "error"
+        failed_member = copy.deepcopy(INTAKE_FEEDBACK)
+        failed_member[2]["status"] = "failed"
+        missing = preparation("ready")
+        missing.pop("pre_submission_results")
+        for invalid in (
+            preparation("ready") | {"pre_submission_results": blocked_check},
+            preparation("ready") | {"pre_submission_results": error_finding},
+            preparation("ready") | {"pre_submission_results": failed_member},
+            preparation("ready") | {"pre_submission_results": None},
+            missing,
+        ):
+            respond(response, invalid, 202)
+            assert_failure(
+                cli(origin, TOKEN, *prepare_args(path)), "invalid_api_response"
+            )
+        assert len(requests) == 6
 
 
 def test_revision_prepare_requires_and_replays_exact_acknowledgement_headers(

@@ -292,7 +292,7 @@ def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> 
         )
 
 
-def test_v2_findings_carry_check_location_and_coverage_level() -> None:
+def test_findings_carry_check_location_and_coverage_level() -> None:
     finding = ExternalCheckerFinding(
         check_id="coverage.files",
         code="coverage.unreadable",

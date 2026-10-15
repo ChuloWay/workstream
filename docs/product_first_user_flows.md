@@ -233,8 +233,14 @@ Acceptance:
 - Every committed `needs_revision` starts a fresh PostgreSQL-time window from
   the failed attempt's locked policy; only immutable resubmission ends it.
   Upload, replay, repair and infrastructure retry preserve the window.
-- A checker coverage return spends no round; consecutive coverage returns keep
-  the first return's window, so the same gap cannot return the work forever.
+- A post-submit coverage gap with no error goes to human review when the
+  locked ReviewPolicy requires it; otherwise it returns to the contributor
+  without spending a round, so the next attempt keeps its current round.
+  Consecutive coverage returns keep the first return's window, so the same gap
+  cannot return the work forever.
+- Successful preparation and its exact replay return the bounded intake
+  results, so nonblocking findings such as coverage gaps stay visible; the CLI
+  prints them. Intake feedback never decides acceptance.
 - Cap exhaustion refuses another attempt. At expiry, an immutable rejection
   receipt, assignment release and return to `ready` commit atomically with
   AUTH/audit/outbox evidence and no new economic facts. Checker expiry is

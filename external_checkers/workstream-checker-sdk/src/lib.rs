@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 pub const REQUEST_SCHEMA_VERSION: &str = "external_checker_request.v1";
-pub const RESULT_SCHEMA_VERSION: &str = "external_checker_result.v2";
+pub const RESULT_SCHEMA_VERSION: &str = "external_checker_result.v1";
 pub const MAX_REQUEST_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_RESULT_BYTES: usize = 65_536;
 

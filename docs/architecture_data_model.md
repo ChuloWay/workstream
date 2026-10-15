@@ -1178,8 +1178,9 @@ Fields:
 
 Revision rounds are assignment-scoped: initial round 0, then at most
 `max_revision_rounds` replacements. A checker coverage return
-(`checker_coverage_incomplete`) is not counted, so the next attempt keeps its
-round and `next_revision_round` may be 0. Each committed `needs_revision` starts a
+(`checker_coverage_incomplete`) is not counted, so the next attempt keeps the
+source attempt's current round (0 only when no counted revision preceded it);
+`next_revision_round` therefore allows 0. Each committed `needs_revision` starts a
 fresh PostgreSQL-time window using the failed attempt's locked policy. Only
 immutable resubmission ends it. Cap exhaustion refuses a successor; expiry
 retains an immutable rejection receipt, releases the outstanding assignment
@@ -1628,12 +1629,17 @@ rejection lifecycle states.
 Attempt outcome (`attempt_status`, published as the read `status`):
 
 - `evaluation_pending` — created with the Submission and kept through
-  post-submit checks and infrastructure retries
-- `review_pending` — an `allow_review` routing manifest sent it to human review
+  post-submit checks and infrastructure retries; no `decided_at`
+- `review_pending` — an `allow_review` routing manifest sent it to human review;
+  awaiting a reviewer is not a decision, so it has no `decided_at` or reason
 - `accepted` — a FinalAcceptance exists for this Submission
 - `needs_revision` — a `needs_revision` routing manifest exists; when its
-  run had no failed member (a checker coverage gap) `status_reason` is
-  `checker_coverage_incomplete` and the attempt spends no revision round
+  run had no failed member but stored a `coverage_incomplete` finding (a
+  coverage gap under a false ReviewPolicy) `status_reason` is
+  `checker_coverage_incomplete` and the attempt spends no revision round. A
+  genuine failure keeps a null reason and spends a round even when a coverage
+  finding accompanies it. A coverage gap under a true ReviewPolicy is
+  `review_pending` instead.
 - `rejected` — a revision expiration receipt names this Submission as its
   source; `status_reason` is `revision_deadline_expired`
 

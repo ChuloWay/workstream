@@ -2,7 +2,7 @@
 
 - Initiative: None
 - Durable disposition: Planned
-- Intended merge outcome: Submissions, assignments and post-submit checker runs store the outcome, timestamp and per-finding facts that the PILOT read APIs project, through the existing TASK and CHECKERS owners and an extended external checker result contract, without changing who decides an outcome.
+- Intended merge outcome: Submissions, assignments and post-submit checker runs store the outcome, timestamp and per-finding facts that the PILOT read APIs project, through the existing TASK and CHECKERS owners and the single external checker result contract, without changing who decides an outcome; successful intake returns its nonblocking feedback.
 
 ## Intent
 
@@ -14,7 +14,8 @@ PRs are pure projections.
 
 It is the first of three PRs for the read-API issue:
 
-1. This change: stored facts, the extended checker result contract, B1 and B2.
+1. This change: stored facts, the checker result finding shape, successful
+   intake feedback, B1 and B2.
 2. Contributor reads A1–A6 and the B3 task-list filters.
 3. Project Manager and Finance reads C1–C9 (including activation readiness) and D1.
 
@@ -50,11 +51,13 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 
 ### Allowed
 
-- Replace `external_checker_result.v1` with `external_checker_result.v2` in the
-  Python contract, Rust SDK, fixtures, pilot04 experiment checker and SQL
-  custody. Findings gain a required `check_id`, an optional `line` (only with a
-  `path`) and the `coverage_incomplete` level. The verdict rule is unchanged:
-  `failed` exactly when an `error` finding exists.
+- Change the finding shape of the one canonical `external_checker_result.v1`
+  contract in place, for unreleased v0.1, across the Python contract, Rust SDK
+  and checker service, pilot04 experiment checker, fixtures and CLI decoders.
+  Findings gain a required `check_id`, an optional `line` (only with a `path`)
+  and the `coverage_incomplete` level. The verdict rule is unchanged: `failed`
+  exactly when an `error` finding exists. No second contract identifier,
+  version-transition guard or compatibility parser exists.
 - Add immutable `checker_result_findings` rows written in the existing
   finalization transaction and verified against the stored result by the
   existing deferred terminal-custody trigger.
@@ -66,7 +69,9 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 - Record such a return as `needs_revision` with `status_reason`
   `checker_coverage_incomplete` and exclude it from every revision-round count
   (capacity guard, revision-preparation guard, TASK preparation, submission
-  context and replay), allowing `next_revision_round` 0. Consecutive coverage
+  context and replay). The next attempt keeps the source's current round, so
+  `next_revision_round` allows 0. A genuine failure keeps its normal
+  accounting even beside a coverage finding. Consecutive coverage
   returns keep the first return's revision window (Python and the PostgreSQL
   preparation guard), so a repeated gap still reaches the revision deadline.
 - Add `attempt_status`, `status_reason`, `decided_at` and DB-maintained
@@ -80,16 +85,17 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   `path`, `line` and the `coverage_incomplete` status; members without findings
   keep one entry. B2: typed submission `status`, stored `status_reason`,
   `decided_at` and `finding_counts` on both history projections.
+- Return the existing bounded PRE results projection on successful
+  preparation and exact replay (`pre_submission_results`), from the retained
+  terminal facts, and print nonblocking findings in the CLI.
 - Update the Go CLI strict decoders (history, checker results, pre-submit
-  feedback findings, revision context round) and their integration fixtures.
+  feedback findings, successful preparation feedback, revision context round)
+  and their integration fixtures.
 - Update the authorization OpenAPI field-set assertions, the CI lane catalogue
   for the new test modules, the journey probe's outcome assertions, the Alembic
   environment head pin, and current docs (README revision-round sentence,
   checker framework, data model, lifecycle state machine, first-user flows,
   roadmap).
-- Refuse the upgrade, before any DDL, when retained `external_checker_result.v1`
-  evidence exists, as earlier migrations do for evidence that needs an explicit
-  preservation design.
 - Constrain finding paths to safe relative archive paths in Python and the Rust
   SDK, and require both location keys in the Rust SDK so its digest matches
   Python's.
@@ -101,7 +107,9 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 - No change to who decides an outcome or to AUTH actions; no new endpoints.
 - `submissions.status` keeps its intake-liveness meaning; no replay or guard
   that reads it changes behavior.
-- No parallel v1/v2 result contract or compatibility alias.
+- No second result contract identifier, version-transition machinery,
+  compatibility parser or fallback path.
+- No substitution of a checker image for an existing task lock.
 - No human review decision writes (#554); no fabricated Review.
 - No change to checker-authored message exposure: reads keep fixed worker
   messages.
@@ -120,7 +128,7 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   owner that decided it: an `allow_review` or `needs_revision` routing manifest,
   a FinalAcceptance for the submission, or a revision expiration receipt for
   `needs_revision → rejected` with reason `revision_deadline_expired`.
-- `check_id` is required in v2 so every stored finding is attributable to the
+- `check_id` is required so every stored finding is attributable to the
   check that produced it. `coverage_incomplete` is evidence about the checker,
   not the contributor, so it never costs a revision round.
 - A coverage return spends no round, which alone would let a persistent gap
@@ -134,11 +142,17 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 
 ## Acceptance criteria
 
-- [ ] A v2 result with `check_id`, `path`, `line` and each level round-trips
+- [ ] A result with `check_id`, `path`, `line` and each level round-trips
   from the checker contract through stored findings to both checker-result reads.
+- [ ] Successful preparation and its exact replay return the same bounded
+  intake results, including nonblocking coverage findings, without rerunning
+  PRE; the CLI decodes and prints them; the attempt still awaits evaluation.
+- [ ] An error beside a coverage finding records no coverage reason, spends
+  round one and uses the policy window; the test fails without the
+  `failed_count=0` guard.
 - [ ] `coverage_incomplete` without errors reaches `review_pending` under a
   true ReviewPolicy and returns to the contributor under a false one, recorded
-  as `checker_coverage_incomplete` with `next_revision_round` 0; it never
+  as `checker_coverage_incomplete` keeping the current round; it never
   auto-accepts and never leaves the task in `evaluation_pending`. Consecutive
   coverage returns keep the first window, and later failures still spend the
   full locked allowance.
@@ -176,8 +190,13 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 - The replay of the window change found no defect. Its Medium test gap (a
   second return routed after the first deadline, plus a shared-deadline expiry)
   is now covered. Contributor finding counts now use the same filters as
-  contributor history. The v1 refusal is proven for all three retained
-  sources.
+  contributor history.
+- Human reconciliation of #575: one canonical contract identifier (the v1/v2
+  distinction and the retained-v1 refusal were removed); successful intake
+  feedback; a discriminating mixed error-plus-coverage regression; corrected
+  round wording. CodeRabbit's competing-manifest and stale-ORM suggestions were
+  rechecked: lifecycle locking prevents competing routing manifests and no
+  caller reads stale ORM outcome fields, so no machinery was added.
 - Noted, not a defect: the stored-coverage-finding clause in the attempt guard
   and backfill is defence in depth. Terminal custody already makes a
   zero-failure `needs_revision` imply such a finding, so tests cannot
@@ -191,6 +210,18 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 
 - Current-source reconciliation: based on main at the PILOT-08 merge (#569).
 - Next usable boundary: PILOT-READ-2 contributor reads A1–A6 and B3.
+- Retained state needing explicit handling: the migration rewrites no checker
+  evidence. A retained `checker_runs.result_json` or selected PRE
+  `terminal_json` whose findings lack `check_id` fails current validation if it
+  is replayed or re-read through `stored_result` or exact PRE replay. Retained
+  terminal rows are otherwise unaffected, and runs completed before 0048 have
+  no finding rows, so their reads show one entry per member. Hosted data was not
+  inspected from the authoring sandbox.
+- The pilot04 checker image source changed (`check_id`, `line`); an image built
+  from the previous source emits findings the contract now rejects as invalid
+  output, never a silent pass. No repository fixture pins a real image digest
+  (setup fixtures use synthetic digests and controlled execution). The image was
+  not rebuilt here because the sandbox cannot reach Docker Hub for its base.
 - Remaining risks: human review decisions do not write `attempt_status` yet.
   #554 must extend the attempt-status guard (`review_pending` to `accepted`
   through the shared acceptance effects already works; `review_pending` to

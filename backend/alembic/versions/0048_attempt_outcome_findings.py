@@ -94,21 +94,6 @@ CREATE TRIGGER checker_result_finding_no_truncate BEFORE TRUNCATE
   EXECUTE FUNCTION public.protect_checker_result_finding_custody();
 """
 
-# The v2 contract decodes every stored checker result; v1 evidence would become
-# unreadable, so its presence needs a preservation design rather than an upgrade.
-_REFUSE_RETAINED_V1 = """
-DO $$ BEGIN
-IF EXISTS (SELECT 1 FROM public.checker_results
-           WHERE definition_version='external_checker_result.v1')
-   OR EXISTS (SELECT 1 FROM public.checker_runs
-              WHERE result_json LIKE '%"external_checker_result.v1"%')
-   OR EXISTS (SELECT 1 FROM public.selected_pre_submit_runs
-              WHERE terminal_json::text LIKE '%"external_checker_result.v1"%') THEN
-  RAISE EXCEPTION 'retained external checker v1 results require an explicit preservation design'
-    USING ERRCODE='23514';
-END IF; END $$
-"""
-
 _TERMINAL_REPLACEMENTS = (
     (
         "envelope jsonb; expected_members jsonb;",
@@ -380,11 +365,6 @@ CREATE TRIGGER task_assignment_started_at BEFORE INSERT OR UPDATE ON public.task
 
 def upgrade():
     op.execute("SET LOCAL search_path=pg_catalog,public,pg_temp")
-    op.execute(_REFUSE_RETAINED_V1)
-    _replace(
-        "public.protect_checker_result_custody()",
-        (("'external_checker_result.v1'", "'external_checker_result.v2'"),),
-    )
     _execute_script(_FINDINGS_TABLE)
     _replace("public.validate_checker_terminal_custody()", _TERMINAL_REPLACEMENTS)
     _replace("public.guard_dispatched_submission_immutable()", _DISPATCHED_IMMUTABLE)

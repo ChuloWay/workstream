@@ -40,7 +40,7 @@ Submission exists. Post-submit identity uses the immutable Submission,
 evaluation request and reservation, plus the current execution lease and its
 database expiry.
 
-The normalized `external_checker_result.v2` echoes the exact request, registry
+The normalized `external_checker_result.v1` echoes the exact request, registry
 and phase identity. It is either `completed`, with closed findings and a
 passed/failed verdict, or `infrastructure_failed`, with one of the existing
 capacity, deadline, material, implementation or invalid-output codes. Each
@@ -613,13 +613,17 @@ task's locked ReviewPolicy: when human review is required the result is
 otherwise it is `needs_revision` and returns to the contributor. TASK records
 that return as `needs_revision` with `status_reason`
 `checker_coverage_incomplete`, and neither Python nor PostgreSQL counts it as a
-revision round, so the next attempt keeps its round. The normal revision
+revision round, so the next attempt keeps its current round. The normal revision
 deadline still applies, and consecutive coverage returns keep the first
 return's revision window instead of starting a new one, so a checker that keeps
 reporting the same gap cannot return the work indefinitely. The deferred terminal-custody trigger recomputes the
-same route from the stored result and locked policy. Pre-submit intake treats a
-coverage gap like any non-error finding: it is shown in feedback and does not
-block admission, because intake never decides acceptance. Run-level
+same route from the stored result and locked policy. A genuine failure keeps
+its normal accounting even when a coverage finding accompanies it: no coverage
+reason, one revision round spent and the policy's normal window. Pre-submit
+intake treats a coverage gap like any non-error finding: it does not block
+admission, because intake never decides acceptance, and the bounded intake
+results are returned on the successful preparation response and its exact
+replay as well as on a blocked one. Run-level
 `warning_count` and `blocking_count` remain member counts; per-finding counts
 come from the stored findings, and contributors count only the findings their
 checker history shows them.

@@ -333,7 +333,9 @@ and never rewrites an earlier Submission, Review, contribution, or award.
 Each assignment starts at round 0 with its own revision allowance. A checker
 coverage return (`needs_revision` with `checker_coverage_incomplete`, used when
 no failed member exists and the locked ReviewPolicy does not require human
-review) spends no round. Every committed `needs_revision` freezes a fresh PostgreSQL-time window using the
+review) spends no round, so the next attempt keeps its current round; under a
+true ReviewPolicy the same gap goes to `review_pending` instead. A genuine
+failure accompanied by a coverage finding spends a round normally. Every committed `needs_revision` freezes a fresh PostgreSQL-time window using the
 failed attempt's locked RevisionPolicy, except that a coverage return whose
 immediate predecessor was also a coverage return keeps that first return's
 window. Only a committed immutable successor

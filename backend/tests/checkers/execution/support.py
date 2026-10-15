@@ -39,7 +39,7 @@ class ControlledSelectedExecution:
             request_digest=request.request_digest,
             registry_entry_id=request.registry.registry_entry_id,
             registry_entry_digest=request.registry.entry_digest,
-            phase="post_submit",
+            phase=request.identity.phase,
             outcome="completed",
             verdict=self.verdict,
             findings=findings,

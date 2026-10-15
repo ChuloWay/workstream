@@ -7,7 +7,7 @@ Rust service starts it by that exact platform-manifest digest in explicit
 UID/GID 65532, bounded resources, and the callback-scoped ART workspace as its
 only read-only material mount.
 
-The checker returns the published `external_checker_result.v2` envelope. It
+The checker returns the published `external_checker_result.v1` envelope. It
 fails its own result if the expected verified file differs, effective
 capabilities are nonzero, a Docker socket exists, the root is writable, or a
 network connection succeeds. This small Linux fixture does not establish

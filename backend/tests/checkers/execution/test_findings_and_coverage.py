@@ -173,6 +173,36 @@ async def test_coverage_return_spends_no_revision_round(tmp_path, isolated_datab
         await assert_backfill_matches_live(h.factory)
 
 
+async def test_genuine_failure_with_coverage_gap_spends_the_normal_round_and_window(
+    tmp_path, isolated_database_env,
+):
+    """An error beside a coverage gap is an ordinary contributor failure, not a gap return."""
+    async with remediation_source(
+        tmp_path, isolated_database_env, human_review_required=False,
+        findings=(ERROR, COVERAGE),
+    ) as h:
+        assert (h.run.routing_recommendation, h.run.failed_count) == ("needs_revision", 1)
+        async with h.factory() as session, session.begin():
+            routed = await task_post_submit_outcome(session, h.factory).apply(
+                h.envelope, current_generation=None,
+            )
+        assert routed.routing_recommendation == "needs_revision"
+        async with h.factory() as session:
+            outcome = (await session.execute(text("""
+                SELECT s.attempt_status, s.status_reason, s.decided_at=m.created_at,
+                  p.next_revision_round, p.requested_at=m.created_at,
+                  p.deadline_at=m.created_at+make_interval(hours=>policy.revision_deadline_hours)
+                FROM public.submissions s
+                JOIN public.task_post_submit_routing_manifests m ON m.submission_id=s.id
+                JOIN public.task_revision_preparations p ON p.routing_manifest_id=m.id
+                JOIN public.revision_policies policy ON policy.id=s.locked_revision_policy_id
+                WHERE s.id=:id
+            """), {"id": h.request.submission_id})).one()
+        # No coverage exemption: no reason, round one is spent, the policy window applies.
+        assert outcome == ("needs_revision", None, True, 1, True, True)
+        await assert_backfill_matches_live(h.factory)
+
+
 async def test_coverage_gap_routes_to_review_pending_when_review_is_required(
     tmp_path, isolated_database_env,
 ):

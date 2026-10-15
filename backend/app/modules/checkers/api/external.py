@@ -40,7 +40,7 @@ PRE_SUBMIT_INPUT_SCHEMA_ID = "external_checker_pre_submit_input"
 POST_SUBMIT_INPUT_SCHEMA_ID = "external_checker_post_submit_input"
 RESULT_SCHEMA_ID = "external_checker_result"
 EXTERNAL_CHECKER_REQUEST_SCHEMA_VERSION = "external_checker_request.v1"
-EXTERNAL_CHECKER_RESULT_SCHEMA_VERSION = "external_checker_result.v2"
+EXTERNAL_CHECKER_RESULT_SCHEMA_VERSION = "external_checker_result.v1"
 MAX_SCHEMA_BYTES = 65_536
 MAX_CONFIGURATION_BYTES = 65_536
 MAX_INPUT_BYTES = 1_048_576
@@ -567,7 +567,7 @@ def safe_finding_path(path: str) -> bool:
 class ExternalCheckerExecutionResult(ExternalCheckerValue):
     """Normalized completed or infrastructure result bound to one exact request."""
 
-    schema_version: Literal["external_checker_result.v2"] = EXTERNAL_CHECKER_RESULT_SCHEMA_VERSION
+    schema_version: Literal["external_checker_result.v1"] = EXTERNAL_CHECKER_RESULT_SCHEMA_VERSION
     request_digest: Sha256
     registry_entry_id: UUID = Field(strict=True)
     registry_entry_digest: Sha256
