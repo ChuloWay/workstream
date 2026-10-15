@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.outbox.api import OutboxAppendDisposition
-from app.modules.projects.api import ProjectLockedPolicyContextRequest
+from app.modules.projects.api import ProjectLockedPolicyContextRequest, ProjectLockedPolicyContextUnavailable
 from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
 from app.modules.tasks.api.revision_exhaustion import TaskRevisionExhaustionAuditFacts
 from app.modules.tasks.api.revision_recovery import TaskRevisionRecoveryFacts
@@ -22,16 +22,19 @@ from app.modules.tasks.service import LOCKED_CONTEXT_REQUIRED_FIELDS
 
 async def recover_exhausted_assignment(session, *, projects, authorization, audit, outbox,
                                      manifest, task, assignment, source, root, head):
-    """Return false below the cap; otherwise authorize and release the exact source."""
-    context = await projects.lock_locked_policy_context(ProjectLockedPolicyContextRequest(
-        project_id=UUID(manifest.project_id), guide_version=source.locked_guide_version,
-        source_snapshot_id=UUID(source.locked_guide_source_snapshot_id),
-        source_snapshot_hash=source.locked_guide_source_snapshot_hash,
-        effective_policy_id=UUID(source.locked_effective_project_submission_artifact_policy_id),
-        effective_policy_hash=source.locked_effective_project_submission_artifact_policy_hash,
-        pre_submit_policy_id=UUID(source.locked_pre_submit_checker_policy_id),
-        pre_submit_policy_bundle_hash=source.locked_pre_submit_checker_bundle_hash,
-    ))
+    """Return false below the cap or without locked context; otherwise exhaust the source."""
+    try:
+        context = await projects.lock_locked_policy_context(ProjectLockedPolicyContextRequest(
+            project_id=UUID(manifest.project_id), guide_version=source.locked_guide_version,
+            source_snapshot_id=UUID(source.locked_guide_source_snapshot_id),
+            source_snapshot_hash=source.locked_guide_source_snapshot_hash,
+            effective_policy_id=UUID(source.locked_effective_project_submission_artifact_policy_id),
+            effective_policy_hash=source.locked_effective_project_submission_artifact_policy_hash,
+            pre_submit_policy_id=UUID(source.locked_pre_submit_checker_policy_id),
+            pre_submit_policy_bundle_hash=source.locked_pre_submit_checker_bundle_hash,
+        ))
+    except ProjectLockedPolicyContextUnavailable:
+        return False
     policy = RevisionPolicySemantics.model_validate_json(context.revision_policy.value)
     count = await session.scalar(select(func.count()).select_from(Submission).where(
         Submission.task_assignment_id == assignment.id, Submission.version <= source.version,

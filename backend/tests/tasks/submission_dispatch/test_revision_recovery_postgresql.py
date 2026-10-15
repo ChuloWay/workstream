@@ -12,6 +12,8 @@ from sqlalchemy.exc import IntegrityError
 from app.adapters.tasks import scan_task_revision_sources, task_revision_recovery
 from app.core.identifiers import new_record_id
 from app.modules.outbox.models import OutboxEvent
+from app.modules.projects.api import ProjectLockedPolicyContextUnavailable
+from app.modules.tasks.revision.expiry_event import revision_preparation_event
 from app.modules.tasks.revision.models import TaskRevisionPreparation
 from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.repository import TaskRepository
@@ -21,6 +23,84 @@ from tests.tasks.post_submit_routing.support import activate_successor_guide
 from tests.tasks.submission_dispatch.test_revision_capacity import _retain_pre_revision_source
 from tests.tasks.submission_dispatch.test_revision_expiry import _provision_expirer
 from tests.test_submission_predecessor_custody import _fixture_revision_context
+
+
+async def _recovery_source_custody(h, source_id):
+    """Include immutable evidence and physical rows without new recovery receipts."""
+    async with h.factory() as session:
+        return (await session.execute(text("""
+            SELECT to_jsonb(t),t.xmin::text,to_jsonb(a),a.xmin::text,
+              to_jsonb(s),s.xmin::text,to_jsonb(m),m.xmin::text,
+              (SELECT jsonb_agg(jsonb_build_array(to_jsonb(p),p.xmin::text) ORDER BY p.sequence)
+                 FROM public.task_revision_preparations p WHERE p.routing_manifest_id=m.id),
+              (SELECT count(*) FROM public.task_revision_exhaustions),
+              (SELECT count(*) FROM public.task_revision_expirations)
+            FROM public.task_post_submit_routing_manifests m
+            JOIN public.workstream_tasks t ON t.id=m.task_id
+            JOIN public.task_assignments a ON a.id=m.assignment_id
+            JOIN public.submissions s ON s.id=m.submission_id WHERE m.id=:id
+        """), {"id": source_id})).one()
+
+
+@pytest.mark.parametrize("existing_root", [False, True])
+async def test_unavailable_locked_policy_preserves_existing_root_event_recovery(
+    tmp_path, isolated_database_env, monkeypatch, existing_root,
+):
+    """A missing PROJECT context cannot prevent exact frozen-head event recovery."""
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        source_id = await _fixture_revision_context(h)
+        await _provision_expirer(h.factory)
+        if existing_root:
+            async with h.factory() as session, session.begin():
+                root = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+                manifest = await session.get(TaskPostSubmitRoutingManifest, source_id)
+                expected = revision_preparation_event(manifest, root)
+                await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+                await session.execute(text(
+                    "ALTER TABLE public.outbox_events DISABLE TRIGGER outbox_events_custody"
+                ))
+                removed = await session.execute(text("""
+                    DELETE FROM public.outbox_events WHERE idempotency_key=:key
+                      AND event_type='TaskRevisionExpiryRequested' AND attempt_count=0
+                      AND claimed_at IS NULL AND delivery_state='pending' RETURNING event_id
+                """), {"key": expected.idempotency_key})
+                assert len(removed.all()) == 1
+                await session.execute(text(
+                    "ALTER TABLE public.outbox_events ENABLE TRIGGER outbox_events_custody"
+                ))
+        else:
+            await _retain_pre_revision_source(h, source_id)
+        before = await _recovery_source_custody(h, source_id)
+        unavailable_calls = []
+
+        async def unavailable(request):
+            unavailable_calls.append(request)
+            assert request.project_id == h.request.project_id
+            raise ProjectLockedPolicyContextUnavailable("project_locked_policy_context_changed")
+
+        for attempt in range(2):
+            async with h.factory() as session, session.begin():
+                recovery = task_revision_recovery(session)
+                monkeypatch.setattr(recovery._projects, "lock_locked_policy_context", unavailable)
+                assert await recovery.recover(source_id) is (existing_root and attempt == 0)
+            assert await _recovery_source_custody(h, source_id) == before
+        assert len(unavailable_calls) == (2 if existing_root else 4)
+        async with h.factory() as session:
+            events = (await session.scalars(select(OutboxEvent).where(
+                OutboxEvent.idempotency_key == f"task.revision.expire:{source_id}",
+            ))).all()
+            assert len(events) == int(existing_root)
+            if existing_root:
+                event = events[0]
+                for field in ("event_type", "event_version", "aggregate_type", "aggregate_id",
+                              "project_id", "correlation_id", "causation_event_id",
+                              "idempotency_key", "payload", "not_before_at"):
+                    assert getattr(event, field) == getattr(expected, field), field
+            assert await session.scalar(text("""
+                SELECT count(*) FROM public.audit_events
+                WHERE event_type='TaskRevisionContextRepaired'
+                  AND event_payload->'references'->>'routing_manifest_id'=:source
+            """), {"source": str(source_id)}) == int(existing_root)
 
 
 @pytest.mark.parametrize("new_active_guide", [False, True])

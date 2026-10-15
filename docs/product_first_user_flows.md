@@ -149,8 +149,12 @@ Acceptance:
 1. Checker runner validates the submission-stamped locked `PostSubmitCheckerPolicy` id/version/hash/body.
 2. Runner executes enabled checks from that locked policy body.
 3. Results are saved with `passed`, `warning`, or `failed`, plus severity, message, and evidence.
-4. Contributor-fixable checker failures route the Task to `NEEDS_REVISION` with
-   `CheckerResult` lineage and no Review or reviewer contribution.
+4. Contributor-fixable checker failures route the Task to `NEEDS_REVISION` only
+   when another revision is allowed by the locked project RevisionPolicy.
+   Failure of the final allowed attempt records rejection, closes the Assignment
+   as `revision_exhausted`, and returns the Task to `ready` atomically, without a
+   revision preparation or deadline. Both outcomes retain `CheckerResult`
+   lineage and create no Review or reviewer contribution.
 5. Setup or provenance defects keep the Task `evaluation_pending` on the
    internal `task_setup_blocked` repair route.
 6. For locked `human_review_required=true`, only a durable, final, current `CheckerRun` outcome of `allow_review` admits
