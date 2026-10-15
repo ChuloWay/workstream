@@ -2052,7 +2052,9 @@ root belongs to a routing manifest; `predecessor_id` and consecutive `sequence`
 form a non-branching immutable repair chain. Each repair retains its actor,
 idempotency key, request digest, bounded reason, exact AUTH resource facts and
 audit references. Fresh authorization is required for replay. A running repair preserves its deadline; a paused repair resumes only the
-frozen remainder. A blocked root starts paused with its full allowance.
+frozen remainder. A fresh blocked root starts paused with its full allowance.
+A recovered missing root preserves only the unspent original allowance;
+an already-expired window stays expired.
 
 The authorized contributor work-context read exposes the exact current head
 ID/digest, source Submission/manifest, local round/limit, original timestamps,

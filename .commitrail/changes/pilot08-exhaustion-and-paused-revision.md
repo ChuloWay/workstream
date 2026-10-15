@@ -78,17 +78,15 @@ contributor revision window. They retain bounded durable recovery semantics.
   marker: its two DDL mutation paths explicitly roll back, while the ordinary
   fixture verifies the canonical schema and rebuilds plus fails if either leaks.
   Rebalance only retained-pause, revision-expiry, task-batch, pause-race, and
-  `test_projects.py` nodes from complete hosted phase evidence. After both 3bad
-  attempts left only the project C `test_projects.py` tail, 6202 moved the three
-  measured pause-race waits to D; D then timed out with only six nodes from that
-  same tail left. Route those waits to measured-spare E. E796 then twice timed
-  out A with only the `test_projects.py` tail left while B passed in 604 seconds;
-  repartition only `test_projects.py` across measured-spare B/E and move the
-  three-node revision-clock module from A to B. E796 measured the 131 E-owned
-  project cases at 128.22 phase seconds; because A did not complete, estimated
-  totals of about A 1050--1100 and B 780--850 seconds are capacity evidence,
-  not guarantees. C/D/E ownership remains unchanged;
-  these estimates motivate ownership and do not replace hosted qualification.
+  `test_projects.py` nodes from measured hosted evidence. Keep `test_projects.py`
+  across B/E and the three-node revision-clock module in B. Move only the three
+  pause-race deadline cases from E to A: on bf0f31, A completed in 690.1 seconds,
+  while E reached its unchanged 1200-second limit twice, leaving respectively
+  125 and 98 unchanged `test_projects.py` cases unfinished. All affected revision
+  cases completed. The move separates real deadline waits from E's project tail;
+  it does not change their SQL sleeps, fixture semantics, or assertions. All
+  other lane ownership remains unchanged. Measured capacity motivates this
+  allocation and does not replace full hosted qualification.
   Preserve every test node, all 13
   required lanes and existing timeouts; affected current
   specifications/runbooks/README and roadmap. Remove
