@@ -17,6 +17,7 @@ from app.modules.projects.schemas import RevisionPolicyInput
 from app.modules.tasks.revision.models import TaskRevisionExhaustion
 from app.modules.tasks.schemas import AdmissionBackedSubmissionResponse
 from tests.checkers.execution.support import service_link_state
+from tests.checkers.execution.completion_fixture import completed_evidence
 from tests.tasks.post_submit_routing.outcome_support import outcome_snapshot
 from tests.tasks.post_submit_routing.remediation_support import no_economic_effects, remediation_source
 from tests.tasks.post_submit_routing.support import revision_archive
@@ -290,7 +291,18 @@ async def test_direct_sql_exhaustion_rejects_forged_receipts_and_partial_release
     tmp_path, isolated_database_env, monkeypatch,
 ):
     """Bypass ORM validation while preserving every database guard and participant."""
-    async with remediation_source(tmp_path, isolated_database_env, max_revision_rounds=0) as h:
+    async with (
+        remediation_source(tmp_path / "own", isolated_database_env, max_revision_rounds=0) as h,
+        completed_evidence(tmp_path / "foreign", isolated_database_env,
+                           provision_services=False, storage_settings=h.settings) as foreign,
+    ):
+        assert foreign.request.project_id != h.request.project_id
+        assert foreign.request.task_id != h.request.task_id
+        assert foreign.request.assignment_id != h.request.assignment_id
+        async with h.factory() as session:
+            assert await session.scalar(text(
+                "SELECT id FROM public.submissions WHERE id=:id"
+            ), {"id": foreign.created.submission_id}) == foreign.created.submission_id
         before = await _snapshot(h)
         for attack in ("source", "policy", "authority", "missing_closure"):
             reached = []
@@ -300,7 +312,7 @@ async def test_direct_sql_exhaustion_rejects_forged_receipts_and_partial_release
                           for column in TaskRevisionExhaustion.__table__.columns
                           if column.key not in {"created_at", "creation_xid"}}
                 if attack == "source":
-                    values["source_submission_id"] = str(new_record_id())
+                    values["source_submission_id"] = str(foreign.created.submission_id)
                 elif attack == "policy":
                     values["revision_policy_generation"] += 1
                 elif attack == "authority":

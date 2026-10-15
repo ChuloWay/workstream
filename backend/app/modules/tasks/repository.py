@@ -364,7 +364,7 @@ class TaskRepository:
     async def read_contributor_task_detail(
         self, request: ContributorTaskDetailRequest
     ) -> ContributorTaskDetail | None:
-        """Read visible work facts in one scoped query; caller supplies authority."""
+        """Read visible work through bounded scoped projections; caller supplies authority."""
         if type(request) is not ContributorTaskDetailRequest:
             raise ValueError("task detail request is invalid")
         task, assignment = WorkstreamTask, TaskAssignment
@@ -449,18 +449,19 @@ class TaskRepository:
             return None
         from app.modules.tasks.revision.terminal_read import latest_assignment_outcome
         from app.modules.tasks.revision.service import read_task_revision
-        assignment_id = await self._session.scalar(select(TaskAssignment.id).where(
-            TaskAssignment.task_id == str(request.task_id),
-            TaskAssignment.status == "active",
-        ))
-        return ManagementTaskDetail(
-            **values, revision_context=await read_task_revision(
-                self._session, task_id=str(request.task_id), status=values["status"],
-                assignment_id=assignment_id,
-            ), last_assignment_outcome=await latest_assignment_outcome(
-                self._session, project_id=request.project_id, task_id=request.task_id,
-            ),
-        )
+        with self._session.no_autoflush:
+            assignment_id = await self._session.scalar(select(TaskAssignment.id).where(
+                TaskAssignment.task_id == str(request.task_id),
+                TaskAssignment.status == "active",
+            ))
+            return ManagementTaskDetail(
+                **values, revision_context=await read_task_revision(
+                    self._session, task_id=str(request.task_id), status=values["status"],
+                    assignment_id=assignment_id,
+                ), last_assignment_outcome=await latest_assignment_outcome(
+                    self._session, project_id=request.project_id, task_id=request.task_id,
+                ),
+            )
 
     async def _read_task_detail_values(
         self,

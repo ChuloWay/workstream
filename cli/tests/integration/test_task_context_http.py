@@ -264,8 +264,11 @@ def test_revision_context_accepts_absent_null_and_valid_projection_but_rejects_b
 ):
     with http_fixture() as (origin, response, _):
         paused = REVISION_CONTEXT | {
-            "deadline_at": None, "remaining_microseconds": 1800000000,
-            "clock_state": "paused", "outcome": "blocked", "disposition": "context_blocked",
+            "deadline_at": None,
+            "remaining_microseconds": 1800000000,
+            "clock_state": "paused",
+            "outcome": "blocked",
+            "disposition": "context_blocked",
         }
         for revision in (None, REVISION_CONTEXT, paused):
             value = deepcopy(CONTEXT)

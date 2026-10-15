@@ -1,7 +1,7 @@
 # [PILOT-08] Immediate exhaustion and governed revision windows
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: Complete issue #495 with project-policy zero-revision support, immediate assignment exhaustion, automatic return to ready after exhaustion or timeout, explicit contributor/PM outcomes, and PostgreSQL-time pause/resume of setup-blocked revision windows.
 
 ## Intent
@@ -55,7 +55,10 @@ contributor revision window. They retain bounded durable recovery semantics.
   changed backend contract; coordinate with issue #499 rather than duplicating
   unrelated contributor UX work.
 - Focused positive/negative real API/PostgreSQL/outbox/storage proofs, exact test
-  ownership, affected current specifications/runbooks/README and roadmap. Remove
+  ownership and its exact behavior-partition registration; place the new
+  wall-clock proofs within the existing project lanes without changing prior
+  module ownership, lane count or timeouts; affected current
+  specifications/runbooks/README and roadmap. Remove
   superseded cap-waits-for-expiry assertions and replace their real guarantees.
 
 ### Prohibited changes
@@ -112,16 +115,26 @@ Human review focus: policy ownership, no invented retained-policy default,
 immediate exhaustion without a phantom window, exact paused-time accounting,
 automatic return to ready, terminal evidence and safe recovery.
 
-## Evidence
+## Verification
 
-| Claim | Command or proof | Result | Remaining uncertainty |
-|---|---|---|---|
-| Routing contract distinguishes exhaustion from remediation | Focused TASK/AUTH contract tests | Positive, denial and changed-receipt cases exercised | Final committed-head replay required after implementation |
-| One forward schema chain preserves old records | Fresh 0048 install and retained-window upgrade proofs | Fresh install exercised with successful cleanup | Retained clock/exhaustion recovery and final fingerprint qualification remain |
-| Public contracts represent paused time explicitly | Real PostgreSQL/API pause proof | Found and corrected recursive null omission; pure serialization regression passes | Final public-client and race proof remain |
+The committed regressions cover zero/two-revision policies, immediate exhaustion,
+reclaim, immutable history, real-participant rollback, direct-SQL denial,
+concurrent terminal deliveries, paused-clock precision and retained-window
+recovery. Existing task-detail transaction tests also protect caller-owned pending
+writes from read-triggered autoflush. The test inventory and behavior ownership
+partition include every new module without moving existing owners or reducing
+required checks.
+
+Fresh migration capture validates every installed SQL/PLpgSQL function before
+recording the schema fingerprint. PostgreSQL proofs exercise actual transactions,
+lock waits, migrations and durable outbox handlers. CLI process tests exercise the
+public response boundary. Hosted CI runs the complete required suite and retains
+per-node completion and cleanup evidence. Exact tested heads, commands, failures,
+review results and remaining execution limits are recorded in PR #573; a test
+name or passing source inspection is not a runtime qualification.
 
 ## Reconciliation
 
 - Current-source reconciliation: follows merged #569 and preserves main's 13-lane CI and immutable history. The user's final decision removes every contributor-count limit or repeated-failure PM hold.
-- Next usable boundary: one fully qualified follow-up PR completing immediate exhaustion, automatic ready/reclaim and conserved paused windows, including retained-record recovery.
-- Remaining risks: no implementation or merge-readiness claim until retained-data, API, concurrency and independent review checks complete.
+- Next usable boundary: human review and merge of this complete follow-up; future human-review trigger integration remains #554 and hosted-broker rehearsal remains #555.
+- Merge qualification requires retained-data, API, concurrency, independent review and full CI evidence for the final candidate. This record describes the intended merged behavior and does not authorize merge or deployment.

@@ -496,7 +496,7 @@ $$;
         "SELECT * INTO source FROM public.submissions WHERE id=NEW.source_submission_id;",
         """SELECT * INTO source FROM public.submissions WHERE id=NEW.source_submission_id;
  IF EXISTS(SELECT 1 FROM public.revision_policies policy
-   WHERE policy.id=source.locked_revision_policy_id AND policy.project_id=source.project_id
+   WHERE policy.id=source.locked_revision_policy_id AND policy.project_id=t.project_id
     AND policy.guide_version=source.locked_guide_version
     AND policy.policy_generation=source.locked_revision_policy_generation
     AND policy.policy_hash=source.locked_revision_policy_hash AND policy.semantics_status='complete'

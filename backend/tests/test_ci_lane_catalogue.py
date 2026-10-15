@@ -124,8 +124,8 @@ def test_project_intake_partitions_across_the_project_family() -> None:
     )
 
 
-def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
-    """Every capacity lane retains its complete semantic-family catalogue."""
+def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
+    """Every capacity lane retains its exact semantic-family ownership."""
     modules_by_lane = {lane.name: set(lane.modules) for lane in LANES}
 
     expected_families = (
@@ -161,9 +161,15 @@ def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
         (lane_names, modules) for lane_names, modules in expected_families
     )
     for lane_names, modules in expected_families:
-        assert all(modules_by_lane[name] == set(modules) for name in lane_names)
+        for name in lane_names:
+            assert modules_by_lane[name] == {
+                module
+                for module in modules
+                if name in catalogue.PARTITION_LANES_BY_MODULE[module]
+            }
+        assert all(catalogue.PARTITION_LANES_BY_MODULE[module] for module in modules)
         assert all(
-            catalogue.PARTITION_LANES_BY_MODULE[module] == lane_names
+            set(catalogue.PARTITION_LANES_BY_MODULE[module]) <= set(lane_names)
             for module in modules
         )
 
@@ -211,8 +217,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "2b4af700ea941ffddbd6f0789fff9227528deebc2b8dadbed9ec74d772ab8a91",
         ),
         "project": (
-            189,
-            "c8f83c0af956ef7884a71d9b3e8203c47829d080abf6172837f63f74e4440480",
+            196,
+            "22c5c14b692cf39c879be2f520721b302cb92fc5a29949e48c1281b8e497f349",
         ),
         "task": (
             76,
@@ -229,6 +235,57 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
         canonical = "\n".join(sorted(modules)) + "\n"
         assert len(modules) == len(set(modules)) == count
         assert hashlib.sha256(canonical.encode()).hexdigest() == digest
+
+
+def test_project_wall_clock_modules_have_exact_owned_lanes() -> None:
+    expected = {
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py": (
+            "project_lifecycle_a",
+        ),
+        "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
+            "project_lifecycle_a",
+        ),
+        "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
+            "project_lifecycle_d",
+        ),
+        "tests/tasks/submission_dispatch/test_revision_exhaustion.py": (
+            "project_lifecycle_d",
+        ),
+    }
+    assert catalogue.PROJECT_WALL_CLOCK_MODULE_LANES == expected
+    assert set(expected) <= set(catalogue.PROJECT_MODULES)
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module]
+        == expected.get(module, catalogue.PARTITIONED_PROJECT_LANES)
+        for module in catalogue.PROJECT_PARTITIONED_MODULES
+    )
+
+
+def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
+    canonical = "\n".join(
+        f"{module}:{','.join(catalogue.PARTITION_LANES_BY_MODULE[module])}"
+        for module in sorted(catalogue.PROJECT_PARTITIONED_MODULES)
+    ) + "\n"
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
+    assert hashlib.sha256(canonical.encode()).hexdigest() == (
+        "375f95c5863f921ad790af8bc01d4b3d87380d4c1105a9ac9dc447443ff20527"
+    )
+
+
+def test_project_wall_clock_nodes_execute_exactly_once_in_owned_lane() -> None:
+    nodes = [
+        f"{module}::test_wall_clock_{index}"
+        for module in catalogue.PROJECT_WALL_CLOCK_MODULE_LANES
+        for index in range(3)
+    ]
+    rows = runner.build_manifest("a" * 40, list(reversed(nodes)))["nodes"]
+
+    assert Counter(row["nodeid"] for row in rows) == Counter(nodes)
+    assert len(rows) == len(nodes)
+    assert all(
+        row["lane"] == catalogue.PROJECT_WALL_CLOCK_MODULE_LANES[row["module"]][0]
+        for row in rows
+    )
 
 
 def test_discovery_is_recursive_and_lexically_canonical(tmp_path: Path) -> None:

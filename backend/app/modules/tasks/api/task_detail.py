@@ -78,7 +78,9 @@ class ContributorTaskDetail(_TaskDetailFields):
 
     def __post_init__(self) -> None:
         _TaskDetailFields.__post_init__(self)
-        if not isinstance(self.compensation, TaskCompensationTerms):
+        if (not isinstance(self.compensation, TaskCompensationTerms)
+                or (self.last_assignment_outcome is not None
+                    and not isinstance(self.last_assignment_outcome, TaskAssignmentOutcome))):
             raise ValueError("task detail facts are invalid")
 
 
@@ -103,6 +105,10 @@ class ManagementTaskDetail(_TaskDetailFields):
             or any(value is not None and not isinstance(value, str) for value in (
                 self.source_ref, self.source_payload_hash, self.import_batch_id, self.external_task_id, self.assigned_to,
             ))
+            or (self.last_assignment_outcome is not None
+                and not isinstance(self.last_assignment_outcome, TaskAssignmentOutcome))
+            or (self.revision_context is not None
+                and not isinstance(self.revision_context, ContributorRevisionContext))
         ):
             raise ValueError("task detail facts are invalid")
 

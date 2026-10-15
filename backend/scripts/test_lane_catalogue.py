@@ -586,13 +586,32 @@ PROJECT_PARTITIONED_MODULES = (
     + PROJECT_INTAKE_MODULES
 )
 
+# Wall-clock proofs stay in their project semantic family but need exact lane
+# ownership so their intentional waits do not collide in the same process.
+PROJECT_WALL_CLOCK_MODULE_LANES = {
+    "tests/tasks/submission_dispatch/test_revision_clock_sql.py": (
+        "project_lifecycle_a",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
+        "project_lifecycle_a",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
+        "project_lifecycle_d",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_exhaustion.py": (
+        "project_lifecycle_d",
+    ),
+}
+
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_PARTITIONED_MODULES),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
-    module: names for names, modules in PARTITION_GROUPS for module in modules
+    module: PROJECT_WALL_CLOCK_MODULE_LANES.get(module, names)
+    for names, modules in PARTITION_GROUPS
+    for module in modules
 }
 
 LANES = (
@@ -630,6 +649,16 @@ LANES = (
             ADMIN_RUNNER_MODULE,
         ),
     ),
-    *(TestLane(name, PROJECT_PARTITIONED_MODULES) for name in PARTITIONED_PROJECT_LANES),
+    *(
+        TestLane(
+            name,
+            tuple(
+                module
+                for module in PROJECT_PARTITIONED_MODULES
+                if name in PARTITION_LANES_BY_MODULE[module]
+            ),
+        )
+        for name in PARTITIONED_PROJECT_LANES
+    ),
     *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
 )

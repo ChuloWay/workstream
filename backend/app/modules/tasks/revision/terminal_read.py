@@ -27,7 +27,8 @@ async def latest_assignment_outcome(session, *, project_id, task_id, contributor
     )
     if contributor_id is not None:
         statement = statement.where(assignment.contributor_id == str(contributor_id))
-    row = (await session.execute(statement.order_by(
-        assignment.released_at.desc(), assignment.id.desc(),
-    ).limit(1))).mappings().one_or_none()
+    with session.no_autoflush:
+        row = (await session.execute(statement.order_by(
+            assignment.released_at.desc(), assignment.id.desc(),
+        ).limit(1))).mappings().one_or_none()
     return TaskAssignmentOutcome(**row) if row is not None else None

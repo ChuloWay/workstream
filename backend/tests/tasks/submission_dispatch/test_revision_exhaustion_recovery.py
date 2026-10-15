@@ -131,9 +131,9 @@ async def test_retained_cap_recovery_releases_once_and_preserves_exact_routing_r
             with pytest.raises(DBAPIError) as rejected:
                 async with h.factory() as session, session.begin():
                     await session.execute(text("""
-                        INSERT INTO public.task_revision_expirations (id,source_submission_id)
-                        VALUES (:id,:source)
-                    """), {"id": new_record_id(), "source": h.created.submission_id})
+                        INSERT INTO public.task_revision_expirations (id,task_id,source_submission_id)
+                        VALUES (:id,:task,:source)
+                    """), {"id": new_record_id(), "task": h.request.task_id, "source": h.created.submission_id})
             assert rejected.value.orig.sqlstate == "23514"
             assert "ck_revision_expiration_source_not_exhausted" in str(rejected.value)
             assert await _snapshot(h) == before
