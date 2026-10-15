@@ -1,12 +1,15 @@
 """Built-process evidence reads, hostile wire data and private server CSV."""
 
 from copy import deepcopy
+from contextlib import contextmanager
 import csv
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import StringIO
 import json
 import os
 import subprocess
 import sys
+from threading import Thread
 from urllib.parse import parse_qs, urlsplit
 
 from test_http_boundary import ACTOR, PROJECT, TOKEN, assert_failure, http_fixture
@@ -76,10 +79,59 @@ def csv_bytes(value):
     )
 
 
+def api_page(value, cursor=None):
+    return value | {"next_cursor": cursor}
+
+
+@contextmanager
+def contribution_pages(responder):
+    requests = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):  # noqa: N802 - standard HTTP handler interface
+            requests.append(
+                (self.command, self.path, self.headers.get("Authorization"))
+            )
+            status, headers, body = responder(self.path)
+            self.send_response(status)
+            entries = headers.items() if isinstance(headers, dict) else headers
+            for key, value in entries:
+                self.send_header(key, value)
+            self.end_headers()
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}", requests
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+
+def many_items(start, count):
+    prototype = evidence()["items"][0]
+    items = []
+    for index in range(start, start + count):
+        item = deepcopy(prototype)
+        item.update(contribution_id=identity(index), awards=[])
+        items.append(item)
+    return items
+
+
 def test_contributions_exact_self_project_filters_and_text(cli):
     value = evidence()
     with http_fixture() as (origin, response, requests):
-        response["body"] = json.dumps(value, ensure_ascii=False).encode()
+        response["body"] = json.dumps(api_page(value), ensure_ascii=False).encode()
         for args, path in (
             (
                 ("contributions", "--project", PROJECT.replace("-", "")),
@@ -115,6 +167,7 @@ def test_contributions_exact_self_project_filters_and_text(cli):
             assert urlsplit(target).path == path
             expected = {
                 "format": ["json"],
+                "limit": ["1000"],
                 "contribution_type": ["accepted_submission"],
                 "recorded_from": [STAMP],
                 "recorded_before": ["2026-10-02T00:00:00Z"],
@@ -144,7 +197,7 @@ def test_contributions_empty_review_and_filter_validation(cli):
                     acceptance_routing_manifest_id=None,
                     awards=[],
                 )
-            response["body"] = json.dumps(value).encode()
+            response["body"] = json.dumps(api_page(value)).encode()
             result = cli(origin, TOKEN, "contributions", "-o", "json")
             assert result.returncode == 0 and json.loads(result.stdout) == value
         before = len(requests)
@@ -165,7 +218,7 @@ def test_contributions_empty_review_and_filter_validation(cli):
 def test_contributions_refuse_wrong_scope_shape_lineage_and_duplicate_identity(cli):
     original = evidence()
     with http_fixture() as (origin, response, _):
-        response["body"] = json.dumps(original).encode()
+        response["body"] = json.dumps(api_page(original)).encode()
         control = cli(origin, TOKEN, "project", "contributions", PROJECT, "-o", "json")
         assert control.returncode == 0, control.stderr
         mutations = [
@@ -187,7 +240,7 @@ def test_contributions_refuse_wrong_scope_shape_lineage_and_duplicate_identity(c
         for patch in mutations:
             value = deepcopy(original)
             value["items"][0].update(patch)
-            response["body"] = json.dumps(value).encode()
+            response["body"] = json.dumps(api_page(value)).encode()
             assert_failure(
                 cli(origin, TOKEN, "project", "contributions", PROJECT, "-o", "json"),
                 "invalid_api_response",
@@ -195,7 +248,7 @@ def test_contributions_refuse_wrong_scope_shape_lineage_and_duplicate_identity(c
         for field in tuple(original["items"][0]):
             value = deepcopy(original)
             del value["items"][0][field]
-            response["body"] = json.dumps(value).encode()
+            response["body"] = json.dumps(api_page(value)).encode()
             assert_failure(
                 cli(origin, TOKEN, "contributions", "-o", "json"),
                 "invalid_api_response",
@@ -204,11 +257,11 @@ def test_contributions_refuse_wrong_scope_shape_lineage_and_duplicate_identity(c
         duplicate["items"].append(deepcopy(duplicate["items"][0]))
         duplicate["items"][1]["contribution_id"] = identity(3).replace("-", "")
         duplicate["items"][1]["awards"] = []
-        response["body"] = json.dumps(duplicate).encode()
+        response["body"] = json.dumps(api_page(duplicate)).encode()
         assert_failure(
             cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
         )
-        response["body"] = json.dumps(original).encode()
+        response["body"] = json.dumps(api_page(original)).encode()
         for flags in (
             ("--type", "completed_review"),
             ("--recorded-before", STAMP),
@@ -242,7 +295,10 @@ def test_contribution_csv_exact_bytes_private_no_overwrite_and_symlink(cli, tmp_
             "saved": True,
         }, result.stderr
         assert output.read_bytes() == body and output.stat().st_mode & 0o777 == 0o600
-        assert parse_qs(urlsplit(requests[-1][1]).query) == {"format": ["csv"]}
+        assert parse_qs(urlsplit(requests[-1][1]).query) == {
+            "format": ["csv"],
+            "limit": ["1000"],
+        }
         assert "'=project" in output.read_text()
         for target in (output, tmp_path / "link.csv"):
             if target != output:
@@ -306,6 +362,33 @@ def test_contribution_csv_reports_usage_and_real_write_failure(cli, tmp_path):
             assert not target.exists()
             assert not list(tmp_path.glob(".workstream-contributions-*"))
 
+        response["headers"] = {"Content-Type": "application/json"}
+        response["body"] = json.dumps(api_page(evidence())).encode()
+        staged = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                launcher,
+                os.environ["WORKSTREAM_CLI_EXECUTABLE"],
+                "contributions",
+                "-o",
+                "json",
+            ],
+            env={
+                "WORKSTREAM_API_URL": origin,
+                "WORKSTREAM_TOKEN": TOKEN,
+                "TMPDIR": str(tmp_path),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=20,
+        )
+        assert staged.returncode == 1 and not staged.stdout, staged.stderr
+        assert json.loads(staged.stderr)["error"]["code"] == "file_io_error"
+        assert TOKEN not in staged.stderr and str(tmp_path) not in staged.stderr
+        assert not list(tmp_path.glob(".workstream-contributions-*"))
+
 
 def test_contribution_csv_refuses_malformed_foreign_and_unsafe_rows(cli, tmp_path):
     body = csv_bytes(evidence())
@@ -360,7 +443,7 @@ def test_contributions_redaction_and_failure_never_publish(cli, tmp_path):
         for token in ("credential_canary_AAA", identity(9)):
             value = evidence()
             value["items"][0]["task_title"] = token
-            response["body"] = json.dumps(value).encode()
+            response["body"] = json.dumps(api_page(value)).encode()
             assert_failure(
                 cli(origin, token, "contributions", "-o", "json"),
                 "invalid_api_response",
@@ -401,7 +484,7 @@ def test_contributions_human_acceptance_and_leading_zero_quantities(cli, tmp_pat
     item["awards"][0]["quantity"] = "000001.2300"
     item["awards"][1]["quantity"] = "00012"
     with http_fixture() as (origin, response, _):
-        response["body"] = json.dumps(value).encode()
+        response["body"] = json.dumps(api_page(value)).encode()
         result = cli(origin, TOKEN, "contributions", "-o", "json")
         assert result.returncode == 0 and json.loads(result.stdout) == value, (
             result.stderr
@@ -424,7 +507,7 @@ def test_contributions_human_acceptance_and_leading_zero_quantities(cli, tmp_pat
         ):
             bad = deepcopy(value)
             bad["items"][0].update(patch)
-            response["body"] = json.dumps(bad).encode()
+            response["body"] = json.dumps(api_page(bad)).encode()
             assert_failure(
                 cli(origin, TOKEN, "contributions", "-o", "json"),
                 "invalid_api_response",
@@ -437,7 +520,7 @@ def test_contributions_json_and_csv_size_caps_reject_valid_oversized_exports(
     value = evidence()
     value["items"][0]["task_title"] = "x" * (32 * 1024 * 1024)
     with http_fixture() as (origin, response, _):
-        response["body"] = json.dumps(value).encode()
+        response["body"] = json.dumps(api_page(value)).encode()
         assert_failure(
             cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
         )
@@ -457,7 +540,7 @@ def test_contributions_complete_limit_order_and_unique_awards(cli, tmp_path):
         second = deepcopy(first)
         second.update(contribution_id=identity(30), awards=[])
         valid = {"exported_at": STAMP, "items": [first, second]}
-        response["body"] = json.dumps(valid).encode()
+        response["body"] = json.dumps(api_page(valid)).encode()
         assert cli(origin, TOKEN, "contributions", "-o", "json").returncode == 0
         for value in (
             {"exported_at": STAMP, "items": [second, first]},
@@ -468,7 +551,7 @@ def test_contributions_complete_limit_order_and_unique_awards(cli, tmp_path):
             {"exported_at": STAMP, "items": None},
             valid | {"extra": "undocumented"},
         ):
-            response["body"] = json.dumps(value).encode()
+            response["body"] = json.dumps(api_page(value)).encode()
             assert_failure(
                 cli(origin, TOKEN, "contributions", "-o", "json"),
                 "invalid_api_response",
@@ -476,13 +559,17 @@ def test_contributions_complete_limit_order_and_unique_awards(cli, tmp_path):
         items = [
             second | {"contribution_id": identity(100 + index)} for index in range(1000)
         ]
-        response["body"] = json.dumps({"exported_at": STAMP, "items": items}).encode()
+        response["body"] = json.dumps(
+            api_page({"exported_at": STAMP, "items": items})
+        ).encode()
         result = cli(origin, TOKEN, "contributions", "-o", "json")
         assert (
             result.returncode == 0 and len(json.loads(result.stdout)["items"]) == 1000
         )
         items.append(second | {"contribution_id": identity(1100)})
-        response["body"] = json.dumps({"exported_at": STAMP, "items": items}).encode()
+        response["body"] = json.dumps(
+            api_page({"exported_at": STAMP, "items": items})
+        ).encode()
         assert_failure(
             cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
         )
@@ -500,3 +587,299 @@ def test_contributions_complete_limit_order_and_unique_awards(cli, tmp_path):
                 origin, TOKEN, "contributions", "--csv", str(target), "-o", "json"
             )
             assert result.returncode == 0 and target.read_bytes() == body, result.stderr
+
+
+def test_contributions_traverse_1001_json_and_csv_without_exposing_cursors(
+    cli, tmp_path
+):
+    json_cursor = "opaque.v2~é,+"
+    csv_cursor = "opaque.v2~,+"
+    first_items = many_items(100, 1000)
+    first_items[0]["awards"] = deepcopy(evidence()["items"][0]["awards"])
+    final_item = many_items(1100, 1)[0]
+    final_item["task_title"] = "later \u009b\u202e\U000e0001 page"
+    final_item["awards"] = [
+        {
+            "award_id": identity(9000),
+            "award_definition_id": identity(9001),
+            "instrument": "money",
+            "unit": "USD",
+            "quantity": "1.2300",
+        }
+    ]
+    first = {"exported_at": STAMP, "items": first_items}
+    second = {"exported_at": "2026-10-01T00:00:01Z", "items": [final_item]}
+    csv_first, csv_second = csv_bytes(first), csv_bytes(second)
+    csv_second_data = csv_second[csv_second.index(b"\n") + 1 :]
+
+    def responder(target):
+        selected = parse_qs(urlsplit(target).query)
+        assert selected["format"] in (["json"], ["csv"])
+        cursor = csv_cursor if selected["format"] == ["csv"] else json_cursor
+        assert selected == {
+            "format": selected["format"],
+            "limit": ["1000"],
+            "project_id": [PROJECT],
+            "contribution_type": ["accepted_submission"],
+            "recorded_from": [STAMP],
+            "recorded_before": ["2026-10-02T00:00:00Z"],
+        } | ({"cursor": [cursor]} if "cursor" in selected else {})
+        continuation = selected.get("cursor")
+        assert continuation in (None, [cursor])
+        if selected["format"] == ["csv"]:
+            if continuation is None:
+                return (
+                    200,
+                    [
+                        ("Content-Type", "text/csv; charset=utf-8"),
+                        ("X-Workstream-Next-Cursor", csv_cursor),
+                    ],
+                    csv_first,
+                )
+            return 200, {"Content-Type": "text/csv"}, csv_second
+        value = (
+            api_page(first, json_cursor) if continuation is None else api_page(second)
+        )
+        return (
+            200,
+            {"Content-Type": "application/json"},
+            json.dumps(value, ensure_ascii=False).encode(),
+        )
+
+    with contribution_pages(responder) as (origin, requests):
+        args = (
+            "contributions",
+            "--project",
+            PROJECT,
+            "--type",
+            "accepted_submission",
+            "--recorded-from",
+            STAMP,
+            "--recorded-before",
+            "2026-10-02T00:00:00Z",
+        )
+        result = cli(origin, TOKEN, *args, "-o", "json")
+        assert result.returncode == 0 and result.stderr == "", result.stderr
+        value = json.loads(result.stdout)
+        assert set(value) == {"exported_at", "items"}
+        assert value["exported_at"] == STAMP
+        assert [item["contribution_id"] for item in value["items"]] == [
+            item["contribution_id"] for item in first_items + [final_item]
+        ]
+        assert len({item["contribution_id"] for item in value["items"]}) == 1001
+        assert value["items"][0]["awards"] == first_items[0]["awards"]
+        assert value["items"][-1]["awards"] == final_item["awards"]
+        assert all(
+            mark not in result.stdout for mark in ("\u009b", "\u202e", "\U000e0001")
+        )
+        assert "\\u202e" in result.stdout and "next_cursor" not in result.stdout
+
+        rendered = cli(origin, TOKEN, *args)
+        assert rendered.returncode == 0 and "not payment status" in rendered.stdout
+        assert all(
+            mark not in rendered.stdout for mark in ("\u009b", "\u202e", "\U000e0001")
+        )
+        assert "\\u202e" in rendered.stdout
+
+        target = tmp_path / "complete.csv"
+        saved = cli(origin, TOKEN, *args, "--csv", str(target), "-o", "json")
+        assert (
+            saved.returncode == 0 and target.read_bytes() == csv_first + csv_second_data
+        )
+        assert target.stat().st_mode & 0o777 == 0o600
+        assert not list(tmp_path.glob(".workstream-contributions-*"))
+        assert len(requests) == 6
+
+
+def test_contributions_reject_cursor_and_cross_page_failures_without_output(
+    cli, tmp_path
+):
+    first_items = many_items(100, 1000)
+    first_items[0]["awards"] = deepcopy(evidence()["items"][0]["awards"])
+    first = {"exported_at": STAMP, "items": first_items}
+
+    terminal_without_cursor = json.dumps(first).encode()
+    with contribution_pages(
+        lambda _target: (
+            200,
+            {"Content-Type": "application/json"},
+            terminal_without_cursor,
+        )
+    ) as (origin, _):
+        assert_failure(
+            cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+        )
+
+    for bad_cursor in ("", "é" * 513):
+        body = json.dumps(api_page(first, bad_cursor)).encode()
+        with contribution_pages(
+            lambda _target, body=body: (
+                200,
+                {"Content-Type": "application/json"},
+                body,
+            )
+        ) as (origin, requests):
+            assert_failure(
+                cli(origin, TOKEN, "contributions", "-o", "json"),
+                "invalid_api_response",
+            )
+            assert len(requests) == 1
+
+    second_items = many_items(2000, 1000)
+
+    def repeated_cursor(target):
+        selected = parse_qs(urlsplit(target).query)
+        items = first_items if "cursor" not in selected else second_items
+        return (
+            200,
+            {"Content-Type": "application/json"},
+            json.dumps(
+                api_page({"exported_at": STAMP, "items": items}, "repeat")
+            ).encode(),
+        )
+
+    with contribution_pages(repeated_cursor) as (origin, requests):
+        assert_failure(
+            cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+        )
+        assert len(requests) == 2
+
+    def empty_continuation(target):
+        selected = parse_qs(urlsplit(target).query)
+        value = (
+            first
+            if "cursor" not in selected
+            else {
+                "exported_at": STAMP,
+                "items": [],
+            }
+        )
+        cursor = "second" if "cursor" not in selected else None
+        return (
+            200,
+            {"Content-Type": "application/json"},
+            json.dumps(api_page(value, cursor)).encode(),
+        )
+
+    with contribution_pages(empty_continuation) as (origin, requests):
+        assert_failure(
+            cli(origin, TOKEN, "contributions", "-o", "json"), "invalid_api_response"
+        )
+        assert len(requests) == 2
+
+    for final_item in (
+        deepcopy(first_items[0]),
+        many_items(1100, 1)[0] | {"awards": [deepcopy(first_items[0]["awards"][0])]},
+    ):
+
+        def duplicate_page(target, final_item=final_item):
+            selected = parse_qs(urlsplit(target).query)
+            value = (
+                first
+                if "cursor" not in selected
+                else {
+                    "exported_at": STAMP,
+                    "items": [final_item],
+                }
+            )
+            cursor = "second" if "cursor" not in selected else None
+            return (
+                200,
+                {"Content-Type": "application/json"},
+                json.dumps(api_page(value, cursor)).encode(),
+            )
+
+        with contribution_pages(duplicate_page) as (origin, requests):
+            assert_failure(
+                cli(origin, TOKEN, "contributions", "-o", "json"),
+                "invalid_api_response",
+            )
+            assert len(requests) == 2
+
+    def denied_page(target):
+        selected = parse_qs(urlsplit(target).query)
+        if "cursor" not in selected:
+            return (
+                200,
+                {"Content-Type": "application/json"},
+                json.dumps(api_page(first, "denied")).encode(),
+            )
+        return (
+            404,
+            {"Content-Type": "application/json"},
+            json.dumps({"error": {"code": "contribution_export_not_found"}}).encode(),
+        )
+
+    with contribution_pages(denied_page) as (origin, requests):
+        result = cli(origin, TOKEN, "contributions", "-o", "json")
+        assert_failure(result, "contribution_export_not_found")
+        assert len(requests) == 2
+
+    csv_first = csv_bytes(first)
+
+    def csv_denied(target):
+        selected = parse_qs(urlsplit(target).query)
+        if "cursor" not in selected:
+            return (
+                200,
+                [
+                    ("Content-Type", "text/csv"),
+                    ("X-Workstream-Next-Cursor", "denied"),
+                ],
+                csv_first,
+            )
+        return (
+            404,
+            {"Content-Type": "application/json"},
+            json.dumps({"error": {"code": "contribution_export_not_found"}}).encode(),
+        )
+
+    with contribution_pages(csv_denied) as (origin, requests):
+        target = tmp_path / "denied.csv"
+        result = cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json")
+        assert_failure(result, "contribution_export_not_found")
+        assert len(requests) == 2 and not target.exists()
+        assert not list(tmp_path.glob(".workstream-contributions-*"))
+
+    final_csv = csv_bytes({"exported_at": STAMP, "items": many_items(1100, 1)})
+    changed_header = final_csv.replace(b'"contribution_id",', b"contribution_id,", 1)
+
+    def changed_csv_header(target):
+        selected = parse_qs(urlsplit(target).query)
+        if "cursor" not in selected:
+            return (
+                200,
+                [
+                    ("Content-Type", "text/csv"),
+                    ("X-Workstream-Next-Cursor", "second"),
+                ],
+                csv_first,
+            )
+        return 200, {"Content-Type": "text/csv"}, changed_header
+
+    with contribution_pages(changed_csv_header) as (origin, requests):
+        target = tmp_path / "changed-header.csv"
+        assert_failure(
+            cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json"),
+            "invalid_api_response",
+        )
+        assert len(requests) == 2 and not target.exists()
+        assert not list(tmp_path.glob(".workstream-contributions-*"))
+
+    with contribution_pages(
+        lambda _target: (
+            200,
+            [
+                ("Content-Type", "text/csv"),
+                ("X-Workstream-Next-Cursor", "one"),
+                ("X-Workstream-Next-Cursor", "two"),
+            ],
+            csv_first,
+        )
+    ) as (origin, requests):
+        target = tmp_path / "ambiguous.csv"
+        assert_failure(
+            cli(origin, TOKEN, "contributions", "--csv", str(target), "-o", "json"),
+            "invalid_api_response",
+        )
+        assert len(requests) == 1 and not target.exists()

@@ -74,6 +74,61 @@ async def _execute(database_url: str, statement: str, *arguments: object) -> Non
         await connection.close()
 
 
+async def _seed_export_resume_rows(database_url: str):
+    """Retain real main-owned export membership and its required identity custody."""
+    from app.core.identifiers import new_record_id
+
+    actor, link, snapshot = new_record_id(), new_record_id(), new_record_id()
+    connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
+    try:
+        async with connection.transaction():
+            await connection.execute("""
+                INSERT INTO public.actor_profiles
+                  (id,actor_kind,status,provisioning_method,created_by)
+                VALUES ($1,'human','active','automatic_first_access','migration-resume-test')
+            """, actor)
+            await connection.execute("""
+                INSERT INTO public.actor_identity_links
+                  (id,actor_profile_id,issuer,subject,subject_kind,status,linked_by,last_verified_at)
+                VALUES ($1,$2,'https://identity.flowresearch.tech',$3,'human','active',
+                        'migration-resume-test',clock_timestamp())
+            """, link, actor, str(actor))
+            await connection.execute("""
+                INSERT INTO public.contribution_export_snapshots
+                  (id,actor_profile_id,allocation_slot,query_digest,member_ids,created_at,expires_at)
+                VALUES ($1,$2,1,$3,$4,statement_timestamp(),statement_timestamp()+interval '1 hour')
+            """, snapshot, actor, "sha256:" + "a" * 64, [new_record_id(), new_record_id()])
+        return snapshot
+    finally:
+        await connection.close()
+
+
+async def _migration_resume_custody(database_url: str, snapshot_id) -> dict[str, object]:
+    """Compare retained row bytes and table identities, including the sentinel."""
+    connection = await asyncpg.connect(database_url.replace("+asyncpg", ""))
+    try:
+        sentinel = await connection.fetchrow(
+            "select value,tableoid::bigint,xmin::text from migration_resume_sentinel where id=1"
+        )
+        assert sentinel is not None
+        export = None
+        if snapshot_id is not None:
+            export = await connection.fetchrow("""
+                SELECT to_jsonb(s)::text,to_jsonb(a)::text,to_jsonb(l)::text,
+                       s.tableoid::bigint,a.tableoid::bigint,l.tableoid::bigint,
+                       s.xmin::text,a.xmin::text,l.xmin::text
+                FROM public.contribution_export_snapshots s
+                JOIN public.actor_profiles a ON a.id=s.actor_profile_id
+                JOIN public.actor_identity_links l ON l.actor_profile_id=a.id
+                WHERE s.id=$1
+            """, snapshot_id)
+            assert export is not None
+        return {"sentinel": tuple(sentinel.values()),
+                "export": tuple(export.values()) if export is not None else None}
+    finally:
+        await connection.close()
+
+
 def test_v01_graph_has_one_root_and_head() -> None:
     config = _alembic_config()
     script = ScriptDirectory.from_config(config)
@@ -81,12 +136,13 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
-        "0045_revision_expiry_retry",
-        "0044_task_revision_expiry",
-        "0043_outbox_not_before",
-        "0042_revision_preparation",
-        "0041_revision_lineage",
-        "0040_checker_revision_cap",
+        "0046_revision_expiry_retry",
+        "0045_task_revision_expiry",
+        "0044_outbox_not_before",
+        "0043_revision_preparation",
+        "0042_revision_lineage",
+        "0041_checker_revision_cap",
+        "0040_contribution_export_page",
         "0039_false_guide_activation",
         "0038_task_batch_transitions",
         "0037_task_import_batches",
@@ -253,8 +309,13 @@ def test_repeated_upgrade_head_preserves_current_database(
 
 @pytest.mark.parametrize("installed_revision", [
     "0038_task_batch_transitions",
-    "0044_task_revision_expiry",
-    "0045_revision_expiry_retry",
+    "0040_contribution_export_page",
+    "0041_checker_revision_cap",
+    "0042_revision_lineage",
+    "0043_revision_preparation",
+    "0044_outbox_not_before",
+    "0045_task_revision_expiry",
+    "0046_revision_expiry_retry",
 ])
 def test_preceding_head_upgrades_to_current_without_recreation(
     isolated_database_env: str, migration_lock, installed_revision: str,
@@ -271,20 +332,21 @@ def test_preceding_head_upgrades_to_current_without_recreation(
             "create table migration_resume_sentinel(id integer primary key, value text not null); "
             "insert into migration_resume_sentinel values (1,'preserve-me')",
         ))
+        snapshot_id = (
+            asyncio.run(_seed_export_resume_rows(isolated_database_env))
+            if installed_revision != "0038_task_batch_transitions" else None
+        )
+        retained = asyncio.run(_migration_resume_custody(isolated_database_env, snapshot_id))
+        assert retained["sentinel"][0] == "preserve-me"
         before = asyncio.run(_database_snapshot(isolated_database_env))
         assert before["versions"] == [installed_revision]
         command.upgrade(config, HEAD_REVISION)
         after = asyncio.run(_database_snapshot(isolated_database_env))
         command.upgrade(config, "head")
         repeated = asyncio.run(_database_snapshot(isolated_database_env))
-        async def retained_sentinel() -> str:
-            connection = await asyncpg.connect(isolated_database_env.replace("+asyncpg", ""))
-            try:
-                return await connection.fetchval("select value from migration_resume_sentinel where id=1")
-            finally:
-                await connection.close()
-
-        assert asyncio.run(retained_sentinel()) == "preserve-me"
+        assert asyncio.run(
+            _migration_resume_custody(isolated_database_env, snapshot_id)
+        ) == retained
         asyncio.run(_execute(isolated_database_env, "drop table migration_resume_sentinel"))
     assert after["versions"] == [HEAD_REVISION]
     assert after["reference_rows"] == before["reference_rows"]

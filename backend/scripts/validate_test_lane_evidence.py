@@ -24,12 +24,14 @@ if __package__ in {None, ""}:
 from scripts.record_id_collection import RecordIdCollection  # noqa: E402
 
 SCHEMA_VERSION = 1
-LANE_COUNT = 12
+LANE_COUNT = 13
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
 LANE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 ADMIN_RUNNER_MODULE = "tests/test_isolated_database_runner.py"
-SHARED_S3_LANES = frozenset(("shared_foundations_a", "shared_foundations_b"))
+SHARED_S3_LANES = frozenset(
+    ("shared_foundations_a", "shared_foundations_b", "shared_foundations_c")
+)
 SHARED_S3_BUCKET = "workstream-artifacts"
 ORDINARY_KIND = "ordinary_isolated"
 ADMIN_KIND = "admin_runner_self_test"

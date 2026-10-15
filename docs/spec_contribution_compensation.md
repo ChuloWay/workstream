@@ -968,8 +968,9 @@ Missing or ungranted project
 selectors are concealed and absent from target audit evidence. Historical project
 status does not erase immutable contribution facts.
 
-Both routes accept `format=json|csv`, an optional exact `contribution_type`, and
-timezone-aware `recorded_from` (inclusive) and `recorded_before` (exclusive).
+Both routes accept `format=json|csv`, `limit` from 1 through 1,000, an opaque
+`cursor`, an optional exact `contribution_type`, and timezone-aware
+`recorded_from` (inclusive) and `recorded_before` (exclusive).
 Self reads also accept an optional `project_id` filter. `recorded_at` is the
 ContributionRecord's immutable creation time for both contribution types.
 `accepted_at` is the actual FinalAcceptance time for accepted-submission records
@@ -977,19 +978,22 @@ and null for completed-review records. Separate `acceptance_review_id` and
 `acceptance_routing_manifest_id` retain the acceptance's exclusive trigger source;
 they never replace the contribution's own exclusive source references.
 
-The response includes contribution, contributor, project, task, Submission,
-artifact hash, policy-version and source identities, task source/display facts,
-and every immutable award ID, instrument, unit and exact decimal quantity. An
-unpaid record has `awards: []`. No field asserts payout, payment or fulfillment;
-adapter bindings and provider credentials are not exported. Quantity strings
-preserve exact decimal values without binary floats or rounding.
+The JSON response envelope contains `exported_at`, `items`, and nullable
+`next_cursor`. A present, non-null cursor means another page exists; null ends
+the traversal. Each item includes contribution, contributor, project, task,
+Submission, artifact hash, policy-version and source identities, task
+source/display facts, and every immutable award ID, instrument, unit and exact
+decimal quantity. An unpaid record has `awards: []`. No field asserts payout,
+payment or fulfillment; adapter bindings and provider credentials are not
+exported. Quantity strings preserve exact decimal values without binary floats
+or rounding.
 
-Each response uses one fresh PostgreSQL REPEATABLE READ transaction selected
+Each page uses one fresh PostgreSQL REPEATABLE READ transaction selected
 before the first AUTH query. Current human profile/link, selected grant and
 authorized Project locks remain held through complete projection, response-byte
 serialization and canonical audit commit. An evidenced denial commits only its
 denial evidence. Selection, projection, serialization and SQL failures roll back
-the response transaction. A PostgreSQL serialization refusal (SQLSTATE 40001)
+the page transaction. A PostgreSQL serialization refusal (SQLSTATE 40001)
 permits one new response attempt after full rollback, with fresh canonical AUTH
 and a new repeatable-read snapshot for the identical query. Only the successful
 attempt's evidence and bytes survive. Denials, other SQL errors and serialization
@@ -997,19 +1001,52 @@ errors are not retried; a second 40001 remains unavailable. This bounded read
 recovery does not retry product mutations. Export reads mutate no recognition
 or economic facts.
 
-The maximum is 1,000 selected contributions. Filters apply before the repository
-probes the 1,001st row; excess selection returns 422
-`contribution_export_too_large` with no partial export. Empty selections succeed.
-Rows sort by `(recorded_at, contribution_id)` for display, not commit order.
-There is no continuation cursor or snapshot retained across requests. Fixed
-membership pagination and CLI consumption remain separate implementation work.
+The supported fixed membership is at most 100,000 selected contributions.
+Filters apply before the repository probes the 100,001st row; excess selection
+returns 422 `contribution_export_too_large` with no cursor, retained state or
+partial body. Empty selections succeed. Rows sort by
+`(recorded_at, contribution_id)` for display, not commit order. Page one stores
+only that first transaction's ordered contribution IDs in one CON-owned
+short-lived snapshot when continuation is required. This retained membership
+prevents later commits from entering the traversal; every member appears once.
 
-CSV uses the same validated projection, quotes every UTF-8 cell and retains one
-row for an unpaid contribution or one row per award (at most 2,000 data rows).
+The HMAC-signed cursor binds action, current actor, audience, exact project,
+normalized type/time filters, output format, page limit, ordering, snapshot,
+next offset and database expiry. Raw contribution, award, source, label and grant
+facts are absent. Every continuation freshly authorizes before cursor decoding
+or snapshot lookup, so revocation is concealed under the existing read contract.
+Malformed, forged, substituted, access-expired, or missing-state cursors receive one
+generic 422 response after successful scope authorization. Cursors can replay
+the same membership page until access expiry; failed later pages leave the
+already committed snapshot available for retry.
+
+Snapshot access expires one hour after database creation. At most five snapshot
+slots may exist for one actor; a database unique actor/slot constraint is the
+concurrency fence. Initial allocation at capacity returns a generic 429, while
+continuations allocate no slot. Both routes consume the existing authorization-
+read rate allowance. Requests prune only a bounded batch of expired rows, so
+physical deletion is opportunistic and no product fact or immutable evidence is
+deleted. First-page projection or serialization failure rolls back snapshot
+state with its staged ALLOW evidence.
+
+CSV uses the same validated page projection, quotes every UTF-8 cell and retains
+one row for an unpaid contribution or one row per award (at most 2,000 data rows
+per page). `X-Workstream-Next-Cursor` carries continuation when another page
+exists; flattened CSV row counts never determine contribution membership.
 Untrusted display/source/unit text is neutralized with an apostrophe for formula
 triggers, including whitespace-prefixed and full-width variants. Embedded CSV
 delimiters remain inside one quoted cell. This mitigation applies to the generated
 CSV; external spreadsheet save/re-export behavior can change its interpretation.
+
+The contribution CLI consumes these pages as one bounded export without adding
+cursor or page flags. It sends the same normalized filters and explicit
+1,000-contribution limit on every request, rejects cursor cycles, cross-page
+identity/order violations and changed CSV headers, and preserves page one's
+`exported_at` in the existing complete JSON shape. JSON is staged in a private
+file before safe terminal rendering. CSV preserves the validated server bytes,
+emits the header once, and uses its existing confined 0600 sync and no-overwrite
+publication path. A failure on any page publishes neither a successful JSON
+result nor a destination CSV.
 
 These mappings do not authorize protected handler execution. Before delivery,
 reconciliation, projection rebuild, or callback implementation, the human and
@@ -1201,11 +1238,10 @@ repository; all communication is through typed ports.
 
 Contribution and award reads use PostgreSQL canonical truth directly. They do
 not depend on ART, optional evidence, provider availability, balances, or
-settlement ledgers. The public contribution reads use the bounded single-response
-contract above, with no continuation cursor, exact self/project scope,
-pre-filtering, and concealment. Stable fixed-membership pagination remains later
-issue #497 work. Provider references, credentials, and secret routes are never
-returned.
+settlement ledgers. The public contribution reads use the fixed-membership page
+contract above with exact self/project scope, pre-filtering, fresh page authority
+and generic cursor concealment. Provider references, credentials, and secret
+routes are never returned.
 
 CP05A exposes only ContributionPolicy administration, using the existing CP05
 Finance authority and caller-owned transaction. Under the project-scoped
@@ -1323,8 +1359,8 @@ not wait for contribution/award persistence or REV decisions.
 
 PILOT-10's bounded reads consume existing immutable CON/award facts after their
 own exact AUTH/audit activation and snapshot proof. They do not wait for CON-08B
-fulfillment or the historical CON-10A ordering below. The later fixed-membership
-list and CLI remain separately scoped under issue 497.
+fulfillment or the historical CON-10A ordering below. Fixed-membership REST
+pages and their CLI traversal are delivered independently of fulfillment.
 
 ```text
 CON-01 -> CON-02A

@@ -26,6 +26,9 @@ from tests.contributions.exports.conftest import (
     admin_access as _admin_access,
     live_acceptance_lifecycle as _live_acceptance_lifecycle,
 )
+from tests.conftest import (
+    pagination_cursor_hmac_secret as pagination_cursor_hmac_secret,
+)
 from tests.authorization.admin_access.support import create_project
 from tests.contributions.exports.support import source_actor, export_path
 from tests.contributions.records.support import authorized_submitter_source, rows

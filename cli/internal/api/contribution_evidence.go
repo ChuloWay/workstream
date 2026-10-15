@@ -13,17 +13,25 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const maxContributionBytes = 32 * 1024 * 1024
+const maxContributionPages = 100
+const maxContributionRecords = 100_000
+const contributionPageLimit = 1_000
 
 type ContributionFilters struct {
 	Project, Type, From, Before string
 }
 
-type ContributionEvidence struct {
-	ExportedAt string               `json:"exported_at"`
-	Items      []ContributionRecord `json:"items"`
+type contributionPage struct {
+	exportedAt string
+	items      []ContributionRecord
+	rawItems   []json.RawMessage
+	nextCursor *string
+	csvHeader  []byte
+	csvData    []byte
 }
 
 type ContributionRecord struct {
@@ -107,46 +115,226 @@ func (f *ContributionFilters) query(projectScope, csv bool) (string, string, err
 	return path, values.Encode(), nil
 }
 
-func (c *Client) Contributions(ctx context.Context, projectScope bool, filters ContributionFilters) (Result[ContributionEvidence], error) {
-	var result Result[ContributionEvidence]
-	path, query, err := filters.query(projectScope, false)
-	if err != nil {
-		return result, err
-	}
-	raw, err := c.requestWithResponseLimit(ctx, http.MethodGet, path, query, nil, "", http.StatusOK, maxContributionBytes)
-	if err != nil {
-		return result, err
-	}
-	var value ContributionEvidence
-	fields, err := contextObject(raw, &value, []string{"exported_at", "items"}, nil)
-	if err != nil || !validTime(value.ExportedAt) || !c.safeMutationResponse(raw) || validateContributionRecords(fields["items"], filters) != nil {
-		return result, &Failure{Code: "invalid_api_response"}
-	}
-	return Result[ContributionEvidence]{Raw: raw, Value: value}, nil
+func (c *Client) Contributions(
+	ctx context.Context, projectScope bool, filters ContributionFilters, destination io.Writer,
+) error {
+	return c.writeContributions(ctx, projectScope, filters, false, destination)
 }
 
-func (c *Client) ContributionCSV(ctx context.Context, projectScope bool, filters ContributionFilters) ([]byte, error) {
-	path, query, err := filters.query(projectScope, true)
-	if err != nil {
-		return nil, err
+func (c *Client) ContributionCSV(
+	ctx context.Context, projectScope bool, filters ContributionFilters, destination io.Writer,
+) error {
+	return c.writeContributions(ctx, projectScope, filters, true, destination)
+}
+
+func (c *Client) writeContributions(
+	ctx context.Context, projectScope bool, filters ContributionFilters, csv bool,
+	destination io.Writer,
+) error {
+	if destination == nil {
+		return errors.New("contribution export destination is required")
 	}
+	path, rawQuery, err := filters.query(projectScope, csv)
+	if err != nil {
+		return err
+	}
+	query, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return errors.New("invalid contribution export query")
+	}
+	query.Set("limit", "1000")
+
+	seenRecords := make(map[[16]byte]bool)
+	seenAwards := make(map[[16]byte]bool)
+	seenCursors := make(map[string]bool)
+	var firstExportedAt string
+	var csvHeader []byte
+	var previousTime time.Time
+	var previousID [16]byte
+	total := 0
+
+	for pageNumber := 0; pageNumber < maxContributionPages; pageNumber++ {
+		page, err := c.contributionPage(ctx, path, query.Encode(), filters, csv)
+		if err != nil {
+			return err
+		}
+		updatedTotal, valid := advanceContributionTraversal(
+			pageNumber, total, len(page.items), page.nextCursor != nil,
+		)
+		if !valid {
+			return &Failure{Code: "invalid_api_response"}
+		}
+		for _, item := range page.items {
+			stamp, stampErr := time.Parse(time.RFC3339Nano, item.RecordedAt)
+			id, valid := uuidIdentity(item.ID)
+			if stampErr != nil || !valid || seenRecords[id] ||
+				(total > 0 && (stamp.Before(previousTime) ||
+					(stamp.Equal(previousTime) && bytes.Compare(id[:], previousID[:]) <= 0))) {
+				return &Failure{Code: "invalid_api_response"}
+			}
+			seenRecords[id], previousTime, previousID = true, stamp, id
+			for _, award := range item.Awards {
+				awardID, valid := uuidIdentity(award.ID)
+				if !valid || seenAwards[awardID] {
+					return &Failure{Code: "invalid_api_response"}
+				}
+				seenAwards[awardID] = true
+			}
+		}
+		total = updatedTotal
+
+		if pageNumber == 0 {
+			firstExportedAt = page.exportedAt
+			if csv {
+				csvHeader = bytes.Clone(page.csvHeader)
+				if err := writeContributionBytes(destination, csvHeader); err != nil {
+					return err
+				}
+			} else {
+				exportedAt, marshalErr := json.Marshal(firstExportedAt)
+				if marshalErr != nil {
+					return &Failure{Code: "invalid_api_response"}
+				}
+				if err := writeContributionBytes(destination, append(append(
+					[]byte(`{"exported_at":`), exportedAt...), []byte(`,"items":[`)...)); err != nil {
+					return err
+				}
+			}
+		} else if csv && !bytes.Equal(page.csvHeader, csvHeader) {
+			return &Failure{Code: "invalid_api_response"}
+		}
+
+		if csv {
+			if err := writeContributionBytes(destination, page.csvData); err != nil {
+				return err
+			}
+		} else {
+			for index, item := range page.rawItems {
+				if total-len(page.items)+index > 0 {
+					if err := writeContributionBytes(destination, []byte(",")); err != nil {
+						return err
+					}
+				}
+				if err := writeContributionBytes(destination, item); err != nil {
+					return err
+				}
+			}
+		}
+
+		if page.nextCursor == nil {
+			if !csv {
+				return writeContributionBytes(destination, []byte("]}"))
+			}
+			return nil
+		}
+		if pageNumber == maxContributionPages-1 || seenCursors[*page.nextCursor] {
+			return &Failure{Code: "invalid_api_response"}
+		}
+		seenCursors[*page.nextCursor] = true
+		query.Set("cursor", *page.nextCursor)
+	}
+	return &Failure{Code: "invalid_api_response"}
+}
+
+func (c *Client) contributionPage(
+	ctx context.Context, path, query string, filters ContributionFilters, csv bool,
+) (contributionPage, error) {
+	if csv {
+		return c.contributionCSVPage(ctx, path, query, filters)
+	}
+	var page contributionPage
+	raw, err := c.requestWithResponseLimit(
+		ctx, http.MethodGet, path, query, nil, "", http.StatusOK, maxContributionBytes,
+	)
+	if err != nil {
+		return page, err
+	}
+	var envelope struct {
+		ExportedAt string          `json:"exported_at"`
+		Items      json.RawMessage `json:"items"`
+		NextCursor *string         `json:"next_cursor"`
+	}
+	fields, err := contextObject(raw, &envelope, []string{"exported_at", "items"}, nil)
+	if err != nil || !requiredNullable(fields, "next_cursor") ||
+		!validTime(envelope.ExportedAt) || !c.safeMutationResponse(raw) ||
+		(envelope.NextCursor != nil && !c.validContributionCursor(*envelope.NextCursor)) ||
+		validateContributionRecords(fields["items"], filters) != nil {
+		return page, &Failure{Code: "invalid_api_response"}
+	}
+	if err := json.Unmarshal(fields["items"], &page.items); err != nil || page.items == nil {
+		return contributionPage{}, &Failure{Code: "invalid_api_response"}
+	}
+	if err := json.Unmarshal(fields["items"], &page.rawItems); err != nil || page.rawItems == nil {
+		return contributionPage{}, &Failure{Code: "invalid_api_response"}
+	}
+	page.exportedAt, page.nextCursor = envelope.ExportedAt, envelope.NextCursor
+	return page, nil
+}
+
+func (c *Client) contributionCSVPage(
+	ctx context.Context, path, query string, filters ContributionFilters,
+) (contributionPage, error) {
+	var page contributionPage
 	response, err := c.openRequest(ctx, c.http, http.MethodGet, path, query, nil, "", "text/csv")
 	if err != nil {
-		return nil, err
+		return page, err
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxContributionBytes+1))
 	if err != nil || len(body) > maxContributionBytes {
-		return nil, &Failure{Code: "invalid_api_response"}
+		return page, &Failure{Code: "invalid_api_response"}
 	}
 	if response.StatusCode != http.StatusOK {
-		return nil, c.responseFailure(http.MethodGet, response, body)
+		return page, c.responseFailure(http.MethodGet, response, body)
 	}
 	mediaType, params, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-	if err != nil || mediaType != "text/csv" || (params["charset"] != "" && !strings.EqualFold(params["charset"], "utf-8")) || c.validateContributionCSV(body, filters) != nil {
-		return nil, &Failure{Code: "invalid_api_response"}
+	cursors := response.Header.Values("X-Workstream-Next-Cursor")
+	if err != nil || mediaType != "text/csv" ||
+		(params["charset"] != "" && !strings.EqualFold(params["charset"], "utf-8")) ||
+		len(cursors) > 1 {
+		return page, &Failure{Code: "invalid_api_response"}
 	}
-	return body, nil
+	if len(cursors) == 1 {
+		if !c.validContributionCursor(cursors[0]) {
+			return page, &Failure{Code: "invalid_api_response"}
+		}
+		page.nextCursor = &cursors[0]
+	}
+	items, headerEnd, err := c.decodeContributionCSV(body, filters)
+	if err != nil {
+		return contributionPage{}, &Failure{Code: "invalid_api_response"}
+	}
+	page.items = items
+	page.csvHeader = body[:headerEnd]
+	page.csvData = body[headerEnd:]
+	return page, nil
+}
+
+func (c *Client) validContributionCursor(value string) bool {
+	return value != "" && utf8.ValidString(value) && utf8.RuneCountInString(value) <= 512 &&
+		c.safeMetadata(value)
+}
+
+func advanceContributionTraversal(
+	pageNumber, total, pageItems int, continues bool,
+) (int, bool) {
+	if pageNumber < 0 || pageNumber >= maxContributionPages || total < 0 || pageItems < 0 ||
+		(pageNumber > 0 && pageItems == 0) || pageItems > maxContributionRecords-total ||
+		(continues && (pageItems != contributionPageLimit || pageNumber == maxContributionPages-1)) {
+		return total, false
+	}
+	return total + pageItems, true
+}
+
+func writeContributionBytes(destination io.Writer, value []byte) error {
+	written, err := destination.Write(value)
+	if err != nil {
+		return err
+	}
+	if written != len(value) {
+		return io.ErrShortWrite
+	}
+	return nil
 }
 
 func validateContributionRecords(raw json.RawMessage, filters ContributionFilters) error {

@@ -347,6 +347,34 @@ async def _ready_expiry_race_replacement(h):
         ) from exc
 
 
+async def _wait_for_staged_submission(staged, final_request):
+    """Retain an early real POST failure instead of hiding it behind a stage timeout."""
+    observed = asyncio.create_task(staged.wait())
+    try:
+        done, _ = await asyncio.wait(
+            (observed, final_request), timeout=15, return_when=asyncio.FIRST_COMPLETED,
+        )
+        if final_request in done:
+            response = final_request.result()
+            pytest.fail(
+                "final POST ended before staged creation: "
+                f"status={response.status_code}; body={response.text[:1200]}"
+            )
+        assert observed in done, "actual final creation did not reach staging within 15 seconds"
+    finally:
+        observed.cancel()
+        await asyncio.gather(observed, return_exceptions=True)
+
+
+def _assert_race_expiry_acknowledged(h, delivered):
+    assert delivered is not None
+    assert json.loads(delivered.outcome_json)["delivery_state"] == "acknowledged", (
+        delivered.outcome_json,
+        getattr(h, "expiry_handler_outcome", None),
+        getattr(h, "expiry_handler_error", None),
+    )
+
+
 async def _assert_expired_creation_absent(h, source_id, admission_id, before):
     # Delivery changes OUTBOX custody and TASK status. Every finalization owner
     # before those two snapshot columns must remain exactly as before the race.
@@ -432,7 +460,7 @@ async def test_due_expiry_and_ready_final_submission_wait_for_task_lock(
                         if not contender.done():
                             contender.cancel()
                     await asyncio.gather(*pending, return_exceptions=True)
-        assert json.loads(delivered.outcome_json)["delivery_state"] == "acknowledged"
+        _assert_race_expiry_acknowledged(h, delivered)
         assert final.status_code in {404, 409}, final.text
         await _assert_expired_creation_absent(h, source_id, admission_id, before)
 
@@ -483,7 +511,7 @@ async def test_final_submission_commit_boundary_serializes_expiry(
                         f"/api/v1/tasks/{h.request.task_id}/submissions",
                         json=_payload(prepared, admission_id),
                     )))
-                    await asyncio.wait_for(staged.wait(), 15)
+                    await _wait_for_staged_submission(staged, pending[0])
                     assert (await _creation_snapshot(h))[:8] == before[:8]
                     assert await _admission_status(h, admission_id) == "ready"
                     if commit_before_deadline:
@@ -522,8 +550,7 @@ async def test_final_submission_commit_boundary_serializes_expiry(
                         if not contender.done():
                             contender.cancel()
                     await asyncio.gather(*pending, return_exceptions=True)
-        assert delivered is not None
-        assert json.loads(delivered.outcome_json)["delivery_state"] == "acknowledged"
+        _assert_race_expiry_acknowledged(h, delivered)
         if not commit_before_deadline:
             await _assert_expired_creation_absent(h, source_id, admission_id, before)
             return

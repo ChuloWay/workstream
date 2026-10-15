@@ -44,7 +44,7 @@ Reviews, findings, reviewer contributions or human actors.
   exact committed replay.
 - ART preparation, verified admission/evidence and public error mapping;
   CHECKERS attempt lineage constraints; affected retained records, INSERT-only
-  guards, model registration and Alembic revisions 0040–0046. Historical facts
+  guards, model registration and Alembic revisions 0041–0047. Historical facts
   retain immutable owner references instead of mutable TASK stamp references.
 - TASK-owned immutable complete-context preparations, PROJECTS typed active/
   historical reads and composition adapters, atomic next-attempt TASK/assignment
@@ -88,6 +88,18 @@ Reviews, findings, reviewer contributions or human actors.
   cap, full canonical test union, isolated services and mandatory fan-in. Verify
   missing-lane rejection, unique ownership and complete hosted execution, with
   focused CI-integrity review. No seed reshuffle, deselection or retry-to-pass.
+
+- Reconcile with main `19954df87`, preserving its thirteen-lane workflow,
+  dependency execution, retry-evidence selection and contribution-export owner.
+  Place the revision migration chain after the merged export snapshot migration,
+  update every affected head/intermediate-revision reference and prove upgrades
+  from the merged baseline and valid intermediate revisions with retained data.
+- Correct remaining data-model, CLI, roadmap and authority catalogue claims:
+  checker preparation/rebase/repair/expiry/recovery are implemented in this change;
+  live human Review integration remains separate under #554. Rerun the actual
+  final-submission/expiry and missing-root recovery PostgreSQL cases with retained
+  failure tracebacks, then full current-main CI. Migration/architecture, CI
+  integrity, documentation and QA/test-delta reviews cover this reconciliation.
 
 ### Not allowed
 
@@ -252,3 +264,24 @@ Task A used 1,020.068 runner seconds, B 1,193.532 and C 1,199.892. The repaired
 ancestry test adds a previously unexecuted fourth Submission to B's workload.
 A fourth task partition therefore provides measured headroom too, preserving
 the same required node union and 1,200-second deadline across twelve lanes.
+
+
+### Current-main migration and CI reconciliation
+
+Main `19954df87` owns `0040_contribution_export_page`. Revision migrations now
+form its single successor chain, `0041_checker_revision_cap` through
+`0047_revision_recovery`; the merged export migration is unchanged. Migration
+resume proof retains real export snapshot and identity rows, table identities
+and transaction versions across each valid intermediate upgrade. Comparing the
+combined PostgreSQL schema with the prior revision candidate adds exactly the
+43 export-owned catalog objects and removes none; the reset fingerprint records
+that inspected union. No old development revision alias or bridge is installed.
+
+The workflow retains main's thirteen lanes, frozen dependency lock execution,
+project-wide intake distribution and latest-attempt evidence handling. Revision
+proof modules are added to those existing semantic families; full collection,
+service probes, cleanup, checksums and mandatory fan-in remain required. The
+previous twelve-lane measurements above describe historical evidence only.
+The race staging observer now reports an actual early final-POST response or
+exception instead of concealing it as an event-wait timeout. It changes no
+production clock, deadline, lock operation or expected race outcome.

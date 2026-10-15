@@ -86,6 +86,7 @@ or the exact project; own means record-level ownership still applies.
 | Contribution policy and compensation-adapter binding | no | no | no | covered | no | no | no |
 | Project contributor grants | no | no | covered | no | read covered | no | no |
 | Task management | no | explicit recovery only | covered | no | read covered | no | no |
+| Checker revision-context repair | no | no | covered, exact preparation head | no | no | no | no |
 | Ready task queue/detail | no | no | no | no | no | exact project under guards | exact project under guards |
 | Task claim/start | no | explicit recovery only | no | no | no | exact project under guards | no |
 | Submission create/read | no | operational projection only | management projection only | no | read covered | own assignment | read-for-review only |
@@ -138,21 +139,35 @@ Recovery is a separate, reasoned, audited path.
 | Normal covered task/setup repair | `project.task.manage` | Covered Project Manager |
 | Task start override | `operations.task.start_override` | Operator |
 | Submission gate repair (planned; unavailable) | `operations.submission_gate.repair` | Operator |
-| Checker retry (planned; unavailable) | `operations.checker.retry` | Operator |
+| Checker retry (active internal operation; no public route) | `operations.checker.retry` | Operator under exact terminal-failure guards |
 | Review lease force release | `review.lease.force_release` | Operator under WS-REV-001 |
-| Revision-context repair | `project.task.manage` via planned `review.revision_context.repair` | Covered Project Manager |
+| Checker revision-context repair (active public operation) | `project.task.manage` via `project.task.revision.repair` | Covered Project Manager |
+| Checker revision expiry (active internal operation) | `task.revision.expire` | Exact fixed service `workstream.task.revision_expirer` |
+| Retained checker revision recovery (active internal operation) | `task.revision.recover` | Exact fixed service `workstream.task.revision_expirer` |
+| Human-Review revision-context repair (planned; unavailable) | `project.task.manage` via `review.revision_context.repair` | Covered Project Manager |
 | Legacy revision close | `operations.reconcile.run` via planned `review.revision_context.legacy_close` | Operator |
-| Lifecycle release control | `operations.reconcile.run` via planned `review.lifecycle.activation.manage` | Operator |
+| Lifecycle release control (active internal operation; no public route) | `operations.reconcile.run` via `review.lifecycle.activation.manage` | Operator |
 
-Every recovery mutation records the exact actor, matched grant/permission,
-project/resource, reason, bounded before/after state, request/correlation IDs,
+Every recovery mutation records the exact actor and action/permission, matched
+grant or fixed-service identity, project/resource, reason, bounded before/after state, request/correlation IDs,
 and immutable evidence. Recovery cannot erase checker results, rewrite
 submissions, create review decisions, alter contribution history, or bypass
 contribution award rules.
 
-The review/revision rows above are contract declarations, not active runtime
-capabilities. Their exact guards and release gates are defined in
-`docs/spec_review_lifecycle.md`; no review route is exposed before REV-13.
+Checker revision repair uses
+`POST /api/v1/projects/{project_id}/tasks/{task_id}/revision-context/repair`
+with the exact parent preparation ID/digest, a bounded reason and an idempotency
+key. It appends an authorized successor and cannot bypass the revision cap or
+deadline. The expiry and retained-source recovery actions require the exact
+active fixed-service profile and identity link; no human grant substitutes for
+that identity. Recovery preserves the source-policy window and cannot authorize
+a rebase. See [Revision Replay](operations_revision_replay.md).
+
+The human review lease and revision repair/legacy-close rows remain planned
+contracts. Their exact guards and release gates are defined in
+[Review And Revision Lifecycle](spec_review_lifecycle.md); no public human
+review route is exposed before REV-13. The active checker operations do not
+activate genuine human Review decisions or their #554 revision integration.
 
 ## Provisioning And Revocation
 

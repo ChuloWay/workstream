@@ -476,8 +476,14 @@ All support human-readable and JSON output, using the caller's Flow token.
 `workstream contributions [--project UUID]` reads the caller's contribution
 evidence; `workstream project contributions PROJECT_ID` exports one authorized
 project. Both support recorded-time/type filters and `--csv FILE` for the exact
-server export, saved privately without overwrite. Earned awards are not proof
-of payment; these reads do not activate unfinished lifecycle writers.
+server export, saved privately without overwrite. The backing REST reads use
+signed fixed-membership cursors for selections up to 100,000 contributions,
+freshly authorize every page, and expose continuation in JSON or the CSV
+response header. The CLI follows continuation internally with the same filters,
+retains its existing complete JSON output shape, and publishes CSV only after
+every page validates. A later-page denial or malformed response leaves no
+partial stdout result or destination file. Earned awards are not proof of
+payment; these reads do not activate unfinished lifecycle writers.
 The first source package is buildable; further workflow commands and published
 binaries remain planned.
 

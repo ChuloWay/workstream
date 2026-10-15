@@ -116,8 +116,13 @@ contribution disclosure through other permission candidates. The kernel locks
 actor, matching grant and selected Project in that order; response composition
 keeps those locks through complete serialization and audit commit. Both actions
 retain a digest of the exact caller/project/filters/format, without exported
-facts or labels in audit. Missing or ungranted Project selectors are absent
-from audit target evidence. See the
+facts or labels in audit. Each contribution page consumes the ordinary
+authorization-read rate allowance and re-runs this evaluator before decoding
+the opaque cursor or reading retained membership. The request digest binds the
+normalized page query and a digest of any presented cursor; raw cursor and
+exported facts are not audit payload. Service callers still reach the canonical
+evaluator and retain their DENY evidence. Missing or ungranted Project selectors
+are absent from audit target evidence. See the
 [bounded CON read contract](spec_contribution_compensation.md#bounded-contribution-evidence-reads).
 
 ### Project Contributor Grants

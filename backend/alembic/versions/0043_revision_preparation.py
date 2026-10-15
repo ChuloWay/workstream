@@ -3,8 +3,8 @@
 from alembic import op
 from sqlalchemy import text
 
-revision = "0042_revision_preparation"
-down_revision = "0041_revision_lineage"
+revision = "0043_revision_preparation"
+down_revision = "0042_revision_lineage"
 branch_labels = None
 depends_on = None
 

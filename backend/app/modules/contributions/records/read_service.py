@@ -10,9 +10,8 @@ from app.modules.actors.api.contribution_labels import (
 from app.modules.compensation.api.award_reads import ContributionAwardReadPort
 from app.modules.compensation.api.awards import CompensationAwardFacts
 from app.modules.contributions.api.records import (
-    MAX_EXPORT_CONTRIBUTIONS,
-    ContributionAwardView, ContributionExportResponse, ContributionExportTooLarge,
-    ContributionExportUnavailable,
+    ContributionAwardView, ContributionExportAtCapacity, ContributionExportResponse,
+    ContributionExportTooLarge, ContributionExportUnavailable, InvalidContributionCursor,
     ContributionReadAuthorizationPort,
     ContributionReadRequest, ContributionRecordView,
 )
@@ -56,10 +55,12 @@ class ContributionReadService:
         request = ContributionReadRequest.model_validate(request)
         await self._authorization.authorize(request)
         try:
-            records = tuple(ContributionReadFacts.model_validate(row)
-                            for row in await self._records.read(request))
-            if len(records) > MAX_EXPORT_CONTRIBUTIONS:
-                raise ContributionExportTooLarge("Contribution export exceeds 1000 records; narrow the filters")
+            page = await self._records.read(request)
+            records = tuple(ContributionReadFacts.model_validate(row) for row in page.records)
+            if len(records) > request.limit or (
+                page.next_cursor is not None and len(records) != request.limit
+            ):
+                raise ContributionExportUnavailable("Contribution evidence unavailable")
             for record in records:
                 self._require_selected(record, request)
             record_ids = {record.id for record in records}
@@ -96,8 +97,10 @@ class ContributionReadService:
                 actors[record.contributor_id],
                 acceptances.get((record.project_id, record.source_final_acceptance_id)),
             ) for record in records)
-            return ContributionExportResponse(exported_at=datetime.now(UTC), items=items)
-        except ContributionExportTooLarge:
+            return ContributionExportResponse(
+                exported_at=datetime.now(UTC), items=items, next_cursor=page.next_cursor,
+            )
+        except (ContributionExportTooLarge, InvalidContributionCursor, ContributionExportAtCapacity):
             raise
         except (ValidationError, ValueError, TypeError) as exc:
             raise ContributionExportUnavailable("Contribution evidence unavailable") from exc

@@ -2,8 +2,8 @@
 
 from alembic import op
 
-revision = "0040_checker_revision_cap"
-down_revision = "0039_false_guide_activation"
+revision = "0041_checker_revision_cap"
+down_revision = "0040_contribution_export_page"
 branch_labels = None
 depends_on = None
 

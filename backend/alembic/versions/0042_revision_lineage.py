@@ -7,8 +7,8 @@ attempts then refer to immutable source rows rather than the mutable Task stamp.
 from alembic import op
 
 
-revision = "0041_revision_lineage"
-down_revision = "0040_checker_revision_cap"
+revision = "0042_revision_lineage"
+down_revision = "0041_checker_revision_cap"
 branch_labels = None
 depends_on = None
 

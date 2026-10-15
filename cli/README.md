@@ -87,21 +87,29 @@ Submitter/Reviewer grant alone does not authorize project export.
 Both commands accept `--type accepted_submission|completed_review` and aware
 RFC3339 `--recorded-from` (inclusive) / `--recorded-before` (exclusive) filters.
 Times are normalized to UTC microsecond precision before dispatch. Omitted
-filters select all authorized records. The server refuses selections above
-1,000 contributions: narrow the filters; the CLI never truncates or paginates.
+filters select all authorized records. The paginated REST change exposes JSON
+`next_cursor` and CSV `X-Workstream-Next-Cursor` for selections through 100,000.
+The CLI follows either continuation internally with the same normalized filters
+and a 1,000-contribution page limit. Cursors are transport details: the complete
+JSON result retains `exported_at` from page one plus `items`, without exposing a
+cursor or adding pagination flags.
 
 Text and JSON retain every public source/acceptance identity and award, including
 exact decimal strings and unpaid empty award sets. These are **earned facts,
 not payment status**. A completed-review record is evidence of an actual Review;
-reading existing records does not activate unfinished review/revision workflows.
+reading existing records does not activate unfinished human review or its
+revision workflow.
 
 `--csv FILE` requests the server's formula-neutralized CSV, one row per award
 or one row for an unpaid contribution. It preserves those exact bytes after
-validation, writes a new 0600 file in an existing directory and refuses existing
-files or destination symlinks. It never writes raw CSV to the terminal or
-reconstructs CSV from a separate JSON read. `--output json` with `--csv` returns
-only `{"format":"csv","saved":true}` after successful publication. Failures
-leave no published or temporary export. Keep exported personal data private.
+validation across every page, emits the server header once, writes a new 0600
+file in an existing directory and refuses existing files or destination
+symlinks. It never writes raw CSV to the terminal or reconstructs CSV from a
+separate JSON read. `--output json` with `--csv` returns only
+`{"format":"csv","saved":true}` after successful publication. JSON and CSV
+are staged privately until traversal completes; later-page failures leave no
+successful stdout or published/temporary export. Keep exported personal data
+private.
 Invalid destinations or empty explicit flags exit 2 (`invalid_arguments`);
 local file creation/write/persistence/publication failures exit 1
 (`file_io_error`). Text errors explain the failure without echoing paths.
@@ -1149,7 +1157,12 @@ This requires an active assignment and current exact-project Submitter authority
 Each download reauthorizes independently; neither a cached list nor a read
 reference grants access. Workstream reads the task's locked snapshot, not the
 latest guide or drafts. A successor activation alone never changes its documents.
-The task rebase operation remains separate planned work.
+Checker-requested revision preparation can atomically rebase the complete task
+and assignment context for the next attempt. Inspect `task context` for its
+frozen change summary and acknowledge the exact preparation pair when running
+`task prepare`; this guide download does not initiate a rebase. Covered-manager
+repair is a separate backend operation with no CLI command. Genuine human
+Review revision integration remains #554 work.
 
 The API verifies the complete original against retained ART size/SHA-256 before
 responding. Missing, corrupt or wrong-namespace originals fail with

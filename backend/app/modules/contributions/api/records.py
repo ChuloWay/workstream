@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 MAX_EXPORT_CONTRIBUTIONS = 1_000
+MAX_EXPORT_MEMBERS = 100_000
 ContributionType = Literal["accepted_submission", "completed_review"]
 _STRICT = ConfigDict(extra="forbid", frozen=True, strict=True, revalidate_instances="always")
 
@@ -17,7 +18,19 @@ class ContributionExportUnavailable(RuntimeError):
 
 
 class ContributionExportTooLarge(ValueError):
-    """The complete selection exceeds the fixed limit; no partial export is valid."""
+    """The complete selection exceeds the snapshot limit; no partial export is valid."""
+
+
+class InvalidContributionCursor(ValueError):
+    """The opaque continuation cannot select an authorized snapshot page."""
+
+
+class ContributionExportAtCapacity(ValueError):
+    """The caller has occupied all five live export allocation slots."""
+
+    def __init__(self, retry_after: int) -> None:
+        super().__init__("Contribution export capacity is temporarily unavailable")
+        self.retry_after = retry_after
 
 
 class ContributionReadDenied(RuntimeError):
@@ -35,6 +48,8 @@ class ContributionReadRequest(BaseModel):
     contribution_type: ContributionType | None = None
     recorded_from: AwareDatetime | None = None
     recorded_before: AwareDatetime | None = None
+    limit: int = Field(default=MAX_EXPORT_CONTRIBUTIONS, ge=1, le=MAX_EXPORT_CONTRIBUTIONS)
+    cursor: str | None = None
 
     @field_validator("recorded_from", "recorded_before")
     @classmethod
@@ -132,11 +147,12 @@ class ContributionRecordView(BaseModel):
 
 
 class ContributionExportResponse(BaseModel):
-    """The complete bounded selection from one repeatable-read request transaction."""
+    """One complete bounded page from an authorized contribution selection."""
 
     model_config = _STRICT
     exported_at: AwareDatetime
     items: tuple[ContributionRecordView, ...] = Field(max_length=MAX_EXPORT_CONTRIBUTIONS)
+    next_cursor: str | None = Field(default=None, max_length=512)
 
     @model_validator(mode="after")
     def validate_unique_order(self) -> Self:

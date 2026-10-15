@@ -23,15 +23,21 @@ var contributionColumns = []string{
 	"policy_version_number", "award_definition_id", "instrument", "unit", "quantity",
 }
 
-func (c *Client) validateContributionCSV(body []byte, filters ContributionFilters) error {
+func (c *Client) decodeContributionCSV(
+	body []byte, filters ContributionFilters,
+) ([]ContributionRecord, int, error) {
 	bad := errors.New("invalid contribution CSV")
 	if !utf8.Valid(body) {
-		return bad
+		return nil, 0, bad
 	}
 	reader := csv.NewReader(bytes.NewReader(body))
 	header, err := reader.Read()
 	if err != nil || !slices.Equal(header, contributionColumns) {
-		return bad
+		return nil, 0, bad
+	}
+	headerEnd := bytes.IndexByte(body, '\n') + 1
+	if headerEnd == 0 {
+		return nil, 0, bad
 	}
 	records := make([]map[string]any, 0)
 	var previous map[string]any
@@ -43,12 +49,12 @@ func (c *Client) validateContributionCSV(body []byte, filters ContributionFilter
 			break
 		}
 		if err != nil || count >= 2000 {
-			return bad
+			return nil, 0, bad
 		}
 		cells := make(map[string]string, len(header))
 		for i, key := range header {
 			if !c.safeMetadata(row[i]) || sameUUID(row[i], c.token) {
-				return bad
+				return nil, 0, bad
 			}
 			cells[key] = row[i]
 		}
@@ -56,7 +62,7 @@ func (c *Client) validateContributionCSV(body []byte, filters ContributionFilter
 			value := cells[key]
 			if strings.HasPrefix(value, "\t") || strings.HasPrefix(value, "\r") || strings.HasPrefix(value, "\n") ||
 				strings.ContainsAny(firstRune(strings.TrimSpace(value)), "=+-@＝＋－＠") {
-				return bad
+				return nil, 0, bad
 			}
 		}
 		record := make(map[string]any)
@@ -72,14 +78,14 @@ func (c *Client) validateContributionCSV(body []byte, filters ContributionFilter
 		}
 		id, valid := uuidIdentity(cells["contribution_id"])
 		if !valid {
-			return bad
+			return nil, 0, bad
 		}
 		if previous != nil && id == previousID {
 			// Normalized identity selects the group; other repeated facts must
 			// remain identical. A zero-award row cannot precede an award row.
 			record["contribution_id"] = previous["contribution_id"]
 			if !reflect.DeepEqual(record, previous) || len(currentAwards) == 0 || cells["award_id"] == "" {
-				return bad
+				return nil, 0, bad
 			}
 		} else {
 			previous, previousID = record, id
@@ -89,7 +95,7 @@ func (c *Client) validateContributionCSV(body []byte, filters ContributionFilter
 		if cells["award_id"] == "" {
 			for _, key := range []string{"award_definition_id", "instrument", "unit", "quantity"} {
 				if cells[key] != "" {
-					return bad
+					return nil, 0, bad
 				}
 			}
 		} else {
@@ -109,9 +115,16 @@ func (c *Client) validateContributionCSV(body []byte, filters ContributionFilter
 	}
 	raw, err := json.Marshal(records)
 	if err != nil {
-		return bad
+		return nil, 0, bad
 	}
-	return validateContributionRecords(raw, filters)
+	if validateContributionRecords(raw, filters) != nil {
+		return nil, 0, bad
+	}
+	var values []ContributionRecord
+	if json.Unmarshal(raw, &values) != nil || values == nil {
+		return nil, 0, bad
+	}
+	return values, headerEnd, nil
 }
 
 func firstRune(value string) string {

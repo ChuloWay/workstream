@@ -313,9 +313,11 @@ Migration 0024 adds `WorkstreamTask.locked_contribution_policy_version_id`,
 initial screening binds the exact guide/project/contribution version. Every
 non-draft Task requires it. Claim copies it to an assignment in the same project;
 Submission requires its exact assignment and copied version at initial insertion.
-Assignment and Submission identities and stamps cannot be rewritten. CP08 permits
-only the initial draft-to-screening Task stamp; a future authorized rebase must
-replace the Task and Assignment guards together.
+Assignment identities and committed Submission identities and stamps cannot be
+rewritten. Initial Task stamping occurs at draft-to-screening. TASK's authorized
+checker revision preparation may then rebase the continuing Task and Assignment
+selectors together for the next attempt, retaining immutable prior/next lineage.
+Genuine human Review integration remains #554 work under the same intended rule.
 
 Submission's three ART references remain all-null during transaction staging or
 all-present. The production creation command consumes the exact ART admission and
@@ -1472,10 +1474,11 @@ policy identities.
 when the Task first acquires its complete context lock, before `ready`
 (the existing transition acquires it at screening). Later readiness checks
 validate that frozen tuple, not equality to a newer active guide or global
-policy selector. Ordinary claim never changes it. Human
-`needs_revision` complete-context preparation is the only boundary that may
-atomically rebase this field on the continuing Task for the next attempt, with
-prior/next lineage recorded before contributor access.
+policy selector. Ordinary claim never changes it. TASK's authorized complete-context
+revision preparation is the additional boundary that may atomically rebase this
+field on the continuing Task for the next attempt, with prior/next lineage
+recorded before contributor access. Checker preparation implements that boundary;
+#554 owns the future genuine human `needs_revision` trigger.
 
 Durable post-submit checker execution uses
 `locked_post_submit_checker_policy_id`,
@@ -1992,8 +1995,9 @@ Fields:
 
 Purpose:
 
-This immutable Review-rooted record is created atomically before a contributor
-can observe human-review-caused revision. Checker remediation uses a distinct
+This planned immutable Review-rooted record will be created atomically before a
+contributor can observe human-review-caused revision through #554. Checker
+remediation uses a distinct
 TASK-owned `TaskRevisionPreparation`, rooted in its exact routing manifest,
 with the same complete-context comparison, guarded rebase and exact next-attempt
 acknowledgement; it creates no human-Review-rooted record. Preparation compares the prior
@@ -2019,9 +2023,11 @@ the complete current context changed. Prior Submissions, ReviewLeases, Reviews,
 ContributionRecords, and CompensationAwards retain their old version. The next
 Submission stamps the rebased version, and its ReviewLease copies that version.
 
-The contributor and reviewer history show prior/next guide, policy—including
+The planned human revision history will show prior/next guide, policy—including
 ContributionPolicyVersion—identity, activation sequence where applicable,
-direction, reason, and change summary.
+direction, reason, and change summary. Implemented checker work context exposes
+the frozen preparation and bounded `revision_context.changes`; public Submission
+history does not yet expose that change summary.
 
 ## TaskRevisionPreparation
 

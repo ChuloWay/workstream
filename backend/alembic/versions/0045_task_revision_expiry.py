@@ -3,8 +3,8 @@
 from alembic import op
 from sqlalchemy import text
 
-revision = "0044_task_revision_expiry"
-down_revision = "0043_outbox_not_before"
+revision = "0045_task_revision_expiry"
+down_revision = "0044_outbox_not_before"
 branch_labels = None
 depends_on = None
 

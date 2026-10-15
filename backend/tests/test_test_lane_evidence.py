@@ -23,6 +23,7 @@ HEAD = "a" * 40
 LANES = (
     "shared_foundations_a",
     "shared_foundations_b",
+    "shared_foundations_c",
     "schema_contracts",
     "project_lifecycle_a",
     "project_lifecycle_b",
@@ -34,6 +35,15 @@ LANES = (
     "task_lifecycle_c",
     "task_lifecycle_d",
 )
+
+
+def test_validator_requires_exact_expanded_lane_and_shared_s3_custody() -> None:
+    assert validator.LANE_COUNT == len(LANES) == 13
+    assert validator.SHARED_S3_LANES == {
+        "shared_foundations_a",
+        "shared_foundations_b",
+        "shared_foundations_c",
+    }
 
 
 def _write(path: Path, value: object) -> str:
@@ -340,17 +350,18 @@ def test_rejects_recorded_database_environment_or_shared_coverage(tmp_path: Path
 
 
 @pytest.mark.parametrize(
-    ("target_index", "source_index", "field", "message"),
+    ("target_index", "field", "value", "message"),
     (
-        (2, 0, "minio_bucket", "invalid_isolation_metadata"),
-        (1, 0, "minio_prefix", "shared_isolation_namespace"),
+        (3, "minio_bucket", validator.SHARED_S3_BUCKET, "invalid_isolation_metadata"),
+        (2, "minio_prefix", "prefix/shared_foundations_a", "shared_isolation_namespace"),
+        (2, "minio_cleanup_complete", False, "invalid_isolation_metadata"),
     ),
 )
 def test_rejects_unapproved_shared_minio_custody(
     tmp_path: Path,
     target_index: int,
-    source_index: int,
     field: str,
+    value: object,
     message: str,
 ) -> None:
     metadata, summary_path, summary = _bundle(tmp_path)
@@ -363,9 +374,8 @@ def test_rejects_unapproved_shared_minio_custody(
         isolation = json.loads(isolation_path.read_text())
         return lane, evidence_path, evidence, isolation
 
-    source = isolation_for(source_index)[3]
     lane, evidence_path, evidence, isolation = isolation_for(target_index)
-    isolation[field] = source[field]
+    isolation[field] = value
     isolation_path = metadata / evidence["isolation_metadata_file"]
     evidence["isolation_metadata_sha256"] = _write(isolation_path, isolation)
     lane["evidence_sha256"] = _write(evidence_path, evidence)

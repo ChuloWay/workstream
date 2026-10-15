@@ -1158,6 +1158,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/contributions/records/pagination.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/contributions/records/participant.py"
     },
     {
@@ -2009,7 +2013,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "a21793d43afa5b241f35a1dcf9c678630f431f1edef53c815bf82db7ed9d9e96",
+  "authority_digest": "4ef6eb9868acc9cac94b5f9b2cededb4691ba504f8c532eae2a64cc273db9488",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
