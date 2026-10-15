@@ -2,11 +2,12 @@
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from datetime import timedelta
 
 import pytest
 from alembic import command
-from sqlalchemy import DateTime, select, text
+from sqlalchemy import select, text
 
 from app.adapters.tasks import task_post_submit_outcome, task_revision_recovery
 from app.modules.tasks.post_submit_routing import outcome as routing_outcome
@@ -17,6 +18,51 @@ from tests.tasks.submission_dispatch.test_revision_expiry import _provision_expi
 from tests.test_alembic import HEAD_REVISION, _alembic_config, _execute
 
 pytestmark = pytest.mark.postgres_schema_contract
+
+_SOURCE_GUARD_DEFINITION = (
+    "SELECT pg_catalog.pg_get_functiondef("
+    "'public.guard_task_post_submit_routing_source()'::regprocedure)"
+)
+
+
+@asynccontextmanager
+async def _historical_manifest_clock(session, window_seconds):
+    """Control only the old INSERT clock, restoring its complete guard in this transaction."""
+    assert window_seconds in (60, 600)
+    # Resolve every old policy column before substituting the clock expression.
+    await session.execute(text("""
+        SELECT p.revision_deadline_hours,p.policy_generation,p.policy_hash,p.project_id,
+            p.guide_version,p.semantics_status,s.task_id,s.locked_revision_policy_generation,
+            s.locked_revision_policy_hash,s.locked_guide_version
+        FROM public.submissions s
+        JOIN public.revision_policies p ON p.id=s.locked_revision_policy_id
+        WHERE false
+    """))
+    original = await session.scalar(text(_SOURCE_GUARD_DEFINITION))
+    anchor = "NEW.created_at := pg_catalog.clock_timestamp();"
+    assert original.count(anchor) == 1
+    historical_clock = f"""NEW.created_at := (
+        SELECT pg_catalog.clock_timestamp()
+            -pg_catalog.make_interval(hours=>p.revision_deadline_hours)
+            +pg_catalog.make_interval(secs=>{window_seconds})
+        FROM public.submissions s
+        JOIN public.revision_policies p ON p.id=s.locked_revision_policy_id
+            AND p.policy_generation=s.locked_revision_policy_generation
+            AND p.policy_hash=s.locked_revision_policy_hash AND p.project_id=NEW.project_id
+            AND p.guide_version=s.locked_guide_version AND p.semantics_status='complete'
+        WHERE s.id=NEW.submission_id AND s.task_id=NEW.task_id);"""
+    await session.execute(text(original.replace(anchor, historical_clock)))
+    try:
+        yield original
+    except BaseException:
+        # The caller's root transaction rolls back the clock substitution and rows.
+        raise
+    else:
+        await session.execute(text(original))
+        assert await session.scalar(text(_SOURCE_GUARD_DEFINITION)) == original
+        assert await session.scalar(text(
+            "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgenabled='D'"
+        )) == 0
 
 
 async def _old_blocked_preparation(
@@ -53,31 +99,23 @@ async def test_retained_blocked_clock_pauses_once_or_stays_due(
         await asyncio.to_thread(command.upgrade, _alembic_config(), "0047_revision_recovery")
         async with remediation_source(tmp_path, isolated_database_env) as h:
             window_seconds = 60 if already_due else 600
-            original_manifest = routing_outcome._manifest
-
-            def old_manifest(*args, **kwargs):
-                manifest = original_manifest(*args, **kwargs)
-                manifest.created_at = text("""
-                    SELECT clock_timestamp()-make_interval(hours=>p.revision_deadline_hours)
-                        +make_interval(secs=>:historical_window_seconds) AS created_at
-                    FROM public.submissions s
-                    JOIN public.revision_policies p ON p.id=s.locked_revision_policy_id
-                    WHERE s.id=CAST(:historical_submission_id AS uuid)
-                """).bindparams(
-                    historical_window_seconds=window_seconds,
-                    historical_submission_id=manifest.submission_id,
-                ).columns(created_at=DateTime(timezone=True)).scalar_subquery()
-                return manifest
-
             with monkeypatch.context() as patch:
-                patch.setattr(routing_outcome, "_manifest", old_manifest)
                 patch.setattr(routing_outcome, "prepare_revision", _old_blocked_preparation)
                 async with h.factory() as session, session.begin():
-                    outcome = await task_post_submit_outcome(session, h.factory).apply(
-                        h.envelope, current_generation=None,
-                    )
+                    async with _historical_manifest_clock(session, window_seconds) as source_guard:
+                        outcome = await task_post_submit_outcome(session, h.factory).apply(
+                            h.envelope, current_generation=None,
+                        )
             source_id = outcome.routing_manifest_id
             async with h.factory() as session:
+                assert await session.scalar(text(_SOURCE_GUARD_DEFINITION)) == source_guard
+                remaining = await session.scalar(text(
+                    "SELECT deadline_at-clock_timestamp() FROM public.task_revision_preparations "
+                    "WHERE routing_manifest_id=CAST(:id AS uuid) AND predecessor_id IS NULL"
+                ), {"id": source_id})
+                assert remaining <= timedelta(seconds=window_seconds)
+                if not already_due:
+                    assert remaining > timedelta(0)
                 before = await retained_revision_rows(session, source_id, root_only=True)
                 original = json.loads(before["task_revision_preparations"][0][0])
                 assert original["blocked_reason"] == "context_blocked"
