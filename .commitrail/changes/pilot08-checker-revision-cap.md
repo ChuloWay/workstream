@@ -285,3 +285,10 @@ previous twelve-lane measurements above describe historical evidence only.
 The race staging observer now reports an actual early final-POST response or
 exception instead of concealing it as an event-wait timeout. It changes no
 production clock, deadline, lock operation or expected race outcome.
+
+The authorization specification's fixed-service inventory and service-authority
+table include the active revision-expirer identity and both expiry/recovery
+actions. The inventory also reconciles the existing checker/router identities
+and its count against the closed ACTORS registry and AUTH action matrix. This
+corrects documentation completeness without changing runtime authority or the
+roadmap's delivered/future boundary.

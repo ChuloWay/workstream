@@ -669,6 +669,10 @@ closed:
 | `workstream.review.projection` | `review.projection.rebuild` |
 | `workstream.outbox.dispatcher` | active shared mechanics only: `outbox.dispatch` |
 | `workstream.task.assignment_reconciler` | active hidden assignment effect only: `task.assignment.authority_reconcile` |
+| `workstream.task.revision_expirer` | active: `task.revision.expire`, `task.revision.recover` |
+| `workstream.task.post_submit_router` | active: `task.post_submit.route` |
+| `workstream.checker.pre_submit` | active: `checker.pre_submit.execute`, `checker.pre_submit.finalize` |
+| `workstream.checker.post_submit` | active: `checker.post_submit.execute`, `checker.post_submit.finalize` |
 | `workstream.compensation.adapter` | target-only; no action membership |
 
 The hidden 04B2 prepared resource first locks fixed-service authority using
@@ -686,8 +690,9 @@ than a separate generation counter.
 
 `workstream.project.setup` was the eighth fixed identity when AUTH-12B merged;
 02C expanded that registry to fourteen identities. The current registry has
-seventeen identities after the target-only compensation adapter, shared outbox
-dispatcher and task assignment reconciler registrations. AUTH-12E activates
+twenty-one identities, including the target-only compensation adapter, shared
+outbox dispatcher, task assignment reconciler, pre/post-submit checkers,
+post-submit router and revision expirer. AUTH-12E activates
 `project.guide_sufficiency.run`, AUTH-12F3 activates policy derivation, and
 AUTH-12I activates exact unified compilation execution. AUTH-12B2 activates
 exact setup finalization; AUTH-12G activates
@@ -729,8 +734,9 @@ Routers cannot invent identifiers or evaluate grant unions.
 
 ### Pre-Review Service Authority
 
-`outbox.dispatch` and `task.assignment.authority_reconcile` are active for their
-separate fixed services and included in current catalogue counts. The dispatcher
+`outbox.dispatch`, `task.assignment.authority_reconcile`, `task.revision.expire`
+and `task.revision.recover` are active for their exact fixed services and included
+in current catalogue counts. The dispatcher
 authorizes shared delivery mechanics; the reconciler authorizes the hidden
 assignment effect. Checker execute/finalize authority is implemented by
 ARCH-04D2. AUTH-19A registered `task.post_submit.route` and its fixed identity;
@@ -744,6 +750,8 @@ exact fixed-service authority and manifest.
 |---|---|---|---|
 | `outbox.dispatch` | `workstream.outbox.dispatcher` | Event/claim generation/lease and exact phase; fresh authority for claim, invoke and finalize; no feature authority | AUTH-OUTBOX-02 authority/phase custody and Celery composition complete; feature handlers remain separate |
 | `task.assignment.authority_reconcile` | `workstream.task.assignment_reconciler` | Committed exact AUTH invalidation event, project/actor/grant-or-link, active pre-submit assignment; no wrong-role or submitted-history mutation | ARCH-03B9 hidden handler/fence and ARCH-03C1 real feature authority/decision receipts complete; ARCH-03C2 atomic producer wiring and registration |
+| `task.revision.expire` | `workstream.task.revision_expirer` | Exact project, task, assignment, failed Submission, routing manifest, preparation and locked-policy deadline, with the scheduled OUTBOX event/claim and fresh fixed-service authority. TASK-first custody revalidates the outstanding window against PostgreSQL time; a committed successor or replacement assignment cannot be expired | PILOT-08 implements atomic immutable expiration receipt, assignment release and return to `ready`, with authorization, audit and OUTBOX custody; no fabricated Review or economic effect |
+| `task.revision.recover` | `workstream.task.revision_expirer` | Exact retained routing manifest, assigned contributor, locked task context, request digest and optional preparation ID/digest pair; fresh fixed-service authority. Recovery retains the original source timestamp and policy deadline; exact already-scheduled work is a no-op | PILOT-08 implements bounded retained-source recovery of missing preparation or expiry intent; it may freeze unchanged or blocked context, never authorize an automatic rebase or reset the window |
 | `checker.post_submit.execute` | `workstream.checker.post_submit` | Immutable Submission/request/generation, locked compiled policy, attempt and admitted service; exact pre-I/O authority | Implemented by ARCH-04C/04D2 and invoked by the registered selected request handler |
 | `checker.post_submit.finalize` | `workstream.checker.post_submit` | Exact execution request/fence, accepted result digest, retained material and original execute receipt; fresh post-I/O authority and atomic evidence; current outputs are empty | Implemented by ARCH-04C/04D2 and invoked by the registered selected request handler |
 | `task.post_submit.route` | `workstream.task.post_submit_router` | Committed completion event/claim, exact current CHECKER result/fence, immutable Submission, locked ReviewPolicy and TASK pre-review state. `allow_review` with true permits only TASK `review_pending`; `allow_review` with false binds exact accepted TASK effects for shared FinalAcceptance. `needs_revision` under either mode permits only TASK remediation with the assignment active and no REV/CON effect. Never a human review decision or generic CON write | 04E2-B delivers canonical fixed-router PREP consumption and actual receipt custody for complete outcomes; ARCH-04F2 extends that same operation and receipt to exact checker remediation. SQL rejects orphan or incomplete outcomes and failure-to-acceptance substitution. Selected request and completion handlers are registered in production composition. False/pass effects require a live REV generation; the typed pre-effect non-live refusal rolls back and uses bounded OUTBOX retry. 04F3 adds exact-cause replacement under existing AUTH actions; 04F4 adds separate Operator retry authority through CHECKERS. |
