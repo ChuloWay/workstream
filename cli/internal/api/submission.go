@@ -36,7 +36,7 @@ type PreparationReceipt struct {
 	AdmissionID  *string           `json:"admission_id"`
 	Status       string            `json:"submission_bundle_preparation_status"`
 	Replayed     bool              `json:"replayed"`
-	Feedback     []json.RawMessage `json:"pre_submission_results"`
+	Feedback     []json.RawMessage `json:"pre_submission_results,omitempty"`
 }
 
 type SubmissionReceipt struct {

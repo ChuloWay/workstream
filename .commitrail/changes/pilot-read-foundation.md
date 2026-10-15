@@ -213,7 +213,9 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 - Retained state needing explicit handling: the migration rewrites no checker
   evidence. A retained `checker_runs.result_json` or selected PRE
   `terminal_json` whose findings lack `check_id` fails current validation if it
-  is replayed or re-read through `stored_result` or exact PRE replay. Retained
+  is replayed or re-read through `stored_result` or exact PRE replay: exact PRE
+  replay then fails the preparation request (HTTP 500), and completion or
+  retry delivery for such a run exhausts its retries and dead-letters. Retained
   terminal rows are otherwise unaffected, and runs completed before 0048 have
   no finding rows, so their reads show one entry per member. Hosted data was not
   inspected from the authoring sandbox.

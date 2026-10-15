@@ -189,6 +189,9 @@ def test_admitted_preparation_shows_nonblocking_intake_feedback(cli, tmp_path):
         respond(response, preparation("ready"), 202)
         result = cli(origin, TOKEN, *human)
         assert result.returncode == 0, result.stderr
+        receipt_line = result.stdout.splitlines()[0]
+        assert receipt_line.startswith("Preparation receipt")
+        assert "pre_submission_results" not in receipt_line
         assert "Intake feedback: warning submission_summary_missing" in result.stdout
         assert (
             "Intake feedback: coverage_incomplete coverage.files results/vendor.bin: "
