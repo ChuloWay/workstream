@@ -144,6 +144,7 @@ PILOT_10_EXPORT_TARGETS = frozenset({
     "backend/app/modules/contributions/api/records.py",
     "backend/app/modules/contributions/api/source_reads.py",
     "backend/app/modules/contributions/records/csv.py",
+    "backend/app/modules/contributions/records/pagination.py",
     "backend/app/modules/contributions/records/read_facts.py",
     "backend/app/modules/contributions/records/read_repository.py",
     "backend/app/modules/contributions/records/read_service.py",
