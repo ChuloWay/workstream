@@ -125,6 +125,15 @@ contributor revision window. They retain bounded durable recovery semantics.
 - Block/repair preserve exact remaining PostgreSQL time; stale expiry events,
   duplicate workers and service recovery cannot expire paused/newer work or
   extend its allowance. Original immutable source/preparation history survives.
+- Missing-root recovery observes the original routing failure time: a blocked
+  root receives only the original deadline's unspent allowance, never a renewed
+  full policy window. Fresh blocked failure keeps its full allowance; already
+  due recovery remains expired. PostgreSQL regressions must distinguish these
+  paths and reject the former full-window recovery behavior.
+- Once live or recovered exhaustion, or expiry, commits, its assignment's terminal status,
+  release timestamp and receipt-bound identity remain immutable. Real subsequent
+  transactions must reject reopening, retiming, rebinding and deletion while
+  preserving legitimate separate-assignment reclaim and replay.
 - Real PostgreSQL intermediate waits cover both contenders/winners for
   submission/terminal failure/expiry, pause/repair and concurrent claim, with
   complete participant rollback, exact replay, revocation and foreign-resource

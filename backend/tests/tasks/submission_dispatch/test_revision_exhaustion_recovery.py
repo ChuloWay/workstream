@@ -28,7 +28,8 @@ from tests.tasks.submission_dispatch.test_replacement_creation import (
 )
 from tests.tasks.submission_dispatch.test_revision_capacity import _fail_current_submission
 from tests.tasks.submission_dispatch.test_revision_exhaustion import (
-    StagedFailure, _apply, _history_rejects_source, _snapshot, _submit_initial_after_reclaim,
+    StagedFailure, _apply, _assert_exhausted_assignment_immutable, _history_rejects_source,
+    _snapshot, _submit_initial_after_reclaim,
 )
 from tests.tasks.submission_dispatch.test_revision_expiry import _provision_expirer
 from tests.tasks.test_public_submission_intake import _client
@@ -182,6 +183,7 @@ async def test_retained_cap_recovery_releases_once_and_preserves_exact_routing_r
                 for owner in ("revision_policies", "submissions", "task_revision_preparations",
                               "task_post_submit_routing_manifests", "outbox_events"):
                     assert retained[owner] == old[owner], owner
+            await _assert_exhausted_assignment_immutable(h, receipt)
             committed = await _snapshot(h)
             assert await _recover(h, source_id) is False
             assert await _snapshot(h) == committed

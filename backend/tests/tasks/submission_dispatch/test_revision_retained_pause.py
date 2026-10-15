@@ -28,7 +28,7 @@ _SOURCE_GUARD_DEFINITION = (
 @asynccontextmanager
 async def _historical_manifest_clock(session, window_seconds):
     """Control only the old INSERT clock, restoring its complete guard in this transaction."""
-    assert window_seconds in (60, 600)
+    assert window_seconds in (-3_600, 60, 600, 136_800)
     # Resolve every old policy column before substituting the clock expression.
     await session.execute(text("""
         SELECT p.revision_deadline_hours,p.policy_generation,p.policy_hash,p.project_id,

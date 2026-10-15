@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import timedelta
 from uuid import UUID
 
 import pytest
@@ -153,7 +154,14 @@ async def test_discovery_freezes_original_retained_window_without_pm_or_rebase(
             assert root.repair_idempotency_key == source_id
             assert root.requested_at == source_window[0]
             assert root.deadline_at == (None if new_active_guide else source_window[1])
-            assert root.remaining_microseconds == (int((source_window[1] - source_window[0]).total_seconds() * 1_000_000) if new_active_guide else None)
+            assert root.remaining_microseconds == (
+                (source_window[1] - root.clock_observed_at) // timedelta(microseconds=1)
+                if new_active_guide else None
+            )
+            if new_active_guide:
+                assert 0 < root.remaining_microseconds < (
+                    source_window[1] - source_window[0]
+                ) // timedelta(microseconds=1)
             assert root.outcome == ("blocked" if new_active_guide else "kept")
             assert root.blocked_reason == ("context_blocked" if new_active_guide else None)
             if new_active_guide:

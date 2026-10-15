@@ -108,7 +108,10 @@ projects the failed Submission as rejected with `revision_limit_reached`.
 When another revision remains, the failure freezes a complete next-attempt
 context and a fresh PostgreSQL-time allowance. A setup-blocked context pauses
 that allowance and publishes durable PM-attention evidence. A blocked root
-preserves the full policy duration. Repair resumes only the stored remaining
+created with the original failure preserves the full policy duration. Recovery
+of a missing root preserves only the unspent original allowance, including when
+the recovered context is blocked; an already due source stays due.
+Repair resumes only the stored remaining
 time; repair of a running context preserves its deadline. The API exposes
 `clock_state`, nullable `deadline_at`, and nullable `remaining_microseconds`:
 paused means no deadline and a stored remainder; running means a deadline and

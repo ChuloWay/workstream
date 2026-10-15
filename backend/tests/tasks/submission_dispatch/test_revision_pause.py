@@ -8,18 +8,22 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.adapters.tasks import task_post_submit_outcome, task_revision_recovery
 from app.core.identifiers import new_record_id
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.authorized_commands import AuthorizedTaskCommands
 from app.modules.tasks.api.revision import RevisionCandidate, RevisionContextSnapshot
 from app.modules.tasks.api.revision_expiry import REVISION_CONTEXT_BLOCKED_EVENT, REVISION_EXPIRY_EVENT
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
+from app.modules.tasks.post_submit_routing import outcome as routing_outcome
 from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.revision.expiry_event import revision_preparation_event
 from app.modules.tasks.revision.models import TaskRevisionPreparation
 from app.modules.tasks.revision.service import candidate_from_packet, project_revision
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.post_submit_routing.support import activate_successor_guide
+from tests.tasks.submission_dispatch.test_revision_expiry import _provision_expirer
+from tests.tasks.submission_dispatch.test_revision_retained_pause import _historical_manifest_clock
 from tests.tasks.test_public_submission_intake import _client
 from tests.test_submission_predecessor_custody import _fixture_revision_context
 
@@ -140,7 +144,7 @@ async def _repair(client, h, parent, *, key=None):
     return response.json()
 
 
-async def test_blocked_initial_context_pauses_full_budget_and_is_visible_to_pm(
+async def test_fresh_blocked_failure_pauses_full_budget_and_is_visible_to_pm(
     tmp_path, isolated_database_env, monkeypatch,
 ):
     async with remediation_source(tmp_path, isolated_database_env) as h:
@@ -171,6 +175,151 @@ async def test_blocked_initial_context_pauses_full_budget_and_is_visible_to_pm(
             view = response.json()["task"]["revision_context"]
             assert view["clock_state"] == "paused" and view["deadline_at"] is None
             assert view["remaining_microseconds"] == root.remaining_microseconds
+
+
+async def _fixture_historical_missing_root(
+    h, monkeypatch, *, remaining_seconds, recover_in_source_transaction,
+):
+    """Commit a guarded historical route whose old writer omitted revision effects."""
+    omitted = []
+    async with h.factory() as session, session.begin():
+        outcome = task_post_submit_outcome(session, h.factory)
+        append = outcome._outbox.append
+
+        async def omit_preparation(*args, **kwargs):
+            omitted.append("preparation")
+            return None
+
+        async def append_except_missing_revision(event):
+            if event is None:
+                omitted.append("event")
+                return None
+            return await append(event)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(routing_outcome, "prepare_revision", omit_preparation)
+            patch.setattr(routing_outcome, "revision_preparation_event", lambda *_args: None)
+            patch.setattr(outcome._outbox, "append", append_except_missing_revision)
+            async with _historical_manifest_clock(session, remaining_seconds) as source_guard:
+                assert await outcome.observe_delivery_generation(h.envelope) is None
+                result = await outcome.apply(h.envelope, current_generation=None)
+                assert result.routing_recommendation == "needs_revision"
+        if recover_in_source_transaction:
+            assert await session.scalar(text(
+                "SELECT pg_catalog.pg_get_functiondef("
+                "'public.guard_task_post_submit_routing_source()'::regprocedure)"
+            )) == source_guard
+            assert await session.scalar(text("""
+                SELECT xmin::text=pg_current_xact_id()::text
+                FROM public.task_post_submit_routing_manifests WHERE id=:source
+            """), {"source": result.routing_manifest_id}) is True
+            assert await task_revision_recovery(session).recover(result.routing_manifest_id) is True
+    assert omitted == ["preparation", "event"]
+    async with h.factory() as session:
+        assert await session.scalar(text(
+            "SELECT pg_catalog.pg_get_functiondef("
+            "'public.guard_task_post_submit_routing_source()'::regprocedure)"
+        )) == source_guard
+        assert await session.scalar(text(
+            "SELECT count(*) FROM public.task_revision_preparations"
+        )) == int(recover_in_source_transaction)
+        assert await session.scalar(text("""
+            SELECT count(*) FROM public.outbox_events
+            WHERE correlation_id=:source AND event_type IN (
+              'TaskRevisionExpiryRequested','TaskRevisionContextBlocked')
+        """), {"source": str(result.routing_manifest_id)}) == int(
+            recover_in_source_transaction
+        )
+        assert await session.scalar(text(
+            "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgenabled='D'"
+        )) == 0
+    return result.routing_manifest_id
+
+
+@pytest.mark.parametrize(("remaining_seconds", "blocked_reason", "recover_with_source"), [
+    (136_800, "context_blocked", False),
+    (-3_600, "revision_deadline_expired", False),
+    (136_800, "context_blocked", True),
+])
+async def test_missing_root_recovery_preserves_original_unspent_or_due_window(
+    tmp_path, isolated_database_env, monkeypatch,
+    remaining_seconds, blocked_reason, recover_with_source,
+):
+    """Delayed service recovery cannot renew an old source's original allowance."""
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        await activate_successor_guide(h, max_revision_rounds=0)
+        service_actor = await _provision_expirer(h.factory)
+        source_id = await _fixture_historical_missing_root(
+            h, monkeypatch, remaining_seconds=remaining_seconds,
+            recover_in_source_transaction=recover_with_source,
+        )
+        async with h.factory() as session:
+            source_window = (await session.execute(text("""
+                SELECT m.created_at,
+                       m.created_at+make_interval(hours=>p.revision_deadline_hours)
+                FROM public.task_post_submit_routing_manifests m
+                JOIN public.submissions s ON s.id=m.submission_id
+                JOIN public.revision_policies p ON p.id=s.locked_revision_policy_id
+                WHERE m.id=:source
+            """), {"source": source_id})).one()
+            assert source_window[1] - source_window[0] == timedelta(hours=48)
+        if not recover_with_source:
+            async with h.factory() as session, session.begin():
+                assert await task_revision_recovery(session).recover(source_id) is True
+        async with h.factory() as session:
+            root = (await session.scalars(select(TaskRevisionPreparation).where(
+                TaskRevisionPreparation.routing_manifest_id == source_id,
+            ))).one()
+            assert root.predecessor_id is None and root.sequence == 1
+            assert root.repair_actor_id == service_actor
+            assert root.repair_idempotency_key == source_id
+            assert root.requested_at == source_window[0]
+            assert root.outcome == "blocked" and root.blocked_reason == blocked_reason
+            expected = revision_preparation_event(
+                await session.get(TaskPostSubmitRoutingManifest, source_id), root,
+            )
+            event = (await session.scalars(select(OutboxEvent).where(
+                OutboxEvent.idempotency_key == expected.idempotency_key,
+            ))).one()
+            assert event.event_type == expected.event_type
+            assert event.not_before_at == expected.not_before_at
+            assert event.payload == expected.payload
+            if remaining_seconds > 0:
+                expected_remaining = (
+                    source_window[1] - root.clock_observed_at
+                ) // timedelta(microseconds=1)
+                assert 0 < root.remaining_microseconds == expected_remaining < 48 * 3_600_000_000
+                assert root.deadline_at is None
+                assert event.event_type == REVISION_CONTEXT_BLOCKED_EVENT
+                assert event.payload["remaining_microseconds"] == expected_remaining
+            else:
+                assert root.deadline_at == source_window[1]
+                assert root.remaining_microseconds is None
+                assert event.event_type == REVISION_EXPIRY_EVENT
+                assert event.not_before_at == source_window[1]
+            before = await session.execute(text("""
+                SELECT to_jsonb(p),to_jsonb(e),(
+                  SELECT count(*) FROM public.audit_events a
+                  WHERE a.event_type='TaskRevisionContextRepaired'
+                    AND a.event_payload->'references'->>'routing_manifest_id'=:source)
+                FROM public.task_revision_preparations p
+                JOIN public.outbox_events e ON e.idempotency_key=:key WHERE p.id=:preparation
+            """), {"source": str(source_id), "key": expected.idempotency_key,
+                     "preparation": root.id})
+            before = before.one()
+        async with h.factory() as session, session.begin():
+            assert await task_revision_recovery(session).recover(source_id) is False
+        async with h.factory() as session:
+            after = (await session.execute(text("""
+                SELECT to_jsonb(p),to_jsonb(e),(
+                  SELECT count(*) FROM public.audit_events a
+                  WHERE a.event_type='TaskRevisionContextRepaired'
+                    AND a.event_payload->'references'->>'routing_manifest_id'=:source)
+                FROM public.task_revision_preparations p
+                JOIN public.outbox_events e ON e.idempotency_key=:key WHERE p.id=:preparation
+            """), {"source": str(source_id), "key": expected.idempotency_key,
+                     "preparation": root.id})).one()
+            assert after == before
 
 
 async def test_pm_pause_and_resume_preserve_only_remaining_database_time(

@@ -101,6 +101,56 @@ async def terminal_facts(h, outcome, *, expected_round):
         return receipt
 
 
+async def _assert_exhausted_assignment_immutable(h, receipt):
+    """Every terminal assignment mutation fails without changing receipt history."""
+    assignment_id = receipt.assignment_id
+    receipt_id = receipt.id
+
+    async def custody():
+        async with h.factory() as session:
+            row = (await session.execute(text("""
+                SELECT to_jsonb(a),to_jsonb(e),
+                  (SELECT jsonb_agg(to_jsonb(s) ORDER BY s.version)
+                     FROM public.submissions s WHERE s.task_assignment_id=a.id),
+                  (SELECT to_jsonb(o) FROM public.outbox_events o
+                     WHERE o.event_id=e.outcome_event_id),
+                  (SELECT to_jsonb(v) FROM public.audit_events v WHERE v.id=e.audit_event_id),
+                  public.task_revision_exhaustion_complete(e.id)
+                FROM public.task_assignments a
+                JOIN public.task_revision_exhaustions e ON e.assignment_id=a.id
+                WHERE a.id=:assignment AND e.id=:receipt
+            """), {"assignment": assignment_id, "receipt": receipt_id})).one()
+            assert row[-1] is True
+            return row
+
+    before = await custody()
+    attacks = (
+        ("UPDATE public.task_assignments SET status='active' WHERE id=:assignment", {}),
+        ("UPDATE public.task_assignments SET released_at=NULL WHERE id=:assignment", {}),
+        ("UPDATE public.task_assignments SET released_at=released_at+interval '1 second' "
+         "WHERE id=:assignment", {}),
+        ("UPDATE public.task_assignments SET accepted_at=accepted_at+interval '1 second' "
+         "WHERE id=:assignment", {}),
+        ("UPDATE public.task_assignments SET id=:new_assignment,project_id=:new_project,"
+         "task_id=:new_task,contributor_id=:new_contributor WHERE id=:assignment", {
+             "new_assignment": new_record_id(), "new_project": new_record_id(),
+             "new_task": new_record_id(), "new_contributor": new_record_id(),
+         }),
+        ("UPDATE public.task_assignments SET submitter_contribution_policy_version_id=:replacement "
+         "WHERE id=:assignment", {"replacement": new_record_id()}),
+        ("DELETE FROM public.task_assignments WHERE id=:assignment", {}),
+    )
+    for statement, parameters in attacks:
+        with pytest.raises(DBAPIError) as rejected:
+            async with h.factory() as session, session.begin():
+                await session.execute(text(statement), parameters | {"assignment": assignment_id})
+                raise AssertionError("terminal assignment mutation unexpectedly succeeded")
+        assert rejected.value.orig.sqlstate == "23514"
+        database_error = rejected.value.orig.__cause__
+        assert database_error.constraint_name == "ck_revision_exhausted_assignment_immutable"
+        assert await custody() == before
+
+
 async def _submit_initial_after_reclaim(h, client):
     claim = await client.post(f"/api/v1/tasks/{h.request.task_id}/claim",
                               headers={"Idempotency-Key": str(new_record_id())})
@@ -198,7 +248,8 @@ async def test_zero_cap_releases_immediately_and_reclaim_resets_only_assignment_
             original = await session.scalar(text("SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"),
                                             {"id": h.created.submission_id})
         first = await _apply(h)
-        await terminal_facts(h, first, expected_round=0)
+        first_receipt = await terminal_facts(h, first, expected_round=0)
+        await _assert_exhausted_assignment_immutable(h, first_receipt)
         async with _client(h, monkeypatch, isolated_database_env) as client:
             await _history_rejects_source(h, client, first_submission)
             h.created = await _submit_initial_after_reclaim(h, client)

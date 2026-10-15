@@ -272,6 +272,16 @@ def _route_exhaustion() -> None:
 CREATE FUNCTION public.guard_task_revision_exhaustion_transition() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
 BEGIN
+ IF TG_TABLE_NAME='task_assignments' THEN
+  IF OLD.status='revision_exhausted' THEN
+   RAISE EXCEPTION 'exhausted assignment is immutable'
+    USING ERRCODE='23514', CONSTRAINT='ck_revision_exhausted_assignment_immutable';
+  ELSIF OLD.status='revision_expired' THEN
+   RAISE EXCEPTION 'expired assignment is immutable'
+    USING ERRCODE='23514', CONSTRAINT='ck_revision_expired_assignment_immutable';
+  END IF;
+  IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ END IF;
  IF TG_TABLE_NAME='workstream_tasks' AND OLD.status='evaluation_pending' AND NEW.status='ready' THEN
   IF NEW.assigned_to IS NOT NULL OR NOT EXISTS(SELECT 1 FROM public.task_revision_exhaustions e
     WHERE e.task_id=OLD.id AND e.project_id=OLD.project_id AND e.contributor_id=OLD.assigned_to
@@ -288,7 +298,7 @@ BEGIN
 END $$;
 CREATE TRIGGER revision_exhaustion_task_transition BEFORE UPDATE ON public.workstream_tasks
  FOR EACH ROW EXECUTE FUNCTION public.guard_task_revision_exhaustion_transition();
-CREATE TRIGGER revision_exhaustion_assignment_transition BEFORE UPDATE ON public.task_assignments
+CREATE TRIGGER a_revision_terminal_assignment_immutable BEFORE UPDATE OR DELETE ON public.task_assignments
  FOR EACH ROW EXECUTE FUNCTION public.guard_task_revision_exhaustion_transition();
     """)
 
@@ -369,7 +379,11 @@ BEGIN
    NEW.deadline_at:=original_deadline;
    NEW.blocked_reason:='revision_deadline_expired';
   ELSIF blocked THEN
-   NEW.remaining_microseconds:=policy.revision_deadline_hours::bigint*3600000000;
+   NEW.remaining_microseconds:=CASE WHEN NEW.repair_actor_id IS NULL AND EXISTS(
+    SELECT 1 FROM public.task_post_submit_routing_manifests original
+    WHERE original.id=m.id AND original.xmin=pg_current_xact_id()::xid)
+    THEN policy.revision_deadline_hours::bigint*3600000000
+    ELSE floor(extract(epoch FROM (original_deadline-observed))*1000000)::bigint END;
    NEW.blocked_reason:='context_blocked';
   ELSE NEW.deadline_at:=original_deadline; NEW.blocked_reason:=NULL;
   END IF;
@@ -416,7 +430,12 @@ def _guard_preparation_clock() -> None:
         """OR (NEW.deadline_at IS NOT NULL AND NEW.deadline_at IS DISTINCT FROM
           m.created_at + make_interval(hours=>policy.revision_deadline_hours))
     OR (NEW.deadline_at IS NULL AND NEW.remaining_microseconds IS DISTINCT FROM
-          policy.revision_deadline_hours::bigint*3600000000)""")
+      CASE WHEN NEW.repair_actor_id IS NULL AND EXISTS(
+       SELECT 1 FROM public.task_post_submit_routing_manifests original
+       WHERE original.id=m.id AND original.xmin=pg_current_xact_id()::xid)
+      THEN policy.revision_deadline_hours::bigint*3600000000
+      ELSE floor(extract(epoch FROM (m.created_at
+       +make_interval(hours=>policy.revision_deadline_hours)-NEW.clock_observed_at))*1000000)::bigint END)""")
     _replace(guard,
         "OR ROW(NEW.requested_at,NEW.deadline_at,NEW.max_revision_rounds)\n"
         "       IS DISTINCT FROM ROW(prior.requested_at,prior.deadline_at,prior.max_revision_rounds)",
