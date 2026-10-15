@@ -106,14 +106,18 @@ def test_project_intake_partitions_across_the_project_family() -> None:
     }
     assert set(catalogue.PROJECT_INTAKE_MODULES) == expected
     assert not expected & set(catalogue.PROJECT_MODULES)
-    assert all(
-        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_LANES
-        for module in expected
+    assert catalogue.PARTITION_LANES_BY_MODULE["tests/test_guide_document_intake.py"] == (
+        catalogue.PARTITIONED_PROJECT_LANES
+    )
+    assert catalogue.PARTITION_LANES_BY_MODULE["tests/test_projects.py"] == (
+        "project_lifecycle_a",
+        "project_lifecycle_e",
     )
 
     for module in expected:
-        assert tuple(lane.name for lane in LANES if module in lane.modules) == (
-            catalogue.PARTITIONED_PROJECT_LANES
+        assert (
+            tuple(lane.name for lane in LANES if module in lane.modules)
+            == (catalogue.PARTITION_LANES_BY_MODULE[module])
         )
 
     nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
@@ -257,6 +261,10 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
 
 def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
     expected = {
+        "tests/test_projects.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_e",
+        ),
         "tests/tasks/test_task_batch_transitions.py": (
             "project_lifecycle_e",
             "project_lifecycle_d",
@@ -270,7 +278,7 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
             "project_lifecycle_c",
             "project_lifecycle_d",
         ),
-        "tests/tasks/submission_dispatch/test_revision_pause_races.py": ("project_lifecycle_d",),
+        "tests/tasks/submission_dispatch/test_revision_pause_races.py": ("project_lifecycle_e",),
         "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
         "tests/tasks/submission_dispatch/test_revision_expiry.py": (
             "project_lifecycle_a",
@@ -281,7 +289,7 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
         ),
     }
     assert catalogue.PROJECT_MODULE_LANE_OVERRIDES == expected
-    assert set(expected) <= set(catalogue.PROJECT_MODULES)
+    assert set(expected) <= set(catalogue.PROJECT_PARTITIONED_MODULES)
     assert all(
         catalogue.PARTITION_LANES_BY_MODULE[module]
         == expected.get(module, catalogue.PARTITIONED_PROJECT_LANES)
@@ -299,7 +307,7 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     )
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "e9d89d4942836a9b5fcfd445c78538ae7e0d9e4613b638f83bdf56c0d7335317"
+        "ed395e3eb0f3925f9e1c9e3f101a6c0c9f722dfedfe633177a9d2c7a287b46cd"
     )
 
 
@@ -319,13 +327,13 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
     retained_module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
     expected = {
         f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[False]": (
-            "project_lifecycle_d"
+            "project_lifecycle_e"
         ),
         f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[True]": (
-            "project_lifecycle_d"
+            "project_lifecycle_e"
         ),
         f"{pause_module}::test_expiry_beats_real_pm_repair_waiting_for_task_past_deadline": (
-            "project_lifecycle_d"
+            "project_lifecycle_e"
         ),
         f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]": (
             "project_lifecycle_a"
@@ -347,6 +355,24 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
         ),
         "tests/tasks/test_task_batch_transitions.py::test_public_source_import_screen_release_complete_journey[200]": (
             "project_lifecycle_b"
+        ),
+        "tests/test_projects.py::test_submission_artifact_policy_removed_agent_route_performs_no_runtime_calls": (
+            "project_lifecycle_a"
+        ),
+        "tests/test_projects.py::test_submission_artifact_policy_update_conceals_foreign_policy_id": (
+            "project_lifecycle_a"
+        ),
+        "tests/test_projects.py::test_submission_artifact_policy_update_fault_rolls_back_replacement": (
+            "project_lifecycle_a"
+        ),
+        "tests/test_projects.py::test_sufficiency_report_rejects_unknown_request_fields": (
+            "project_lifecycle_e"
+        ),
+        "tests/test_projects.py::test_unified_warnings_do_not_use_the_manual_report_acknowledgement_path": (
+            "project_lifecycle_e"
+        ),
+        "tests/test_projects.py::test_worker_cannot_create_project_records": (
+            "project_lifecycle_e"
         ),
     }
     rows = runner.build_manifest("a" * 40, list(reversed(expected)))["nodes"]

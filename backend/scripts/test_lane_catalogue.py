@@ -597,6 +597,11 @@ PROJECT_PARTITIONED_MODULES = (
 # Measured long-running proofs stay in their project semantic family but need
 # exact lane ownership so their waits and large fixtures do not collide.
 PROJECT_MODULE_LANE_OVERRIDES = {
+    "tests/test_projects.py": (
+        # The repeatedly incomplete tail is split across the two measured spare lanes.
+        "project_lifecycle_a",
+        "project_lifecycle_e",
+    ),
     "tests/tasks/test_task_batch_transitions.py": (
         # Tuple order spreads the measured 500/200-row cases away from E.
         "project_lifecycle_e",
@@ -613,8 +618,8 @@ PROJECT_MODULE_LANE_OVERRIDES = {
         "project_lifecycle_d",
     ),
     "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
-        # All three measured waits fit D while removing C's repeated timeout cause.
-        "project_lifecycle_d",
+        # E has measured room for all three waits; D timed out after receiving them.
+        "project_lifecycle_e",
     ),
     "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
     "tests/tasks/submission_dispatch/test_revision_expiry.py": (

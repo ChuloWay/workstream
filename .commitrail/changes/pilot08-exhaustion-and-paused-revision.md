@@ -77,11 +77,14 @@ contributor revision window. They retain bounded durable recovery semantics.
   In `contributions/records/test_storage.py`, remove the module-wide schema-owner
   marker: its two DDL mutation paths explicitly roll back, while the ordinary
   fixture verifies the canonical schema and rebuilds plus fails if either leaks.
-  Rebalance only retained-pause, revision-expiry, and task-batch nodes from the
-  resulting complete phase evidence. After both 3bad hosted attempts timed out
-  project C with only the `test_projects.py` tail left, route the three measured
-  pause-race waits to project D. This removes about 102 seconds from C while
-  projecting D at about 865 seconds from its measured 714-second pass.
+  Rebalance only retained-pause, revision-expiry, task-batch, pause-race, and
+  `test_projects.py` nodes from complete hosted phase evidence. After both 3bad
+  attempts left only the project C `test_projects.py` tail, 6202 moved the three
+  measured pause-race waits to D; D then timed out with only six nodes from that
+  same tail left. Route those waits to measured-spare E and repartition only
+  `test_projects.py` across measured-spare A/E. The 6202 manifest gives estimated
+  totals near A 862, B 872, C 1012, D 930--1020, and E 923 seconds;
+  these estimates motivate ownership and do not replace hosted qualification.
   Preserve every test node, all 13
   required lanes and existing timeouts; affected current
   specifications/runbooks/README and roadmap. Remove
@@ -95,7 +98,8 @@ contributor revision window. They retain bounded durable recovery semantics.
   parallel lifecycle writers, fabricated Reviews or economic outcomes.
 - Human-review activation, model proxy or coding evaluator implementation,
   general contributor claim leases, CI optimization beyond the exact measured
-  ownership changes above, the separate
+  ownership changes above; repartitioning the repeatedly incomplete
+  `test_projects.py` module to any lane outside project A/E; the separate
   optional-criteria screening repair (#489), deployment or automatic merge.
 - Weakened authority, mutable historical outcomes, skipped tests, increased CI
   timeouts, retry-until-green or unreviewed boundary exceptions.
