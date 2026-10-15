@@ -192,32 +192,3 @@ class ExecutionRepository:
                 )
         await self.session.flush()
 
-
-COVERAGE_HOLD_FAILURE_CODE = "coverage_incomplete"
-
-
-def retry_source_failure_code(run: CheckerRun) -> str | None:
-    """Return the retry cause of a finalized terminal run, or None when not retryable.
-
-    Two terminal outcomes are recoverable by an Operator retry: an
-    infrastructure failure, and a completed coverage hold that routed nowhere.
-    """
-    if (
-        run.finalize_evidence_id is None or run.result_json is None
-        or run.result_digest is None or run.completion_event_id is not None
-    ):
-        return None
-    result = stored_result(run)
-    if run.status == "infrastructure_failed":
-        if run.failure_code is None or result.outcome != "infrastructure_failed" or (
-            result.infrastructure_failure_code != run.failure_code
-        ):
-            return None
-        return run.failure_code
-    if (
-        run.status == "completed" and run.routing_recommendation == "task_setup_blocked"
-        and run.failure_code is None and result.outcome == "completed"
-    ):
-        return COVERAGE_HOLD_FAILURE_CODE
-    return None
-

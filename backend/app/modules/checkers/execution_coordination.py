@@ -36,12 +36,10 @@ from app.modules.checkers.execution_repository import (
     ExecutionRepository,
     require_transaction,
     request_text,
-    retry_source_failure_code,
     reservation,
     stored_result,
     stored_request,
 )
-from app.modules.checkers.execution_results import classify_result
 from app.modules.checkers.models import CheckerRun, CheckerSubmissionFence
 
 
@@ -101,7 +99,11 @@ class EvaluationCoordinator:
         if terminal_source_id is not None:
             if (
                 prior is None or prior.id != str(terminal_source_id)
-                or retry_source_failure_code(prior) is None
+                or prior.status != "infrastructure_failed"
+                or prior.finalize_evidence_id is None
+                or prior.result_json is None or prior.result_digest is None
+                or prior.completion_event_id is not None
+                or stored_result(prior).outcome != "infrastructure_failed"
             ):
                 raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
         expected = 1 if prior is None else prior.evaluation_generation + 1
@@ -239,9 +241,10 @@ class EvaluationCoordinator:
             )
         )
         reference.validate_result(result)
-        classification = classify_result(request, result)
+        result.validate_request(request)
+        # Terminal custody already recomputed this routing under the locked policy.
         return CompletedEvaluation(
-            reference=reference, routing_recommendation=classification.routing, result=result
+            reference=reference, routing_recommendation=run.routing_recommendation, result=result
         )
 
     async def require_current_completion(

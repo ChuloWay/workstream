@@ -74,3 +74,38 @@ async def test_assignment_start_requires_the_started_task(tmp_path, isolated_dat
             h, "UPDATE public.task_assignments SET started_at=clock_timestamp() WHERE id=:id",
             "assignment start requires the started task", **assignment,
         )
+
+
+async def test_a_recorded_decision_cannot_be_rewritten(tmp_path, isolated_database_env):
+    from app.adapters.tasks import task_post_submit_outcome
+    from tests.tasks.post_submit_routing.remediation_support import remediation_source
+
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        async with h.factory() as session, session.begin():
+            await task_post_submit_outcome(session, h.factory).apply(
+                h.envelope, current_generation=None,
+            )
+        submission = {"id": h.request.submission_id}
+        async with h.factory() as session:
+            decided = (await session.execute(text(
+                "SELECT attempt_status,decided_at FROM public.submissions WHERE id=:id"
+            ), submission)).one()
+        assert decided[0] == "needs_revision" and decided[1] is not None
+        for status in ("evaluation_pending", "review_pending", "accepted"):
+            await _refused(
+                h, "UPDATE public.submissions SET attempt_status=:status WHERE id=:id",
+                "not allowed", status=status, **submission,
+            )
+        # Rejection needs a revision expiration receipt for this exact source.
+        await _refused(
+            h, "UPDATE public.submissions SET attempt_status='rejected' WHERE id=:id",
+            "requires owner evidence", **submission,
+        )
+        await _refused(
+            h, "UPDATE public.submissions SET decided_at=decided_at - interval '1 day' WHERE id=:id",
+            "decision is immutable", **submission,
+        )
+        async with h.factory() as session:
+            assert (await session.execute(text(
+                "SELECT attempt_status,decided_at FROM public.submissions WHERE id=:id"
+            ), submission)).one() == decided

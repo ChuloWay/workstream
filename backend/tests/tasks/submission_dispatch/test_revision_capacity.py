@@ -134,8 +134,10 @@ async def test_two_revisions_then_public_and_sql_refusal(
             ), {"id": h.created.submission_id})
         # Intake now rejects excess rounds at the database boundary too. A raw
         # INSERT cannot bypass the cap even before an admission is selected.
+        # A forged successor is a new, undecided attempt.
+        fresh = dict(attempt_status="evaluation_pending", status_reason=None, decided_at=None)
         forbidden = dict(original, id=str(new_record_id()), version=4,
-                         supersedes_submission_id=str(h.created.submission_id))
+                         supersedes_submission_id=str(h.created.submission_id), **fresh)
         with pytest.raises(IntegrityError, match="revision_limit_reached"):
             async with h.factory() as session, session.begin():
                 await session.execute(text(
@@ -147,7 +149,7 @@ async def test_two_revisions_then_public_and_sql_refusal(
             forged = dict(original, id=str(new_record_id()), version=version,
                           supersedes_submission_id=str(h.created.submission_id),
                           submission_bundle_admission_id=None, artifact_binding_id=None,
-                          artifact_content_id=None)
+                          artifact_content_id=None, **fresh)
             with pytest.raises(IntegrityError, match="submission_revision_lineage_invalid"):
                 async with h.factory() as session, session.begin():
                     await session.execute(text(
@@ -231,7 +233,7 @@ async def test_rebase_keeps_history_and_requires_exact_acknowledgement(
     async with remediation_source(tmp_path, isolated_database_env) as h:
         async with h.factory() as session:
             original = await session.scalar(text(
-                "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                "SELECT to_jsonb(s)-ARRAY['attempt_status','status_reason','decided_at','updated_at'] FROM public.submissions s WHERE id=:id"
             ), {"id": h.created.submission_id})
             retained_run = await session.scalar(text(
                 "SELECT to_jsonb(r) FROM public.checker_runs r WHERE id=:id"
@@ -293,7 +295,7 @@ async def test_rebase_keeps_history_and_requires_exact_acknowledgement(
             assert created.json()["submission_version"] == 2
         async with h.factory() as session:
             assert await session.scalar(text(
-                "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                "SELECT to_jsonb(s)-ARRAY['attempt_status','status_reason','decided_at','updated_at'] FROM public.submissions s WHERE id=:id"
             ), {"id": h.created.submission_id}) == original
             assert await session.scalar(text(
                 "SELECT to_jsonb(r) FROM public.checker_runs r WHERE id=:id"

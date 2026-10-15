@@ -456,6 +456,12 @@ def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
                 "status_reason": "revision_deadline_expired",
                 "decided_at": DECIDED,
             },
+            HISTORY
+            | {
+                "status": "needs_revision",
+                "status_reason": "checker_coverage_incomplete",
+                "decided_at": DECIDED,
+            },
         ):
             respond(response, history)
             result = cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json")
@@ -477,6 +483,10 @@ def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
             HISTORY | {"status": "rejected", "decided_at": DECIDED, "status_reason": ""},
             HISTORY | {"status": "rejected", "decided_at": DECIDED, "status_reason": 1},
             HISTORY | {"status": "submitted"},
+            HISTORY | {"status": "accepted", "decided_at": DECIDED,
+                       "status_reason": "checker_coverage_incomplete"},
+            HISTORY | {"status": "needs_revision", "decided_at": DECIDED,
+                       "status_reason": "revision_deadline_expired"},
             HISTORY | {"status": "accepted"},
             HISTORY | {"decided_at": DECIDED},
             HISTORY | {"finding_counts": {"blocking": -1, "warning": 0, "coverage_incomplete": 0}},

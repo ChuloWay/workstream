@@ -7,6 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
+from app.modules.tasks.submission_attempts import record_attempt_outcome
 from app.modules.tasks.api.accepted_effects import (
     TaskAcceptedEffectsFence,
     TaskAcceptedEffectsRequest,
@@ -63,6 +64,12 @@ class TaskAcceptedEffectsParticipant:
             task.status = "accepted"
             assignment.status = "completed"
             await self._session.flush()
+            # Every acceptance trigger shares this write; SQL derives decided_at
+            # from the FinalAcceptance flushed above.
+            await record_attempt_outcome(
+                self._session, submission_id=checked.submission_id,
+                task_id=checked.task_id, outcome="accepted",
+            )
         return TaskAcceptedEffectsResult(
             request=checked,
             task_status="accepted",

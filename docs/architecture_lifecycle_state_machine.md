@@ -324,8 +324,10 @@ checker or human revision may rebase every changed valid component to the comple
 applicable context. The immutable preparation records that next-attempt context
 and never rewrites an earlier Submission, Review, contribution, or award.
 
-Each assignment starts at round 0 with its own revision allowance. Every
-committed `needs_revision` freezes a fresh PostgreSQL-time window using the
+Each assignment starts at round 0 with its own revision allowance. A checker
+coverage return (`needs_revision` with `checker_coverage_incomplete`, used when
+no failed member exists and the locked ReviewPolicy does not require human
+review) spends no round. Every committed `needs_revision` freezes a fresh PostgreSQL-time window using the
 failed attempt's locked RevisionPolicy. Only a committed immutable successor
 Submission ends the prior window. Cap exhaustion refuses a successor; expiry
 records rejection in an immutable receipt, marks the assignment

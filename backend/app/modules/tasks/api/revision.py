@@ -54,7 +54,7 @@ class ContributorRevisionContext(BaseModel):
     source_submission_id: UUID
     source_routing_manifest_id: UUID
     sequence: int = Field(gt=0)
-    next_revision_round: int = Field(gt=0)
+    next_revision_round: int = Field(ge=0)
     max_revision_rounds: int = Field(gt=0)
     requested_at: AwareDatetime
     deadline_at: AwareDatetime

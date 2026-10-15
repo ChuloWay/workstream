@@ -180,12 +180,6 @@ class TaskPostSubmitOutcome:
                 economic = await acceptance.participate(
                     source, effects, receipt, authorized_generation
                 )
-                if not replay:
-                    await self._session.flush()
-                    await record_attempt_outcome(
-                        self._session, submission_id=source.source.submission_id,
-                        task_id=source.source.task_id, outcome="accepted",
-                    )
             await self._audit.record(
                 audit_event_id=audit_id,
                 source=source,

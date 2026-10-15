@@ -83,3 +83,13 @@ class CheckerHistoryReadPort(Protocol):
         run_id: UUID | None = None, limit: int = 25,
         after: tuple[datetime, UUID] | None = None,
     ) -> tuple[list[ContributorCheckerHistory | ManagementCheckerHistory], bool]: ...
+
+    async def read_finding_counts(
+        self, submission_ids: tuple[UUID, ...], *, manager: bool,
+    ) -> dict[UUID, tuple[int, int, int]]:
+        """Return (blocking, warning, coverage_incomplete) per current completed run.
+
+        This satisfies TASK's ``SubmissionFindingCountsPort`` structurally, without
+        a public dependency from CHECKERS back onto TASK.
+        """
+        ...

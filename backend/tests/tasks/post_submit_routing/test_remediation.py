@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from app.adapters.tasks import evaluation_completion_handler, task_post_submit_outcome
 from app.modules.outbox.api import HandlerOutcome
+from tests.tasks.post_submit_routing.backfill_support import assert_backfill_matches_live
 from tests.tasks.post_submit_routing.outcome_support import outcome_snapshot
 from .remediation_support import remediation_source, no_economic_effects
 
@@ -51,6 +52,12 @@ async def test_remediation_outcome_and_replay(tmp_path, isolated_database_env, h
             assert row["authorization_decision_id"] == result.authorization_decision_id
             assert row["assignment_status"] == "active"
             assert row["context_valid"] is True and row["complete"] is True
+            # The routing manifest, not the caller, supplies the decision time.
+            assert (await session.execute(text(
+                "SELECT s.attempt_status,s.decided_at=m.created_at,s.status_reason "
+                "FROM public.submissions s JOIN public.task_post_submit_routing_manifests m "
+                "ON m.submission_id=s.id WHERE m.id=:id"
+            ), {"id": result.routing_manifest_id})).one() == ("needs_revision", True, None)
             assert row["consequence"] == {
                 "kind": "checker_remediation", "expected_task_status": "evaluation_pending",
                 "target_task_status": "needs_revision",
@@ -62,6 +69,7 @@ async def test_remediation_outcome_and_replay(tmp_path, isolated_database_env, h
         async with h.factory() as session:
             assert await outcome_snapshot(session) == before
             await no_economic_effects(session)
+        await assert_backfill_matches_live(h.factory)
 
 
 async def test_false_remediation_does_not_wait_for_rev(tmp_path, isolated_database_env):

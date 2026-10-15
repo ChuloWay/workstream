@@ -1,5 +1,6 @@
 """Direct SQL terminal writes, deliberately bypassing the executor's validation."""
 
+from app.adapters.projects import project_locked_policy_context_port
 from uuid import UUID
 import json
 from app.adapters.auth import post_submit_execution_authority
@@ -39,7 +40,10 @@ async def stage_terminal(session, facts, material, evidence_id):
     """One direct SQL writer, with the caller's explicit receipt and all guards enabled."""
     request, result = facts.request, facts.result
     run = await session.get(CheckerRun, str(result.attempt_id))
-    classification = classify_result(request, result)
+    human = await project_locked_policy_context_port(session).observe_review_mode(
+        request.project_id, request.expected_context.review_policy_id,
+    )
+    classification = classify_result(request, result, human_review_required=human)
     for member in result.execution.external_members if result.execution else ():
         await session.execute(insert(CheckerResult).values(
             id=str(new_record_id()), checker_run_id=run.id, task_id=run.task_id,

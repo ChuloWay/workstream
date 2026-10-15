@@ -528,6 +528,7 @@ class _Execution:
             if self.verdict == "passed"
             else (
                 {
+                    "check_id": "project_rule",
                     "code": "project_rule_failed",
                     "level": "error",
                     "message": "Project rule failed.",

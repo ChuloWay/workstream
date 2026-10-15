@@ -92,21 +92,28 @@ CREATE TRIGGER checker_result_finding_custody BEFORE INSERT OR DELETE OR UPDATE
 CREATE TRIGGER checker_result_finding_no_truncate BEFORE TRUNCATE
   ON public.checker_result_findings FOR EACH STATEMENT
   EXECUTE FUNCTION public.protect_checker_result_finding_custody();
-CREATE CONSTRAINT TRIGGER checker_finding_terminal_custody AFTER INSERT
-  ON public.checker_result_findings DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
-  EXECUTE FUNCTION public.validate_checker_terminal_custody();
+"""
+
+# The v2 contract decodes every stored checker result; v1 evidence would become
+# unreadable, so its presence needs a preservation design rather than an upgrade.
+_REFUSE_RETAINED_V1 = """
+DO $$ BEGIN
+IF EXISTS (SELECT 1 FROM public.checker_results
+           WHERE definition_version='external_checker_result.v1')
+   OR EXISTS (SELECT 1 FROM public.checker_runs
+              WHERE result_json LIKE '%"external_checker_result.v1"%')
+   OR EXISTS (SELECT 1 FROM public.selected_pre_submit_runs
+              WHERE terminal_json::text LIKE '%"external_checker_result.v1"%') THEN
+  RAISE EXCEPTION 'retained external checker v1 results require an explicit preservation design'
+    USING ERRCODE='23514';
+END IF; END $$
 """
 
 _TERMINAL_REPLACEMENTS = (
     (
         "envelope jsonb; expected_members jsonb;",
         "envelope jsonb; expected_members jsonb; actual_findings jsonb; expected_findings jsonb;"
-        " coverage_incomplete boolean;",
-    ),
-    (
-        "THEN (to_jsonb(NEW)->>'checker_run_id')::uuid ELSE NEW.id END;",
-        "THEN (to_jsonb(NEW)->>'checker_run_id')::uuid WHEN TG_TABLE_NAME='checker_result_findings'"
-        " THEN (to_jsonb(NEW)->>'checker_run_id')::uuid ELSE NEW.id END;",
+        " coverage_incomplete boolean; human_review boolean;",
     ),
     (
         """          RAISE EXCEPTION 'checker terminal members differ' USING ERRCODE='23514';
@@ -145,59 +152,83 @@ _TERMINAL_REPLACEMENTS = (
         "SELECT EXISTS(SELECT 1 FROM jsonb_array_elements(result#>'{execution,external_members}') item"
         " CROSS JOIN LATERAL jsonb_array_elements(item#>'{result,findings}') finding"
         " WHERE finding->>'level'='coverage_incomplete') INTO coverage_incomplete;\n"
-        "      expected_route := CASE WHEN failed>0 THEN 'needs_revision'"
-        " WHEN coverage_incomplete THEN 'task_setup_blocked' ELSE 'allow_review' END;",
-    ),
-    (
-        """        RAISE EXCEPTION 'checker completed custody or routing invalid' USING ERRCODE='23514';
-      END IF;
-""",
-        """        RAISE EXCEPTION 'checker completed custody or routing invalid' USING ERRCODE='23514';
-      END IF;
-      IF expected_route='task_setup_blocked' THEN
-        IF current_run.completion_event_id IS NOT NULL THEN
-          RAISE EXCEPTION 'checker coverage hold cannot route' USING ERRCODE='23514';
-        END IF;
-        RETURN NULL;
-      END IF;
-""",
+        "      SELECT p.human_review_required INTO human_review FROM review_policies p"
+        " WHERE p.project_id=current_run.project_id AND p.id=current_run.locked_review_policy_id"
+        " AND p.policy_generation=current_run.locked_review_policy_generation"
+        " AND p.policy_hash=current_run.locked_review_policy_hash;\n"
+        "      IF human_review IS NULL THEN RAISE EXCEPTION 'checker locked review policy missing'"
+        " USING ERRCODE='23514'; END IF;\n"
+        "      -- A coverage gap never auto-accepts: a reviewer judges it, or it returns.\n"
+        "      expected_route := CASE WHEN failed>0 OR (coverage_incomplete AND NOT human_review)"
+        " THEN 'needs_revision' ELSE 'allow_review' END;",
     ),
 )
 
-_RETRY_SOURCE = (
-    (
-        """      IF source.status IS DISTINCT FROM 'infrastructure_failed'
-        OR source.project_id""",
-        """      IF NOT (
-          (source.status='infrastructure_failed'
-           AND source.failure_code IS NOT DISTINCT FROM r.failure_code
-           AND source.result_json::jsonb->>'outcome'='infrastructure_failed'
-           AND source.result_json::jsonb->>'infrastructure_failure_code' IS NOT DISTINCT FROM r.failure_code)
-          OR (source.status='completed' AND source.routing_recommendation='task_setup_blocked'
-           AND source.failure_code IS NULL AND r.failure_code='coverage_incomplete'
-           AND source.result_json::jsonb->>'outcome'='completed'))
-        OR source.project_id""",
+# A coverage return spends no revision round: neither round count includes it.
+_ROUND_COUNTS = {
+    "public.guard_submission_revision_capacity()": (
+        (
+            """      WHERE s.task_assignment_id=NEW.task_assignment_id
+        AND s.version<=predecessor.version;""",
+            """      WHERE s.task_assignment_id=NEW.task_assignment_id
+        AND s.version<=predecessor.version
+        AND s.status_reason IS DISTINCT FROM 'checker_coverage_incomplete';""",
+        ),
     ),
-    (
-        """        OR source.failure_code IS DISTINCT FROM r.failure_code
-        OR source.result_json::jsonb->>'outcome' IS DISTINCT FROM 'infrastructure_failed'
-        OR source.result_json::jsonb->>'infrastructure_failure_code' IS DISTINCT FROM r.failure_code
-""",
-        "",
+    "public.guard_revision_preparation()": (
+        (
+            """ WHERE counted.task_assignment_id=NEW.assignment_id
+   AND counted.version<=NEW.source_submission_version;""",
+            """ WHERE counted.task_assignment_id=NEW.assignment_id
+   AND counted.version<=NEW.source_submission_version
+   AND counted.status_reason IS DISTINCT FROM 'checker_coverage_incomplete';""",
+        ),
     ),
-)
+}
 
-_SUPERSESSION = (
-    (
-        "IF prior.status IS DISTINCT FROM 'infrastructure_failed' THEN RETURN NULL; END IF;",
-        "IF prior.status IS DISTINCT FROM 'infrastructure_failed' AND NOT (prior.status='completed'"
-        " AND prior.routing_recommendation='task_setup_blocked') THEN RETURN NULL; END IF;",
-    ),
-    (
-        "'terminal checker infrastructure retry requires Operator receipt'",
-        "'terminal checker retry requires Operator receipt'",
-    ),
-)
+_ROUND_ZERO = """
+ALTER TABLE public.task_revision_preparations
+  DROP CONSTRAINT ck_task_revision_preparations_positive_rounds,
+  ADD CONSTRAINT ck_task_revision_preparations_positive_rounds CHECK (
+    sequence > 0 AND source_submission_version > 0 AND next_revision_round >= 0
+    AND max_revision_rounds > 0);
+"""
+
+# Backfills replay what each deciding owner would have written; tests run them
+# against rows produced by the live owners to prove the two agree.
+BACKFILL_SUBMISSION_ATTEMPTS = """
+UPDATE public.submissions s SET attempt_status='review_pending'
+  FROM public.task_post_submit_routing_manifests m
+  WHERE m.submission_id=s.id AND m.routing_recommendation='allow_review'
+    AND m.human_review_required;
+UPDATE public.submissions s SET attempt_status='needs_revision', decided_at=m.created_at,
+    status_reason=CASE WHEN r.failed_count=0 THEN 'checker_coverage_incomplete' END
+  FROM public.task_post_submit_routing_manifests m
+  JOIN public.checker_runs r ON r.id=m.checker_run_id
+  WHERE m.submission_id=s.id AND m.routing_recommendation='needs_revision';
+UPDATE public.submissions s SET attempt_status='rejected',
+    status_reason='revision_deadline_expired', decided_at=e.expired_at
+  FROM public.task_revision_expirations e WHERE e.source_submission_id=s.id;
+UPDATE public.submissions s SET attempt_status='accepted', decided_at=a.accepted_at,
+    status_reason=NULL
+  FROM public.final_acceptances a WHERE a.submission_id=s.id;
+UPDATE public.submissions SET updated_at=greatest(submitted_at, coalesce(decided_at, submitted_at),
+  coalesce((SELECT max(m.created_at) FROM public.task_post_submit_routing_manifests m
+            WHERE m.submission_id=submissions.id), submitted_at));
+
+"""
+
+BACKFILL_ASSIGNMENT_STARTS = """
+UPDATE public.task_assignments a SET started_at=(
+  SELECT min(e.created_at) FROM public.audit_events e
+  WHERE e.entity_type='task' AND e.entity_id=a.task_id
+    AND e.event_type IN ('TaskStarted','TaskStartOverridden')
+    AND e.created_at >= a.assigned_at
+    AND (a.released_at IS NULL OR e.created_at <= a.released_at));
+UPDATE public.task_assignments SET updated_at=greatest(assigned_at,
+  coalesce(started_at, assigned_at), coalesce(released_at, assigned_at));
+
+"""
 
 _SUBMISSION_ATTEMPTS = """
 ALTER TABLE public.submissions
@@ -206,35 +237,20 @@ ALTER TABLE public.submissions
   ADD COLUMN decided_at timestamp with time zone,
   ADD COLUMN updated_at timestamp with time zone DEFAULT now() NOT NULL;
 
-UPDATE public.submissions s SET attempt_status='review_pending'
-  FROM public.task_post_submit_routing_manifests m
-  WHERE m.submission_id=s.id AND m.routing_recommendation='allow_review'
-    AND m.human_review_required;
-UPDATE public.submissions s SET attempt_status='needs_revision', decided_at=m.created_at
-  FROM public.task_post_submit_routing_manifests m
-  WHERE m.submission_id=s.id AND m.routing_recommendation='needs_revision';
-UPDATE public.submissions s SET attempt_status='rejected',
-    status_reason='revision_deadline_expired', decided_at=e.expired_at
-  FROM public.task_revision_expirations e WHERE e.source_submission_id=s.id;
-UPDATE public.submissions s SET attempt_status='accepted', decided_at=a.accepted_at
-  FROM public.final_acceptances a WHERE a.submission_id=s.id;
-UPDATE public.submissions SET updated_at=greatest(submitted_at, coalesce(decided_at, submitted_at),
-  coalesce((SELECT max(m.created_at) FROM public.task_post_submit_routing_manifests m
-            WHERE m.submission_id=submissions.id), submitted_at));
-
 ALTER TABLE public.submissions
   ADD CONSTRAINT ck_submissions_attempt_status CHECK (attempt_status in
     ('evaluation_pending','review_pending','accepted','needs_revision','rejected')),
   ADD CONSTRAINT ck_submissions_attempt_decision CHECK (
     (attempt_status in ('accepted','needs_revision','rejected')) = (decided_at is not null)),
   ADD CONSTRAINT ck_submissions_status_reason CHECK (status_reason is null or
-    (attempt_status='rejected' and status_reason='revision_deadline_expired'));
+    (attempt_status='rejected' and status_reason='revision_deadline_expired') or
+    (attempt_status='needs_revision' and status_reason='checker_coverage_incomplete'));
 CREATE INDEX ix_submissions_contributor_updated
   ON public.submissions USING btree (contributor_id, updated_at, id);
 
 CREATE FUNCTION public.guard_submission_attempt_status() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public,pg_temp AS $$
-DECLARE evidence_at timestamptz;
+DECLARE evidence_at timestamptz; coverage_reason text;
 BEGIN
   IF TG_OP='INSERT' THEN
     IF NEW.attempt_status IS DISTINCT FROM 'evaluation_pending'
@@ -258,10 +274,14 @@ BEGIN
         AND m.routing_recommendation='allow_review' AND m.human_review_required;
     NEW.decided_at := NULL; NEW.status_reason := NULL;
   ELSIF OLD.attempt_status='evaluation_pending' AND NEW.attempt_status='needs_revision' THEN
-    SELECT m.created_at INTO evidence_at FROM public.task_post_submit_routing_manifests m
+    -- A return without failed members is a checker coverage gap; it spends no round.
+    SELECT m.created_at, CASE WHEN r.failed_count=0 THEN 'checker_coverage_incomplete' END
+      INTO evidence_at, coverage_reason
+      FROM public.task_post_submit_routing_manifests m
+      JOIN public.checker_runs r ON r.id=m.checker_run_id
       WHERE m.submission_id=OLD.id AND m.task_id=OLD.task_id
         AND m.routing_recommendation='needs_revision';
-    NEW.decided_at := evidence_at; NEW.status_reason := NULL;
+    NEW.decided_at := evidence_at; NEW.status_reason := coverage_reason;
   ELSIF OLD.attempt_status IN ('evaluation_pending','review_pending')
         AND NEW.attempt_status='accepted' THEN
     SELECT a.accepted_at INTO evidence_at FROM public.final_acceptances a
@@ -295,15 +315,6 @@ _ASSIGNMENTS_AND_TASKS = """
 ALTER TABLE public.task_assignments
   ADD COLUMN started_at timestamp with time zone,
   ADD COLUMN updated_at timestamp with time zone DEFAULT now() NOT NULL;
-
-UPDATE public.task_assignments a SET started_at=(
-  SELECT min(e.created_at) FROM public.audit_events e
-  WHERE e.entity_type='task' AND e.entity_id=a.task_id
-    AND e.event_type IN ('TaskStarted','TaskStartOverridden')
-    AND e.created_at >= a.assigned_at
-    AND (a.released_at IS NULL OR e.created_at <= a.released_at));
-UPDATE public.task_assignments SET updated_at=greatest(assigned_at,
-  coalesce(started_at, assigned_at), coalesce(released_at, assigned_at));
 
 CREATE INDEX ix_task_assignments_contributor_updated
   ON public.task_assignments USING btree (contributor_id, updated_at, id);
@@ -341,17 +352,32 @@ CREATE TRIGGER task_assignment_started_at BEFORE INSERT OR UPDATE ON public.task
 
 def upgrade():
     op.execute("SET LOCAL search_path=pg_catalog,public,pg_temp")
+    op.execute(_REFUSE_RETAINED_V1)
     _replace(
         "public.protect_checker_result_custody()",
         (("'external_checker_result.v1'", "'external_checker_result.v2'"),),
     )
     _execute_script(_FINDINGS_TABLE)
     _replace("public.validate_checker_terminal_custody()", _TERMINAL_REPLACEMENTS)
-    _replace("public.checker_retry_receipt_valid(uuid)", _RETRY_SOURCE)
-    _replace("public.require_checker_failed_supersession_receipt()", _SUPERSESSION)
     _replace("public.guard_dispatched_submission_immutable()", _DISPATCHED_IMMUTABLE)
-    _execute_script(_SUBMISSION_ATTEMPTS)
-    _execute_script(_ASSIGNMENTS_AND_TASKS)
+    submission_columns, submission_guards = _SUBMISSION_ATTEMPTS.split(
+        "ALTER TABLE public.submissions\n  ADD CONSTRAINT", 1,
+    )
+    _execute_script(submission_columns)
+    _execute_script(BACKFILL_SUBMISSION_ATTEMPTS)
+    # Fire the deferred row checks the backfill queued so later DDL may proceed.
+    op.execute("SET CONSTRAINTS ALL IMMEDIATE")
+    _execute_script("ALTER TABLE public.submissions\n  ADD CONSTRAINT" + submission_guards)
+    assignment_columns, assignment_guards = _ASSIGNMENTS_AND_TASKS.split(
+        "CREATE INDEX ix_task_assignments_contributor_updated", 1,
+    )
+    _execute_script(assignment_columns)
+    _execute_script(BACKFILL_ASSIGNMENT_STARTS)
+    op.execute("SET CONSTRAINTS ALL IMMEDIATE")
+    _execute_script("CREATE INDEX ix_task_assignments_contributor_updated" + assignment_guards)
+    for signature, replacements in _ROUND_COUNTS.items():
+        _replace(signature, replacements)
+    _execute_script(_ROUND_ZERO)
 
 
 def downgrade():

@@ -25,7 +25,7 @@ class TaskRevisionPreparation(Base):
         UniqueConstraint("predecessor_id", name="uq_revision_preparation_successor"),
         UniqueConstraint("routing_manifest_id", "sequence", name="uq_revision_preparation_sequence"),
         Index("uq_revision_preparation_root", "routing_manifest_id", unique=True, postgresql_where=text("predecessor_id IS NULL")),
-        CheckConstraint("sequence > 0 and source_submission_version > 0 and next_revision_round > 0 and max_revision_rounds > 0", name="positive_rounds"),
+        CheckConstraint("sequence > 0 and source_submission_version > 0 and next_revision_round >= 0 and max_revision_rounds > 0", name="positive_rounds"),
         CheckConstraint("(sequence = 1) = (predecessor_id IS NULL)", name="chain_shape"),
         CheckConstraint("outcome in ('kept','rebased','blocked')", name="outcome"),
         CheckConstraint("blocked_reason is null or blocked_reason in ('context_blocked','revision_limit_reached','revision_deadline_expired')", name="blocked_reason"),

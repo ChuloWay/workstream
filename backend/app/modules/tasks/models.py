@@ -421,7 +421,9 @@ class Submission(Base):
         ),
         CheckConstraint(
             "status_reason is null or (attempt_status='rejected' and "
-            "status_reason='revision_deadline_expired')",
+            "status_reason='revision_deadline_expired') or "
+            "(attempt_status='needs_revision' and "
+            "status_reason='checker_coverage_incomplete')",
             name="status_reason",
         ),
         Index("ix_submissions_contributor_updated", "contributor_id", "updated_at", "id"),

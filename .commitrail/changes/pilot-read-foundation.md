@@ -19,8 +19,10 @@ It is the first of three PRs for the read-API issue:
 3. Project Manager and Finance reads C1–C9 (including activation readiness) and D1.
 
 The human decided the split, the contract extension, stored columns with
-backfill over read-time derivation, and routing `coverage_incomplete` to a
-manager-visible hold.
+backfill over read-time derivation, and how a coverage gap is routed: to human
+review when the locked ReviewPolicy requires it, otherwise back to the
+contributor without spending a revision round. A hold that could leave a task
+in `evaluation_pending` indefinitely was explicitly rejected.
 
 ## Current behavior
 
@@ -57,9 +59,14 @@ manager-visible hold.
   finalization transaction and verified against the stored result by the
   existing deferred terminal-custody trigger.
 - Route a completed result with no failed member and at least one
-  `coverage_incomplete` finding to `task_setup_blocked`: no completion event, no
-  TASK routing, no acceptance; the task stays `evaluation_pending`. Extend the
-  existing Operator checker retry to accept that terminal hold as a source.
+  `coverage_incomplete` finding by the task's locked ReviewPolicy: `allow_review`
+  (to `review_pending`) when human review is required, otherwise
+  `needs_revision`. Classification reads the policy through an injected
+  PROJECTS review-mode port; terminal SQL custody recomputes the same route.
+- Record such a return as `needs_revision` with `status_reason`
+  `checker_coverage_incomplete` and exclude it from every revision-round count
+  (capacity guard, revision-preparation guard, TASK preparation, submission
+  context and replay), allowing `next_revision_round` 0.
 - Add `attempt_status`, `status_reason`, `decided_at` and DB-maintained
   `updated_at` to `submissions`, set by the existing deciding operations
   (dispatch, post-submit routing, shared false-policy acceptance, revision
@@ -71,10 +78,18 @@ manager-visible hold.
   `path`, `line` and the `coverage_incomplete` status; members without findings
   keep one entry. B2: typed submission `status`, stored `status_reason`,
   `decided_at` and `finding_counts` on both history projections.
-- Update the Go CLI strict decoders (history, checker results and the 422
-  pre-submit feedback findings) and their integration fixtures for B1/B2, the
-  authorization OpenAPI field-set assertions, the CI lane catalogue for the new
-  test modules, the journey probe's outcome assertions, and current docs.
+- Update the Go CLI strict decoders (history, checker results, pre-submit
+  feedback findings, revision context round) and their integration fixtures.
+- Update the authorization OpenAPI field-set assertions, the CI lane catalogue
+  for the new test modules, the journey probe's outcome assertions, the Alembic
+  environment head pin, and current docs (README, checker framework, data model,
+  authorization spec, roadmap).
+- Refuse the upgrade, before any DDL, when retained `external_checker_result.v1`
+  evidence exists, as earlier migrations do for evidence that needs an explicit
+  preservation design.
+- Constrain finding paths to safe relative archive paths in Python and the Rust
+  SDK, and require both location keys in the Rust SDK so its digest matches
+  Python's.
 - Batch the per-row evidence and per-run result queries the history reads
   already issue, removing their N+1 shape.
 
@@ -95,6 +110,9 @@ manager-visible hold.
   `submissions.status`, because seven Python checks and a SQL guard use
   `status = 'submitted'` as liveness inside routing, acceptance and their exact
   replays. Changing those values would break replay of decided attempts.
+- `accepted` is written inside the shared TASK accepted-effects operation, so
+  every acceptance trigger (the false-policy route now, human `accept` later)
+  records it once.
 - Each attempt-status transition is guarded in SQL by the evidence of the
   owner that decided it: an `allow_review` or `needs_revision` routing manifest,
   a FinalAcceptance for the submission, or a revision expiration receipt for
@@ -102,17 +120,19 @@ manager-visible hold.
 - `check_id` is required in v2 so every stored finding is attributable to the
   check that produced it. `coverage_incomplete` is evidence about the checker,
   not the contributor, so it never costs a revision round.
-- A coverage hold remains recoverable through the existing Operator retry
-  rather than a new workflow. Contributors do not see held results, matching
-  the existing `task_setup_blocked` visibility rule.
+- The review requirement is the task's locked ReviewPolicy, read through the
+  PROJECTS port that TASK routing already uses. The completion coordinator
+  returns the stored routing, which terminal custody already verified against
+  that policy, instead of recomputing it.
 
 ## Acceptance criteria
 
 - [ ] A v2 result with `check_id`, `path`, `line` and each level round-trips
   from the checker contract through stored findings to both checker-result reads.
-- [ ] `coverage_incomplete` without errors yields `task_setup_blocked`, no
-  completion event, no acceptance, task still `evaluation_pending`, and an
-  Operator retry succeeds from that hold.
+- [ ] `coverage_incomplete` without errors reaches `review_pending` under a
+  true ReviewPolicy and returns to the contributor under a false one, recorded
+  as `checker_coverage_incomplete` with `next_revision_round` 0; it never
+  auto-accepts and never leaves the task in `evaluation_pending`.
 - [ ] Routing, false-policy acceptance and revision expiry write the matching
   `attempt_status`/`decided_at`/`status_reason` atomically; SQL rejects each
   transition without its evidence and rejects edits to a final status.
@@ -128,8 +148,8 @@ manager-visible hold.
 - Risk class: `L1`
 - Required reviewers: `architecture`, `security`, `qa`, `test_delta`,
   `product_ops`, `documentation`
-- Human review focus: the `attempt_status` versus `status` split; routing
-  coverage gaps to a hold under false ReviewPolicy; requiring `check_id`.
+- Human review focus: the `attempt_status` versus `status` split; coverage-gap
+  routing and its round exemption; requiring `check_id` and safe paths.
 
 ## Evidence
 
@@ -146,5 +166,10 @@ Recorded after internal review.
 
 - Current-source reconciliation: based on main at the PILOT-08 merge (#569).
 - Next usable boundary: PILOT-READ-2 contributor reads A1–A6 and B3.
-- Remaining risks: human review decisions still do not write `attempt_status`
-  until #554 composes them.
+- Remaining risks: human review decisions do not write `attempt_status` yet.
+  #554 must extend the attempt-status guard (`review_pending` to `accepted`
+  through the shared acceptance effects already works; `review_pending` to
+  `needs_revision`/`rejected` needs Review evidence) before human
+  `needs_revision` reuses revision expiry. The Go CLI changes are not compiled
+  locally (no Go 1.27 toolchain in the authoring sandbox); hosted CLI CI proves
+  them.

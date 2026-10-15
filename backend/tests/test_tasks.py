@@ -34,6 +34,7 @@ from projects.guide_fixtures import complete_guide_payload
 from tests.projects.policy_read_faults import corrupt_locked_policy_reads
 from auth_concurrency_support import wait_for_named_database_lock
 from tests.submission_fixtures import seed_retained_submission, route_retained_checker_remediation
+from tests.tasks.post_submit_routing.backfill_support import assert_backfill_matches_live
 
 from app.core.config import get_settings
 from app.db import models as db_models
@@ -2002,6 +2003,7 @@ async def test_full_task_claim_start_flow_writes_audit_events(
         assert abs((assignment.started_at - start_event["created_at"]).total_seconds()) < 5
     assert persisted_event is not None
     assert persisted_event.claim_snapshot == {}
+    await assert_backfill_matches_live(db_session.get_session_factory(), assignments=True)
 
 
 @pytest.mark.parametrize("authority_state", ["absent", "revoked"])

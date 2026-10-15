@@ -201,7 +201,7 @@ def test_completed_and_infrastructure_results_are_closed_and_request_bound() -> 
                 code="archive.unsafe_path",
                 level="error",
                 message="archive contains an unsafe path",
-                path="../escape",
+                path="src/escape.txt",
                 line=3,
             ),
         ),
@@ -321,3 +321,18 @@ def test_v2_findings_carry_check_location_and_coverage_level() -> None:
             check_id="coverage.files", code="c", level="warning", message="m",
             path="a", line=0,
         )
+
+
+@pytest.mark.parametrize("path", [
+    "../x", "/etc/passwd", "a//b", "a/./b", "src\\main.rs", "dir/ ", "dir/.",
+    "c:/x", "line\nbreak", "bidi\u202eexe.txt", "tab\tname", "",
+])
+def test_finding_paths_must_be_safe_relative_archive_paths(path) -> None:
+    with pytest.raises(ValidationError):
+        ExternalCheckerFinding(
+            check_id="paths.check", code="paths.code", level="warning", message="m", path=path,
+        )
+    assert ExternalCheckerFinding(
+        check_id="paths.check", code="paths.code", level="warning", message="m",
+        path="src/naïve/main.rs",
+    ).path == "src/naïve/main.rs"

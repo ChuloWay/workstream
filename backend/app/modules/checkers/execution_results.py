@@ -20,9 +20,15 @@ class ResultClassification:
 
 
 def classify_result(
-    request: PostSubmissionExecutionRequest, result: PostSubmissionExecutionResult
+    request: PostSubmissionExecutionRequest, result: PostSubmissionExecutionResult,
+    *, human_review_required: bool,
 ) -> ResultClassification:
-    """Validate every selected member before deriving policy-governed routing."""
+    """Validate every selected member before deriving policy-governed routing.
+
+    A coverage gap (``coverage_incomplete`` without errors) never auto-accepts:
+    with human review it goes to a reviewer, otherwise it returns to the
+    contributor. TASK records that return without spending a revision round.
+    """
     result.validate_request(request)
     if result.outcome == "infrastructure_failed":
         return ResultClassification("not_evaluated", 0, 0, 0, 0)
@@ -33,11 +39,9 @@ def classify_result(
         for member in members
         for finding in member.result.findings
     )
-    # A coverage gap is the checker's, not the contributor's: hold for an
-    # Operator instead of auto-accepting or spending a revision round.
+    returned = failed or (coverage_incomplete and not human_review_required)
     return ResultClassification(
-        "needs_revision" if failed else
-        "task_setup_blocked" if coverage_incomplete else "allow_review",
+        "needs_revision" if returned else "allow_review",
         sum(member.result.verdict == "passed" for member in members),
         0,
         failed,
@@ -51,6 +55,6 @@ RESULT_STATUS_MESSAGES = {
     "failed": ("Project check failed.", "Review the project guide and check findings."),
     "coverage_incomplete": (
         "Check could not evaluate part of the submission.",
-        None,
+        "Make the listed files readable by the project checks, then resubmit.",
     ),
 }

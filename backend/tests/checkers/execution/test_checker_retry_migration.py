@@ -201,7 +201,7 @@ async def test_retry_upgrade_preserves_evidence_and_installs_closure(
         }
         with pytest.raises(
             IntegrityError,
-            match="terminal checker retry requires Operator receipt",
+            match="terminal checker infrastructure retry requires Operator receipt",
         ):
             async with db_session.get_session_factory().begin() as session:
                 await session.execute(text("""

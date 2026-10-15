@@ -59,6 +59,7 @@ from app.modules.checkers.api.materialization import (
     PostSubmissionMaterializationFailure,
 )
 from app.modules.outbox.api import OutboxAppendPort
+from app.modules.checkers.api.execution import ReviewModePort
 from app.modules.outbox.api import OutboxAppendInput
 
 def _lease(run):
@@ -147,9 +148,11 @@ class PostSubmissionExecutor:
         materialization: PostSubmissionMaterializationPort,
         selected_execution: ExternalCheckerExecutionAdapter | None = None,
         outbox: Callable[[AsyncSession], OutboxAppendPort],
+        review_modes: Callable[[AsyncSession], ReviewModePort],
     ):
         """Receive explicit session, authority, materialization and publication ports."""
         self._sessions = sessions
+        self._review_modes = review_modes
         self._execute_authority, self._finalize_authority = execute_authority, finalize_authority
         self._materialization, self._outbox = materialization, outbox
         self._selected_execution = selected_execution
@@ -274,7 +277,7 @@ class PostSubmissionExecutor:
         """Fresh phase-specific PREP and one atomic terminal/member/outbox commit."""
         facts = FinalizeFacts.model_validate(facts)
         request, result = facts.request, facts.result
-        classification = classify_result(request, result)
+        result.validate_request(request)
         if (result.attempt_id, result.result_id) != (
             facts.lease.reservation.attempt_id,
             facts.lease.reservation.result_id,
@@ -299,6 +302,12 @@ class PostSubmissionExecutor:
         ):
             raise CheckerExecutionUnavailable("checker_material_custody_unavailable")
         async with self._sessions() as session, session.begin():
+            human = await self._review_modes(session).observe_review_mode(
+                request.project_id, request.expected_context.review_policy_id,
+            )
+            if type(human) is not bool:
+                raise CheckerExecutionUnavailable("checker_review_mode_unavailable")
+            classification = classify_result(request, result, human_review_required=human)
             authority = self._finalize_authority(session)
             await authority.preflight(request)
             async with authority.prepare_finalization(request) as prepared:
@@ -334,7 +343,7 @@ class PostSubmissionExecutor:
                 )
                 completed_at = await repo.now()
                 await repo.write_members(run, result)
-                if result.outcome == "completed" and classification.routing != "task_setup_blocked":
+                if result.outcome == "completed":
                     reference = SelectedPostSubmitCurrentResultReference(
                         **result.model_dump(
                             include=set(SelectedPostSubmitCurrentResultReference.model_fields)

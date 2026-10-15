@@ -33,6 +33,7 @@ from app.modules.tasks.revision.models import TaskRevisionExpiration, TaskRevisi
 from app.modules.tasks.revision.service import project_current_revision
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.submission_composition import TaskSubmissionCreationService
+from tests.tasks.post_submit_routing.backfill_support import assert_backfill_matches_live
 from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.tasks.post_submit_routing.remediation_support import remediation_source, no_economic_effects
 from tests.tasks.post_submit_routing.support import revision_archive
@@ -226,10 +227,6 @@ async def test_due_failure_auto_rejects_and_releases_with_immutable_receipt(
                 "SELECT to_jsonb(s)-ARRAY['attempt_status','status_reason','decided_at','updated_at'] "
                 "FROM public.submissions s WHERE id=:id"
             ), {"id": h.created.submission_id})
-            assert (await session.execute(text(
-                "SELECT attempt_status,status_reason,decided_at IS NOT NULL "
-                "FROM public.submissions WHERE id=:id"
-            ), {"id": h.created.submission_id})).one() == ("needs_revision", None, True)
         source_id, recovered, event_id = await expire_retained_revision(
             h, monkeypatch=monkeypatch, isolated_database_env=isolated_database_env,
         )
@@ -293,6 +290,8 @@ async def test_due_failure_auto_rejects_and_releases_with_immutable_receipt(
                        if item["id"] == str(h.created.submission_id))
             assert row["status"] == "rejected"
             assert row["status_reason"] == "revision_deadline_expired"
+            assert row["decided_at"] is not None
+        await assert_backfill_matches_live(h.factory)
 
 
 async def test_expiry_replays_one_receipt_when_effect_commits_before_ack(
@@ -402,6 +401,10 @@ async def _assert_expired_creation_absent(h, source_id, admission_id, before):
         assert await session.scalar(text(
             "SELECT count(*) FROM public.task_revision_expirations WHERE routing_manifest_id=:source"
         ), {"source": source_id}) == 1
+        # Expiry, not the losing final POST, decided the source attempt.
+        assert (await session.execute(text(
+            "SELECT attempt_status,status_reason FROM public.submissions WHERE id=:id"
+        ), {"id": h.created.submission_id})).one() == ("rejected", "revision_deadline_expired")
         assert (await session.execute(text(
             "SELECT status,assigned_to FROM public.workstream_tasks WHERE id=:task"
         ), {"task": h.request.task_id})).one() == ("ready", None)
@@ -590,7 +593,8 @@ async def test_final_submission_commit_boundary_serializes_expiry(
                 "WHERE d.submission_id=:submission"
             ), {"submission": final.json()["submission_id"]}) is True
             assert await session.scalar(text(
-                "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:submission"
+                "SELECT to_jsonb(s)-ARRAY['attempt_status','status_reason','decided_at','updated_at'] "
+                "FROM public.submissions s WHERE id=:submission"
             ), {"submission": h.created.submission_id}) == before[0][0]
             await no_economic_effects(session)
 

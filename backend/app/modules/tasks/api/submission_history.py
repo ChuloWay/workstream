@@ -71,7 +71,7 @@ class SubmissionFindingCountsPort(Protocol):
 SubmissionAttemptStatus = Literal[
     "evaluation_pending", "review_pending", "accepted", "needs_revision", "rejected",
 ]
-SubmissionStatusReason = Literal["revision_deadline_expired"]
+SubmissionStatusReason = Literal["revision_deadline_expired", "checker_coverage_incomplete"]
 
 
 class ContributorSubmissionHistory(BaseModel):

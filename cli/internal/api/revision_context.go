@@ -73,7 +73,7 @@ func validateRevisionContext(raw json.RawMessage, value *RevisionContext) error 
 	}, nil)
 	if err != nil || !validUUID(value.PreparationID) || !contextPolicyDigest.MatchString(value.PreparationSHA256) ||
 		!validUUID(value.SourceSubmissionID) || !validUUID(value.SourceRoutingManifestID) ||
-		value.Sequence <= 0 || value.NextRevisionRound <= 0 || value.MaxRevisionRounds <= 0 ||
+		value.Sequence <= 0 || value.NextRevisionRound < 0 || value.MaxRevisionRounds <= 0 ||
 		!validTime(value.RequestedAt) || !validTime(value.DeadlineAt) || value.Changes == nil || len(value.Changes) > 8 {
 		return revisionInvalid()
 	}

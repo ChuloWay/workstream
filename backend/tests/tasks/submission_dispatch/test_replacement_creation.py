@@ -91,7 +91,8 @@ async def _creation_snapshot(h):
                 text(
                     """
                     SELECT
-                      (SELECT jsonb_agg(to_jsonb(s) ORDER BY s.id)
+                      (SELECT jsonb_agg(to_jsonb(s)-ARRAY['attempt_status','status_reason',
+                                'decided_at','updated_at'] ORDER BY s.id)
                          FROM public.submissions s),
                       (SELECT jsonb_agg(to_jsonb(d) ORDER BY d.submission_id)
                          FROM public.submission_dispatches d),

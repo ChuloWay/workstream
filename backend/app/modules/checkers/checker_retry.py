@@ -1,4 +1,4 @@
-"""One hidden Operator retry of a terminal checker infrastructure failure or coverage hold."""
+"""One hidden Operator retry of a terminal checker infrastructure failure."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from app.modules.checkers.api.evaluation_contract import PostSubmissionExecution
 from app.modules.checkers.api.selected_post_submit import make_selected_post_submit_request
 from app.modules.checkers.execution_coordination import EvaluationCoordinator
 from app.modules.checkers.execution_repository import (
-    require_transaction, retry_source_failure_code, stored_request,
+    require_transaction, stored_request, stored_result,
 )
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun
 from app.modules.outbox.api import OutboxAppendInput, OutboxAppendPort
@@ -29,11 +29,19 @@ from app.modules.outbox.api import OutboxAppendInput, OutboxAppendPort
 
 def _source_from_run(run: CheckerRun) -> tuple[PostSubmissionExecutionRequest, CheckerRetrySource]:
     """Require a real terminal result/finalization before any new Operator effect."""
-    failure_code = retry_source_failure_code(run)
-    if failure_code is None:
+    if (
+        run.status != "infrastructure_failed" or run.finalize_evidence_id is None
+        or run.result_json is None or run.result_digest is None
+        or run.completion_event_id is not None or run.failure_code is None
+    ):
         raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
     request = stored_request(run)
-    if request.evaluation_generation != run.evaluation_generation:
+    result = stored_result(run)
+    if (
+        result.outcome != "infrastructure_failed"
+        or result.infrastructure_failure_code != run.failure_code
+        or request.evaluation_generation != run.evaluation_generation
+    ):
         raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
     return request, CheckerRetrySource(
         project_id=request.project_id, task_id=request.task_id,
@@ -43,7 +51,7 @@ def _source_from_run(run: CheckerRun) -> tuple[PostSubmissionExecutionRequest, C
         source_request_digest=request.request_sha256,
         source_result_id=UUID(run.result_id), source_result_digest=run.result_digest,
         source_finalize_evidence_id=UUID(run.finalize_evidence_id),
-        source_generation=run.evaluation_generation, failure_code=failure_code,
+        source_generation=run.evaluation_generation, failure_code=run.failure_code,
     )
 
 

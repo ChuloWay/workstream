@@ -1196,7 +1196,9 @@ Fields:
 - `created_at`
 
 Revision rounds are assignment-scoped: initial round 0, then at most
-`max_revision_rounds` replacements. Each committed `needs_revision` starts a
+`max_revision_rounds` replacements. A checker coverage return
+(`checker_coverage_incomplete`) is not counted, so the next attempt keeps its
+round and `next_revision_round` may be 0. Each committed `needs_revision` starts a
 fresh PostgreSQL-time window using the failed attempt's locked policy. Only
 immutable resubmission ends it. Cap exhaustion refuses a successor; expiry
 retains an immutable rejection receipt, releases the outstanding assignment
@@ -1640,10 +1642,12 @@ rejection lifecycle states.
 Attempt outcome (`attempt_status`, published as the read `status`):
 
 - `evaluation_pending` — created with the Submission and kept through
-  post-submit checks, infrastructure retries and coverage holds
+  post-submit checks and infrastructure retries
 - `review_pending` — an `allow_review` routing manifest sent it to human review
 - `accepted` — a FinalAcceptance exists for this Submission
-- `needs_revision` — a `needs_revision` routing manifest exists
+- `needs_revision` — a `needs_revision` routing manifest exists; when its
+  run had no failed member (a checker coverage gap) `status_reason` is
+  `checker_coverage_incomplete` and the attempt spends no revision round
 - `rejected` — a revision expiration receipt names this Submission as its
   source; `status_reason` is `revision_deadline_expired`
 
@@ -1712,7 +1716,9 @@ an independently mutable stored flag. Current-result consumers hold the caller
 transaction while checking this fence; an old event is not perpetual authority.
 
 Completed routing is `allow_review`, `needs_revision` or `task_setup_blocked`,
-derived from the locked blocking severities and complete member set. Unfinished
+derived from the locked blocking severities and complete member set; a result
+with no failed member but a `coverage_incomplete` finding is `allow_review` when
+the locked ReviewPolicy requires human review and `needs_revision` otherwise. Unfinished
 or infrastructure-failed runs use `not_evaluated`. `allow_review` means no
 blocking evaluation finding, never acceptance: later TASK routing follows the
 locked human-review requirement, including shared authorized acceptance when
@@ -1748,6 +1754,24 @@ bounded messages and contributor visibility from these facts; arbitrary messages
 metadata and evidence links are not stored on checker results. Private request,
 policy, receipt and material facts are excluded from public history projections.
 Pre-submit evidence remains a separate intake contract and creates no CheckerRun.
+
+## CheckerResultFinding
+
+One immutable finding of one member, stored as `checker_result_findings` in the
+same finalization transaction as its member.
+
+Fields:
+
+- `id`, `checker_result_id`, `checker_run_id`, `task_id`, `submission_id`
+- `member_order`, `finding_order` (0–255)
+- `check_id`, `code`, `level` (`info`, `warning`, `error`, `coverage_incomplete`)
+- `path` (a safe relative archive path) and `line` (1-based, only with a path)
+- `created_at`
+
+Insertion requires the running parent and the member's own run and order.
+Updates, deletion and truncation reject. The deferred terminal-custody trigger
+requires the stored findings to equal the findings in the run's stored result,
+in order. History lists one entry per finding.
 
 ## CheckerDefinition
 
@@ -2093,9 +2117,10 @@ at the original deadline; due delivery revalidates current source, assignment,
 head and authority under TASK-first locks.
 
 Receipt, assignment `revision_expired`/release timestamp, Task `ready`/cleared
-assignee, audit and outcome outbox intent commit together. The source Submission
-row stays unchanged; history projects `rejected` with
-`status_reason=revision_deadline_expired` from the receipt. A new claimant starts
+assignee, audit and outcome outbox intent commit together. The source
+Submission's packet facts stay unchanged; its attempt outcome moves to `rejected`
+with `status_reason=revision_deadline_expired` and `decided_at` copied from the
+receipt by the attempt-status guard, and history reads those stored columns. A new claimant starts
 round 0 with an independent allowance while task-global Submission versions
 remain consecutive. Exact replay recovers the same receipt; stale delivery cannot
 reject a successor or release a newer assignment. Expiry creates no Review,

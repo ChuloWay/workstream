@@ -90,10 +90,10 @@ class SubmissionPredecessorFacts:
     revision_round: int
 
     def __post_init__(self) -> None:
-        """Reject non-positive or non-integer Submission versions."""
+        """Reject invalid versions; a coverage return leaves the next round at zero."""
         if type(self.version) is not int or self.version < 1:
             raise ValueError("submission predecessor version is invalid")
-        if type(self.revision_round) is not int or self.revision_round < 1:
+        if type(self.revision_round) is not int or self.revision_round < 0:
             raise ValueError("submission predecessor revision round is invalid")
 
 

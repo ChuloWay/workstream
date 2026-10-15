@@ -117,7 +117,8 @@ func decodeSubmission(raw json.RawMessage, task, submission string) (SubmissionH
 }
 
 // validSubmissionOutcome mirrors the server's attempt-status rules: only a
-// decided attempt has decided_at, and only a deadline rejection has a reason.
+// decided attempt has decided_at, and only a deadline rejection or a checker
+// coverage return carries a reason.
 func validSubmissionOutcome(value SubmissionHistory) bool {
 	decided := false
 	switch value.Status {
@@ -130,7 +131,11 @@ func validSubmissionOutcome(value SubmissionHistory) bool {
 	if decided != (value.DecidedAt != nil) || (value.DecidedAt != nil && !validTime(*value.DecidedAt)) {
 		return false
 	}
-	return value.StatusReason == nil || (value.Status == "rejected" && *value.StatusReason == "revision_deadline_expired")
+	if value.StatusReason == nil {
+		return true
+	}
+	return (value.Status == "rejected" && *value.StatusReason == "revision_deadline_expired") ||
+		(value.Status == "needs_revision" && *value.StatusReason == "checker_coverage_incomplete")
 }
 
 func validFindingCounts(raw json.RawMessage, counts *SubmissionFindingCounts) bool {

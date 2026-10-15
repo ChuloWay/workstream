@@ -69,7 +69,7 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/execution/test_checker_retry_authority.py",
         "tests/checkers/execution/test_checker_retry_history_replay.py",
         "tests/checkers/execution/test_checker_retry_migration.py",
-        "tests/checkers/execution/test_findings_and_coverage_hold.py",
+        "tests/checkers/execution/test_findings_and_coverage.py",
         "tests/test_post_submit_materialization.py",
         "tests/test_post_submit_selection.py",
         "tests/test_checker_output_custody.py",
@@ -213,7 +213,7 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
         ),
         "project": (
             191,
-            "ef3bffcb89ad2a693a3a9c58b1ab9ee06fa3e4a4449e702f7be91d9f0a3e4940",
+            "329382a2e965236f44c87d1e0d8af1b49e1ab0777f23bb16746ba8b1db2da9f2",
         ),
         "task": (
             76,

@@ -598,13 +598,20 @@ criteria, or another task setup defect that is not contributor-fixable, the run 
 `task_setup_blocked`. That route is internal to covered Project Managers and
 authorized Operators and must not be shown to contributors as a revision request.
 
-A completed post-submit result with no failed member and at least one
-`coverage_incomplete` finding is classified `task_setup_blocked`. It publishes
-no completion event, so TASK routing, acceptance and revision do not run and the
-task stays `evaluation_pending`; a false ReviewPolicy cannot auto-accept work a
-checker could not fully evaluate. An authorized Operator retry accepts this
-terminal hold as its source, exactly as it accepts a terminal infrastructure
-failure. A result with failed members still routes to `needs_revision`.
+A completed post-submit result with no failed member but at least one
+`coverage_incomplete` finding never auto-accepts. Classification reads the
+task's locked ReviewPolicy: when human review is required the result is
+`allow_review`, so a reviewer judges the part the checker could not evaluate;
+otherwise it is `needs_revision` and returns to the contributor. TASK records
+that return as `needs_revision` with `status_reason`
+`checker_coverage_incomplete`, and neither Python nor PostgreSQL counts it as a
+revision round, so the next attempt keeps its round. The normal revision
+deadline still applies. The deferred terminal-custody trigger recomputes the
+same route from the stored result and locked policy. Pre-submit intake treats a
+coverage gap like any non-error finding: it is shown in feedback and does not
+block admission, because intake never decides acceptance. Run-level
+`warning_count` and `blocking_count` remain member counts; per-finding counts
+come from the stored findings.
 
 ## Readiness Proof — Target Contract
 
@@ -667,8 +674,7 @@ deferred terminal custody trigger compares with the stored result. Current
 contributor and Project Manager history reads list one entry per stored finding
 with its `check_id`, `path`, `line` and level-derived status (a member without
 findings keeps one entry), plus fixed, permission-appropriate messages; raw
-checker messages are not exposed. Contributors never see entries of a
-`task_setup_blocked` run. Future REV packet/current-work presentation must
+checker messages are not exposed. Future REV packet/current-work presentation must
 expose an authorized bounded subset after routing and review integration. The
 current contract does not include excerpts, per-check evidence references, full
 logs or generated output artifacts.
