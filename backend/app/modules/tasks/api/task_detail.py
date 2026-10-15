@@ -6,6 +6,8 @@ from typing import Protocol
 from uuid import UUID
 
 from app.modules.tasks.api.ready_queue import TaskCompensationTerms, _aware
+from app.modules.tasks.api.assignment_outcome import TaskAssignmentOutcome
+from app.modules.tasks.api.revision import ContributorRevisionContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,6 +74,7 @@ class ContributorTaskDetail(_TaskDetailFields):
     """Work instructions plus contributor-safe locked compensation terms."""
 
     compensation: TaskCompensationTerms
+    last_assignment_outcome: TaskAssignmentOutcome | None = None
 
     def __post_init__(self) -> None:
         _TaskDetailFields.__post_init__(self)
@@ -90,6 +93,8 @@ class ManagementTaskDetail(_TaskDetailFields):
     external_task_id: str | None
     created_by: str
     assigned_to: str | None
+    last_assignment_outcome: TaskAssignmentOutcome | None = None
+    revision_context: ContributorRevisionContext | None = None
 
     def __post_init__(self) -> None:
         _TaskDetailFields.__post_init__(self)

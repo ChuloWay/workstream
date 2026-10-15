@@ -114,7 +114,7 @@ def task_post_submit_source_digest(source: TaskPostSubmitSourceProposal) -> str:
 
 __all__ = ("TaskPostSubmitSourceProposal", "TaskPostSubmitManifestFacts", "task_post_submit_source_digest",
            "TaskRoutingSelection", "TaskRoutingRequestFacts", "task_routing_request_digest",
-           "TaskRoutingSourcePreparation")
+           "TaskRoutingSourcePreparation", "TaskRevisionExhaustionFacts")
 
 
 class TaskRoutingSelection(BaseModel):
@@ -173,6 +173,23 @@ class TaskRoutingRequestFacts(TaskRoutingSelection):
         return self
 
 
+class TaskRevisionExhaustionFacts(BaseModel):
+    """Exact terminal consequence selected from the failed source's locked policy."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    exhaustion_receipt_id: UUID
+    revision_round: int = Field(ge=0)
+    max_revision_rounds: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def final_round(self) -> Self:
+        """Exhaust only an actual final attempt with an independently allocated receipt."""
+        if self.revision_round != self.max_revision_rounds or self.exhaustion_receipt_id.version != 7:
+            raise ValueError("revision exhaustion requires the final permitted attempt")
+        return self
+
+
 class TaskRoutingSourcePreparation(BaseModel):
     """Reserved request with matching proposed source; no publication or authority."""
 
@@ -181,9 +198,18 @@ class TaskRoutingSourcePreparation(BaseModel):
     request: TaskRoutingRequestFacts
     source: TaskPostSubmitSourceProposal
     revision_candidate: RevisionCandidate | None = None
+    exhaustion: TaskRevisionExhaustionFacts | None = None
+    recovered_exhaustion: bool = False
 
     @model_validator(mode="after")
     def matching_source(self) -> Self:
+        if self.recovered_exhaustion and self.exhaustion is None:
+            raise ValueError("recovered exhaustion requires terminal evidence")
+        if self.exhaustion is not None and (
+            self.source.routing_recommendation != "needs_revision"
+            or self.revision_candidate is not None
+        ):
+            raise ValueError("exhaustion cannot prepare another revision")
         request = TaskRoutingRequestFacts.model_validate(self.request.model_dump())
         source = TaskPostSubmitSourceProposal.model_validate(self.source.model_dump())
         if request.routing_manifest_id != source.id or request.evaluation_request_digest != source.request_digest:

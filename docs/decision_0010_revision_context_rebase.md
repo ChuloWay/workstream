@@ -121,31 +121,29 @@ Acceptance-affecting checker implementation changes must be tied to visible guid
 
 ## Revision rounds and deadline
 
-Each assignment's initial Submission is round 0. Checker and genuine human
-`needs_revision` use the same intended deadline policy; human decision
-integration remains #554 work. `max_revision_rounds = 2` permits two
-resubmissions, rounds 1 and 2. Each committed contributor-fixable failure starts
-a fresh window using that failed attempt's locked `revision_deadline_hours`.
-The database supplies the timestamp; eligibility ends at the exact deadline.
-Infrastructure failures and provider retries do not spend a revision round.
+The project RevisionPolicy requires an explicit nonnegative `max_revision_rounds`.
+There is no task-local override. Each assignment starts at round 0; N=2 permits
+revisions 1 and 2, while N=0 permits only the initial Submission. Only committed
+Submissions consume attempts. Infrastructure/provider/budget failures do not.
 
-The immutable preparation freezes its source, deadline and complete target
-context. Duplicate delivery, exact replay and PM context repair retain the
-original window and cap. Repair appends one authorized successor to the exact
-current preparation; it cannot reset the deadline or rewrite previous evidence.
-Cap exhaustion refuses further revisions. At expiry, a durable worker records
-the outstanding attempt's rejection, releases its assignment and returns the
-task to `ready` in one transaction with audit and outbox evidence. Original
-Submissions and findings remain immutable. A recurring PostgreSQL-backed scan
-recovers overdue work after downtime; duplicate or stale jobs cannot expire a
-newer attempt or assignment. Resubmission and expiry serialize under TASK-first
-custody and use PostgreSQL time at the new-write boundary.
+Final-attempt failure immediately records immutable exhaustion, closes the
+assignment and returns the task to `ready`, with no preparation or deadline.
+When another revision remains, the failure freezes a complete next-attempt
+context and a fresh policy allowance using PostgreSQL time. A setup block
+publishes PM attention and pauses the clock. A blocked root preserves the full
+allowance; authorized repair resumes the remaining time. A running-context
+repair preserves its deadline. Immutable preparation successors retain exact
+clock custody; stale timers cannot expire a paused or newer clock.
 
-Revision rounds belong to an assignment. A subsequent claimant starts at round
-0 with their own allowance; task-global Submission ordering remains immutable.
-Uploading ZIP bytes alone is not resubmission: the next immutable Submission
-must commit before the deadline. A seven-day policy is 168 hours, supplied by
-the failed attempt's locked RevisionPolicy.
+Only a committed immutable successor ends the opportunity. A seven-day policy
+is 168 hours. Timeout records a separate immutable rejection, closes the
+assignment and returns the task to ready. Authorization, TASK release, evidence,
+audit and outbox intent commit atomically under TASK-first custody. Original
+Submissions/findings remain unchanged. Any eligible claimant, including the
+previous contributor, can start a new assignment at round 0; there is no
+contributor-count cap or repeated-failure hold. Global Submission order remains
+consecutive. Human Review integration remains #554 work under the same intended
+revision policy.
 
 ## Consequences
 

@@ -1215,6 +1215,7 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
             LifecycleAuditEventType.TASK_POST_SUBMIT_ROUTED,
             LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
             LifecycleAuditEventType.TASK_REVISION_EXPIRED,
+            LifecycleAuditEventType.TASK_REVISION_EXHAUSTED,
         },
         LifecycleAuditEntityType.REVIEW_QUEUE_ENTRY: {
             LifecycleAuditEventType.REVIEW_QUEUE_ENTRY_CREATED,
@@ -1337,6 +1338,15 @@ def test_lifecycle_input_covers_every_canonical_event_entity_pair() -> None:
                     LifecycleAuditReferenceKind.ROUTING_MANIFEST: new_record_id(),
                 })
                 transition.update(from_status="evaluation_pending", to_status="review_pending")
+            if event_type is LifecycleAuditEventType.TASK_REVISION_EXHAUSTED:
+                references.update({reference: new_record_id() for reference in (
+                    LifecycleAuditReferenceKind.SUBMISSION,
+                    LifecycleAuditReferenceKind.ROUTING_MANIFEST,
+                    LifecycleAuditReferenceKind.REVISION_EXHAUSTION,
+                    LifecycleAuditReferenceKind.OUTBOX_EVENT,
+                )})
+                transition.update(from_status="needs_revision", to_status="ready",
+                                  authorization_resource_digest="sha256:" + "a" * 64)
             if event_type in {
                 LifecycleAuditEventType.TASK_REVISION_CONTEXT_REPAIRED,
                 LifecycleAuditEventType.TASK_REVISION_EXPIRED,

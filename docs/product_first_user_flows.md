@@ -224,10 +224,12 @@ Acceptance:
 - Each required finding has an immutable response and later resolution.
 - Revision count is tracked against the locked revision policy.
 - Each assignment starts at round 0 with its own revision allowance.
-- Every committed `needs_revision` starts a fresh PostgreSQL-time window from
+- Every fixable failure with a revision remaining starts a fresh PostgreSQL-time window from
   the failed attempt's locked policy; only immutable resubmission ends it.
-  Upload, replay, repair and infrastructure retry preserve the window.
-- Cap exhaustion refuses another attempt. At expiry, an immutable rejection
+  Upload, replay and infrastructure retry cannot reset the window. A setup block
+  pauses it and notifies the PM; repair resumes only the remaining allowance.
+- Final-attempt failure immediately records exhaustion and returns the task to
+  ready without another window. At expiry, an immutable rejection
   receipt, assignment release and return to `ready` commit atomically with
   AUTH/audit/outbox evidence and no new economic facts. Checker expiry is
   implemented; #554 owns the future genuine human trigger under the same policy.

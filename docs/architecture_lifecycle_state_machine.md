@@ -324,15 +324,18 @@ checker or human revision may rebase every changed valid component to the comple
 applicable context. The immutable preparation records that next-attempt context
 and never rewrites an earlier Submission, Review, contribution, or award.
 
-Each assignment starts at round 0 with its own revision allowance. Every
-committed `needs_revision` freezes a fresh PostgreSQL-time window using the
-failed attempt's locked RevisionPolicy. Only a committed immutable successor
-Submission ends the prior window. Cap exhaustion refuses a successor; expiry
-records rejection in an immutable receipt, marks the assignment
-`revision_expired`, releases it and returns TASK to `READY` atomically with
-AUTH/audit/outbox evidence. No economic facts are created. Checker-triggered
-expiry is implemented; #554 owns future human decision integration using the
-same policy. Stale jobs cannot release a newer assignment.
+The task's locked project RevisionPolicy supplies the required cap N>=0. Each
+assignment starts at round 0, with at most revisions 1 through N. Final-attempt
+failure records exhaustion, closes the assignment and returns TASK to `READY`
+immediately, without another window. A failure with a revision remaining freezes
+its complete next context and a PostgreSQL-time allowance. Setup blocks pause
+it and publish PM attention; repair resumes only the remainder. Only committed
+immutable resubmission ends the opportunity. Timeout records a distinct rejection
+and also releases the task to `READY`, atomically with AUTH/audit/outbox evidence.
+Any eligible contributor, including the previous claimant, can start a new
+assignment at round 0; no contributor-count limit applies. Neither rejection
+creates economic facts. Human Review integration remains #554 work under the
+same intended policy. Stale jobs cannot release newer work.
 
 ## Revision Replay
 

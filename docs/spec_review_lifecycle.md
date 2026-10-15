@@ -268,9 +268,10 @@ Rows migrated from the pre-lineage schema are retained as
 satisfy readiness or activate future review behavior because no lease or
 preference semantics are invented from the removed `sla_hours` field. Policy
 rows reject update, delete, and truncate at the database boundary. The removed `auto_reject_after_limit` field grants no lifecycle authority.
-The governing RevisionPolicy supplies a positive revision allowance and deadline.
-Cap exhaustion blocks another attempt; the frozen deadline still governs durable
-TASK timeout rejection and assignment release as defined below.
+The project RevisionPolicy requires an explicit nonnegative revision allowance
+and a positive deadline duration. Exhaustion immediately rejects the final
+attempt, closes its assignment and returns the task to ready; zero allows only
+the initial attempt. The task has no separate cap override.
 
 Project Guide activation binds one `ContributionPolicyVersion`; task readiness
 locks it before claimability. TaskAssignment copies that lock, Submission
@@ -305,7 +306,8 @@ false/pass still requires an Operator-authorized live REV generation.
 Checker routing is not human judgment. A final needs-remediation CHECKER result
 is consumed by the TASK-owned ARCH-04F handler, which moves the Task to
 contributor-readable `needs_revision` and creates a TASK-owned checker-rooted
-revision preparation in the same authorized transaction. The preparation freezes
+preparation when another revision remains. On the final allowed failed attempt,
+it records immediate exhaustion and returns the Task to `ready` instead. The preparation freezes
 the complete next-attempt context, including a guarded complete-context rebase
 when applicable, or records why revision is blocked. CHECKERS does not mutate
 TASK directly. This creates no Review, ReviewFinding, human-Review-rooted
@@ -315,15 +317,17 @@ assignment-scoped revision allowance: the initial Submission is round 0; max_rev
 permits rounds 1 and 2, for three Submissions total. Infrastructure retries and
 replay create no Submission and consume no round. ART preparation and new TASK
 creation refuse revision_limit_reached with HTTP 409 before new effects; SQL
-also rejects over-cap inserts. The task remains needs_revision with its earlier
-evidence intact. Reaching the cap does not itself reject the outstanding attempt;
-its original revision deadline still applies. Each committed fixable failure
-starts a fresh window from PostgreSQL time and the failed attempt's locked
-RevisionPolicy. Only a committed immutable successor Submission ends that window;
-ZIP upload, ready admission, repair and infrastructure retry do not. At expiry,
-TASK atomically records an immutable rejection receipt, releases the
-assignment and returns the task to ready with audit and outbox evidence. A new
-assignment starts its own round 0 while global Submission versions remain
+also rejects over-cap inserts. Final-attempt failure immediately records
+`TaskRevisionExhaustion`, closes its assignment and returns the task to ready;
+it creates no preparation or deadline window. A fixable failure with a revision
+remaining freezes a fresh policy allowance from PostgreSQL time. A setup block
+publishes durable PM attention and pauses that allowance; repair resumes the
+remaining time, while a running-context repair keeps its deadline. Only a
+committed immutable successor ends the opportunity. At its effective deadline,
+TASK records `TaskRevisionExpiration`, releases the assignment and returns the
+task to ready with audit and outbox evidence. Any eligible claimant, including
+the previous contributor, may start a new assignment at round 0. There is no
+contributor-count limit or repeated-failure hold. Global Submission versions stay
 consecutive. Checker remediation follows that exact CheckerRun lineage and must pass
 the normal submission/checker spine before human review.
 
@@ -935,8 +939,8 @@ replacement. The old contributor cannot submit.
 
 Checker and human `needs_revision` share one intended deadline and cap policy.
 Each assignment starts at round 0; a limit of 2 permits revisions 1 and 2.
-Each committed contributor-fixable failure starts a fresh window using
-PostgreSQL time and the failed attempt's exact locked RevisionPolicy. The
+Each committed contributor-fixable failure with another revision remaining
+starts a fresh window using PostgreSQL time and the failed attempt's exact locked RevisionPolicy. The
 checker-rooted path implements this policy. Genuine human Review decision
 integration remains #554 work; its future trigger must use the same policy with
 Review provenance rather than fabricate a checker cause.
@@ -945,9 +949,11 @@ A committed immutable successor Submission ends the predecessor's window.
 Upload, pre-submit checks, ready admission, duplicate delivery, exact replay,
 infrastructure retry and context repair do not end or reset it. The next
 committed `needs_revision` starts another window under that attempt's lock.
-Cap exhaustion refuses further preparation and creation while preserving the
-outstanding deadline; deadline exhaustion refuses a new attempt at the exact
-PostgreSQL boundary.
+Final-attempt failure records immediate exhaustion, closes the assignment and
+returns the task to ready without a next preparation or window. A setup-blocked
+rebase pauses the clock and notifies the PM; repair resumes only the remaining
+allowance. Running-window expiry refuses new work at the exact PostgreSQL
+boundary. There is no contributor-count limit or repeated-failure hold.
 
 At expiry, the TASK-owned durable operation appends an immutable rejection
 receipt for the outstanding attempt, marks its assignment `revision_expired`
@@ -958,8 +964,8 @@ or create FinalAcceptance, ContributionRecord, award, fulfillment or reputation
 effects. A new claimant receives their own round-0 allowance while task-global
 Submission versions remain consecutive. TASK-first revalidation fences
 resubmission, duplicate expiry deliveries and stale delivery after reclaim. The recurring
-retained-source scan schedules the original source-policy window after downtime
-without selecting a new context or moving its deadline.
+retained-source scan recovers the exact running or paused opportunity after
+downtime without choosing a new rebase or adding time.
 
 Normal revision timeout uses TASK service authority. Reaching the revision cap
 refuses another attempt while preserving the current deadline; it does not

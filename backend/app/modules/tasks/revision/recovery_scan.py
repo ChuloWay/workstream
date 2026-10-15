@@ -1,4 +1,4 @@
-"""Page current TASK revision sources and recover missing expiry coverage."""
+"""Reconcile retained TASK revision outcomes in bounded source pages."""
 
 import logging
 from uuid import UUID

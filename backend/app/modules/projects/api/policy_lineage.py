@@ -39,7 +39,7 @@ class RevisionPolicySemantics(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    max_revision_rounds: int = Field(gt=0)
+    max_revision_rounds: int = Field(ge=0, strict=True)
     revision_deadline_hours: int = Field(gt=0)
     allowed_resubmission_states: tuple[Literal["needs_revision"], ...]
     reviewer_reassignment_rule: str | None = None

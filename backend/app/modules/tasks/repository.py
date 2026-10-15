@@ -390,7 +390,14 @@ class TaskRepository:
             return None
         version_id = values.pop("locked_contribution_policy_version_id")
         compensation = await self._locked_compensation(request.project_id, (version_id,))
-        return ContributorTaskDetail(**values, compensation=compensation[version_id])
+        from app.modules.tasks.revision.terminal_read import latest_assignment_outcome
+        return ContributorTaskDetail(
+            **values, compensation=compensation[version_id],
+            last_assignment_outcome=await latest_assignment_outcome(
+                self._session, project_id=request.project_id, task_id=request.task_id,
+                contributor_id=request.contributor_id,
+            ),
+        )
 
     async def contributor_task_visible(self, request: ContributorTaskDetailRequest) -> bool:
         """Check existing contributor visibility without projecting compensation."""
@@ -438,7 +445,22 @@ class TaskRepository:
             task.assigned_to,
         )
         values = await self._read_task_detail_values(request, statement)
-        return ManagementTaskDetail(**values) if values is not None else None
+        if values is None:
+            return None
+        from app.modules.tasks.revision.terminal_read import latest_assignment_outcome
+        from app.modules.tasks.revision.service import read_task_revision
+        assignment_id = await self._session.scalar(select(TaskAssignment.id).where(
+            TaskAssignment.task_id == str(request.task_id),
+            TaskAssignment.status == "active",
+        ))
+        return ManagementTaskDetail(
+            **values, revision_context=await read_task_revision(
+                self._session, task_id=str(request.task_id), status=values["status"],
+                assignment_id=assignment_id,
+            ), last_assignment_outcome=await latest_assignment_outcome(
+                self._session, project_id=request.project_id, task_id=request.task_id,
+            ),
+        )
 
     async def _read_task_detail_values(
         self,
@@ -763,10 +785,10 @@ class TaskRepository:
             prior_assignment = await self._session.get(
                 TaskAssignment, latest_submission.task_assignment_id
             )
-            if (prior_assignment is None or prior_assignment.status != "revision_expired"
+            if (prior_assignment is None or prior_assignment.status not in {"revision_expired", "revision_exhausted"}
                     or prior_assignment.released_at is None):
                 raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
-            if await self._session.scalar(select(func.task_revision_expired_assignment_current(
+            if await self._session.scalar(select(func.task_revision_released_assignment_current(
                 UUID(str(prior_assignment.id)), UUID(str(latest_submission.id)),
             ))) is not True:
                 raise TaskSubmissionContextUnavailable("task_submission_context_invalid")

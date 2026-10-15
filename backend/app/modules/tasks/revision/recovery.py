@@ -14,9 +14,10 @@ from app.modules.tasks.api.revision_recovery import RECOVERY_REASON, TaskRevisio
 from app.modules.tasks.api.transition_audit import TaskRevisionRepairAuditFacts
 from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.repository import TaskRepository
-from app.modules.tasks.revision.expiry_event import revision_expiry_event
+from app.modules.tasks.revision.expiry_event import revision_preparation_event
+from app.modules.tasks.revision.exhaustion_recovery import recover_exhausted_assignment
 from app.modules.tasks.revision.models import TaskRevisionPreparation
-from app.modules.tasks.revision.service import RevisionRepairReceipt, prepare_revision, select_candidate
+from app.modules.tasks.revision.service import RevisionRepairReceipt, candidate_from_packet, head_for_source, prepare_revision, select_candidate
 from app.modules.tasks.service import LOCKED_CONTEXT_REQUIRED_FIELDS
 
 
@@ -103,16 +104,22 @@ class TaskRevisionRecovery:
             TaskRevisionPreparation.routing_manifest_id == manifest_id,
             TaskRevisionPreparation.sequence == 1,
         ))
-        expected_event = revision_expiry_event(manifest, root) if root else None
-        if expected_event is not None:
+        head = await head_for_source(self._session, manifest_id) if root else None
+        if await recover_exhausted_assignment(
+            self._session, projects=self._projects, authorization=self._authorization,
+            audit=self._audit, outbox=self._outbox, manifest=manifest, task=task,
+            assignment=assignment, source=latest, root=root, head=head,
+        ):
+            return True
+        candidate = await self._retained_pause_candidate(head)
+        predecessor = head if candidate is not None else None
+        if root is not None and candidate is None:
             try:
-                await self._outbox.require_existing(None, expected_event)
+                await self._outbox.require_existing(None, revision_preparation_event(manifest, root, head))
                 return False
             except OutboxIdempotencyConflict:
-                # Missing or conflicting logical keys are resolved by OUTBOX's
-                # atomic append after fresh service authority below.
+                # OUTBOX resolves missing or conflicting exact-head keys atomically.
                 pass
-        candidate = None
         if root is None:
             candidate = await self._missing_root_candidate(manifest, latest, task)
             if candidate is None:
@@ -125,6 +132,8 @@ class TaskRevisionRecovery:
             "routing_manifest_id": str(manifest_id),
             "preparation_id": str(root.id) if root else None,
             "preparation_sha256": root.preparation_sha256 if root else None,
+            "head_preparation_id": str(head.id) if head else None,
+            "head_preparation_sha256": head.preparation_sha256 if head else None,
             "candidate": candidate.model_dump(mode="json") if candidate else None,
         })
         actor_id, decision = await self._authorization.authorize(
@@ -138,25 +147,48 @@ class TaskRevisionRecovery:
                 preparation_sha256=root.preparation_sha256 if root else None,
             )
         )
+        return await self._publish_recovery(
+            manifest=manifest, root=root, head=head, candidate=candidate, predecessor=predecessor,
+            actor_id=actor_id, decision=decision, request_digest=request_digest,
+        )
+
+    async def _retained_pause_candidate(self, head):
+        """Pause an old blocked running head once, preserving only unspent time."""
+        if (head is None or head.clock_observed_at is not None or head.deadline_at is None
+                or head.outcome != "blocked"
+                or head.blocked_reason not in {"context_blocked", "revision_limit_reached"}):
+            return None
+        now = await self._session.scalar(select(func.clock_timestamp()))
+        if head.deadline_at <= now:
+            return None
+        candidate = candidate_from_packet(head.packet)
+        # Service recovery cannot adopt a changed active target on the PM's behalf.
+        return candidate.model_copy(update={
+            "target": None, "target_post_policy_json": None, "target_max_revision_rounds": None,
+        })
+
+    async def _publish_recovery(self, *, manifest, root, head, candidate, predecessor,
+                                actor_id, decision, request_digest):
+        """Commit one preparation or missing head event with exact AUTH/audit custody."""
         audit_event_id = new_record_id()
-        if root is None:
-            root = await prepare_revision(
+        if root is None or predecessor is not None:
+            head = await prepare_revision(
                 self._session, manifest=manifest, candidate=candidate,
-                audit_event_id=audit_event_id,
+                audit_event_id=audit_event_id, predecessor=predecessor,
                 authorization_decision_id=decision.decision_id,
                 repair_receipt=RevisionRepairReceipt(
-                    actor_id=actor_id, idempotency_key=manifest_id,
-                    request_digest=request_digest, reason=RECOVERY_REASON,
-                    authority=decision,
+                    actor_id=actor_id, idempotency_key=predecessor.id if predecessor else manifest.id,
+                    request_digest=request_digest, reason=RECOVERY_REASON, authority=decision,
                 ),
             )
-            if root.outcome == "rebased":
+            if head.outcome == "rebased":
                 raise RuntimeError("service recovery cannot rebase a task")
-        event = await self._outbox.append(revision_expiry_event(manifest, root))
+            root = root or head
+        event = await self._outbox.append(revision_preparation_event(manifest, root, head))
         await self._audit.record_revision_repair(TaskRevisionRepairAuditFacts(
-            event_id=audit_event_id, project_id=UUID(task.project_id), task_id=UUID(task.id),
-            assignment_id=UUID(assignment.id), submission_id=UUID(latest.id),
-            routing_manifest_id=manifest_id, preparation_id=UUID(str(root.id)),
+            event_id=audit_event_id, project_id=UUID(manifest.project_id), task_id=UUID(manifest.task_id),
+            assignment_id=UUID(manifest.assignment_id), submission_id=UUID(manifest.submission_id),
+            routing_manifest_id=manifest.id, preparation_id=UUID(str(head.id)),
             actor_profile_id=actor_id, authorization_decision_id=decision.decision_id,
             reason=RECOVERY_REASON, outbox_event_id=event.event_id,
             authorization_resource_digest=decision.resource_context_digest,

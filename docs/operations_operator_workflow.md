@@ -146,13 +146,16 @@ contribution. `closed/review_rejected` is not a canonical task state.
 
 - A covered Project Manager may append an exact context-repair successor;
   checker-rooted repair is public and human-rooted integration remains planned.
-- Each committed `needs_revision` starts a fresh PostgreSQL-time window using
+- Each fixable failure with another revision remaining starts a fresh PostgreSQL-time window using
   the failed attempt's locked RevisionPolicy. Only immutable resubmission ends
-  it. Repair, upload, replay and infrastructure retry preserve the window.
+  it. Setup-blocked rebase pauses the allowance and notifies the PM; repair
+  resumes only remaining time or preserves a running deadline. Upload, replay
+  and infrastructure retry do not spend time while paused or reset a window.
 - At expiry, the authorized durable TASK delivery handler records an immutable rejection
   receipt, marks the assignment `revision_expired`, releases it and returns the
-  task to `ready` without Review or economic facts. Cap exhaustion refuses a
-  successor but leaves its deadline in force. A new claimant starts round 0.
+  task to `ready` without Review or economic facts. Final-attempt failure
+  records exhaustion and releases immediately, without another window. Anyone
+  eligible can claim a new assignment at round 0; no contributor-count cap applies.
 - Checker expiry/recovery is implemented. #554 owns future human decision
   integration with the same intended policy. Provision the exact expirer
   service and run Celery Beat and outbox delivery processes as described in

@@ -84,7 +84,7 @@ func decodeSubmission(raw json.RawMessage, task, submission string) (SubmissionH
 	if err != nil || !requiredNullable(fields, "locked_at", "supersedes_submission_id") ||
 		!validUUID(value.ID) || !validUUID(value.Task) || (task != "" && !sameUUID(value.Task, task)) ||
 		(submission != "" && !sameUUID(value.ID, submission)) || value.Version == nil || value.Version.Sign() <= 0 || value.Status == "" ||
-		(value.StatusReason != nil && (value.Status != "rejected" || *value.StatusReason != "revision_deadline_expired")) ||
+		(value.StatusReason != nil && (value.Status != "rejected" || (*value.StatusReason != "revision_deadline_expired" && *value.StatusReason != "revision_limit_reached"))) ||
 		!validTime(value.SubmittedAt) || (value.LockedAt != nil && !validTime(*value.LockedAt)) ||
 		(value.Predecessor != nil && (!validUUID(*value.Predecessor) || sameUUID(*value.Predecessor, value.ID))) || value.Evidence == nil {
 		return value, bad

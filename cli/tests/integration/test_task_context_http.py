@@ -68,6 +68,8 @@ REVISION_CONTEXT = {
     "max_revision_rounds": 2,
     "requested_at": "2026-10-14T10:00:00Z",
     "deadline_at": "2026-10-15T10:00:00Z",
+    "clock_state": "running",
+    "remaining_microseconds": None,
     "outcome": "kept",
     "disposition": "ready",
     "direction": "kept",
@@ -261,7 +263,11 @@ def test_revision_context_accepts_absent_null_and_valid_projection_but_rejects_b
     cli,
 ):
     with http_fixture() as (origin, response, _):
-        for revision in (None, REVISION_CONTEXT):
+        paused = REVISION_CONTEXT | {
+            "deadline_at": None, "remaining_microseconds": 1800000000,
+            "clock_state": "paused", "outcome": "blocked", "disposition": "context_blocked",
+        }
+        for revision in (None, REVISION_CONTEXT, paused):
             value = deepcopy(CONTEXT)
             value["revision_context"] = deepcopy(revision)
             response["body"] = json.dumps(value).encode()
@@ -281,6 +287,10 @@ def test_revision_context_accepts_absent_null_and_valid_projection_but_rejects_b
         for change in (
             {"preparation_sha256": "sha256:" + "B" * 64},
             {"sequence": 0},
+            {"clock_state": "paused"},
+            {"clock_state": "unknown"},
+            {"remaining_microseconds": 1},
+            {"deadline_at": None},
             {"disposition": "accepted"},
             {
                 "prior": REVISION_SNAPSHOT

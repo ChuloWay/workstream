@@ -359,8 +359,8 @@ async def source_count(session) -> int:
     )
 
 
-async def activate_successor_guide(h):
-    """Activate a genuine v2 guide in the source Submission's project."""
+async def activate_successor_guide(h, *, max_revision_rounds=2, version="v2"):
+    """Activate a genuine successor guide in the source Submission's project."""
     from uuid import uuid4
 
     from sqlalchemy import select
@@ -417,12 +417,14 @@ async def activate_successor_guide(h):
         h.factory,
         values,
         manager,
-        version="v2",
+        version=version,
         artifact_proposal=proposal,
         pre_submit_registry_entry=pre_entries[0] if pre_entries else None,
         post_submit_registry_entry=post_entries[0] if post_entries else None,
     )
-    await seed_selected_review_revision_inputs(h.factory, finalization, manager)
+    await seed_selected_review_revision_inputs(
+        h.factory, finalization, manager, max_revision_rounds=max_revision_rounds,
+    )
     _, derived = await prepare_post_policy(
         h.factory,
         finalization,

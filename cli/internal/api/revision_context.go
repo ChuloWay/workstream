@@ -20,7 +20,9 @@ type RevisionContext struct {
 	NextRevisionRound        int64             `json:"next_revision_round"`
 	MaxRevisionRounds        int64             `json:"max_revision_rounds"`
 	RequestedAt              string            `json:"requested_at"`
-	DeadlineAt               string            `json:"deadline_at"`
+	DeadlineAt               *string           `json:"deadline_at"`
+	ClockState               string            `json:"clock_state"`
+	RemainingMicroseconds    *int64            `json:"remaining_microseconds"`
 	Outcome                  string            `json:"outcome"`
 	Disposition              string            `json:"disposition"`
 	Direction                *string           `json:"direction"`
@@ -68,13 +70,31 @@ func revisionInvalid() error { return errors.New("invalid revision context") }
 func validateRevisionContext(raw json.RawMessage, value *RevisionContext) error {
 	fields, err := contextObject(raw, value, []string{
 		"preparation_id", "preparation_sha256", "source_submission_id", "source_routing_manifest_id",
-		"sequence", "next_revision_round", "max_revision_rounds", "requested_at", "deadline_at",
+		"sequence", "next_revision_round", "max_revision_rounds", "requested_at",
+		"clock_state",
 		"outcome", "disposition", "prior", "changes",
 	}, nil)
 	if err != nil || !validUUID(value.PreparationID) || !contextPolicyDigest.MatchString(value.PreparationSHA256) ||
 		!validUUID(value.SourceSubmissionID) || !validUUID(value.SourceRoutingManifestID) ||
-		value.Sequence <= 0 || value.NextRevisionRound <= 0 || value.MaxRevisionRounds <= 0 ||
-		!validTime(value.RequestedAt) || !validTime(value.DeadlineAt) || value.Changes == nil || len(value.Changes) > 8 {
+		value.Sequence <= 0 || value.NextRevisionRound <= 0 || value.MaxRevisionRounds < 0 ||
+		!validTime(value.RequestedAt) || value.Changes == nil || len(value.Changes) > 8 {
+		return revisionInvalid()
+	}
+	if _, ok := fields["deadline_at"]; !ok {
+		return revisionInvalid()
+	}
+	if _, ok := fields["remaining_microseconds"]; !ok {
+		return revisionInvalid()
+	}
+	if value.ClockState == "running" {
+		if value.DeadlineAt == nil || !validTime(*value.DeadlineAt) || value.RemainingMicroseconds != nil {
+			return revisionInvalid()
+		}
+	} else if value.ClockState == "paused" {
+		if value.DeadlineAt != nil || value.RemainingMicroseconds == nil || *value.RemainingMicroseconds <= 0 || value.Outcome != "blocked" || value.Disposition != "context_blocked" {
+			return revisionInvalid()
+		}
+	} else {
 		return revisionInvalid()
 	}
 	if value.PredecessorPreparationID != nil && !validUUID(*value.PredecessorPreparationID) {

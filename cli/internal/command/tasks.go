@@ -62,6 +62,14 @@ func addTaskReads(project *cobra.Command, client func() (*api.Client, error), ou
 			if err := writeTaskSummary(stdout, t.TaskSummary); err != nil {
 				return err
 			}
+			if err := writeAssignmentOutcome(stdout, t.LastAssignmentOutcome); err != nil {
+				return err
+			}
+			if t.RevisionContext != nil {
+				if err := writeTaskContextFields(stdout, []contextField{{"Revision context", t.RevisionContext}}); err != nil {
+					return err
+				}
+			}
 			_, err = fmt.Fprintf(stdout,
 				"Description: %s\nAcceptance criteria: %s\nRejection criteria: %s\nSource type: %s\nSource reference: %s\nSource hash: %s\nImport batch: %s\nExternal task: %s\nCreated by: %s\nAssigned to: %s\n",
 				safeText(t.Description), optional(t.AcceptanceCriteria), optional(t.RejectionCriteria), safeText(t.SourceType),

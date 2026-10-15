@@ -97,21 +97,38 @@ new ReviewFinding on the later Review.
 
 ## Limits And Recovery
 
-Each assignment's initial Submission is round 0; a limit of 2 permits revisions
-1 and 2. Checker and future human Review triggers use the same deadline policy;
-#554 owns genuine human decision integration.
-Each committed contributor-fixable failure starts a fresh window using the
-failed attempt's locked policy and database time. Eligibility ends at the exact
-deadline. Infrastructure retries spend no round; duplicate delivery, replay and
-context repair preserve the original window. Only the next immutable Submission
-commit ends it; upload or a ready admission alone does not. A reached revision limit or
-deadline blocks further preparation and
-`submission.create`. At expiry, the durable timeout operation records rejection
-of the outstanding attempt in an immutable `TaskRevisionExpiration` receipt,
-marks its assignment `revision_expired` with a release timestamp and returns the task to
-`ready`. It preserves original Submission and finding evidence and creates no
-synthetic Review, contribution or award. Task/assignment changes, immutable
-timeout evidence, audit and outbox publication intent commit atomically.
+The project RevisionPolicy requires an explicit integer `max_revision_rounds >= 0`;
+there is no per-task override. Each assignment starts at round 0. A limit of 2
+permits revisions 1 and 2; zero permits only the initial Submission. A final
+contributor-fixable failure immediately records `TaskRevisionExhaustion`, closes
+the assignment as `revision_exhausted`, and returns the task to `ready` in the
+same authorized transaction. It creates no next preparation or deadline. History
+projects the failed Submission as rejected with `revision_limit_reached`.
+
+When another revision remains, the failure freezes a complete next-attempt
+context and a fresh PostgreSQL-time allowance. A setup-blocked context pauses
+that allowance and publishes durable PM-attention evidence. A blocked root
+preserves the full policy duration. Repair resumes only the stored remaining
+time; repair of a running context preserves its deadline. The API exposes
+`clock_state`, nullable `deadline_at`, and nullable `remaining_microseconds`:
+paused means no deadline and a stored remainder; running means a deadline and
+no stored remainder. Covered PM task detail exposes the same revision context.
+
+Only a committed immutable successor ends a running opportunity. ZIP upload,
+ready admission, replay and infrastructure retry do not. At the effective
+deadline, durable expiry records `TaskRevisionExpiration`, closes the assignment
+as `revision_expired`, and returns the task to `ready`. Task/assignment changes,
+terminal evidence, authorization, audit and outbox intent commit together.
+Neither exhaustion nor timeout fabricates a Review, contribution or award;
+original Submissions and findings remain immutable.
+
+There is no contributor-count limit or repeated-failure hold. Any eligible
+contributor, including a previous claimant, may claim again under a new
+assignment at round 0. The closed assignment remains terminal and its
+`last_assignment_outcome.next_action` is `none`. Infrastructure failures use
+bounded recovery and consume neither an attempt nor a revision window.
+Checker and future human triggers share the intended policy; #554 owns genuine
+human Review integration.
 
 The recurring Celery scan uses PostgreSQL server time and recovers overdue
 opportunities after downtime. Duplicate deliveries and old jobs recheck exact
@@ -121,7 +138,8 @@ with their own allowance while task-global Submission versions remain ordered.
 
 Expiry delivery is explicitly safe to retry after a Celery process crashes: the new
 invocation either performs the authorized transaction or acknowledges its exact
-immutable receipt. Retries retain the original deadline and use bounded backoff.
+immutable receipt. Retries retain the exact scheduled clock and use bounded backoff. Stale timer
+intents cannot expire a paused or resumed preparation.
 An exhausted retry budget or rejected authority remains visible as dead-letter
 work requiring operator resolution; it must not be reported as a completed timeout.
 
@@ -130,13 +148,19 @@ successor through covered-manager repair. For checker-rooted preparations,
 `POST /api/v1/projects/{project_id}/tasks/{task_id}/revision-context/repair` takes
 `parent_preparation_id`, `parent_preparation_sha256`, a bounded `reason`, and an
 `Idempotency-Key`. It records the exact parent and authorized child atomically.
-Repair cannot bypass limit/deadline exhaustion. The contributor work-context
+Repair cannot reopen an exhausted assignment or an already elapsed running window. The contributor work-context
 read exposes the frozen change summary and current eligibility.
 
 The recurring service scan discovers current retained failures missing preparation
 or scheduling. Fresh service authority freezes an unchanged context or a blocked
-root and schedules the original source-policy deadline; it cannot authorize a
-rebase. Exact already-scheduled work is a no-op.
+root and publishes its exact clock or paused-attention intent; it cannot
+authorize a rebase. It also reconciles retained pre-upgrade failures: a source
+already at its locked cap receives immediate exhaustion under fresh recovery
+authority, even if its old timer still exists. That obsolete timer acknowledges
+without recording a timeout. A retained setup-blocked running window receives
+one paused successor preserving only its unspent PostgreSQL time; an already
+due window remains due. Original records and scheduling intents stay immutable.
+Exact already-scheduled work with no required reconciliation is a no-op.
 
 Before enabling this journey, provision `workstream.task.revision_expirer` through
 the existing authorized `POST /api/v1/service-actors` operation and keep its
@@ -150,8 +174,8 @@ fallback authority: inspect scan failures and outbox dead-letter diagnostics.
 For explicit manager recovery, the same endpoint accepts `routing_manifest_id`
 and `reason` instead of the parent pair when the preparation is missing. It
 records the missing root using the original failure's window; ordinary routing
-replay does not create it. An expired or exhausted source stays
-blocked. Exact repair replay returns its original preparation identity and
+replay does not create it. An expired source cannot gain more time. An exhausted source cannot create
+a preparation; the recovery scan records its terminal outcome. Exact repair replay returns its original preparation identity and
 window after fresh authorization, with eligibility evaluated against the current
 source and preparation head.
 

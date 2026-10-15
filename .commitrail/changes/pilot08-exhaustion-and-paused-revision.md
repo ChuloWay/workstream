@@ -2,9 +2,9 @@
 
 - Initiative: None
 - Durable disposition: Planned
-- Intended merge outcome: Complete issue #495 with project-policy zero-revision support, immediate assignment exhaustion, a finite project-approved contributor allowance per task, explicit contributor/PM outcomes, and PostgreSQL-time pause/resume of setup-blocked revision windows.
+- Intended merge outcome: Complete issue #495 with project-policy zero-revision support, immediate assignment exhaustion, automatic return to ready after exhaustion or timeout, explicit contributor/PM outcomes, and PostgreSQL-time pause/resume of setup-blocked revision windows.
 
-## Intent and settled policy
+## Intent
 
 The revision limit belongs to the project's immutable RevisionPolicy. Each task
 and Submission uses its locked policy version; no per-task revision-limit input
@@ -17,16 +17,17 @@ same transaction. It creates no next-revision preparation or deadline window.
 Contributors and covered PMs see a terminal exhausted outcome, with no further
 submission action for that assignment. Timeout is a separate terminal reason.
 
-The task returns to ready after exhaustion/timeout only within a required finite
-PM-approved contributor allowance. Its usage is cumulative across failed or
-timed-out assignments and cannot reset through reclaim. At its allowance the
-task is held for PM action and a durable notification is recorded. A replacement
-assignment starts its own round 0. Policy configuration and usage are distinct;
-task-local usage does not create a task-local revision policy.
+The failed Submission has a terminal rejection outcome and its assignment closes
+on exhaustion or timeout; the task returns to ready in the same transaction.
+Any otherwise eligible contributor may claim it, including a previous claimant.
+A replacement assignment starts at round 0 under the task's locked project
+RevisionPolicy. There is no cumulative contributor limit, new policy field,
+platform limit, reclaim exclusion or PM hold for repeated failures. Retain the
+original Submission bytes, findings and assignment outcome as immutable history.
 
 When another revision is permitted, freeze the complete approved context at
 failure and keep/rebase/block it atomically. A blocked setup context immediately
-notifies the PM and pauses the contributor's PostgreSQL-time allowance. Repair
+records durable PM attention visible in the covered task read and pauses the contributor's PostgreSQL-time allowance. Repair
 resumes remaining time rather than starting a fresh window. A block at the
 start preserves the full allowance. Duplicate events and repair/recovery cannot
 add time. A later genuine failed Submission starts its own fresh policy window.
@@ -34,7 +35,7 @@ add time. A later genuine failed Submission starts its own fresh policy window.
 Infrastructure, provider and budget failures never spend a revision or start a
 contributor revision window. They retain bounded durable recovery semantics.
 
-## Bounded implementation
+## Bounded change
 
 ### Allowed files and owners
 
@@ -45,11 +46,11 @@ contributor revision window. They retain bounded durable recovery semantics.
   assignment/submission lineage, repository guards, and authorized contributor/
   covered-PM reads. Extend existing owner operations and typed public ports.
 - AUTH/AUDIT/OUTBOX contracts, bindings, deferred closure and registered handlers
-  needed for the exact exhaustion/pause/hold effects and PM notification custody.
+  needed for the exact exhaustion/pause/release effects and PM notification custody.
 - One forward migration chain after current main, ORM constraints/registration,
   schema fingerprint, preflight and retained-data upgrade proofs. Preserve old
   immutable policy/history bytes and identifiers; never invent PM authorization
-  or a default allowance for retained policy versions lacking new configuration.
+  or rewrite retained policy values.
 - Affected CLI/MCP public schema snapshots and existing displays required by the
   changed backend contract; coordinate with issue #499 rather than duplicating
   unrelated contributor UX work.
@@ -59,7 +60,8 @@ contributor revision window. They retain bounded durable recovery semantics.
 
 ### Prohibited changes
 
-- Per-task revision-cap configuration, implicit/unlimited PM policy values,
+- Contributor limits or failure-count PM holds, per-task revision-cap configuration,
+  implicit/unlimited revision-policy values,
   migration recreation or rewriting retained evidence, compatibility aliases or
   parallel lifecycle writers, fabricated Reviews or economic outcomes.
 - Human-review activation, model proxy or coding evaluator implementation,
@@ -68,7 +70,7 @@ contributor revision window. They retain bounded durable recovery semantics.
 - Weakened authority, mutable historical outcomes, skipped tests, increased CI
   timeouts, retry-until-green or unreviewed boundary exceptions.
 
-## Acceptance and verification
+## Acceptance criteria
 
 - Explicit N=0 is accepted from public policy input through activation and SQL;
   omission/negative/unlimited values fail. Attempt 0 admits normally and its
@@ -77,9 +79,10 @@ contributor revision window. They retain bounded durable recovery semantics.
   retries and pre-submit failures never charge a round.
 - Canonical task/assignment/Submission reads expose exhaustion, timeout, setup
   pause and eligible revision distinctly without cross-actor/project leakage.
-- Required contributor allowance is policy-owned, cumulative and race-safe;
-  claim/reclaim cannot bypass it. Boundary failure holds the task and notifies
-  the PM with one source-bound durable effect.
+- Exhaustion and timeout atomically reject the failed Submission outcome, close
+  the assignment and return the task to ready. A fresh claim starts round 0,
+  including a claim by the same eligible actor; concurrent claims create only
+  one active assignment. No cumulative contributor cap or PM hold is introduced.
 - Block/repair preserve exact remaining PostgreSQL time; stale expiry events,
   duplicate workers and service recovery cannot expire paused/newer work or
   extend its allowance. Original immutable source/preparation history survives.
@@ -88,13 +91,15 @@ contributor revision window. They retain bounded durable recovery semantics.
   complete participant rollback, exact replay, revocation and foreign-resource
   denial. Notifications and unknown acknowledgements use durable outbox custody.
 - Fresh and intermediate upgrades preserve rows, hashes and linear graph;
-  direct SQL cannot evade the final invariants. Include missing newly-required
-  configuration and retained pre-follow-up windows in migration/recovery proof.
+  direct SQL cannot evade the final invariants. Include retained policy values and
+  pre-follow-up windows in migration/recovery proof.
 - Run focused checks, applicable repository gates and full hosted CI. Record
   exact heads, commands, failures and cleanup; old counts do not qualify a new
   candidate. Hosted-broker deployment rehearsal remains issue #555.
 
-## Risk and review
+## Risk and review routing
+
+- Risk class: L0
 
 High risk: project policy provenance, financial-context lineage, concurrency,
 service authorization, immutable migration history and worker recovery.
@@ -105,4 +110,18 @@ required if workflow/evidence-selection behavior changes.
 
 Human review focus: policy ownership, no invented retained-policy default,
 immediate exhaustion without a phantom window, exact paused-time accounting,
-task contributor allowance boundaries, terminal evidence and safe recovery.
+automatic return to ready, terminal evidence and safe recovery.
+
+## Evidence
+
+| Claim | Command or proof | Result | Remaining uncertainty |
+|---|---|---|---|
+| Routing contract distinguishes exhaustion from remediation | Focused TASK/AUTH contract tests | Positive, denial and changed-receipt cases exercised | Final committed-head replay required after implementation |
+| One forward schema chain preserves old records | Fresh 0048 install and retained-window upgrade proofs | Fresh install exercised with successful cleanup | Retained clock/exhaustion recovery and final fingerprint qualification remain |
+| Public contracts represent paused time explicitly | Real PostgreSQL/API pause proof | Found and corrected recursive null omission; pure serialization regression passes | Final public-client and race proof remain |
+
+## Reconciliation
+
+- Current-source reconciliation: follows merged #569 and preserves main's 13-lane CI and immutable history. The user's final decision removes every contributor-count limit or repeated-failure PM hold.
+- Next usable boundary: one fully qualified follow-up PR completing immediate exhaustion, automatic ready/reclaim and conserved paused windows, including retained-record recovery.
+- Remaining risks: no implementation or merge-readiness claim until retained-data, API, concurrency and independent review checks complete.

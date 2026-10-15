@@ -13,6 +13,7 @@ from app.adapters.tasks import scan_task_revision_sources, task_revision_recover
 from app.core.identifiers import new_record_id
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.revision.models import TaskRevisionPreparation
+from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.repository import TaskRepository
 from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
@@ -70,7 +71,8 @@ async def test_discovery_freezes_original_retained_window_without_pm_or_rebase(
             assert root.repair_actor_id == service_actor
             assert root.repair_idempotency_key == source_id
             assert root.requested_at == source_window[0]
-            assert root.deadline_at == source_window[1]
+            assert root.deadline_at == (None if new_active_guide else source_window[1])
+            assert root.remaining_microseconds == (int((source_window[1] - source_window[0]).total_seconds() * 1_000_000) if new_active_guide else None)
             assert root.outcome == ("blocked" if new_active_guide else "kept")
             assert root.blocked_reason == ("context_blocked" if new_active_guide else None)
             if new_active_guide:
@@ -85,13 +87,17 @@ async def test_discovery_freezes_original_retained_window_without_pm_or_rebase(
                 "SELECT action_id FROM public.audit_events WHERE id=:decision"
             ), {"decision": root.authorization_decision_id})
             assert action == "task.revision.recover"
+            from app.modules.tasks.revision.expiry_event import revision_preparation_event
+
+            expected = revision_preparation_event(
+                await session.get(TaskPostSubmitRoutingManifest, source_id), root,
+            )
             event = await session.scalar(select(OutboxEvent).where(
-                OutboxEvent.idempotency_key == f"task.revision.expire:{source_id}",
+                OutboxEvent.idempotency_key == expected.idempotency_key,
             ))
             assert event is not None
             assert event.not_before_at == root.deadline_at
-            assert event.payload["root_preparation_id"] == str(root.id)
-            assert event.payload["root_preparation_sha256"] == root.preparation_sha256
+            assert event.payload == expected.payload
         if not new_active_guide:
             # The same root, packet, digest and service decision cannot be
             # replayed with a different AUTH request/correlation receipt.
@@ -125,6 +131,11 @@ async def test_discovery_freezes_original_retained_window_without_pm_or_rebase(
                         "ENABLE TRIGGER audit_events_reject_update_delete"
                     ))
                     row["creation_xid"] = await session.scalar(text("SELECT pg_current_xact_id()::text"))
+                    # Supply the canonical INSERT clock inputs so the intended
+                    # changed AUTH receipt, rather than an earlier clock guard, rejects.
+                    for field in ("deadline_at", "remaining_microseconds", "clock_observed_at"):
+                        row[field] = None
+                        row["packet"][field] = None
                     await session.execute(text(
                         "INSERT INTO public.task_revision_preparations SELECT * FROM "
                         "jsonb_populate_record(NULL::public.task_revision_preparations, CAST(:row AS jsonb))"
