@@ -38,12 +38,20 @@ Allowed files:
   mandatory guide-governed requirements.
 - `.commitrail/changes/pilot02-bulk-transitions-cli.md`: reconcile only its
   current outcome paragraph with this correction; retain historical evidence.
+- `backend/scripts/test_lane_catalogue.py`: move only the three non-database
+  architecture inspection modules from the overloaded schema lane into the
+  existing shared-foundation partition.
+- `backend/tests/test_ci_lane_catalogue.py`: replace their obsolete schema-only
+  placement expectation with explicit shared-family/exact-once node proof;
+  retain all other inventory, schema/admin/reset and completeness assertions.
+- `docs/operations_backend_testing.md`: describe that bounded placement repair.
 - This change record.
 
 Prohibited: new routes, new optionality flags, compatibility paths, policy
 defaults, AUTH/grant changes, transaction or lock-order changes, imports or
 cross-owner dependencies, migrations, retained-data edits, checker changes,
-PILOT-08 revision work, CI selection/timeout changes, or weakened safeguards.
+PILOT-08 revision work, selective test omission, timeout/workflow changes, or weakened safeguards.
+The only CI placement change is the three-module move explicitly listed above.
 
 ## Acceptance criteria
 
@@ -67,9 +75,10 @@ No import normalization, placeholder criteria or second screening path is needed
 
 ## Risk and review routing
 
-- Risk class: `L1` — bounded task-readiness contract correction.
+- Risk class: `L1` — bounded task-readiness correction and CI placement repair.
 - Required reviewers: combined security/architecture and QA/test-delta/docs;
-  plan review before implementation, exact clean candidate review after proof.
+  CI integrity for the placement repair; plan review before implementation,
+  exact clean candidate review after proof.
 - Human review focus: only optional task-local criteria become optional at
   SCREEN; required instructions, authorization, lineage and atomicity remain.
 - Verification: frozen backend environment; focused parser tests, public
@@ -90,6 +99,34 @@ five-minute attempt timed out during fixture work and is not counted as proof.
 The corrected candidate runs these same regressions, required-instruction and
 authority/rollback controls, and the existing built-CLI journey. Exact-head
 results and review/check disposition belong in the PR.
+
+## Necessary CI placement repair
+
+The unchanged schema lane timed out twice at approximately 1,202 seconds, with
+582/669 and 576/669 nodes completed, no assertion failure and successful cleanup.
+None of this change's original test modules belongs to that lane. The earlier
+successful baseline wrapper took 1,181.726 seconds against the unchanged
+1,200-second deadline. Repeated retries are not the repair.
+
+The CI plan review preferred a separate placement PR because the workload
+defect predates this product change. This record retains the bounded repair
+here to complete the requested full verification without another prerequisite
+merge. It changes placement only, not screening scope or CI requirements.
+
+Move `tests/test_artifact_architecture.py`,
+`tests/architecture/test_module_boundaries.py` and
+`tests/architecture/test_test_structure_boundary.py` to the existing shared
+partition. They inspect repository structure without database fixtures. Baseline
+setup/call/teardown evidence totals approximately 205 seconds for those modules;
+the existing node hash assigns about 8/103/94 seconds to shared A/B/C. Measured
+receiving job walls were about 596/905/690 seconds. Module-scoped setup can repeat
+across processes, so those estimates require final-head hosted proof.
+
+Keep the same 13 lanes, complete test inventory, canonical exact-node hash,
+PostgreSQL/MinIO ownership, schema/admin/reset tests, timeout, coverage collection
+and aggregate validation. Prove every moved node has exactly one shared owner;
+no baseline test or assertion is removed. PR #566 overlaps the catalogue files
+but is not a dependency; subsequent reconciliation must retain both changes.
 
 ## Reconciliation
 
