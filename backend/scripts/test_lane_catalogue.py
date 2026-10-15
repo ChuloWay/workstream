@@ -599,7 +599,7 @@ PROJECT_PARTITIONED_MODULES = (
 PROJECT_MODULE_LANE_OVERRIDES = {
     "tests/test_projects.py": (
         # The repeatedly incomplete tail is split across the two measured spare lanes.
-        "project_lifecycle_a",
+        "project_lifecycle_b",
         "project_lifecycle_e",
     ),
     "tests/tasks/test_task_batch_transitions.py": (
@@ -610,7 +610,7 @@ PROJECT_MODULE_LANE_OVERRIDES = {
         "project_lifecycle_b",
         "project_lifecycle_c",
     ),
-    "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_a",),
+    "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_b",),
     "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
         # The measured historical cases land on A/D after the deadline-wait repair.
         "project_lifecycle_a",

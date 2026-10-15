@@ -81,9 +81,13 @@ contributor revision window. They retain bounded durable recovery semantics.
   `test_projects.py` nodes from complete hosted phase evidence. After both 3bad
   attempts left only the project C `test_projects.py` tail, 6202 moved the three
   measured pause-race waits to D; D then timed out with only six nodes from that
-  same tail left. Route those waits to measured-spare E and repartition only
-  `test_projects.py` across measured-spare A/E. The 6202 manifest gives estimated
-  totals near A 862, B 872, C 1012, D 930--1020, and E 923 seconds;
+  same tail left. Route those waits to measured-spare E. E796 then twice timed
+  out A with only the `test_projects.py` tail left while B passed in 604 seconds;
+  repartition only `test_projects.py` across measured-spare B/E and move the
+  three-node revision-clock module from A to B. E796 measured the 131 E-owned
+  project cases at 128.22 phase seconds; because A did not complete, estimated
+  totals of about A 1050--1100 and B 780--850 seconds are capacity evidence,
+  not guarantees. C/D/E ownership remains unchanged;
   these estimates motivate ownership and do not replace hosted qualification.
   Preserve every test node, all 13
   required lanes and existing timeouts; affected current
@@ -99,7 +103,8 @@ contributor revision window. They retain bounded durable recovery semantics.
 - Human-review activation, model proxy or coding evaluator implementation,
   general contributor claim leases, CI optimization beyond the exact measured
   ownership changes above; repartitioning the repeatedly incomplete
-  `test_projects.py` module to any lane outside project A/E; the separate
+  `test_projects.py` module to any lane outside project B/E, or the revision-clock
+  module outside project B; the separate
   optional-criteria screening repair (#489), deployment or automatic merge.
 - Weakened authority, mutable historical outcomes, skipped tests, increased CI
   timeouts, retry-until-green or unreviewed boundary exceptions.
