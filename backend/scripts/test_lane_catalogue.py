@@ -586,9 +586,15 @@ PROJECT_PARTITIONED_MODULES = (
     + PROJECT_INTAKE_MODULES
 )
 
-# Wall-clock proofs stay in their project semantic family but need exact lane
-# ownership so their intentional waits do not collide in the same process.
-PROJECT_WALL_CLOCK_MODULE_LANES = {
+# Measured long-running proofs stay in their project semantic family but need
+# exact lane ownership so their waits and large fixtures do not collide.
+PROJECT_MODULE_LANE_OVERRIDES = {
+    "tests/tasks/test_task_batch_transitions.py": (
+        "project_lifecycle_a",
+        "project_lifecycle_b",
+        "project_lifecycle_d",
+        "project_lifecycle_e",
+    ),
     "tests/tasks/submission_dispatch/test_revision_clock_sql.py": (
         "project_lifecycle_a",
     ),
@@ -596,10 +602,17 @@ PROJECT_WALL_CLOCK_MODULE_LANES = {
         "project_lifecycle_a",
     ),
     "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
+        "project_lifecycle_a",
         "project_lifecycle_d",
     ),
     "tests/tasks/submission_dispatch/test_revision_exhaustion.py": (
         "project_lifecycle_d",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_expiry.py": (
+        "project_lifecycle_a",
+        "project_lifecycle_b",
+        "project_lifecycle_d",
+        "project_lifecycle_e",
     ),
 }
 
@@ -609,7 +622,7 @@ PARTITION_GROUPS = (
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
-    module: PROJECT_WALL_CLOCK_MODULE_LANES.get(module, names)
+    module: PROJECT_MODULE_LANE_OVERRIDES.get(module, names)
     for names, modules in PARTITION_GROUPS
     for module in modules
 }

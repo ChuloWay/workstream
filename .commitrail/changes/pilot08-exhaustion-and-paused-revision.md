@@ -55,9 +55,11 @@ contributor revision window. They retain bounded durable recovery semantics.
   changed backend contract; coordinate with issue #499 rather than duplicating
   unrelated contributor UX work.
 - Focused positive/negative real API/PostgreSQL/outbox/storage proofs, exact test
-  ownership and its exact behavior-partition registration; place the new
-  wall-clock proofs within the existing project lanes without changing prior
-  module ownership, lane count or timeouts; affected current
+  ownership and its exact behavior-partition registration. Balance the new
+  wall-clock proofs and the existing `test_revision_expiry.py` and
+  `test_task_batch_transitions.py` modules within the five project lanes, using
+  measured runtime. Preserve semantic owner families, every test node, all 13
+  required lanes and existing timeouts; affected current
   specifications/runbooks/README and roadmap. Remove
   superseded cap-waits-for-expiry assertions and replace their real guarantees.
 
@@ -122,8 +124,9 @@ reclaim, immutable history, real-participant rollback, direct-SQL denial,
 concurrent terminal deliveries, paused-clock precision and retained-window
 recovery. Existing task-detail transaction tests also protect caller-owned pending
 writes from read-triggered autoflush. The test inventory and behavior ownership
-partition include every new module without moving existing owners or reducing
-required checks.
+partition include every new module without moving semantic owners or reducing
+required checks. The two existing project test modules named in scope may move
+only between project lanes to preserve the unchanged execution time budget.
 
 Fresh migration capture validates every installed SQL/PLpgSQL function before
 recording the schema fingerprint. PostgreSQL proofs exercise actual transactions,

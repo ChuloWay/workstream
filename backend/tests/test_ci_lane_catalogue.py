@@ -237,8 +237,14 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
         assert hashlib.sha256(canonical.encode()).hexdigest() == digest
 
 
-def test_project_wall_clock_modules_have_exact_owned_lanes() -> None:
+def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
     expected = {
+        "tests/tasks/test_task_batch_transitions.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_b",
+            "project_lifecycle_d",
+            "project_lifecycle_e",
+        ),
         "tests/tasks/submission_dispatch/test_revision_clock_sql.py": (
             "project_lifecycle_a",
         ),
@@ -246,13 +252,20 @@ def test_project_wall_clock_modules_have_exact_owned_lanes() -> None:
             "project_lifecycle_a",
         ),
         "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
+            "project_lifecycle_a",
             "project_lifecycle_d",
         ),
         "tests/tasks/submission_dispatch/test_revision_exhaustion.py": (
             "project_lifecycle_d",
         ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_b",
+            "project_lifecycle_d",
+            "project_lifecycle_e",
+        ),
     }
-    assert catalogue.PROJECT_WALL_CLOCK_MODULE_LANES == expected
+    assert catalogue.PROJECT_MODULE_LANE_OVERRIDES == expected
     assert set(expected) <= set(catalogue.PROJECT_MODULES)
     assert all(
         catalogue.PARTITION_LANES_BY_MODULE[module]
@@ -268,24 +281,22 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     ) + "\n"
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "375f95c5863f921ad790af8bc01d4b3d87380d4c1105a9ac9dc447443ff20527"
+        "06e9964f576d92d3d917d096d4f932814cb63136fe9d34a7480466dafbc73d89"
     )
 
 
-def test_project_wall_clock_nodes_execute_exactly_once_in_owned_lane() -> None:
+def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> None:
     nodes = [
-        f"{module}::test_wall_clock_{index}"
-        for module in catalogue.PROJECT_WALL_CLOCK_MODULE_LANES
-        for index in range(3)
+        f"{module}::test_owned_{index}"
+        for module in catalogue.PROJECT_MODULE_LANE_OVERRIDES
+        for index in range(256)
     ]
     rows = runner.build_manifest("a" * 40, list(reversed(nodes)))["nodes"]
 
     assert Counter(row["nodeid"] for row in rows) == Counter(nodes)
     assert len(rows) == len(nodes)
-    assert all(
-        row["lane"] == catalogue.PROJECT_WALL_CLOCK_MODULE_LANES[row["module"]][0]
-        for row in rows
-    )
+    for module, lane_names in catalogue.PROJECT_MODULE_LANE_OVERRIDES.items():
+        assert {row["lane"] for row in rows if row["module"] == module} == set(lane_names)
 
 
 def test_discovery_is_recursive_and_lexically_canonical(tmp_path: Path) -> None:
