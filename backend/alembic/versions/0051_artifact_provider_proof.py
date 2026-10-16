@@ -185,12 +185,12 @@ BEGIN
   OR octet_length(NEW.expected_principal_arn) NOT BETWEEN 20 AND 700
   OR (NEW.observed_principal_arn IS NOT NULL AND
       octet_length(NEW.observed_principal_arn) NOT BETWEEN 20 AND 700)
-  OR NEW.expected_principal_arn<>CASE NEW.probe_type
+  OR NEW.expected_principal_arn<>(CASE NEW.probe_type
       WHEN 'readiness' THEN NEW.readiness_role_arn
       WHEN 'runtime_immutability' THEN NEW.runtime_role_arn
       WHEN 'negative_access' THEN NEW.negative_role_arn
       ELSE NULL
-     END
+     END)
  THEN
   RAISE EXCEPTION 'artifact provider probe result is invalid' USING ERRCODE='23514';
  END IF;
