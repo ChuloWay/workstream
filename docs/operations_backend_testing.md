@@ -42,7 +42,7 @@ unset WORKSTREAM_TEST_ADMIN_DATABASE_URL
 ```
 
 Run both phases for this sequential local diagnostic. Hosted CI instead
-uses 13 independent matrix jobs, one per semantic lane, with a 20-minute lane
+uses 16 independent matrix jobs, one per semantic lane, with a 25-minute lane
 limit and a separate fail-closed fan-in job.
 
 The runner removes the admin URL before child launch, overwrites both child database URLs,
@@ -62,7 +62,7 @@ attribution across SQLAlchemy async switches using the repository configuration.
 This setting changes measurement, not test selection or exclusions.
 
 Backend and MCP coverage percentages do not gate merges. Backend combines the
-13 lane artifacts once for diagnostics, without subsystem/per-file quotas or
+16 lane artifacts once for diagnostics, without subsystem/per-file quotas or
 focused reruns to raise a number. Artifact integrity and complete test execution
 remain blocking. The old floor-computation CLI and unused quota-policy helpers
 are removed; their module retains the shared lexical test-safety owner.
@@ -170,23 +170,22 @@ This is not a production configuration or proof of host-power-loss durability:
 [Docker tmpfs data disappears when the container stops](https://docs.docker.com/engine/storage/tmpfs/).
 An exhausted mount fails the job; it does not silently change storage or skip tests.
 
-The `project_lifecycle_a`, `project_lifecycle_b`, `project_lifecycle_c`,
-`project_lifecycle_d`, and `project_lifecycle_e` lanes
+The seven `project_lifecycle_a` through `project_lifecycle_g` lanes
 partition PROJECT nodes, checker execution, materialization, evaluation capacity,
 output custody and routing AUTH preparation beside initial dispatch/delivery.
 All use the existing exact-node hash within the project family. Measured module
 overrides in `PROJECT_MODULE_LANE_OVERRIDES` spread expensive proofs across
-specific project lanes. In particular, `test_projects.py` uses C/B/D after its
-former B/E allocation repeatedly exceeded E's deadline. The
-[CI change record](../.commitrail/changes/ci-pr-scope-segmentation.md) records this
-allocation repair; it changes neither semantic ownership nor test membership.
+specific project lanes. Five project lanes repeatedly crossed the 1200-second
+deadline on `main` as hosted runner speed varied, so the family grew to seven
+lanes and the overrides were re-placed from measured hosted durations. The
+[lane capacity record](../.commitrail/changes/ci-lane-capacity.md) records the
+measurements; the change alters neither semantic ownership nor test membership.
 The lane logs retain all setup/call/teardown phase durations,
 including phases below five milliseconds, for performance diagnosis. This output
 is bounded by the selected test inventory and remains diagnostic only: it cannot
-select tests or override completeness, cleanup or the unchanged execution deadline.
+select tests or override completeness, cleanup or the execution deadline.
 Measure final-report overhead alongside test execution when comparing allocations.
-`task_lifecycle_a`, `task_lifecycle_b`, `task_lifecycle_c`, and
-`task_lifecycle_d` use the same
+The five `task_lifecycle_a` through `task_lifecycle_e` lanes use the same
 deterministic partition mechanism for the remaining TASK and checker nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
 isolated-runner contracts, together with database-backed migration, storage, and
 custody proofs. The
@@ -278,7 +277,7 @@ Each executed lane uploads one seven-day bundle per attempt, and the final job
 uploads the reconciled `.ci/test-lanes` tree and downloaded diagnostics under its
 own attempt-specific artifact name. Older diagnostic artifacts are preserved.
 Its summary
-records the exact head, canonical node count, 13 lane results, elapsed time,
+records the exact head, canonical node count, 16 lane results, elapsed time,
 and raw-file digests. Per-lane evidence records collected, completed, skipped,
 and deselected exact node IDs plus the bound resource-isolation metadata and
 coverage digest. Resource metadata is mode `0600`, omits credentials, and proves
