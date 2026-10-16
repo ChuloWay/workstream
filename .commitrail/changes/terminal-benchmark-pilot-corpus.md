@@ -55,6 +55,14 @@ examples/assertions, a genuinely broken starting program and a correct reference
 Tests reject the unchanged starter and accept the reference across repeat runs.
 The Dockerfile copies only starting workspace material; reference solutions and
 tests stay outside the task image and are provided separately by the evaluator.
+Candidate evaluation never receives `solution/`. Trusted reference calibration
+overlays it only in a separate temporary copy; the evaluator injects tests
+separately. Each package has `task.toml`, `instruction.md`,
+`environment/Dockerfile`, `workspace/program.py`, `solution/program.py`, and
+`tests/` containing independent golden cases and assertions.
+`tasks.json` alone owns native TaskImportDocument fields. `task.toml` and
+`corpus.json` own package mapping, commands and corpus hashes; their shared
+`external_task_id` must equal the corresponding native import row exactly.
 Reuse the repository's digest-pinned CPython base as the explicit project base;
 record that its approved offline cache/platform digest must be prepared by #493.
 
@@ -62,9 +70,12 @@ The verifier executes only these reviewed repository assets in temporary
 workspaces using local Python; it never accepts uploaded ZIP/code or claims to
 provide sandbox isolation. It records corpus hashes and observed reference/no-op
 outcomes. The project Docker build and genuine gVisor execution remain #493
-proof. Negative cases identify real missing files, invalid metadata/base,
-build errors, wrong reference logic and ineffective tests, rather than filename
-rejection flags. A nondeterminism example cannot be claimed to fail every sample;
+proof. Local negative cases prove malformed package metadata, wrong reference
+logic and ineffective tests. Actual Docker build failures, approved base-cache
+availability, platform compatibility and gVisor execution belong to #493 and
+must not be reported as locally verified. Each task also names a plausible
+near-miss solution rejected by independent golden assertions. A nondeterminism
+example cannot be claimed to fail every sample;
 record this limit instead of retry-until-green.
 
 Guide request includes at least one meaningful task example. Native task-import
@@ -73,6 +84,9 @@ schema; briefs are not auto-created tasks. Proposed first drill policies are
 explicit `human_review_required=false`, second-review false, a project-controlled
 revision allowance and an independently published ContributionPolicy. These
 assets do not grant authority or assert that proposed requirements are registered.
+`guide-request.json` contains only current `ProjectGuideCreate` fields. Proposed
+ReviewPolicy, RevisionPolicy and ContributionPolicy values remain documented
+handoff intent requiring separate authorized manager or Finance operations.
 
 ## Acceptance criteria
 
@@ -82,7 +96,7 @@ assets do not grant authority or assert that proposed requirements are registere
   invented required task-local criteria or identity selectors.
 - [ ] Five positive reference packages have independently reviewed expected
   outputs; local execution passes their assertions while unchanged starters fail.
-- [ ] Repeatability, corpus hashes and documented negative mutations are
+- [ ] Repeatability, corpus hashes and locally supported negative mutations are
   reproducible without network, provider secrets or product database access.
 - [ ] Every claimed observed result is distinguished from future sandbox/build,
   live-inference, manager-approval and hosted-runtime proof.
