@@ -86,6 +86,22 @@ profile requires the dedicated host's IAM role; web-identity token and
 container-role transports need a different reviewed topology and fail this
 preflight.
 
+Set the immutable release digest and every exact AWS role, managed-policy,
+trust-policy and bucket-policy identity from the reviewed #582 evidence. The
+release wrapper allowlists these eleven non-secret values and the shared Compose
+environment passes them unchanged to API, worker and Beat. The canonical
+application `Settings` owner rejects a malformed digest or ARN, a mixed AWS
+partition/account, reused workload roles or trust-policy digests, or reused
+managed policies when any of those processes starts. Preflight checks presence
+and rendered custody only so it does not create a second IAM-policy validator.
+
+The AWS proof command also loads this exact Settings contract. Its readiness,
+runtime-immutability and negative-access modes require distinct active IAM
+identities, so they must not be run through the long-lived API, worker or Beat
+identity. The dedicated proof-job profile is pending the stable #493 integration;
+this release configuration does not invent an interim Compose service or claim
+that the three proof modes have run.
+
 The example S3 and completion timeouts are unmeasured starting values supplied
 by the current #582 contract:
 
@@ -141,8 +157,9 @@ python3 deploy/hosted/preflight.py --env-file /etc/workstream/release.env
 Preflight cannot attest the active AWS identity, absence of extra IAM
 permissions, Flow token acceptance, external service health, collector delivery,
 backup recoverability or a live checker result. Issue #582 owns the AWS release
-identity, exact role/policy and bucket-policy proof contract; do not infer those
-facts from these settings.
+identity, exact role/policy and bucket-policy proof contract. The configuration
+now carries that contract into every long-running Settings process, but do not
+infer the underlying facts or completed proof-job execution from rendered values.
 
 ## Start and inspect
 

@@ -297,11 +297,14 @@ The first hosted release configuration now separates immutable API/Celery/Beat
 and checker-service images from the development stack, requires real Flow
 verification and AWS workload identity, and binds the existing checker service
 to a dedicated Docker/runsc host with exact private material paths and cached
-image identities. Its preflight proves local configuration and host
-prerequisites only. Deployment, active cloud/IAM identity, representative
-resource limits, diagnostic privacy/outage behavior, drain/restart and isolated
-backup/restore remain environment evidence for #583 and the parent release
-drill.
+image identities. It carries the required release digest and exact AWS
+role/policy/trust/bucket-policy identities into every long-running application
+Settings process while leaving their canonical validation with the application
+owner. Its preflight proves local configuration and host prerequisites only.
+The role-isolated AWS proof-job profile, deployment, active cloud/IAM identity,
+representative resource limits, diagnostic privacy/outage behavior,
+drain/restart and isolated backup/restore remain environment evidence for #583
+and the parent release drill.
 
 [ARCH-04E1B-B1](../.commitrail/initiatives/WS-ARCH-001/WS-ARCH-001-04E1BB1.md)
 adds required TASK-before-CHECKERS reservation/current-result locking, ordered

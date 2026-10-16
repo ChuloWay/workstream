@@ -126,15 +126,16 @@ identity, absence of extra IAM permissions, external service availability,
 diagnostic delivery, backup/restore recoverability or live product health.
 
 Issue #582 owns AWS provider activation and proof. This configuration wires the
-existing non-secret AWS S3 profile, region, bucket, prefix, virtual addressing,
-workload-identity mode and method. It also requires explicit existing operation,
-complete-read and persistence timeout settings; the example values are
-unmeasured and do not assert a live result. Eligibility math and runtime
+non-secret AWS S3 profile, region, bucket, prefix, virtual addressing,
+workload-identity mode and method plus the canonical release ID, exact IAM
+role/policy ARNs, trust-policy digests, bootstrap principal and bucket-policy
+digest into the shared API/Celery/Beat Settings environment. It also requires
+explicit operation, complete-read and persistence timeout settings; the example
+values are unmeasured and do not assert a live result. Format, partition/account
+coherence, required distinct identities, eligibility math and runtime
 enforcement remain with #582's canonical application owner rather than being
-duplicated in preflight. The proposed release ID, exact IAM role/policy ARNs,
-bucket-policy digest and proof-job identity fields remain pending #582
-implementation and integration and are not treated as proof or invented as
-current application settings here.
+duplicated in preflight. The role-isolated proof-job profile remains pending the
+stable #493 integration and is not invented as another release service here.
 
 ## Acceptance criteria
 
@@ -151,6 +152,9 @@ current application settings here.
   existing runner revalidates it for each execution.
 - [x] Real Flow verification and AWS workload identity are required; local auth,
   local Flow-HMAC, static AWS keys, MinIO and debug settings fail preflight.
+- [x] Every AWS-backed API, worker and Beat Settings process receives the same
+  required release digest and exact role, policy, trust and bucket-policy
+  identities without treating those non-secret values as live proof.
 - [x] Required secrets are mounted and loaded only for their API, worker or Beat
   role and are never printed or evaluated; absent, unrelated, broad-mode,
   wrong-owner or empty files fail closed.
@@ -169,8 +173,9 @@ current application settings here.
 ## Verification Plan
 
 1. Run focused unit tests for the secret loader contract and release preflight,
-   including hostile ambient interpolation, role/mount isolation and mutated
-   tag/local-auth/static-key/non-runsc/cache/path/mode cases.
+   including hostile ambient interpolation, exact AWS evidence flow to every
+   Settings process, role/mount isolation and mutated tag/local-auth/static-key/
+   non-runsc/cache/path/mode cases.
 2. Render `deploy/hosted/compose.yml` with disposable placeholder identities and
    secret files; assert service commands, immutable images, mounts, security
    options, health checks and absence of development services/settings.
@@ -220,14 +225,16 @@ explicitly provisional.
 
 Source/configuration candidate checks:
 
-- `python3 -m unittest -v scripts.test_hosted_release_config`: ten focused tests
-  pass, including hostile ambient Compose rendering/operation and executed
-  role-specific secret-loader failure/non-evaluation/non-disclosure cases.
+- `python3 -m unittest -v scripts.test_hosted_release_config`: eleven focused
+  tests pass, including required AWS evidence custody in each rendered backend
+  process, hostile ambient Compose rendering/operation and executed role-specific
+  secret-loader failure/non-evaluation/non-disclosure cases.
 - `uvx ruff@0.15.22 check deploy/hosted/preflight.py deploy/hosted/compose.py
   scripts/test_hosted_release_config.py`,
   `/bin/sh -n docker/backend/release-entrypoint.sh` and `git diff --check` pass.
 - `python3 scripts/check_markdown_links.py` passes for the three changed
-  Markdown files; the stale-wording and Commitrail record checks pass.
+  Markdown files; stale Workstream/artifact/authorization wording and Commitrail
+  record checks pass. No local spreadsheet export is present to reconcile.
 - Historical evidence: `docker build --file docker/checker/Dockerfile.release --tag
   workstream-checker-release:test .` passes with locked Cargo and two compiler
   jobs. Local image ID

@@ -63,11 +63,20 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertEqual(set(rendered["services"]), {"api", "worker", "beat", "checker-service"})
         self.assertNotIn("build", rendered["services"]["api"])
         services = rendered["services"]
+        evidence = {
+            key: self.environment[key] for key in preflight.AWS_S3_EVIDENCE_KEYS
+        }
         for service in services.values():
             self.assertEqual(service["pull_policy"], "always")
             self.assertTrue(service["init"])
             self.assertEqual(service["restart"], "on-failure:5")
             self.assertTrue(service["healthcheck"]["test"])
+        for name in preflight.ROLE_SECRET_FILE_KEYS:
+            service_environment = services[name]["environment"]
+            self.assertEqual(
+                {key: service_environment[key] for key in preflight.AWS_S3_EVIDENCE_KEYS},
+                evidence,
+            )
         api_command = " ".join(services["api"]["command"])
         worker_command = " ".join(services["worker"]["command"])
         self.assertIn("alembic upgrade head", api_command)
@@ -141,6 +150,10 @@ class HostedReleaseConfigTests(unittest.TestCase):
             operation_environment["WORKSTREAM_TOKEN_JWKS_URL"],
             self.environment["WORKSTREAM_TOKEN_JWKS_URL"],
         )
+        self.assertEqual(
+            operation_environment["WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN"],
+            self.environment["WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN"],
+        )
         self.assertEqual(operation_environment["DOCKER_HOST"], "unix:///var/run/docker.sock")
         for key in ("COMPOSE_FILE", "AWS_ACCESS_KEY_ID"):
             self.assertNotIn(key, operation_environment)
@@ -169,6 +182,14 @@ class HostedReleaseConfigTests(unittest.TestCase):
         for label, (key, value) in cases.items():
             with self.subTest(label=label):
                 changed = self.environment | {key: value}
+                with self.assertRaises(preflight.PreflightError):
+                    preflight.validate_environment(changed)
+
+    def test_environment_requires_every_aws_s3_evidence_setting(self) -> None:
+        for key in preflight.AWS_S3_EVIDENCE_KEYS:
+            with self.subTest(key=key):
+                changed = dict(self.environment)
+                del changed[key]
                 with self.assertRaises(preflight.PreflightError):
                     preflight.validate_environment(changed)
 
