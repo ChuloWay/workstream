@@ -162,5 +162,66 @@
         }
       }
     ]
+  },
+  {
+    "name": "non-object-input",
+    "steps": [
+      {
+        "input": [],
+        "expected": {
+          "status": "rejected",
+          "rows": []
+        },
+        "database_rows": []
+      }
+    ]
+  },
+  {
+    "name": "non-object-input-preserves-rows",
+    "steps": [
+      {
+        "input": {
+          "rows": [
+            {
+              "id": "keep",
+              "quantity": 7
+            }
+          ]
+        },
+        "expected": {
+          "status": "committed",
+          "rows": [
+            [
+              "keep",
+              7
+            ]
+          ]
+        },
+        "database_rows": [
+          [
+            "keep",
+            7
+          ]
+        ]
+      },
+      {
+        "input": [],
+        "expected": {
+          "status": "rejected",
+          "rows": [
+            [
+              "keep",
+              7
+            ]
+          ]
+        },
+        "database_rows": [
+          [
+            "keep",
+            7
+          ]
+        ]
+      }
+    ]
   }
 ]

@@ -145,6 +145,13 @@ reads use explicit UTF-8. The fixed Dockerfile recipe gives the non-root runtime
 user ownership of the workspace directory itself, including relative output
 creation. Actual container execution remains #493 proof, not native calibration.
 
+Candidate timeouts, malformed UTF-8/JSON output and unreadable required SQLite
+rows now reject through the sample harness's assertion boundary. The native
+verifier exercises each program-failure case without treating a broken harness
+as a successful rejection. Event aggregation and atomic import explicitly reject
+non-object input, with independent golden cases; solver instructions use repair
+titles while task-import briefs retain their contributor-facing authoring titles.
+
 The checker implementation inspection also distinguished the originally pinned
 OCI index from its Linux/AMD64 child manifest. The corpus now pins that exact
 platform manifest; registry bytes were SHA-256 checked against both identities and
@@ -153,9 +160,9 @@ chosen Python image or the evaluator's isolation requirements.
 
 ## Reconciliation
 
-- Current-source reconciliation: PILOT-08 is merged. #575/#577 result/read work,
-  #585 CI is incorporated; #586 README remains separately owned. No edits to
-  those paths.
+- Current-source reconciliation: PILOT-08, #575 stored attempt/findings reads
+  and #585 CI are incorporated. #577 contributor reads and #586 README remain
+  separately owned; their implementation paths are outside this change.
 - Next usable boundary: #493 real checker execution; #580 supported registration;
   #555 public live-inference/local and hosted journey proof.
 - Remaining risks: Proposed guide still requires manager approval; local Python

@@ -10,6 +10,8 @@ def solve(payload):
         db.commit()
         try:
             db.execute("BEGIN")
+            if not isinstance(payload, dict):
+                raise ValueError
             rows = payload.get("rows")
             if not isinstance(rows, list):
                 raise ValueError

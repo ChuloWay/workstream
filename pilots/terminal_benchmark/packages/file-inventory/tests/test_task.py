@@ -20,18 +20,27 @@ def main():
             for index, step in enumerate(case["steps"]):
                 input_path, output_path = root / f"input-{index}.json", root / f"output-{index}.json"
                 input_path.write_text(json.dumps(step["input"]), encoding="utf-8")
-                run = subprocess.run(
-                    [sys.executable, str(program), str(input_path), str(output_path)],
-                    cwd=root, capture_output=True, timeout=5, check=False,
-                )
+                try:
+                    run = subprocess.run(
+                        [sys.executable, str(program), str(input_path), str(output_path)],
+                        cwd=root, capture_output=True, timeout=5, check=False,
+                    )
+                except subprocess.TimeoutExpired:
+                    raise AssertionError(f"{case['name']} step {index}: program timed out") from None
                 if run.returncode != 0 or not output_path.is_file():
                     raise AssertionError(f"{case['name']} step {index}: no successful output")
-                actual = json.loads(output_path.read_text(encoding="utf-8"))
+                try:
+                    actual = json.loads(output_path.read_text(encoding="utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    raise AssertionError(f"{case['name']} step {index}: output is not valid UTF-8 JSON") from None
                 if actual != step["expected"]:
                     raise AssertionError(f"{case['name']} step {index}: output differs from independent expected value")
                 if "database_rows" in step:
-                    with sqlite3.connect(root / "records.sqlite") as connection:
-                        rows = [list(row) for row in connection.execute("SELECT id, quantity FROM records ORDER BY id")]
+                    try:
+                        with sqlite3.connect(root / "records.sqlite") as connection:
+                            rows = [list(row) for row in connection.execute("SELECT id, quantity FROM records ORDER BY id")]
+                    except sqlite3.Error:
+                        raise AssertionError(f"{case['name']} step {index}: required database rows are unreadable") from None
                     if rows != step["database_rows"]:
                         raise AssertionError(f"{case['name']} step {index}: durable rows differ")
     print(json.dumps({"cases": len(cases), "status": "passed"}, sort_keys=True))

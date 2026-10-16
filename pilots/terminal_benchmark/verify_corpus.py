@@ -84,6 +84,26 @@ def require_starter_failure(package: Path, starter: str, *, ineffective_tests: b
         raise AssertionError("unchanged starter unexpectedly passed")
 
 
+def require_candidate_failure_boundaries(package: Path) -> None:
+    """Bad program behavior must fail a case, without breaking the test harness."""
+    programs = {
+        "timeout": "import time\ntime.sleep(30)\n",
+        "invalid-json": "from pathlib import Path\nimport sys\nPath(sys.argv[2]).write_text('not json')\n",
+        "invalid-utf8": "from pathlib import Path\nimport sys\nPath(sys.argv[2]).write_bytes(bytes([255]))\n",
+    }
+    for failure, program in programs.items():
+        if run_cases(package, program):
+            raise AssertionError(f"{failure} program escaped case rejection")
+    if package.name == "atomic-import":
+        cases = json.loads((package / "tests/cases.json").read_text(encoding="utf-8"))
+        case = next(case for case in cases if "database_rows" in case["steps"][0])
+        expected = json.dumps(case["steps"][0]["expected"])
+        # Match the expected JSON so only the missing database/table rejects it.
+        program = f"from pathlib import Path\nimport sys\nPath(sys.argv[2]).write_text({expected!r})\n"
+        if run_cases(package, program, case_name=case["name"]):
+            raise AssertionError("missing database escaped case rejection")
+
+
 def verify() -> dict:
     corpus = json.loads((ROOT / "corpus.json").read_text(encoding="utf-8"))
     actual_names = sorted(str(p.relative_to(ROOT)) for p in ROOT.rglob("*") if p.is_file() and p.suffix != ".pyc" and p.name != "corpus.json")
@@ -105,6 +125,7 @@ def verify() -> dict:
         starter = (package / "workspace/program.py").read_text(encoding="utf-8")
         reference = (package / "solution/program.py").read_text(encoding="utf-8")
         require_starter_failure(package, starter)
+        require_candidate_failure_boundaries(package)
         for _ in range(3):
             if not run_cases(package, reference):
                 raise AssertionError(f"reference failed: {item['path']}")
@@ -141,7 +162,7 @@ def verify() -> dict:
                     pass
                 else:
                     raise AssertionError(f"invalid package survived: {mutation_name}")
-        evidence.append({"external_task_id": item["external_task_id"], "reference_passes": 3, "starter_rejected": True, "near_miss_rejected": True})
+        evidence.append({"external_task_id": item["external_task_id"], "reference_passes": 3, "starter_rejected": True, "near_miss_rejected": True, "candidate_failure_boundaries": "passed"})
     return {"proof": "trusted_native_corpus_only", "packages": evidence, "docker_gvisor_hosted_proof": "pending"}
 
 

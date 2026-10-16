@@ -1,4 +1,4 @@
-# Author a deterministic file-inventory repair benchmark
+# Repair the file inventory tool
 
 Input is {"root":"relative-directory"}. The evaluator creates a tree of regular files/directories beneath this root, without links. Recursively inventory every regular file except files whose basename ends with the case-sensitive suffix .tmp. A directory ending in .tmp is still traversed. Return {"files":[{"path":relative_POSIX_path,"bytes":byte_count,"sha256":lowercase_SHA256},...]}, sorted lexicographically by path. Hash exact bytes, not decoded characters. Include empty files; an empty directory gives an empty list. The input root is always a valid directory beneath the current working directory; handling hostile roots or symlinks is not this exercise's contract.
 

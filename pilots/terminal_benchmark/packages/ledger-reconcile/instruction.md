@@ -1,4 +1,4 @@
-# Author an exact-decimal ledger repair benchmark
+# Repair the ledger reconciliation tool
 
 Repair ledger reconciliation. Input is {"transactions": [...]} with string fields id, account, currency, kind (credit or debit), status (posted or pending), and amount. Validate every row before aggregation. All text identifiers must be nonempty; amounts must be nonnegative plain decimal strings with one to eighteen integral digits and at most two fractional digits (no exponent, sign or whitespace). Invalid input returns {"error":"invalid_input"}. Pending rows do not contribute and do not consume transaction IDs. Among posted rows the first occurrence of each id wins globally. Credits add; debits subtract. Group by account and currency, retaining groups with zero balance; sort by account then currency. Output {"balances":[{"account":...,"currency":...,"amount":"0.00"}]} with exact two-digit decimal strings. Empty input yields an empty balances list.
 
