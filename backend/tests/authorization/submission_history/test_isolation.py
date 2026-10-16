@@ -149,10 +149,10 @@ async def test_same_task_history_separates_contributors(task_client, monkeypatch
         assert [item["id"] for item in response.json()["items"]] == [expected]
         item = response.json()["items"][0]
         expected_state = (
-            ("rejected", "revision_deadline_expired") if subject == "worker-one"
-            else ("submitted", None)
+            ("rejected", "revision_deadline_expired", True) if subject == "worker-one"
+            else ("evaluation_pending", None, False)
         )
-        assert (item["status"], item["status_reason"]) == expected_state
+        assert (item["status"], item["status_reason"], item["decided_at"] is not None) == expected_state
         assert response.json()["next_cursor"] is None
         who = await actor_id(subject)
         async with db_session.get_session_factory()() as session:
@@ -162,7 +162,7 @@ async def test_same_task_history_separates_contributors(task_client, monkeypatch
     assert response.status_code == 200, response.text
     assert [item["id"] for item in response.json()["items"]] == [case[2], other_submission_id]
     assert [(item["status"], item["status_reason"]) for item in response.json()["items"]] == [
-        ("rejected", "revision_deadline_expired"), ("submitted", None),
+        ("rejected", "revision_deadline_expired"), ("evaluation_pending", None),
     ]
 
 

@@ -279,8 +279,18 @@ async def test_zero_cap_releases_immediately_and_reclaim_resets_only_assignment_
         assert await _snapshot(h) == denied
         await service_link_state(h.factory, ServiceIdentity.TASK_POST_SUBMIT_ROUTER, active=True)
         async with h.factory() as session:
-            assert await session.scalar(text("SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"),
-                                        {"id": first_submission}) == original
+            # The packet is unchanged; only its attempt outcome records the exhaustion.
+            outcome = ["attempt_status", "status_reason", "decided_at", "updated_at"]
+            assert await session.scalar(text(
+                "SELECT to_jsonb(s)-CAST(:outcome AS text[]) FROM public.submissions s WHERE id=:id"
+            ), {"id": first_submission, "outcome": outcome}) == {
+                key: value for key, value in original.items() if key not in outcome
+            }
+            assert (await session.execute(text(
+                "SELECT attempt_status,status_reason,decided_at FROM public.submissions WHERE id=:id"
+            ), {"id": first_submission})).one() == (
+                "rejected", "revision_limit_reached", first_receipt.exhausted_at,
+            )
             rows = (await session.execute(text("""
                 SELECT version,task_assignment_id,supersedes_submission_id FROM public.submissions
                 WHERE task_id=:id ORDER BY version

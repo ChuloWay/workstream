@@ -1001,6 +1001,13 @@ another preparation or deadline. Timeout also returns the task to ready. Anyone
 eligible may claim a new assignment at round 0, including a previous claimant;
 there is no contributor-count limit or repeated-failure hold.
 
+A post-submit coverage gap with no error goes to human review when the locked
+ReviewPolicy requires it; otherwise it returns to the contributor
+(`checker_coverage_incomplete`) without spending a round, so it never exhausts
+the assignment and the next attempt keeps its current round. Consecutive
+coverage returns keep the first return's window, so a repeated gap still
+expires.
+
 When a revision remains, contributor-fixable failure freezes the complete
 next-attempt context and change summary. Revision reruns intake and acknowledges
 that exact preparation. A setup-blocked rebase publishes durable PM attention

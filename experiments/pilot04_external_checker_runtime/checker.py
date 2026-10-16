@@ -67,27 +67,33 @@ def main() -> int:
         failures.append("pids_limit")
     findings = [
         {
+            "check_id": "probe.isolation",
             "code": "probe.isolation_failed",
             "level": "error",
             "message": item,
             "path": None,
+            "line": None,
         }
         for item in failures
     ]
     if Path("/work/input/project-rejected.txt").exists():
         findings.append({
+            "check_id": "probe.project_rule",
             "code": "probe.project_rule_failed",
             "level": "error",
             "message": "The sample project rejects this fixture file.",
             "path": "project-rejected.txt",
+            "line": None,
         })
     if (request["identity"]["phase"] == "post_submit"
             and Path("/work/input/post-rejected.txt").exists()):
         findings.append({
+            "check_id": "probe.post_rule",
             "code": "probe.post_rule_failed",
             "level": "error",
             "message": "The sample project requests a replacement for this fixture file.",
             "path": "post-rejected.txt",
+            "line": None,
         })
     body = {
         "schema_version": "external_checker_result.v1",

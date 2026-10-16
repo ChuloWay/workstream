@@ -38,7 +38,22 @@ def validate_stored_execution_result(value: str) -> PostSubmissionExecutionResul
     return _RESULT.validate_json(value)
 
 
+def coverage_gap_without_failure(result: PostSubmissionExecutionResult) -> bool:
+    """A completed result whose checks could not evaluate part of the work, with no failure.
+
+    Such a return is evidence about the checker, not the contributor: it never
+    auto-accepts, spends no revision round and never exhausts an assignment.
+    """
+    members = result.execution.external_members if result.execution else ()
+    return not any(member.result.verdict == "failed" for member in members) and any(
+        finding.level == "coverage_incomplete"
+        for member in members
+        for finding in member.result.findings
+    )
+
+
 __all__ = (
+    "coverage_gap_without_failure",
     "PostSubmissionExecutionRequest",
     "PostSubmissionExecutionResult",
     "validate_execution_request",

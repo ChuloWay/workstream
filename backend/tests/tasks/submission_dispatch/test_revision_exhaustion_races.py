@@ -15,15 +15,22 @@ from tests.tasks.submission_dispatch.test_revision_exhaustion import terminal_fa
 
 
 async def _snapshot(session):
-    """Include immutable evidence and request rows as well as every routing participant."""
+    """Include immutable evidence and request rows as well as every routing participant.
+
+    Submission packets are compared without their attempt outcome, which the
+    terminal writer records; the last element holds that outcome.
+    """
     routing = tuple(await outcome_snapshot(session))
     retained = (await session.execute(text("""
-        SELECT (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM public.submissions r),
+        SELECT (SELECT jsonb_agg(to_jsonb(r)-ARRAY['attempt_status','status_reason','decided_at','updated_at']
+                  ORDER BY r.id) FROM public.submissions r),
           (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM public.task_revision_exhaustions r),
           (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM public.task_revision_preparations r),
           (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id) FROM public.task_revision_expirations r),
           (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.route_operation_id)
-             FROM public.task_post_submit_routing_requests r)
+             FROM public.task_post_submit_routing_requests r),
+          (SELECT jsonb_agg(jsonb_build_array(r.attempt_status,r.status_reason) ORDER BY r.id)
+             FROM public.submissions r)
     """))).one()
     return routing, tuple(retained)
 
@@ -92,6 +99,7 @@ async def test_duplicate_terminal_failure_serializes_and_rolled_back_evidence_st
             after = await _snapshot(reader)
         assert len(after[1][1]) == 1
         assert after[1][0] == before[1][0]
+        assert after[1][5] == [["rejected", "revision_limit_reached"]]
         if roll_back_first:
             assert not committed.replayed and receipt.id != staged_id
             assert committed.authorization_decision_id != staged.authorization_decision_id

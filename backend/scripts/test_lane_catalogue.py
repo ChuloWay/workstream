@@ -500,6 +500,10 @@ TASK_MODULES = (
     "tests/tasks/post_submit_routing/test_remediation_storage.py",
     "tests/tasks/post_submit_routing/test_remediation_currentness.py",
     "tests/tasks/post_submit_routing/test_remediation_migration.py",
+    # Stored attempt-outcome proofs use TASK custody; every project lane runs
+    # within measured variance of the hosted execution deadline.
+    "tests/tasks/post_submit_routing/test_attempt_outcome_custody.py",
+    "tests/checkers/execution/test_findings_and_coverage.py",
     # New completion proofs use TASK custody and its measured lane headroom.
     "tests/tasks/evaluation_delivery/test_completion.py",
     "tests/tasks/evaluation_delivery/test_completion_contracts.py",

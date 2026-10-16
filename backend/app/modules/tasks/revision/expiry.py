@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.outbox.api import HandlerOutcome, OutboxAppendDisposition, OutboxEventEnvelope
+from app.modules.tasks.submission_attempts import record_attempt_outcome
 from app.modules.tasks.api.revision_expiry import (
     REVISION_EXPIRY_EVENT, TaskRevisionExpiryAuthorityFacts, TaskRevisionExpiryEvidence,
     TaskRevisionExpiryTarget, TaskRevisionExpiryUnavailable,
@@ -176,6 +177,11 @@ class TaskRevisionExpiryOperation:
         await self._session.flush()
         assignment.status, assignment.released_at = "revision_expired", expired_at
         task.status, task.assigned_to = "ready", None
+        await self._session.flush()
+        await record_attempt_outcome(
+            self._session, submission_id=target.source_submission_id,
+            task_id=target.task_id, outcome="rejected",
+        )
         recorded = await self._audit.record_expiry(
             TaskRevisionExpiryEvidence(facts, authority, receipt.id, audit_event_id, expired_at))
         if recorded != audit_event_id:

@@ -12,7 +12,9 @@ from sqlalchemy import select, text
 from app.adapters.tasks import task_post_submit_outcome, task_revision_recovery
 from app.modules.tasks.post_submit_routing import outcome as routing_outcome
 from app.modules.tasks.revision.models import TaskRevisionPreparation
-from tests.migration_revision_fixtures import insert_0047_preparation, retained_revision_rows
+from tests.migration_revision_fixtures import (
+    enter_predecessor_owner_shape, leave_predecessor_owner_shape, insert_0047_preparation, retained_revision_rows,
+)
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.submission_dispatch.test_revision_expiry import _provision_expirer
 from tests.test_alembic import HEAD_REVISION, _alembic_config, _execute
@@ -97,6 +99,8 @@ async def test_retained_blocked_clock_pauses_once_or_stays_due(
     with migration_lock():
         await _execute(isolated_database_env, "drop schema public cascade; create schema public")
         await asyncio.to_thread(command.upgrade, _alembic_config(), "0047_revision_recovery")
+        shape = pytest.MonkeyPatch()
+        await enter_predecessor_owner_shape(_execute, isolated_database_env, shape)
         async with remediation_source(tmp_path, isolated_database_env) as h:
             window_seconds = 60 if already_due else 600
             with monkeypatch.context() as patch:
@@ -122,6 +126,8 @@ async def test_retained_blocked_clock_pauses_once_or_stays_due(
                 assert await session.scalar(text(
                     "SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgenabled='D'"
                 )) == 0
+            shape.undo()
+            await leave_predecessor_owner_shape(_execute, isolated_database_env)
             await asyncio.to_thread(command.upgrade, _alembic_config(), HEAD_REVISION)
             await _provision_expirer(h.factory)
             async with h.factory() as session:

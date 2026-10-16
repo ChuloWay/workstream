@@ -19,6 +19,8 @@ from app.modules.artifacts.submission_admission import (
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.checkers.api.selected_pre_submit import SelectedPreSubmitCompletion
+from app.modules.artifacts.api.submission_preparation import public_pre_submission_results
+from tests.test_submission_bundle_preparation_recovery import _feedback_facts
 
 
 @asynccontextmanager
@@ -62,7 +64,7 @@ def _runtime_case(prepared, attempt_id):
     completion = SelectedPreSubmitCompletion(
         terminal=SimpleNamespace(
             outcome="completed",
-            execution=SimpleNamespace(eligible=True),
+            execution=_feedback_facts(eligible=True),
             infrastructure_failure_code=None,
         ),
         capability=object(),
@@ -176,6 +178,10 @@ async def test_hidden_preparation_uses_selected_pre_before_durable_admission(
 
     assert result.submission_bundle_preparation_status is (
         SubmissionBundlePreparationStatus.PREPARED
+    )
+    # The admitted attempt returns its intake feedback from the executed facts.
+    assert result.pre_submission_results == tuple(
+        public_pre_submission_results(case.completion.terminal.execution)
     )
     case.materialization.prepare_selected_authorization.assert_awaited_once()
     case.materialization.authorize_inspected.assert_awaited_once()

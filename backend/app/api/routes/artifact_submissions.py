@@ -1,6 +1,6 @@
 """Contributor ZIP preparation through ART-owned selected intake and custody."""
 
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -57,6 +57,9 @@ class SubmissionBundlePreparationResponse(BaseModel):
     admission_id: UUID | None
     submission_bundle_preparation_status: SubmissionBundlePreparationStatus
     replayed: bool
+    # Bounded intake feedback for the admitted attempt, including nonblocking
+    # findings; the same projection as a blocked preparation's error details.
+    pre_submission_results: list[dict[str, Any]]
 
 
 @router.post(

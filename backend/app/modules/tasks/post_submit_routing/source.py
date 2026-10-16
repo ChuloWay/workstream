@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.checkers.api.evaluation_contract import coverage_gap_without_failure
 from app.modules.checkers.api.execution import EvaluationCompletion, EvaluationCoordinationPort
 from app.modules.projects.api import (
     ProjectLockedPolicyContextPort, ProjectLockedPolicyContextRequest,
@@ -22,6 +23,7 @@ from app.modules.tasks.post_submit_routing.requests import (
 )
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.models import Submission, SubmissionDispatch
+from app.modules.tasks.submission_attempts import COVERAGE_RETURN_REASON
 from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.service import TaskService
 from app.modules.tasks.revision.service import select_candidate
@@ -128,24 +130,31 @@ class TaskRoutingSourcePreparer:
         except (ProjectLockedPolicyContextUnavailable, ValueError, TypeError, KeyError) as exc:
             raise TaskRoutingRequestUnavailable("routing_source_unavailable") from exc
         # Active PROJECT custody must precede retaining the CHECKERS fence.
-        candidate, exhaustion = None, None
+        candidate, exhaustion, revision_round, policy = None, None, None, None
         if retained is None and completion.routing_recommendation == "needs_revision":
             policy = RevisionPolicySemantics.model_validate_json(context.revision_policy.value)
+            # Earlier coverage returns spent no round (PostgreSQL counts alike).
             submitted_count = await self._session.scalar(select(func.count()).select_from(Submission).where(
                 Submission.task_assignment_id == assignment.id,
                 Submission.version <= submission.version,
+                Submission.status_reason.is_distinct_from(COVERAGE_RETURN_REASON),
             ))
             revision_round = submitted_count - 1
             if revision_round > policy.max_revision_rounds or revision_round < 0:
                 raise TaskRoutingRequestUnavailable("routing revision count differs")
-            if revision_round == policy.max_revision_rounds:
-                exhaustion = TaskRevisionExhaustionFacts(
-                    exhaustion_receipt_id=new_record_id(), revision_round=revision_round,
-                    max_revision_rounds=policy.max_revision_rounds,
-                )
-            else:
-                candidate = await select_candidate(self._projects, context)
+            # PROJECT custody precedes the CHECKERS fence, so the candidate is
+            # selected before the result shows whether this is a coverage return.
+            candidate = await select_candidate(self._projects, context)
         request, verified = await self._requests._stage(event_id, completion)
+        if (
+            revision_round is not None and revision_round == policy.max_revision_rounds
+            and not coverage_gap_without_failure(verified.result)
+        ):
+            candidate = None
+            exhaustion = TaskRevisionExhaustionFacts(
+                exhaustion_receipt_id=new_record_id(), revision_round=revision_round,
+                max_revision_rounds=policy.max_revision_rounds,
+            )
         material = verified.material
         if not (
             material.admission_id == UUID(submission.submission_bundle_admission_id)
