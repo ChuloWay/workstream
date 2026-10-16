@@ -129,13 +129,17 @@ Issue #582 owns AWS provider activation and proof. This configuration wires the
 non-secret AWS S3 profile, region, bucket, prefix, virtual addressing,
 workload-identity mode and method plus the canonical release ID, exact IAM
 role/policy ARNs, trust-policy digests, bootstrap principal and bucket-policy
-digest into the shared API/Celery/Beat Settings environment. It also requires
+digest into the shared API/Celery/Beat process environment. It also requires
 explicit operation, complete-read and persistence timeout settings; the example
 values are unmeasured and do not assert a live result. Format, partition/account
 coherence, required distinct identities, eligibility math and runtime
 enforcement remain with #582's canonical application owner rather than being
-duplicated in preflight. The role-isolated proof-job profile remains pending the
-stable #493 integration and is not invented as another release service here.
+duplicated in preflight. That owner is not present on this branch: its current
+Settings ignores the eleven extra environment fields. A clean reviewed #582/PR
+#592 target must be merged before release images are built or used; only the
+combined source can make the startup-validation claim. The role-isolated
+proof-job profile remains pending the stable #493 integration and is not invented
+as another release service here.
 
 ## Acceptance criteria
 
@@ -152,9 +156,10 @@ stable #493 integration and is not invented as another release service here.
   existing runner revalidates it for each execution.
 - [x] Real Flow verification and AWS workload identity are required; local auth,
   local Flow-HMAC, static AWS keys, MinIO and debug settings fail preflight.
-- [x] Every AWS-backed API, worker and Beat Settings process receives the same
-  required release digest and exact role, policy, trust and bucket-policy
-  identities without treating those non-secret values as live proof.
+- [x] Every AWS-backed API, worker and Beat process environment receives the
+  same required release digest and exact role, policy, trust and bucket-policy
+  identities without treating those non-secret values as validated or live
+  proof.
 - [x] Required secrets are mounted and loaded only for their API, worker or Beat
   role and are never printed or evaluated; absent, unrelated, broad-mode,
   wrong-owner or empty files fail closed.
@@ -174,8 +179,8 @@ stable #493 integration and is not invented as another release service here.
 
 1. Run focused unit tests for the secret loader contract and release preflight,
    including hostile ambient interpolation, exact AWS evidence flow to every
-   Settings process, role/mount isolation and mutated tag/local-auth/static-key/
-   non-runsc/cache/path/mode cases.
+   backend process environment, role/mount isolation and mutated tag/local-auth/
+   static-key/non-runsc/cache/path/mode cases.
 2. Render `deploy/hosted/compose.yml` with disposable placeholder identities and
    secret files; assert service commands, immutable images, mounts, security
    options, health checks and absence of development services/settings.
@@ -221,14 +226,22 @@ application-setting and checker-runtime health validation with their existing
 owners. Live infrastructure evidence is unavailable by design and remains
 explicitly provisional.
 
+Bounded repair review at `c3ae39539` found `HOST-S3001`: the rendered wiring and
+focused role-isolation proof passed, but the branch-local application Settings
+does not yet own the eleven fields and ignores extra environment keys. The
+documentation now makes #582/PR #592 an explicit merge and release-image
+dependency instead of claiming that this branch performs canonical startup
+validation. No duplicate hosted validator or unreviewed #582 source is added.
+
 ## Evidence
 
 Source/configuration candidate checks:
 
 - `python3 -m unittest -v scripts.test_hosted_release_config`: eleven focused
   tests pass, including required AWS evidence custody in each rendered backend
-  process, hostile ambient Compose rendering/operation and executed role-specific
-  secret-loader failure/non-evaluation/non-disclosure cases.
+  process environment, hostile ambient Compose rendering/operation and executed
+  role-specific secret-loader failure/non-evaluation/non-disclosure cases. These
+  tests do not claim branch-local Settings validation for the eleven fields.
 - `uvx ruff@0.15.22 check deploy/hosted/preflight.py deploy/hosted/compose.py
   scripts/test_hosted_release_config.py`,
   `/bin/sh -n docker/backend/release-entrypoint.sh` and `git diff --check` pass.
