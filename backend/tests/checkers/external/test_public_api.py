@@ -7,7 +7,11 @@ from sqlalchemy import select, text
 
 from app.db import session as db_session
 from app.main import create_app
+from app.modules.actors.api import ServiceIdentity
 from app.modules.actors.models import ActorIdentityLink
+from app.modules.checkers.models import ExternalCheckerRegistryEntryRecord
+from tests.authentication.support import issue_asymmetric_token
+from tests.authorization.admin_access.support import create_project
 from tests.authorization.admin_access.concurrency_support import ordered_owner_calls
 from tests.checkers.external.support import registry_spec
 
@@ -69,6 +73,16 @@ async def _registration_denials() -> int:
             )
         )
     return int(count or 0)
+
+
+async def _registry_rows() -> list[dict]:
+    async with db_session.get_session_factory()() as session:
+        rows = await session.execute(
+            select(ExternalCheckerRegistryEntryRecord.__table__).order_by(
+                ExternalCheckerRegistryEntryRecord.id
+            )
+        )
+    return [dict(row) for row in rows.mappings()]
 
 
 @pytest.mark.asyncio
@@ -160,6 +174,91 @@ async def test_registration_conflict_and_denials_leave_no_partial_row(admin_acce
     assert missing.status_code == 404, missing.text
     assert await _counts() == baseline
     assert await _registration_denials() == 1
+
+
+@pytest.mark.asyncio
+async def test_registry_read_conceals_entry_from_non_system_human_and_service_authority(
+    admin_access,
+) -> None:
+    await admin_access.signed.grant(
+        admin_access.admin, admin_access.target, role="operator"
+    )
+    created = await admin_access.signed.client.post(
+        PATH,
+        headers=admin_access.target.headers | {"Idempotency-Key": str(uuid4())},
+        json=registry_spec().model_dump(mode="json"),
+    )
+    assert created.status_code == 201, created.text
+    entry = created.json()
+    path = f"{PATH}/{entry['registry_entry_id']}"
+
+    project_operator = await admin_access.signed.actor("project-registry-operator")
+    project_id = await create_project("Scoped registry denial")
+    await admin_access.signed.grant(
+        admin_access.admin,
+        project_operator,
+        role="operator",
+        project_id=project_id,
+    )
+
+    service_subject = "checker-registry-reader-" + uuid4().hex
+    provisioned = await admin_access.signed.client.post(
+        "/api/v1/service-actors",
+        headers=admin_access.admin.headers | {"Idempotency-Key": str(uuid4())},
+        json={
+            "service_identity": ServiceIdentity.REVIEW_PROJECTION.value,
+            "subject": service_subject,
+            "reason": "Prove fixed services cannot read checker registry entries",
+        },
+    )
+    assert provisioned.status_code == 201, provisioned.text
+    service_token = issue_asymmetric_token(
+        admin_access.signed.private_key,
+        scope="workstream:service",
+        claims={
+            "sub": service_subject,
+            "subject_kind": "service",
+            "roles": ["operator"],
+        },
+    )
+
+    revoked_actor = await admin_access.signed.actor("revoked-registry-operator")
+    await admin_access.signed.grant(
+        admin_access.admin, revoked_actor, role="operator"
+    )
+    async with db_session.get_session_factory()() as session:
+        link_id = await session.scalar(
+            select(ActorIdentityLink.id).where(
+                ActorIdentityLink.actor_profile_id == str(revoked_actor.id)
+            )
+        )
+    revoked = await admin_access.signed.client.post(
+        f"/api/v1/actor-identity-links/{link_id}/revoke",
+        headers=admin_access.admin.headers | {"Idempotency-Key": str(uuid4())},
+        json={"reason": "Withdraw checker registry read identity"},
+    )
+    assert revoked.status_code == 200, revoked.text
+
+    registry_before = await _registry_rows()
+    counts_before = await _counts()
+    reads_before = await _read_events()
+    requests = (
+        (project_operator.headers, 404),
+        ({"Authorization": f"Bearer {service_token}"}, 404),
+        (revoked_actor.headers, 401),
+    )
+    for headers, expected_status in requests:
+        denied = await admin_access.signed.client.get(path, headers=headers)
+        assert denied.status_code == expected_status, denied.text
+        assert entry["registry_entry_id"] not in denied.text
+        assert entry["entry_digest"] not in denied.text
+        assert entry["image_digest"] not in denied.text
+
+    assert await _registry_rows() == registry_before
+    assert await _counts() == counts_before
+    denied_reads = (await _read_events())[len(reads_before) :]
+    assert len(denied_reads) == 2
+    assert all(event["after_facts"]["allowed"] is False for event in denied_reads)
 
 
 @pytest.mark.asyncio

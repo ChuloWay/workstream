@@ -55,6 +55,7 @@ identity and system Operator grant to perform startup registration.
   delivery-to-private-module dependency.
 - `backend/app/modules/authorization/catalogue.py`,
   `backend/app/modules/authorization/domain/checker_registry.py`,
+  `backend/app/modules/authorization/domain/action_groups.py`,
   `backend/app/modules/authorization/checker_registry_authorization.py`, and
   `backend/app/modules/authorization/{kernel.py,prepared.py,prepared_admin_authority.py}`:
   reuse the existing opaque prepared-authority protocol for registration and
@@ -62,6 +63,9 @@ identity and system Operator grant to perform startup registration.
   `operations.status.read` permission. Registration continues to use
   `operations.reconcile.run`; both actions bind the registry resource and
   ordinary AUTH audit evidence. No general AUTH lock-order redesign is allowed.
+  The existing prepared-denial classifier admits only the exact registry
+  mutation resource, and the kernel reuses the existing project-scoped admin
+  mutation classification without changing its action set.
 - `backend/tests/checkers/external/{support.py,test_contracts.py,test_registry.py,test_postgresql.py,test_public_api.py}`:
   focused service and signed public-API/PostgreSQL proof.
 - `backend/tests/authorization/catalogue_fixtures.py`,
