@@ -318,6 +318,7 @@ PROJECT_MODULES = (
     "tests/tasks/post_submit_routing/test_outcome_concurrency.py",
     "tests/tasks/post_submit_routing/test_outcome.py",
     "tests/tasks/post_submit_routing/test_attempt_outcome_custody.py",
+    "tests/checkers/execution/test_findings_and_coverage.py",
     "tests/tasks/post_submit_routing/test_outcome_storage.py",
     "tests/tasks/post_submit_routing/test_outcome_migration.py",
     "tests/reviews/acceptance/test_participant_contracts.py",
@@ -479,7 +480,6 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers/execution/test_checker_retry_authority.py",
     "tests/checkers/execution/test_checker_retry_history_replay.py",
     "tests/checkers/execution/test_checker_retry_migration.py",
-    "tests/checkers/execution/test_findings_and_coverage.py",
     "tests/test_post_submit_materialization.py",
     "tests/test_post_submit_selection.py",
     "tests/test_checker_output_custody.py",
@@ -599,6 +599,16 @@ PROJECT_PARTITIONED_MODULES = (
 # Measured long-running proofs stay in their project semantic family but need
 # exact lane ownership so their waits and large fixtures do not collide.
 PROJECT_MODULE_LANE_OVERRIDES = {
+    # PILOT-READ-1's stored-outcome proofs use the measured A/C headroom;
+    # B, D and E were within 75 seconds of the hosted lane deadline.
+    "tests/checkers/execution/test_findings_and_coverage.py": (
+        "project_lifecycle_a",
+        "project_lifecycle_c",
+    ),
+    "tests/tasks/post_submit_routing/test_attempt_outcome_custody.py": (
+        "project_lifecycle_c",
+        "project_lifecycle_a",
+    ),
     "tests/test_projects.py": (
         # Retained durations put this broad module on C/B/D, relieving the
         # repeated E timeout without adding work to the already busy A lane.

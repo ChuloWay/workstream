@@ -17,11 +17,11 @@ async def test_attempt_outcome_needs_owner_evidence_and_is_final(tmp_path, isola
     async with routing_source(tmp_path, isolated_database_env) as h:
         submission = {"id": h.request.submission_id}
         update = "UPDATE public.submissions SET attempt_status=:status WHERE id=:id"
-        for status in ("accepted", "needs_revision", "review_pending"):
+        # Rejection straight from evaluation needs an exhaustion receipt.
+        for status in ("accepted", "needs_revision", "review_pending", "rejected"):
             await _refused(h, update, "requires owner evidence", status=status, **submission)
-        for status in ("rejected", "evaluation_pending_typo"):
-            await _refused(h, update, "not allowed|ck_submissions_attempt_status",
-                           status=status, **submission)
+        await _refused(h, update, "not allowed|ck_submissions_attempt_status",
+                       status="evaluation_pending_typo", **submission)
         await _refused(
             h, "UPDATE public.submissions SET decided_at=clock_timestamp() WHERE id=:id",
             "decision is immutable", **submission,

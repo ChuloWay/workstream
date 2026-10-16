@@ -90,7 +90,6 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/execution/test_checker_retry_authority.py",
         "tests/checkers/execution/test_checker_retry_history_replay.py",
         "tests/checkers/execution/test_checker_retry_migration.py",
-        "tests/checkers/execution/test_findings_and_coverage.py",
         "tests/test_post_submit_materialization.py",
         "tests/test_post_submit_selection.py",
         "tests/test_checker_output_custody.py",
@@ -284,6 +283,14 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
 
 def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
     expected = {
+        "tests/checkers/execution/test_findings_and_coverage.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_c",
+        ),
+        "tests/tasks/post_submit_routing/test_attempt_outcome_custody.py": (
+            "project_lifecycle_c",
+            "project_lifecycle_a",
+        ),
         "tests/test_projects.py": (
             "project_lifecycle_c",
             "project_lifecycle_b",
@@ -336,7 +343,7 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     )
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 198
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "8389bca22067aaec59b9ffc11eb1979534f5ef5b93e4ef9fa4d166460eca233c"
+        "541debe0e7d5f6c08285e4d72f4e3ffe160ae9e5fe6faef3f730881c19235a70"
     )
 
 
