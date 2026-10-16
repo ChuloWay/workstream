@@ -20,7 +20,9 @@ from app.modules.tasks.revision.models import TaskRevisionExhaustion
 from app.modules.tasks.revision.service import select_candidate
 from tests.checkers.execution.support import service_link_state
 from tests.migration_fixtures import current_schema_revision
-from tests.migration_revision_fixtures import insert_0047_preparation, retained_revision_rows
+from tests.migration_revision_fixtures import (
+    enter_predecessor_owner_shape, leave_predecessor_owner_shape, insert_0047_preparation, retained_revision_rows,
+)
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.post_submit_routing.support import revision_archive
 from tests.tasks.submission_dispatch.test_replacement_creation import (
@@ -56,6 +58,8 @@ async def _retained_cap_source(tmp_path, database_url, monkeypatch):
     """Execute old source selection before real AUTH with every 0047 guard enabled."""
     await _execute(database_url, "drop schema public cascade; create schema public")
     await asyncio.to_thread(command.upgrade, _alembic_config(), "0047_revision_recovery")
+    shape = pytest.MonkeyPatch()
+    await enter_predecessor_owner_shape(_execute, database_url, shape)
     original = TaskRoutingSourcePreparer.prepare
 
     async def old_source(preparer, *args, **kwargs):
@@ -102,6 +106,8 @@ async def _retained_cap_source(tmp_path, database_url, monkeypatch):
                     JOIN pg_namespace n ON n.oid=c.relnamespace
                     WHERE n.nspname='public' AND NOT t.tgisinternal AND t.tgenabled='D'
                 """)) == 0
+        shape.undo()
+        await leave_predecessor_owner_shape(_execute, database_url)
         await asyncio.to_thread(command.upgrade, _alembic_config(), current_schema_revision())
         async with h.factory() as session:
             assert await retained_revision_rows(session, retained.routing_manifest_id) == before

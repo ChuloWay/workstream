@@ -75,7 +75,7 @@ async def assert_upgrade_refuses_stale_findings(factory, *, store, row_id):
     Removing ``check_id`` from one retained finding reproduces evidence written
     before the contract required it. The rollback leaves custody untouched.
     """
-    path = "{execution,external_members,0,result,findings,0,check_id}"
+    path = ["execution", "external_members", "0", "result", "findings", "0", "check_id"]
     async with factory() as session:
         await session.begin()
         try:
