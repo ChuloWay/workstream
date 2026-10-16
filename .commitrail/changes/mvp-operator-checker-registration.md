@@ -84,8 +84,11 @@ identity and system Operator grant to perform startup registration.
 - `backend/tests/authorization/catalogue_fixtures.py`,
   `backend/tests/authorization/test_catalogue.py`, and
   `backend/tests/authorization/setup_finalization/test_catalogue.py`, plus
-  `backend/tests/test_api_controls.py`: closed
-  AUTH catalogue and active-action parity for the read action.
+  `backend/tests/test_api_controls.py`: closed AUTH catalogue and active-action
+  parity for the read action.
+- `backend/tests/test_api_rate_controls.py`: retain the global dependency guard
+  while admitting only the registry POST/admin-mutation and exact-entry
+  GET/authorization-read limiter bindings.
 - `backend/tests/projects/guide_activation/source_fixtures.py`: update the one
   existing direct registration caller to the server-selected registry-ID
   contract without an optional-ID or compatibility path.
@@ -240,11 +243,11 @@ added or rewritten.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner and public gap | Inspect registry service, AUTH adapter/domain, router composition, issue #580 and direct PostgreSQL tests at base `34501cd64` | Existing hidden operation and absent route confirmed | Implementation and runtime proof await accepted plan |
-| Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref origin/main` | Pending | Exact-head rerun required after implementation |
-| Public and PostgreSQL behavior | Focused `pytest` for checker external contracts, registry, PostgreSQL and public API using the repository isolated PostgreSQL runner | Pending | Hosted full-suite evidence remains with the lead |
-| AUTH catalogue parity | Focused authorization catalogue/setup-finalization tests and stale authorization-document check | Pending | Exact-head reviewer replay remains |
-| Documentation integrity | Markdown links, stale wording scan and affected roadmap reconciliation | Pending | Deployment and complete issue #580 remain outside this PR |
+| Existing owner and public gap | Inspect registry service, AUTH adapter/domain, router composition, issue #580 and direct PostgreSQL tests at base `34501cd64` | Existing hidden operation and absent route confirmed; the public surface extends that owner | No parallel registry or administrative bypass was introduced |
+| Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref origin/main` | Pass with the record-only finding correction applied | Exact-head hosted checks remain with the lead |
+| Public and PostgreSQL behavior | `backend/tests/checkers/external/test_public_api.py`, `test_postgresql.py`, and `test_migration.py` through the isolated PostgreSQL runner | Nine registration/readback/replay/revocation/migration cases passed at `802a22260`; the public commit-boundary database-failure rollback and same-key retry case passed at `f620eab2c` | Hosted full-suite evidence remains with the lead |
+| AUTH catalogue parity | Focused authorization catalogue/setup-finalization tests and stale authorization-document check | 157 focused registry/catalogue/API/lane tests passed before the final rollback case; the changed route-rate inventory and rollback cases passed separately at `f620eab2c` | Hosted full-suite evidence remains with the lead |
+| Documentation integrity | Markdown links, stale wording scan and affected roadmap reconciliation | Affected architecture/roadmap claims, bounded change links and stale wording passed with the record-only correction applied | Deployment and complete issue #580 remain outside this PR |
 
 ## Review findings
 
@@ -268,6 +271,8 @@ of this corrected clean plan is required before implementation.
 - Next usable boundary: issue #580's separate authenticated REV lifecycle
   state/readback and guarded `disabled -> shadow -> live` controls, followed by
   the parent #555 real-project drill combining actual checker images.
-- Remaining risks: exact-head PostgreSQL/public API proof and routed internal
-  review remain pending; the shared read-pair migration must remain one linear
-  prerequisite for recovery and S3, and no REV behavior is authorized.
+- Focused proof: signed public registration/readback and real PostgreSQL
+  replay, revocation, concurrency, migration, commit-boundary database-failure
+  rollback and same-key retry are covered by the external-checker tests named
+  above. The shared read-pair migration must remain one linear prerequisite for
+  recovery and S3, and no REV behavior is authorized.
