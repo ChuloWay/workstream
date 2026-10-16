@@ -310,11 +310,6 @@ async def test_internal_artifact_store_is_initialized_once_per_process(
     monkeypatch.setattr(internal_worker_adapter, "get_settings", Mock(return_value=Mock()))
     monkeypatch.setattr(
         internal_worker_adapter,
-        "require_artifact_runtime_eligible",
-        Mock(),
-    )
-    monkeypatch.setattr(
-        internal_worker_adapter,
         "create_artifact_store_bootstrap",
         Mock(return_value=first_bootstrap),
     )
@@ -433,7 +428,6 @@ async def test_process_runtime_shutdown_waits_for_active_lease(
         "get_settings",
         Mock(return_value=SimpleNamespace(artifact_store_backend="local")),
     )
-    monkeypatch.setattr(internal_worker_adapter, "require_artifact_runtime_eligible", Mock())
     monkeypatch.setattr(
         internal_worker_adapter,
         "create_artifact_store_bootstrap",
@@ -485,7 +479,6 @@ async def test_process_runtime_closes_bootstrap_when_namespace_claim_fails(
         "get_settings",
         Mock(return_value=SimpleNamespace(artifact_store_backend="local")),
     )
-    monkeypatch.setattr(internal_worker_adapter, "require_artifact_runtime_eligible", Mock())
     monkeypatch.setattr(
         internal_worker_adapter,
         "create_artifact_store_bootstrap",
@@ -538,7 +531,6 @@ async def test_process_runtime_closes_losing_concurrent_bootstrap(
         "get_settings",
         Mock(return_value=SimpleNamespace(artifact_store_backend="local")),
     )
-    monkeypatch.setattr(internal_worker_adapter, "require_artifact_runtime_eligible", Mock())
     monkeypatch.setattr(
         internal_worker_adapter,
         "create_artifact_store_bootstrap",
@@ -732,7 +724,7 @@ def test_verification_deadline_and_margin_must_fit_lease() -> None:
 @pytest.mark.asyncio
 async def test_complete_read_uses_total_deadline_for_progressing_stream() -> None:
     class SlowStore:
-        def open(self, _provider_object_ref: str):
+        def open(self, _provider_object_ref: str, **_kwargs):
             async def chunks():
                 while True:
                     await asyncio.sleep(0.02)

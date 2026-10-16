@@ -41,6 +41,8 @@ RESETTABLE_TEST_TABLES = (
     "artifact_bindings",
     "artifact_contents",
     "artifact_operation_receipts",
+    "artifact_provider_activations",
+    "artifact_provider_probe_results",
     "artifact_put_attempt_charges",
     "artifact_put_attempts",
     "artifact_put_observation_receipts",
@@ -148,6 +150,8 @@ RESETTABLE_TEST_TABLES = (
     "workstream_tasks",
 )
 TRUNCATE_GUARDED_TABLES = (
+    "artifact_provider_activations",
+    "artifact_provider_probe_results",
     "artifact_task_import_sources",
     "external_checker_registry_entries",
     "joint_lifecycle_release_control",

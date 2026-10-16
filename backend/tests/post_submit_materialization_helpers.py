@@ -138,7 +138,7 @@ def _material_storage(tmp_path, provider, storage_settings, scratch_limits, post
                 "external_checker_material_root": tmp_path / "scratch",
             }
         )
-    bootstrap = create_artifact_store_bootstrap(settings)
+    bootstrap = create_artifact_store_bootstrap(settings, activation_guard=None)
     namespace = artifact_storage_namespace_spec(settings, bootstrap)
     store = bootstrap.initialize_after_namespace_claim(
         ArtifactStoreNamespaceClaim(

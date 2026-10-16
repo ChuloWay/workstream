@@ -250,7 +250,8 @@ activation ID. It contains no credential. LocalStorage and MinIO never create
 probe or activation records.
 
 Only the credential-free activation coordinator writes this record after every
-Chunk 07 proof passes with identical bindings and a valid time window.
+fixed live proof passes with identical bindings and an overlapping valid time
+window.
 Production startup and every AWS provider operation require one unexpired
 successful record matching the exact release, namespace, roles, policy, and
 proof version. Any mismatch or expiry fails before provider I/O.
@@ -555,15 +556,14 @@ environment. Publicly exposed MinIO and every production-environment MinIO
 configuration are outside v0.1; neither can satisfy native AWS live proof.
 
 `aws_s3` accepts only a native endpoint-less AWS configuration, explicit
-region, and exactly one allowlisted workload-identity method. The composition
-root validates settings and then raises `artifact_provider_live_proof_required`
-before validating credential environment, constructing the adapter factory,
-building or loading the credential resolver, claiming a namespace, or
-performing provider I/O. The credential-environment validator and isolated
-resolver are inactive deployment-proof support in this chunk; startup does not
-invoke them. Chunk 07 alone may make native AWS runtime-eligible by adding the
-immutable live activation proof defined below. MinIO conformance is not AWS
-activation evidence.
+region, exactly one allowlisted workload-identity method, an immutable release
+digest, exact runtime/readiness/negative role ARNs, exact runtime/readiness
+managed-policy ARNs and the expected canonical bucket-policy digest. Startup
+claims the exact namespace, then loads a matching fresh activation before
+credential-environment inspection or provider I/O. The adapter resolves its
+isolated credential session lazily only after the guard succeeds. Every later
+AWS SDK call reloads the same activation ID selected for that logical store
+operation. MinIO conformance is not AWS activation evidence.
 
 Cloudflare R2 has no v0.1 runtime mode, credential issuer, sidecar, secret
 contract, configuration profile, or deployment proof. Any future provider
@@ -629,8 +629,8 @@ The principal/action matrix is closed:
 | Workstream runtime role | `s3:PutObject`, `s3:GetObject` | `OBJECT_ARN` only |
 | Workstream runtime role | `s3:ListBucket` | `BUCKET_ARN` only |
 | deployment readiness role | `s3:GetBucketPolicy`, `s3:GetBucketPolicyStatus`, `s3:GetBucketAcl`, `s3:GetBucketPublicAccessBlock`, `s3:GetBucketOwnershipControls`, `s3:GetBucketVersioning`, `s3:GetLifecycleConfiguration`, `s3:GetEncryptionConfiguration` | `BUCKET_ARN` only |
-| deployment readiness role | `iam:GetRole`, `iam:ListRolePolicies`, `iam:ListAttachedRolePolicies` | `RUNTIME_ROLE_ARN` only |
-| deployment readiness role | `iam:GetPolicy`, `iam:GetPolicyVersion` | `RUNTIME_POLICY_ARN` only |
+| deployment readiness role | `iam:GetRole`, `iam:ListRolePolicies`, `iam:ListAttachedRolePolicies` | the exact configured runtime, readiness, and negative role ARNs only |
+| deployment readiness role | `iam:GetPolicy`, `iam:GetPolicyVersion` | the exact configured runtime and readiness managed-policy ARNs only |
 | deployment readiness role | `access-analyzer:ValidatePolicy`, `access-analyzer:CheckAccessNotGranted`, `access-analyzer:CheckNoPublicAccess` | `*` because these policy-check APIs do not support a narrower resource in this contract |
 | deployment negative-test role | no S3, IAM, or Access Analyzer action | none |
 | infrastructure bootstrap principal | no Workstream-defined allow statement and no proof credential; environment-owned provisioning only | outside the Workstream runtime/probe policy |
@@ -668,8 +668,8 @@ denies. For `DenyUnconditionalPut`, SigV4 and the S3 API require the present
 `If-None-Match` value to be `*` for this operation.
 
 Identity policies therefore cannot grant an unexpected same-account,
-same-organization, or external role object access. The deployment-only Chunk
-07 proof rejects any extra runtime/readiness allow action, resource, attached
+same-organization, or external role object access. The deployment-only
+readiness proof rejects any extra runtime/readiness allow action, resource, attached
 policy, inline policy, or bucket-policy exception. It validates the canonical
 policy documents, all four Block Public Access flags, bucket-owner-enforced
 object ownership, ACL state, SSE-S3 encryption, lifecycle safety, and the three
@@ -686,7 +686,7 @@ configured private prefix. AWS inspection covers `Expiration` and
 `NoncurrentVersionExpiration` for every rule whose filter can intersect the
 prefix. Storage-class transitions and abort-incomplete-multipart rules are not
 completed-object deletion. These checks use the separate read-only deployment
-identity in the Chunk 07 harness; the runtime principal is not granted bucket
+identity in the live proof harness; the runtime principal is not granted bucket
 administration merely to inspect policy or lifecycle configuration.
 Provider-readiness inspection is not part of `ArtifactStore` and is not called
 by a product service.
@@ -955,7 +955,7 @@ The S3-compatible provider settings use the same prefix:
 | Environment variable | Default | Contract |
 |---|---:|---|
 | `WORKSTREAM_ARTIFACT_STORE_BACKEND` | `disabled` | Set to `s3_compatible` to select the S3 protocol adapter. |
-| `WORKSTREAM_ARTIFACT_S3_PROVIDER_PROFILE` | unset | Closed value: `minio` for local/CI or `aws_s3` for the inactive native AWS profile. |
+| `WORKSTREAM_ARTIFACT_S3_PROVIDER_PROFILE` | unset | Closed value: `minio` for local/CI or `aws_s3` for activation-gated native AWS. |
 | `WORKSTREAM_ARTIFACT_S3_REGION` | unset | Required canonical S3 region. |
 | `WORKSTREAM_ARTIFACT_S3_ENDPOINT_URL` | unset | Required HTTP(S) endpoint for MinIO; forbidden for native AWS. |
 | `WORKSTREAM_ARTIFACT_S3_BUCKET` | unset | Required private bucket name. |
@@ -963,6 +963,14 @@ The S3-compatible provider settings use the same prefix:
 | `WORKSTREAM_ARTIFACT_S3_ADDRESSING_STYLE` | `virtual` | Closed value: `path` or `virtual`; local compose uses `path`. |
 | `WORKSTREAM_ARTIFACT_S3_CREDENTIAL_MODE` | unset | MinIO requires `local_static`; native AWS requires `aws_workload_identity`. |
 | `WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD` | unset | Native AWS selection: `assume-role-with-web-identity`, `container-role`, or `iam-role`; never used by MinIO. |
+| `WORKSTREAM_RELEASE_ID` | unset | Native AWS-only immutable deployed image/release digest in `sha256:<64 lowercase hex>` form. |
+| `WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN` | unset | Exact runtime IAM role ARN used for product object calls and runtime proof. |
+| `WORKSTREAM_ARTIFACT_S3_RUNTIME_POLICY_ARN` | unset | Exact sole customer-managed runtime policy ARN. |
+| `WORKSTREAM_ARTIFACT_S3_READINESS_ROLE_ARN` | unset | Exact independent readiness-job role ARN. |
+| `WORKSTREAM_ARTIFACT_S3_READINESS_POLICY_ARN` | unset | Exact sole customer-managed readiness policy ARN. |
+| `WORKSTREAM_ARTIFACT_S3_NEGATIVE_ROLE_ARN` | unset | Exact independent negative-test role ARN; it has no attached or inline policy. |
+| `WORKSTREAM_ARTIFACT_S3_BOOTSTRAP_PRINCIPAL_ARN` | unset | Exact environment provisioning principal evaluated without supplying its credentials. |
+| `WORKSTREAM_ARTIFACT_S3_BUCKET_POLICY_SHA256` | unset | Expected canonical bucket-policy digest in `sha256:<64 lowercase hex>` form. |
 | `WORKSTREAM_ARTIFACT_S3_ACCESS_KEY_ID` | unset | MinIO local/CI secret only; forbidden for native AWS. |
 | `WORKSTREAM_ARTIFACT_S3_SECRET_ACCESS_KEY` | unset | MinIO local/CI secret only; forbidden for native AWS. |
 | `WORKSTREAM_ARTIFACT_S3_SESSION_TOKEN` | unset | Optional MinIO local/CI secret only; forbidden for native AWS. |
@@ -974,9 +982,10 @@ The S3-compatible provider settings use the same prefix:
 | `WORKSTREAM_ARTIFACT_S3_MAX_POOL_CONNECTIONS` | `16` | Bounded client connection pool, from 1 through 256. |
 | `WORKSTREAM_ARTIFACT_MAXIMUM_BYTES` | `536870912` | Hard object maximum; configuration cannot exceed 512 MiB. |
 
-MinIO is the only runtime-eligible S3 profile in this chunk and is restricted
-to local, development, and test environments. Native AWS configuration rejects
-static credentials, configured endpoints, unselected or ambient credential
+MinIO is restricted to local, development, and test environments. Native AWS
+becomes runtime-eligible only while an exact immutable three-probe activation
+remains fresh. Native AWS configuration rejects static credentials, configured
+endpoints, unselected or ambient credential
 sources, arbitrary container credential URLs, and custom instance-metadata
 endpoints. The selected method accepts only its exact closed `AWS_*`
 environment allowlist; every other `AWS_*` or `BOTOCORE_*` SDK behavior control
@@ -1757,8 +1766,8 @@ ART identity without provider I/O. Client delivery/export is outside this v0.1
 initiative and requires a separately planned egress capability.
 
 - one conformance suite runs against LocalStorage and real MinIO;
-- inactive validation proves the closed AWS S3 configuration contract, while
-  Chunk 07 owns live deployment proof;
+- offline validation proves the closed AWS S3 configuration and activation
+  contract; actual provider eligibility still requires live deployment proof;
 - integration tests use real S3-compatible API calls, not monkeypatching;
 - concurrent puts cannot overwrite existing bytes;
 - acknowledgement loss, exact replay, oversized-object refusal, truncation,

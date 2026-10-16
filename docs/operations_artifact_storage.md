@@ -14,10 +14,42 @@ pending-work scanner, and put resolver through transaction-bound prepared
 authority. It grants no Operator route. Do not add role checks, fallback
 constructors, or artifact-owned grant evaluation.
 
-AWS S3 readiness is configuration-only and remains
-`inactive_live_proof_required`. This check does not instantiate an adapter or
-call AWS. Chunk 07 owns live bucket-policy, principal-boundary, credential,
-anonymous-read-negative, lifecycle, and activation proof.
+AWS S3 is activation-gated. Configuration supplies only non-secret exact
+release, namespace, role/policy and bucket-policy bindings; it cannot assert a
+pass. API, worker and Beat startup load an exact fresh activation after the
+namespace claim and before credential inspection. Every AWS SDK call reloads
+the same activation selected for its logical operation, and ART reloads that ID
+inside any provider-derived terminal transaction.
+
+The deployment runs one fixed command separately under each configured proof
+identity, using one newly generated non-secret UUID nonce. Run runtime proof
+first so its retained challenge object exists, followed by readiness and
+negative-access proof, then run credential-free coordination:
+
+```bash
+python -m scripts.aws_artifact_provider_proof runtime_immutability --group-nonce <uuid>
+python -m scripts.aws_artifact_provider_proof readiness --group-nonce <uuid>
+python -m scripts.aws_artifact_provider_proof negative_access --group-nonce <uuid>
+python -m scripts.aws_artifact_provider_proof coordinate --group-nonce <uuid>
+```
+
+Each proof process first binds its STS-observed caller to its configured role,
+performs only that mode's fixed calls, and writes one append-only bounded result
+using PostgreSQL time. Coordination has database access and no AWS transport;
+it accepts exactly one passing result of every type in the common group. Run
+the sequence every five minutes. Results and activations expire 15 minutes from
+their individual starts, so overlapping unexpired groups are expected.
+
+Each independently deployed executor supplies its own selected workload-identity
+method and identity environment; the common settings contract does not imply
+that the runtime, readiness and negative jobs share one credential method.
+
+Do not supply bootstrap credentials or run all modes under one identity. The
+readiness identity may inspect only the exact three role attachments/inline
+policies and the exact two required managed-policy documents. A failed,
+expired, mixed or drifted group cannot activate AWS. An expired activation
+during a possibly successful write leaves recoverable acknowledgement-unknown
+state; rerun proof and let the existing resolver observe the object.
 
 ## Diagnosis sequence
 

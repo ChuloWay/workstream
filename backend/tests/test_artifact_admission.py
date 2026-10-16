@@ -50,6 +50,8 @@ from app.modules.artifacts.models import (
 )
 from app.interfaces.artifacts import (
     ArtifactObjectMissingError,
+    ArtifactProviderActivationLease,
+    ArtifactProviderLiveProofRequiredError,
     ArtifactPutObservation,
     ArtifactPutResult,
     ArtifactStoreError,
@@ -557,13 +559,13 @@ async def test_every_provider_operation_revalidates_namespace_before_io(
     class DriftStore:
         identity = replace(store.identity, provider_key="drift")
 
-        async def put(self, _source):
+        async def put(self, _source, **_kwargs):
             raise AssertionError("put must not run after namespace drift")
 
-        async def observe_put_result(self, _commitment):
+        async def observe_put_result(self, _commitment, **_kwargs):
             raise AssertionError("observation must not run after namespace drift")
 
-        def open(self, _provider_object_ref):
+        def open(self, _provider_object_ref, **_kwargs):
             raise AssertionError("read must not run after namespace drift")
 
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
@@ -753,11 +755,11 @@ async def test_put_paths_recheck_authorized_facts_after_provider_io(
                         assert drifted_attempt is not None
                         drifted_attempt.operation_identity = "sha256:" + "e" * 64
 
-                async def put(_source: object) -> ArtifactPutResult:
+                async def put(_source: object, **_kwargs: object) -> ArtifactPutResult:
                     await drift_facts()
                     return ArtifactPutResult(provider_object_ref, replayed=False)
 
-                async def observe_put_result(_commitment: object) -> ArtifactPutObservation:
+                async def observe_put_result(_commitment: object, **_kwargs: object) -> ArtifactPutObservation:
                     await drift_facts()
                     return ArtifactPutObservation(provider_object_ref, committed=False)
 
@@ -883,7 +885,13 @@ async def test_expired_lease_takeover_rejects_stale_terminal_completion(
                 stale_session, object(), namespace, settings, _AllowArtifactAuthority()
             )
             assert (
-                await stale._record_put_absence(first_claim, first_executor, first_facts) == "stale"
+                await stale._record_put_absence(
+                    first_claim,
+                    first_executor,
+                    first_facts,
+                    None,
+                )
+                == "stale"
             )
             attempt = await stale_session.get(ArtifactPutAttempt, str(admission.attempt_id))
             assert attempt is not None
@@ -965,7 +973,7 @@ async def test_put_observation_unavailable_retries_then_exhausts_without_facts(
     class UnavailableObservationStore:
         identity = SimpleNamespace(provider_key=namespace.adapter)
 
-        async def observe_put_result(self, _commitment):
+        async def observe_put_result(self, _commitment, **_kwargs):
             raise ArtifactStoreUnavailableError("provider unavailable")
 
     try:
@@ -1011,6 +1019,77 @@ async def test_put_observation_unavailable_retries_then_exhausts_without_facts(
                 assert attempt.terminal_at is not None
                 assert attempt.terminal_result_code == "provider_unavailable"
                 assert attempt.executor_id is None
+                assert await _count(session, ArtifactOperationReceipt) == 0
+                assert await _count(session, ArtifactPutObservationReceipt) == 0
+                assert await _count(session, ArtifactReplica) == 0
+                assert await _count(session, ArtifactVerificationJob) == 0
+    finally:
+        await engine.dispose()
+
+
+async def test_activation_expiry_during_put_terminal_transaction_rolls_back_to_unknown(
+    admission_database_env: str,
+    tmp_path: Path,
+) -> None:
+    settings = _settings(tmp_path)
+    namespace = _namespace(settings)
+    engine = create_async_engine(admission_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    activation_id = UUID("0199e648-0b77-7000-8000-000000000001")
+
+    class ActivatedPutStore:
+        identity = SimpleNamespace(provider_key=namespace.adapter)
+
+        async def put(self, source, *, operation_evidence):
+            operation_evidence.bind(ArtifactProviderActivationLease(activation_id))
+            return ArtifactPutResult(
+                f"sha256/{source.commitment.sha256[7:9]}/{source.commitment.sha256[9:]}",
+                replayed=False,
+            )
+
+    try:
+        async with factory() as session:
+            async with minted_source(tmp_path / "activation-expiry", b"provider wrote") as source:
+                admission = await _admit_guide_source(
+                    session,
+                    settings,
+                    namespace,
+                    _context(),
+                    source,
+                )
+                orchestrator = ArtifactStorageOrchestrator(
+                    session,
+                    ActivatedPutStore(),
+                    namespace,
+                    settings,
+                    _AllowArtifactAuthority(),
+                )
+                orchestrator._require_terminal_activation = AsyncMock(
+                    side_effect=[
+                        None,
+                        ArtifactProviderLiveProofRequiredError("activation expired"),
+                    ]
+                )
+
+                assert (
+                    await orchestrator.execute_committed_put(
+                        attempt_id=admission.attempt_id,
+                        source=source,
+                    )
+                    == "acknowledgement_unknown"
+                )
+                terminal_activation_args = [
+                    call.args
+                    for call in orchestrator._require_terminal_activation.await_args_list
+                ]
+                assert terminal_activation_args == [
+                    (activation_id,),
+                    (activation_id,),
+                ]
+                attempt = await session.get(ArtifactPutAttempt, str(admission.attempt_id))
+                assert attempt is not None
+                assert attempt.status == "acknowledgement_unknown"
+                assert attempt.terminal_at is None
                 assert await _count(session, ArtifactOperationReceipt) == 0
                 assert await _count(session, ArtifactPutObservationReceipt) == 0
                 assert await _count(session, ArtifactReplica) == 0
@@ -2493,10 +2572,18 @@ async def test_checker_output_shared_put_and_verification_lifecycle(
                         {"receipt_id": receipt.id},
                     )
                 await session.rollback()
-                if isinstance(read_result, Exception):
-                    orchestrator._read_complete = AsyncMock(side_effect=read_result)
-                elif read_result is not None:
-                    orchestrator._read_complete = AsyncMock(return_value=read_result)
+                activation_id = UUID("0199e648-0b77-7000-8000-000000000003")
+
+                async def read_complete(_provider_object_ref, *, operation_evidence):
+                    operation_evidence.bind(ArtifactProviderActivationLease(activation_id))
+                    if isinstance(read_result, Exception):
+                        raise read_result
+                    if read_result is not None:
+                        return read_result
+                    return source.commitment.sha256, source.commitment.byte_count
+
+                orchestrator._read_complete = read_complete
+                orchestrator._require_terminal_activation = AsyncMock()
                 assert await orchestrator.verify_object(job_id) == expected_outcome
                 job = await session.get(ArtifactVerificationJob, str(job_id))
                 assert job is not None
@@ -2508,6 +2595,11 @@ async def test_checker_output_shared_put_and_verification_lifecycle(
                 )
                 assert verification is not None
                 assert verification.outcome == expected_outcome
+                assert orchestrator._require_terminal_activation.await_count >= 2
+                assert all(
+                    call.args == (activation_id,)
+                    for call in orchestrator._require_terminal_activation.await_args_list
+                )
     finally:
         bootstrap.close()
         await engine.dispose()
@@ -2542,15 +2634,14 @@ async def test_checker_output_put_observation_terminal_outcomes(
                     await _conflicting_checker_replica(session, attempt, namespace, provider_object_ref)
                 else:
                     await session.rollback()
-                observe = (
-                    AsyncMock(
-                        return_value=ArtifactPutObservation(
-                            provider_object_ref, committed=True
-                        )
-                    )
-                    if expected_outcome != "conflict"
-                    else AsyncMock(side_effect=ArtifactStoreError("provider conflict"))
-                )
+                activation_id = UUID("0199e648-0b77-7000-8000-000000000002")
+
+                async def observe(_commitment, *, operation_evidence):
+                    operation_evidence.bind(ArtifactProviderActivationLease(activation_id))
+                    if expected_outcome == "conflict":
+                        raise ArtifactStoreError("provider conflict")
+                    return ArtifactPutObservation(provider_object_ref, committed=True)
+
                 provider = SimpleNamespace(
                     identity=SimpleNamespace(provider_key=namespace.adapter),
                     observe_put_result=observe,
@@ -2561,6 +2652,7 @@ async def test_checker_output_put_observation_terminal_outcomes(
                 orchestrator._read_complete = AsyncMock(
                     return_value=("sha256:" + "0" * 64, 1)
                 )
+                orchestrator._require_terminal_activation = AsyncMock()
 
                 assert (
                     await orchestrator.resolve_put_attempt(admission.attempt_id)
@@ -2614,6 +2706,11 @@ async def test_checker_output_put_observation_terminal_outcomes(
                     assert receipt.observed_byte_count is None
                 assert receipt.execution_generation == attempt.execution_generation
                 assert checker_run_id == attempt.checker_run_id
+                assert orchestrator._require_terminal_activation.await_count >= 2
+                assert all(
+                    call.args == (activation_id,)
+                    for call in orchestrator._require_terminal_activation.await_args_list
+                )
     finally:
         await engine.dispose()
 

@@ -12,8 +12,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.adapters.artifacts import (
+    artifact_provider_activation_guard,
     create_artifact_store_bootstrap,
-    require_artifact_runtime_eligible,
 )
 from app.core.config import Settings, get_settings
 from app.db.session import get_database_url
@@ -64,6 +64,31 @@ async def initialize_artifact_internal_runtime() -> None:
         await _initialize_artifact_internal_runtime(settings, session_factory)
 
 
+async def validate_artifact_internal_runtime_startup() -> None:
+    """Validate namespace and AWS activation for a non-provider Beat process."""
+    settings = get_settings()
+    if settings.artifact_store_backend == "disabled":
+        return
+    async with _artifact_worker_database() as session_factory:
+        activation_guard = artifact_provider_activation_guard(settings, session_factory)
+        bootstrap = create_artifact_store_bootstrap(
+            settings,
+            activation_guard=activation_guard,
+        )
+        try:
+            claim = await validate_artifact_storage_namespace_at_startup(
+                bootstrap,
+                settings,
+                session_factory,
+            )
+            if activation_guard is not None:
+                await activation_guard.select_for_call(
+                    namespace_fingerprint=claim.namespace_fingerprint,
+                )
+        finally:
+            bootstrap.close()
+
+
 async def _initialize_artifact_internal_runtime(
     settings: Settings,
     session_factory: async_sessionmaker[AsyncSession],
@@ -73,8 +98,11 @@ async def _initialize_artifact_internal_runtime(
     with _runtime_condition:
         if _runtime is not None and not _runtime_shutting_down:
             return
-    require_artifact_runtime_eligible(settings)
-    bootstrap = create_artifact_store_bootstrap(settings)
+    activation_guard = artifact_provider_activation_guard(settings, session_factory)
+    bootstrap = create_artifact_store_bootstrap(
+        settings,
+        activation_guard=activation_guard,
+    )
     try:
         namespace = artifact_storage_namespace_spec(settings, bootstrap)
         claim = await validate_artifact_storage_namespace_at_startup(
@@ -82,6 +110,10 @@ async def _initialize_artifact_internal_runtime(
             settings,
             session_factory,
         )
+        if activation_guard is not None:
+            await activation_guard.select_for_call(
+                namespace_fingerprint=claim.namespace_fingerprint,
+            )
         store = bootstrap.initialize_after_namespace_claim(claim)
     except BaseException:
         bootstrap.close()
