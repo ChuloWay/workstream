@@ -282,6 +282,23 @@ def task_queue_authorization(kernel, secret):
     return TaskQueueReadAuthorization(kernel, secret)
 
 
+def checker_retry_discovery_authorization(session, context, secret):
+    """Compose exact Operator retry-source reads through the shared AUTH kernel."""
+    from app.modules.authorization.checker_retry_read import (
+        CheckerRetryDiscoveryAuthorization,
+    )
+    from app.modules.authorization.kernel import AuthorizationService
+    from app.modules.authorization.repository import AdminAuthorizationRepository
+
+    repository = AdminAuthorizationRepository(session)
+    return CheckerRetryDiscoveryAuthorization(
+        AuthorizationService(
+            session, context, admin_repository=repository,
+        ),
+        secret,
+    )
+
+
 def history_read_authorization(kernel):
     """Compose current AUTH decisions for owner-selected immutable history."""
     from app.modules.authorization.history_authorization import HistoryReadAuthorization

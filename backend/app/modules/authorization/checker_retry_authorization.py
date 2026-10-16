@@ -16,7 +16,7 @@ from app.modules.authorization.runtime import (
     authorization_resource_digest,
 )
 from app.modules.checkers.api.execution import (
-    CheckerExecutionUnavailable, CheckerRetryAuthorityReceipt,
+    CheckerExecutionUnavailable, CheckerRetryAuthorityDenied, CheckerRetryAuthorityReceipt,
     CheckerRetryPreparation, CheckerRetrySuccessor,
 )
 
@@ -28,6 +28,7 @@ class PreparedCheckerRetryAuthorization:
         self._context = context
         repository = AdminAuthorizationRepository(session)
         kernel = AuthorizationService(session, context, admin_repository=repository)
+        self._kernel = kernel
         self._service = PreparedAuthorizationService(session, context, kernel, repository)
 
     @staticmethod
@@ -64,7 +65,9 @@ class PreparedCheckerRetryAuthorization:
                 self._caller_input(facts),
                 PreparedAuthorityScope(kind=PreparedAuthorityScopeKind.SYSTEM),
             )
-        except (AuthorizationDenied, PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
+        except AuthorizationDenied as exc:
+            raise CheckerRetryAuthorityDenied("checker_retry_authority_unavailable") from exc
+        except (PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
             raise CheckerExecutionUnavailable("checker_retry_authority_unavailable") from exc
 
     async def consume(
@@ -77,7 +80,9 @@ class PreparedCheckerRetryAuthorization:
                 handle, ActionId.OPERATIONS_CHECKER_RETRY,
                 self._caller_input(facts), resource,
             )
-        except (AuthorizationDenied, PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
+        except AuthorizationDenied as exc:
+            raise CheckerRetryAuthorityDenied("checker_retry_authority_unavailable") from exc
+        except (PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
             raise CheckerExecutionUnavailable("checker_retry_authority_unavailable") from exc
         digest = authorization_resource_digest(resource)
         if decision.resource_context_digest != digest:
@@ -101,8 +106,17 @@ class PreparedCheckerRetryAuthorization:
                 self._caller_input(facts),
                 self._resource(facts, successor, original_link_id), decision_id,
             )
-        except (AuthorizationDenied, PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
+        except AuthorizationDenied as exc:
+            raise CheckerRetryAuthorityDenied("checker_retry_replay_unavailable") from exc
+        except (PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
             raise CheckerExecutionUnavailable("checker_retry_replay_unavailable") from exc
 
     def close(self, handle: object) -> None:
         self._service.close()
+
+    async def restage_denial(self, error: CheckerRetryAuthorityDenied) -> bool:
+        """Persist only the exact pending decision after caller-root rollback."""
+        if isinstance(error.__cause__, AuthorizationDenied):
+            await self._kernel.restage_denial(error.__cause__.decision)
+            return True
+        return False

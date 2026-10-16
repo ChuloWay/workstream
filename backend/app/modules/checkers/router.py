@@ -4,6 +4,10 @@ from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from app.api.deps.authorization import enforce_human_authorization_read
+from app.api.deps.checker_recovery import (
+    CheckerRetryCommands, CheckerRetryReads,
+    get_checker_retry_commands, get_checker_retry_reads,
+)
 
 from app.api.deps.history import HistoryReadOperation, get_history_reads
 
@@ -14,9 +18,57 @@ from app.modules.checkers.api.history import (
     ContributorCheckerHistory,
     ManagementCheckerHistory,
 )
+from app.modules.checkers.api.execution import (
+    CheckerRetryRequest, CheckerRetryResult, CheckerRetrySourcePage,
+)
+from app.modules.authorization.catalogue import ActionId
 
 
 router = APIRouter(tags=["checkers"])
+
+CHECKER_RETRY_KEY_PARAMETER = {
+    "name": "Idempotency-Key",
+    "in": "header",
+    "required": True,
+    "schema": {"type": "string", "format": "uuid"},
+}
+
+
+@router.get(
+    "/operations/projects/{project_id}/checker-retry-sources",
+    response_model=CheckerRetrySourcePage,
+    openapi_extra={
+        "x-workstream-action-id": ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST.value,
+    },
+)
+async def list_checker_retry_sources(
+    project_id: UUID,
+    reads: Annotated[CheckerRetryReads, Depends(get_checker_retry_reads)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    cursor: Annotated[str | None, Query(max_length=512)] = None,
+) -> CheckerRetrySourcePage:
+    """List exact finalized infrastructure failures for a system Operator."""
+    return await reads.discover(project_id, limit=limit, cursor=cursor)
+
+
+@router.post(
+    "/operations/projects/{project_id}/checker-runs/{source_run_id}/retry",
+    response_model=CheckerRetryResult,
+    status_code=201,
+    openapi_extra={
+        "x-workstream-action-id": ActionId.OPERATIONS_CHECKER_RETRY.value,
+        "parameters": [CHECKER_RETRY_KEY_PARAMETER],
+    },
+)
+async def retry_checker_infrastructure_failure(
+    project_id: UUID,
+    source_run_id: UUID,
+    payload: CheckerRetryRequest,
+    commands: Annotated[CheckerRetryCommands, Depends(get_checker_retry_commands)],
+) -> CheckerRetryResult:
+    """Create or replay one exact reason-bound terminal checker retry."""
+    return await commands.retry(project_id, source_run_id, payload)
+
 
 @router.get("/submissions/{submission_id}/checker-runs", response_model=ContributorCheckerHistoryPage,
     dependencies=[Depends(enforce_human_authorization_read)],

@@ -5,8 +5,14 @@ from app.modules.authorization.domain.contribution_reads import contribution_rea
 from app.modules.authorization.domain.project_reads import project_read_denial
 from app.modules.authorization.domain.submission_history import history_read_denial
 from app.modules.authorization.domain.task_queues import TASK_QUEUE_ACTIONS, queue_read_denial
+from app.modules.authorization.domain.checker_retry_reads import (
+    CHECKER_RETRY_READ_ACTIONS, checker_retry_read_denial,
+)
 
-READ_ACTIONS = TASK_QUEUE_ACTIONS | HISTORY_READ_ACTIONS | CONTRIBUTION_READ_ACTIONS | {ActionId.PROJECT_READ}
+READ_ACTIONS = (
+    TASK_QUEUE_ACTIONS | HISTORY_READ_ACTIONS | CONTRIBUTION_READ_ACTIONS
+    | CHECKER_RETRY_READ_ACTIONS | {ActionId.PROJECT_READ}
+)
 
 
 async def read_denial(action, resource, context, repository, refresh, lifecycle, revalidate_self):
@@ -19,6 +25,8 @@ async def read_denial(action, resource, context, repository, refresh, lifecycle,
         evaluator = queue_read_denial
     elif action.action_id in CONTRIBUTION_READ_ACTIONS:
         evaluator = contribution_read_denial
+    elif action.action_id in CHECKER_RETRY_READ_ACTIONS:
+        evaluator = checker_retry_read_denial
     else:
         raise TypeError("unsupported closed read action")
     return await evaluator(action, resource, context, repository, refresh, lifecycle)

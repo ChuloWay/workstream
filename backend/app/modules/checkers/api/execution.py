@@ -35,9 +35,14 @@ class CheckerRequestConflict(CheckerExecutionUnavailable):
     """A request key or generation already belongs to different facts."""
 
 
+class CheckerRetryAuthorityDenied(CheckerExecutionUnavailable):
+    """An exact retry authority denial available for canonical HTTP restaging."""
+
+
 class CheckerRetryCommand(CheckerValue):
     """Operator's exact source, reason and replay key; no caller-selected successor."""
 
+    project_id: ResourceId
     source_run_id: ResourceId
     request_key: ResourceId
     reason: str = Field(min_length=1, max_length=500)
@@ -46,6 +51,21 @@ class CheckerRetryCommand(CheckerValue):
     @classmethod
     def nonblank_reason(cls, value: str) -> str:
         if not value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
+            raise ValueError("checker retry reason is invalid")
+        return value
+
+
+class CheckerRetryRequest(CheckerValue):
+    """Public body for one exact project/run retry command."""
+
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def nonblank_reason(cls, value: str) -> str:
+        if not value.strip() or any(
+            ord(character) < 32 or ord(character) == 127 for character in value
+        ):
             raise ValueError("checker retry reason is invalid")
         return value
 
@@ -105,6 +125,74 @@ class CheckerRetryResult(CheckerValue):
     authorization_decision_id: ResourceId
 
 
+class CheckerRetrySourceQuery(CheckerValue):
+    """One project-bound page request for retained terminal retry sources."""
+
+    project_id: ResourceId
+    limit: int = Field(ge=1, le=100, strict=True)
+    cursor: str | None = Field(default=None, max_length=512)
+
+
+class CheckerRetrySourcePosition(CheckerValue):
+    """Stable keyset boundary returned only by the signed cursor authority."""
+
+    created_at: AwareDatetime
+    source_run_id: ResourceId
+
+
+class CheckerRetrySourceItem(CheckerValue):
+    """Privacy-bounded known terminal failure and its immutable retry state."""
+
+    source: CheckerRetrySource
+    recovery_state: Literal["eligible", "retried", "not_current"]
+    created_at: AwareDatetime
+    completed_at: AwareDatetime
+    retry_receipt_id: ResourceId | None = None
+    successor: CheckerRetrySuccessor | None = None
+
+    @model_validator(mode="after")
+    def exact_retry_state(self):
+        retried = self.recovery_state == "retried"
+        retained = self.retry_receipt_id is not None and self.successor is not None
+        partial = (self.retry_receipt_id is None) != (self.successor is None)
+        if retried != retained or partial:
+            raise ValueError("checker retry source state is invalid")
+        return self
+
+
+class CheckerRetrySourcePage(CheckerValue):
+    """One bounded exact project page; a cursor conveys no authority."""
+
+    project_id: ResourceId
+    items: tuple[CheckerRetrySourceItem, ...]
+    next_cursor: str | None
+
+    @model_validator(mode="after")
+    def exact_project(self):
+        if len(self.items) > 100 or any(
+            item.source.project_id != self.project_id for item in self.items
+        ):
+            raise ValueError("checker retry source page is invalid")
+        return self
+
+
+class CheckerRetryDiscoveryAuthorizationPort(Protocol):
+    """Fresh system-Operator read authority and signed keyset custody."""
+
+    async def authorize_and_decode(
+        self, request: CheckerRetrySourceQuery,
+    ) -> CheckerRetrySourcePosition | None:
+        ...
+
+    def encode(
+        self, request: CheckerRetrySourceQuery, position: CheckerRetrySourcePosition,
+    ) -> str:
+        ...
+
+    async def restage_denial(self, error: Exception) -> bool:
+        ...
+
+
 class CheckerRetryEventExpectation(CheckerValue):
     """Immutable retry event facts for exact TASK delivery comparison."""
 
@@ -156,6 +244,9 @@ class CheckerRetryAuthorizationPort(Protocol):
         ...
 
     def close(self, handle: object) -> None:
+        ...
+
+    async def restage_denial(self, error: CheckerRetryAuthorityDenied) -> bool:
         ...
 
 
