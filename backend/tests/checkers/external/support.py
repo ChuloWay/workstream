@@ -70,17 +70,26 @@ def registry_spec(
     )
 
 
-def post_registry_spec() -> ExternalCheckerRegistrySpec:
-    """Return the exact selected POST schema used by native execution fixtures."""
-    values = registry_spec("post_submit").model_dump(mode="json")
+def _open_input_spec(phase: str, schema_id: str) -> ExternalCheckerRegistrySpec:
+    values = registry_spec(phase).model_dump(mode="json")
     document = {"type": "object"}
     values["input_schema"] = ExternalCheckerSchema(
-        schema_id=POST_SUBMIT_INPUT_SCHEMA_ID,
+        schema_id=schema_id,
         schema_version="v1",
         document=document,
         schema_sha256=external_checker_json_hash(document),
     ).model_dump(mode="json")
     return ExternalCheckerRegistrySpec.model_validate(values)
+
+
+def post_registry_spec() -> ExternalCheckerRegistrySpec:
+    """Return the exact selected POST schema used by native execution fixtures."""
+    return _open_input_spec("post_submit", POST_SUBMIT_INPUT_SCHEMA_ID)
+
+
+def pre_registry_spec() -> ExternalCheckerRegistrySpec:
+    """Return a selected PRE schema that accepts the owner-built intake input."""
+    return _open_input_spec("pre_submit", PRE_SUBMIT_INPUT_SCHEMA_ID)
 
 
 def registry_entry(

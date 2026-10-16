@@ -34,6 +34,7 @@ from projects.guide_fixtures import complete_guide_payload
 from tests.projects.policy_read_faults import corrupt_locked_policy_reads
 from auth_concurrency_support import wait_for_named_database_lock
 from tests.submission_fixtures import seed_retained_submission, route_retained_checker_remediation
+from tests.tasks.post_submit_routing.backfill_support import assert_backfill_matches_live
 
 from app.core.config import get_settings
 from app.db import models as db_models
@@ -120,7 +121,7 @@ def test_task_submission_context_public_facts_are_immutable_and_consistent() -> 
     with pytest.raises(ValueError, match="version is invalid"):
         SubmissionPredecessorFacts(submission_id=new_record_id(), version=0, revision_round=1)
     with pytest.raises(ValueError, match="revision round is invalid"):
-        SubmissionPredecessorFacts(submission_id=new_record_id(), version=3, revision_round=0)
+        SubmissionPredecessorFacts(submission_id=new_record_id(), version=3, revision_round=-1)
     with pytest.raises(ValueError, match="reference is empty"):
         TaskLockedProjectContextReferences(locked_contribution_policy_version_id=UUID(int=100),
             project_id=new_record_id(),
@@ -1999,8 +2000,15 @@ async def test_full_task_claim_start_flow_writes_audit_events(
         assert decision.action_id == "task.claim"
         assert decision.actor_id == worker_actor_id
         assert decision.after_facts["allowed"] is True
+        start_event = next(event for event in events if event["to_status"] == "in_progress")
+        assignment = await session.get(TaskAssignment, claim.json()["assignment"]["id"])
+        # Claim time stays assigned_at; start is stamped once, after the claim.
+        assert assignment.started_at is not None
+        assert assignment.assigned_at <= assignment.started_at <= assignment.updated_at
+        assert abs((assignment.started_at - start_event["created_at"]).total_seconds()) < 5
     assert persisted_event is not None
     assert persisted_event.claim_snapshot == {}
+    await assert_backfill_matches_live(db_session.get_session_factory(), assignments=True)
 
 
 @pytest.mark.parametrize("authority_state", ["absent", "revoked"])

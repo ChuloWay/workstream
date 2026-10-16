@@ -35,17 +35,24 @@ type SubmissionEvidence struct {
 	Label string   `json:"label"`
 	Size  *big.Int `json:"size_bytes"`
 }
+type SubmissionFindingCounts struct {
+	Blocking           *big.Int `json:"blocking"`
+	Warning            *big.Int `json:"warning"`
+	CoverageIncomplete *big.Int `json:"coverage_incomplete"`
+}
 type SubmissionHistory struct {
-	ID           string               `json:"id"`
-	Task         string               `json:"task_id"`
-	Version      *big.Int             `json:"version"`
-	Status       string               `json:"status"`
-	StatusReason *string              `json:"status_reason,omitempty"`
-	Summary      string               `json:"summary"`
-	SubmittedAt  string               `json:"submitted_at"`
-	LockedAt     *string              `json:"locked_at"`
-	Predecessor  *string              `json:"supersedes_submission_id"`
-	Evidence     []SubmissionEvidence `json:"evidence_items"`
+	ID            string                  `json:"id"`
+	Task          string                  `json:"task_id"`
+	Version       *big.Int                `json:"version"`
+	Status        string                  `json:"status"`
+	StatusReason  *string                 `json:"status_reason"`
+	Summary       string                  `json:"summary"`
+	SubmittedAt   string                  `json:"submitted_at"`
+	DecidedAt     *string                 `json:"decided_at"`
+	FindingCounts SubmissionFindingCounts `json:"finding_counts"`
+	LockedAt      *string                 `json:"locked_at"`
+	Predecessor   *string                 `json:"supersedes_submission_id"`
+	Evidence      []SubmissionEvidence    `json:"evidence_items"`
 }
 type SubmissionPage struct {
 	Items  []SubmissionHistory `json:"items"`
@@ -54,6 +61,9 @@ type SubmissionPage struct {
 type ContributorFinding struct {
 	ID       string  `json:"id"`
 	Checker  string  `json:"checker_name"`
+	CheckID  *string `json:"check_id"`
+	Path     *string `json:"path"`
+	Line     *int64  `json:"line"`
 	Status   string  `json:"status"`
 	Severity string  `json:"severity"`
 	Message  *string `json:"worker_message"`
@@ -80,11 +90,11 @@ type SubmissionCheckerPage struct {
 func decodeSubmission(raw json.RawMessage, task, submission string) (SubmissionHistory, error) {
 	var value SubmissionHistory
 	bad := &Failure{Code: "invalid_api_response"}
-	fields, err := contextObject(raw, &value, []string{"id", "task_id", "version", "status", "summary", "submitted_at", "evidence_items"}, nil)
-	if err != nil || !requiredNullable(fields, "locked_at", "supersedes_submission_id") ||
+	fields, err := contextObject(raw, &value, []string{"id", "task_id", "version", "status", "summary", "submitted_at", "finding_counts", "evidence_items"}, nil)
+	if err != nil || !requiredNullable(fields, "status_reason", "decided_at", "locked_at", "supersedes_submission_id") ||
 		!validUUID(value.ID) || !validUUID(value.Task) || (task != "" && !sameUUID(value.Task, task)) ||
-		(submission != "" && !sameUUID(value.ID, submission)) || value.Version == nil || value.Version.Sign() <= 0 || value.Status == "" ||
-		(value.StatusReason != nil && (value.Status != "rejected" || (*value.StatusReason != "revision_deadline_expired" && *value.StatusReason != "revision_limit_reached"))) ||
+		(submission != "" && !sameUUID(value.ID, submission)) || value.Version == nil || value.Version.Sign() <= 0 ||
+		!validSubmissionOutcome(value) || !validFindingCounts(fields["finding_counts"], &value.FindingCounts) ||
 		!validTime(value.SubmittedAt) || (value.LockedAt != nil && !validTime(*value.LockedAt)) ||
 		(value.Predecessor != nil && (!validUUID(*value.Predecessor) || sameUUID(*value.Predecessor, value.ID))) || value.Evidence == nil {
 		return value, bad
@@ -104,6 +114,41 @@ func decodeSubmission(raw json.RawMessage, task, submission string) (SubmissionH
 		seen[id] = true
 	}
 	return value, nil
+}
+
+// validSubmissionOutcome mirrors the server's attempt-status rules: only a
+// decided attempt has decided_at, and only a deadline rejection or a checker
+// coverage return carries a reason.
+func validSubmissionOutcome(value SubmissionHistory) bool {
+	decided := false
+	switch value.Status {
+	case "evaluation_pending", "review_pending":
+	case "accepted", "needs_revision", "rejected":
+		decided = true
+	default:
+		return false
+	}
+	if decided != (value.DecidedAt != nil) || (value.DecidedAt != nil && !validTime(*value.DecidedAt)) {
+		return false
+	}
+	if value.StatusReason == nil {
+		return true
+	}
+	return (value.Status == "rejected" &&
+		(*value.StatusReason == "revision_deadline_expired" || *value.StatusReason == "revision_limit_reached")) ||
+		(value.Status == "needs_revision" && *value.StatusReason == "checker_coverage_incomplete")
+}
+
+func validFindingCounts(raw json.RawMessage, counts *SubmissionFindingCounts) bool {
+	if _, err := contextObject(raw, counts, []string{"blocking", "warning", "coverage_incomplete"}, nil); err != nil {
+		return false
+	}
+	for _, count := range []*big.Int{counts.Blocking, counts.Warning, counts.CoverageIncomplete} {
+		if count == nil || count.Sign() < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *Client) Submission(ctx context.Context, id string) (Result[SubmissionHistory], error) {
@@ -182,11 +227,13 @@ func decodeSubmissionChecker(raw json.RawMessage, submission, run string) (Submi
 		f := &value.Results[i]
 		fields, err := contextObject(item, f, []string{"id", "checker_name", "status", "severity"}, nil)
 		id, ok := uuidIdentity(f.ID)
-		if err != nil || !requiredNullable(fields, "worker_message", "worker_suggested_fix") || !ok || seen[id] || f.Checker == "" {
+		if err != nil || !requiredNullable(fields, "check_id", "path", "line", "worker_message", "worker_suggested_fix") ||
+			!ok || seen[id] || f.Checker == "" || (f.CheckID != nil && *f.CheckID == "") ||
+			(f.Path != nil && *f.Path == "") || (f.Line != nil && (f.Path == nil || *f.Line < 1)) {
 			return value, bad
 		}
 		switch f.Status {
-		case "passed", "warning", "failed":
+		case "passed", "warning", "failed", "coverage_incomplete":
 		default:
 			return value, bad
 		}

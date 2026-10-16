@@ -166,16 +166,12 @@ async def test_mounted_preparation_does_not_reclassify_unexpected_failure() -> N
         )
 
 
-@pytest.mark.asyncio
-async def test_post_reservation_archive_failure_remains_recoverable(
-    monkeypatch,
-) -> None:
-    """A later projection failure must retain its reserved PRE recovery owner."""
+@asynccontextmanager
+async def _transaction():
+    yield
 
-    @asynccontextmanager
-    async def transaction():
-        yield
 
+def _post_reservation_runtime_case():
     actor = _actor()
     request = SubmissionBundlePreparationRequest(
         actor=actor,
@@ -231,18 +227,33 @@ async def test_post_reservation_archive_failure_remains_recoverable(
         storage_scheme="s3",
         artifact_deadline_ms=120_000,
     )
+    return SimpleNamespace(
+        request=request,
+        prepared=prepared,
+        policy=policy,
+        selected=selected,
+        reservation=reservation,
+        materialization=materialization,
+        coordinator=coordinator,
+        later_failure=later_failure,
+        selected_execution=selected_execution,
+        durable_put=durable_put,
+        runtime=runtime,
+    )
 
+
+def _post_reservation_command(case, monkeypatch):
     @asynccontextmanager
     async def runtime_factory():
-        yield runtime
+        yield case.runtime
 
     authority = SimpleNamespace(
         preflight=AsyncMock(),
-        transaction=transaction,
+        transaction=_transaction,
         close=Mock(),
     )
     command = PreparedSubmissionBundlePreparationCommand(
-        session=SimpleNamespace(begin=transaction),
+        session=SimpleNamespace(begin=_transaction),
         authority=authority,
         task_contexts=SimpleNamespace(),
         project_contexts=SimpleNamespace(),
@@ -266,7 +277,7 @@ async def test_post_reservation_archive_failure_remains_recoverable(
         "LockedExternalCheckerPolicies",
         SimpleNamespace(
             model_validate_json=Mock(
-                return_value=SimpleNamespace(pre_submit=policy)
+                return_value=SimpleNamespace(pre_submit=case.policy)
             )
         ),
     )
@@ -278,12 +289,12 @@ async def test_post_reservation_archive_failure_remains_recoverable(
     monkeypatch.setattr(
         submission_admission,
         "bind_selected_pre_submit_admission",
-        Mock(return_value=selected),
+        Mock(return_value=case.selected),
     )
     monkeypatch.setattr(
         submission_admission,
         "build_selected_pre_submit_reservation",
-        Mock(return_value=reservation),
+        Mock(return_value=case.reservation),
     )
     monkeypatch.setattr(
         submission_admission,
@@ -295,17 +306,27 @@ async def test_post_reservation_archive_failure_remains_recoverable(
         "selected_pre_submit_execution_budget_ms",
         Mock(return_value=60_000),
     )
+    return command, authority
+
+
+@pytest.mark.asyncio
+async def test_post_reservation_archive_failure_remains_recoverable(
+    monkeypatch,
+) -> None:
+    """A later projection failure must retain its reserved PRE recovery owner."""
+    case = _post_reservation_runtime_case()
+    command, authority = _post_reservation_command(case, monkeypatch)
 
     with pytest.raises(SubmissionArchiveRejectedError) as failure:
-        await command.prepare(request)
+        await command.prepare(case.request)
 
-    assert failure.value is later_failure
-    materialization.authorize_inspected.assert_awaited_once()
-    coordinator.reserve.assert_awaited_once_with(reservation)
-    selected_execution.execute.assert_awaited_once()
-    durable_put.admit_in_transaction.assert_not_awaited()
-    durable_put.publish_after_commit.assert_not_awaited()
-    prepared.close.assert_awaited_once()
+    assert failure.value is case.later_failure
+    case.materialization.authorize_inspected.assert_awaited_once()
+    case.coordinator.reserve.assert_awaited_once_with(case.reservation)
+    case.selected_execution.execute.assert_awaited_once()
+    case.durable_put.admit_in_transaction.assert_not_awaited()
+    case.durable_put.publish_after_commit.assert_not_awaited()
+    case.prepared.close.assert_awaited_once()
     authority.close.assert_called_once()
 
 
@@ -414,7 +435,7 @@ async def test_hidden_preparation_treats_missing_optional_packet_text_as_warning
     command = SimpleNamespace(prepare=AsyncMock(return_value=SubmissionBundlePreparationResult(
         put_attempt_id=new_record_id(), admission_id=None,
         submission_bundle_preparation_status=SubmissionBundlePreparationStatus.PREPARED,
-        replayed=False,
+        replayed=False, pre_submission_results=(),
     )))
     request = Request({
         "type": "http", "method": "POST", "path": "/",

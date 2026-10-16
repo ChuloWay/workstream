@@ -40,10 +40,16 @@ Submission exists. Post-submit identity uses the immutable Submission,
 evaluation request and reservation, plus the current execution lease and its
 database expiry.
 
-The normalized result echoes the exact request, registry and phase identity.
-It is either `completed`, with closed findings and a passed/failed verdict, or
-`infrastructure_failed`, with one of the existing capacity, deadline, material,
-implementation or invalid-output codes. Missing images, crashes and malformed
+The normalized `external_checker_result.v1` echoes the exact request, registry
+and phase identity. It is either `completed`, with closed findings and a
+passed/failed verdict, or `infrastructure_failed`, with one of the existing
+capacity, deadline, material, implementation or invalid-output codes. Each
+finding names the `check_id` that produced it, a closed `code`, a level
+(`info`, `warning`, `error` or `coverage_incomplete`), a message and an
+optional `path` with an optional 1-based `line` inside that path. The verdict
+is `failed` exactly when an `error` finding exists; `coverage_incomplete`
+reports work the checker could not evaluate and never fails the verdict by
+itself. Missing images, crashes and malformed
 or oversized output cannot become a silent pass. This contract and the
 immutable registry are consumed by selected hidden PRE/POST owners through an
 explicit Rust service adapter. Production request/completion handlers are
@@ -600,6 +606,28 @@ containing the token do not activate the route. Omitted or null optional
 task-local `acceptance_criteria` alone is not a setup defect; guide-level
 acceptance requirements remain mandatory.
 
+A completed post-submit result with no failed member but at least one
+`coverage_incomplete` finding never auto-accepts. Classification reads the
+task's locked ReviewPolicy: when human review is required the result is
+`allow_review`, so a reviewer judges the part the checker could not evaluate;
+otherwise it is `needs_revision` and returns to the contributor. TASK records
+that return as `needs_revision` with `status_reason`
+`checker_coverage_incomplete`, and neither Python nor PostgreSQL counts it as a
+revision round, so the next attempt keeps its current round. The normal revision
+deadline still applies, and consecutive coverage returns keep the first
+return's revision window instead of starting a new one, so a checker that keeps
+reporting the same gap cannot return the work indefinitely. The deferred terminal-custody trigger recomputes the
+same route from the stored result and locked policy. A genuine failure keeps
+its normal accounting even when a coverage finding accompanies it: no coverage
+reason, one revision round spent and the policy's normal window. Pre-submit
+intake treats a coverage gap like any non-error finding: it does not block
+admission, because intake never decides acceptance, and the bounded intake
+results are returned on the successful preparation response and its exact
+replay as well as on a blocked one. Run-level
+`warning_count` and `blocking_count` remain member counts; per-finding counts
+come from the stored findings, and contributors count only the findings their
+checker history shows them.
+
 ## Readiness Proof — Target Contract
 
 Canonical readiness publication is pending. Its required contract stores proof
@@ -655,13 +683,16 @@ results have empty counters; selected image results use their closed JSON schema
 derived deterministically from the closed code; raw handler messages and arbitrary
 metadata are not retained.
 
-This is retained proof, not a live reviewer projection. Current contributor and
-Project Manager history reads expose only their fixed, permission-appropriate
-DTO fields. Future REV packet/current-work presentation must expose an authorized
-bounded subset after routing and review integration. The current contract does
-not include per-file findings, per-check evidence references, full logs or generated
-output artifacts. For example, a missing-required-file code identifies the failed
-rule but does not retain which path was missing or a missing-file counter.
+This is retained proof, not a live reviewer projection. Each selected-image
+finding is also stored as an immutable `checker_result_findings` row that the
+deferred terminal custody trigger compares with the stored result. Current
+contributor and Project Manager history reads list one entry per stored finding
+with its `check_id`, `path`, `line` and level-derived status (a member without
+findings keeps one entry), plus fixed, permission-appropriate messages; raw
+checker messages are not exposed. Future REV packet/current-work presentation must
+expose an authorized bounded subset after routing and review integration. The
+current contract does not include excerpts, per-check evidence references, full
+logs or generated output artifacts.
 
 Reviewer file inspection belongs to the planned lease-scoped ART capability bound
 to the exact `ReviewPacketManifest` and active `ReviewLease`; see
@@ -669,7 +700,7 @@ to the exact `ReviewPacketManifest` and active `ReviewLease`; see
 CHECKERS history does not grant artifact access. A reviewer uses the exact immutable
 Submission and locked context, with checker results as bounded provenance.
 
-A richer finding such as a path, location, excerpt, evidence reference or generated
+A richer finding such as an excerpt, evidence reference or generated
 output needs a typed capability-specific result/evidence schema, visibility rules,
 immutable custody and regression tests before the reviewer contract may promise
 it. This does not introduce a generic metadata store or another checker path.

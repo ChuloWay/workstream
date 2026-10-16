@@ -1045,6 +1045,10 @@ class AuthorizedTaskCommands:
     ) -> None:
         before = task.status
         task.status = status
+        if status == "in_progress":
+            # The started task must be visible to PostgreSQL before the assignment stamp.
+            await self._session.flush()
+            assignment.started_at = await self._session.scalar(select(func.clock_timestamp()))
         await self._audit.record(TaskTransitionFacts(
             operation=(
                 TaskAuthorityOperation.START_OVERRIDE if operator_override

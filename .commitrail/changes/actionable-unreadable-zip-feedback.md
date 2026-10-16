@@ -20,8 +20,9 @@ prepares selected materialization authorization and then inspects the bytes befo
 selected PRE reservation, but its exception translation does not include that
 error. The mounted route only handles public submission-preparation errors, so the
 exception reaches the global 500 handler.
-Open PR #575 changes successful preparation feedback but explicitly records this
-malformed-ZIP behavior as a follow-up and does not translate the archive error.
+Merged PR #575 changes successful preparation feedback but explicitly records
+this malformed-ZIP behavior as a follow-up and does not translate the archive
+error.
 
 ## Bounded change
 
@@ -122,12 +123,12 @@ candidate is frozen.
 
 ## Reconciliation
 
-- Current-source reconciliation: Baseline is `34501cd64`; merged main
-  `801b8dabb` changes only CI lane capacity plus its operations/roadmap accounting
-  and does not change the ART preparation owner or public behavior. Open PR #575 overlaps
-  the command, route, public-intake proof, and roadmap but leaves this defect as an
-  explicit follow-up. Reconcile its eventual merged response shape before PR
-  readiness without duplicating its successful-feedback work.
+- Current-source reconciliation: Baseline is `34501cd64`; current merged main
+  `a201d7432` includes PR #575's successful and replayed intake-result response.
+  The command now carries those results on success while this change retains its
+  narrow initial-inspection translation. The public regression's valid control
+  accepts that response without duplicating #575's detailed success/replay proof,
+  and the roadmap records both behaviors.
 - Next usable boundary: Independent exact-head implementation review, pull request,
   CI, and human merge; no additional product chunk is implied.
 - Remaining risks: Hosted CI and exact-head reviewer conclusions remain PR evidence,

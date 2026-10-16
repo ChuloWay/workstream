@@ -40,7 +40,6 @@ from app.modules.checkers.execution_repository import (
     stored_result,
     stored_request,
 )
-from app.modules.checkers.execution_results import classify_result
 from app.modules.checkers.models import CheckerRun, CheckerSubmissionFence
 
 
@@ -242,9 +241,10 @@ class EvaluationCoordinator:
             )
         )
         reference.validate_result(result)
-        classification = classify_result(request, result)
+        result.validate_request(request)
+        # Terminal custody already recomputed this routing under the locked policy.
         return CompletedEvaluation(
-            reference=reference, routing_recommendation=classification.routing, result=result
+            reference=reference, routing_recommendation=run.routing_recommendation, result=result
         )
 
     async def require_current_completion(

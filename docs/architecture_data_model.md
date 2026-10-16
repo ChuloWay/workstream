@@ -1196,6 +1196,11 @@ allowance. Setup blocks pause it; repair resumes only the stored remainder.
 Expiry records a separate rejection receipt and also returns the task to ready.
 Neither outcome creates a Review or economic facts. There is no contributor
 limit: any eligible claimant can start a new assignment at round 0.
+A checker coverage return (`checker_coverage_incomplete`) is not counted and
+never exhausts, so the next attempt keeps the source attempt's current round
+(`next_revision_round` therefore allows 0, including under N=0). Consecutive
+coverage returns keep the first return's window; `revision_window_origin`
+supplies it to the PostgreSQL clock.
 Checker-triggered enforcement is implemented; #554 owns future human decision
 integration under the same intended policy. Complete next-attempt context selection is
 deterministic: exact prior component matches keep, every changed valid active
@@ -1495,6 +1500,14 @@ Fields:
 - `accepted_at`
 - `released_at`
 - `status`
+- `started_at`
+- `updated_at`
+
+`assigned_at` is the claim time. The start transition sets `started_at` once,
+and PostgreSQL refuses it unless the assignment is active and its task is
+`in_progress` for that contributor. `updated_at` on TaskAssignment and
+WorkstreamTask is PostgreSQL-owned on every committed change, including raw SQL
+updates.
 
 The v0.1 baseline excludes the retired persisted human
 owner to `contributor_id`. The non-null `varchar(36)` value is protected by
@@ -1594,7 +1607,12 @@ or human revision preparation records prior/next policy lineage before it may up
 that selector; publication alone cannot.
 
 Each assignment's initial round 0 has no replacement cause; its task-global
-Submission version may exceed 1 after an earlier assignment's timeout. For a current checker-remediation replacement,
+Submission version may exceed 1 after an earlier assignment's timeout. A
+needs_revision attempt with `status_reason='checker_coverage_incomplete'` is
+excluded from every round count, so its replacement keeps the source's round.
+Consecutive coverage returns inherit the first coverage return's revision
+window (`requested_at`, `deadline_at`), which PostgreSQL also requires of the
+preparation. For a current checker-remediation replacement,
 TASK selects the exact authorized `needs_revision` routing manifest for the
 immediate predecessor and its current completed CheckerRun. The server-selected
 `checker_remediation_manifest_id` travels through ART's pre-submit evidence and
@@ -1619,8 +1637,34 @@ Status:
 
 - submitted
 
-Submission status records the immutable packet version state. Task status carries
-evaluation, human review, revision, acceptance, and rejection lifecycle states.
+Submission `status` records the immutable packet version state and is the
+intake-liveness fact that evaluation, routing and replay guards check. Task
+status carries the task's evaluation, human review, revision, acceptance, and
+rejection lifecycle states.
+
+Attempt outcome (`attempt_status`, published as the read `status`):
+
+- `evaluation_pending` — created with the Submission and kept through
+  post-submit checks and infrastructure retries; no `decided_at`
+- `review_pending` — an `allow_review` routing manifest sent it to human review;
+  awaiting a reviewer is not a decision, so it has no `decided_at` or reason
+- `accepted` — a FinalAcceptance exists for this Submission
+- `needs_revision` — a `needs_revision` routing manifest exists; when its
+  run had no failed member but stored a `coverage_incomplete` finding (a
+  coverage gap under a false ReviewPolicy) `status_reason` is
+  `checker_coverage_incomplete` and the attempt spends no revision round. A
+  genuine failure keeps a null reason and spends a round even when a coverage
+  finding accompanies it. A coverage gap under a true ReviewPolicy is
+  `review_pending` instead.
+- `rejected` — a revision expiration receipt names this Submission as its
+  source, with `status_reason` `revision_deadline_expired`; or a revision
+  exhaustion receipt names it, with `status_reason` `revision_limit_reached`
+
+The deciding owner requests each transition in its own transaction. A
+PostgreSQL guard refuses any transition without that owner's evidence, derives
+`decided_at` (and the reason) from it, and refuses edits to a recorded
+decision. `updated_at` is PostgreSQL-owned on every committed change. Human
+review decisions do not yet write outcomes.
 
 ## EvidenceItem
 
@@ -1681,10 +1725,12 @@ an independently mutable stored flag. Current-result consumers hold the caller
 transaction while checking this fence; an old event is not perpetual authority.
 
 The current completion classifier derives `allow_review` or `needs_revision`
-from the complete locked external member set. Retained contracts/history may
-contain `task_setup_blocked`, but the classifier cannot emit it and a
-manager-visible setup-fault hold remains future safety work. Unfinished or
-infrastructure-failed runs use `not_evaluated`. `allow_review` means no
+from the complete locked external member set; a result with no failed member
+but a `coverage_incomplete` finding is `allow_review` when the locked
+ReviewPolicy requires human review and `needs_revision` otherwise. Retained
+contracts/history may contain `task_setup_blocked`, but the classifier cannot
+emit it and a manager-visible setup-fault hold remains future safety work.
+Unfinished or infrastructure-failed runs use `not_evaluated`. `allow_review` means no
 blocking evaluation finding, never acceptance: later TASK routing follows the
 locked human-review requirement, including shared authorized acceptance when
 false. No human Review is invented for that branch.
@@ -1719,6 +1765,24 @@ bounded messages and contributor visibility from these facts; arbitrary messages
 metadata and evidence links are not stored on checker results. Private request,
 policy, receipt and material facts are excluded from public history projections.
 Pre-submit evidence remains a separate intake contract and creates no CheckerRun.
+
+## CheckerResultFinding
+
+One immutable finding of one member, stored as `checker_result_findings` in the
+same finalization transaction as its member.
+
+Fields:
+
+- `id`, `checker_result_id`, `checker_run_id`, `task_id`, `submission_id`
+- `member_order`, `finding_order` (0–255)
+- `check_id`, `code`, `level` (`info`, `warning`, `error`, `coverage_incomplete`)
+- `path` (a safe relative archive path) and `line` (1-based, only with a path)
+- `created_at`
+
+Insertion requires the running parent and the member's own run and order.
+Updates, deletion and truncation reject. The deferred terminal-custody trigger
+requires the stored findings to equal the findings in the run's stored result,
+in order. History lists one entry per finding.
 
 ## CheckerDefinition
 
@@ -2065,8 +2129,10 @@ locked revision policy identity/generation/hash, PostgreSQL exhaustion time and
 AUTH/audit/outbox references. One assignment has one exhaustion receipt. The
 routing transaction releases it as `revision_exhausted`, clears the task's
 assignee and returns the task to `ready`, without creating another preparation
-or expiry intent. History projects `rejected` with
-`status_reason=revision_limit_reached`; the stored Submission is unchanged.
+or expiry intent. The source Submission's packet facts stay unchanged; its
+attempt outcome moves to `rejected` with `status_reason=revision_limit_reached`
+and `decided_at` copied from the receipt by the attempt-status guard, and
+history reads those stored columns.
 Contributor task detail exposes only that actor's `last_assignment_outcome`,
 while covered PM detail exposes the latest closed assignment. Its `next_action`
 is `none`, even when the task permits a fresh claim under a new assignment.
@@ -2093,9 +2159,10 @@ Stale intents are harmless; due delivery revalidates current source, assignment,
 head and authority under TASK-first locks.
 
 Receipt, assignment `revision_expired`/release timestamp, Task `ready`/cleared
-assignee, audit and outcome outbox intent commit together. The source Submission
-row stays unchanged; history projects `rejected` with
-`status_reason=revision_deadline_expired` from the receipt. A new claimant starts
+assignee, audit and outcome outbox intent commit together. The source
+Submission's packet facts stay unchanged; its attempt outcome moves to `rejected`
+with `status_reason=revision_deadline_expired` and `decided_at` copied from the
+receipt by the attempt-status guard, and history reads those stored columns. A new claimant starts
 round 0 with an independent allowance while task-global Submission versions
 remain consecutive. Exact replay recovers the same receipt; stale delivery cannot
 reject a successor or release a newer assignment. Expiry creates no Review,

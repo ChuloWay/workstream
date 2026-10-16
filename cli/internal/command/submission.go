@@ -85,8 +85,17 @@ func addSubmissionCommands(root, task *cobra.Command, client func() (*api.Client
 			if *output == "json" {
 				return writeSafeJSON(stdout, result.Raw)
 			}
-			if err := writeTaskContextFields(stdout, []contextField{{"Preparation receipt (no Submission created)", result.Value}}); err != nil {
+			receipt := result.Value
+			receipt.Feedback = nil // Printed below as readable intake feedback lines.
+			if err := writeTaskContextFields(stdout, []contextField{{"Preparation receipt (no Submission created)", receipt}}); err != nil {
 				return err
+			}
+			// Nonblocking intake findings stay visible after admission; they are
+			// intake feedback, not a post-submission outcome.
+			for _, line := range api.IntakeFeedbackLines(result.Value.Feedback) {
+				if _, err := fmt.Fprintln(stdout, "Intake feedback:", safeText(line)); err != nil {
+					return err
+				}
 			}
 			if result.Value.Status == "ready" {
 				_, err = fmt.Fprintln(stdout, "Ready admission: submit explicitly with the same assignment and packet.")

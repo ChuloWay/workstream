@@ -13,6 +13,7 @@ from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
 from app.modules.tasks.api.revision_exhaustion import TaskRevisionExhaustionAuditFacts
 from app.modules.tasks.api.revision_recovery import TaskRevisionRecoveryFacts
 from app.modules.tasks.models import Submission
+from app.modules.tasks.submission_attempts import COVERAGE_RETURN_REASON
 from app.modules.tasks.post_submit_routing.requests import TaskRoutingRequestUnavailable
 from app.modules.tasks.revision.exhaustion import commit_exhaustion
 from app.modules.tasks.revision.exhaustion_event import revision_exhausted_event
@@ -38,6 +39,7 @@ async def recover_exhausted_assignment(session, *, projects, authorization, audi
     policy = RevisionPolicySemantics.model_validate_json(context.revision_policy.value)
     count = await session.scalar(select(func.count()).select_from(Submission).where(
         Submission.task_assignment_id == assignment.id, Submission.version <= source.version,
+        Submission.status_reason.is_distinct_from(COVERAGE_RETURN_REASON),
     ))
     revision_round = count - 1
     if revision_round < policy.max_revision_rounds:

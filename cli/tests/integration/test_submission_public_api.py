@@ -129,6 +129,12 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
                     == "stored_pending_verification"
                 )
                 assert prepared["admission_id"] is None
+                # The admitted attempt's intake feedback is returned, not dropped.
+                assert prepared["pre_submission_results"]
+                assert all(
+                    item["status"] in {"passed", "warning"}
+                    for item in prepared["pre_submission_results"]
+                )
                 async with h.factory() as session:
                     assert (
                         await session.scalar(

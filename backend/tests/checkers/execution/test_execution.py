@@ -127,7 +127,7 @@ async def test_unsupported_request_envelope_never_reaches_execution(monkeypatch)
 
     executor = owner.PostSubmissionExecutor(
         sessions=None, execute_authority=None, finalize_authority=None,
-        materialization=None, outbox=None,
+        materialization=None, outbox=None, review_modes=None,
     )
     monkeypatch.setattr(executor, "_claim", forbidden_claim)
     for schema in ("post_submit_evaluation_request", "arbitrary_request.v1"):

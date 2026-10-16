@@ -29,7 +29,7 @@ def test_removed_mutation_and_worker_surface():
     assert set(AuthVerificationResult.model_fields) == {"token"}
 
 
-SUBMISSION_FIELDS = set("id task_id version status status_reason summary submitted_at locked_at supersedes_submission_id evidence_items".split())
+SUBMISSION_FIELDS = set("id task_id version status status_reason summary submitted_at decided_at finding_counts locked_at supersedes_submission_id evidence_items".split())
 MANAGER_SUBMISSION_FIELDS = SUBMISSION_FIELDS | set("""contributor_id task_assignment_id contribution_policy_version_id locked_guide_version
     locked_post_submit_checker_policy_id locked_post_submit_checker_policy_version locked_post_submit_checker_policy_hash
     locked_review_policy_id locked_review_policy_generation locked_review_policy_hash
@@ -42,7 +42,7 @@ MANAGER_RUN_FIELDS = RUN_FIELDS | set("""routing_recommendation outcome_source t
     locked_post_submit_checker_policy_id locked_post_submit_checker_policy_version locked_post_submit_checker_policy_hash
     locked_review_policy_id locked_review_policy_generation locked_review_policy_hash
     locked_revision_policy_id locked_revision_policy_generation locked_revision_policy_hash""".split())
-RESULT_FIELDS = set("id checker_name status severity worker_message worker_suggested_fix".split())
+RESULT_FIELDS = set("id checker_name check_id path line status severity worker_message worker_suggested_fix".split())
 MANAGER_RESULT_FIELDS = RESULT_FIELDS | {"message", "blocks_review"}
 EVIDENCE_FIELDS = {"id", "type", "label", "size_bytes"}
 

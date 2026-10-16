@@ -16,9 +16,20 @@ pytestmark = pytest.mark.usefixtures("live_acceptance_lifecycle")
 
 @pytest.mark.parametrize("prestate", ("review_pending", "evaluation_pending"))
 async def test_new_then_exact_replay_preserves_nonterminal_task_facts(
-    tmp_path, isolated_database_env, prestate
+    tmp_path, isolated_database_env, prestate, monkeypatch
 ):
     """Prove TASK mechanics for either prestate, without automated authority."""
+    import app.modules.tasks.accepted_effects as owner_module
+
+    # The attempt outcome needs a FinalAcceptance, which this TASK-only proof has
+    # no REV evidence for; record the request instead (the routed proofs in
+    # test_outcome.py commit the real outcome).
+    outcomes = []
+
+    async def record(session, **values):
+        outcomes.append(values)
+
+    monkeypatch.setattr(owner_module, "record_attempt_outcome", record)
     async with accepted_effects_source(tmp_path, isolated_database_env) as h:
         h.effects_request = h.effects_request.model_copy(update={
             "expected_task_status": prestate,
@@ -89,6 +100,11 @@ async def test_new_then_exact_replay_preserves_nonterminal_task_facts(
         assert after["task_status"] == "accepted"
         assert after["assignment_status"] == "completed"
         assert {key: after[key] for key in before} == dict(before)
+        # Only the new disposition records the outcome; replay records nothing.
+        assert outcomes == [{
+            "submission_id": h.effects_request.submission_id,
+            "task_id": h.effects_request.task_id, "outcome": "accepted",
+        }]
 
 
 @pytest.mark.parametrize(
