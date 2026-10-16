@@ -28,8 +28,7 @@ Each piece of work goes through these steps:
 1. **A project sets its rules.** A project manager uploads a project guide.
    Workstream helps turn the guide into versioned policies. Approved policies
    are locked, so later changes do not affect work that has already started.
-2. **A contributor gets a task.** The contributor claims a task, or a manager
-   assigns it.
+2. **A contributor gets a task.** A contributor claims a ready task.
 3. **The contributor prepares the work.** The contributor puts the work into
    one ZIP file.
 4. **Workstream checks the package before it accepts the submission.** These
@@ -39,12 +38,18 @@ Each piece of work goes through these steps:
    can change it.
 6. **Workstream checks the submitted work.** These are the *post-submission
    checks*. They compare the work with the project's requirements.
-7. **The work is accepted, sent back, or rejected.** By default, a human
-   reviewer makes this decision. A project can turn off human review. If it
-   does, work that passes all required checks is accepted automatically.
-8. **The contributor revises the work if necessary.** When the decision is
-   `needs_revision`, the contributor can submit a new version.
-9. **Workstream makes contribution records.** These records are permanent.
+7. **The work is accepted, sent back, or rejected.** By default, a project
+   requires a human reviewer to make this decision. Live human review is not
+   complete yet. A project can turn off human review. If it does, work that
+   passes all required checks is accepted automatically. Failed checks can
+   send the work back. On the last permitted attempt, failed checks reject
+   the work.
+8. **The contributor revises the work if necessary.** When the work is sent
+   back, the contributor can submit a new version. The project sets the
+   maximum number of revisions and a deadline.
+9. **Workstream makes permanent records.** Every valid human review makes a
+   reviewer contribution record. An accepted submission also makes a
+   `FinalAcceptance` record and a contribution record for the contributor.
 
 Workstream keeps the full history. It does not overwrite submissions,
 findings, reviews, or records.
@@ -60,8 +65,8 @@ findings, reviews, or records.
 | Pre-submission check | A check on the ZIP package before Workstream accepts it as a submission. |
 | Post-submission check | A check on the stored submission against the project requirements. |
 | Review | A decision by an authorized reviewer: `accept`, `needs_revision`, or `reject`. |
-| `FinalAcceptance` | The record that a submission is accepted, by a reviewer or automatically. |
-| `ContributionRecord` | A permanent record of a contribution, such as accepted work or a completed review. |
+| `FinalAcceptance` | The record that a submission is accepted, by a reviewer or automatically. Only this record can make a contribution record for accepted work. |
+| `ContributionRecord` | A permanent record of accepted work or of a valid human review. Nobody can create or edit it directly. |
 
 The [glossary](docs/glossary.md) defines all Workstream terms.
 
@@ -90,9 +95,14 @@ These parts work in a local test run:
 - Accept work automatically when a project turns off human review.
 - Make contribution records and conditional awards for accepted work.
 
+The local test run used recorded AI model output. It does not prove project
+setup with a live AI model.
+
 These parts are not complete:
 
-- Live human review and revision.
+- Live human review and revision after a human decision.
+- Reviewer contribution records, because live human review is not complete.
+- Proof of project setup with a live AI model.
 - Operation on a hosted server.
 - Payment delivery.
 
@@ -118,18 +128,18 @@ You need Git, Docker Engine, and Docker Compose v2.
    chmod 600 .env
    ```
 
-   This command works on Linux, macOS, and Git Bash. On PowerShell, restrict
-   the file to your Windows user with an equivalent private NTFS ACL.
+   This command works on Linux, macOS, and Git Bash. On PowerShell, make the
+   file readable only by your Windows user before you add secrets.
 
-3. Edit `.env`:
-   - Give `COMPOSE_PROJECT_NAME` a unique value.
-   - Replace every `change-me` value with your own secret.
-   - Select host ports that no other program uses.
+3. In `.env`, give `COMPOSE_PROJECT_NAME` a unique value.
 
-   The [local pilot runbook](docs/engineering/local-pilot.md) tells you how to
+4. In `.env`, replace every `change-me` value with your own secret. The
+   [local pilot runbook](docs/engineering/local-pilot.md) tells you how to
    make the secrets.
 
-4. Build and start Workstream:
+5. In `.env`, select host ports that no other program uses.
+
+6. Build and start Workstream:
 
    ```bash
    docker compose --profile backend up --build --wait
@@ -138,16 +148,22 @@ You need Git, Docker Engine, and Docker Compose v2.
    This command starts the API, the background worker, the scheduler,
    PostgreSQL, Redis, and MinIO (local file storage).
 
-5. Make sure the API is running. Replace `<WORKSTREAM_API_HOST_PORT>` with the
-   port that you selected in `.env`:
+7. Make sure the API is running. Replace `<WORKSTREAM_API_HOST_PORT>` with the
+   port that you selected in `.env`. On macOS, Linux, or Git Bash:
 
    ```bash
    curl --fail http://127.0.0.1:<WORKSTREAM_API_HOST_PORT>/api/v1/health
    ```
 
+   On PowerShell:
+
+   ```powershell
+   Invoke-RestMethod http://127.0.0.1:<WORKSTREAM_API_HOST_PORT>/api/v1/health
+   ```
+
    The correct response is `{"status":"ok"}`.
 
-6. To stop Workstream:
+8. To stop Workstream:
 
    ```bash
    docker compose --profile backend down
@@ -157,7 +173,8 @@ You need Git, Docker Engine, and Docker Compose v2.
 
 The [Workstream CLI](cli/README.md) is a terminal client for the public API.
 You can use it to set up projects, find and claim tasks, submit work, and
-export contribution records. It uses your Flow token to sign in.
+export contribution records. It sends your Flow token, from
+`WORKSTREAM_TOKEN`, with each request.
 
 ## Repository layout
 
@@ -165,12 +182,13 @@ export contribution records. It uses your Flow token to sign in.
 |---|---|
 | `backend/` | The Workstream API and background workers (Python and FastAPI). |
 | `cli/` | The command-line client (Go). |
-| `mcp_server/` | An MCP adapter for the public API, for AI agents. |
+| `mcp_server/` | An MCP (Model Context Protocol) adapter. AI agents can use it to read profile and permission data. |
 | `external_checkers/` | The service and SDK that run external checker images (Rust). |
 | `contracts/` | Shared data contracts. |
 | `docs/` | Product, architecture, and operations documents. |
 | `docker/` | Container files for local development. |
-| `examples/` and `experiments/` | Examples and test probes. |
+| `scripts/` | Scripts that check the repository and its documents. |
+| `examples/` and `experiments/` | A sample benchmark project, and experiments that test features before they are built. |
 | `.commitrail/` | Engineering records about changes to this repository. |
 
 ## Learn more

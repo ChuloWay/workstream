@@ -68,7 +68,12 @@ follows ASD-STE100 principles; it makes no claim of formal ASD-STE100 compliance
 
 ## Review findings
 
-None yet.
+An independent docs review found six inaccuracies and five clarity issues in
+the first draft, all fixed: v0.1 has no manager task assignment; human review
+is not live; revision limits and final-attempt rejection were missing; record
+creation rules and the key-term rows were incomplete; the local run used
+recorded model output; and the MCP adapter, CLI token use, PowerShell steps,
+one multi-instruction step and the layout table needed correction.
 
 ## Reconciliation
 
