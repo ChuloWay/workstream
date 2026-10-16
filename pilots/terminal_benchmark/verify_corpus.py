@@ -11,7 +11,7 @@ import tempfile
 import tomllib
 
 ROOT = Path(__file__).resolve().parent
-BASE = "python:3.12-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2"
+BASE = "python:3.12-slim-bookworm@sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af"
 FILES = (
     "task.toml", "instruction.md", "environment/Dockerfile", ".dockerignore",
     "workspace/program.py", "solution/program.py", "tests/test_task.py", "tests/cases.json",
@@ -24,7 +24,7 @@ def validate_package(package: Path, external_task_id: str) -> None:
         path = package / name
         if path.is_symlink() or not path.is_file():
             raise ValueError(f"missing or linked package member: {name}")
-    metadata = tomllib.loads((package / "task.toml").read_text())
+    metadata = tomllib.loads((package / "task.toml").read_text(encoding="utf-8"))
     expected = {
         "external_task_id": external_task_id,
         "entrypoint": ["python", "/workspace/program.py", "INPUT.json", "OUTPUT.json"],
@@ -34,18 +34,19 @@ def validate_package(package: Path, external_task_id: str) -> None:
     }
     if metadata != expected:
         raise ValueError("package metadata does not match the fixed corpus contract")
-    dockerfile = (package / "environment/Dockerfile").read_text().splitlines()
+    dockerfile = (package / "environment/Dockerfile").read_text(encoding="utf-8").splitlines()
     if dockerfile != [
         f"FROM {BASE}", "ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1",
+        "RUN mkdir -p /workspace && chown 65532:65532 /workspace",
         "WORKDIR /workspace", "COPY --chown=65532:65532 workspace/ /workspace/",
         "USER 65532:65532",
     ]:
         raise ValueError("package Dockerfile differs from the reviewed offline recipe")
-    if (package / ".dockerignore").read_text().splitlines() != ["solution/", "tests/"]:
+    if (package / ".dockerignore").read_text(encoding="utf-8").splitlines() != ["solution/", "tests/"]:
         raise ValueError("reference or tests are not excluded from the build context")
-    if not (package / "instruction.md").read_text().strip():
+    if not (package / "instruction.md").read_text(encoding="utf-8").strip():
         raise ValueError("empty instructions")
-    cases = json.loads((package / "tests/cases.json").read_text())
+    cases = json.loads((package / "tests/cases.json").read_text(encoding="utf-8"))
     if not cases or len({case["name"] for case in cases}) != len(cases):
         raise ValueError("missing or duplicate golden cases")
 
@@ -59,7 +60,7 @@ def run_cases(package: Path, program_text: str, *, ineffective_tests: bool = Fal
         shutil.copytree(package / "tests", root / "tests")
         if case_name is not None:
             cases_path = root / "tests/cases.json"
-            selected = [case for case in json.loads(cases_path.read_text()) if case["name"] == case_name]
+            selected = [case for case in json.loads(cases_path.read_text(encoding="utf-8")) if case["name"] == case_name]
             if len(selected) != 1:
                 raise ValueError("named discriminating case is absent or duplicated")
             cases_path.write_text(json.dumps(selected))
@@ -84,25 +85,25 @@ def require_starter_failure(package: Path, starter: str, *, ineffective_tests: b
 
 
 def verify() -> dict:
-    corpus = json.loads((ROOT / "corpus.json").read_text())
+    corpus = json.loads((ROOT / "corpus.json").read_text(encoding="utf-8"))
     actual_names = sorted(str(p.relative_to(ROOT)) for p in ROOT.rglob("*") if p.is_file() and p.suffix != ".pyc" and p.name != "corpus.json")
     if actual_names != sorted(corpus["sha256"]):
         raise ValueError("corpus file membership differs from its reviewed manifest")
     for name, expected in corpus["sha256"].items():
         if hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != expected:
             raise ValueError(f"corpus hash changed: {name}")
-    tasks = json.loads((ROOT / "tasks.json").read_text())["tasks"]
+    tasks = json.loads((ROOT / "tasks.json").read_text(encoding="utf-8"))["tasks"]
     if [t["external_task_id"] for t in tasks] != [p["external_task_id"] for p in corpus["packages"]]:
         raise ValueError("native task import and package membership disagree")
-    negatives = json.loads((ROOT / "negative-cases.json").read_text())["near_miss_solutions"]
+    negatives = json.loads((ROOT / "negative-cases.json").read_text(encoding="utf-8"))["near_miss_solutions"]
     if [(n["external_task_id"], n["package"]) for n in negatives] != [(p["external_task_id"], p["path"]) for p in corpus["packages"]]:
         raise ValueError("near-miss membership differs from corpus")
     evidence = []
     for item, negative in zip(corpus["packages"], negatives, strict=True):
         package = ROOT / item["path"]
         validate_package(package, item["external_task_id"])
-        starter = (package / "workspace/program.py").read_text()
-        reference = (package / "solution/program.py").read_text()
+        starter = (package / "workspace/program.py").read_text(encoding="utf-8")
+        reference = (package / "solution/program.py").read_text(encoding="utf-8")
         require_starter_failure(package, starter)
         for _ in range(3):
             if not run_cases(package, reference):
@@ -131,7 +132,7 @@ def verify() -> dict:
                     (altered / "tests/test_task.py").unlink()
                 elif mutation_name == "wrong-task-identity":
                     path = altered / "task.toml"
-                    path.write_text(path.read_text().replace(item["external_task_id"], "foreign-task"))
+                    path.write_text(path.read_text(encoding="utf-8").replace(item["external_task_id"], "foreign-task"))
                 else:
                     (altered / "environment/Dockerfile").write_text("FROM python:latest\n")
                 try:

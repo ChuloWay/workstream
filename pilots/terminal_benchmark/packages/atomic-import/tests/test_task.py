@@ -9,7 +9,7 @@ import tempfile
 
 def main():
     program = Path(sys.argv[1]).resolve(strict=True)
-    cases = json.loads(Path(__file__).with_name("cases.json").read_text())
+    cases = json.loads(Path(__file__).with_name("cases.json").read_text(encoding="utf-8"))
     for case in cases:
         with tempfile.TemporaryDirectory(prefix="benchmark-case-") as directory:
             root = Path(directory)
@@ -26,7 +26,7 @@ def main():
                 )
                 if run.returncode != 0 or not output_path.is_file():
                     raise AssertionError(f"{case['name']} step {index}: no successful output")
-                actual = json.loads(output_path.read_text())
+                actual = json.loads(output_path.read_text(encoding="utf-8"))
                 if actual != step["expected"]:
                     raise AssertionError(f"{case['name']} step {index}: output differs from independent expected value")
                 if "database_rows" in step:

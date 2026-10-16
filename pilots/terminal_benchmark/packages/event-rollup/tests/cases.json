@@ -258,5 +258,47 @@
         }
       }
     ]
+  },
+  {
+    "name": "utc-underflow",
+    "steps": [
+      {
+        "input": {
+          "events": [
+            {
+              "id": "x",
+              "service": "api",
+              "timestamp": "0001-01-01T00:00:00+01:00",
+              "latency_ms": 1,
+              "error": false
+            }
+          ]
+        },
+        "expected": {
+          "error": "invalid_input"
+        }
+      }
+    ]
+  },
+  {
+    "name": "utc-overflow",
+    "steps": [
+      {
+        "input": {
+          "events": [
+            {
+              "id": "x",
+              "service": "api",
+              "timestamp": "9999-12-31T23:59:59-01:00",
+              "latency_ms": 1,
+              "error": false
+            }
+          ]
+        },
+        "expected": {
+          "error": "invalid_input"
+        }
+      }
+    ]
   }
 ]

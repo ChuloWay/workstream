@@ -33,14 +33,14 @@ policy supplies the exact limits; this guide does not override those limits.
 
 ## Fixed pilot environment
 
-Use this exact base:
+Use this exact Linux/AMD64 platform manifest (not a multi-platform image index):
 
-`python:3.12-slim-bookworm@sha256:4766d8b510c428e595d74b9cc5bbb2fae8e26316fffb4adc89908d79aacd58a2`
+`python:3.12-slim-bookworm@sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af`
 
 Use Python standard-library dependencies only. The approved build recipe sets
 `PYTHONDONTWRITEBYTECODE=1` and `PYTHONUNBUFFERED=1`, works in `/workspace`, copies
-only `workspace/` there with ownership `65532:65532`, and runs as that non-root
-user. Build context is the package root. The evaluator must inject trusted tests
+only `workspace/` there with ownership `65532:65532`, gives that user ownership
+of `/workspace` itself, and runs as that non-root user. Build context is the package root. The evaluator must inject trusted tests
 separately and provide the required bounded writable workspace. Candidate solver
 execution must never receive the reference solution. Reference calibration uses
 a separate copy of the starting workspace with the solution overlaid.

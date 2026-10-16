@@ -18,7 +18,7 @@ def solve(payload):
             if stamp.utcoffset() is None or type(row.get("latency_ms")) is not int or row["latency_ms"] < 0 or type(row.get("error")) is not bool:
                 raise ValueError
             parsed.append((row, stamp.astimezone(timezone.utc).date().isoformat()))
-        except (ValueError, TypeError):
+        except (ValueError, TypeError, OverflowError):
             return {"error": "invalid_input"}
     seen, groups = set(), {}
     for row, day in parsed:
