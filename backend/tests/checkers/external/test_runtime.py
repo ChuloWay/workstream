@@ -24,6 +24,7 @@ from app.adapters.checkers.external_service import (
     EXTERNAL_CHECKER_PROVIDER_KEY,
 )
 from app.core.config import Settings
+from app.core.hashing import canonical_json_hash
 from app.interfaces.external_checker_execution import (
     ExternalCheckerIsolationReceipt,
     ExternalCheckerMaterialGrant,
@@ -40,6 +41,7 @@ from app.modules.artifacts.preparation import (
     ArtifactScratchManager,
     ExternalMaterialFile,
     ExternalMaterialGrantRequest,
+    PostExternalMaterialGrantRequest,
 )
 from app.modules.artifacts.submission_archive import (
     SubmissionArchiveInspector,
@@ -47,6 +49,7 @@ from app.modules.artifacts.submission_archive import (
     SubmissionArchiveEntryType,
 )
 from app.modules.artifacts.submission_manifest import build_submission_manifest
+from app.modules.artifacts.submission_manifest import SUBMISSION_MANIFEST_SCHEMA_VERSION
 from app.modules.checkers.api.external import (
     ExternalCheckerContractError,
     ExternalCheckerExecutionRequest,
@@ -514,4 +517,73 @@ def test_external_grant_recomputes_the_semantic_manifest(tmp_path: Path):
         with pytest.raises(ArtifactScratchIntegrityError, match="semantic manifest differs"):
             with manager._external_material_grant(workspace, request):
                 pass
+    manager.close()
+
+
+def test_post_external_grant_uses_existing_workspace_byte_and_entry_ownership(
+    tmp_path: Path,
+) -> None:
+    """Bind runtime scratch to the existing ledger and admit its exact entry limit."""
+    maximum_entries = 6
+    manager = ArtifactScratchManager(
+        root=tmp_path / "scratch",
+        limits=ArtifactPreparationLimits(
+            aggregate_reserved_bytes=HARD_MAXIMUM_ARTIFACT_BYTES,
+            minimum_free_bytes=0,
+            maximum_workspace_entries=maximum_entries,
+        ),
+    )
+    semantic_manifest_sha256 = canonical_json_hash(
+        {"schema_version": SUBMISSION_MANIFEST_SCHEMA_VERSION, "entries": []}
+    )
+    identifiers = [str(uuid4()) for _ in range(11)]
+    request = PostExternalMaterialGrantRequest(
+        request_digest=SHA,
+        submission_id=identifiers[0],
+        submission_version=1,
+        evaluation_request_id=identifiers[1],
+        evaluation_request_digest=SHA,
+        evaluation_generation=1,
+        attempt_id=identifiers[2],
+        result_id=identifiers[3],
+        lease_id=identifiers[4],
+        lease_generation=1,
+        lease_expires_at="2026-10-16T00:00:00Z",
+        binding_id=identifiers[5],
+        content_id=identifiers[6],
+        replica_id=identifiers[7],
+        content_sha256=SHA,
+        byte_count=0,
+        evidence_id=identifiers[8],
+        verification_receipt_id=identifiers[9],
+        verification_job_id=identifiers[10],
+        verification_generation=1,
+        namespace_fingerprint=SHA,
+        semantic_manifest_sha256=semantic_manifest_sha256,
+        directories=(),
+        files=(),
+    )
+
+    with manager.extraction_workspace(reserved_bytes=0, maximum_entries=1) as workspace:
+        with manager._external_material_grant(workspace, request) as grant:
+            grant_root = tmp_path / "scratch" / "workspaces" / grant.grant_id
+            manifest = json.loads(
+                (grant_root / ".external-checker-grant.json").read_text()
+            )
+            assert manifest["runtime_scratch"] == {
+                "byte_allowance": HARD_MAXIMUM_ARTIFACT_BYTES,
+                "entry_allowance": maximum_entries - 3,
+                "gid": os.getgid(),
+                "mode": 0o700,
+                "uid": os.getuid(),
+            }
+            ledger = json.loads((tmp_path / "scratch" / ".ledger.json").read_text())
+            [reservation] = ledger["workspaces"]
+            assert reservation["reserved_bytes"] == HARD_MAXIMUM_ARTIFACT_BYTES
+            assert reservation["maximum_entries"] == maximum_entries
+            runtime = grant_root / "runtime"
+            for index in range(manifest["runtime_scratch"]["entry_allowance"]):
+                (runtime / f"entry-{index}").write_bytes(b"")
+
+    assert list((tmp_path / "scratch" / "workspaces").iterdir()) == []
     manager.close()

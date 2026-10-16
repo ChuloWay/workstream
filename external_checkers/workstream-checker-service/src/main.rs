@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::os::fd::AsRawFd;
+use std::os::unix::fs::FileTypeExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Component, Path, PathBuf};
@@ -13,8 +14,13 @@ use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use workstream_checker_sdk::{
-    canonical_hash, infrastructure_result, parse_request, validate_result, ValidatedRequest,
-    MAX_REQUEST_BYTES, MAX_RESULT_BYTES,
+    canonical_hash, infrastructure_result, parse_request, parse_terminal_benchmark_plan,
+    validate_result, ValidatedRequest, MAX_REQUEST_BYTES, MAX_RESULT_BYTES,
+};
+
+mod terminal_benchmark;
+use terminal_benchmark::{
+    execute_terminal_benchmark, TerminalBenchmarkExecution, TerminalBenchmarkProfile,
 };
 
 const PROTOCOL: &str = "external_checker_service.v1";
@@ -39,6 +45,8 @@ struct ServiceConfig {
     sandbox_uid: u32,
     sandbox_gid: u32,
     cache: Vec<CacheEntry>,
+    #[serde(default)]
+    terminal_benchmark: Option<TerminalBenchmarkProfile>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -85,7 +93,34 @@ struct GrantManifest {
     identity: GrantIdentity,
     directories: Vec<String>,
     files: Vec<GrantFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    runtime_scratch: Option<RuntimeScratchGrant>,
     binding_digest: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+struct RuntimeScratchGrant {
+    byte_allowance: u64,
+    entry_allowance: u64,
+    uid: u32,
+    gid: u32,
+    mode: u32,
+}
+
+struct VerifiedGrant {
+    grant_id: String,
+    root: PathBuf,
+    workspace: PathBuf,
+    files: Vec<GrantFile>,
+    runtime: Option<(PathBuf, RuntimeScratchGrant)>,
+    binding_digest: String,
+}
+
+#[derive(Debug, PartialEq)]
+struct ExecutedChecker {
+    value: Value,
+    output_bytes: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -176,6 +211,144 @@ struct BoundedCommandOutput {
     _stderr: Vec<u8>,
 }
 
+#[derive(Debug)]
+struct OwnedSocketListener {
+    listener: Option<UnixListener>,
+    parent: File,
+    path: PathBuf,
+    device: u64,
+    inode: u64,
+}
+
+impl OwnedSocketListener {
+    fn bind(path: &Path) -> Result<Self, String> {
+        let parent_path = path.parent().ok_or("socket parent missing")?;
+        let parent = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(parent_path)
+            .map_err(|_| "socket parent unavailable")?;
+        let parent_metadata = parent.metadata().map_err(|_| "socket parent unavailable")?;
+        if !private_socket_parent(&parent_metadata)
+            || fs::canonicalize(format!("/proc/self/fd/{}", parent.as_raw_fd()))
+                .map_err(|_| "socket parent unavailable")?
+                != parent_path
+        {
+            return Err("socket parent is not private".into());
+        }
+        // SAFETY: `parent` is a live descriptor. `flock` changes only its advisory lock state.
+        if unsafe { libc::flock(parent.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
+            return Err("socket custody unavailable".into());
+        }
+        prepare_socket_path(path, &parent)?;
+        let listener = UnixListener::bind(path).map_err(|_| "socket bind failed")?;
+        let mut owned = Self {
+            listener: Some(listener),
+            parent,
+            path: path.to_owned(),
+            device: 0,
+            inode: 0,
+        };
+        let initial = fs::symlink_metadata(path).map_err(|_| "socket identity missing")?;
+        if !process_owned_socket(&initial) {
+            return Err("socket identity invalid".into());
+        }
+        owned.device = initial.dev();
+        owned.inode = initial.ino();
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+            .map_err(|_| "socket permission failed")?;
+        let metadata = fs::symlink_metadata(path).map_err(|_| "socket identity missing")?;
+        if !owned_socket_identity(&metadata) {
+            return Err("socket identity invalid".into());
+        }
+        if (metadata.dev(), metadata.ino()) != (owned.device, owned.inode) {
+            return Err("socket identity changed".into());
+        }
+        Ok(owned)
+    }
+
+    fn incoming(&self) -> std::os::unix::net::Incoming<'_> {
+        self.listener
+            .as_ref()
+            .expect("owned listener exists until drop")
+            .incoming()
+    }
+}
+
+impl Drop for OwnedSocketListener {
+    fn drop(&mut self) {
+        drop(self.listener.take());
+        let Ok(metadata) = fs::symlink_metadata(&self.path) else {
+            return;
+        };
+        if process_owned_socket(&metadata)
+            && (metadata.dev(), metadata.ino()) == (self.device, self.inode)
+        {
+            let _ = unlink_socket_at(&self.parent, &self.path);
+            let _ = self.parent.sync_all();
+        }
+    }
+}
+
+fn owned_socket_identity(metadata: &fs::Metadata) -> bool {
+    process_owned_socket(metadata) && metadata.mode() & 0o777 == 0o600
+}
+
+fn process_owned_socket(metadata: &fs::Metadata) -> bool {
+    // SAFETY: effective process IDs are read-only process attributes.
+    let (effective_uid, effective_gid) = unsafe { (libc::geteuid(), libc::getegid()) };
+    metadata.file_type().is_socket()
+        && metadata.uid() == effective_uid
+        && metadata.gid() == effective_gid
+}
+
+fn private_socket_parent(metadata: &fs::Metadata) -> bool {
+    // SAFETY: effective process IDs are read-only process attributes.
+    let (effective_uid, effective_gid) = unsafe { (libc::geteuid(), libc::getegid()) };
+    metadata.file_type().is_dir()
+        && metadata.mode() & 0o777 == 0o700
+        && metadata.uid() == effective_uid
+        && metadata.gid() == effective_gid
+}
+
+fn unlink_socket_at(parent: &File, path: &Path) -> Result<(), String> {
+    use std::os::unix::ffi::OsStrExt;
+
+    let name = path.file_name().ok_or("socket name missing")?;
+    let name = std::ffi::CString::new(name.as_bytes()).map_err(|_| "socket name invalid")?;
+    // SAFETY: `parent` is a pinned directory descriptor and `name` is NUL terminated.
+    if unsafe { libc::unlinkat(parent.as_raw_fd(), name.as_ptr(), 0) } != 0 {
+        return Err("socket cleanup failed".into());
+    }
+    Ok(())
+}
+
+fn prepare_socket_path(path: &Path, parent: &File) -> Result<(), String> {
+    let before = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err("socket identity unavailable".into()),
+    };
+    if !owned_socket_identity(&before) {
+        return Err("socket path is not an owned socket".into());
+    }
+    match UnixStream::connect(path) {
+        Ok(_) => return Err("socket listener already active".into()),
+        Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(_) => return Err("socket listener state is ambiguous".into()),
+    }
+    let after = fs::symlink_metadata(path).map_err(|_| "socket identity changed")?;
+    if !owned_socket_identity(&after) || (before.dev(), before.ino()) != (after.dev(), after.ino())
+    {
+        return Err("socket identity changed".into());
+    }
+    unlink_socket_at(parent, path).map_err(|_| "stale socket cleanup failed")?;
+    parent
+        .sync_all()
+        .map_err(|_| "stale socket cleanup failed".into())
+}
+
 fn main() {
     if let Err(error) = run() {
         eprintln!("external checker service unavailable: {error}");
@@ -191,13 +364,11 @@ fn run() -> Result<(), String> {
     let config: ServiceConfig =
         serde_json::from_slice(&bytes).map_err(|_| "configuration invalid")?;
     validate_config(&config)?;
-    if config.socket_path.exists() {
-        return Err("socket path already exists".into());
-    }
     cleanup_stale_runtime_files(&config)?;
-    let listener = UnixListener::bind(&config.socket_path).map_err(|_| "socket bind failed")?;
-    fs::set_permissions(&config.socket_path, fs::Permissions::from_mode(0o600))
-        .map_err(|_| "socket permission failed")?;
+    if let Some(profile) = &config.terminal_benchmark {
+        terminal_benchmark::cleanup_stale_resources(&config, profile)?;
+    }
+    let listener = OwnedSocketListener::bind(&config.socket_path)?;
     for connection in listener.incoming() {
         match connection {
             Ok(stream) => serve_connection(&config, stream, SOCKET_IO_TIMEOUT),
@@ -248,9 +419,13 @@ fn validate_config(config: &ServiceConfig) -> Result<(), String> {
     let socket_parent = config.socket_path.parent().ok_or("socket parent missing")?;
     let socket_parent_metadata =
         fs::symlink_metadata(socket_parent).map_err(|_| "socket parent missing")?;
+    // SAFETY: effective process IDs are read-only process attributes.
+    let (effective_uid, effective_gid) = unsafe { (libc::geteuid(), libc::getegid()) };
     if !socket_parent_metadata.file_type().is_dir()
         || socket_parent_metadata.file_type().is_symlink()
         || socket_parent_metadata.mode() & 0o777 != 0o700
+        || socket_parent_metadata.uid() != effective_uid
+        || socket_parent_metadata.gid() != effective_gid
         || fs::canonicalize(socket_parent).map_err(|_| "socket parent invalid")? != socket_parent
     {
         return Err("socket parent is not private".into());
@@ -289,9 +464,13 @@ fn validate_config(config: &ServiceConfig) -> Result<(), String> {
             return Err("cache identity invalid".into());
         }
     }
+    if let Some(profile) = &config.terminal_benchmark {
+        terminal_benchmark::validate_profile(config, profile)?;
+    }
     runtime_ready(config)
 }
 
+#[cfg(test)]
 fn handle(config: &ServiceConfig, stream: &mut UnixStream) -> Result<Vec<u8>, String> {
     let bytes = read_frame(stream, MAX_ENVELOPE_BYTES)?;
     handle_frame(config, stream, &bytes)
@@ -302,7 +481,7 @@ fn handle_frame(
     stream: &UnixStream,
     bytes: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let value: Value = serde_json::from_slice(&bytes).map_err(|_| "request envelope invalid")?;
+    let value: Value = serde_json::from_slice(bytes).map_err(|_| "request envelope invalid")?;
     if value.get("operation").and_then(Value::as_str) == Some("health") {
         let envelope: HealthEnvelope =
             serde_json::from_value(value).map_err(|_| "health envelope invalid")?;
@@ -355,16 +534,55 @@ fn handle_frame(
     };
     let execution_deadline = Instant::now() + Duration::from_millis(request.deadline_ms);
     let (result, isolation) = match verify_grant(config, &request, &envelope.grant) {
-        Ok(workspace) => match inspect_image(config, cache, execution_deadline) {
+        Ok(grant) => match inspect_image(config, cache, execution_deadline) {
             Ok(()) => match execute_container(
                 config,
                 cache,
                 &request,
-                &workspace,
+                &grant.workspace,
                 stream,
                 execution_deadline,
             ) {
-                Ok(result) => (result, Some(isolation)),
+                Ok(output) if validate_result(&output.value, &request).is_ok() => {
+                    (output.value, Some(isolation))
+                }
+                Ok(output) => {
+                    let continued = config
+                        .terminal_benchmark
+                        .as_ref()
+                        .filter(|profile| profile.authorizes(&request))
+                        .and_then(|profile| {
+                            parse_terminal_benchmark_plan(&output.value, &request)
+                                .ok()
+                                .map(|plan| (profile, plan))
+                        });
+                    match continued {
+                        Some((profile, plan)) => match execute_terminal_benchmark(
+                            TerminalBenchmarkExecution {
+                                config,
+                                profile,
+                                request: &request,
+                                grant: &grant,
+                                client: stream,
+                                deadline: execution_deadline,
+                            },
+                            &plan,
+                            output.output_bytes,
+                        ) {
+                            Ok(result) => (result, Some(isolation)),
+                            Err(code) => (
+                                infrastructure_result(&request, code)
+                                    .map_err(|_| "result construction failed")?,
+                                Some(isolation),
+                            ),
+                        },
+                        None => (
+                            infrastructure_result(&request, "invalid_output")
+                                .map_err(|_| "result construction failed")?,
+                            Some(isolation),
+                        ),
+                    }
+                }
                 Err((code, launched)) => (
                     infrastructure_result(&request, code)
                         .map_err(|_| "result construction failed")?,
@@ -499,6 +717,7 @@ fn run_bounded_command(
     loop {
         if read_available(&mut stdout, &mut stdout_bytes, maximum_output).is_err()
             || read_available(&mut stderr, &mut stderr_bytes, maximum_output).is_err()
+            || stdout_bytes.len().saturating_add(stderr_bytes.len()) > maximum_output
         {
             let _ = stop_child(&mut child, Instant::now() + CLEANUP_TIMEOUT);
             return Err("process output unbounded".into());
@@ -513,6 +732,9 @@ fn run_bounded_command(
         if let Some(status) = status {
             read_available(&mut stdout, &mut stdout_bytes, maximum_output)?;
             read_available(&mut stderr, &mut stderr_bytes, maximum_output)?;
+            if stdout_bytes.len().saturating_add(stderr_bytes.len()) > maximum_output {
+                return Err("process output unbounded".into());
+            }
             return Ok(BoundedCommandOutput {
                 status,
                 stdout: stdout_bytes,
@@ -544,7 +766,7 @@ fn verify_grant(
     config: &ServiceConfig,
     request: &ValidatedRequest,
     reference: &GrantReference,
-) -> Result<PathBuf, String> {
+) -> Result<VerifiedGrant, String> {
     if !valid_grant_id(&reference.grant_id) || !valid_digest(&reference.binding_digest) {
         return Err("grant reference invalid".into());
     }
@@ -601,7 +823,41 @@ fn verify_grant(
     if observed.files != manifest.files || observed.directories != manifest.directories {
         return Err("grant material differs".into());
     }
-    Ok(workspace)
+    let runtime = match (&manifest.identity, &manifest.runtime_scratch) {
+        (GrantIdentity::PreSubmit { .. }, None) => None,
+        (GrantIdentity::PostSubmit { .. }, Some(runtime)) => {
+            let path = grant_root.join("runtime");
+            let metadata = fs::symlink_metadata(&path).map_err(|_| "runtime scratch missing")?;
+            if !metadata.file_type().is_dir()
+                || metadata.file_type().is_symlink()
+                || metadata.mode() & 0o777 != 0o700
+                || metadata.uid() != runtime.uid
+                || metadata.gid() != runtime.gid
+                || runtime.uid != config.sandbox_uid
+                || runtime.gid != config.sandbox_gid
+                || runtime.mode != 0o700
+                || runtime.byte_allowance == 0
+                || runtime.byte_allowance > 512 * 1024 * 1024
+                || runtime.entry_allowance == 0
+                || fs::read_dir(&path)
+                    .map_err(|_| "runtime scratch unavailable")?
+                    .next()
+                    .is_some()
+            {
+                return Err("runtime scratch identity differs".into());
+            }
+            Some((path, runtime.clone()))
+        }
+        _ => return Err("grant runtime phase differs".into()),
+    };
+    Ok(VerifiedGrant {
+        grant_id: manifest.grant_id,
+        root: grant_root,
+        workspace,
+        files: manifest.files,
+        runtime,
+        binding_digest: manifest.binding_digest,
+    })
 }
 
 fn grant_matches_request(manifest: &GrantManifest, request: &ValidatedRequest) -> bool {
@@ -933,7 +1189,7 @@ fn execute_container(
     workspace: &Path,
     client: &UnixStream,
     deadline: Instant,
-) -> Result<Value, (&'static str, bool)> {
+) -> Result<ExecutedChecker, (&'static str, bool)> {
     // Revalidate immediately before handing the path to Docker.
     inspect_workspace(workspace, config.sandbox_uid, config.sandbox_gid)
         .map_err(|_| ("material_unavailable", false))?;
@@ -1044,7 +1300,7 @@ fn run_started_container(
     request: &ValidatedRequest,
     client: &UnixStream,
     deadline: Instant,
-) -> Result<Value, &'static str> {
+) -> Result<ExecutedChecker, &'static str> {
     let payload = serde_json::to_vec(&request.value).map_err(|_| "invalid_output")?;
     let files = RuntimeFiles::new(config, name)?;
     let output = OpenOptions::new()
@@ -1136,7 +1392,8 @@ fn run_started_container(
     }
     let bytes = read_bounded_file(&files.output, request.maximum_output_bytes)
         .map_err(|_| "invalid_output")?;
-    read_bounded_file(&files.error, MAX_RESULT_BYTES).map_err(|_| "invalid_output")?;
+    let error_bytes =
+        read_bounded_file(&files.error, MAX_RESULT_BYTES).map_err(|_| "invalid_output")?;
     if !status.success() {
         return if container_was_oom_killed(config, name)? {
             Err("capacity_exceeded")
@@ -1148,8 +1405,10 @@ fn run_started_container(
         return Err("invalid_output");
     }
     let result: Value = serde_json::from_slice(&bytes).map_err(|_| "invalid_output")?;
-    validate_result(&result, request).map_err(|_| "invalid_output")?;
-    Ok(result)
+    Ok(ExecutedChecker {
+        value: result,
+        output_bytes: bytes.len().saturating_add(error_bytes.len()),
+    })
 }
 
 struct RuntimeFiles {
@@ -1257,6 +1516,7 @@ fn client_is_connected(stream: &UnixStream) -> bool {
     }
 }
 
+#[cfg(test)]
 fn read_frame(stream: &mut UnixStream, maximum: usize) -> Result<Vec<u8>, String> {
     let mut header = [0_u8; 4];
     stream
@@ -1325,6 +1585,7 @@ fn read_frame_until(
     Ok(bytes)
 }
 
+#[cfg(test)]
 fn write_frame(stream: &mut UnixStream, bytes: &[u8]) -> Result<(), String> {
     if bytes.is_empty() || bytes.len() > MAX_RESPONSE_BYTES {
         return Err("response frame invalid".into());
@@ -1457,6 +1718,7 @@ mod tests {
                 architecture: "amd64".into(),
                 config_image_id: format!("sha256:{}", "2".repeat(64)),
             }],
+            terminal_benchmark: None,
         };
         (root, config)
     }
@@ -1487,6 +1749,70 @@ mod tests {
         fs::write(&unrelated, b"preserved").unwrap();
         cleanup_stale_runtime_files(&config).unwrap();
         assert_eq!(fs::read(&unrelated).unwrap(), b"preserved");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn socket_startup_recovers_only_a_stale_owned_socket() {
+        let (root, config) = test_config();
+        let stale = UnixListener::bind(&config.socket_path).unwrap();
+        fs::set_permissions(&config.socket_path, fs::Permissions::from_mode(0o600)).unwrap();
+        drop(stale);
+        assert!(config.socket_path.exists());
+
+        let owned = OwnedSocketListener::bind(&config.socket_path).unwrap();
+        assert!(config.socket_path.exists());
+        drop(owned);
+        assert!(!config.socket_path.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn socket_startup_preserves_live_and_foreign_paths() {
+        let (root, config) = test_config();
+        let live = UnixListener::bind(&config.socket_path).unwrap();
+        fs::set_permissions(&config.socket_path, fs::Permissions::from_mode(0o600)).unwrap();
+        assert_eq!(
+            OwnedSocketListener::bind(&config.socket_path).unwrap_err(),
+            "socket listener already active"
+        );
+        assert!(config.socket_path.exists());
+        drop(live);
+        fs::remove_file(&config.socket_path).unwrap();
+
+        fs::write(&config.socket_path, b"foreign").unwrap();
+        assert_eq!(
+            OwnedSocketListener::bind(&config.socket_path).unwrap_err(),
+            "socket path is not an owned socket"
+        );
+        assert_eq!(fs::read(&config.socket_path).unwrap(), b"foreign");
+        fs::remove_file(&config.socket_path).unwrap();
+        let target = config.socket_path.with_extension("target");
+        fs::write(&target, b"foreign").unwrap();
+        symlink(&target, &config.socket_path).unwrap();
+        assert_eq!(
+            OwnedSocketListener::bind(&config.socket_path).unwrap_err(),
+            "socket path is not an owned socket"
+        );
+        assert!(fs::symlink_metadata(&config.socket_path)
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn socket_parent_lock_serializes_startup_and_guard_preserves_substitution() {
+        let (root, config) = test_config();
+        let first = OwnedSocketListener::bind(&config.socket_path).unwrap();
+        assert_eq!(
+            OwnedSocketListener::bind(&config.socket_path).unwrap_err(),
+            "socket custody unavailable"
+        );
+        fs::remove_file(&config.socket_path).unwrap();
+        fs::write(&config.socket_path, b"replacement").unwrap();
+        drop(first);
+        assert_eq!(fs::read(&config.socket_path).unwrap(), b"replacement");
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1760,6 +2086,7 @@ mod tests {
             },
             directories: Vec::new(),
             files: Vec::new(),
+            runtime_scratch: None,
             binding_digest: format!("sha256:{}", "9".repeat(64)),
         };
         let semantic = semantic_manifest_hash(&manifest).unwrap();
@@ -1857,6 +2184,7 @@ mod tests {
             },
             directories: Vec::new(),
             files: Vec::new(),
+            runtime_scratch: None,
             binding_digest: digest('9'),
         };
         let semantic = semantic_manifest_hash(&manifest).unwrap();
@@ -1882,6 +2210,7 @@ mod tests {
             registry_entry_id: id('f'),
             registry_entry_digest: digest('1'),
             image_digest: digest('2'),
+            configuration_digest: digest('3'),
             phase: "post_submit".into(),
             cpu_millis: 1,
             memory_bytes: 1,

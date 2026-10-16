@@ -55,6 +55,7 @@ _PROCESS_IDENTITY = re.compile(r"^[0-9a-f]{64}$")
 _ROOT_MARKER = ".workstream-artifact-scratch-v1"
 _ROOT_MARKER_PREFIX = b"workstream-artifact-scratch-v1:"
 _EXTERNAL_GRANT_MANIFEST = ".external-checker-grant.json"
+_EXTERNAL_RUNTIME_DIRECTORY = "runtime"
 _EXTERNAL_GRANT_PROTOCOL = "workstream.external_checker_material_grant.v1"
 
 
@@ -662,6 +663,46 @@ class ArtifactScratchManager:
                 }
             )
 
+    def _expand_post_workspace_reservation_sync(self, workspace_name: str) -> int:
+        """Raise one live POST workspace to the existing fixed byte/entry ceilings."""
+        with self._locked_ledger():
+            ledger = self._read_ledger()
+            workspaces = list(ledger["workspaces"])
+            matching = [
+                (index, entry)
+                for index, entry in enumerate(workspaces)
+                if entry["workspace_name"] == workspace_name
+            ]
+            if len(matching) != 1:
+                raise ArtifactScratchIntegrityError("artifact extraction workspace is invalid")
+            index, current = matching[0]
+            if (
+                current["owner_pid"] != os.getpid()
+                or current["owner_process_identity"] != self._owner_process_identity
+            ):
+                raise ArtifactScratchIntegrityError("artifact extraction workspace owner differs")
+            current_reserved = sum(
+                entry["reserved_bytes"] for entry in ledger["reservations"] + workspaces
+            )
+            expanded_reserved = (
+                current_reserved
+                - current["reserved_bytes"]
+                + HARD_MAXIMUM_ARTIFACT_BYTES
+            )
+            if expanded_reserved > self._limits.aggregate_reserved_bytes:
+                raise ArtifactScratchCapacityError("artifact scratch byte limit reached")
+            filesystem = os.fstatvfs(self._workspaces_fd)
+            available = filesystem.f_bavail * filesystem.f_frsize
+            if available < expanded_reserved + self._limits.minimum_free_bytes:
+                raise ArtifactScratchCapacityError("artifact scratch free-space floor reached")
+            workspaces[index] = {
+                **current,
+                "reserved_bytes": HARD_MAXIMUM_ARTIFACT_BYTES,
+                "maximum_entries": self._limits.maximum_workspace_entries,
+            }
+            self._write_ledger({**ledger, "workspaces": workspaces})
+        return self._limits.maximum_workspace_entries
+
     @contextmanager
     def extraction_workspace(
         self,
@@ -734,12 +775,21 @@ class ArtifactScratchManager:
             dir_fd=self._workspaces_fd,
         )
         try:
+            post_maximum_entries = (
+                self._expand_post_workspace_reservation_sync(grant_id)
+                if type(request) is PostExternalMaterialGrantRequest
+                else None
+            )
             # The trusted archive inspector seals this directory before its
             # callback. ART briefly reopens only the parent so it can publish
             # the fixed mount child; projected members remain sealed.
             os.fchmod(root_fd, 0o700)
             names = os.listdir(root_fd)
-            if "workspace" in names or _EXTERNAL_GRANT_MANIFEST in names:
+            if (
+                "workspace" in names
+                or _EXTERNAL_GRANT_MANIFEST in names
+                or _EXTERNAL_RUNTIME_DIRECTORY in names
+            ):
                 raise ArtifactScratchIntegrityError("external material workspace is invalid")
             os.mkdir("workspace", mode=0o700, dir_fd=root_fd)
             workspace_fd = os.open(
@@ -811,6 +861,37 @@ class ArtifactScratchManager:
                     "directories": list(observed_directories),
                     "files": list(observed),
                 }
+                if post_maximum_entries is not None:
+                    runtime_entry_allowance = post_maximum_entries - (
+                        len(observed_files) + len(observed_directories) + 3
+                    )
+                    runtime_byte_allowance = HARD_MAXIMUM_ARTIFACT_BYTES - sum(
+                        int(item["byte_count"]) for item in observed_files
+                    )
+                    if runtime_entry_allowance < 0 or runtime_byte_allowance < 0:
+                        raise ArtifactScratchCapacityError(
+                            "artifact scratch workspace limit reached"
+                        )
+                    os.mkdir(_EXTERNAL_RUNTIME_DIRECTORY, mode=0o700, dir_fd=root_fd)
+                    runtime_fd = os.open(
+                        _EXTERNAL_RUNTIME_DIRECTORY,
+                        os.O_RDONLY
+                        | getattr(os, "O_DIRECTORY", 0)
+                        | getattr(os, "O_NOFOLLOW", 0),
+                        dir_fd=root_fd,
+                    )
+                    try:
+                        runtime_metadata = os.fstat(runtime_fd)
+                        os.fsync(runtime_fd)
+                    finally:
+                        os.close(runtime_fd)
+                    body["runtime_scratch"] = {
+                        "byte_allowance": runtime_byte_allowance,
+                        "entry_allowance": runtime_entry_allowance,
+                        "uid": runtime_metadata.st_uid,
+                        "gid": runtime_metadata.st_gid,
+                        "mode": stat_module.S_IMODE(runtime_metadata.st_mode),
+                    }
                 binding_digest = canonical_json_hash(body)
                 payload = json.dumps(
                     {**body, "binding_digest": binding_digest},

@@ -85,7 +85,11 @@ code on the host would break the established boundary.
   - return one normalized final result, classifying contributor Dockerfile or
     oracle conclusions as work findings and missing cache/runtime, launch,
     deadline, capacity, malformed output or uncertain cleanup as the existing
-    infrastructure outcomes.
+    infrastructure outcomes; and
+  - keep one nonblocking lifetime lock on the validated private socket parent,
+    refuse a live listener or foreign/link path, recover only a connection-
+    refused socket with the same owned inode, and remove the current owned
+    socket on clean shutdown without deleting a substituted path.
 - `backend/app/modules/artifacts/preparation.py`,
   `backend/app/modules/artifacts/post_submit_materialization.py`, and their
   existing focused tests only for one narrow extension of the current
@@ -371,6 +375,9 @@ can safely adopt the PILOT-00 mechanism.
   create with no pull. Startup recovery removes seeded stale containers and
   temporary images with the exact owned labels/inventory while leaving an
   unowned control resource untouched.
+- [ ] Simultaneous service startups serialize on the private socket-parent
+  lock; restart recovers an owned stale socket while preserving a live
+  listener, foreign file/link and path substituted before listener teardown.
 - [ ] Launch evidence proves no external network or host socket, exact cached
   platform identities, builder-only capabilities, non-root capability-free
   oracles, read-only inputs/root, fresh containers, fixed resources and complete
@@ -401,15 +408,17 @@ can safely adopt the PILOT-00 mechanism.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner and gap | Inspect PILOT-00, PILOT-04 service/SDK, ART grants, selected PRE/POST owners and #493/#576/#555 | The selected service has exact verified input and image custody but only one conventional checker launch; it cannot safely build a submitted Dockerfile or launch a separate oracle | Plan review and representative execution pending |
+| Existing owner and gap | Inspect PILOT-00, PILOT-04 service/SDK, ART grants, selected PRE/POST owners and #493/#576/#555 | The selected service had exact verified input and image custody but only one conventional checker launch; this change adds one exact-authorized terminal-benchmark continuation rather than a general runner | Representative execution pending |
 | Platform pin feasibility | `docker buildx imagetools inspect --raw` for the proposed CPython and Kaniko digests, without pulling either image | Both proposed top-level digests are OCI indexes; linux/amd64 resolves to CPython `sha256:6e13e65c...` and Kaniko `sha256:c73ca67a...`; raw nonsecret manifests and SHA-256 commands are retained under `/tmp/workstream-493-python-*` | Trusted builder config must bind the full canonical cache inventory plus both platform manifests and config IDs |
 | Corpus dependency | Merge `4628babe4`; run `python3 pilots/terminal_benchmark/verify_corpus.py` on that reviewed #576 candidate | PASS: all five originals report three reference passes plus starter and near-miss rejection; corrected exact base recipe/platform, workspace ownership, UTF-8 and UTC-overflow inputs are present | This is explicitly `trusted_native_corpus_only`, not Docker/gVisor or production admission proof; parent assets remain outside this change's implementation diff |
 | Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, external grant publication and selected POST call order | Existing owner already provides aggregate byte quota and per-workspace entry ceiling, durable workspace ownership, failed-cleanup retention and crash recovery. Rust settles Docker before socket response; the live Python context then revokes/deletes before exposing the evaluation. Service death and Python-owner death have distinct cleanup paths | Focused exact-limit, cleanup-order, SIGKILL and dead-owner proof pending |
 | #582 ownership check | Coordinate exact paths and port ownership with the S3 activation owner | #582 does not touch `preparation.py` or `post_submit_materialization.py`; it owns provider-neutral ArtifactStore activation evidence and S3 composition, while this change reuses the separate existing ArtifactScratchManager/ledger without extending that activation port | Recheck after either branch changes its bounded files |
 | Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin and the service has one 10-second cleanup timeout | Continuation must prove it never resets these ceilings per phase/resource |
-| Rust contracts and logic | `cargo fmt --all --check && cargo test --workspace --locked` in `external_checkers/` | Future implementation proof | Does not prove Docker/runsc behavior |
+| Rust service contracts and logic | `cargo fmt --manifest-path external_checkers/Cargo.toml --all && CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-service` | PASS: 21 tests cover strong-profile authority, grant/cache/context substitution, byte/entry limits, output bounds, orphan recovery and socket restart custody | Pure/fake-Docker tests do not prove actual Docker/runsc behavior |
+| Project image and SDK contracts | `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-terminal-benchmark-checker` and `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-sdk` | PASS: 4 project-package tests over all five originals and 5 SDK contract/canonicalization tests | Real image execution remains pending |
+| ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /home/abiorh/flow/workstream_product_builder/backend/.venv/bin/python -m pytest -q -p pytest_asyncio.plugin tests/checkers/external/test_runtime.py` from `backend/` | PASS: 11 tests, including exact existing-ledger POST byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering |
 | Real local matrix | Bounded project-checker probe over originals and work/infrastructure negatives | Future implementation proof; wait for lead-owned Docker capacity | Local `docker-dev` is not hosted gVisor proof |
-| Current-source reconciliation | Diff against merged #576 and current `main`; focused existing checker tests and repository gates | Future final proof | PR #575 result-contract merge state must be rechecked |
+| Current-source reconciliation | Merge current `main` at `a201d743`; inspect #575 result/findings and Python CHECKERS contracts; run focused existing checker tests | This branch contains the current result shape and no old/new compatibility path | Recheck after the final main reconciliation and hosted checks |
 
 ## Review findings
 
@@ -429,23 +438,29 @@ the service/ART cleanup order was reversed; the runtime byte allowance omitted
 the existing entry ceiling; and the plan asked the image to echo an unseen grant
 digest. This revision follows the actual socket/grant call order, binds and
 meters both existing ART ceilings, and has the trusted service attach the parsed
-plan to its verified in-memory grant. A final scoped replay is required before
-product edits.
+plan to its verified in-memory grant. The final scoped replay was the remaining
+prerequisite before product edits.
+
+The final record-only replay passed at `6ad0fb456d8c55f750110e8d23f07e66349a9e8b`.
+That verdict authorized this bounded implementation; it is plan evidence, not
+runtime or acceptance proof.
 
 ## Reconciliation
 
 - Current-source reconciliation: This branch merged corrected stacked corpus
-  commit `4628babe4`, which already incorporates `main` at `801b8dabb`. The
-  corpus now carries the exact linux/amd64 base recipe and the reviewed ownership,
-  UTF-8 and UTC-overflow fixes. Final proof must still incorporate the eventual
-  human-merged #576 and then-current `main`; parent corpus assets must remain
-  outside this change's implementation diff.
-- Next usable boundary: plan review, manager agreement on #576 mechanical
-  configuration, then bounded implementation; #580 may register the resulting
-  exact specs, and #555 may combine registration with the public/hosted journey.
+  commit `4628babe4` and current `main` at `a201d743`, including #575's current
+  finding/check result contract. The corpus carries the exact linux/amd64 base
+  recipe and reviewed ownership, UTF-8 and UTC-overflow fixes. Parent corpus
+  assets remain dependency input rather than this change's implementation diff.
+- Next usable boundary: independent review of the source implementation, then
+  the lead-coordinated local Docker development matrix and exact built-image
+  registration specifications. #580 may register those specs, and #555 may
+  combine registration with the public/hosted journey.
 - Ownership reconciliation: #582 confirmed no file or port overlap. It owns
   provider activation evidence and S3 composition; this change owns only the
   existing ephemeral `ArtifactScratchManager` workspace/grant extension and must
   not depend on or extend #582's activation guard.
-- Remaining risks: representative disk/resource ceilings, exact approved
-  linux/amd64 base cache identity, and hosted `runsc` hardening remain unproved.
+- Remaining risks: representative disk/resource ceilings, the actual built
+  checker digest, exact approved linux/amd64 cache execution, cancellation and
+  process-crash cleanup, and hosted `runsc` hardening remain unproved. This host
+  exposes only `runc`; any later local Docker result is `docker-dev` evidence.
