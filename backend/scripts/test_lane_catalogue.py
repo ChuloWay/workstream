@@ -598,9 +598,11 @@ PROJECT_PARTITIONED_MODULES = (
 # exact lane ownership so their waits and large fixtures do not collide.
 PROJECT_MODULE_LANE_OVERRIDES = {
     "tests/test_projects.py": (
-        # The repeatedly incomplete tail is split across the two measured spare lanes.
+        # Retained durations put this broad module on C/B/D, relieving the
+        # repeated E timeout without adding work to the already busy A lane.
+        "project_lifecycle_c",
         "project_lifecycle_b",
-        "project_lifecycle_e",
+        "project_lifecycle_d",
     ),
     "tests/tasks/test_task_batch_transitions.py": (
         # Tuple order spreads the measured 500/200-row cases away from E.
@@ -667,6 +669,7 @@ LANES = (
             "tests/reviews/acceptance/test_migration.py",
             "tests/test_database_reset.py",
             "tests/test_ci_lane_catalogue.py",
+            "tests/test_ci_scope_selection.py",
             "tests/test_ci_test_lanes.py",
             "tests/test_test_lane_evidence.py",
             "tests/test_merge_test_lane_evidence.py",

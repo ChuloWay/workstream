@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 
@@ -17,6 +16,7 @@ import pytest
 import scripts.run_test_lanes as runner
 from scripts import test_lane_catalogue as catalogue
 from scripts.run_test_lanes import LANES, LaneError
+from scripts.select_ci_scope import ALL_LANES
 
 
 def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
@@ -131,14 +131,14 @@ def test_project_intake_partitions_across_the_project_family() -> None:
         catalogue.PARTITIONED_PROJECT_LANES
     )
     assert catalogue.PARTITION_LANES_BY_MODULE["tests/test_projects.py"] == (
+        "project_lifecycle_c",
         "project_lifecycle_b",
-        "project_lifecycle_e",
+        "project_lifecycle_d",
     )
 
     for module in expected:
-        assert (
-            tuple(lane.name for lane in LANES if module in lane.modules)
-            == (catalogue.PARTITION_LANES_BY_MODULE[module])
+        assert {lane.name for lane in LANES if module in lane.modules} == set(
+            catalogue.PARTITION_LANES_BY_MODULE[module]
         )
 
     nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
@@ -196,6 +196,7 @@ def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
 
     schema_static_contracts = {
         "tests/test_ci_lane_catalogue.py",
+        "tests/test_ci_scope_selection.py",
         "tests/test_ci_test_lanes.py",
         "tests/test_test_lane_evidence.py",
         "tests/test_merge_test_lane_evidence.py",
@@ -283,8 +284,9 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
 def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
     expected = {
         "tests/test_projects.py": (
+            "project_lifecycle_c",
             "project_lifecycle_b",
-            "project_lifecycle_e",
+            "project_lifecycle_d",
         ),
         "tests/tasks/test_task_batch_transitions.py": (
             "project_lifecycle_e",
@@ -333,7 +335,7 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     )
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "bb7886806a7e8db1a41b78af6ca04959303b162ddc5f204e7042df1ce3b4877b"
+        "e0c8672b13522e025542740cda87527a3a46bb2fef8a4de0bfccb51853f609a2"
     )
 
 
@@ -383,22 +385,22 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
             "project_lifecycle_b"
         ),
         "tests/test_projects.py::test_submission_artifact_policy_removed_agent_route_performs_no_runtime_calls": (
-            "project_lifecycle_b"
+            "project_lifecycle_c"
         ),
         "tests/test_projects.py::test_submission_artifact_policy_update_conceals_foreign_policy_id": (
-            "project_lifecycle_b"
+            "project_lifecycle_d"
         ),
         "tests/test_projects.py::test_submission_artifact_policy_update_fault_rolls_back_replacement": (
             "project_lifecycle_b"
         ),
         "tests/test_projects.py::test_sufficiency_report_rejects_unknown_request_fields": (
-            "project_lifecycle_e"
+            "project_lifecycle_b"
         ),
         "tests/test_projects.py::test_unified_warnings_do_not_use_the_manual_report_acknowledgement_path": (
-            "project_lifecycle_e"
+            "project_lifecycle_b"
         ),
         "tests/test_projects.py::test_worker_cannot_create_project_records": (
-            "project_lifecycle_e"
+            "project_lifecycle_d"
         ),
         "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_direct_sql_cannot_supply_authoritative_clock_values": (
             "project_lifecycle_b"
@@ -737,10 +739,8 @@ def test_direct_runner_cli_remains_runnable(tmp_path: Path) -> None:
 
 def test_workflow_lane_inventory_matches_catalogue() -> None:
     source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
-    expected = Counter(lane.name for lane in LANES)
-    matrix = re.search(r"        lane:\n((?:          - [a-z_]+\n)+)", source)
-    assert matrix is not None
-    assert Counter(re.findall(r"- ([a-z_]+)", matrix[1])) == expected
+    assert ALL_LANES == tuple(lane.name for lane in LANES)
+    assert source.count("matrix: ${{ fromJSON(needs.scope.outputs.lane_matrix) }}") == 1
     assert (
         source.count(
             "name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}"
@@ -768,7 +768,7 @@ def test_workflow_requires_the_locked_external_checker_workspace() -> None:
     assert "cargo fmt --all --check" in source
     assert "cargo test --workspace --locked" in source
     assert "EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}" in source
-    assert 'test "${EXTERNAL_CHECKER_RESULT}" = success' in source
+    assert 'require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_CHECKER_RESULT}"' in source
 
 
 def test_former_coverage_reruns_remain_in_full_suite_lanes() -> None:

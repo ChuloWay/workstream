@@ -2038,6 +2038,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/select_ci_scope.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/test_lane_catalogue.py"
     },
     {
@@ -2049,7 +2053,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "a7a93e286a6b23c0e161b5ab6f527c2483137c40f192999f2597972394cc69b5",
+  "authority_digest": "13d9fa6d97f8b3fb02d8efaf72d1f3e2bdecdf7ec6b6cc003cf646b23e32294c",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }
