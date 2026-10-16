@@ -133,7 +133,6 @@ def test_project_intake_partitions_across_the_project_family() -> None:
     assert catalogue.PARTITION_LANES_BY_MODULE["tests/test_projects.py"] == (
         "project_lifecycle_c",
         "project_lifecycle_b",
-        "project_lifecycle_d",
     )
 
     for module in expected:
@@ -286,7 +285,6 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
         "tests/test_projects.py": (
             "project_lifecycle_c",
             "project_lifecycle_b",
-            "project_lifecycle_d",
         ),
         "tests/tasks/test_task_batch_transitions.py": (
             "project_lifecycle_e",
@@ -335,7 +333,7 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     )
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "e0c8672b13522e025542740cda87527a3a46bb2fef8a4de0bfccb51853f609a2"
+        "339886f8b6c56fa29f69622098216b678c62b05ca724151550964b0cc9cb6a55"
     )
 
 
@@ -388,10 +386,10 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
             "project_lifecycle_c"
         ),
         "tests/test_projects.py::test_submission_artifact_policy_update_conceals_foreign_policy_id": (
-            "project_lifecycle_d"
+            "project_lifecycle_c"
         ),
         "tests/test_projects.py::test_submission_artifact_policy_update_fault_rolls_back_replacement": (
-            "project_lifecycle_b"
+            "project_lifecycle_c"
         ),
         "tests/test_projects.py::test_sufficiency_report_rejects_unknown_request_fields": (
             "project_lifecycle_b"
@@ -400,7 +398,7 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
             "project_lifecycle_b"
         ),
         "tests/test_projects.py::test_worker_cannot_create_project_records": (
-            "project_lifecycle_d"
+            "project_lifecycle_b"
         ),
         "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_direct_sql_cannot_supply_authoritative_clock_values": (
             "project_lifecycle_b"
