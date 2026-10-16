@@ -174,10 +174,13 @@ The `project_lifecycle_a`, `project_lifecycle_b`, `project_lifecycle_c`,
 `project_lifecycle_d`, and `project_lifecycle_e` lanes
 partition PROJECT nodes, checker execution, materialization, evaluation capacity,
 output custody and routing AUTH preparation beside initial dispatch/delivery.
-All use the existing exact-node hash across five lanes, including the broad
-project intake modules. The [capacity change record](../.commitrail/changes/backend-runtime-dependency-security.md)
-explains the measured expansion and removal of the superseded placement
-exceptions. The lane logs retain all setup/call/teardown phase durations,
+All use the existing exact-node hash within the project family. Measured module
+overrides in `PROJECT_MODULE_LANE_OVERRIDES` spread expensive proofs across
+specific project lanes. In particular, `test_projects.py` uses C/B/D after its
+former B/E allocation repeatedly exceeded E's deadline. The
+[CI change record](../.commitrail/changes/ci-pr-scope-segmentation.md) records this
+allocation repair; it changes neither semantic ownership nor test membership.
+The lane logs retain all setup/call/teardown phase durations,
 including phases below five milliseconds, for performance diagnosis. This output
 is bounded by the selected test inventory and remains diagnostic only: it cannot
 select tests or override completeness, cleanup or the unchanged execution deadline.

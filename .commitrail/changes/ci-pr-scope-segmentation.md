@@ -190,3 +190,26 @@ change. That failed aggregate does not qualify the corrected candidate.
 The repair adds process-boundary regressions for fixture construction, API
 startup and administrator bootstrap, alongside the exact workflow argv check.
 Only integration scaffolding changes; both full HTTP journeys remain required.
+
+## Repeated project-lane timeout repair
+
+Run `38859184029` passed at `7aedf3d1` after one failed-lane retry. After
+main was merged into `cbda4eff`, run `38866475950` again interrupted
+`project_lifecycle_e` at 1,201 seconds, completing 564 of 579 nodes. The other
+twelve lanes and both client contracts passed. The earlier green run proves
+correctness at that head, not reliable execution headroom.
+
+The bounded follow-up adjusts the existing project-family module allocation in
+`backend/scripts/test_lane_catalogue.py`, its ownership/digest and exact-node
+regressions in `backend/tests/test_ci_lane_catalogue.py`, this record and
+`docs/operations_backend_testing.md`. Use retained setup/call/teardown durations
+to remove the two-lane concentration of the broad project intake module. Keep
+all thirteen lanes, semantic-family boundaries, every collected node, the
+1,200-second timeout, immutable evidence checks and all product tests unchanged.
+No retry loop or additional runner is introduced.
+
+Acceptance: the broad project module is distributed deterministically without
+missing or duplicate nodes; catalogue/selector/evidence and workflow tests pass;
+CI-integrity and test-delta/docs review pass on the clean candidate; fresh hosted
+full-suite and required final status pass. Recorded duration projections guide
+allocation only and are not a measured speedup or a replacement for hosted proof.
