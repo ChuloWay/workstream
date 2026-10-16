@@ -14,9 +14,11 @@ on:
       - "backend/app/interfaces/external_checker_execution.py"
       - "backend/app/core/hashing.py"
       - "backend/app/core/identifiers.py"
+      - "backend/app/modules/artifacts/post_submit_materialization.py"
       - "backend/app/modules/artifacts/preparation.py"
       - "backend/app/modules/checkers/api/external.py"
       - "backend/tests/checkers/external/test_runtime.py"
+      - "backend/tests/test_post_submit_materialization.py"
       - "backend/pyproject.toml"
       - "backend/uv.lock"
 

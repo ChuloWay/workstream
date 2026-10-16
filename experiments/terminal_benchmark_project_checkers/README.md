@@ -29,11 +29,12 @@ allowlist through no-follow file descriptors. Cleanup removes the exact DIND
 and checker image, unmounts XFS, detaches the loop device, deletes raw state,
 and adds a verified cleanup receipt before upload.
 
-The verifier tests require no Docker resources:
+The evidence, launch-source and matrix-reducer tests require no Docker
+resources:
 
 ```bash
 cd experiments/terminal_benchmark_project_checkers
-python3 -m unittest -q test_verify_evidence
+python3 -m unittest -q test_verify_evidence test_runtime_proof
 ```
 
 Do not run `proof.sh` on a shared development host. It is intentionally bound

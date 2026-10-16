@@ -11,6 +11,19 @@ from pathlib import Path
 
 
 SCHEMA = "workstream.terminal_benchmark_project_checker_proof.v1"
+SOURCE_IDENTITIES = {
+    "checker": {"/work/input": "art_workspace"},
+    "builder": {
+        "/cache": "sealed_cache",
+        "/out/candidate.tar": "art_runtime_candidate_tar",
+        "/project": "art_runtime_build_context",
+    },
+    "candidate": {"/tests": "art_workspace_tests"},
+    "reference": {
+        "/tests": "art_workspace_tests",
+        "/workspace/program.py": "art_workspace_reference_solution",
+    },
+}
 
 
 def _json(path: Path) -> dict[str, object]:
@@ -37,19 +50,18 @@ def _write(path: Path, value: object) -> None:
         0o600,
     )
     try:
-        os.write(descriptor, payload)
+        view = memoryview(payload)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OSError("short write")
+            view = view[written:]
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--raw", type=Path, required=True)
-    parser.add_argument("--head", required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    arguments = parser.parse_args()
-    raw = arguments.raw
+def reduce_matrix(raw: Path, head: str) -> dict[str, object]:
     interrupted = _json(raw / "interrupt.json")
     art_interrupted = _json(raw / "art-interrupt.json")
     restart = _json(raw / "restart-cleanup.json")
@@ -62,8 +74,14 @@ def main() -> None:
         launch for launch in launches if launch.get("kind") == "checker"
     ]
     if (
-        len(checker_launches) != 2
+        len(launches) != 8
+        or len(checker_launches) != 2
         or len({item.get("container_id") for item in checker_launches}) != 2
+        or len({item.get("name") for item in checker_launches}) != 2
+        or any(
+            item.get("mount_source_identities") != SOURCE_IDENTITIES["checker"]
+            for item in checker_launches
+        )
     ):
         raise ValueError("checker launches were not fresh")
     terminal_launches = [
@@ -72,8 +90,14 @@ def main() -> None:
     by_attempt: dict[str, list[dict[str, object]]] = defaultdict(list)
     for launch in terminal_launches:
         attempt = launch.get("attempt")
-        if type(attempt) is not str:
+        if type(attempt) is not str or launch.get("kind") not in {
+            "builder",
+            "candidate",
+            "reference",
+        }:
             raise ValueError("launch attempt missing")
+        if launch.get("mount_source_identities") != SOURCE_IDENTITIES[launch["kind"]]:
+            raise ValueError("launch source identity differs")
         by_attempt[attempt].append(launch)
     complete_attempts = [
         (attempt, items)
@@ -86,34 +110,64 @@ def main() -> None:
         for attempt, items in by_attempt.items()
         if [str(item.get("kind")) for item in items] == ["builder"]
     ]
-    if len(complete_attempts) != 1 or len(interrupted_attempts) != 1:
+    if (
+        len(terminal_launches) != 6
+        or len(by_attempt) != 2
+        or len(complete_attempts) != 1
+        or len(interrupted_attempts) != 1
+    ):
         raise ValueError("launch matrix differs")
-    complete_attempt, complete_launches = complete_attempts[0]
-    if len({item.get("container_id") for item in complete_launches}) != 5:
-        raise ValueError("complete containers were not fresh")
+    complete_attempt, _ = complete_attempts[0]
+    interrupted_attempt, _ = interrupted_attempts[0]
+    if (
+        complete_attempt == interrupted_attempt
+        or len({item.get("container_id") for item in terminal_launches}) != 6
+        or len({item.get("name") for item in terminal_launches}) != 6
+    ):
+        raise ValueError("terminal containers were not fresh")
 
-    statuses: dict[str, int] = {}
+    starts: dict[str, list[int]] = defaultdict(list)
     for result in results:
         argv = result.get("argv")
         status = result.get("status")
-        if (
-            isinstance(argv, list)
-            and len(argv) == 3
-            and argv[:2] == ["start", "--attach"]
-            and type(argv[2]) is str
-            and type(status) is int
-        ):
-            statuses[argv[2]] = status
+        if not isinstance(argv, list) or not argv or argv[0] != "start":
+            continue
+        if len(argv) == 3 and argv[:2] == ["start", "--attach"]:
+            name = argv[2]
+        elif len(argv) == 4 and argv[:3] == ["start", "-a", "-i"]:
+            name = argv[3]
+        else:
+            name = None
+        if type(name) is not str or type(status) is not int:
+            raise ValueError("container start observation is invalid")
+        starts[name].append(status)
     builder_name = f"ws-terminal-builder-{complete_attempt}"
     candidate_name = f"ws-terminal-candidate-{complete_attempt}"
     reference_names = [
         f"ws-terminal-reference-{complete_attempt}-{index}" for index in range(3)
     ]
-    if set([builder_name, candidate_name, *reference_names]) - statuses.keys():
-        raise ValueError("container exit observations are incomplete")
     checker_names = [str(item.get("name")) for item in checker_launches]
-    if any(statuses.get(name) != 0 for name in checker_names):
-        raise ValueError("checker planning exits differ")
+    interrupted_builder = f"ws-terminal-builder-{interrupted_attempt}"
+    expected_starts = {
+        checker_names[0]: [0],
+        checker_names[1]: [0],
+        builder_name: [0],
+        candidate_name: [1],
+        reference_names[0]: [0],
+        reference_names[1]: [0],
+        reference_names[2]: [0],
+    }
+    if dict(starts) != expected_starts or interrupted_builder in starts:
+        raise ValueError("container start observations differ")
+
+    expected_terminal_names = {
+        interrupted_builder,
+        builder_name,
+        candidate_name,
+        *reference_names,
+    }
+    if {str(item.get("name")) for item in terminal_launches} != expected_terminal_names:
+        raise ValueError("terminal create observations differ")
 
     result = complete.get("result")
     if (
@@ -130,15 +184,12 @@ def main() -> None:
         or result.get("verdict") != "passed"
         or result.get("findings") != []
         or art_complete != {"ledger_empty": True, "workspace_empty": True}
-        or statuses[builder_name] != 0
-        or statuses[candidate_name] != 1
-        or [statuses[name] for name in reference_names] != [0, 0, 0]
     ):
         raise ValueError("POST proof outcome differs")
 
-    matrix = {
+    return {
         "schema_version": SCHEMA,
-        "head_sha": arguments.head,
+        "head_sha": head,
         "interrupted": {
             "adapter_failure": True,
             "art_unwound": True,
@@ -155,6 +206,15 @@ def main() -> None:
             "verdict": "passed",
         },
     }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--raw", type=Path, required=True)
+    parser.add_argument("--head", required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    arguments = parser.parse_args()
+    matrix = reduce_matrix(arguments.raw, arguments.head)
     _write(arguments.output, matrix)
 
 

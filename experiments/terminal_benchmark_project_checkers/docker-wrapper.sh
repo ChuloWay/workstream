@@ -12,9 +12,12 @@ readonly BARRIER_READY="${WS493_BARRIER_READY:?}"
 readonly BARRIER_RELEASE="${WS493_BARRIER_RELEASE:?}"
 readonly BARRIER_TOKEN="${WS493_BARRIER_TOKEN:?}"
 readonly SANDBOX_USER="${WS493_SANDBOX_USER:?}"
+readonly ART_ROOT="${WS493_ART_ROOT:?}"
+readonly CACHE_ROOT="${WS493_CACHE_ROOT:?}"
 readonly LOCK_FILE="${WORK_DIR}/evidence.lock"
 
 [[ "${REAL_DOCKER}" == /* && "${RAW_DIR}" == /* && "${WORK_DIR}" == /* ]] || exit 64
+[[ "${ART_ROOT}" == /* && "${CACHE_ROOT}" == /* ]] || exit 64
 [[ "${DIND_NAME}" =~ ^ws-pilot00-[a-z0-9-]+-dind$ ]] || exit 64
 umask 077
 
@@ -78,9 +81,11 @@ if [[ "${status}" -eq 0 && "${1:-}" == create ]]; then
     if ! "${REAL_DOCKER}" exec "${DIND_NAME}" docker container inspect "${name}" >"${inspect_file}"; then
       exit 70
     fi
-    launch_kind="$(python3 - "${inspect_file}" "${RAW_DIR}/launches.ndjson" "${SANDBOX_USER}" <<'PY'
+    launch_kind="$(python3 - "${inspect_file}" "${RAW_DIR}/launches.ndjson" \
+      "${SANDBOX_USER}" "${ART_ROOT}" "${CACHE_ROOT}" <<'PY'
 import json
 import os
+from pathlib import Path
 import re
 import sys
 
@@ -116,16 +121,86 @@ config = item.get("Config", {})
 mounts = item.get("Mounts", [])
 destinations = sorted(mount.get("Destination") for mount in mounts)
 read_write = {mount.get("Destination"): mount.get("RW") for mount in mounts}
-sources = {mount.get("Source") for mount in mounts}
+sources = {mount.get("Destination"): mount.get("Source") for mount in mounts}
 security = set(host.get("SecurityOpt") or [])
+
+def canonical(path: Path) -> bool:
+    try:
+        return path.is_absolute() and path.resolve(strict=True) == path
+    except OSError:
+        return False
+
+art_root = Path(sys.argv[4])
+cache_root = Path(sys.argv[5])
+source_paths = {destination: Path(str(source)) for destination, source in sources.items()}
+source_identity = {}
+source_valid = (
+    canonical(art_root)
+    and canonical(cache_root)
+    and len(mounts) == len(destinations) == len(read_write) == len(sources)
+    and all(mount.get("Type") == "bind" for mount in mounts)
+    and all(canonical(path) for path in source_paths.values())
+)
+
+if kind == "checker" and source_valid:
+    source = source_paths.get("/work/input")
+    try:
+        relative = source.relative_to(art_root) if source is not None else None
+    except ValueError:
+        relative = None
+    source_valid = (
+        relative is not None
+        and len(relative.parts) == 3
+        and relative.parts[0] == "workspaces"
+        and re.fullmatch(r"extract_[0-9a-f]{32}", relative.parts[1]) is not None
+        and relative.parts[2] == "workspace"
+    )
+    source_identity = {"/work/input": "art_workspace"}
+elif terminal_owned and source_valid:
+    grant_id = labels.get("workstream.grant-id")
+    source_valid = (
+        isinstance(grant_id, str)
+        and re.fullmatch(r"extract_[0-9a-f]{32}", grant_id) is not None
+    )
+    grant_root = art_root / "workspaces" / str(grant_id)
+    expected_sources = {
+        "builder": {
+            "/cache": cache_root,
+            "/out/candidate.tar": grant_root / "runtime" / "candidate.tar",
+            "/project": grant_root / "runtime" / "build-context",
+        },
+        "candidate": {"/tests": grant_root / "workspace" / "tests"},
+        "reference": {
+            "/tests": grant_root / "workspace" / "tests",
+            "/workspace/program.py": grant_root / "workspace" / "solution" / "program.py",
+        },
+    }
+    identities = {
+        "builder": {
+            "/cache": "sealed_cache",
+            "/out/candidate.tar": "art_runtime_candidate_tar",
+            "/project": "art_runtime_build_context",
+        },
+        "candidate": {"/tests": "art_workspace_tests"},
+        "reference": {
+            "/tests": "art_workspace_tests",
+            "/workspace/program.py": "art_workspace_reference_solution",
+        },
+    }
+    source_valid = source_valid and source_paths == expected_sources.get(kind)
+    source_identity = identities.get(kind, {})
+else:
+    source_valid = False
+
 common = (
     valid_name
+    and source_valid
     and host.get("Runtime") == "runsc"
     and host.get("NetworkMode") == "none"
     and host.get("CapDrop") == ["ALL"]
     and bool({"no-new-privileges", "no-new-privileges:true"} & security)
     and not any(destination in {"/var/run/docker.sock", "/run/docker.sock"} for destination in destinations)
-    and not ({"/var/run/docker.sock", "/run/docker.sock"} & sources)
+    and not ({"/var/run/docker.sock", "/run/docker.sock"} & set(sources.values()))
 )
 if kind == "builder":
     valid = (
@@ -177,6 +252,7 @@ record = {
     "container_id": item.get("Id"),
     "kind": kind,
     "mount_destinations": destinations,
+    "mount_source_identities": source_identity,
     "name": name,
     "network": host.get("NetworkMode"),
     "read_only_root": host.get("ReadonlyRootfs"),

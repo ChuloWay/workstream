@@ -131,9 +131,11 @@ code on the host would break the established boundary.
   `backend/app/adapters/checkers/**`,
   `backend/app/interfaces/external_checker_execution.py`,
   `backend/app/core/hashing.py`, `backend/app/core/identifiers.py`,
+  `backend/app/modules/artifacts/post_submit_materialization.py`,
   `backend/app/modules/artifacts/preparation.py`,
   `backend/app/modules/checkers/api/external.py` and
-  `backend/tests/checkers/external/test_runtime.py`, plus the exact Python
+  `backend/tests/checkers/external/test_runtime.py`,
+  `backend/tests/test_post_submit_materialization.py`, plus the exact Python
   dependency locks `backend/pyproject.toml` and `backend/uv.lock`; it never uses
   `pull_request_target`. It uses the named ephemeral `ubuntu-24.04` runner,
   per-PR/head-ref cancel-in-progress concurrency, only `contents: read`, and
@@ -557,10 +559,12 @@ can safely adopt the PILOT-00 mechanism.
   adapter failure and ART unwind; releasing the wrapper permits restart to
   remove the orphan while preserving an unowned control.
 - [ ] Evidence verifier fixtures reject head mismatch, missing/false cleanup,
-  extra files, links, special files, path escape and size overflow. The real
-  matrix is copied into a fixed bounded nonsecret allowlist before owned cleanup;
-  only staging plus the verified cleanup receipt is uploaded after a final
-  no-follow/hash/schema check.
+  extra files, links, special files, path escape and size overflow. A hostile
+  launch fixture rejects a canonical parent source outside the exact ART/cache
+  roots, and reducer fixtures separately reject an extra partial attempt and a
+  duplicate start. The real matrix is copied into a fixed bounded nonsecret
+  allowlist before owned cleanup; only staging plus the verified cleanup receipt
+  is uploaded after a final no-follow/hash/schema check.
 - [ ] Exact built image platform-manifest digest(s), canonical PRE/POST registry
   specs and approved configuration are independently validated by the current
   Python registry contract without writing the registry or depending on #580.
@@ -597,6 +601,7 @@ can safely adopt the PILOT-00 mechanism.
 | Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame and `.github/workflows/backend.yml` inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced. The required `external-checker-runtime` CI lane runs locked workspace tests and formatting, not clippy | This optional local strict-clippy probe remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
 | Project image and SDK contracts | `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-terminal-benchmark-checker` and `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-sdk` | PASS: 4 project-package tests over all five originals and 5 SDK contract/canonicalization tests | Real image execution remains pending |
 | ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /home/abiorh/flow/workstream_product_builder/backend/.venv/bin/python -m pytest -q -p pytest_asyncio.plugin tests/checkers/external/test_runtime.py` from `backend/` | PASS: 11 tests, including exact existing-ledger POST byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering |
+| Runtime proof validators | `python3 -m unittest -v test_verify_evidence test_runtime_proof` plus `../pilot00_gvisor_offline/test_probe.sh` under a 30-second cap | PASS: 12 stdlib tests cover the fixed evidence allowlist, exact symbolic ART/cache mount identities, hostile parent-source rejection, exact two-attempt launch reduction, and separate extra-attempt/duplicate-start rejection; PILOT-00 readiness stubs also pass | Stub/fake-Docker validation does not establish Docker, XFS or runsc behavior |
 | Real gVisor matrix | Path-scoped isolated-runner probe over the one interrupted and one complete `ledger-reconcile` POST | The plan replay passed and the bounded harness/workflow implementation is present; exact hosted execution and implementation review remain pending | Source/fake-Docker evidence is not real Docker/runsc proof; DIND evidence will remain development rather than hosted-deployment proof |
 | Current-source reconciliation | Merge current `main` at `a201d743`; inspect #575 result/findings and Python CHECKERS contracts; run focused existing checker tests | This branch contains the current result shape and no old/new compatibility path | Recheck after the final main reconciliation and hosted checks |
 

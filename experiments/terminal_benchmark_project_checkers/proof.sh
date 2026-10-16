@@ -418,8 +418,10 @@ prepare() {
   for name in argv.ndjson command-results.ndjson launches.ndjson service-interrupt.log service-complete.log; do
     install -m 0600 -o "${OWNER_UID}" -g "${DOCKER_GID}" /dev/null "${RAW_DIR}/${name}"
   done
-  PYTHONPATH="${SCRIPT_DIR}" python3 -m unittest -q test_verify_evidence
-  write_owned_json "${RAW_DIR}/verifier-tests.json" '{"passed":true,"suite":"test_verify_evidence"}'
+  PYTHONPATH="${SCRIPT_DIR}" python3 -m unittest -q \
+    test_verify_evidence test_runtime_proof
+  write_owned_json "${RAW_DIR}/verifier-tests.json" \
+    '{"passed":true,"suites":["test_verify_evidence","test_runtime_proof"]}'
 }
 
 service_environment() {
@@ -430,7 +432,8 @@ service_environment() {
     WS493_SERVICE_PID_FILE="${SERVICE_PID_FILE}" WS493_SERVICE_BINARY="${SERVICE_BINARY}" \
     WS493_BARRIER_ENABLE="${BARRIER_ENABLE}" WS493_BARRIER_READY="${BARRIER_READY}" \
     WS493_BARRIER_RELEASE="${BARRIER_RELEASE}" WS493_BARRIER_TOKEN="${BARRIER_TOKEN}" \
-    WS493_SANDBOX_USER="${OWNER_UID}:${DOCKER_GID}" \
+    WS493_SANDBOX_USER="${OWNER_UID}:${DOCKER_GID}" WS493_ART_ROOT="${ART_ROOT}" \
+    WS493_CACHE_ROOT="${CACHE_ROOT}" \
     "$@"
 }
 
