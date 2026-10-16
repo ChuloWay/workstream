@@ -38,9 +38,10 @@ identity and system Operator grant to perform startup registration.
   `backend/app/modules/checkers/api/__init__.py`: the closed HTTP command/read
   values and exact read authority facts needed by the existing CHECKERS owner.
 - `backend/app/modules/checkers/external_registry.py`: extend the existing
-  service so it selects a UUIDv7 row ID on a new operation and recovers that
-  stored ID by the exact operation key before fresh replay authorization; keep
-  the same repository, immutable row and digest contract.
+  service with one two-phase operation: prepare and retain current authority,
+  lock registry operation/logical identity, recover or select the durable
+  UUIDv7, then finalize exact authority before insert or replay; keep the same
+  repository, immutable row and digest contract.
 - `backend/app/modules/checkers/registry_router.py`,
   `backend/app/api/deps/checker_registry.py`, and
   `backend/app/api/router.py`: one authenticated Operator registration route,
@@ -49,17 +50,21 @@ identity and system Operator grant to perform startup registration.
 - `backend/app/modules/authorization/catalogue.py`,
   `backend/app/modules/authorization/domain/checker_registry.py`,
   `backend/app/modules/authorization/checker_registry_authorization.py`, and
-  `backend/app/modules/authorization/kernel.py`: activate an exact registry
-  read action using the existing system Operator `operations.status.read`
-  permission, while registration continues to use
-  `operations.reconcile.run`; bind both to the registry resource and ordinary
-  AUTH audit evidence.
+  `backend/app/modules/authorization/{kernel.py,prepared.py,prepared_admin_authority.py}`:
+  reuse the existing opaque prepared-authority protocol for registration and
+  activate an exact registry read action using the existing system Operator
+  `operations.status.read` permission. Registration continues to use
+  `operations.reconcile.run`; both actions bind the registry resource and
+  ordinary AUTH audit evidence. No general AUTH lock-order redesign is allowed.
 - `backend/tests/checkers/external/{support.py,test_contracts.py,test_registry.py,test_postgresql.py,test_public_api.py}`:
   focused service and signed public-API/PostgreSQL proof.
 - `backend/tests/authorization/catalogue_fixtures.py`,
   `backend/tests/authorization/test_catalogue.py`, and
   `backend/tests/authorization/setup_finalization/test_catalogue.py`: closed
   AUTH catalogue and active-action parity for the read action.
+- `backend/tests/projects/guide_activation/source_fixtures.py`: update the one
+  existing direct registration caller to the server-selected registry-ID
+  contract without an optional-ID or compatibility path.
 - `docs/architecture_checker_framework.md` and `docs/roadmap_status.md`: state
   only the supported registration/readback capability delivered by this PR
   and retain the remaining REV/hosted-runtime boundary.
@@ -81,12 +86,29 @@ identity and system Operator grant to perform startup registration.
 
 The public mutation accepts only the existing canonical
 `ExternalCheckerRegistrySpec`; the verified actor and `Idempotency-Key` supply
-actor and operation identity. The existing registry service remains the sole
-writer and selects `new_record_id()` only after locking the operation and
-logical identity. A committed replay first recovers the stored UUID through
-that operation key, reconstructs the same complete request digest, performs
-fresh AUTH, and returns the original entry. Changed payload/key reuse remains a
-conflict, and a revoked caller cannot recover the old result.
+actor and operation identity. Registration uses AUTH's existing opaque
+prepared-authority machinery in one root transaction:
+
+1. Prepare `checker.registry.register` by locking and revalidating the exact
+   actor, identity link and active system Operator grant.
+2. While retaining those AUTH locks, take the registry operation and logical
+   capability/version/phase locks.
+3. Reread the operation winner and either recover its stored UUID or select
+   exactly one `new_record_id()` UUIDv7 for a new row.
+4. Construct the complete current registration request plus request/spec
+   digests using that durable UUID.
+5. Consume the opaque prepared handle to finalize and stage exact AUTH evidence.
+6. Insert or return only the UUID and digests named by that decision.
+
+This AUTH-first ordering extends the current operation through the existing
+`PreparedAuthorizationService`; it does not expose an AUTH lock primitive to
+CHECKERS or add another permission evaluator. A committed replay recovers the
+stored UUID before final exact AUTH and returns the original entry. Changed
+payload/key reuse remains a conflict, and a revoked caller cannot recover the
+old result. Independent same-key sessions must serialize to one stored UUID;
+every committed allow event must name that same UUID, operation, request digest
+and entry digest. The direct guide-activation fixture adopts this command
+contract and no caller-selected-ID constructor remains.
 
 Readback is an exact entry-ID GET. It uses a new action ID rather than recording
 a mutation-shaped decision, but maps to the Operator's existing
@@ -97,6 +119,17 @@ exact entry/request/spec facts before the route discloses the value. Missing or
 unauthorized entries are concealed consistently. The registration response and
 read response are the existing complete `ExternalCheckerRegistryEntry`, so no
 second projection or lossy schema is introduced.
+
+The public dependency owns distinct transaction outcomes. A canonical AUTH
+denial is concealed and committed only through a typed registration/read
+denial path so its staged denial evidence survives; no CHECKERS effect is
+retained. Payload/key or logical-identity conflicts roll back any staged allow
+evidence. Storage, audit or prepared-authority failure rolls back everything
+and returns retryable unavailability. On success, the dependency first
+round-trips the response through its declared Pydantic type to detach and
+validate it, then commits the registry row and allow evidence together before
+returning. Read success likewise commits its allow evidence only after the
+detached response is valid.
 
 No migration is expected: the persisted registry and audit-event action field
 already support the exact facts. If implementation reveals a required schema
@@ -113,7 +146,9 @@ this record.
 - [ ] Repeating the same `Idempotency-Key` and specification after a committed
   response or simulated lost response freshly authorizes and returns the exact
   original ID, timestamps, specification/digests and registration authority
-  receipt without a second registry row.
+  receipt without a second registry row. Independent same-key sessions produce
+  one row and only allow events whose resource ID, operation, request digest and
+  entry digest equal the stored/returned facts.
 - [ ] Reusing the key with any changed specification, or registering an already
   occupied capability/version/phase with another key, returns a stable conflict
   with no registry or allow-audit partial write.
@@ -125,6 +160,11 @@ this record.
   actor, system scope, operation/resource ID and immutable digests. Registration
   rollback removes both the row and staged allow evidence; replay after
   revocation fails before returning the stored result.
+- [ ] Crossed real-session Operator-grant and identity-link revocation races
+  prove both legal serial orders: registration holding prepared authority
+  completes with exact evidence before revocation, while revocation winning
+  first denies registration with no row or allow; no stale allow crosses either
+  locked boundary.
 - [ ] Real PostgreSQL and signed canonical AUTH fixtures prove success,
   denial/scope isolation, revocation, replay, payload mismatch and forced
   rollback through `/api/v1`; existing service/registry tests remain green.
@@ -139,9 +179,10 @@ this record.
   `product_ops`, `reuse_dedup`, and `documentation`; the lead owns shared
   deterministic checks and final reviewer coordination.
 - Human review focus: server-owned UUIDv7 replay recovery, lock/AUTH ordering,
-  exact read concealment and audit facts, existing-service reuse, and avoiding
-  any implication that registration activates a checker or completes issue
-  #580's REV lifecycle portion.
+  prepared-handle binding/denial custody, exact concurrent audit facts, exact
+  read concealment, existing-service reuse, and avoiding any implication that
+  registration activates a checker or completes issue #580's REV lifecycle
+  portion.
 - Human gate: lead plan acceptance before implementation; an eligible human
   separately reviews the final PR and explicitly authorizes any merge.
 - Budget posture: bounded Sol-high implementation and focused PostgreSQL/API
@@ -159,8 +200,17 @@ this record.
 
 ## Review findings
 
-Plan review is pending before implementation. Material findings and their
-disposition will be recorded here after a clean candidate exists.
+Security plan review at plan-only head `bca361570` found three blocking design
+gaps. `SEC-580-PLAN-001` identified the speculative-loser UUID risk in a
+single-phase AUTH-before-registry-lock flow; the design now uses AUTH's existing
+opaque prepare/consume protocol and requires exact independent-session audit
+assertions plus crossed revocation races. `SEC-580-PLAN-002` found the existing
+guide-activation fixture caller outside scope; it is now allowed and must adopt
+the replacement server-ID contract without compatibility behavior.
+`SEC-580-PLAN-003` found denial custody underspecified; the transaction outcomes
+now distinguish committed canonical denials, rolled-back conflicts, retryable
+storage/audit failures and detached-response success commits. A bounded replay
+of this corrected clean plan is required before implementation.
 
 ## Reconciliation
 
