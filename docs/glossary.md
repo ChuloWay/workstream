@@ -2,14 +2,28 @@
 
 ## Workstream
 
-Source-agnostic governed contribution infrastructure for coordinating,
-verifying, and recording work performed by humans, AI agents, or both.
+A shared protocol for governed work and the software that implements it,
+independent of the source application or execution client.
 Workstream binds project-defined tasks, locked rules, immutable submission
 artifacts, policy-governed checks, and authorized acceptance into trusted
 `ContributionRecord` facts. Source applications and downstream economic or
 reporting systems may consume those facts but do not control Workstream's
 identity, authorization, submission, review, or contribution truth. Flow
 Identity is the current v0.1 external authentication provider.
+
+## Workstream Protocol
+
+The shared contracts for valid lifecycle actions, authorization, evidence,
+review, acceptance, and contribution records. A standalone versioned protocol
+specification and conformance suite remain to be formalized; the name does
+not imply a released interoperability standard or decentralized runtime.
+
+## Workstream Implementation
+
+The software that enforces the protocol contracts and maintains canonical
+lifecycle state and evidence. Multiple clients can use this implementation
+without being independent implementations of the protocol. See
+[Protocol And Implementation](protocol-and-implementation.md).
 
 ## Repository-Native Human-Agent SDLC
 
