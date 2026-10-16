@@ -1,4 +1,4 @@
-"""Unattached FastAPI dependencies for future protected mutations."""
+"""FastAPI rate-control dependencies for protected API operations."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ async def enforce_admin_mutation_rate_limit(
     result: Annotated[AuthVerificationResult, Depends(get_auth_verification_result)],
     service: Annotated[RateControlService, Depends(get_rate_control_service)],
 ) -> None:
-    """Consume the future authority-management mutation allowance."""
+    """Consume one protected administrative-mutation allowance."""
     settings = request.app.state.settings
     await enforce_rate_control(
         request=request,
