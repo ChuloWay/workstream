@@ -98,7 +98,7 @@ ReviewPolicy sets `human_review_required: false`.
 | License copies match | `shasum -a 256 LICENSE backend/LICENSE mcp_server/LICENSE` | Equal hashes | Copies could drift later |
 | Metadata parses | `tomllib` read of `project.license` | `AGPL-3.0-only` | None |
 | Links and wording | `scripts/check_markdown_links.py`, `scripts/check_stale_workstream_wording.py` | See PR | None |
-| Wheels carry license | `uv build --wheel` for `backend/` and `mcp_server/`, then wheel METADATA and `dist-info/licenses/LICENSE` inspection | `License-Expression: AGPL-3.0-only`; packaged license byte-identical | None |
+| Wheels carry license | `uv build --wheel` for `backend/` and `mcp_server/`, then wheel METADATA and `dist-info/licenses/LICENSE` inspection | Local builds of commit `e01c2a208` on 2026-10-16, which already contained both license files and metadata: `License-Expression: AGPL-3.0-only`; packaged license byte-identical | Later commits do not change Python packaging; CI `package` and MCP Foundation build the PR head |
 
 ## Review findings
 
