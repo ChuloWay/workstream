@@ -137,10 +137,25 @@ claim: fixed-recipe validation would reject that mutation before Docker. Actual
 build/cache/platform proof remains with #493. These assets do not complete #576's
 manager agreement or #555's hosted release evidence.
 
+External review found two reference edge cases: non-object ledger inputs and
+out-of-range UTC conversion. The repaired references return the specified invalid
+input response. Separate golden cases reject each previous implementation. Amount
+precision and validation of pending rows also have independent cases. Harness
+reads use explicit UTF-8. The fixed Dockerfile recipe gives the non-root runtime
+user ownership of the workspace directory itself, including relative output
+creation. Actual container execution remains #493 proof, not native calibration.
+
+The checker implementation inspection also distinguished the originally pinned
+OCI index from its Linux/AMD64 child manifest. The corpus now pins that exact
+platform manifest; registry bytes were SHA-256 checked against both identities and
+the index's platform membership. This changes the precise image selector, not the
+chosen Python image or the evaluator's isolation requirements.
+
 ## Reconciliation
 
 - Current-source reconciliation: PILOT-08 is merged. #575/#577 result/read work,
-  #585 CI and #586 README remain separately owned. No edits to those paths.
+  #585 CI is incorporated; #586 README remains separately owned. No edits to
+  those paths.
 - Next usable boundary: #493 real checker execution; #580 supported registration;
   #555 public live-inference/local and hosted journey proof.
 - Remaining risks: Proposed guide still requires manager approval; local Python

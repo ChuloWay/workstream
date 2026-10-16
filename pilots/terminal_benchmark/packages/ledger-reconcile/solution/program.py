@@ -6,7 +6,7 @@ import re
 from decimal import Decimal
 
 def solve(payload):
-    rows = payload.get("transactions")
+    rows = payload.get("transactions") if isinstance(payload, dict) else None
     if not isinstance(rows, list):
         return {"error": "invalid_input"}
     for row in rows:
