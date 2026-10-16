@@ -122,9 +122,11 @@ Draft and ready PRs use the same conservative component rules. Backend changes,
 including backend tests, run the complete suite. CI controls, unknown paths,
 unavailable Git history and external-checker changes also require full execution.
 CLI-only and MCP-only changes require their respective public-contract workflows;
-mixed client changes require both. Only positively classified ordinary Markdown
-documentation omits runtime checks; Agent Gates still runs. Any backend or
-unknown path in a mixed change restores complete proof.
+mixed client changes require both. Documentation omits runtime checks only for
+`README.md`, `CHANGELOG.md`, and Markdown files under `docs/` or
+`.commitrail/changes/`; Agent Gates still runs. Other Markdown paths, including
+`AGENTS.md` and `CONTRIBUTING.md`, require full execution. Any backend or unknown
+path in a mixed change restores complete proof.
 
 Import-only backend test selection was rejected: source readers and injected
 ports can cross import boundaries, and shared fixtures can carry state into
@@ -158,10 +160,11 @@ data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
 before tests. Real SQL, transaction, lock, isolation, and full hosted behavior
 checks remain.
 Ordinary storage tests use the existing transactional data reset with canonical
-schema verification before and after each test. Only tests that deliberately
-change schema use `postgres_schema_contract` to rebuild it. In contribution
-storage this includes the function-replacement test and the trigger-removal
-parameter, not the ordinary control. No assertions or storage tests are omitted.
+schema verification before and after each test. Tests that own persistent schema
+replacement use `postgres_schema_contract` to rebuild it. The contribution
+storage function-replacement and trigger-removal controls explicitly roll back
+their transaction-local DDL and retain canonical teardown verification. No
+assertions or storage tests are omitted.
 The schema-contract lane and aggregate job retain disk-backed databases.
 This is not a production configuration or proof of host-power-loss durability:
 [Docker tmpfs data disappears when the container stops](https://docs.docker.com/engine/storage/tmpfs/).
@@ -308,8 +311,9 @@ its head and digests differ. Each lane bundle records its job-start epoch;
 missing or malformed timing fails the final evidence step. Hosted evidence
 records whole Backend wall time from the earliest selected lane start, lane
 aggregate/slowest execution timing, and whether
-the five-minute target was met. Timing uses the same bundle selection as
-evidence. On a retry this wall time includes the wait between selected attempts;
+the recorded eight-minute threshold was met. Five minutes remains an aspirational
+goal, not the threshold of the `timing_target_met` evidence field. Timing uses
+the same bundle selection as evidence. On a retry this wall time includes the wait between selected attempts;
 it is not fresh-run execution latency. When the repository owner explicitly accepts
 a measured target miss at the human merge checkpoint, that performance result
 does not override otherwise passing correctness, custody, service-contract,

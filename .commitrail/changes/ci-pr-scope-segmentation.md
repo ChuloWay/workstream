@@ -85,9 +85,12 @@ reported as complete proof. No new selector/evidence service or paid runner.
 - Check removed selected-mode imports, flags, artifacts and registrations have
   no remaining consumers. Run affected runner/merger/validator/catalogue tests.
 - Run the affected routing storage module against PostgreSQL 16 and MinIO.
-  Preserve current main’s contribution storage mutation controls unchanged. Compare identical representative tests before/after with
-  coverage enabled; report setup/call/teardown separately. Preserve exact nodes
-  and all assertions. Coverage percentages remain diagnostic only.
+  Preserve current main's contribution storage mutation controls unchanged.
+  Compare fixture invocation paths: five routing tests replace ten complete
+  Alembic rebuilds with five transactional resets and five schema verifications.
+  Preserve exact nodes and all assertions. Report comparable coverage-enabled
+  setup/call/teardown timings when available; structural savings alone do not
+  establish a wall-time speedup. Coverage percentages remain diagnostic only.
 - Run lint, markdown links, stale wording and Commitrail checks. Final hosted
   execution and focused internal reviews must pass before readiness.
 - Verify the reusable CLI contract preserves its Go build and runs all Backend
@@ -148,3 +151,13 @@ The Ruff commands still execute from the repository root with the Backend uv
 project selected explicitly, preserving the CLI tests' original format rules.
 The MinIO producer-attempt guard now exits explicitly on malformed values so its
 fail-closed behavior does not depend on Bash `errexit` handling of `[[ ... ]]`.
+
+Reconciliation with main `ce60d0f02` preserves all merged revision migrations,
+all thirteen lanes and contribution storage mutation controls. At `13fec951e`,
+366 focused selector/catalogue/runner/evidence/ownership tests and 101 workflow
+and Commitrail tests passed. Ruff and behavior-ownership validation passed.
+Independent documentation review corrected the contribution reset description,
+made the Markdown allowlist explicit, and distinguished the recorded eight-minute
+timing threshold from the aspirational five-minute goal. No exact-head wall-time
+speedup has been established. Fresh hosted full-suite proof is required after
+these final documentation corrections; earlier green runs do not qualify it.
