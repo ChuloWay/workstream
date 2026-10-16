@@ -570,18 +570,17 @@ class ArtifactStorageOrchestrator:
             )
         except ArtifactProviderLiveProofRequiredError:
             return await self._record_put_unavailable(
-                claimed,
                 executor_id,
                 facts,
                 force_acknowledgement_unknown=True,
             )
         except ArtifactStoreUnavailableError:
-            return await self._record_put_unavailable(claimed, executor_id, facts)
+            return await self._record_put_unavailable(executor_id, facts)
         except ArtifactStoreError:
             # Any non-acknowledgement provider error is resolved through the
             # read-only observation path; a caller write never fabricates
             # observation evidence.
-            return await self._record_put_unavailable(claimed, executor_id, facts)
+            return await self._record_put_unavailable(executor_id, facts)
         try:
             return await self._complete_transaction_b(
                 claimed=claimed,
@@ -594,7 +593,6 @@ class ArtifactStorageOrchestrator:
             )
         except ArtifactProviderLiveProofRequiredError:
             return await self._record_put_unavailable(
-                claimed,
                 executor_id,
                 facts,
                 force_acknowledgement_unknown=True,
@@ -682,10 +680,9 @@ class ArtifactStorageOrchestrator:
                     operation_evidence=operation_evidence,
                 )
             except (ArtifactStoreUnavailableError, TimeoutError):
-                return await self._record_put_unavailable(claimed, executor_id, facts)
+                return await self._record_put_unavailable(executor_id, facts)
             except ArtifactProviderLiveProofRequiredError:
                 return await self._record_put_unavailable(
-                    claimed,
                     executor_id,
                     facts,
                     force_acknowledgement_unknown=True,
@@ -714,10 +711,9 @@ class ArtifactStorageOrchestrator:
                 operation_evidence.activation_id,
             )
         except (ArtifactStoreUnavailableError, TimeoutError):
-            return await self._record_put_unavailable(claimed, executor_id, facts)
+            return await self._record_put_unavailable(executor_id, facts)
         except ArtifactProviderLiveProofRequiredError:
             return await self._record_put_unavailable(
-                claimed,
                 executor_id,
                 facts,
                 force_acknowledgement_unknown=True,
@@ -751,7 +747,6 @@ class ArtifactStorageOrchestrator:
             )
         except ArtifactProviderLiveProofRequiredError:
             return await self._record_put_unavailable(
-                claimed,
                 executor_id,
                 facts,
                 force_acknowledgement_unknown=True,
@@ -1110,7 +1105,6 @@ class ArtifactStorageOrchestrator:
 
     async def _record_put_unavailable(
         self,
-        claimed: ArtifactPutAttempt,
         executor_id: UUID,
         expected_facts: ArtifactPutAttemptAuthorityFacts,
         *,
@@ -1124,13 +1118,15 @@ class ArtifactStorageOrchestrator:
                 phase="terminal",
                 idempotency_key=executor_id,
             )
-            attempt = await self._repo.lock_put_attempt(claimed.id)
-            if not _matching_put_fence(attempt, executor_id, claimed.execution_generation):
+            attempt = await self._repo.lock_put_attempt(str(expected_facts.resource_id))
+            if not _matching_put_fence(
+                attempt, executor_id, expected_facts.execution_generation
+            ):
                 self._authority.discard()
                 return "stale"
             assert attempt is not None
             terminal_facts = _put_authority_facts(
-                attempt, executor_id, claimed.execution_generation
+                attempt, executor_id, expected_facts.execution_generation
             )
             if terminal_facts != expected_facts:
                 self._authority.discard()
@@ -1173,7 +1169,6 @@ class ArtifactStorageOrchestrator:
             )
         except ArtifactProviderLiveProofRequiredError:
             return await self._record_put_unavailable(
-                claimed,
                 executor_id,
                 expected_facts,
                 force_acknowledgement_unknown=True,
@@ -1201,7 +1196,6 @@ class ArtifactStorageOrchestrator:
             )
         except ArtifactProviderLiveProofRequiredError:
             return await self._record_put_unavailable(
-                claimed,
                 executor_id,
                 expected_facts,
                 force_acknowledgement_unknown=True,
@@ -1223,7 +1217,6 @@ class ArtifactStorageOrchestrator:
             )
         except ArtifactProviderLiveProofRequiredError:
             return await self._record_put_unavailable(
-                claimed,
                 executor_id,
                 expected_facts,
                 force_acknowledgement_unknown=True,
