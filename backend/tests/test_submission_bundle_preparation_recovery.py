@@ -210,7 +210,7 @@ async def test_hidden_preparation_treats_missing_optional_packet_text_as_warning
     command = SimpleNamespace(prepare=AsyncMock(return_value=SubmissionBundlePreparationResult(
         put_attempt_id=new_record_id(), admission_id=None,
         submission_bundle_preparation_status=SubmissionBundlePreparationStatus.PREPARED,
-        replayed=False,
+        replayed=False, pre_submission_results=(),
     )))
     request = Request({
         "type": "http", "method": "POST", "path": "/",

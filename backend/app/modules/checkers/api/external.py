@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import unicodedata
 from collections.abc import Mapping
 from decimal import Decimal
 from math import isfinite
@@ -519,13 +520,48 @@ class ExternalCheckerExecutionRequest(ExternalCheckerValue):
         return self
 
 
-class ExternalCheckerFinding(ExternalCheckerValue):
-    """Sanitized work result; policy later decides whether failure blocks."""
+ExternalCheckerFindingLevel = Literal["info", "warning", "error", "coverage_incomplete"]
 
+
+class ExternalCheckerFinding(ExternalCheckerValue):
+    """Sanitized work result; policy later decides whether failure blocks.
+
+    ``coverage_incomplete`` reports work the checker could not evaluate. It never
+    fails the verdict or costs a revision round; locked ReviewPolicy routing sends
+    it to a reviewer or back to the contributor.
+    """
+
+    check_id: Identifier
     code: Identifier
-    level: Literal["info", "warning", "error"]
+    level: ExternalCheckerFindingLevel
     message: Annotated[StrictStr, Field(min_length=1, max_length=4096)]
     path: Annotated[StrictStr, Field(min_length=1, max_length=1000)] | None = None
+    line: Annotated[StrictInt, Field(ge=1, le=10_000_000)] | None = None
+
+    @model_validator(mode="after")
+    def validate_location(self) -> Self:
+        """A location names one safe relative archive path and, optionally, a line in it."""
+        if self.path is not None and not safe_finding_path(self.path):
+            raise ExternalCheckerContractError("external checker finding path is unsafe")
+        if self.line is not None and self.path is None:
+            raise ExternalCheckerContractError("external checker finding line requires a path")
+        return self
+
+
+def safe_finding_path(path: str) -> bool:
+    """Accept only a relative archive path that intake could have admitted.
+
+    Paths are shown to contributors and managers, so they must not carry
+    control or formatting characters, traversal or absolute forms.
+    """
+    parts = path.split("/")
+    return not (
+        "\\" in path or path.startswith("/")
+        or any(unicodedata.category(character) in {"Cc", "Cf", "Zl", "Zp"}
+               for character in path)
+        or any(part in {"", ".", ".."} or part.endswith((" ", ".")) for part in parts)
+        or ":" in parts[0]
+    )
 
 
 class ExternalCheckerExecutionResult(ExternalCheckerValue):

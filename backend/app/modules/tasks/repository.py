@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Sequence
 
+from app.modules.tasks.submission_attempts import COVERAGE_RETURN_REASON
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.checkers.api.external_policy import validate_stored_external_post_policy
 from uuid import UUID
@@ -856,6 +857,7 @@ class TaskRepository:
                 await self._session.scalar(select(func.count(Submission.id)).where(
                     Submission.task_assignment_id == str(request.assignment_id),
                     Submission.version <= latest_assignment_submission.version,
+                    Submission.status_reason.is_distinct_from(COVERAGE_RETURN_REASON),
                 )) if latest_assignment_submission is not None else None
             )
             predecessor = (

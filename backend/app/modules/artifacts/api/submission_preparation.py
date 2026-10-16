@@ -32,40 +32,52 @@ class SubmissionBundlePreparationCheckFailed(SubmissionBundlePreparationRejected
 
     def public_results(self) -> list[dict[str, object]]:
         """Return sanitized ordered work findings without execution authority."""
-        default = self.facts.workstream_default
-        results: list[dict[str, object]] = [
-            {
-                "source": "workstream_default",
-                "check_id": item.check_id,
-                "status": item.status,
-                "failure_code": item.failure_code,
-                "finding_count": item.finding_count,
-            }
-            for item in default.checks
-        ]
-        results.extend(
-            {
-                "source": "workstream_default",
-                "status": "warning",
-                "warning_code": item.code,
-            }
-            for item in default.warnings
-        )
-        results.extend(
-            {
-                "source": "project_external_checker",
-                "requirement_id": member.requirement_id,
-                "registry_entry_id": str(member.registry_entry_id),
-                "registry_entry_digest": member.registry_entry_digest,
-                "status": member.result.verdict,
-                "findings": [
-                    finding.model_dump(mode="json")
-                    for finding in member.result.findings
-                ],
-            }
-            for member in self.facts.external_members
-        )
-        return results
+        return public_pre_submission_results(self.facts)
+
+
+def public_pre_submission_results(
+    facts: SelectedPreSubmitExecutionFacts,
+) -> list[dict[str, object]]:
+    """Project one bounded PRE outcome for its authorized contributor.
+
+    Blocked and admitted preparations share this projection, so nonblocking
+    findings (warnings, info, coverage gaps) stay visible when intake passes.
+    It is intake feedback only; post-submission evaluation decides outcomes.
+    """
+    default = facts.workstream_default
+    results: list[dict[str, object]] = [
+        {
+            "source": "workstream_default",
+            "check_id": item.check_id,
+            "status": item.status,
+            "failure_code": item.failure_code,
+            "finding_count": item.finding_count,
+        }
+        for item in default.checks
+    ]
+    results.extend(
+        {
+            "source": "workstream_default",
+            "status": "warning",
+            "warning_code": item.code,
+        }
+        for item in default.warnings
+    )
+    results.extend(
+        {
+            "source": "project_external_checker",
+            "requirement_id": member.requirement_id,
+            "registry_entry_id": str(member.registry_entry_id),
+            "registry_entry_digest": member.registry_entry_digest,
+            "status": member.result.verdict,
+            "findings": [
+                finding.model_dump(mode="json")
+                for finding in member.result.findings
+            ],
+        }
+        for member in facts.external_members
+    )
+    return results
 
 
 class SubmissionBundlePreparationUnavailable(RuntimeError):
@@ -121,6 +133,7 @@ class SubmissionBundlePreparationResult:
     admission_id: UUID | None
     submission_bundle_preparation_status: SubmissionBundlePreparationStatus
     replayed: bool
+    pre_submission_results: tuple[dict[str, object], ...]
 
 
 class SubmissionBundlePreparationCommand(Protocol):

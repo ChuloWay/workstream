@@ -32,6 +32,7 @@ from app.modules.actors.models import ActorProfile
 from tests.tasks.test_submission_lineage import _prepared_packet
 from tests.test_artifact_admission import _context, _seed_human_actor
 from tests.submission_preparation_auth_helpers import install_submitter_grant
+from tests.tasks.post_submit_routing.backfill_support import assert_upgrade_refuses_stale_findings
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.post_submit_routing.support import revision_archive
 from tests.tasks.submission_lineage_support import _verified_admission, _verify_put_attempt
@@ -220,6 +221,81 @@ async def test_public_optional_packet_text_round_trips_through_ready_admission(
             admission = await session.get(SubmissionBundleAdmission, str(admission_id))
             assert admission.status == "consumed"
             assert admission.packet_sha256 == SubmissionPacketView("", "").sha256
+
+
+async def test_public_preparation_returns_nonblocking_feedback_on_success_and_replay(
+    isolated_database_env, tmp_path, monkeypatch,
+):
+    """An admitted attempt keeps its coverage gap visible; replay returns it unchanged."""
+    from app.adapters.checkers import _ConfiguredExternalCheckerExecution
+    from app.modules.artifacts.selected_pre_submit_execution import SelectedPreSubmitExecutionService
+    from tests.checkers.execution.support import ControlledSelectedExecution
+    from tests.checkers.external.support import pre_registry_spec
+
+    coverage = {
+        "check_id": "coverage.files", "code": "coverage.unreadable",
+        "level": "coverage_incomplete", "message": "One file was not evaluated.",
+        "path": "results/vendor.bin", "line": None,
+    }
+    project_checker = ControlledSelectedExecution(verdict="passed", findings=(coverage,))
+
+    async def locked_image(_adapter, request, grant):
+        return await project_checker.execute(request, grant)
+
+    monkeypatch.setattr(_ConfiguredExternalCheckerExecution, "execute", locked_image)
+    async with _prepared_packet(
+        isolated_database_env, tmp_path, pre_submit_registry_spec=pre_registry_spec(),
+    ) as h:
+        route = f"/api/v1/tasks/{h.task_id}/submission-bundle-preparations"
+        headers = {
+            "Content-Type": "application/zip",
+            "X-Task-Assignment-Id": str(h.assignment_id),
+            "Idempotency-Key": str(new_record_id()),
+            "X-Submission-Summary": h.preparation_request.summary,
+            "X-Contributor-Attestation": h.preparation_request.contributor_attestation,
+        }
+        async with _client(h, monkeypatch, isolated_database_env) as client:
+            prepared = await client.post(route, headers=headers, content=h.archive_bytes)
+            assert prepared.status_code == 202, prepared.text
+            feedback = prepared.json()["pre_submission_results"]
+            external = [item for item in feedback if item["source"] == "project_external_checker"]
+            assert [(item["status"], item["findings"]) for item in external] == [("passed", [coverage])]
+            assert all(
+                item["status"] == "passed" for item in feedback
+                if item["source"] == "workstream_default" and "check_id" in item
+            )
+            admission_id = await _verify_put_attempt(
+                h.factory, h.store, h.namespace, h.settings, prepared.json()["put_attempt_id"],
+            )
+            checked = len(project_checker.requests)
+
+            async def no_new_checker(*_args, **_kwargs):
+                raise AssertionError("exact replay invoked selected PRE again")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(SelectedPreSubmitExecutionService, "execute", no_new_checker)
+                ready = await client.post(route, headers=headers, content=h.archive_bytes)
+            assert ready.status_code == 202, ready.text
+            assert ready.json()["submission_bundle_preparation_status"] == "ready"
+            assert ready.json()["replayed"] is True
+            assert ready.json()["pre_submission_results"] == feedback
+
+            # Intake feedback never decides the outcome: the attempt awaits evaluation.
+            created = await client.post(
+                f"/api/v1/tasks/{h.task_id}/submissions",
+                json=_payload(h.preparation_request, admission_id),
+            )
+            assert created.status_code == 201, created.text
+        async with h.factory() as session:
+            stored = await session.get(Submission, created.json()["submission_id"])
+            assert (stored.attempt_status, stored.decided_at) == ("evaluation_pending", None)
+            pre_run = await session.scalar(select(SelectedPreSubmitRun.id).where(
+                SelectedPreSubmitRun.task_id == str(h.task_id),
+            ))
+        assert len(project_checker.requests) == checked
+        await assert_upgrade_refuses_stale_findings(
+            h.factory, store="selected_pre_submit_runs", row_id=pre_run,
+        )
 
 
 async def test_public_submission_infrastructure_error_is_retryable_only_for_sql():

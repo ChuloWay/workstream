@@ -136,6 +136,7 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
+        "0048_revision_exhaustion",
         "0047_revision_recovery",
         "0046_revision_expiry_retry",
         "0045_task_revision_expiry",
@@ -318,6 +319,7 @@ def test_repeated_upgrade_head_preserves_current_database(
     "0045_task_revision_expiry",
     "0046_revision_expiry_retry",
     "0047_revision_recovery",
+    "0048_revision_exhaustion",
 ])
 def test_preceding_head_upgrades_to_current_without_recreation(
     isolated_database_env: str, migration_lock, installed_revision: str,
@@ -363,7 +365,10 @@ async def test_revision_upgrade_retains_policy_source_and_running_window(
     from app.adapters.tasks import task_post_submit_outcome
     from app.modules.tasks.revision.models import TaskRevisionPreparation
     from app.modules.tasks.revision.service import project_current_revision
-    from tests.migration_revision_fixtures import insert_0047_preparation, retained_revision_rows
+    from tests.migration_revision_fixtures import (
+        enter_predecessor_owner_shape, insert_0047_preparation, leave_predecessor_owner_shape,
+        retained_revision_rows,
+    )
     from tests.tasks.post_submit_routing.remediation_support import remediation_source
     from tests.tasks.post_submit_routing.support import revision_archive
     from tests.tasks.submission_dispatch.test_replacement_creation import (
@@ -373,6 +378,8 @@ async def test_revision_upgrade_retains_policy_source_and_running_window(
     with migration_lock():
         await _execute(isolated_database_env, "drop schema public cascade; create schema public")
         await asyncio.to_thread(command.upgrade, _alembic_config(), "0047_revision_recovery")
+        shape = pytest.MonkeyPatch()
+        await enter_predecessor_owner_shape(_execute, isolated_database_env, shape)
         async with remediation_source(tmp_path, isolated_database_env) as h:
             with monkeypatch.context() as patch:
                 patch.setattr("app.modules.tasks.post_submit_routing.outcome.prepare_revision", insert_0047_preparation)
@@ -389,6 +396,8 @@ async def test_revision_upgrade_retains_policy_source_and_running_window(
                 before = await retained_revision_rows(session, outcome.routing_manifest_id)
                 source = before["task_revision_preparations"][0][0]
                 assert "remaining_microseconds" not in source
+            shape.undo()
+            await leave_predecessor_owner_shape(_execute, isolated_database_env)
             await asyncio.to_thread(command.upgrade, _alembic_config(), HEAD_REVISION)
             async with h.factory() as session:
                 assert await retained_revision_rows(session, outcome.routing_manifest_id) == before

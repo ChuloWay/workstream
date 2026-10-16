@@ -6,6 +6,7 @@ from app.modules.tasks.api.post_submit_routing import TaskRevisionExhaustionFact
 from app.modules.tasks.models import TaskAssignment, WorkstreamTask
 from app.modules.tasks.post_submit_routing.requests import TaskRoutingRequestUnavailable
 from app.modules.tasks.revision.models import TaskRevisionExhaustion
+from app.modules.tasks.submission_attempts import record_attempt_outcome
 
 
 def exhaustion_facts(receipt) -> TaskRevisionExhaustionFacts:
@@ -80,3 +81,8 @@ async def commit_exhaustion(session, *, receipt, task, assignment):
     await session.flush()
     assignment.status, assignment.released_at = "revision_exhausted", receipt.exhausted_at
     task.status, task.assigned_to = "ready", None
+    await session.flush()
+    await record_attempt_outcome(
+        session, submission_id=receipt.source_submission_id, task_id=receipt.task_id,
+        outcome="rejected",
+    )

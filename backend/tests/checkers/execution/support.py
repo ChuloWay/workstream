@@ -11,8 +11,9 @@ from app.modules.actors.models import ActorProfile, ActorIdentityLink
 class ControlledSelectedExecution:
     """Return one request-bound selected result without replacing owner logic."""
 
-    def __init__(self, *, verdict="passed"):
+    def __init__(self, *, verdict="passed", findings=None):
         self.verdict = verdict
+        self.findings = findings
         self.requests = []
 
     async def execute(self, request, grant):
@@ -27,16 +28,18 @@ class ControlledSelectedExecution:
 
         assert type(grant) is ExternalCheckerMaterialGrant
         self.requests.append(request)
-        findings = () if self.verdict == "passed" else ({
+        findings = self.findings if self.findings is not None else (
+            () if self.verdict == "passed" else ({
+            "check_id": "post_evidence",
             "code": "post_evidence_failed",
             "level": "error",
             "message": "Post evidence failed.",
-        },)
+        },))
         result = make_external_checker_execution_result(
             request_digest=request.request_digest,
             registry_entry_id=request.registry.registry_entry_id,
             registry_entry_digest=request.registry.entry_digest,
-            phase="post_submit",
+            phase=request.identity.phase,
             outcome="completed",
             verdict=self.verdict,
             findings=findings,
@@ -166,6 +169,7 @@ async def provision_post_submit_service(factory, identity=ServiceIdentity.CHECKE
 def live_executor(h, *, outbox=None, selected_execution=None):
     from app.adapters.auth import post_submit_execution_authority
     from app.adapters.outbox import outbox_append
+    from app.adapters.projects import project_locked_policy_context_port
     from app.modules.checkers.execution import PostSubmissionExecutor
 
     return PostSubmissionExecutor(
@@ -175,6 +179,7 @@ def live_executor(h, *, outbox=None, selected_execution=None):
         finalize_authority=post_submit_execution_authority,
         selected_execution=selected_execution or ControlledSelectedExecution(),
         outbox=outbox if outbox is not None else outbox_append,
+        review_modes=project_locked_policy_context_port,
     )
 
 

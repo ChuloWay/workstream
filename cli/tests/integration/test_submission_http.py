@@ -27,10 +27,12 @@ HISTORY = {
     "id": SUBMISSION,
     "task_id": TASK,
     "version": 1,
-    "status": "submitted",
+    "status": "evaluation_pending",
     "status_reason": None,
     "summary": "Work complete",
     "submitted_at": "2026-10-14T10:00:00Z",
+    "decided_at": None,
+    "finding_counts": {"blocking": 0, "warning": 0, "coverage_incomplete": 0},
     "locked_at": None,
     "supersedes_submission_id": None,
     "evidence_items": [],
@@ -50,6 +52,9 @@ CHECKER = {
         {
             "id": KEY,
             "checker_name": "quality",
+            "check_id": "quality.output",
+            "path": "src/out.txt",
+            "line": 4,
             "status": "failed",
             "severity": "error",
             "worker_message": "Fix \u202eunsafe\x1b text",
@@ -89,12 +94,46 @@ def submit_args():
     )
 
 
+INTAKE_FEEDBACK = [
+    {
+        "source": "workstream_default",
+        "check_id": "archive_safety",
+        "status": "passed",
+        "failure_code": None,
+        "finding_count": 0,
+    },
+    {
+        "source": "workstream_default",
+        "status": "warning",
+        "warning_code": "submission_summary_missing",
+    },
+    {
+        "source": "project_external_checker",
+        "requirement_id": "quality",
+        "registry_entry_id": RUN,
+        "registry_entry_digest": "sha256:" + "a" * 64,
+        "status": "passed",
+        "findings": [
+            {
+                "check_id": "coverage.files",
+                "code": "coverage.unreadable",
+                "level": "coverage_incomplete",
+                "message": "One file was not evaluated.",
+                "path": "results/vendor.bin",
+                "line": None,
+            }
+        ],
+    },
+]
+
+
 def preparation(status="stored_pending_verification"):
     return {
         "put_attempt_id": PUT,
         "admission_id": ADMISSION if status == "ready" else None,
         "submission_bundle_preparation_status": status,
         "replayed": status == "ready",
+        "pre_submission_results": INTAKE_FEEDBACK,
     }
 
 
@@ -140,6 +179,49 @@ def test_explicit_prepare_replay_then_create_preserves_packet_and_bytes(cli, tmp
             f"/api/v1/tasks/{TASK}/submissions",
             "Bearer " + TOKEN,
         )
+
+
+def test_admitted_preparation_shows_nonblocking_intake_feedback(cli, tmp_path):
+    path = tmp_path / "submission.zip"
+    path.write_bytes(b"PK\x03\x04feedback")
+    human = prepare_args(path)[:-2]
+    with http_fixture() as (origin, response, requests):
+        respond(response, preparation("ready"), 202)
+        result = cli(origin, TOKEN, *human)
+        assert result.returncode == 0, result.stderr
+        receipt_line = result.stdout.splitlines()[0]
+        assert receipt_line.startswith("Preparation receipt")
+        assert "pre_submission_results" not in receipt_line
+        assert "Intake feedback: warning submission_summary_missing" in result.stdout
+        assert (
+            "Intake feedback: coverage_incomplete coverage.files results/vendor.bin: "
+            "One file was not evaluated." in result.stdout
+        )
+        # An admitted receipt cannot carry blocking results or omit its feedback.
+        blocked_check = copy.deepcopy(INTAKE_FEEDBACK)
+        blocked_check[0] |= {
+            "status": "failed",
+            "failure_code": "secret_detected",
+            "finding_count": 1,
+        }
+        error_finding = copy.deepcopy(INTAKE_FEEDBACK)
+        error_finding[2]["findings"][0]["level"] = "error"
+        failed_member = copy.deepcopy(INTAKE_FEEDBACK)
+        failed_member[2]["status"] = "failed"
+        missing = preparation("ready")
+        missing.pop("pre_submission_results")
+        for invalid in (
+            preparation("ready") | {"pre_submission_results": blocked_check},
+            preparation("ready") | {"pre_submission_results": error_finding},
+            preparation("ready") | {"pre_submission_results": failed_member},
+            preparation("ready") | {"pre_submission_results": None},
+            missing,
+        ):
+            respond(response, invalid, 202)
+            assert_failure(
+                cli(origin, TOKEN, *prepare_args(path)), "invalid_api_response"
+            )
+        assert len(requests) == 6
 
 
 def test_revision_prepare_requires_and_replays_exact_acknowledgement_headers(
@@ -331,10 +413,12 @@ def test_preparation_feedback_is_closed_safe_and_not_a_submission(cli, tmp_path)
                 "status": "failed",
                 "findings": [
                     {
+                        "check_id": "quality.output",
                         "code": "quality",
                         "level": "error",
                         "message": "Fix \u202eunsafe\x1b text",
                         "path": "../../not-a-local-file",
+                        "line": 2,
                     }
                 ],
             }
@@ -419,15 +503,67 @@ def test_submission_history_and_findings_are_bounded_and_preserve_evidence(cli):
         assert result.returncode == 0 and json.loads(result.stdout) == CHECKER
         assert requests[-1][1] == f"/api/v1/submissions/{SUBMISSION}/checker-runs/{RUN}"
         assert len(requests) == 4
+        coverage = CHECKER | {
+            "results": [
+                CHECKER["results"][0]
+                | {
+                    "id": ASSIGNMENT,
+                    "check_id": "coverage.files",
+                    "path": None,
+                    "line": None,
+                    "status": "coverage_incomplete",
+                    "severity": "medium",
+                }
+            ]
+        }
+        respond(response, coverage)
+        shown = cli(
+            origin,
+            TOKEN,
+            "submission",
+            "findings",
+            SUBMISSION,
+            "--run",
+            RUN,
+            "-o",
+            "json",
+        )
+        assert shown.returncode == 0 and json.loads(shown.stdout) == coverage, (
+            shown.stderr
+        )
+
+
+DECIDED = "2026-10-14T11:00:00Z"
 
 
 def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
     with http_fixture() as (origin, response, _):
         for history in (
-            {key: value for key, value in HISTORY.items() if key != "status_reason"},
             HISTORY,
+            HISTORY | {"status": "review_pending"},
+            HISTORY | {"status": "accepted", "decided_at": DECIDED},
             HISTORY
-            | {"status": "rejected", "status_reason": "revision_deadline_expired"},
+            | {
+                "status": "needs_revision",
+                "decided_at": DECIDED,
+                "finding_counts": {
+                    "blocking": 2,
+                    "warning": 1,
+                    "coverage_incomplete": 1,
+                },
+            },
+            HISTORY
+            | {
+                "status": "rejected",
+                "status_reason": "revision_deadline_expired",
+                "decided_at": DECIDED,
+            },
+            HISTORY
+            | {
+                "status": "needs_revision",
+                "status_reason": "checker_coverage_incomplete",
+                "decided_at": DECIDED,
+            },
         ):
             respond(response, history)
             result = cli(origin, TOKEN, "submission", "show", SUBMISSION, "-o", "json")
@@ -445,9 +581,36 @@ def test_submission_history_displays_only_exact_revision_deadline_reason(cli):
             ]
         for history in (
             HISTORY | {"status_reason": "revision_deadline_expired"},
-            HISTORY | {"status": "rejected", "status_reason": "other"},
-            HISTORY | {"status": "rejected", "status_reason": ""},
-            HISTORY | {"status": "rejected", "status_reason": 1},
+            HISTORY
+            | {"status": "rejected", "decided_at": DECIDED, "status_reason": "other"},
+            HISTORY
+            | {"status": "rejected", "decided_at": DECIDED, "status_reason": ""},
+            HISTORY | {"status": "rejected", "decided_at": DECIDED, "status_reason": 1},
+            HISTORY | {"status": "submitted"},
+            HISTORY
+            | {
+                "status": "accepted",
+                "decided_at": DECIDED,
+                "status_reason": "checker_coverage_incomplete",
+            },
+            HISTORY
+            | {
+                "status": "needs_revision",
+                "decided_at": DECIDED,
+                "status_reason": "revision_deadline_expired",
+            },
+            HISTORY | {"status": "accepted"},
+            HISTORY | {"decided_at": DECIDED},
+            HISTORY
+            | {
+                "finding_counts": {
+                    "blocking": -1,
+                    "warning": 0,
+                    "coverage_incomplete": 0,
+                }
+            },
+            HISTORY | {"finding_counts": {"blocking": 0, "warning": 0}},
+            {key: value for key, value in HISTORY.items() if key != "status_reason"},
         ):
             respond(response, history)
             assert_failure(
@@ -481,12 +644,18 @@ def test_submission_reads_reject_substitution_private_fields_and_duplicate_ident
                 cli(origin, TOKEN, "task", "submissions", TASK, "-o", "json"),
                 "invalid_api_response",
             )
+        result = CHECKER["results"][0]
         for change in (
             {"submission_id": KEY},
             {"id": KEY},
             {"results": [None]},
             {"attempt_number": None},
             {"raw_output": "private"},
+            {"results": [result | {"line": 4, "path": None}]},
+            {"results": [result | {"line": 0}]},
+            {"results": [result | {"check_id": ""}]},
+            {"results": [{k: v for k, v in result.items() if k != "check_id"}]},
+            {"results": [result | {"status": "not_run"}]},
         ):
             respond(response, CHECKER | change)
             assert_failure(

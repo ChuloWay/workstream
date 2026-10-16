@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.tasks.submission_attempts import COVERAGE_RETURN_REASON
 from app.modules.tasks.api import (
     SubmissionCreationRequest, SubmissionCreationUnavailable, SubmissionPredecessorFacts,
     TaskLockedProjectContextReferences, TaskPolicyLineage, TaskSubmissionContextFacts,
@@ -69,6 +70,7 @@ async def read_creation_replay(
         revision_round = await session.scalar(select(func.count(Submission.id)).where(
             Submission.task_assignment_id == submission.task_assignment_id,
             Submission.version <= original.version,
+            Submission.status_reason.is_distinct_from(COVERAGE_RETURN_REASON),
         ))
         predecessor = SubmissionPredecessorFacts(
             request.predecessor_submission_id, original.version, revision_round
