@@ -1001,3 +1001,13 @@ become governed guide, policy, template, or checker changes before they affect
 future work. Project activation, task screening, submission quality, review,
 contribution recognition, and conditional fulfillment remain distinct gates
 even though they form one end-to-end v0.1 lifecycle.
+
+## License
+
+Workstream is licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`).
+
+If you modify Workstream and let users interact with the modified version over
+a network, AGPLv3 requires offering those users the corresponding source under
+the license terms. Third-party packages and incorporated material remain under
+their respective licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
