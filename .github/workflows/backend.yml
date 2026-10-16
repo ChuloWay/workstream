@@ -395,7 +395,7 @@ jobs:
             --lane "${{ matrix.lane }}" \
             --metadata-dir ".ci/lane-bundle/${{ matrix.lane }}/metadata" \
             --summary-json ".ci/lane-bundle/${{ matrix.lane }}/summary.json" \
-            --timeout-seconds 1200
+            --timeout-seconds 1500
 
       - name: Bind lane bundle timing
         if: ${{ always() }}
@@ -589,7 +589,7 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           coverage_files=(.ci/test-lanes/run/.coverage.*)
-          test "${#coverage_files[@]}" -eq 13
+          test "${#coverage_files[@]}" -eq 16
           for source in "${coverage_files[@]}"; do
             destination="$(basename "${source}")"
             test -f "${source}"
@@ -668,7 +668,7 @@ jobs:
               raise SystemExit("hosted evidence head drift")
 
           lanes = summary.get("lanes")
-          if not isinstance(lanes, list) or len(lanes) != 13:
+          if not isinstance(lanes, list) or len(lanes) != 16:
               raise SystemExit("invalid hosted lane inventory")
           collected: list[str] = []
           completed: list[str] = []
