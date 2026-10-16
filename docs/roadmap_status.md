@@ -402,7 +402,7 @@ cannot be reused as post-submission review-gate evidence. See the
   skipped/deselected tests and requires behavior, boundary and real API proof.
   Coverage is diagnostic only, with no percentage gate or test-count target.
   Redundant coverage-only reruns are removed; their tests remain in full-suite lanes.
-  Its 13-lane allocation uses five project lanes, four task lanes, three
+  Its 16-lane allocation uses seven project lanes, five task lanes, three
   shared-foundation lanes and one schema lane. Backend preflight, suite and
   aggregate commands use the checked, frozen dependency lock. Database resets
   batch trigger commands within the existing transaction while retaining full schema checks;

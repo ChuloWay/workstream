@@ -24,7 +24,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     runner.validate_lane_inventory(discovered)
 
     assigned = [module for lane in LANES for module in lane.modules]
-    assert len(LANES) == 13
+    assert len(LANES) == 16
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(
@@ -133,7 +133,8 @@ def test_project_intake_partitions_across_the_project_family() -> None:
     assert catalogue.PARTITION_LANES_BY_MODULE["tests/test_projects.py"] == (
         "project_lifecycle_c",
         "project_lifecycle_b",
-        "project_lifecycle_d",
+        "project_lifecycle_g",
+        "project_lifecycle_f",
     )
 
     for module in expected:
@@ -167,6 +168,8 @@ def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
                 "project_lifecycle_c",
                 "project_lifecycle_d",
                 "project_lifecycle_e",
+                "project_lifecycle_f",
+                "project_lifecycle_g",
             ),
             catalogue.PROJECT_PARTITIONED_MODULES,
         ),
@@ -176,6 +179,7 @@ def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
                 "task_lifecycle_b",
                 "task_lifecycle_c",
                 "task_lifecycle_d",
+                "task_lifecycle_e",
             ),
             catalogue.TASK_MODULES,
         ),
@@ -286,7 +290,8 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
         "tests/test_projects.py": (
             "project_lifecycle_c",
             "project_lifecycle_b",
-            "project_lifecycle_d",
+            "project_lifecycle_g",
+            "project_lifecycle_f",
         ),
         "tests/tasks/test_task_batch_transitions.py": (
             "project_lifecycle_e",
@@ -295,19 +300,19 @@ def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
             "project_lifecycle_b",
             "project_lifecycle_c",
         ),
-        "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_b",),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_f",),
         "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
             "project_lifecycle_a",
             "project_lifecycle_c",
-            "project_lifecycle_d",
+            "project_lifecycle_g",
         ),
         "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
             "project_lifecycle_a",
             "project_lifecycle_c",
-            "project_lifecycle_d",
             "project_lifecycle_e",
+            "project_lifecycle_f",
         ),
-        "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
+        "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_g",),
         "tests/tasks/submission_dispatch/test_revision_expiry.py": (
             "project_lifecycle_a",
             "project_lifecycle_e",
@@ -335,7 +340,7 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
     )
     assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "e0c8672b13522e025542740cda87527a3a46bb2fef8a4de0bfccb51853f609a2"
+        "1af35702d873709f8404e0b21c7a5bef706d7483d8a6ef4db87b34a1aec463de"
     )
 
 
@@ -355,19 +360,19 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
     retained_module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
     expected = {
         f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[False]": (
-            "project_lifecycle_d"
+            "project_lifecycle_e"
         ),
         f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[True]": (
             "project_lifecycle_c"
         ),
         f"{pause_module}::test_expiry_beats_real_pm_repair_waiting_for_task_past_deadline": (
-            "project_lifecycle_e"
+            "project_lifecycle_f"
         ),
         f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]": (
             "project_lifecycle_a"
         ),
         f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[True]": (
-            "project_lifecycle_d"
+            "project_lifecycle_g"
         ),
         "tests/tasks/submission_dispatch/test_revision_expiry.py::test_due_expiry_and_ready_final_submission_wait_for_task_lock": (
             "project_lifecycle_b"
@@ -385,31 +390,31 @@ def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> No
             "project_lifecycle_b"
         ),
         "tests/test_projects.py::test_submission_artifact_policy_removed_agent_route_performs_no_runtime_calls": (
-            "project_lifecycle_c"
+            "project_lifecycle_g"
         ),
         "tests/test_projects.py::test_submission_artifact_policy_update_conceals_foreign_policy_id": (
-            "project_lifecycle_d"
+            "project_lifecycle_g"
         ),
         "tests/test_projects.py::test_submission_artifact_policy_update_fault_rolls_back_replacement": (
-            "project_lifecycle_b"
+            "project_lifecycle_c"
         ),
         "tests/test_projects.py::test_sufficiency_report_rejects_unknown_request_fields": (
-            "project_lifecycle_b"
+            "project_lifecycle_f"
         ),
         "tests/test_projects.py::test_unified_warnings_do_not_use_the_manual_report_acknowledgement_path": (
-            "project_lifecycle_b"
+            "project_lifecycle_f"
         ),
         "tests/test_projects.py::test_worker_cannot_create_project_records": (
-            "project_lifecycle_d"
+            "project_lifecycle_b"
         ),
         "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_direct_sql_cannot_supply_authoritative_clock_values": (
-            "project_lifecycle_b"
+            "project_lifecycle_f"
         ),
         "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_large_revision_allowance_preserves_every_microsecond": (
-            "project_lifecycle_b"
+            "project_lifecycle_f"
         ),
         "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_pause_cannot_commit_after_running_parent_deadline": (
-            "project_lifecycle_b"
+            "project_lifecycle_f"
         ),
     }
     rows = runner.build_manifest("a" * 40, list(reversed(expected)))["nodes"]
@@ -673,7 +678,7 @@ def test_partition_accepts_exact_noncanonical_owner_order() -> None:
         "project_lifecycle_b",
         "project_lifecycle_c",
     )
-    assert attached == catalogue.PARTITIONED_PROJECT_LANES
+    assert attached == catalogue.PARTITIONED_PROJECT_LANES[:5]
     node = f"{module}::test_public_source_import_screen_release_complete_journey[500]"
     assert runner.build_manifest("a" * 40, [node])["nodes"][0]["lane"] == declared[2]
 
@@ -751,8 +756,8 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
     assert '--expected-head "${GITHUB_SHA}"' in source
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
-    assert 'test "${#coverage_files[@]}" -eq 13' in source
-    assert "len(lanes) != 13" in source
+    assert 'test "${#coverage_files[@]}" -eq 16' in source
+    assert "len(lanes) != 16" in source
     assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
     assert 'timing_path = bundle / "job-start-epoch.txt"' in source
     assert (
