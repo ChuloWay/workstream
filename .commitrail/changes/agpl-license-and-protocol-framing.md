@@ -32,7 +32,8 @@ governed contribution infrastructure.
   `THIRD_PARTY_NOTICES.md`, the README License section, the CONTRIBUTING
   contribution grant, and PEP 639 metadata in `backend/pyproject.toml`
   (`license`, `license-files`, `setuptools>=77`) and `mcp_server/pyproject.toml`
-  (`license`, `license-files`).
+  (`license`, `license-files`), and the `external_checkers/Cargo.toml`
+  workspace license, which changes from `Apache-2.0` to `AGPL-3.0-only`.
 - Framing: `docs/protocol-and-implementation.md` and protocol wording in
   `AGENTS.md`, `README.md`, `docs/glossary.md`, `docs/principles.md`,
   `docs/product_principles.md`, and `docs/architecture_lockdown.md`.
@@ -69,9 +70,10 @@ ReviewPolicy sets `human_review_required: false`.
 
 - [x] `LICENSE`, `backend/LICENSE`, and `mcp_server/LICENSE` are the
       byte-identical canonical AGPLv3.
-- [x] README, CONTRIBUTING, and both package metadata files declare
-      `AGPL-3.0-only`.
-- [x] Third-party notices cover the backend and MCP dependency sets,
+- [x] README, CONTRIBUTING, both Python package metadata files, and the
+      external-checker Cargo workspace declare `AGPL-3.0-only`.
+- [x] Third-party notices cover the backend, MCP, external-checker, and Go CLI
+      dependency sets, list the Go CLI modules with their licenses,
       distinguish installed dependencies from bundled material, and disclaim a
       complete transitive inventory.
 - [x] Current-implementation wording does not claim live fulfillment or
@@ -109,6 +111,10 @@ described as current behavior; the orchestration diagram limited core checks
 to deterministic checks; the notice and license metadata omitted the
 independently packaged MCP adapter. Open as a human gate: confirmation of
 authority to license existing contributions.
+
+Maintainer review asked to relicense the external-checker Cargo workspace from
+`Apache-2.0` to `AGPL-3.0-only`, because the checkers are part of Workstream
+and maintained by the same team, and to list the Go CLI modules. Both are done.
 
 ## Reconciliation
 
