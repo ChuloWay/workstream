@@ -1,10 +1,16 @@
 # Workstream
 
-Workstream is governed contribution infrastructure for coordinating, verifying,
-and recording work performed by humans, AI agents, or both. It transforms
+Workstream defines a shared protocol for governed work and provides the
+software that implements it. It coordinates, verifies, and records work
+performed by humans, AI agents, or both. It transforms
 project-defined tasks, immutable submissions, policy-governed checks, and
 policy-governed acceptance into trusted `ContributionRecord` facts that applications,
 organizations, and economic systems can consume.
+
+The protocol defines valid lifecycle actions and records; the software
+enforces those rules. A standalone versioned protocol specification and
+conformance suite remain formalization work, not delivered interoperability
+claims. See [Protocol And Implementation](docs/protocol-and-implementation.md).
 
 Workstream governs the work lifecycle; it does not need to own the system that
 requested the work, the tools used to complete it, the identity provider, or
@@ -136,6 +142,20 @@ External origin onboarding, external task-routing systems, and execution workspa
 later adapters. Revision and reassignment belong to the governed lifecycle;
 adjudication remains a separately approved future capability rather than a
 claim about current v0.1 behavior.
+
+## Long-Term Intelligent Orchestration Direction
+
+After the governed v0.1 lifecycle is proven, a future orchestration adapter may
+propose task dependencies and contributor matches for work distributed across
+humans and AI agents. Existing Workstream services would still authorize and
+version tasks and assignments, bind artifacts and checks, record Reviews and
+revisions, and create contribution facts under the canonical lifecycle.
+
+This is a research hypothesis, not current or planned runtime behavior.
+Execution remains in a source application such as Garden or another external
+host. See the [Product Brief](docs/product_brief.md#future-research-hypothesis-accountable-orchestration)
+for the canonical hypothesis. Current availability is governed only by
+[Current v0.1 Status](docs/roadmap_status.md).
 
 ## Product Boundary
 

@@ -2,6 +2,11 @@
 
 ## 1. Workstream Governs Contribution Truth
 
+Workstream defines a shared protocol for governed work and provides its
+software implementation. The protocol specifies valid actions and records;
+the implementation enforces them. The distinction and remaining formalization
+work are described in [Protocol And Implementation](protocol-and-implementation.md).
+
 Workstream does not need to own the source application or execution workspace.
 Humans and agents can work in terminals, editors, notebooks, external
 platforms, or local repositories. Workstream governs the rules, artifact
@@ -131,3 +136,52 @@ internal lifecycle. Marketplace experiences, source adapters, external client
 surfaces, blockchain settlement, and a public reputation network come after the
 core loop works. They remain consumers or adapters, not alternate sources of
 Workstream lifecycle truth.
+
+## 11. Intelligence Proposes; Governed Authority Decides
+
+Future orchestration intelligence may propose outcome decomposition, candidate
+matches, exception classifications, evidence gaps, and recovery plans. It does
+not create task authority, contribution truth, adverse reputation, nonpayment,
+misconduct findings, or appeal decisions.
+
+Hard constraints remain deterministic and versioned. Material decisions remain
+attributable to an explicitly authorized actor under the applicable future
+policy. Every recommendation must preserve its
+inputs, evidence, uncertainty, alternatives, model or rule version, and
+accountable approver.
+
+## 12. Dependencies Stay Bounded
+
+Complex outcomes may produce versioned task dependencies and, only when pilot
+evidence requires it, a directed acyclic graph. Every child task inherits parent
+legal, privacy, safety, budget, tool, data, and acceptance constraints. Every
+task has an authorized owner; every multi-task outcome has an integration owner
+in the external execution host.
+
+Unrestricted recursive delegation, invisible subagent spawning, and dependency
+growth that creates unauthorized work or exceeds an applicable approved budget
+are prohibited. Released dependency changes are prospective and never rewrite
+frozen assignments or evidence.
+
+## 13. Matching Uses Plural Evidence, Not A Global Score
+
+Future matching first applies eligibility and conflict rules, then produces an
+explainable shortlist from task-specific capability evidence, recency,
+uncertainty, availability, cost, collaboration needs, and concentration.
+Capability, authority, reputation, availability, price, and conflicts remain
+separate.
+
+Participants may decline work without reputation penalty. Qualified newcomers
+must have bounded opportunities to earn evidence. Workstream does not turn
+historical reputation into a permanent labour caste.
+
+## 14. Automation Earns And Can Lose Authority
+
+New planning and routing behavior begins in shadow mode against a human-curated
+baseline. It expands only after repeated healthy outcomes and contracts when
+quality, fairness, safety, privacy, concentration, appeals, or economics cross
+declared limits.
+
+Canonical records remain available during an automation stop. Operations fall
+back to manual queueing and authorized review instead of failing closed around
+an unavailable or unsafe model.
