@@ -179,7 +179,9 @@ async def test_fresh_blocked_failure_pauses_full_budget_and_is_visible_to_pm(
             mine = await client.get("/api/v1/actors/me/assignments", params={"state": "active"})
             assert mine.status_code == 200, mine.text
             [item] = mine.json()["items"]
-            assert item["revision"] == view and item["next_action"] == "none"
+            present = {name: value for name, value in item["revision"].items() if value is not None}
+            assert present == {name: value for name, value in view.items() if value is not None}
+            assert item["next_action"] == "none"
 
 
 async def _fixture_historical_missing_root(

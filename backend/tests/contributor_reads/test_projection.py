@@ -11,6 +11,10 @@ from tests.test_tasks import set_dev_actor
 from .support import ME, OWNER, as_actor, get_ok, preparations_path, submitted_case
 
 
+def _present(view):
+    return {name: value for name, value in view.items() if value is not None}
+
+
 async def test_projects_list_exact_grant_roles_and_active_guide(task_client, monkeypatch):
     project, _task, _submission = await submitted_case(task_client, monkeypatch)
     await as_actor(task_client, monkeypatch, OWNER)
@@ -41,7 +45,8 @@ async def test_assignment_revision_fields_equal_work_context(task_client, monkey
     await as_actor(task_client, monkeypatch, OWNER)
     context = (await get_ok(task_client, f"/api/v1/tasks/{task}/work-context"))["revision_context"]
     [item] = (await get_ok(task_client, f"{ME}/assignments"))["items"]
-    assert item["revision"] == context
+    # The work-context route omits null fields; the values are the same projection.
+    assert _present(item["revision"]) == _present(context)
     assert item["task_status"] == "needs_revision"
     assert item["next_action"] == ("revise" if context["disposition"] == "ready" else "none")
 
