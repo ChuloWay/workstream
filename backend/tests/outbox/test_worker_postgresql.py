@@ -198,11 +198,15 @@ async def test_production_registry_claims_only_registered_features(delivery_harn
         ("TaskAssignmentAuthorityInvalidationRequested", 1),
         ("TaskRevisionExpiryRequested", 1),
         ("TaskRevisionExpired", 1),
+        ("TaskRevisionContextBlocked", 1),
+        ("TaskRevisionExhausted", 1),
         (REQUEST_EVENT, 1),
         (COMPLETION_EVENT, 1),
     )
     assert production._registry.can_retry_unknown("TaskRevisionExpiryRequested", 1)
     assert production._registry.can_retry_unknown("TaskRevisionExpired", 1)
+    assert production._registry.can_retry_unknown("TaskRevisionContextBlocked", 1)
+    assert production._registry.can_retry_unknown("TaskRevisionExhausted", 1)
     assert not production._registry.can_retry_unknown(REQUEST_EVENT, 1)
     assert not production._registry.can_retry_unknown(COMPLETION_EVENT, 1)
     assert (await production.candidates()).items == ()

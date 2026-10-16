@@ -1,10 +1,14 @@
 """Store attempt outcomes, assignment start and per-finding checker evidence."""
 
+import json
+import re
+import unicodedata
+
 from alembic import op
 from sqlalchemy import text
 
-revision = "0048_attempt_outcome_findings"
-down_revision = "0047_revision_recovery"
+revision = "0049_attempt_outcome_findings"
+down_revision = "0048_revision_exhaustion"
 branch_labels = None
 depends_on = None
 
@@ -32,6 +36,67 @@ def _execute_script(script):
             statement = []
     if "".join(statement).strip():
         raise RuntimeError("unterminated attempt outcome migration statement")
+
+
+# Frozen copy of the finding rules this revision makes required, so the
+# precondition keeps its meaning if the live contract later changes.
+_IDENTIFIER = re.compile(r"[a-z][a-z0-9_.-]{0,99}")
+_RETAINED_FINDINGS = """
+SELECT 'checker_runs' AS store, r.id::text AS row_id, f.value::text AS finding
+  FROM public.checker_runs r
+  CROSS JOIN LATERAL jsonb_path_query(r.result_json::jsonb,
+    'lax $.execution.external_members[*].result.findings[*]') f(value)
+  WHERE r.result_json IS NOT NULL
+UNION ALL
+SELECT 'selected_pre_submit_runs', p.id::text, f.value::text
+  FROM public.selected_pre_submit_runs p
+  CROSS JOIN LATERAL jsonb_path_query(p.terminal_json,
+    'lax $.execution.external_members[*].result.findings[*]') f(value)
+  WHERE p.terminal_json IS NOT NULL
+"""
+
+
+def _finding_current(finding):
+    """Whether a retained finding satisfies the attributable, safe-location contract."""
+    check_id, path = finding.get("check_id"), finding.get("path")
+    if not (isinstance(check_id, str) and _IDENTIFIER.fullmatch(check_id)):
+        return False
+    if path is None:
+        return finding.get("line") is None
+    if not isinstance(path, str):
+        return False
+    parts = path.split("/")
+    return not (
+        "\\" in path or path.startswith("/")
+        or any(unicodedata.category(character) in {"Cc", "Cf", "Zl", "Zp"} for character in path)
+        or any(part in {"", ".", ".."} or part.endswith((" ", ".")) for part in parts)
+        or ":" in parts[0]
+    )
+
+
+def refuse_incompatible_retained_findings(bind):
+    """Refuse the upgrade, before any change, while retained results would fail replay.
+
+    Retained checker results and selected PRE terminals are immutable,
+    digest-bound evidence: exact replay and completion delivery re-validate them
+    against the finding contract this revision requires. Rewriting them would
+    forge evidence, so v0.1 has no transition; such a database is recreated.
+    """
+    stale = {}
+    for store, row_id, body in bind.execute(text(_RETAINED_FINDINGS)):
+        finding = json.loads(body)
+        if not (isinstance(finding, dict) and _finding_current(finding)):
+            stale.setdefault(store, set()).add(row_id)
+    if stale:
+        detail = "; ".join(
+            f"{store}: {len(ids)} rows (e.g. {', '.join(sorted(ids)[:3])})"
+            for store, ids in sorted(stale.items())
+        )
+        raise RuntimeError(
+            "retained checker findings lack the required check_id or a safe path, so "
+            f"replay would reject them ({detail}); Workstream v0.1 requires a fresh "
+            "database; recreate this database before running the 0001_uuid7_v01 migration"
+        )
 
 
 _FINDINGS_TABLE = """
@@ -149,6 +214,47 @@ _TERMINAL_REPLACEMENTS = (
     ),
 )
 
+# One definition of a coverage return, of an attempt's round and of a root
+# revision window, shared by every guard that needs them.
+ROUND_HELPERS = """
+CREATE FUNCTION public.checker_run_coverage_return(run uuid) RETURNS boolean
+LANGUAGE sql STABLE SET search_path=pg_catalog,public,pg_temp AS $$
+  SELECT coalesce((SELECT r.failed_count=0 AND EXISTS (
+      SELECT 1 FROM public.checker_result_findings f
+      WHERE f.checker_run_id=r.id AND f.level='coverage_incomplete')
+    FROM public.checker_runs r WHERE r.id=run), false)
+$$;
+
+CREATE FUNCTION public.submission_revision_round(assignment uuid, through_version integer)
+RETURNS bigint LANGUAGE sql STABLE SET search_path=pg_catalog,public,pg_temp AS $$
+  SELECT count(*)-1 FROM public.submissions counted
+  WHERE counted.task_assignment_id=assignment AND counted.version<=through_version
+    AND counted.status_reason IS DISTINCT FROM 'checker_coverage_incomplete'
+$$;
+
+-- Consecutive coverage returns keep the first return's window; any other
+-- source opens a fresh locked-policy window at routing.
+CREATE FUNCTION public.revision_window_origin(manifest uuid,
+  OUT requested_at timestamptz, OUT deadline_at timestamptz, OUT inherited boolean)
+LANGUAGE sql STABLE SET search_path=pg_catalog,public,pg_temp AS $$
+  SELECT CASE WHEN head.id IS NULL THEN m.created_at ELSE head.requested_at END,
+    CASE WHEN head.id IS NULL
+      THEN m.created_at+make_interval(hours=>policy.revision_deadline_hours)
+      ELSE head.deadline_at END,
+    head.id IS NOT NULL
+  FROM public.task_post_submit_routing_manifests m
+  JOIN public.submissions s ON s.id=m.submission_id
+  JOIN public.revision_policies policy ON policy.id=s.locked_revision_policy_id
+  LEFT JOIN public.submissions previous ON previous.id=s.supersedes_submission_id
+    AND s.status_reason='checker_coverage_incomplete'
+    AND previous.status_reason='checker_coverage_incomplete'
+  LEFT JOIN public.task_revision_preparations head ON head.submission_id=previous.id
+    AND NOT EXISTS (SELECT 1 FROM public.task_revision_preparations child
+      WHERE child.predecessor_id=head.id)
+  WHERE m.id=manifest
+$$;
+"""
+
 # A coverage return spends no revision round: neither round count includes it.
 _ROUND_COUNTS = {
     "public.guard_submission_revision_capacity()": (
@@ -164,24 +270,28 @@ _ROUND_COUNTS = {
         (
             " auth_context jsonb; auth_digest text; source_round integer;",
             " auth_context jsonb; auth_digest text; source_round integer;\n"
-            " window_requested_at timestamptz; window_deadline_at timestamptz;",
+            " window_requested_at timestamptz; window_deadline_at timestamptz; window_inherited boolean;",
         ),
         (
             """   IF NEW.sequence<>1 OR NEW.requested_at IS DISTINCT FROM m.created_at
-    OR NEW.deadline_at IS DISTINCT FROM m.created_at + make_interval(hours=>policy.revision_deadline_hours)""",
-            """   -- Consecutive coverage returns keep the first return's revision window.
-   SELECT inherited.requested_at, inherited.deadline_at
-     INTO window_requested_at, window_deadline_at
-     FROM public.submissions previous
-     JOIN public.task_revision_preparations inherited ON inherited.submission_id=previous.id
-     WHERE s.status_reason='checker_coverage_incomplete'
-       AND previous.id=s.supersedes_submission_id
-       AND previous.status_reason='checker_coverage_incomplete'
-     ORDER BY inherited.sequence LIMIT 1;
-   IF NEW.sequence<>1
-    OR NEW.requested_at IS DISTINCT FROM coalesce(window_requested_at, m.created_at)
-    OR NEW.deadline_at IS DISTINCT FROM coalesce(window_deadline_at,
-         m.created_at + make_interval(hours=>policy.revision_deadline_hours))""",
+    OR (NEW.deadline_at IS NOT NULL AND NEW.deadline_at IS DISTINCT FROM
+          m.created_at + make_interval(hours=>policy.revision_deadline_hours))
+    OR (NEW.deadline_at IS NULL AND NEW.remaining_microseconds IS DISTINCT FROM
+      CASE WHEN NEW.repair_actor_id IS NULL AND EXISTS(""",
+            """   SELECT w.requested_at, w.deadline_at, w.inherited
+     INTO window_requested_at, window_deadline_at, window_inherited
+     FROM public.revision_window_origin(m.id) w;
+   IF NEW.sequence<>1 OR NEW.requested_at IS DISTINCT FROM window_requested_at
+    OR (NEW.deadline_at IS NOT NULL AND NEW.deadline_at IS DISTINCT FROM window_deadline_at)
+    OR (NEW.deadline_at IS NULL AND NEW.remaining_microseconds IS DISTINCT FROM
+      CASE WHEN NOT window_inherited AND NEW.repair_actor_id IS NULL AND EXISTS(""",
+        ),
+        (
+            """      ELSE floor(extract(epoch FROM (m.created_at
+       +make_interval(hours=>policy.revision_deadline_hours)-NEW.clock_observed_at))*1000000)::bigint END)
+    OR NEW.max_revision_rounds IS DISTINCT FROM policy.max_revision_rounds""",
+            """      ELSE floor(extract(epoch FROM (window_deadline_at-NEW.clock_observed_at))*1000000)::bigint END)
+    OR NEW.max_revision_rounds IS DISTINCT FROM policy.max_revision_rounds""",
         ),
         (
             """ WHERE counted.task_assignment_id=NEW.assignment_id
@@ -193,12 +303,73 @@ _ROUND_COUNTS = {
     ),
 }
 
+# #573's exhaustion guards count rounds with the shared helper, and a coverage
+# return never exhausts: it spends no round and is bounded by its window.
+_EXHAUSTION_ROUNDS = {
+    "public.task_routing_context_valid(public.task_post_submit_routing_manifests)": (
+        (
+            """'revision_round',(SELECT count(*)-1 FROM public.submissions counted
+              WHERE counted.task_assignment_id=m.assignment_id AND counted.version<=s.version),""",
+            "'revision_round',public.submission_revision_round(m.assignment_id,s.version),",
+        ),
+    ),
+    "public.guard_task_routing_authority()": (
+        (
+            """            AND (SELECT count(*)-1 FROM public.submissions counted
+              WHERE counted.task_assignment_id=NEW.assignment_id AND counted.version<=s.version)
+              >=p.max_revision_rounds""",
+            """            AND public.submission_revision_round(NEW.assignment_id,s.version)>=p.max_revision_rounds
+            AND NOT public.checker_run_coverage_return(NEW.checker_run_id)""",
+        ),
+    ),
+    "public.guard_task_revision_exhaustion()": (
+        (
+            """ SELECT count(*)-1 INTO actual_round FROM public.submissions
+  WHERE task_assignment_id=NEW.assignment_id AND version<=s.version;""",
+            " actual_round:=public.submission_revision_round(NEW.assignment_id,s.version);",
+        ),
+        (
+            "  OR m.routing_recommendation<>'needs_revision'\n",
+            "  OR m.routing_recommendation<>'needs_revision'"
+            " OR public.checker_run_coverage_return(m.checker_run_id)\n",
+        ),
+    ),
+    "public.task_revision_exhaustion_complete(uuid)": (
+        (
+            """  OR e.revision_round IS DISTINCT FROM (SELECT count(*)-1 FROM public.submissions counted
+     WHERE counted.task_assignment_id=e.assignment_id AND counted.version<=s.version)""",
+            "  OR e.revision_round IS DISTINCT FROM public.submission_revision_round(e.assignment_id,s.version)",
+        ),
+    ),
+    "public.guard_task_revision_expiration()": (
+        (
+            """    AND (SELECT count(*)-1 FROM public.submissions attempt
+      WHERE attempt.task_assignment_id=source.task_assignment_id
+       AND attempt.version<=source.version)>=policy.max_revision_rounds) THEN""",
+            """    AND public.submission_revision_round(source.task_assignment_id,source.version)
+      >=policy.max_revision_rounds) THEN""",
+        ),
+    ),
+    "public.project_revision_preparation_clock()": (
+        (" blocked boolean;", " blocked boolean; inherited boolean;"),
+        (
+            " original_deadline:=m.created_at+make_interval(hours=>policy.revision_deadline_hours);",
+            " SELECT w.deadline_at, w.inherited INTO original_deadline, inherited\n"
+            "  FROM public.revision_window_origin(m.id) w;",
+        ),
+        (
+            "   NEW.remaining_microseconds:=CASE WHEN NEW.repair_actor_id IS NULL AND EXISTS(",
+            "   NEW.remaining_microseconds:=CASE WHEN NOT inherited AND NEW.repair_actor_id IS NULL AND EXISTS(",
+        ),
+    ),
+}
+
 _ROUND_ZERO = """
 ALTER TABLE public.task_revision_preparations
   DROP CONSTRAINT ck_task_revision_preparations_positive_rounds,
   ADD CONSTRAINT ck_task_revision_preparations_positive_rounds CHECK (
     sequence > 0 AND source_submission_version > 0 AND next_revision_round >= 0
-    AND max_revision_rounds > 0);
+    AND max_revision_rounds >= 0);
 """
 
 # Backfills replay what each deciding owner would have written; tests run them
@@ -209,16 +380,16 @@ UPDATE public.submissions s SET attempt_status='review_pending'
   WHERE m.submission_id=s.id AND m.routing_recommendation='allow_review'
     AND m.human_review_required;
 UPDATE public.submissions s SET attempt_status='needs_revision', decided_at=m.created_at,
-    status_reason=CASE WHEN r.failed_count=0 AND EXISTS (
-      SELECT 1 FROM public.checker_result_findings f
-      WHERE f.checker_run_id=r.id AND f.level='coverage_incomplete')
+    status_reason=CASE WHEN public.checker_run_coverage_return(m.checker_run_id)
       THEN 'checker_coverage_incomplete' END
   FROM public.task_post_submit_routing_manifests m
-  JOIN public.checker_runs r ON r.id=m.checker_run_id
   WHERE m.submission_id=s.id AND m.routing_recommendation='needs_revision';
 UPDATE public.submissions s SET attempt_status='rejected',
     status_reason='revision_deadline_expired', decided_at=e.expired_at
   FROM public.task_revision_expirations e WHERE e.source_submission_id=s.id;
+UPDATE public.submissions s SET attempt_status='rejected',
+    status_reason='revision_limit_reached', decided_at=e.exhausted_at
+  FROM public.task_revision_exhaustions e WHERE e.source_submission_id=s.id;
 UPDATE public.submissions s SET attempt_status='accepted', decided_at=a.accepted_at,
     status_reason=NULL
   FROM public.final_acceptances a WHERE a.submission_id=s.id;
@@ -253,7 +424,7 @@ ALTER TABLE public.submissions
   ADD CONSTRAINT ck_submissions_attempt_decision CHECK (
     (attempt_status in ('accepted','needs_revision','rejected')) = (decided_at is not null)),
   ADD CONSTRAINT ck_submissions_status_reason CHECK (status_reason is null or
-    (attempt_status='rejected' and status_reason='revision_deadline_expired') or
+    (attempt_status='rejected' and status_reason in ('revision_deadline_expired','revision_limit_reached')) or
     (attempt_status='needs_revision' and status_reason='checker_coverage_incomplete'));
 CREATE INDEX ix_submissions_contributor_updated
   ON public.submissions USING btree (contributor_id, updated_at, id);
@@ -285,13 +456,10 @@ BEGIN
     NEW.decided_at := NULL; NEW.status_reason := NULL;
   ELSIF OLD.attempt_status='evaluation_pending' AND NEW.attempt_status='needs_revision' THEN
     -- A return without failed members is a checker coverage gap; it spends no round.
-    SELECT m.created_at, CASE WHEN r.failed_count=0 AND EXISTS (
-        SELECT 1 FROM public.checker_result_findings f
-        WHERE f.checker_run_id=r.id AND f.level='coverage_incomplete')
+    SELECT m.created_at, CASE WHEN public.checker_run_coverage_return(m.checker_run_id)
       THEN 'checker_coverage_incomplete' END
       INTO evidence_at, coverage_reason
       FROM public.task_post_submit_routing_manifests m
-      JOIN public.checker_runs r ON r.id=m.checker_run_id
       WHERE m.submission_id=OLD.id AND m.task_id=OLD.task_id
         AND m.routing_recommendation='needs_revision';
     NEW.decided_at := evidence_at; NEW.status_reason := coverage_reason;
@@ -300,10 +468,18 @@ BEGIN
     SELECT a.accepted_at INTO evidence_at FROM public.final_acceptances a
       WHERE a.submission_id=OLD.id AND a.task_id=OLD.task_id;
     NEW.decided_at := evidence_at; NEW.status_reason := NULL;
-  ELSIF OLD.attempt_status='needs_revision' AND NEW.attempt_status='rejected' THEN
-    SELECT e.expired_at INTO evidence_at FROM public.task_revision_expirations e
+  ELSIF OLD.attempt_status IN ('evaluation_pending','needs_revision')
+        AND NEW.attempt_status='rejected' THEN
+    -- The last permitted attempt exhausts at routing, or at retained recovery.
+    SELECT e.exhausted_at INTO evidence_at FROM public.task_revision_exhaustions e
       WHERE e.source_submission_id=OLD.id AND e.task_id=OLD.task_id;
-    NEW.decided_at := evidence_at; NEW.status_reason := 'revision_deadline_expired';
+    NEW.status_reason := 'revision_limit_reached';
+    IF evidence_at IS NULL AND OLD.attempt_status='needs_revision' THEN
+      SELECT e.expired_at INTO evidence_at FROM public.task_revision_expirations e
+        WHERE e.source_submission_id=OLD.id AND e.task_id=OLD.task_id;
+      NEW.status_reason := 'revision_deadline_expired';
+    END IF;
+    NEW.decided_at := evidence_at;
   ELSE
     RAISE EXCEPTION 'submission attempt transition is not allowed' USING ERRCODE='23514';
   END IF;
@@ -365,6 +541,7 @@ CREATE TRIGGER task_assignment_started_at BEFORE INSERT OR UPDATE ON public.task
 
 def upgrade():
     op.execute("SET LOCAL search_path=pg_catalog,public,pg_temp")
+    refuse_incompatible_retained_findings(op.get_bind())
     _execute_script(_FINDINGS_TABLE)
     _replace("public.validate_checker_terminal_custody()", _TERMINAL_REPLACEMENTS)
     _replace("public.guard_dispatched_submission_immutable()", _DISPATCHED_IMMUTABLE)
@@ -372,6 +549,7 @@ def upgrade():
         "ALTER TABLE public.submissions\n  ADD CONSTRAINT", 1,
     )
     _execute_script(submission_columns)
+    _execute_script(ROUND_HELPERS)
     _execute_script(BACKFILL_SUBMISSION_ATTEMPTS)
     # Fire the deferred row checks the backfill queued so later DDL may proceed.
     op.execute("SET CONSTRAINTS ALL IMMEDIATE")
@@ -383,7 +561,7 @@ def upgrade():
     _execute_script(BACKFILL_ASSIGNMENT_STARTS)
     op.execute("SET CONSTRAINTS ALL IMMEDIATE")
     _execute_script("CREATE INDEX ix_task_assignments_contributor_updated" + assignment_guards)
-    for signature, replacements in _ROUND_COUNTS.items():
+    for signature, replacements in (_ROUND_COUNTS | _EXHAUSTION_ROUNDS).items():
         _replace(signature, replacements)
     _execute_script(_ROUND_ZERO)
 

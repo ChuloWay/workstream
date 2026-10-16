@@ -791,9 +791,11 @@ Fresh-authorized historical replay does not require the old run to remain curren
 
 ARCH-04F2 extends this handler and the existing root outcome transaction for an
 exact current `needs_revision` checker recommendation. The manifest retains the
-recommendation and actual `task.post_submit.route` decision; the only lifecycle
-effect is `evaluation_pending -> needs_revision` with the assignment still
-active. This branch is identical for locked `human_review_required=true` and
+recommendation and actual `task.post_submit.route` decision. When another
+revision remains, the effect is `evaluation_pending -> needs_revision` with the
+assignment active. On the final permitted failed attempt, PILOT-08 instead
+records exhaustion, closes the assignment and returns the task to ready; it
+creates no next preparation or timer. This branch is identical for locked `human_review_required=true` and
 `false`: it does not observe a REV generation, enter CON, or create a Review,
 FinalAcceptance, ContributionRecord or CompensationAward. Replay revalidates the
 stored source, receipt and complete outcome and returns their identities without

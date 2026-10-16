@@ -17,6 +17,7 @@ class RevisionRecoveryAuthorizationAdapter:
 
     async def authorize(self, facts):
         """Consume source-bound recovery authority without impersonating a PM."""
+        key = facts.preparation_id or facts.routing_manifest_id
         async with fixed_service_prepared_authorization(
             self._session, service_identity=ServiceIdentity.TASK_REVISION_EXPIRER,
             request_id=facts.routing_manifest_id, correlation_id=facts.routing_manifest_id,
@@ -29,14 +30,14 @@ class RevisionRecoveryAuthorizationAdapter:
                 assignment_id=facts.assignment_id,
                 assignment_contributor_id=facts.contributor_id,
                 locked_context_hash=facts.locked_context_hash,
-                reason=RECOVERY_REASON, idempotency_key=facts.routing_manifest_id,
+                reason=RECOVERY_REASON, idempotency_key=key,
                 request_digest=facts.request_digest,
                 revision_routing_manifest_id=facts.routing_manifest_id,
                 revision_preparation_id=facts.preparation_id,
                 revision_preparation_sha256=facts.preparation_sha256,
             )
             caller = PreparedAuthorizationInput(
-                idempotency_key=facts.routing_manifest_id,
+                idempotency_key=key,
                 request_value=resource.model_dump(mode="json"),
             )
             handle = await authority.service.prepare(

@@ -16,14 +16,21 @@ from .test_reads import history_case, history_paths
 async def test_historical_owner_after_reassignment(task_client, monkeypatch, state):
     case = await history_case(task_client, monkeypatch)
     replacement = await admit_and_grant_project_submitter(task_client, monkeypatch, case[0], "replacement-contributor")
-    # Retained-data scenario, not a claim that live post-Submission release is supported.
-    async with db_session.get_session_factory()() as session, session.begin():
-        assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == case[1], TaskAssignment.status == "active"))
-        assignment.status = "released"
-        assignment.released_at = await session.scalar(select(func.clock_timestamp()))
-        task = await session.get(WorkstreamTask, case[1])
-        task.status = state
-        task.assigned_to = None if state == "ready" else replacement["actor_profile_id"]
+    if state == "ready":
+        from tests.submission_fixtures import route_retained_checker_remediation
+        from tests.test_tasks import _expire_retained_source_for_reclaim
+
+        source_id = await route_retained_checker_remediation(case[2], generation=2)
+        await _expire_retained_source_for_reclaim(db_session.get_session_factory(), source_id)
+    else:
+        # Retained audience fixture; no claim that these are live release commands.
+        async with db_session.get_session_factory()() as session, session.begin():
+            assignment = await session.scalar(select(TaskAssignment).where(TaskAssignment.task_id == case[1], TaskAssignment.status == "active"))
+            assignment.status = "released"
+            assignment.released_at = await session.scalar(select(func.clock_timestamp()))
+            task = await session.get(WorkstreamTask, case[1])
+            task.status = state
+            task.assigned_to = replacement["actor_profile_id"]
     for path in history_paths(*case).values():
         assert (await task_client.get(path, headers=auth_headers())).status_code == 404
     set_dev_actor(monkeypatch, roles="", subject="worker-one")

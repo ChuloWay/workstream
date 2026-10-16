@@ -32,6 +32,7 @@ from app.modules.actors.models import ActorProfile
 from tests.tasks.test_submission_lineage import _prepared_packet
 from tests.test_artifact_admission import _context, _seed_human_actor
 from tests.submission_preparation_auth_helpers import install_submitter_grant
+from tests.tasks.post_submit_routing.backfill_support import assert_upgrade_refuses_stale_findings
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.post_submit_routing.support import revision_archive
 from tests.tasks.submission_lineage_support import _verified_admission, _verify_put_attempt
@@ -288,7 +289,13 @@ async def test_public_preparation_returns_nonblocking_feedback_on_success_and_re
         async with h.factory() as session:
             stored = await session.get(Submission, created.json()["submission_id"])
             assert (stored.attempt_status, stored.decided_at) == ("evaluation_pending", None)
+            pre_run = await session.scalar(select(SelectedPreSubmitRun.id).where(
+                SelectedPreSubmitRun.task_id == str(h.task_id),
+            ))
         assert len(project_checker.requests) == checked
+        await assert_upgrade_refuses_stale_findings(
+            h.factory, store="selected_pre_submit_runs", row_id=pre_run,
+        )
 
 
 async def test_public_submission_infrastructure_error_is_retryable_only_for_sql():

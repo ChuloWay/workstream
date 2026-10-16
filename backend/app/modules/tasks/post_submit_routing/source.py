@@ -3,26 +3,31 @@
 import json
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.checkers.api.evaluation_contract import coverage_gap_without_failure
 from app.modules.checkers.api.execution import EvaluationCompletion, EvaluationCoordinationPort
 from app.modules.projects.api import (
     ProjectLockedPolicyContextPort, ProjectLockedPolicyContextRequest,
     ProjectLockedPolicyContextUnavailable,
 )
 from app.modules.tasks.api.post_submit_routing import (
-    TaskPostSubmitSourceProposal, TaskRoutingSourcePreparation,
+    TaskPostSubmitSourceProposal, TaskRoutingSourcePreparation, TaskRevisionExhaustionFacts,
 )
+from app.core.identifiers import new_record_id
+from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
 from app.modules.tasks.api.transition_audit import TaskPolicyLineage
 from app.modules.tasks.post_submit_routing.requests import (
     TaskRoutingRequests, TaskRoutingRequestUnavailable, require_routing_transaction,
 )
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.models import Submission, SubmissionDispatch
+from app.modules.tasks.submission_attempts import COVERAGE_RETURN_REASON
 from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.service import TaskService
 from app.modules.tasks.revision.service import select_candidate
+from app.modules.tasks.post_submit_routing.terminal_replay import exhausted_source
 
 
 class TaskRoutingSourcePreparer:
@@ -48,12 +53,7 @@ class TaskRoutingSourcePreparer:
 
     async def _prepare(self, event_id, completion):
         task = await self._tasks.lock_project_task(completion.project_id, completion.task_id)
-        if task is None or task.status not in {
-            "evaluation_pending",
-            "review_pending",
-            "needs_revision",
-            "accepted",
-        }:
+        if task is None:
             raise TaskRoutingRequestUnavailable("routing_source_unavailable")
         retained = await self._session.scalar(
             select(TaskPostSubmitRoutingManifest).where(
@@ -63,6 +63,12 @@ class TaskRoutingSourcePreparer:
                 TaskPostSubmitRoutingManifest.completion_event_id == event_id,
             )
         )
+        if retained is not None:
+            terminal = await exhausted_source(self._session, retained, completion)
+            if terminal is not None:
+                return terminal
+        if task.status not in {"evaluation_pending", "review_pending", "needs_revision", "accepted"}:
+            raise TaskRoutingRequestUnavailable("routing_source_unavailable")
         if (task.status != "evaluation_pending") != (retained is not None):
             raise TaskRoutingRequestUnavailable("routing_source_unavailable")
         # Read selectors without taking a Submission lock ahead of Assignment.
@@ -124,10 +130,31 @@ class TaskRoutingSourcePreparer:
         except (ProjectLockedPolicyContextUnavailable, ValueError, TypeError, KeyError) as exc:
             raise TaskRoutingRequestUnavailable("routing_source_unavailable") from exc
         # Active PROJECT custody must precede retaining the CHECKERS fence.
-        candidate = (await select_candidate(self._projects, context)
-                     if retained is None and completion.routing_recommendation == "needs_revision"
-                     else None)
+        candidate, exhaustion, revision_round, policy = None, None, None, None
+        if retained is None and completion.routing_recommendation == "needs_revision":
+            policy = RevisionPolicySemantics.model_validate_json(context.revision_policy.value)
+            # Earlier coverage returns spent no round (PostgreSQL counts alike).
+            submitted_count = await self._session.scalar(select(func.count()).select_from(Submission).where(
+                Submission.task_assignment_id == assignment.id,
+                Submission.version <= submission.version,
+                Submission.status_reason.is_distinct_from(COVERAGE_RETURN_REASON),
+            ))
+            revision_round = submitted_count - 1
+            if revision_round > policy.max_revision_rounds or revision_round < 0:
+                raise TaskRoutingRequestUnavailable("routing revision count differs")
+            # PROJECT custody precedes the CHECKERS fence, so the candidate is
+            # selected before the result shows whether this is a coverage return.
+            candidate = await select_candidate(self._projects, context)
         request, verified = await self._requests._stage(event_id, completion)
+        if (
+            revision_round is not None and revision_round == policy.max_revision_rounds
+            and not coverage_gap_without_failure(verified.result)
+        ):
+            candidate = None
+            exhaustion = TaskRevisionExhaustionFacts(
+                exhaustion_receipt_id=new_record_id(), revision_round=revision_round,
+                max_revision_rounds=policy.max_revision_rounds,
+            )
         material = verified.material
         if not (
             material.admission_id == UUID(submission.submission_bundle_admission_id)
@@ -196,4 +223,6 @@ class TaskRoutingSourcePreparer:
                 "source"
             ) != source.model_dump(mode="json"):
                 raise TaskRoutingRequestUnavailable("routing_source_unavailable")
-        return TaskRoutingSourcePreparation(request=request, source=source, revision_candidate=candidate)
+        return TaskRoutingSourcePreparation(
+            request=request, source=source, revision_candidate=candidate, exhaustion=exhaustion,
+        )

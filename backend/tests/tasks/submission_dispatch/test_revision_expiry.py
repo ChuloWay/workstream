@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import func, select, text
+from sqlalchemy.exc import DBAPIError
 from uuid import UUID
 
 from app.adapters.auth import outbox_dispatch_authorization, revision_expiry_authorization
@@ -218,6 +219,60 @@ async def expire_retained_revision(
     return source_id, recovered.json(), event_id
 
 
+async def _assert_expired_assignment_immutable(h, receipt):
+    """A committed expiry freezes its assignment and all receipt-bound history."""
+    assignment_id = receipt.assignment_id
+    receipt_id = receipt.id
+
+    async def custody():
+        async with h.factory() as session:
+            row = (await session.execute(text("""
+                SELECT to_jsonb(a),to_jsonb(e),
+                  (SELECT jsonb_agg(to_jsonb(s) ORDER BY s.version)
+                     FROM public.submissions s WHERE s.task_assignment_id=a.id),
+                  (SELECT jsonb_agg(to_jsonb(p) ORDER BY p.sequence)
+                     FROM public.task_revision_preparations p
+                     WHERE p.routing_manifest_id=e.routing_manifest_id),
+                  (SELECT to_jsonb(o) FROM public.outbox_events o
+                     WHERE o.event_id=e.outcome_event_id),
+                  (SELECT to_jsonb(v) FROM public.audit_events v WHERE v.id=e.audit_event_id),
+                  public.task_revision_expired_assignment_current(
+                    e.assignment_id,e.source_submission_id)
+                FROM public.task_assignments a
+                JOIN public.task_revision_expirations e ON e.assignment_id=a.id
+                WHERE a.id=:assignment AND e.id=:receipt
+            """), {"assignment": assignment_id, "receipt": receipt_id})).one()
+            assert row[-1] is True
+            return row
+
+    before = await custody()
+    attacks = (
+        ("UPDATE public.task_assignments SET status='active' WHERE id=:assignment", {}),
+        ("UPDATE public.task_assignments SET released_at=NULL WHERE id=:assignment", {}),
+        ("UPDATE public.task_assignments SET released_at=released_at+interval '1 second' "
+         "WHERE id=:assignment", {}),
+        ("UPDATE public.task_assignments SET accepted_at=accepted_at+interval '1 second' "
+         "WHERE id=:assignment", {}),
+        ("UPDATE public.task_assignments SET id=:new_assignment,project_id=:new_project,"
+         "task_id=:new_task,contributor_id=:new_contributor WHERE id=:assignment", {
+             "new_assignment": new_record_id(), "new_project": new_record_id(),
+             "new_task": new_record_id(), "new_contributor": new_record_id(),
+         }),
+        ("UPDATE public.task_assignments SET submitter_contribution_policy_version_id=:replacement "
+         "WHERE id=:assignment", {"replacement": new_record_id()}),
+        ("DELETE FROM public.task_assignments WHERE id=:assignment", {}),
+    )
+    for statement, parameters in attacks:
+        with pytest.raises(DBAPIError) as rejected:
+            async with h.factory() as session, session.begin():
+                await session.execute(text(statement), parameters | {"assignment": assignment_id})
+                raise AssertionError("terminal assignment mutation unexpectedly succeeded")
+        assert rejected.value.orig.sqlstate == "23514"
+        database_error = rejected.value.orig.__cause__
+        assert database_error.constraint_name == "ck_revision_expired_assignment_immutable"
+        assert await custody() == before
+
+
 async def test_due_failure_auto_rejects_and_releases_with_immutable_receipt(
     tmp_path, isolated_database_env, monkeypatch,
 ):
@@ -278,6 +333,7 @@ async def test_due_failure_auto_rejects_and_releases_with_immutable_receipt(
                 "SELECT public.task_revision_expired_assignment_current(:assignment,:submission)"
             ), {"assignment": h.request.assignment_id, "submission": h.created.submission_id}) is True
             await no_economic_effects(session)
+        await _assert_expired_assignment_immutable(h, receipt)
         acknowledged = await h.expiry_delivery.deliver(
             receipt.outcome_event_id, h.request.project_id, "revision-expired-notice-proof",
         )
@@ -291,6 +347,22 @@ async def test_due_failure_auto_rejects_and_releases_with_immutable_receipt(
             assert row["status"] == "rejected"
             assert row["status_reason"] == "revision_deadline_expired"
             assert row["decided_at"] is not None
+            claimed = await client.post(
+                f"/api/v1/tasks/{h.request.task_id}/claim",
+                headers={"Idempotency-Key": str(new_record_id())},
+            )
+            assert claimed.status_code == 200, claimed.text
+            assert UUID(claimed.json()["assignment"]["id"]) != h.request.assignment_id
+        async with h.factory() as session:
+            assert (await session.execute(text(
+                "SELECT status,released_at FROM public.task_assignments WHERE id=:assignment"
+            ), {"assignment": h.request.assignment_id})).one() == (
+                "revision_expired", receipt.expired_at,
+            )
+            assert await session.scalar(text(
+                "SELECT public.task_revision_expired_assignment_current(:assignment,:submission)"
+            ), {"assignment": h.request.assignment_id,
+                 "submission": h.created.submission_id}) is True
         await assert_backfill_matches_live(h.factory)
 
 

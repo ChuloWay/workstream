@@ -134,7 +134,8 @@ func validSubmissionOutcome(value SubmissionHistory) bool {
 	if value.StatusReason == nil {
 		return true
 	}
-	return (value.Status == "rejected" && *value.StatusReason == "revision_deadline_expired") ||
+	return (value.Status == "rejected" &&
+		(*value.StatusReason == "revision_deadline_expired" || *value.StatusReason == "revision_limit_reached")) ||
 		(value.Status == "needs_revision" && *value.StatusReason == "checker_coverage_incomplete")
 }
 

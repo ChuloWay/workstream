@@ -42,8 +42,8 @@
 ## Rejection, Revision Limits Or Administrative Cancellation
 
 - reject: source human Review ID, bounded reason, blocked TaskAssignment ID;
-- revision cap: `revision_limit_reached`, further resubmission refused, current
-  deadline and assignment retained;
+- revision cap: `revision_limit_reached`, immutable exhaustion receipt,
+  assignment closed immediately, task returned to `ready`, no next window;
 - revision timeout: `revision_deadline_expired`, immutable TASK rejection receipt,
   released assignment, task returned to `ready`, no synthetic Review;
 - legacy revision cancellation: `legacy_revision_context_unrecoverable`,

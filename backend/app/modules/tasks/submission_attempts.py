@@ -16,7 +16,7 @@ async def record_attempt_outcome(session, *, submission_id, task_id, outcome: At
     """Request the transition; PostgreSQL derives its time and reason from committed evidence.
 
     The deciding owner must already have flushed that evidence (routing manifest,
-    FinalAcceptance or revision expiration) in the same transaction.
+    FinalAcceptance, revision expiration or exhaustion) in the same transaction.
     """
     result = await session.execute(
         update(Submission)

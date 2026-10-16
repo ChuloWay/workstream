@@ -22,7 +22,7 @@ class RevisionRecoveryResourceContext(TaskAuthorityResourceContext):
             or self.assignment_id is None
             or self.revision_routing_manifest_id is None
             or self.reason != RECOVERY_REASON
-            or self.idempotency_key != self.revision_routing_manifest_id
+            or self.idempotency_key != (self.revision_preparation_id or self.revision_routing_manifest_id)
             or self.request_digest is None
             or self.replay_assignment_id is not None
             or self.replay_command_id is not None

@@ -13,7 +13,9 @@ from app.modules.outbox.models import OutboxEvent
 from tests.checkers.execution.support import ControlledSelectedExecution, live_executor, reserve
 from tests.checkers.external.support import post_registry_spec
 from tests.post_submit_materialization_helpers import material_fixture
-from tests.tasks.post_submit_routing.backfill_support import assert_backfill_matches_live
+from tests.tasks.post_submit_routing.backfill_support import (
+    assert_backfill_matches_live, assert_upgrade_refuses_stale_findings,
+)
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 
 COVERAGE = {
@@ -77,6 +79,7 @@ async def test_coverage_gap_goes_to_review_when_human_review_is_required(
                 ]
                 counts = await reads.read_finding_counts((h.request.submission_id,), manager=manager)
                 assert counts[h.request.submission_id] == (0, 1, 1)
+        await assert_upgrade_refuses_stale_findings(h.factory, store="checker_runs", row_id=run.id)
 
 
 async def test_coverage_gap_returns_to_contributor_without_human_review(
@@ -226,3 +229,23 @@ async def test_coverage_gap_routes_to_review_pending_when_review_is_required(
         # Awaiting a reviewer is not a decision: no time, no reason, no acceptance.
         assert outcome == ("review_pending", None, None, 0, "review_pending")
         await assert_backfill_matches_live(h.factory)
+
+
+@pytest.mark.parametrize("change", [
+    {}, {"check_id": None}, {"check_id": "Upper.case"}, {"path": None, "line": None},
+    {"path": "../outside"}, {"path": "/absolute"}, {"path": "dir\\file"},
+    {"path": "src/\u200bhidden"}, {"path": "C:/drive"}, {"path": "src/trailing."},
+    {"path": None, "line": 3},
+])
+def test_upgrade_precondition_matches_the_finding_contract(change):
+    """0049's frozen retained-finding rules accept exactly what the contract accepts."""
+    from app.modules.checkers.api import ExternalCheckerFinding
+    from tests.tasks.post_submit_routing.backfill_support import _MIGRATION
+
+    finding = {key: value for key, value in (ERROR | change).items() if value is not None}
+    try:
+        ExternalCheckerFinding.model_validate(finding)
+        accepted = True
+    except Exception:
+        accepted = False
+    assert _MIGRATION._finding_current(finding) is accepted

@@ -1630,6 +1630,10 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/assignment_outcome.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/audit_evidence.py"
     },
     {
@@ -1659,6 +1663,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/api/revision.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/api/revision_exhaustion.py"
     },
     {
       "group": "lifecycle",
@@ -1766,11 +1774,35 @@
     },
     {
       "group": "lifecycle",
+      "target": "backend/app/modules/tasks/post_submit_routing/terminal_replay.py"
+    },
+    {
+      "group": "lifecycle",
       "target": "backend/app/modules/tasks/queue_router.py"
     },
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/repository.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/blocked_notice.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhausted_notice.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhaustion.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhaustion_event.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/exhaustion_recovery.py"
     },
     {
       "group": "lifecycle",
@@ -1799,6 +1831,10 @@
     {
       "group": "lifecycle",
       "target": "backend/app/modules/tasks/revision/service.py"
+    },
+    {
+      "group": "lifecycle",
+      "target": "backend/app/modules/tasks/revision/terminal_read.py"
     },
     {
       "group": "lifecycle",
@@ -2017,7 +2053,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "47a94db78b31f3d3760e4a75f99abc3e2510c8d8451257a89fd3623740448c31",
+  "authority_digest": "b12e255dcb06f0f9581a7e58607bb7a0483d6ccd8d4f0e2d66ea011e2296d182",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

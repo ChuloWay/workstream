@@ -4,7 +4,7 @@ import json
 
 from app.modules.authorization.domain.post_submit_routing import (
     AutomatedAcceptanceConsequence,
-    CheckerRemediationConsequence,
+    CheckerRemediationConsequence, CheckerExhaustionConsequence,
     HumanAdmissionConsequence,
     PostSubmitRoutingResourceContext,
 )
@@ -321,7 +321,9 @@ def _routing_resource(source, claim, effects, authorized_generation, actor_id, l
     if accepts != (effects is not None) or accepts != (authorized_generation is not None):
         raise PreparedAuthorizationHandleInvalid("routing consequence unavailable")
     consequence = (
-        CheckerRemediationConsequence()
+        CheckerExhaustionConsequence(**source.exhaustion.model_dump())
+        if source.exhaustion is not None and not source.recovered_exhaustion
+        else CheckerRemediationConsequence()
         if source.source.routing_recommendation == "needs_revision"
         else HumanAdmissionConsequence()
         if effects is None
