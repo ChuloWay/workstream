@@ -1,0 +1,5 @@
+# Author a transactional import repair benchmark
+
+Input is {"rows":[{"id":...,"quantity":...},...]}. Store rows in records.sqlite in the current working directory, table records(id TEXT PRIMARY KEY, quantity INTEGER NOT NULL). IDs are nonempty strings; quantities are integers from 0 through 2147483647 and cannot be booleans. Create the empty table even if the first batch is invalid. New IDs insert; existing IDs with identical quantities are idempotent no-ops. A conflicting ID or any invalid row rejects the whole batch and preserves all preexisting committed rows; duplicate IDs within the batch follow the same rule. Return {"status":"committed","rows":[[id,quantity],...]} on success or {"status":"rejected","rows":[...]} on rejection, always listing all stored rows sorted by id. Multiple invocations share the database.
+
+Run `python /workspace/program.py INPUT.json OUTPUT.json`. Read one JSON document from the first path and write one JSON document to the second. Use only Python standard-library dependencies. Preserve the interface; do not edit or rely on evaluator tests.

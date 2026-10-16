@@ -1,0 +1,72 @@
+{
+  "packages": [
+    {
+      "external_task_id": "terminal-ledger-reconcile",
+      "path": "packages/ledger-reconcile"
+    },
+    {
+      "external_task_id": "terminal-event-rollup",
+      "path": "packages/event-rollup"
+    },
+    {
+      "external_task_id": "terminal-atomic-import",
+      "path": "packages/atomic-import"
+    },
+    {
+      "external_task_id": "terminal-file-inventory",
+      "path": "packages/file-inventory"
+    },
+    {
+      "external_task_id": "terminal-config-overlay",
+      "path": "packages/config-overlay"
+    }
+  ],
+  "sha256": {
+    "README.md": "682998d74dee02308b66771d578703a02af6d46ec7c1c5fe935f29fec75f4f75",
+    "guide-request.json": "2aa9a922a9d3336a35eab873a4abcd4ad807ef300bb466858a9821f3f0379816",
+    "guide.md": "5a750520c906488fd93a705fbb5f419429a9da4a33a9b73d477b3e2b27bd1f8e",
+    "negative-cases.json": "d2ab84839c5ff16dd75e1007c0091ac6a2d1743021f2d59b5c19ab05e529d73c",
+    "packages/atomic-import/.dockerignore": "9b7d929a2285f8429ff68cebfb38684286e1ee9328727832681e3638f7fdaecb",
+    "packages/atomic-import/environment/Dockerfile": "e5e25ef130409f56dfeed7c04b1de2c6538c5dd4f6864367c702d6b15eb6e2cb",
+    "packages/atomic-import/instruction.md": "ac9fe54b4f2d5aeb3249c0dcd76173b07a909def29fc8008a91d8479a3332763",
+    "packages/atomic-import/solution/program.py": "0a35b0fd38577ba13ae4bbaff1ff40ac66e27f3e8bb623470753b1a5e268da91",
+    "packages/atomic-import/task.toml": "3b06358607986bcc0e16cb550d9c84ba91cbe69df0d2065c994968f054f66f90",
+    "packages/atomic-import/tests/cases.json": "538d082957f269af396262a9bd57bbf1b3d1d55f6312872e1b736b64193dcaf5",
+    "packages/atomic-import/tests/test_task.py": "2cb0d354da3ee7ccddf1993db2789cca9f464aee3b01b77a93cd28cd67c10161",
+    "packages/atomic-import/workspace/program.py": "7c775caf5b3b65f4c178ad3c61524828aba34b69cf79e8ef38b9c5b9e0111890",
+    "packages/config-overlay/.dockerignore": "9b7d929a2285f8429ff68cebfb38684286e1ee9328727832681e3638f7fdaecb",
+    "packages/config-overlay/environment/Dockerfile": "e5e25ef130409f56dfeed7c04b1de2c6538c5dd4f6864367c702d6b15eb6e2cb",
+    "packages/config-overlay/instruction.md": "d6f7efd415622a66df7e4141a461449729e5430298135667993410ebeffdac52",
+    "packages/config-overlay/solution/program.py": "77fbdc2ca764a29754380f886b688766669e69e11b5c908668b3861137361cc0",
+    "packages/config-overlay/task.toml": "65987725d6bb04ebaad01faee940feb39729cd5c24d236c54ca59a97c0db2bfd",
+    "packages/config-overlay/tests/cases.json": "e02ca1970de1cc9c26c7dd47688abc0391f94997ff316dbc0811a8d1428eb75d",
+    "packages/config-overlay/tests/test_task.py": "2cb0d354da3ee7ccddf1993db2789cca9f464aee3b01b77a93cd28cd67c10161",
+    "packages/config-overlay/workspace/program.py": "7c775caf5b3b65f4c178ad3c61524828aba34b69cf79e8ef38b9c5b9e0111890",
+    "packages/event-rollup/.dockerignore": "9b7d929a2285f8429ff68cebfb38684286e1ee9328727832681e3638f7fdaecb",
+    "packages/event-rollup/environment/Dockerfile": "e5e25ef130409f56dfeed7c04b1de2c6538c5dd4f6864367c702d6b15eb6e2cb",
+    "packages/event-rollup/instruction.md": "c6ea8dd442a70642d04235f188c9c1c8253bd7c8b23c4c5fdcb470906009fc2b",
+    "packages/event-rollup/solution/program.py": "d017e2a4ea7c65c15f8e4a14b013fe403bef0d143042e0e2f0561d9b5d2a108e",
+    "packages/event-rollup/task.toml": "9f2b85b4a0dd233fdd290e3d01eea000895960cb64683666f6d0539a2e19f20a",
+    "packages/event-rollup/tests/cases.json": "96540ec58940605d9c6b8f7a7971127e8875ad0ad9499b05c83ae6747a261706",
+    "packages/event-rollup/tests/test_task.py": "2cb0d354da3ee7ccddf1993db2789cca9f464aee3b01b77a93cd28cd67c10161",
+    "packages/event-rollup/workspace/program.py": "7c775caf5b3b65f4c178ad3c61524828aba34b69cf79e8ef38b9c5b9e0111890",
+    "packages/file-inventory/.dockerignore": "9b7d929a2285f8429ff68cebfb38684286e1ee9328727832681e3638f7fdaecb",
+    "packages/file-inventory/environment/Dockerfile": "e5e25ef130409f56dfeed7c04b1de2c6538c5dd4f6864367c702d6b15eb6e2cb",
+    "packages/file-inventory/instruction.md": "693ef5943d94385b79662862fa75d13f8dd5d3e5dc02c9f2decf9f353bd72aac",
+    "packages/file-inventory/solution/program.py": "ee2db1e4310dea68ffcc227258fe43a6d4b9542fbe904dea97ab15a1f901cef4",
+    "packages/file-inventory/task.toml": "d300769a0635a869868327467ec3724d16e8e908c0b9eed8f204b948493462e3",
+    "packages/file-inventory/tests/cases.json": "cf8a2d92a5ee3ab1f3667c36604a190dcae456d0dbdc2fbaadd52cd5df8c6d95",
+    "packages/file-inventory/tests/test_task.py": "2cb0d354da3ee7ccddf1993db2789cca9f464aee3b01b77a93cd28cd67c10161",
+    "packages/file-inventory/workspace/program.py": "7c775caf5b3b65f4c178ad3c61524828aba34b69cf79e8ef38b9c5b9e0111890",
+    "packages/ledger-reconcile/.dockerignore": "9b7d929a2285f8429ff68cebfb38684286e1ee9328727832681e3638f7fdaecb",
+    "packages/ledger-reconcile/environment/Dockerfile": "e5e25ef130409f56dfeed7c04b1de2c6538c5dd4f6864367c702d6b15eb6e2cb",
+    "packages/ledger-reconcile/instruction.md": "51b1d9622d09299619e42b52cc5010cd5f256e84cee35931483aee9ba23ad119",
+    "packages/ledger-reconcile/solution/program.py": "31eb7a5b5464450235a4106e56c63aef6fa1739f0282bafd9c03bf85c6f6f817",
+    "packages/ledger-reconcile/task.toml": "aa394f62073c0c763d516224db3e7aad2c9378ff8f75e2775614edb9c3774a98",
+    "packages/ledger-reconcile/tests/cases.json": "f4219c1b90fd9d491be64c163b610b050a3500a9645ee371a1731f992658be29",
+    "packages/ledger-reconcile/tests/test_task.py": "2cb0d354da3ee7ccddf1993db2789cca9f464aee3b01b77a93cd28cd67c10161",
+    "packages/ledger-reconcile/workspace/program.py": "7c775caf5b3b65f4c178ad3c61524828aba34b69cf79e8ef38b9c5b9e0111890",
+    "tasks.json": "73b9413df6d59bfda475d82fac3fd8c6484ce6990c6ec42084b881ddd8a5d85d",
+    "verify_corpus.py": "7dd122786a32eb5814e7fe110323fe800a1ed9ed544d217f801c220d49dc0368"
+  }
+}

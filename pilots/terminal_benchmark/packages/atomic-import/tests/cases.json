@@ -1,0 +1,166 @@
+[
+  {
+    "name": "exact-replay-and-conflict-rollback",
+    "steps": [
+      {
+        "input": {
+          "rows": [
+            {
+              "id": "old",
+              "quantity": 3
+            }
+          ]
+        },
+        "expected": {
+          "status": "committed",
+          "rows": [
+            [
+              "old",
+              3
+            ]
+          ]
+        },
+        "database_rows": [
+          [
+            "old",
+            3
+          ]
+        ]
+      },
+      {
+        "input": {
+          "rows": [
+            {
+              "id": "old",
+              "quantity": 3
+            }
+          ]
+        },
+        "expected": {
+          "status": "committed",
+          "rows": [
+            [
+              "old",
+              3
+            ]
+          ]
+        },
+        "database_rows": [
+          [
+            "old",
+            3
+          ]
+        ]
+      },
+      {
+        "input": {
+          "rows": [
+            {
+              "id": "new",
+              "quantity": 2
+            },
+            {
+              "id": "old",
+              "quantity": 9
+            }
+          ]
+        },
+        "expected": {
+          "status": "rejected",
+          "rows": [
+            [
+              "old",
+              3
+            ]
+          ]
+        },
+        "database_rows": [
+          [
+            "old",
+            3
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "name": "late-invalid-rollback",
+    "steps": [
+      {
+        "input": {
+          "rows": [
+            {
+              "id": "new",
+              "quantity": 2
+            },
+            {
+              "id": "bad",
+              "quantity": -1
+            }
+          ]
+        },
+        "expected": {
+          "status": "rejected",
+          "rows": []
+        },
+        "database_rows": []
+      }
+    ]
+  },
+  {
+    "name": "same-batch-id-conflict",
+    "steps": [
+      {
+        "input": {
+          "rows": [
+            {
+              "id": "a",
+              "quantity": 1
+            },
+            {
+              "id": "a",
+              "quantity": 2
+            }
+          ]
+        },
+        "expected": {
+          "status": "rejected",
+          "rows": []
+        }
+      }
+    ]
+  },
+  {
+    "name": "empty",
+    "steps": [
+      {
+        "input": {
+          "rows": []
+        },
+        "expected": {
+          "status": "committed",
+          "rows": []
+        }
+      }
+    ]
+  },
+  {
+    "name": "reject-bool",
+    "steps": [
+      {
+        "input": {
+          "rows": [
+            {
+              "id": "a",
+              "quantity": true
+            }
+          ]
+        },
+        "expected": {
+          "status": "rejected",
+          "rows": []
+        }
+      }
+    ]
+  }
+]
