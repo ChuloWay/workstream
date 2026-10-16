@@ -212,6 +212,10 @@ restored from cache. This makes hosted proof use the exact selected backend lock
 without changing any lane or gate. The reusable CLI contract keeps its
 independent Go verification and build, while its Backend Ruff checks, isolated
 runner and five pytest groups use the same pinned, frozen all-extras environment.
+The reusable MCP real-API job likewise runs its OpenAPI subprocess, isolated
+runner and both lifecycle suites from the frozen Backend environment. Its adapter
+environment remains separately locked, and its wheel-install independence check
+remains separate.
 Each matrix job then starts MinIO.
 Authorization preflight asserts the lock-selected Ruff `0.15.22`, then runs
 source-wide lint and docstring checks once for the selected run. The

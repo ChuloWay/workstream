@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -55,6 +56,68 @@ class LightweightAgentGateTests(unittest.TestCase):
         backend = Path(".github/workflows/backend.yml").read_text(encoding="utf-8")
         self.assertEqual(backend.count("uses: ./.github/workflows/mcp.yml"), 1)
         self.assertIn('require_expected "${MCP_EXPECTED}" "${MCP_RESULT}"', backend)
+
+    def test_mcp_backend_contract_uses_the_frozen_lock_and_propagates_failure(self) -> None:
+        workflow = Path(".github/workflows/mcp.yml").read_text(encoding="utf-8")
+
+        def step(name: str) -> str:
+            body = workflow.split("      - name: " + name + "\n", 1)[1]
+            return body.split("\n      - ", 1)[0]
+
+        install = step("Install backend and adapter test environments")
+        self.assertIn('python -m pip install "uv==0.10.7"', install)
+        self.assertIn("uv lock --check --project backend", install)
+        self.assertIn("uv sync --frozen --all-extras --project backend", install)
+        self.assertNotIn('pip install -e "./backend', install)
+        openapi = step("Compare selected OpenAPI contract")
+        self.assertIn(
+            'WORKSTREAM_MCP_OPENAPI_COMMAND="uv run --frozen python -c ', openapi,
+        )
+        runtime = step("Run real isolated API-to-MCP lifecycle parity")
+        self.assertIn("working-directory: backend", runtime)
+        script = textwrap.dedent(runtime.split("        run: |\n", 1)[1])
+        with tempfile.TemporaryDirectory() as directory:
+            scratch = Path(directory)
+            calls = scratch / "calls.jsonl"
+            fake_uv = scratch / "uv"
+            fake_uv.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os, sys\n"
+                "with open(os.environ['MCP_PROBE_CALLS'], 'a') as output:\n"
+                "    output.write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                "raise SystemExit(int(os.environ['MCP_PROBE_EXIT']))\n",
+                encoding="utf-8",
+            )
+            fake_uv.chmod(0o700)
+            for code in (0, 1, 124):
+                with self.subTest(exit_code=code):
+                    calls.unlink(missing_ok=True)
+                    result = subprocess.run(
+                        ["bash", "-eu", "-c", script],
+                        cwd="backend", capture_output=True, text=True, check=False,
+                        env=os.environ | {
+                            "PATH": directory + os.pathsep + os.environ["PATH"],
+                            "RUNNER_TEMP": directory,
+                            "MCP_PROBE_CALLS": str(calls),
+                            "MCP_PROBE_EXIT": str(code),
+                        },
+                    )
+                    self.assertEqual(result.returncode, code, result.stderr)
+                    actual = [json.loads(line) for line in calls.read_text().splitlines()]
+                    suites = ("test_profile_flow", "test_access_reads") if code == 0 else (
+                        "test_profile_flow",
+                    )
+                    expected = [
+                        [
+                            "run", "--frozen", "python", "scripts/run_isolated_tests.py",
+                            "--metadata-json", str(scratch / f"workstream-mcp-{suite}-evidence.json"),
+                            "--timeout-seconds", "240", "--", "env", "PYTHONPATH=../mcp_server",
+                            "uv", "run", "--frozen", "python", "-m", "pytest", "-q",
+                            f"../mcp_server/tests/integration/{suite}.py",
+                        ]
+                        for suite in suites
+                    ]
+                    self.assertEqual(actual, expected)
 
     def test_cli_full_contract_preserves_failure_and_timeout_exits(self) -> None:
         workflow = Path(".github/workflows/cli.yml").read_text(encoding="utf-8")

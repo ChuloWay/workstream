@@ -50,6 +50,10 @@ not fully proven by a hosted green run.
 The reusable CLI contract keeps its independent Go build, while its Backend
 Ruff checks, isolated runner and five pytest groups use the same pinned frozen
 all-extras environment as the other affected Backend jobs.
+The reusable MCP real-API job also checks and installs `backend/uv.lock` frozen;
+its OpenAPI subprocess, isolated runner and both lifecycle suites execute in
+that Backend environment. The adapter retains its own frozen environment and
+independent wheel-install proof.
 
 | Change/event | Required runtime |
 |---|---|
@@ -95,6 +99,8 @@ reported as complete proof. No new selector/evidence service or paid runner.
   execution and focused internal reviews must pass before readiness.
 - Verify the reusable CLI contract preserves its Go build and runs all Backend
   Ruff and pytest commands through pinned `uv` with `--frozen` lock custody.
+- Verify MCP OpenAPI and both real-API suites use the frozen Backend environment,
+  preserve their exact suite arguments, and propagate failure and timeout exits.
 
 ## Risk and review routing
 
@@ -161,3 +167,11 @@ made the Markdown allowlist explicit, and distinguished the recorded eight-minut
 timing threshold from the aspirational five-minute goal. No exact-head wall-time
 speedup has been established. Fresh hosted full-suite proof is required after
 these final documentation corrections; earlier green runs do not qualify it.
+
+Final CI review identified a remaining floating Backend install in MCP's real-API
+job. It now uses the same frozen Backend lock for OpenAPI and lifecycle parity.
+An extracted-workflow regression checks both exact suite invocations and error
+propagation. All 29 focused workflow tests passed; removing frozen mode from
+either the Backend install or child pytest invocation makes the new regression
+fail. Ruff, Markdown links and Commitrail checks passed. This repair requires
+a fresh complete hosted run.

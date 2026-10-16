@@ -124,9 +124,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install --upgrade pip
-          python -m pip install -e "./backend[dev,agents]"
           python -m pip install "uv==0.10.7"
+          uv lock --check --project backend
+          uv sync --frozen --all-extras --project backend
           cd mcp_server
           uv sync --frozen --extra dev
           uv build --wheel --out-dir dist
@@ -139,7 +139,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export WORKSTREAM_MCP_OPENAPI_COMMAND="$(command -v python) -c 'import json; from app.main import app; print(json.dumps(app.openapi()))'"
+          export WORKSTREAM_MCP_OPENAPI_COMMAND="uv run --frozen python -c 'import json; from app.main import app; print(json.dumps(app.openapi()))'"
           uv run --frozen pytest -q tests/test_contract_drift.py
 
       - name: Run real isolated API-to-MCP lifecycle parity
@@ -151,8 +151,8 @@ jobs:
         run: |
           set -euo pipefail
           for suite in test_profile_flow test_access_reads; do
-            python scripts/run_isolated_tests.py \
+            uv run --frozen python scripts/run_isolated_tests.py \
               --metadata-json "${RUNNER_TEMP}/workstream-mcp-${suite}-evidence.json" \
               --timeout-seconds 240 \
-              -- env PYTHONPATH="../mcp_server" python -m pytest -q "../mcp_server/tests/integration/${suite}.py"
+              -- env PYTHONPATH="../mcp_server" uv run --frozen python -m pytest -q "../mcp_server/tests/integration/${suite}.py"
           done
