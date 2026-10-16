@@ -28,9 +28,11 @@ governed contribution infrastructure.
 
 ### Allowed
 
-- Licensing: `LICENSE`, `backend/LICENSE`, `THIRD_PARTY_NOTICES.md`, the README
-  License section, the CONTRIBUTING contribution grant, and PEP 639 metadata in
-  `backend/pyproject.toml` (`license`, `license-files`, `setuptools>=77`).
+- Licensing: `LICENSE`, `backend/LICENSE`, `mcp_server/LICENSE`,
+  `THIRD_PARTY_NOTICES.md`, the README License section, the CONTRIBUTING
+  contribution grant, and PEP 639 metadata in `backend/pyproject.toml`
+  (`license`, `license-files`, `setuptools>=77`) and `mcp_server/pyproject.toml`
+  (`license`, `license-files`).
 - Framing: `docs/protocol-and-implementation.md` and protocol wording in
   `AGENTS.md`, `README.md`, `docs/glossary.md`, `docs/principles.md`,
   `docs/product_principles.md`, and `docs/architecture_lockdown.md`.
@@ -51,9 +53,10 @@ governed contribution infrastructure.
 
 ## Design and decisions
 
-The license text is the unmodified canonical AGPLv3. `backend/` repeats it
-because it is the Python distribution root; PEP 639 then packages it in the
-wheel. `AGPL-3.0-or-later`, legacy `license = { text = ... }` metadata, a
+The license text is the unmodified canonical AGPLv3. `backend/` and
+`mcp_server/` repeat it because each is an independently built Python
+distribution root; PEP 639 then packages it in each wheel, and the MCP
+container image copies it with the package source. `AGPL-3.0-or-later`, legacy `license = { text = ... }` metadata, a
 root-only license, and sole Flow Research copyright attribution were rejected.
 
 The documentation edits predate several merged lifecycle changes. On
@@ -64,10 +67,16 @@ ReviewPolicy sets `human_review_required: false`.
 
 ## Acceptance criteria
 
-- [x] `LICENSE` and `backend/LICENSE` are the byte-identical canonical AGPLv3.
-- [x] README, CONTRIBUTING, and package metadata declare `AGPL-3.0-only`.
-- [x] Third-party notices distinguish installed dependencies from bundled
-      material and disclaim a complete transitive inventory.
+- [x] `LICENSE`, `backend/LICENSE`, and `mcp_server/LICENSE` are the
+      byte-identical canonical AGPLv3.
+- [x] README, CONTRIBUTING, and both package metadata files declare
+      `AGPL-3.0-only`.
+- [x] Third-party notices cover the backend and MCP dependency sets,
+      distinguish installed dependencies from bundled material, and disclaim a
+      complete transitive inventory.
+- [x] Current-implementation wording does not claim live fulfillment or
+      payment delivery, and orchestration diagrams keep policy-governed checks
+      and supported evaluators.
 - [x] No Workstream product behavior changes.
 - [ ] A human confirms authority to license existing contributions before merge.
 
@@ -84,16 +93,22 @@ ReviewPolicy sets `human_review_required: false`.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| License copies match | `shasum -a 256 LICENSE backend/LICENSE` | Equal hashes | Copies could drift later |
+| License copies match | `shasum -a 256 LICENSE backend/LICENSE mcp_server/LICENSE` | Equal hashes | Copies could drift later |
 | Metadata parses | `tomllib` read of `project.license` | `AGPL-3.0-only` | None |
 | Links and wording | `scripts/check_markdown_links.py`, `scripts/check_stale_workstream_wording.py` | See PR | None |
-| Wheel carries license | Isolated `uv build` and wheel inspection on 2026-08-10 | Passed | Re-run in CI against the PR head |
+| Wheels carry license | `uv build --wheel` for `backend/` and `mcp_server/`, then wheel METADATA and `dist-info/licenses/LICENSE` inspection | `License-Expression: AGPL-3.0-only`; packaged license byte-identical | None |
 
 ## Review findings
 
 Local reviews of the licensing patch on 2026-08-10 returned PASS or PASS WITH
 LOW RISKS with no blocking findings. Those reviews bound to an uncommitted
-patch, so they must be repeated against the PR head.
+patch on an older base.
+
+PR review raised four findings. Fixed: fulfillment and payment transfers were
+described as current behavior; the orchestration diagram limited core checks
+to deterministic checks; the notice and license metadata omitted the
+independently packaged MCP adapter. Open as a human gate: confirmation of
+authority to license existing contributions.
 
 ## Reconciliation
 

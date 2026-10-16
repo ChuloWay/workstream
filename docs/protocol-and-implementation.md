@@ -24,8 +24,10 @@ authority for the work it manages. Garden and other clients cannot bypass its
 authorization or write contribution truth directly.
 
 Workstream also evaluates contribution policy into conditional compensation
-awards and tracks fulfillment. Payment providers perform transfers through
-the established adapter boundary. Acceptance alone does not release payment.
+awards. Fulfillment tracking and payment-provider transfers through the
+established adapter boundary are Planned, not live; see
+[Current v0.1 Status](roadmap_status.md). Acceptance alone does not release
+payment.
 This framing does not change award eligibility, finance authority, or receipt
 ownership, and does not make a payment provider part of the core protocol.
 

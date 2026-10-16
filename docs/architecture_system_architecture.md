@@ -101,7 +101,7 @@ Possible Future Orchestration Adapter
 Workstream Core
   Versioned tasks and assignments
   Immutable submissions and artifacts
-  Deterministic checks
+  Policy-governed checks and supported evaluators
   Authorized Reviews and revisions
   ContributionRecords and conditional compensation evidence
 

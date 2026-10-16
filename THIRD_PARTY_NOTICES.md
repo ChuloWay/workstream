@@ -2,7 +2,11 @@
 
 Workstream uses third-party packages installed from
 [`backend/pyproject.toml`](backend/pyproject.toml) and resolved in
-[`backend/uv.lock`](backend/uv.lock). Those packages are not relicensed under
+[`backend/uv.lock`](backend/uv.lock), and, for the independently packaged MCP
+adapter, from [`mcp_server/pyproject.toml`](mcp_server/pyproject.toml) and
+resolved in [`mcp_server/uv.lock`](mcp_server/uv.lock). Its wheel and container
+image each carry their own resolved dependency set. Those packages are not
+relicensed under
 Workstream's AGPL-3.0-only license; each remains governed by its upstream
 license and notices.
 

@@ -230,8 +230,8 @@ The first commercial orchestration experiment is a configuration of the
 existing lifecycle for one enterprise software or quality-assurance issue. A
 human supplies the issue and acceptance rubric; an adapter suggests a plan and
 candidate; a Project Manager or other exact future grant approves Workstream
-task and assignment inputs; one external host performs the work; deterministic
-checks produce a review-ready packet; and the canonical Review lifecycle makes
+task and assignment inputs; one external host performs the work;
+policy-governed checks produce a review-ready packet; and the canonical Review lifecycle makes
 the decision.
 
 This is distinct from the v0.1 internal proof surface below. The internal pilot
