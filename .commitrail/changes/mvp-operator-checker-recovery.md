@@ -57,12 +57,13 @@ eligible source or call the retry through a bearer-authenticated public route.
   `.ci/behavior-ownership/partition.v1.json`: register only the three new
   public recovery modules with the existing ARCH-04F4 ownership group and
   regenerate its additive partition snapshot.
-- `backend/alembic/versions/0050_operational_read_audit_pairs.py`, the canonical
+- `backend/alembic/versions/0050_operational_read_audit.py`, the canonical
   head in `backend/alembic/env.py`, the existing external-checker migration
   proof, and issue #580's bounded record: consume the byte-identical shared
   prerequisite commit from #589 that admits exactly its registry-read pair and
   this change's recovery-read pair. These files remain owned and merged by
-  #589 before this PR; this branch adds no second migration variant.
+  #589 before this PR; this branch adds no second migration variant. The
+  revision identifier remains within Alembic's persisted 32-character bound.
 - `mcp_server/contracts/authorization_context_get.json`: regenerate only the
   selected authorization-context fragment and digest changed by the additive
   recovery-source action.
@@ -201,7 +202,8 @@ PostgreSQL evidence is clean.
   change owns only terminal checker recovery and preserves the shared AUTH
   catalogue/kernel additions. PR #589 owns and merges the canonical shared
   audit-pair migration before #588 and #592; those dependent branches consume
-  commit `019ada270` byte-for-byte and introduce no sibling revision.
+  commits `019ada270` and `ed8fe2275` byte-for-byte and introduce no sibling
+  revision.
 - Next usable boundary: source-specific observation and reconciliation for
   request execution, checker completion and acceptance commit/acknowledgement
   loss, followed by parent issue #555's real-project worker drill.
