@@ -58,7 +58,7 @@ all-extras environment as the other affected Backend jobs.
 | CLI-only PR | CLI real API/PostgreSQL/S3 contract and MinIO |
 | MCP-only PR | MCP contract, included in Backend required fan-in |
 | Mixed CLI/MCP/docs | Union of required client contracts |
-| Positively classified ordinary Markdown documentation | No runtime; Agent Gates remains |
+| Only `README.md`, `CHANGELOG.md`, `docs/**/*.md`, or `.commitrail/changes/**/*.md` | No runtime; Agent Gates remains |
 
 Draft and ready PRs use the same component rules. Event-derived `draft-test`
 cannot satisfy required `test`; marking ready starts the required check.
