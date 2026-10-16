@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Annotated, Any, TypeVar
 from uuid import UUID
@@ -66,6 +67,7 @@ def registry_http_error(status_code: int) -> StructuredHTTPException:
     )
 
 
+@asynccontextmanager
 async def _registry_operation(
     *,
     request: Request,
@@ -110,12 +112,12 @@ async def get_registry_registration(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AsyncIterator[CheckerRegistryOperation]:
     """Bind a registration key to AUTH correlation and one root transaction."""
-    async for operation in _registry_operation(
+    async with _registry_operation(
         request=request,
         resolved=resolved,
         session=session,
         operation_id=operation_id,
-    ):
+    ) as operation:
         yield operation
 
 
@@ -125,12 +127,12 @@ async def get_registry_read(
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> AsyncIterator[CheckerRegistryOperation]:
     """Compose one exact read under the ordinary request correlation."""
-    async for operation in _registry_operation(
+    async with _registry_operation(
         request=request,
         resolved=resolved,
         session=session,
         operation_id=None,
-    ):
+    ) as operation:
         yield operation
 
 

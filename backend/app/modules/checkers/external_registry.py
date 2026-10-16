@@ -245,7 +245,9 @@ class ExternalCheckerRegistryService:
                 phase=command.spec.phase,
             )
             replay = await self._repository.by_operation(command.operation_id)
-            registry_entry_id = replay.id if replay is not None else new_record_id()
+            registry_entry_id = (
+                UUID(str(replay.id)) if replay is not None else new_record_id()
+            )
             request_digest = external_checker_registration_request_digest(
                 command, registry_entry_id
             )

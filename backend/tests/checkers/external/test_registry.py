@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -52,6 +52,10 @@ class _Session:
 
     def in_nested_transaction(self) -> bool:
         return False
+
+
+class _NativeDriverUUID(UUID):
+    """Represent a valid PostgreSQL driver UUID subtype at the storage boundary."""
 
 
 class _Authority:
@@ -166,6 +170,7 @@ async def test_register_flushes_once_and_freshly_authorizes_exact_replay() -> No
     request = registration_request()
 
     first = await service.register(request)
+    repository.rows[0].id = _NativeDriverUUID(str(repository.rows[0].id))
     replay = await service.register(request)
 
     assert replay == first
