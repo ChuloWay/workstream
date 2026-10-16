@@ -15,7 +15,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use workstream_checker_sdk::{
     canonical_hash, infrastructure_result, parse_request, parse_terminal_benchmark_plan,
-    validate_result, ValidatedRequest, MAX_REQUEST_BYTES, MAX_RESULT_BYTES,
+    validate_result, ValidatedRequest, MAX_REQUEST_BYTES,
 };
 
 mod terminal_benchmark;
@@ -30,6 +30,7 @@ const MAX_RESPONSE_BYTES: usize = 65_536 + 16_384;
 const SOCKET_IO_TIMEOUT: Duration = Duration::from_secs(2);
 const DOCKER_CONTROL_TIMEOUT: Duration = Duration::from_secs(10);
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(10);
+const CLEANUP_MAXIMUM_OUTPUT_BYTES: usize = 256 * 1024;
 const RUNTIME_FILE_PREFIX: &str = ".workstream-checker-runtime-";
 
 #[derive(Debug, Deserialize)]
@@ -120,7 +121,6 @@ struct VerifiedGrant {
 #[derive(Debug, PartialEq)]
 struct ExecutedChecker {
     value: Value,
-    output_bytes: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -209,6 +209,70 @@ struct BoundedCommandOutput {
     status: ExitStatus,
     stdout: Vec<u8>,
     _stderr: Vec<u8>,
+}
+
+struct EmergencyCleanupBudget {
+    deadline: Option<Instant>,
+    remaining_output: usize,
+}
+
+struct OutputMeter {
+    remaining: usize,
+}
+
+struct RequestExecutionBudget {
+    deadline: Instant,
+    output: OutputMeter,
+    cleanup: EmergencyCleanupBudget,
+}
+
+impl OutputMeter {
+    fn new(maximum: usize) -> Self {
+        Self { remaining: maximum }
+    }
+
+    fn bytes(&mut self, count: usize) -> Result<(), &'static str> {
+        self.remaining = self.remaining.checked_sub(count).ok_or("invalid_output")?;
+        Ok(())
+    }
+
+    fn charge(&mut self, output: &BoundedCommandOutput) -> Result<(), &'static str> {
+        self.bytes(output.stdout.len().saturating_add(output._stderr.len()))
+    }
+}
+
+impl EmergencyCleanupBudget {
+    fn new() -> Self {
+        Self {
+            deadline: None,
+            remaining_output: CLEANUP_MAXIMUM_OUTPUT_BYTES,
+        }
+    }
+
+    fn deadline(&mut self) -> Instant {
+        *self
+            .deadline
+            .get_or_insert_with(|| Instant::now() + CLEANUP_TIMEOUT)
+    }
+
+    fn charge(&mut self, output: &BoundedCommandOutput) -> Result<(), String> {
+        let count = output.stdout.len().saturating_add(output._stderr.len());
+        self.remaining_output = self
+            .remaining_output
+            .checked_sub(count)
+            .ok_or_else(|| "cleanup output unbounded".to_owned())?;
+        Ok(())
+    }
+}
+
+impl RequestExecutionBudget {
+    fn new(deadline: Instant, maximum_output: usize) -> Self {
+        Self {
+            deadline,
+            output: OutputMeter::new(maximum_output),
+            cleanup: EmergencyCleanupBudget::new(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -363,12 +427,7 @@ fn run() -> Result<(), String> {
     let bytes = fs::read(path).map_err(|_| "configuration unavailable")?;
     let config: ServiceConfig =
         serde_json::from_slice(&bytes).map_err(|_| "configuration invalid")?;
-    validate_config(&config)?;
-    cleanup_stale_runtime_files(&config)?;
-    if let Some(profile) = &config.terminal_benchmark {
-        terminal_benchmark::cleanup_stale_resources(&config, profile)?;
-    }
-    let listener = OwnedSocketListener::bind(&config.socket_path)?;
+    let listener = prepare_listener(&config)?;
     for connection in listener.incoming() {
         match connection {
             Ok(stream) => serve_connection(&config, stream, SOCKET_IO_TIMEOUT),
@@ -376,6 +435,19 @@ fn run() -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn prepare_listener(config: &ServiceConfig) -> Result<OwnedSocketListener, String> {
+    // Socket-parent custody must precede validation that invokes Docker and every
+    // startup cleanup. A losing concurrent process cannot inspect or remove the
+    // live owner's resources.
+    let listener = OwnedSocketListener::bind(&config.socket_path)?;
+    validate_config(config)?;
+    cleanup_stale_runtime_files(config)?;
+    if let Some(profile) = &config.terminal_benchmark {
+        terminal_benchmark::cleanup_stale_resources(config, profile)?;
+    }
+    Ok(listener)
 }
 
 fn serve_connection(config: &ServiceConfig, mut stream: UnixStream, timeout: Duration) {
@@ -532,16 +604,19 @@ fn handle_frame(
         sandbox_uid: config.sandbox_uid,
         sandbox_gid: config.sandbox_gid,
     };
-    let execution_deadline = Instant::now() + Duration::from_millis(request.deadline_ms);
+    let mut budget = RequestExecutionBudget::new(
+        Instant::now() + Duration::from_millis(request.deadline_ms),
+        request.maximum_output_bytes,
+    );
     let (result, isolation) = match verify_grant(config, &request, &envelope.grant) {
-        Ok(grant) => match inspect_image(config, cache, execution_deadline) {
+        Ok(grant) => match inspect_image(config, cache, stream, &mut budget) {
             Ok(()) => match execute_container(
                 config,
                 cache,
                 &request,
                 &grant.workspace,
                 stream,
-                execution_deadline,
+                &mut budget,
             ) {
                 Ok(output) if validate_result(&output.value, &request).is_ok() => {
                     (output.value, Some(isolation))
@@ -564,10 +639,11 @@ fn handle_frame(
                                 request: &request,
                                 grant: &grant,
                                 client: stream,
-                                deadline: execution_deadline,
+                                deadline: budget.deadline,
+                                output: &mut budget.output,
+                                cleanup: &mut budget.cleanup,
                             },
                             &plan,
-                            output.output_bytes,
                         ) {
                             Ok(result) => (result, Some(isolation)),
                             Err(code) => (
@@ -684,6 +760,35 @@ fn run_bounded_command(
     deadline: Instant,
     maximum_output: usize,
 ) -> Result<BoundedCommandOutput, String> {
+    run_bounded_command_inner(binary, arguments, deadline, maximum_output, None, None)
+}
+
+fn run_bounded_command_cancellable(
+    binary: &Path,
+    arguments: &[&str],
+    deadline: Instant,
+    maximum_output: usize,
+    client: &UnixStream,
+    cleanup: &mut EmergencyCleanupBudget,
+) -> Result<BoundedCommandOutput, String> {
+    run_bounded_command_inner(
+        binary,
+        arguments,
+        deadline,
+        maximum_output,
+        Some(client),
+        Some(cleanup),
+    )
+}
+
+fn run_bounded_command_inner(
+    binary: &Path,
+    arguments: &[&str],
+    deadline: Instant,
+    maximum_output: usize,
+    client: Option<&UnixStream>,
+    mut cleanup: Option<&mut EmergencyCleanupBudget>,
+) -> Result<BoundedCommandOutput, String> {
     if Instant::now() >= deadline {
         return Err("process deadline exceeded".into());
     }
@@ -697,35 +802,39 @@ fn run_bounded_command(
     let mut stdout = match child.stdout.take() {
         Some(stdout) => stdout,
         None => {
-            let _ = stop_child(&mut child, Instant::now() + CLEANUP_TIMEOUT);
+            let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
             return Err("process stdout unavailable".into());
         }
     };
     let mut stderr = match child.stderr.take() {
         Some(stderr) => stderr,
         None => {
-            let _ = stop_child(&mut child, Instant::now() + CLEANUP_TIMEOUT);
+            let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
             return Err("process stderr unavailable".into());
         }
     };
     if set_nonblocking(&stdout).is_err() || set_nonblocking(&stderr).is_err() {
-        let _ = stop_child(&mut child, Instant::now() + CLEANUP_TIMEOUT);
+        let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
         return Err("process descriptor unavailable".into());
     }
     let mut stdout_bytes = Vec::new();
     let mut stderr_bytes = Vec::new();
     loop {
+        if client.is_some_and(|stream| !client_is_connected(stream)) {
+            let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
+            return Err("client disconnected".into());
+        }
         if read_available(&mut stdout, &mut stdout_bytes, maximum_output).is_err()
             || read_available(&mut stderr, &mut stderr_bytes, maximum_output).is_err()
             || stdout_bytes.len().saturating_add(stderr_bytes.len()) > maximum_output
         {
-            let _ = stop_child(&mut child, Instant::now() + CLEANUP_TIMEOUT);
+            let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
             return Err("process output unbounded".into());
         }
         let status = match child.try_wait() {
             Ok(status) => status,
             Err(_) => {
-                let _ = stop_child(&mut child, Instant::now() + CLEANUP_TIMEOUT);
+                let _ = stop_child(&mut child, command_cleanup_deadline(&mut cleanup));
                 return Err("process wait failed".into());
             }
         };
@@ -742,11 +851,18 @@ fn run_bounded_command(
             });
         }
         if Instant::now() >= deadline {
-            stop_child(&mut child, Instant::now() + CLEANUP_TIMEOUT)?;
+            stop_child(&mut child, command_cleanup_deadline(&mut cleanup))?;
             return Err("process deadline exceeded".into());
         }
         thread::sleep(Duration::from_millis(5));
     }
+}
+
+fn command_cleanup_deadline(cleanup: &mut Option<&mut EmergencyCleanupBudget>) -> Instant {
+    cleanup
+        .as_deref_mut()
+        .map(EmergencyCleanupBudget::deadline)
+        .unwrap_or_else(|| Instant::now() + CLEANUP_TIMEOUT)
 }
 
 fn encode_response(
@@ -1153,16 +1269,28 @@ fn inspect_directory(
 fn inspect_image(
     config: &ServiceConfig,
     cache: &CacheEntry,
-    deadline: Instant,
+    client: &UnixStream,
+    budget: &mut RequestExecutionBudget,
 ) -> Result<(), String> {
     let reference = format!("{}@{}", cache.repository, cache.platform_manifest_digest);
-    let output = run_bounded_command(
+    let output = run_bounded_command_cancellable(
         &config.docker_binary,
         &["image", "inspect", "--format", "{{json .}}", &reference],
-        deadline,
-        2 * 1024 * 1024,
+        budget.deadline,
+        budget.output.remaining,
+        client,
+        &mut budget.cleanup,
     )
     .map_err(|_| "image inspect unavailable")?;
+    budget.output.charge(&output)?;
+    validate_inspected_image(cache, &output)
+}
+
+fn validate_inspected_image(
+    cache: &CacheEntry,
+    output: &BoundedCommandOutput,
+) -> Result<(), String> {
+    let reference = format!("{}@{}", cache.repository, cache.platform_manifest_digest);
     if !output.status.success() {
         return Err("image missing".into());
     }
@@ -1188,7 +1316,7 @@ fn execute_container(
     request: &ValidatedRequest,
     workspace: &Path,
     client: &UnixStream,
-    deadline: Instant,
+    budget: &mut RequestExecutionBudget,
 ) -> Result<ExecutedChecker, (&'static str, bool)> {
     // Revalidate immediately before handing the path to Docker.
     inspect_workspace(workspace, config.sandbox_uid, config.sandbox_gid)
@@ -1237,15 +1365,17 @@ fn execute_container(
         "-i",
         &image,
     ];
-    let created = match run_bounded_command(
+    let created = match run_bounded_command_cancellable(
         &config.docker_binary,
         &create_arguments,
-        deadline,
-        64 * 1024,
+        budget.deadline,
+        budget.output.remaining,
+        client,
+        &mut budget.cleanup,
     ) {
         Ok(output) => output,
         Err(error) => {
-            if !remove_container(config, &name) {
+            if !remove_container_cleanup(config, &name, &mut budget.cleanup) {
                 return Err(("implementation_unavailable", false));
             }
             return Err((
@@ -1258,40 +1388,109 @@ fn execute_container(
             ));
         }
     };
+    if budget.output.charge(&created).is_err() {
+        return if remove_container_cleanup(config, &name, &mut budget.cleanup) {
+            Err(("invalid_output", false))
+        } else {
+            Err(("implementation_unavailable", false))
+        };
+    }
     if !created.status.success() {
-        if !remove_container(config, &name) {
+        if !remove_container_cleanup(config, &name, &mut budget.cleanup) {
             return Err(("implementation_unavailable", false));
         }
         return Err(("implementation_unavailable", false));
     }
-    let result = run_started_container(config, &name, request, client, deadline);
-    if !remove_container(config, &name) {
+    let result = run_started_container(
+        config,
+        &name,
+        request,
+        client,
+        budget.deadline,
+        &mut budget.output,
+        &mut budget.cleanup,
+    );
+    if !remove_container_work(
+        config,
+        &name,
+        client,
+        budget.deadline,
+        &mut budget.output,
+        &mut budget.cleanup,
+    ) {
         return Err(("implementation_unavailable", true));
     }
     result.map_err(|code| (code, true))
 }
 
-fn remove_container(config: &ServiceConfig, name: &str) -> bool {
-    let cleanup_deadline = Instant::now() + CLEANUP_TIMEOUT;
-    if run_bounded_command(
+fn remove_container_work(
+    config: &ServiceConfig,
+    name: &str,
+    client: &UnixStream,
+    deadline: Instant,
+    output_meter: &mut OutputMeter,
+    cleanup: &mut EmergencyCleanupBudget,
+) -> bool {
+    let removed = run_bounded_command_cancellable(
         &config.docker_binary,
         &["rm", "-f", name],
-        cleanup_deadline,
-        64 * 1024,
-    )
-    .is_err()
-    {
+        deadline,
+        output_meter.remaining,
+        client,
+        cleanup,
+    );
+    let Ok(removed) = removed else {
+        let _ = remove_container_cleanup(config, name, cleanup);
+        return false;
+    };
+    if output_meter.charge(&removed).is_err() {
+        let _ = remove_container_cleanup(config, name, cleanup);
         return false;
     }
-    matches!(
-        run_bounded_command(
-            &config.docker_binary,
-            &["container", "inspect", name],
-            cleanup_deadline,
-            64 * 1024,
-        ),
-        Ok(output) if !output.status.success()
-    )
+    let inspected = run_bounded_command_cancellable(
+        &config.docker_binary,
+        &["container", "inspect", name],
+        deadline,
+        output_meter.remaining,
+        client,
+        cleanup,
+    );
+    let Ok(inspected) = inspected else {
+        let _ = remove_container_cleanup(config, name, cleanup);
+        return false;
+    };
+    if output_meter.charge(&inspected).is_err() || inspected.status.success() {
+        let _ = remove_container_cleanup(config, name, cleanup);
+        return false;
+    }
+    true
+}
+
+fn remove_container_cleanup(
+    config: &ServiceConfig,
+    name: &str,
+    cleanup: &mut EmergencyCleanupBudget,
+) -> bool {
+    let deadline = cleanup.deadline();
+    let removed = run_bounded_command(
+        &config.docker_binary,
+        &["rm", "-f", name],
+        deadline,
+        cleanup.remaining_output,
+    );
+    let Ok(removed) = removed else {
+        return false;
+    };
+    if cleanup.charge(&removed).is_err() {
+        return false;
+    }
+    let inspected = run_bounded_command(
+        &config.docker_binary,
+        &["container", "inspect", name],
+        deadline,
+        cleanup.remaining_output,
+    );
+    matches!(inspected, Ok(output) if cleanup.charge(&output).is_ok() && !output.status.success())
 }
 
 fn run_started_container(
@@ -1300,6 +1499,8 @@ fn run_started_container(
     request: &ValidatedRequest,
     client: &UnixStream,
     deadline: Instant,
+    output_meter: &mut OutputMeter,
+    cleanup_budget: &mut EmergencyCleanupBudget,
 ) -> Result<ExecutedChecker, &'static str> {
     let payload = serde_json::to_vec(&request.value).map_err(|_| "invalid_output")?;
     let files = RuntimeFiles::new(config, name)?;
@@ -1325,34 +1526,34 @@ fn run_started_container(
     let mut stdin = match child.stdin.take() {
         Some(stdin) => Some(stdin),
         None => {
-            terminate_container(config, name, &mut child);
+            terminate_container(config, name, &mut child, cleanup_budget);
             return Err("implementation_unavailable");
         }
     };
     if set_nonblocking(stdin.as_ref().unwrap()).is_err() {
-        terminate_container(config, name, &mut child);
+        terminate_container(config, name, &mut child, cleanup_budget);
         return Err("implementation_unavailable");
     }
     let mut written = 0;
     let status = loop {
         if Instant::now() >= deadline {
-            terminate_container(config, name, &mut child);
+            terminate_container(config, name, &mut child, cleanup_budget);
             return Err("deadline_exceeded");
         }
         if !client_is_connected(client) {
-            terminate_container(config, name, &mut child);
+            terminate_container(config, name, &mut child, cleanup_budget);
             return Err("implementation_unavailable");
         }
         if written < payload.len() {
             match stdin.as_mut().unwrap().write(&payload[written..]) {
                 Ok(0) => {
-                    terminate_container(config, name, &mut child);
+                    terminate_container(config, name, &mut child, cleanup_budget);
                     return Err("implementation_unavailable");
                 }
                 Ok(count) => written += count,
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
                 Err(_) => {
-                    terminate_container(config, name, &mut child);
+                    terminate_container(config, name, &mut child, cleanup_budget);
                     return Err("implementation_unavailable");
                 }
             }
@@ -1363,7 +1564,7 @@ fn run_started_container(
         let status = match child.try_wait() {
             Ok(status) => status,
             Err(_) => {
-                terminate_container(config, name, &mut child);
+                terminate_container(config, name, &mut child, cleanup_budget);
                 return Err("implementation_unavailable");
             }
         };
@@ -1375,13 +1576,12 @@ fn run_started_container(
         let (output_size, error_size) = match sizes {
             Ok(sizes) => sizes,
             Err(_) => {
-                terminate_container(config, name, &mut child);
+                terminate_container(config, name, &mut child, cleanup_budget);
                 return Err("implementation_unavailable");
             }
         };
-        if output_size > request.maximum_output_bytes as u64 || error_size > MAX_RESULT_BYTES as u64
-        {
-            terminate_container(config, name, &mut child);
+        if output_size.saturating_add(error_size) > output_meter.remaining as u64 {
+            terminate_container(config, name, &mut child, cleanup_budget);
             return Err("invalid_output");
         }
         thread::sleep(Duration::from_millis(10));
@@ -1390,25 +1590,32 @@ fn run_started_container(
     if written != payload.len() {
         return Err("invalid_output");
     }
-    let bytes = read_bounded_file(&files.output, request.maximum_output_bytes)
-        .map_err(|_| "invalid_output")?;
+    let bytes =
+        read_bounded_file(&files.output, output_meter.remaining).map_err(|_| "invalid_output")?;
     let error_bytes =
-        read_bounded_file(&files.error, MAX_RESULT_BYTES).map_err(|_| "invalid_output")?;
+        read_bounded_file(&files.error, output_meter.remaining).map_err(|_| "invalid_output")?;
+    output_meter
+        .bytes(bytes.len().saturating_add(error_bytes.len()))
+        .map_err(|_| "invalid_output")?;
     if !status.success() {
-        return if container_was_oom_killed(config, name)? {
+        return if container_was_oom_killed(
+            config,
+            name,
+            client,
+            deadline,
+            output_meter,
+            cleanup_budget,
+        )? {
             Err("capacity_exceeded")
         } else {
             Err("invalid_output")
         };
     }
-    if bytes.is_empty() || bytes.len() > request.maximum_output_bytes {
+    if bytes.is_empty() {
         return Err("invalid_output");
     }
     let result: Value = serde_json::from_slice(&bytes).map_err(|_| "invalid_output")?;
-    Ok(ExecutedChecker {
-        value: result,
-        output_bytes: bytes.len().saturating_add(error_bytes.len()),
-    })
+    Ok(ExecutedChecker { value: result })
 }
 
 struct RuntimeFiles {
@@ -1458,27 +1665,44 @@ fn cleanup_stale_runtime_files(config: &ServiceConfig) -> Result<(), String> {
     Ok(())
 }
 
-fn terminate_container(config: &ServiceConfig, name: &str, child: &mut std::process::Child) {
-    let cleanup_deadline = Instant::now() + CLEANUP_TIMEOUT;
-    let _ = run_bounded_command(
+fn terminate_container(
+    config: &ServiceConfig,
+    name: &str,
+    child: &mut std::process::Child,
+    cleanup: &mut EmergencyCleanupBudget,
+) {
+    let cleanup_deadline = cleanup.deadline();
+    if let Ok(output) = run_bounded_command(
         &config.docker_binary,
         &["kill", name],
         cleanup_deadline,
-        64 * 1024,
-    );
+        cleanup.remaining_output,
+    ) {
+        let _ = cleanup.charge(&output);
+    }
     if reap_child(child, Instant::now() + Duration::from_secs(1)).is_err() {
         let _ = stop_child(child, cleanup_deadline);
     }
 }
 
-fn container_was_oom_killed(config: &ServiceConfig, name: &str) -> Result<bool, &'static str> {
-    let output = run_bounded_command(
+fn container_was_oom_killed(
+    config: &ServiceConfig,
+    name: &str,
+    client: &UnixStream,
+    deadline: Instant,
+    output_meter: &mut OutputMeter,
+    cleanup: &mut EmergencyCleanupBudget,
+) -> Result<bool, &'static str> {
+    let output = run_bounded_command_cancellable(
         &config.docker_binary,
         &["inspect", "--format", "{{json .State.OOMKilled}}", name],
-        Instant::now() + DOCKER_CONTROL_TIMEOUT,
-        16 * 1024,
+        deadline,
+        output_meter.remaining,
+        client,
+        cleanup,
     )
     .map_err(|_| "implementation_unavailable")?;
+    output_meter.charge(&output).map_err(|_| "invalid_output")?;
     if !output.status.success() {
         return Err("implementation_unavailable");
     }
@@ -1817,6 +2041,35 @@ mod tests {
     }
 
     #[test]
+    fn losing_full_startup_cannot_run_cleanup_under_the_live_owner() {
+        let (root, config) = test_config();
+        let first = prepare_listener(&config).unwrap();
+        let socket_root = config.socket_path.parent().unwrap();
+        let stale_runtime = socket_root.join(format!("{RUNTIME_FILE_PREFIX}loser.stdout"));
+        fs::write(&stale_runtime, b"winner-owned").unwrap();
+        let docker_marker = root.join("docker-called-by-loser");
+        fs::write(
+            &config.docker_binary,
+            format!(
+                "#!/bin/sh\ntouch {}\nprintf '{{\"runc\":{{}}}}'\n",
+                docker_marker.display()
+            ),
+        )
+        .unwrap();
+
+        assert_eq!(
+            prepare_listener(&config).unwrap_err(),
+            "socket custody unavailable"
+        );
+        assert_eq!(fs::read(&stale_runtime).unwrap(), b"winner-owned");
+        assert!(!docker_marker.exists());
+
+        fs::remove_file(stale_runtime).unwrap();
+        drop(first);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn grant_ids_and_cache_repositories_are_closed() {
         assert!(valid_grant_id("extract_0123456789abcdef0123456789abcdef"));
         assert!(!valid_grant_id(
@@ -1993,13 +2246,17 @@ mod tests {
         request.value["input"] = Value::String("x".repeat(300_000));
         let (_peer, client) = UnixStream::pair().unwrap();
         let started = Instant::now();
+        let mut output = OutputMeter::new(request.maximum_output_bytes);
+        let mut cleanup = EmergencyCleanupBudget::new();
         assert_eq!(
             run_started_container(
                 &config,
                 "bounded-stdin",
                 &request,
                 &client,
-                Instant::now() + Duration::from_millis(100)
+                Instant::now() + Duration::from_millis(100),
+                &mut output,
+                &mut cleanup,
             ),
             Err("deadline_exceeded")
         );
@@ -2009,17 +2266,167 @@ mod tests {
         let (peer, disconnected) = UnixStream::pair().unwrap();
         drop(peer);
         let started = Instant::now();
+        let mut output = OutputMeter::new(request.maximum_output_bytes);
+        let mut cleanup = EmergencyCleanupBudget::new();
         assert_eq!(
             run_started_container(
                 &config,
                 "disconnected",
                 &request,
                 &disconnected,
-                Instant::now() + Duration::from_secs(30)
+                Instant::now() + Duration::from_secs(30),
+                &mut output,
+                &mut cleanup,
             ),
             Err("implementation_unavailable")
         );
         assert!(started.elapsed() < Duration::from_secs(2));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn blocking_control_command_stops_on_disconnect_and_reuses_cleanup_budget() {
+        let (root, config) = test_config();
+        let cli_pid = root.join("cli-pid");
+        let container = root.join("container");
+        fs::write(&container, b"live").unwrap();
+        fs::write(
+            &config.docker_binary,
+            format!(
+                r#"#!/bin/sh
+root=$(dirname "$0")
+case "$1 $2" in
+  "start --attach") printf '%s' "$$" > "{cli_pid}"; while :; do :; done;;
+  "rm -f") rm -f "{container}"; printf 'removed'; exit 0;;
+  "container inspect") test -e "{container}"; exit $?;;
+esac
+exit 2
+"#,
+                cli_pid = cli_pid.display(),
+                container = container.display(),
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
+
+        let (peer, client) = UnixStream::pair().unwrap();
+        let pid_marker = cli_pid.clone();
+        let disconnect = thread::spawn(move || {
+            for _ in 0..200 {
+                if pid_marker.exists() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+            drop(peer);
+        });
+        let mut cleanup = EmergencyCleanupBudget::new();
+        let started = Instant::now();
+        assert!(matches!(
+            run_bounded_command_cancellable(
+                &config.docker_binary,
+                &["start", "--attach", "candidate"],
+                Instant::now() + Duration::from_secs(30),
+                1024,
+                &client,
+                &mut cleanup,
+            ),
+            Err(error) if error == "client disconnected"
+        ));
+        disconnect.join().unwrap();
+        assert!(started.elapsed() < Duration::from_secs(2));
+        let pid: libc::pid_t = fs::read_to_string(&cli_pid).unwrap().parse().unwrap();
+        // SAFETY: signal 0 only probes the recorded child PID after the bounded
+        // command has reaped it.
+        assert_eq!(unsafe { libc::kill(pid, 0) }, -1);
+
+        let cleanup_deadline = cleanup.deadline();
+        assert!(remove_container_cleanup(&config, "candidate", &mut cleanup));
+        assert_eq!(cleanup.deadline, Some(cleanup_deadline));
+        assert!(cleanup.remaining_output < CLEANUP_MAXIMUM_OUTPUT_BYTES);
+        assert!(!container.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn initial_container_create_output_consumes_the_request_meter() {
+        let (root, config) = test_config();
+        fs::write(
+            &config.docker_binary,
+            b"#!/bin/sh\nroot=$(dirname \"$0\")\ncase \"$1\" in\n  create) printf 'abcd'; exit 17;;\n  rm) rm -f \"$root/container\"; exit 0;;\n  container) exit 1;;\nesac\n",
+        )
+        .unwrap();
+        fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
+        let workspace = config.material_root.join("workspace-meter");
+        fs::create_dir(&workspace).unwrap();
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
+        let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
+        let (_peer, client) = UnixStream::pair().unwrap();
+        let mut budget = RequestExecutionBudget::new(Instant::now() + Duration::from_secs(2), 4);
+
+        assert_eq!(
+            execute_container(
+                &config,
+                &config.cache[0],
+                &request,
+                &workspace,
+                &client,
+                &mut budget,
+            ),
+            Err(("implementation_unavailable", false))
+        );
+        assert_eq!(budget.output.remaining, 0);
+
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn uncertain_work_removal_retries_inside_the_shared_cleanup_budget() {
+        let (root, config) = test_config();
+        let container = root.join("container-work-cleanup");
+        let first_removal = root.join("first-removal");
+        fs::write(&container, b"live").unwrap();
+        fs::write(
+            &config.docker_binary,
+            format!(
+                r#"#!/bin/sh
+case "$1 $2" in
+  "rm -f")
+    if test ! -e "{first_removal}"; then
+      : > "{first_removal}"
+      printf 'work'
+    else
+      rm -f "{container}"
+      printf 'cleanup'
+    fi
+    exit 0;;
+  "container inspect") test -e "{container}"; exit $?;;
+esac
+exit 2
+"#,
+                first_removal = first_removal.display(),
+                container = container.display(),
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
+        let (_peer, client) = UnixStream::pair().unwrap();
+        let mut output = OutputMeter::new(1024);
+        let mut cleanup = EmergencyCleanupBudget::new();
+
+        assert!(!remove_container_work(
+            &config,
+            "candidate",
+            &client,
+            Instant::now() + Duration::from_secs(2),
+            &mut output,
+            &mut cleanup,
+        ));
+        assert!(!container.exists());
+        assert_eq!(output.remaining, 1020);
+        assert!(cleanup.deadline.is_some());
+        assert!(cleanup.remaining_output < CLEANUP_MAXIMUM_OUTPUT_BYTES);
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -2037,6 +2444,10 @@ mod tests {
         fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
         let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
         let (_peer, client) = UnixStream::pair().unwrap();
+        let mut budget = RequestExecutionBudget::new(
+            Instant::now() + Duration::from_secs(2),
+            request.maximum_output_bytes,
+        );
 
         assert_eq!(
             execute_container(
@@ -2045,7 +2456,7 @@ mod tests {
                 &request,
                 &workspace,
                 &client,
-                Instant::now() + Duration::from_secs(2),
+                &mut budget,
             ),
             Err(("implementation_unavailable", false))
         );

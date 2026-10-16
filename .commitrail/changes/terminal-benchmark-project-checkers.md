@@ -34,8 +34,8 @@ code on the host would break the established boundary.
   outcomes. Its verifier intentionally executes only trusted repository assets
   and is not an uploaded-code admission authority.
 - Read-only OCI inspection found that the original corpus `FROM` digest
-  `sha256:4766d8...` was an image index. The reconciled #576 candidate at
-  `4628babe4` now uses its exact linux/amd64 platform manifest
+  `sha256:4766d8...` was an image index. The final reviewed #576 dependency at
+  `e6a55d26b` uses its exact linux/amd64 platform manifest
   `sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af`
   and the exact reviewed Dockerfile recipe. PRE must require that platform
   manifest and recipe; it must not silently accept the index.
@@ -198,13 +198,15 @@ nor response exposes a path. If either larger reservation or directory
 publication cannot be proven, the invocation stops as infrastructure failure
 before the service call.
 
-The service may write only the bound `runtime/` child. Before every directory or
-regular-file creation it charges one entry and the intended bytes to the two
-grant allowances; exact-limit creation is admitted and limit-plus-one fails
-before creating residue. The projected context, image tar, bounded inventory and
-control files all use this single meter. The Docker builder receives a bounded
-writable root and an output file under that directory; the service rejects an
-observed size overrun independently before image load.
+The service may write only the bound `runtime/` child. Before every projected
+directory or regular-file creation it charges one entry and the copied bytes to
+the two grant allowances. It then charges the candidate-tar entry, creates that
+single empty file and reserves every remaining byte before builder launch. The
+builder inherits an `RLIMIT_FSIZE` hard ceiling equal to that reservation, so an
+exact-limit write is admitted and the next byte fails in the writer rather than
+creating unmetered residue. The service also rejects a zero-length or oversized
+tar before image load. The builder's separate writable-root bound does not
+enlarge the ART reservation.
 
 Ownership follows the existing call order. On normal completion, timeout,
 cancellation or disconnect, the Rust service settles its owned Docker resources
@@ -214,25 +216,24 @@ materializer exposes an evaluation to CHECKERS. A grant/workspace cleanup error
 discards any already received result, retains ledger custody for retry and wins
 as infrastructure failure. A service-only SIGKILL produces adapter failure and
 the still-live Python context synchronously unwinds ART scratch; service restart
-uses the label/prefix inventory to sweep Docker residue. If the Python ART owner
+uses the trusted labels and fixed repository/tag namespace to sweep Docker
+residue. If the Python ART owner
 also dies, the existing TTL plus dead-owner reaper cleans the workspace. No
 service-to-ART callback or second cleanup dependency is introduced.
 
 Every service-created Docker container has exact trusted labels for deployment
-owner, request digest, grant ID, attempt nonce and resource kind. Before a
-temporary image is loaded, the service fsyncs a bounded inventory under
-`runtime/` containing its owned repository/tag namespace, expected output hash,
-container names and later observed image ID. Normal cleanup and the service
-startup reaper remove containers selected by the full label set, then remove
-only inventoried images whose IDs and names still match. A scan of the fixed
-service-owned temporary repository prefix recovers an image when SIGKILL occurs
-between load and inventory update; it never removes an image outside that
-prefix. After normal Docker cleanup, ART deletes the remaining runtime files.
-Live Python unwind or dead-owner/TTL cleanup may remove those files first after
-a service crash; the label and fixed-prefix scan therefore remains sufficient
-without the inventory file. The Docker reaper uses one cleanup deadline and
-leaves ambiguous resources quarantined as infrastructure failure rather than
-claiming cleanup.
+owner, request digest, grant ID, attempt nonce and resource kind. The temporary
+image tag uses only the fixed administrator-configured repository plus the
+service-generated hexadecimal attempt nonce. Normal cleanup removes those exact
+names before returning. Startup recovery selects containers by the owner label,
+then validates the complete label set and owned name before deletion; it scans
+only the fixed repository and accepts only valid attempt tags whose inspected
+image still reports that exact tag and the same listed image ID. It never relies
+on ART runtime files, which
+may already be gone after a service crash, and never removes an image outside
+the fixed repository. The Docker reaper uses one cleanup deadline and leaves
+ambiguous resources quarantined as infrastructure failure rather than claiming
+cleanup.
 
 ### Physical build and oracle separation
 
@@ -244,14 +245,14 @@ manifest, and projecting exactly `.dockerignore`, `environment/Dockerfile` and
 out-of-budget entries, seals and reinventories the projection, then mounts only
 that directory into Kaniko. `solution/**`, `tests/**`, the grant root, and the
 absolute submitted Dockerfile path are physically absent from the builder
-namespace. The Dockerfile must match the exact recipe reconciled at
-`4628babe4`, including the linux/amd64 base platform-manifest digest; PRE and
+namespace. The Dockerfile must match the exact recipe in the reviewed
+`e6a55d26b` corpus, including the linux/amd64 base platform-manifest digest; PRE and
 POST both reject any other recipe before building.
 
 The produced image is attempt-specific evidence, not a reproducible artifact:
 Kaniko timestamps mean identical inputs need not produce identical tar bytes.
-The service hashes the exact attempt output, loads it under the owned temporary
-identity, and uses that observed image ID only for the bound oracle runs.
+The service loads the bounded attempt tar under the owned temporary identity,
+inspects its image ID, and uses that observed ID only for the bound oracle runs.
 Candidate runs receive the produced image plus a read-only tests mount and no
 grant or reference path. Reference runs receive the same image and tests plus
 only the single declared `solution/program.py` mounted over the candidate
@@ -276,10 +277,14 @@ image load and all four oracle runs consume its remaining time; no phase or
 retry resets it. One byte meter likewise aggregates checker output, builder and
 Docker control logs, every oracle's stdout/stderr and the final normalized
 result under `maximum_output_bytes`; it is never reset per resource or phase.
-Cancellation starts one aggregate emergency cleanup deadline. All stop/remove/
-unload operations share the service's existing 10-second `CLEANUP_TIMEOUT`,
-which remains within the existing 60-second external-checker cleanup margin;
-there is no 10-second allowance per resource.
+This includes the initial image inspection and container create plus every
+subsequent Docker work command. Blocking Docker control commands poll the
+client connection and stop their CLI process on disconnect. When cleanup first
+becomes necessary, every CLI stop, emergency container remove and image unload
+shares the existing 10-second
+`CLEANUP_TIMEOUT` and a separate fixed 256 KiB cleanup-output ceiling. Both fit
+inside the existing 60-second adapter cleanup margin and neither resets per
+resource.
 
 ### Sealed offline cache
 
@@ -346,15 +351,18 @@ can safely adopt the PILOT-00 mechanism.
   Descriptor-relative copy and a second exact inventory reject links, special
   files, substitutions, additions and byte changes before launch.
 - [ ] One request-bound work deadline and one aggregate output meter cover
-  planning, build, import and every oracle run without per-phase reset. Sequential
-  container CPU/memory values and any concurrent total never exceed the immutable
-  registry ceilings. All emergency cleanup shares one deadline no greater than
-  the existing 60-second cleanup margin.
+  planning, initial create/inspect, build, import, Docker control and every oracle
+  run without per-phase reset. Sequential container CPU/memory values and any
+  concurrent total never exceed the immutable registry ceilings. All emergency
+  cleanup shares one 10-second deadline and separate 256 KiB output ceiling
+  within the existing 60-second cleanup margin.
 - [ ] ART reserves the existing fixed 512 MiB workspace total and manager fixed
   maximum-entry total before POST grant publication, then binds byte and entry
   allowances after sealed workspace/grant overhead. Exact-limit runtime creation
   succeeds; limit-plus-one fails before residue; normal and reaper cleanup remove
-  every admitted tree without exceeding the same entry count.
+  every admitted tree without exceeding the same entry count. The candidate tar
+  entry and every remaining byte are reserved before launch, and a kernel file-
+  size ceiling rejects the first excess byte inside the writer.
 - [ ] `test_post_result_is_hidden_until_grant_workspace_cleanup_completes`
   proves the service settles Docker resources before its socket response and the
   Python grant/materializer revokes and deletes scratch before exposing the
@@ -373,11 +381,13 @@ can safely adopt the PILOT-00 mechanism.
 - [ ] Cache tests mutate one blob and independently cover extra, missing,
   symlink/special, wrong-owner and wrong-mode entries; each fails before Docker
   create with no pull. Startup recovery removes seeded stale containers and
-  temporary images with the exact owned labels/inventory while leaving an
+  temporary images with the exact owned labels/fixed repository while leaving an
   unowned control resource untouched.
 - [ ] Simultaneous service startups serialize on the private socket-parent
   lock; restart recovers an owned stale socket while preserving a live
   listener, foreign file/link and path substituted before listener teardown.
+  Socket-parent custody precedes Docker validation and recovery, so a losing
+  full startup cannot inspect or clean the winner's resources.
 - [ ] Launch evidence proves no external network or host socket, exact cached
   platform identities, builder-only capabilities, non-root capability-free
   oracles, read-only inputs/root, fresh containers, fixed resources and complete
@@ -410,11 +420,12 @@ can safely adopt the PILOT-00 mechanism.
 |---|---|---|---|
 | Existing owner and gap | Inspect PILOT-00, PILOT-04 service/SDK, ART grants, selected PRE/POST owners and #493/#576/#555 | The selected service had exact verified input and image custody but only one conventional checker launch; this change adds one exact-authorized terminal-benchmark continuation rather than a general runner | Representative execution pending |
 | Platform pin feasibility | `docker buildx imagetools inspect --raw` for the proposed CPython and Kaniko digests, without pulling either image | Both proposed top-level digests are OCI indexes; linux/amd64 resolves to CPython `sha256:6e13e65c...` and Kaniko `sha256:c73ca67a...`; raw nonsecret manifests and SHA-256 commands are retained under `/tmp/workstream-493-python-*` | Trusted builder config must bind the full canonical cache inventory plus both platform manifests and config IDs |
-| Corpus dependency | Merge `4628babe4`; run `python3 pilots/terminal_benchmark/verify_corpus.py` on that reviewed #576 candidate | PASS: all five originals report three reference passes plus starter and near-miss rejection; corrected exact base recipe/platform, workspace ownership, UTF-8 and UTC-overflow inputs are present | This is explicitly `trusted_native_corpus_only`, not Docker/gVisor or production admission proof; parent assets remain outside this change's implementation diff |
+| Corpus dependency | Merge `e6a55d26b`; run `python3 pilots/terminal_benchmark/verify_corpus.py` on the final reviewed #576 dependency | PASS in the corpus branch: all five originals report three reference passes plus starter and near-miss rejection; the malformed-input harness cases become bounded work failures; the atomic-import destructive-state mutant is rejected across three runs; all 46 manifest files match | This is explicitly `trusted_native_corpus_only`, not Docker/gVisor or production admission proof; parent assets remain outside this change's implementation diff |
 | Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, external grant publication and selected POST call order | Existing owner already provides aggregate byte quota and per-workspace entry ceiling, durable workspace ownership, failed-cleanup retention and crash recovery. Rust settles Docker before socket response; the live Python context then revokes/deletes before exposing the evaluation. Service death and Python-owner death have distinct cleanup paths | Focused exact-limit, cleanup-order, SIGKILL and dead-owner proof pending |
 | #582 ownership check | Coordinate exact paths and port ownership with the S3 activation owner | #582 does not touch `preparation.py` or `post_submit_materialization.py`; it owns provider-neutral ArtifactStore activation evidence and S3 composition, while this change reuses the separate existing ArtifactScratchManager/ledger without extending that activation port | Recheck after either branch changes its bounded files |
-| Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin and the service has one 10-second cleanup timeout | Continuation must prove it never resets these ceilings per phase/resource |
-| Rust service contracts and logic | `cargo fmt --manifest-path external_checkers/Cargo.toml --all && CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-service` | PASS: 21 tests cover strong-profile authority, grant/cache/context substitution, byte/entry limits, output bounds, orphan recovery and socket restart custody | Pure/fake-Docker tests do not prove actual Docker/runsc behavior |
+| Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin. Work uses one absolute deadline/output meter; emergency cleanup uses one 10-second deadline and separate 256 KiB output ceiling | Actual Docker cancellation/resource behavior remains to be exercised in the local matrix |
+| Rust service contracts and logic | `cargo fmt --manifest-path external_checkers/Cargo.toml --all && CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-service` | PASS: 27 tests, including startup custody before cleanup, disconnect/CLI stop, one cleanup budget, initial control-output charging, uncertain-removal retry, exact recovery image identity and kernel exact-byte/plus-one behavior | Pure/fake-Docker tests do not prove actual Docker/runsc behavior |
+| Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced | Strict clippy remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
 | Project image and SDK contracts | `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-terminal-benchmark-checker` and `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-sdk` | PASS: 4 project-package tests over all five originals and 5 SDK contract/canonicalization tests | Real image execution remains pending |
 | ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /home/abiorh/flow/workstream_product_builder/backend/.venv/bin/python -m pytest -q -p pytest_asyncio.plugin tests/checkers/external/test_runtime.py` from `backend/` | PASS: 11 tests, including exact existing-ledger POST byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering |
 | Real local matrix | Bounded project-checker probe over originals and work/infrastructure negatives | Future implementation proof; wait for lead-owned Docker capacity | Local `docker-dev` is not hosted gVisor proof |
@@ -445,12 +456,28 @@ The final record-only replay passed at `6ad0fb456d8c55f750110e8d23f07e66349a9e8b
 That verdict authorized this bounded implementation; it is plan evidence, not
 runtime or acceptance proof.
 
+The first implementation architecture/security review at
+`cbbdd13851d0988cec77c3a6a33bd9e47daec222` found that Docker recovery
+preceded listener custody (`ARCH493001`/`SEC493003`), the candidate tar was
+metered only after the builder exited (`ARCH493002`/`SEC493001`), blocking
+Docker attach did not observe a client disconnect (`SEC493002`), a runtime
+inventory duplicated label/repository ownership (`ARCH493003`), and initial,
+control and cleanup output did not share explicit aggregate budgets
+(`ARCH493004`). This repair acquires socket-parent custody first; reserves the
+tar entry and remaining ART bytes before launch with a hard file-size ceiling;
+makes every work command cancellation-aware under the request deadline/output
+meter; removes the redundant inventory; and gives all emergency cleanup one
+bounded deadline/output budget. The affected reviewer tracks must replay on the
+next clean candidate; these source repairs are not Docker or hosted runtime
+proof.
+
 ## Reconciliation
 
-- Current-source reconciliation: This branch merged corrected stacked corpus
-  commit `4628babe4` and current `main` at `a201d743`, including #575's current
+- Current-source reconciliation: This branch merged final reviewed corpus
+  commit `e6a55d26b` and current `main` at `a201d743`, including #575's current
   finding/check result contract. The corpus carries the exact linux/amd64 base
-  recipe and reviewed ownership, UTF-8 and UTC-overflow fixes. Parent corpus
+  recipe, bounded harness failures, destructive-state regression and reviewed
+  ownership, UTF-8 and UTC-overflow fixes. Parent corpus
   assets remain dependency input rather than this change's implementation diff.
 - Next usable boundary: independent review of the source implementation, then
   the lead-coordinated local Docker development matrix and exact built-image

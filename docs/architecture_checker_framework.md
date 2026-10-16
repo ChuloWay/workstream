@@ -255,12 +255,19 @@ resources are removed before the service responds, and the Python grant context
 then revokes and deletes ART scratch before exposing the result.
 
 The service holds a nonblocking exclusive lock on the validated private socket
-parent for the listener lifetime. Startup preserves a live listener and every
-foreign or linked path, but may remove a connection-refused socket only after
-its owned inode remains unchanged. Clean shutdown removes only the listener
-inode it created. Terminal-benchmark startup recovery likewise removes only
-resources carrying the complete service-owned container labels or an exact tag
-inside its fixed temporary image repository. Ambiguous cleanup fails closed.
+parent for the listener lifetime. It acquires that custody before Docker
+validation or recovery, so a losing concurrent startup cannot inspect or clean
+the live owner's resources. Startup preserves a live listener and every foreign
+or linked path, but may remove a connection-refused socket only after its owned
+inode remains unchanged. Clean shutdown removes only the listener inode it
+created. Terminal-benchmark startup recovery likewise removes only resources
+carrying the complete service-owned container labels or an exact tag inside its
+fixed temporary image repository; it does not depend on a parallel runtime
+inventory. The candidate tar's one entry and remaining ART byte allowance are
+reserved before launch and enforced in the builder with a hard file-size limit.
+All work commands share the request deadline/output meter and poll cancellation;
+all emergency cleanup shares one 10-second deadline and separate 256 KiB output
+ceiling within the adapter's 60-second margin. Ambiguous cleanup fails closed.
 
 The Rust launcher owns sandbox execution; durable CHECKERS owners retain
 approved policy binding, phase authority/currentness, attempts, results and

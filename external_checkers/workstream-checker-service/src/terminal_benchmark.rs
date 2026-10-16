@@ -1,6 +1,7 @@
 //! Closed offline build/oracle continuation for the one approved project checker.
 
 use super::*;
+#[cfg(test)]
 use serde_json::json;
 use std::collections::BTreeSet;
 use std::ffi::CString;
@@ -102,6 +103,7 @@ pub(super) fn cleanup_stale_resources(
         &[
             "image",
             "ls",
+            "--no-trunc",
             "--format",
             "{{.Repository}} {{.Tag}} {{.ID}}",
             &format!("{}:*", profile.temporary_repository),
@@ -120,7 +122,7 @@ pub(super) fn cleanup_stale_resources(
         if parts.len() != 3
             || parts[0] != profile.temporary_repository
             || !valid_attempt(parts[1])
-            || !valid_docker_id(parts[2])
+            || !valid_digest(parts[2])
         {
             return Err("terminal benchmark image recovery identity differs".into());
         }
@@ -132,7 +134,7 @@ pub(super) fn cleanup_stale_resources(
             1024 * 1024,
         )
         .map_err(|_| "terminal benchmark image recovery unavailable")?;
-        if !inspected.status.success() || !image_has_tag(&inspected.stdout, &tag) {
+        if !inspected.status.success() || !image_has_identity(&inspected.stdout, &tag, parts[2]) {
             return Err("terminal benchmark image recovery identity differs".into());
         }
         if !remove_image_until(config, &tag, deadline) {
@@ -200,12 +202,17 @@ fn owned_container(bytes: &[u8]) -> bool {
         && name.starts_with(expected_prefix)
 }
 
-fn image_has_tag(bytes: &[u8], tag: &str) -> bool {
+fn image_has_identity(bytes: &[u8], tag: &str, listed_id: &str) -> bool {
     serde_json::from_slice::<Value>(bytes)
         .ok()
         .and_then(|value| value.as_array().cloned())
         .is_some_and(|images| {
             images.len() == 1
+                && images[0]
+                    .get("Id")
+                    .and_then(Value::as_str)
+                    .filter(|id| valid_digest(id))
+                    == Some(listed_id)
                 && images[0]
                     .get("RepoTags")
                     .and_then(Value::as_array)
@@ -300,21 +307,14 @@ impl ScratchMeter {
             .ok_or("capacity_exceeded")?;
         Ok(())
     }
-}
 
-struct OutputMeter {
-    remaining: usize,
-}
-
-impl OutputMeter {
-    fn bytes(&mut self, count: usize) -> Result<(), &'static str> {
-        self.remaining = self.remaining.checked_sub(count).ok_or("invalid_output")?;
-        Ok(())
-    }
-
-    fn charge(&mut self, output: &BoundedCommandOutput) -> Result<(), &'static str> {
-        let count = output.stdout.len().saturating_add(output._stderr.len());
-        self.bytes(count)
+    fn reserve_remaining_bytes(&mut self) -> Result<u64, &'static str> {
+        if self.remaining_bytes == 0 {
+            return Err("capacity_exceeded");
+        }
+        let reserved = self.remaining_bytes;
+        self.remaining_bytes = 0;
+        Ok(reserved)
     }
 }
 
@@ -337,12 +337,31 @@ pub(super) struct TerminalBenchmarkExecution<'a> {
     pub(super) grant: &'a VerifiedGrant,
     pub(super) client: &'a UnixStream,
     pub(super) deadline: Instant,
+    pub(super) output: &'a mut OutputMeter,
+    pub(super) cleanup: &'a mut EmergencyCleanupBudget,
+}
+
+struct ExecutionContext<'a> {
+    config: &'a ServiceConfig,
+    profile: &'a TerminalBenchmarkProfile,
+    request: &'a ValidatedRequest,
+    grant: &'a VerifiedGrant,
+    client: &'a UnixStream,
+    deadline: Instant,
+}
+
+struct BuilderInputs<'a> {
+    context: &'a Path,
+    runtime: &'a Path,
+    name: &'a str,
+    tag: &'a str,
+    attempt_id: &'a str,
+    candidate_tar_byte_limit: u64,
 }
 
 pub(super) fn execute_terminal_benchmark(
     execution: TerminalBenchmarkExecution<'_>,
     plan: &TerminalBenchmarkPlan,
-    planning_output_bytes: usize,
 ) -> Result<Value, &'static str> {
     let TerminalBenchmarkExecution {
         config,
@@ -351,6 +370,8 @@ pub(super) fn execute_terminal_benchmark(
         grant,
         client,
         deadline,
+        output,
+        cleanup,
     } = execution;
     if !profile.authorizes(request) || plan.external_task_id != configured_task(request)? {
         return Err("invalid_output");
@@ -359,16 +380,24 @@ pub(super) fn execute_terminal_benchmark(
     if grant.binding_digest.is_empty() || grant.root.join("runtime") != *runtime {
         return Err("material_unavailable");
     }
-    let mut output = OutputMeter {
-        remaining: request
-            .maximum_output_bytes
-            .checked_sub(planning_output_bytes)
-            .ok_or("invalid_output")?,
-    };
     verify_sealed_cache(&profile.sealed_cache).map_err(|_| "implementation_unavailable")?;
-    inspect_image(config, &profile.builder, deadline).map_err(|_| "implementation_unavailable")?;
-    inspect_image(config, &profile.approved_base, deadline)
-        .map_err(|_| "implementation_unavailable")?;
+    inspect_profile_image(config, &profile.builder, client, deadline, output, cleanup)?;
+    inspect_profile_image(
+        config,
+        &profile.approved_base,
+        client,
+        deadline,
+        output,
+        cleanup,
+    )?;
+    let execution = ExecutionContext {
+        config,
+        profile,
+        request,
+        grant,
+        client,
+        deadline,
+    };
     let mut scratch = ScratchMeter {
         remaining_bytes: limits.byte_allowance,
         remaining_entries: limits.entry_allowance,
@@ -389,32 +418,26 @@ pub(super) fn execute_terminal_benchmark(
         .open(&tar)
         .and_then(|file| file.sync_all())
         .map_err(|_| "implementation_unavailable")?;
-    let inventory = runtime.join("runtime-inventory.json");
-    scratch.entry()?;
-    let mut inventory_bytes = write_inventory(&inventory, request, grant, &tag, None, None, &[])?;
-    scratch.bytes(inventory_bytes)?;
+    let candidate_tar_byte_limit = scratch.reserve_remaining_bytes()?;
 
     let mut containers = Vec::new();
     let attempt = (|| {
         let builder = format!("ws-terminal-builder-{nonce:x}");
         containers.push(builder.clone());
         let builder_outcome = run_builder(
-            &TerminalBenchmarkExecution {
-                config,
-                profile,
-                request,
-                grant,
-                client,
-                deadline,
+            &execution,
+            BuilderInputs {
+                context: &context,
+                runtime,
+                name: &builder,
+                tag: &tag,
+                attempt_id: &attempt_id,
+                candidate_tar_byte_limit,
             },
-            &context,
-            runtime,
-            &builder,
-            &tag,
-            &attempt_id,
-            &mut output,
+            output,
+            cleanup,
         )?;
-        if !remove_container_until(config, &builder, deadline) {
+        if !remove_container_work(config, &builder, client, deadline, output, cleanup) {
             return Err("implementation_unavailable");
         }
         containers.retain(|item| item != &builder);
@@ -432,62 +455,33 @@ pub(super) fn execute_terminal_benchmark(
         let tar_size = fs::metadata(&tar)
             .map_err(|_| "implementation_unavailable")?
             .len();
-        scratch.bytes(tar_size)?;
-        let tar_digest = hash_regular_file(&tar)?;
-        let next_inventory_bytes = write_inventory(
-            &inventory,
-            request,
-            grant,
-            &tag,
-            Some(&tar_digest),
-            None,
-            &containers,
-        )?;
-        scratch.bytes(next_inventory_bytes.saturating_sub(inventory_bytes))?;
-        inventory_bytes = next_inventory_bytes;
+        if tar_size == 0 || tar_size > candidate_tar_byte_limit {
+            return Err("capacity_exceeded");
+        }
         let tar_text = tar.to_str().ok_or("implementation_unavailable")?;
-        let loaded = run_bounded_command(
-            &config.docker_binary,
-            &["load", "--input", tar_text],
-            deadline,
-            output.remaining,
-        )
-        .map_err(map_command_error)?;
-        output.charge(&loaded)?;
+        let loaded = command(
+            &execution,
+            &["load".into(), "--input".into(), tar_text.into()],
+            output,
+            cleanup,
+        )?;
         if !loaded.status.success() {
             return Err("implementation_unavailable");
         }
-        let image_id = inspect_loaded_image(config, &tag, deadline, &mut output)?;
-        let next_inventory_bytes = write_inventory(
-            &inventory,
-            request,
-            grant,
-            &tag,
-            Some(&tar_digest),
-            Some(&image_id),
-            &containers,
-        )?;
-        scratch.bytes(next_inventory_bytes.saturating_sub(inventory_bytes))?;
-        inventory_bytes = next_inventory_bytes;
+        let image_id = inspect_loaded_image(&execution, &tag, output, cleanup)?;
 
         let candidate = format!("ws-terminal-candidate-{nonce:x}");
         containers.push(candidate.clone());
         let candidate_status = run_oracle(
-            &TerminalBenchmarkExecution {
-                config,
-                profile,
-                request,
-                grant,
-                client,
-                deadline,
-            },
+            &execution,
             &candidate,
             &image_id,
             false,
             &attempt_id,
-            &mut output,
+            output,
+            cleanup,
         )?;
-        if !remove_container_until(config, &candidate, deadline) {
+        if !remove_container_work(config, &candidate, client, deadline, output, cleanup) {
             return Err("implementation_unavailable");
         }
         containers.retain(|item| item != &candidate);
@@ -506,21 +500,15 @@ pub(super) fn execute_terminal_benchmark(
             let name = format!("ws-terminal-reference-{nonce:x}-{repetition}");
             containers.push(name.clone());
             let status = run_oracle(
-                &TerminalBenchmarkExecution {
-                    config,
-                    profile,
-                    request,
-                    grant,
-                    client,
-                    deadline,
-                },
+                &execution,
                 &name,
                 &image_id,
                 true,
                 &attempt_id,
-                &mut output,
+                output,
+                cleanup,
             )?;
-            if !remove_container_until(config, &name, deadline) {
+            if !remove_container_work(config, &name, client, deadline, output, cleanup) {
                 return Err("implementation_unavailable");
             }
             containers.retain(|item| item != &name);
@@ -551,12 +539,11 @@ pub(super) fn execute_terminal_benchmark(
         Ok(result)
     });
 
-    let cleanup_deadline = Instant::now() + CLEANUP_TIMEOUT;
     let mut cleanup_ok = true;
     for name in containers.iter().rev() {
-        cleanup_ok &= remove_container_until(config, name, cleanup_deadline);
+        cleanup_ok &= remove_container_cleanup(config, name, cleanup);
     }
-    cleanup_ok &= remove_image_until(config, &tag, cleanup_deadline);
+    cleanup_ok &= remove_image_cleanup(config, &tag, cleanup);
     if !cleanup_ok {
         return Err("implementation_unavailable");
     }
@@ -760,22 +747,26 @@ fn seal_projection(path: &Path) -> Result<(), &'static str> {
 }
 
 fn run_builder(
-    execution: &TerminalBenchmarkExecution<'_>,
-    context: &Path,
-    runtime: &Path,
-    name: &str,
-    tag: &str,
-    attempt_id: &str,
+    execution: &ExecutionContext<'_>,
+    inputs: BuilderInputs<'_>,
     output: &mut OutputMeter,
+    cleanup: &mut EmergencyCleanupBudget,
 ) -> Result<BuilderOutcome, &'static str> {
-    let TerminalBenchmarkExecution {
+    let ExecutionContext {
         config,
         profile,
         request,
         grant,
-        client,
-        deadline,
+        ..
     } = execution;
+    let BuilderInputs {
+        context,
+        runtime,
+        name,
+        tag,
+        attempt_id,
+        candidate_tar_byte_limit,
+    } = inputs;
     let image = format!(
         "{}@{}",
         profile.builder.repository, profile.builder.platform_manifest_digest
@@ -791,6 +782,7 @@ fn run_builder(
         "type=bind,src={},dst=/out/candidate.tar",
         runtime.join("candidate.tar").display()
     );
+    let file_size_limit = docker_file_size_limit(candidate_tar_byte_limit);
     let labels = labels(request, grant, attempt_id, "builder");
     let mut arguments = vec![
         "create".into(),
@@ -823,6 +815,8 @@ fn run_builder(
         cpus,
         "--storage-opt".into(),
         format!("size={BUILDER_WRITABLE_BYTES}"),
+        "--ulimit".into(),
+        file_size_limit,
         "--mount".into(),
         context_mount,
         "--mount".into(),
@@ -846,42 +840,42 @@ fn run_builder(
     for label in labels {
         arguments.splice(4..4, ["--label".into(), label]);
     }
-    let created = command(config, &arguments, *deadline, output)?;
+    let created = command(execution, &arguments, output, cleanup)?;
     if !created.status.success() {
         return Err("implementation_unavailable");
     }
     let started = command(
-        config,
+        execution,
         &["start".into(), "--attach".into(), name.into()],
-        *deadline,
         output,
+        cleanup,
     )?;
-    if !client_is_connected(client) {
-        return Err("implementation_unavailable");
-    }
     if started.status.success() {
         return Ok(BuilderOutcome::Succeeded);
     }
-    if container_oom(config, name, *deadline, output)? || output_indicates_capacity(&started) {
+    if container_oom(execution, name, output, cleanup)? || output_indicates_capacity(&started) {
         return Ok(BuilderOutcome::CapacityFailure);
     }
     Ok(BuilderOutcome::WorkFailure)
 }
 
+fn docker_file_size_limit(limit: u64) -> String {
+    format!("fsize={limit}:{limit}")
+}
+
 fn run_oracle(
-    execution: &TerminalBenchmarkExecution<'_>,
+    execution: &ExecutionContext<'_>,
     name: &str,
     image_id: &str,
     reference: bool,
     attempt_id: &str,
     output: &mut OutputMeter,
+    cleanup: &mut EmergencyCleanupBudget,
 ) -> Result<OracleObservation, &'static str> {
-    let TerminalBenchmarkExecution {
+    let ExecutionContext {
         config,
         request,
         grant,
-        client,
-        deadline,
         ..
     } = execution;
     let tests = format!(
@@ -937,21 +931,18 @@ fn run_oracle(
         "/tests/test_task.py".into(),
         "/workspace/program.py".into(),
     ]);
-    let created = command(config, &arguments, *deadline, output)?;
+    let created = command(execution, &arguments, output, cleanup)?;
     if !created.status.success() {
         return Err("implementation_unavailable");
     }
     let result = command(
-        config,
+        execution,
         &["start".into(), "--attach".into(), name.into()],
-        *deadline,
         output,
+        cleanup,
     )?;
-    if !client_is_connected(client) {
-        return Err("implementation_unavailable");
-    }
     if !result.status.success()
-        && (container_oom(config, name, *deadline, output)? || output_indicates_capacity(&result))
+        && (container_oom(execution, name, output, cleanup)? || output_indicates_capacity(&result))
     {
         return Err("capacity_exceeded");
     }
@@ -967,13 +958,13 @@ fn run_oracle(
 }
 
 fn container_oom(
-    config: &ServiceConfig,
+    execution: &ExecutionContext<'_>,
     name: &str,
-    deadline: Instant,
     output: &mut OutputMeter,
+    cleanup: &mut EmergencyCleanupBudget,
 ) -> Result<bool, &'static str> {
     let inspected = command(
-        config,
+        execution,
         &[
             "container".into(),
             "inspect".into(),
@@ -981,8 +972,8 @@ fn container_oom(
             "{{.State.OOMKilled}}".into(),
             name.into(),
         ],
-        deadline,
         output,
+        cleanup,
     )?;
     if !inspected.status.success() {
         return Err("implementation_unavailable");
@@ -1021,14 +1012,21 @@ fn labels(
 }
 
 fn command(
-    config: &ServiceConfig,
+    execution: &ExecutionContext<'_>,
     arguments: &[String],
-    deadline: Instant,
     output: &mut OutputMeter,
+    cleanup: &mut EmergencyCleanupBudget,
 ) -> Result<BoundedCommandOutput, &'static str> {
     let borrowed: Vec<&str> = arguments.iter().map(String::as_str).collect();
-    let result = run_bounded_command(&config.docker_binary, &borrowed, deadline, output.remaining)
-        .map_err(map_command_error)?;
+    let result = run_bounded_command_cancellable(
+        &execution.config.docker_binary,
+        &borrowed,
+        execution.deadline,
+        output.remaining,
+        execution.client,
+        cleanup,
+    )
+    .map_err(map_command_error)?;
     output.charge(&result)?;
     Ok(result)
 }
@@ -1043,14 +1041,36 @@ fn map_command_error(error: String) -> &'static str {
     }
 }
 
-fn inspect_loaded_image(
+fn inspect_profile_image(
     config: &ServiceConfig,
-    tag: &str,
+    image: &CacheEntry,
+    client: &UnixStream,
     deadline: Instant,
     output: &mut OutputMeter,
+    cleanup: &mut EmergencyCleanupBudget,
+) -> Result<(), &'static str> {
+    let reference = format!("{}@{}", image.repository, image.platform_manifest_digest);
+    let result = run_bounded_command_cancellable(
+        &config.docker_binary,
+        &["image", "inspect", "--format", "{{json .}}", &reference],
+        deadline,
+        output.remaining,
+        client,
+        cleanup,
+    )
+    .map_err(map_command_error)?;
+    output.charge(&result)?;
+    validate_inspected_image(image, &result).map_err(|_| "implementation_unavailable")
+}
+
+fn inspect_loaded_image(
+    execution: &ExecutionContext<'_>,
+    tag: &str,
+    output: &mut OutputMeter,
+    cleanup: &mut EmergencyCleanupBudget,
 ) -> Result<String, &'static str> {
     let result = command(
-        config,
+        execution,
         &[
             "image".into(),
             "inspect".into(),
@@ -1058,8 +1078,8 @@ fn inspect_loaded_image(
             "{{.Id}}".into(),
             tag.into(),
         ],
-        deadline,
         output,
+        cleanup,
     )?;
     if !result.status.success() {
         return Err("implementation_unavailable");
@@ -1122,54 +1142,31 @@ fn remove_image_until(config: &ServiceConfig, tag: &str, deadline: Instant) -> b
     )
 }
 
-fn write_inventory(
-    path: &Path,
-    request: &ValidatedRequest,
-    grant: &VerifiedGrant,
+fn remove_image_cleanup(
+    config: &ServiceConfig,
     tag: &str,
-    tar_sha256: Option<&str>,
-    image_id: Option<&str>,
-    containers: &[String],
-) -> Result<u64, &'static str> {
-    let bytes = serde_json::to_vec(&json!({
-        "schema_version": "workstream.terminal_benchmark_runtime_inventory.v1",
-        "request_digest": request.request_digest,
-        "grant_binding_digest": grant.binding_digest,
-        "temporary_image": tag,
-        "candidate_tar_sha256": tar_sha256,
-        "loaded_image_id": image_id,
-        "containers": containers,
-    }))
-    .map_err(|_| "implementation_unavailable")?;
-    let mut file = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .mode(0o600)
-        .open(path)
-        .map_err(|_| "implementation_unavailable")?;
-    file.write_all(&bytes)
-        .map_err(|_| "implementation_unavailable")?;
-    file.sync_all().map_err(|_| "implementation_unavailable")?;
-    Ok(bytes.len() as u64)
-}
-
-fn hash_regular_file(path: &Path) -> Result<String, &'static str> {
-    let before = fs::symlink_metadata(path).map_err(|_| "implementation_unavailable")?;
-    if !before.file_type().is_file() || before.file_type().is_symlink() {
-        return Err("implementation_unavailable");
+    cleanup: &mut EmergencyCleanupBudget,
+) -> bool {
+    let deadline = cleanup.deadline();
+    let removed = run_bounded_command(
+        &config.docker_binary,
+        &["image", "rm", "-f", tag],
+        deadline,
+        cleanup.remaining_output,
+    );
+    let Ok(removed) = removed else {
+        return false;
+    };
+    if cleanup.charge(&removed).is_err() {
+        return false;
     }
-    let mut file = File::open(path).map_err(|_| "implementation_unavailable")?;
-    let mut digest = Sha256::new();
-    let count = std::io::copy(&mut file, &mut digest).map_err(|_| "implementation_unavailable")?;
-    let after = file.metadata().map_err(|_| "implementation_unavailable")?;
-    if count != before.len()
-        || (before.dev(), before.ino(), before.len(), before.mode())
-            != (after.dev(), after.ino(), after.len(), after.mode())
-    {
-        return Err("implementation_unavailable");
-    }
-    Ok(format!("sha256:{:x}", digest.finalize()))
+    let inspected = run_bounded_command(
+        &config.docker_binary,
+        &["image", "inspect", tag],
+        deadline,
+        cleanup.remaining_output,
+    );
+    matches!(inspected, Ok(output) if cleanup.charge(&output).is_ok() && !output.status.success())
 }
 
 fn verify_sealed_cache(cache: &SealedCache) -> Result<(), String> {
@@ -1356,6 +1353,63 @@ mod tests {
         assert_eq!(meter.entry(), Err("capacity_exceeded"));
         assert!(meter.bytes(1).is_ok());
         assert_eq!(meter.bytes(1), Err("capacity_exceeded"));
+
+        let mut reserved = ScratchMeter {
+            remaining_bytes: 4096,
+            remaining_entries: 0,
+        };
+        assert_eq!(reserved.reserve_remaining_bytes(), Ok(4096));
+        assert_eq!(reserved.reserve_remaining_bytes(), Err("capacity_exceeded"));
+        assert_eq!(reserved.bytes(1), Err("capacity_exceeded"));
+        assert_eq!(docker_file_size_limit(4096), "fsize=4096:4096");
+    }
+
+    #[test]
+    fn kernel_file_size_limit_allows_exact_bytes_and_rejects_plus_one() {
+        const LIMIT: usize = 4096;
+        let root = temporary_directory("file-size-limit");
+        fs::create_dir(&root).unwrap();
+        let path = root.join("candidate.tar");
+        let file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .mode(0o600)
+            .open(&path)
+            .unwrap();
+        let descriptor = file.as_raw_fd();
+        // SAFETY: the child performs only libc calls on inherited storage and
+        // descriptors before `_exit`; the parent waits for that exact child.
+        let pid = unsafe { libc::fork() };
+        assert!(pid >= 0);
+        if pid == 0 {
+            let limit = libc::rlimit {
+                rlim_cur: LIMIT as libc::rlim_t,
+                rlim_max: LIMIT as libc::rlim_t,
+            };
+            unsafe {
+                libc::signal(libc::SIGXFSZ, libc::SIG_IGN);
+                if libc::setrlimit(libc::RLIMIT_FSIZE, &limit) != 0 {
+                    libc::_exit(10);
+                }
+                let exact = [b'x'; LIMIT];
+                if libc::write(descriptor, exact.as_ptr().cast(), exact.len()) != LIMIT as isize {
+                    libc::_exit(11);
+                }
+                let extra = [b'y'; 1];
+                if libc::write(descriptor, extra.as_ptr().cast(), extra.len()) != -1 {
+                    libc::_exit(12);
+                }
+                libc::_exit(0);
+            }
+        }
+        drop(file);
+        let mut status = 0;
+        // SAFETY: `pid` is the positive PID returned by fork and `status` is writable.
+        assert_eq!(unsafe { libc::waitpid(pid, &mut status, 0) }, pid);
+        assert!(libc::WIFEXITED(status));
+        assert_eq!(libc::WEXITSTATUS(status), 0);
+        assert_eq!(fs::metadata(&path).unwrap().len(), LIMIT as u64);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -1550,6 +1604,28 @@ mod tests {
     }
 
     #[test]
+    fn recovery_image_identity_binds_the_listed_id_and_exact_tag() {
+        let tag = "workstream.local/terminal-benchmark-candidate:a1";
+        let metadata = serde_json::to_vec(&json!([{
+            "Id": format!("sha256:{}", "b".repeat(64)),
+            "RepoTags": [tag],
+        }]))
+        .unwrap();
+        let listed_id = format!("sha256:{}", "b".repeat(64));
+        assert!(image_has_identity(&metadata, tag, &listed_id));
+        assert!(!image_has_identity(
+            &metadata,
+            tag,
+            &format!("sha256:{}", "c".repeat(64)),
+        ));
+        assert!(!image_has_identity(
+            &metadata,
+            "workstream.local/terminal-benchmark-candidate:a2",
+            &listed_id,
+        ));
+    }
+
+    #[test]
     fn startup_recovery_removes_only_labeled_and_prefixed_resources() {
         let root = temporary_directory("recovery");
         fs::create_dir(&root).unwrap();
@@ -1569,10 +1645,10 @@ case "$1 $2" in
     printf '%s\n' '[{{"Name":"/ws-terminal-builder-a1","Config":{{"Labels":{{"workstream.owner":"terminal-benchmark-checker-service-v1","workstream.request-digest":"sha256:{digest}","workstream.grant-id":"extract_0123456789abcdef0123456789abcdef","workstream.attempt":"a1","workstream.resource-kind":"builder"}}}}}}]'
     exit 0;;
   "rm -f") rm -f "{container}"; exit 0;;
-  "image ls") test -e "{image}" && printf 'workstream.local/terminal-benchmark-candidate a1 bbbbbbbbbbbb\n'; exit 0;;
+  "image ls") test -e "{image}" && printf 'workstream.local/terminal-benchmark-candidate a1 sha256:{image_id}\n'; exit 0;;
   "image inspect")
     test -e "{image}" || exit 1
-    printf '%s\n' '[{{"RepoTags":["workstream.local/terminal-benchmark-candidate:a1"]}}]'
+    printf '%s\n' '[{{"Id":"sha256:{image_id}","RepoTags":["workstream.local/terminal-benchmark-candidate:a1"]}}]'
     exit 0;;
   "image rm") rm -f "{image}"; exit 0;;
 esac
@@ -1580,6 +1656,7 @@ exit 2
 "#,
             container = container.display(),
             image = image.display(),
+            image_id = "b".repeat(64),
             digest = "1".repeat(64),
         );
         fs::write(&docker, script).unwrap();
