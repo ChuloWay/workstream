@@ -288,6 +288,12 @@ def contributor_read_authorization(kernel, session: AsyncSession, secret):
     return ContributorReadAuthorization(kernel, AdminAuthorizationRepository(session), secret)
 
 
+def project_management_read_authorization(kernel, session: AsyncSession, secret):
+    """Compose the project-wide Project Manager and Finance read adapter in the decision transaction."""
+    from app.modules.authorization.management_read import ProjectManagementReadAuthorization
+    return ProjectManagementReadAuthorization(kernel, AdminAuthorizationRepository(session), secret)
+
+
 def history_read_authorization(kernel):
     """Compose current AUTH decisions for owner-selected immutable history."""
     from app.modules.authorization.history_authorization import HistoryReadAuthorization
