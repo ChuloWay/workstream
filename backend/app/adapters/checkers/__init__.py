@@ -298,12 +298,15 @@ def post_submission_executor(*, sessions, materialization):
     from app.modules.checkers.execution import PostSubmissionExecutor
     from app.adapters.auth import post_submit_execution_authority
 
+    from app.adapters.projects import project_locked_policy_context_port
+
     return PostSubmissionExecutor(
         sessions=sessions,
         materialization=materialization,
         execute_authority=post_submit_execution_authority,
         finalize_authority=post_submit_execution_authority,
         outbox=outbox_append,
+        review_modes=project_locked_policy_context_port,
     )
 
 
@@ -371,6 +374,8 @@ def delivery_bound_post_submission_executor(
             request=request,
         )
 
+    from app.adapters.projects import project_locked_policy_context_port
+
     return PostSubmissionExecutor(
         sessions=sessions,
         execute_authority=authority,
@@ -378,4 +383,5 @@ def delivery_bound_post_submission_executor(
         materialization=materialization,
         selected_execution=selected_execution,
         outbox=outbox_append,
+        review_modes=project_locked_policy_context_port,
     )

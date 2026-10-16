@@ -97,11 +97,13 @@ async def test_terminal_member_and_routing_custody(tmp_path, isolated_database_e
         facts = await final_facts(h, lease, verdict="failed")
         blocked = facts.result
         canonical = execution.classify_result
-        assert canonical(h.request, blocked).routing == "needs_revision"
+        assert canonical(h.request, blocked, human_review_required=True).routing == "needs_revision"
         monkeypatch.setattr(
             execution,
             "classify_result",
-            lambda request, result: replace(canonical(request, result), routing="allow_review"),
+            lambda request, result, **policy: replace(
+                canonical(request, result, **policy), routing="allow_review",
+            ),
         )
         with pytest.raises(IntegrityError, match="completed custody or routing invalid"):
             await executor.finalize(facts)
@@ -250,7 +252,7 @@ async def test_consistently_short_result_cannot_omit_selected_policy_member(
         # only comparison with the locked policy's selected set can reject it.
         canonical = material_storage_helpers.classify_result
 
-        def faulty_classifier(request, result):
+        def faulty_classifier(request, result, **policy):
             assert request == h.request and result == short
             return ResultClassification("allow_review", len(short.execution.external_members), 0, 0, 0)
 

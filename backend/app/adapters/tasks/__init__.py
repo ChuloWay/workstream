@@ -460,9 +460,12 @@ def assignment_invalidation_targets(session: AsyncSession):
 
 def submission_history_repository(session) -> SubmissionHistoryReadPort:
     """Compose TASK-owned immutable history selectors and projections."""
+    from app.adapters.checkers import checker_history_repository
     from app.modules.tasks.submission_history import SubmissionHistoryRepository
 
-    return SubmissionHistoryRepository(session)
+    return SubmissionHistoryRepository(
+        session, finding_counts=checker_history_repository(session)
+    )
 
 
 def submitted_bundle_port(session: AsyncSession) -> SubmittedBundlePort:

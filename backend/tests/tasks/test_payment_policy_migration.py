@@ -128,18 +128,27 @@ async def test_payment_cleanup_refuses_each_retained_fact_then_preserves_current
                         f"SELECT to_jsonb(t) FROM public.{table} t ORDER BY to_jsonb(t)::text")))
                     removed = FIELDS if table == "workstream_tasks" else (FIELDS[-1],) if table == "submissions" else ()
                     expected = [{k: v for k, v in row.items() if k not in removed} for row in before[0][table]]
+                    # Later migrations add columns; 0048 backfills unrouted attempts
+                    # and unstarted assignments from their own retained timestamps.
                     added = {
-                        "submissions": {"selected_post_submit_policy_sha256", "selected_post_submit_policy_body"},
-                        "task_command_receipts": {"batch_transition_receipt_id"},
-                    }.get(table, set())
+                        "submissions": {
+                            "selected_post_submit_policy_sha256": None,
+                            "selected_post_submit_policy_body": None,
+                            "attempt_status": "evaluation_pending", "status_reason": None,
+                            "decided_at": None, "updated_at": "submitted_at",
+                        },
+                        "task_command_receipts": {"batch_transition_receipt_id": None},
+                        "task_assignments": {"started_at": None, "updated_at": "assigned_at"},
+                    }.get(table, {})
                     if added:
                         actual.sort(key=lambda row: row["id"])
                         expected.sort(key=lambda row: row["id"])
                         assert len(actual) == len(expected)
                         for upgraded, retained in zip(actual, expected, strict=True):
-                            assert set(upgraded) == set(retained) | added
-                            for column in added:
-                                assert upgraded.pop(column) is None
+                            assert set(upgraded) == set(retained) | set(added)
+                            for column, source in added.items():
+                                value = retained[source] if column == "updated_at" else source
+                                assert upgraded.pop(column) == value, (table, column)
                     assert actual == expected, table
                 assert (
                     await connection.scalar(text("SELECT version_num FROM public.alembic_version"))

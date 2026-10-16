@@ -22,6 +22,7 @@ from app.modules.artifacts.api import (
     SubmissionBundlePreparationStatus,
     SubmissionBundlePreparationUnavailable,
 )
+from app.modules.artifacts.api.submission_preparation import public_pre_submission_results
 from app.modules.artifacts.models import (
     ArtifactContent,
     ArtifactOperationReceipt,
@@ -72,6 +73,7 @@ from app.modules.checkers.api.selected_pre_submit import (
     SelectedPreSubmitCompletion,
     SelectedPreSubmitCoordinationPort,
     SelectedPreSubmitCurrentFacts,
+    SelectedPreSubmitExecutionFacts,
     SelectedPreSubmitReservationFacts,
     SelectedPreSubmitRequestConflict,
     SelectedPreSubmitUnavailable,
@@ -836,7 +838,7 @@ class PreparedSubmissionBundlePreparationCommand:
                     reservation.attempt_id,
                     durable,
                 )
-                return self._result(result)
+                return self._result(result, terminal.execution)
         except SelectedPreSubmitRequestConflict as exc:
             raise SubmissionBundlePreparationRejected(
                 "submission_bundle_preparation_request_conflict"
@@ -907,9 +909,8 @@ class PreparedSubmissionBundlePreparationCommand:
             admission_id=admission_id,
             submission_bundle_preparation_status=SubmissionBundlePreparationStatus(status),
             replayed=True,
+            pre_submission_results=tuple(public_pre_submission_results(execution)),
         )
-
-
 
     async def _lock_authorized_context(
         self,
@@ -1025,10 +1026,14 @@ class PreparedSubmissionBundlePreparationCommand:
         return admission.selected_rules_sha256
 
     @staticmethod
-    def _result(result: SubmissionBundleDurablePutResult) -> SubmissionBundlePreparationResult:
+    def _result(
+        result: SubmissionBundleDurablePutResult,
+        execution: SelectedPreSubmitExecutionFacts,
+    ) -> SubmissionBundlePreparationResult:
         return SubmissionBundlePreparationResult(
             put_attempt_id=result.put_attempt_id,
             admission_id=result.admission_id,
             submission_bundle_preparation_status=SubmissionBundlePreparationStatus(result.status),
             replayed=result.replayed,
+            pre_submission_results=tuple(public_pre_submission_results(execution)),
         )

@@ -378,6 +378,16 @@ class CompletedEvaluation(CheckerValue):
     result: PostSubmissionExecutionResult
 
 
+class ReviewModePort(Protocol):
+    """Observe whether a locked ReviewPolicy requires human review; grants nothing."""
+
+    async def observe_review_mode(
+        self, project_id: ResourceId, review_policy_id: ResourceId,
+    ) -> bool | None:
+        """Return the exact policy's human-review requirement, or None when unknown."""
+        ...
+
+
 class EvaluationTaskGuard(Protocol):
     """TASK locks exact evaluation scope; the boolean is reservation eligibility, not authority."""
 

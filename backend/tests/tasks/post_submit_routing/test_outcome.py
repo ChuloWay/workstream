@@ -5,6 +5,7 @@ from sqlalchemy import select, text
 
 from app.adapters.tasks import task_post_submit_outcome
 from app.modules.tasks.models import WorkstreamTask
+from tests.tasks.post_submit_routing.backfill_support import assert_backfill_matches_live
 from tests.authorization.post_submit_routing.support import provision_router
 from tests.tasks.post_submit_routing.test_source_preparation import routing_source
 from tests.tasks.post_submit_routing.outcome_support import invoked_completion, outcome_snapshot
@@ -31,6 +32,9 @@ async def test_true_branch_does_not_acquire_acceptance(tmp_path, isolated_databa
                 )
                 == "review_pending"
             )
+            assert (await session.execute(text(
+                "SELECT attempt_status,decided_at FROM public.submissions WHERE id=:id"
+            ), {"id": h.request.submission_id})).one() == ("review_pending", None)
             assert await session.scalar(text("SELECT count(*) FROM public.final_acceptances")) == 0
             assert (
                 await session.scalar(text("SELECT count(*) FROM public.contribution_records")) == 0
@@ -40,6 +44,7 @@ async def test_true_branch_does_not_acquire_acceptance(tmp_path, isolated_databa
                 envelope, current_generation=None
             )
             assert replay == result.model_copy(update={"replayed": True})
+        await assert_backfill_matches_live(h.factory)
 
 
 async def test_false_branch_records_one_acceptance_and_submitter_contribution(
@@ -62,6 +67,11 @@ async def test_false_branch_records_one_acceptance_and_submitter_contribution(
                 )
                 == "accepted"
             )
+            # PostgreSQL copies the decision time from the FinalAcceptance evidence.
+            assert (await session.execute(text(
+                "SELECT s.attempt_status,s.decided_at=a.accepted_at FROM public.submissions s "
+                "JOIN public.final_acceptances a ON a.submission_id=s.id WHERE s.id=:id"
+            ), {"id": h.request.submission_id})).one() == ("accepted", True)
             assert await session.scalar(text("SELECT count(*) FROM public.final_acceptances")) == 1
             assert (
                 await session.scalar(text("SELECT count(*) FROM public.contribution_records")) == 1
@@ -92,6 +102,7 @@ async def test_false_branch_records_one_acceptance_and_submitter_contribution(
                 envelope, current_generation=2
             )
             assert replay == result.model_copy(update={"replayed": True})
+        await assert_backfill_matches_live(h.factory)
 
 
 async def test_orphan_routing_allow_cannot_commit(tmp_path, isolated_database_env):

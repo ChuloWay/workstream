@@ -331,6 +331,54 @@ class CheckerResult(Base):
     checker_run: Mapped[CheckerRun] = relationship(back_populates="results")
 
 
+class CheckerResultFinding(Base):
+    """One immutable finding of one checker member, copied from the stored result."""
+
+    __tablename__ = "checker_result_findings"
+    __table_args__ = (
+        CheckConstraint("(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128", name="id_uuid7"),
+        ForeignKeyConstraint(
+            ["checker_run_id", "task_id", "submission_id"],
+            ["checker_runs.id", "checker_runs.task_id", "checker_runs.submission_id"],
+            name="fk_checker_result_findings_run_ownership",
+        ),
+        ForeignKeyConstraint(
+            ["checker_result_id"], ["checker_results.id"],
+            name="fk_checker_result_findings_member",
+        ),
+        UniqueConstraint(
+            "checker_result_id", "finding_order", name="uq_checker_result_findings_order"
+        ),
+        CheckConstraint("member_order between 0 and 8", name="member_order"),
+        CheckConstraint("finding_order between 0 and 255", name="finding_order"),
+        CheckConstraint(
+            "level in ('info','warning','error','coverage_incomplete')", name="level"
+        ),
+        CheckConstraint(
+            "line is null or (path is not null and line between 1 and 10000000)",
+            name="location",
+        ),
+        Index(
+            "ix_checker_result_findings_submission_level",
+            "submission_id", "checker_run_id", "level",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
+    checker_result_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False, index=True)
+    checker_run_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    task_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    submission_id: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
+    member_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    finding_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    check_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    code: Mapped[str] = mapped_column(String(100), nullable=False)
+    level: Mapped[str] = mapped_column(String(30), nullable=False)
+    path: Mapped[str | None] = mapped_column(String(1000))
+    line: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class CheckerSubmissionFence(Base):
     """The sole current request for a submission; never a second result store."""
 

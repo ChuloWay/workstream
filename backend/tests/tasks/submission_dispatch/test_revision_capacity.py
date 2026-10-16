@@ -14,6 +14,7 @@ from app.modules.checkers.models import CheckerRun
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import Submission
 from tests.checkers.execution.support import ControlledSelectedExecution, live_executor
+from tests.tasks.post_submit_routing.backfill_support import assert_backfill_matches_live
 from tests.tasks.post_submit_routing.outcome_support import invoked_completion
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.post_submit_routing.support import revision_archive
@@ -45,7 +46,14 @@ async def _retain_pre_revision_source(h, source_id):
         await session.execute(text("ALTER TABLE public.task_revision_preparations ENABLE TRIGGER revision_preparation_immutable"))
 
 
-async def _fail_current_submission(h, *, terminal=False):
+COVERAGE_GAP = ({
+    "check_id": "coverage.files", "code": "coverage.unreadable",
+    "level": "coverage_incomplete", "message": "One file was not evaluated.",
+    "path": "src/vendor.bin", "line": None,
+},)
+
+
+async def _fail_current_submission(h, *, findings=None, route=True, terminal=False):
     """Complete the actual reserved successor using controlled external work failure."""
     async with h.factory() as session, session.begin():
         reserved = await evaluation_coordinator(session).read_reserved_evaluation(
@@ -55,7 +63,9 @@ async def _fail_current_submission(h, *, terminal=False):
         )
     h.request = reserved.request
     h.result = await live_executor(
-        h, selected_execution=ControlledSelectedExecution(verdict="failed"),
+        h, selected_execution=ControlledSelectedExecution(
+            verdict="passed" if findings else "failed", findings=findings,
+        ),
     ).evaluate_post_submission(h.request)
     async with h.factory() as session:
         run = await session.get(CheckerRun, str(h.result.attempt_id))
@@ -72,7 +82,8 @@ async def _fail_current_submission(h, *, terminal=False):
             return await task_post_submit_outcome(session, h.factory).apply(
                 h.envelope, current_generation=None,
             )
-    await _fixture_revision_context(h)
+    if route:
+        await _fixture_revision_context(h)
 
 
 async def test_two_revisions_then_public_and_sql_refusal(
@@ -150,8 +161,10 @@ async def test_two_revisions_then_public_and_sql_refusal(
             ), {"id": h.created.submission_id})
         # Intake now rejects excess rounds at the database boundary too. A raw
         # INSERT cannot bypass the cap even before an admission is selected.
+        # A forged successor is a new, undecided attempt.
+        fresh = dict(attempt_status="evaluation_pending", status_reason=None, decided_at=None)
         forbidden = dict(original, id=str(new_record_id()), version=4,
-                         supersedes_submission_id=str(h.created.submission_id))
+                         supersedes_submission_id=str(h.created.submission_id), **fresh)
         with pytest.raises(IntegrityError, match="revision_limit_reached"):
             async with h.factory() as session, session.begin():
                 await session.execute(text(
@@ -163,7 +176,7 @@ async def test_two_revisions_then_public_and_sql_refusal(
             forged = dict(original, id=str(new_record_id()), version=version,
                           supersedes_submission_id=str(h.created.submission_id),
                           submission_bundle_admission_id=None, artifact_binding_id=None,
-                          artifact_content_id=None)
+                          artifact_content_id=None, **fresh)
             with pytest.raises(IntegrityError, match="submission_revision_lineage_invalid"):
                 async with h.factory() as session, session.begin():
                     await session.execute(text(
@@ -176,6 +189,55 @@ async def test_two_revisions_then_public_and_sql_refusal(
             assert rows[0].id == str(initial_id)
             assert rows[1].supersedes_submission_id == rows[0].id
             assert rows[2].supersedes_submission_id == rows[1].id
+
+
+async def test_coverage_return_spends_no_round_under_a_zero_revision_policy(
+    tmp_path, isolated_database_env, monkeypatch,
+):
+    """With no revisions allowed, a coverage return v1 still returns the work.
+
+    It neither exhausts nor spends round zero, so v2 is the initial attempt and
+    its genuine failure exhausts the assignment immediately. Counting the
+    coverage return would make v2 a round beyond the policy instead.
+    """
+    from app.modules.tasks.schemas import AdmissionBackedSubmissionResponse
+    from app.modules.tasks.revision.models import TaskRevisionPreparation
+    from tests.tasks.submission_dispatch.test_revision_exhaustion import terminal_facts
+
+    async with remediation_source(
+        tmp_path, isolated_database_env, human_review_required=False, findings=COVERAGE_GAP,
+        max_revision_rounds=0,
+    ) as h:
+        await _fixture_revision_context(h)
+        async with h.factory() as session:
+            first = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+            assert (first.next_revision_round, first.max_revision_rounds) == (0, 0)
+            assert first.deadline_at is not None and first.outcome != "blocked"
+        route = f"/api/v1/tasks/{h.request.task_id}/submissions"
+        async with _client(h, monkeypatch, isolated_database_env) as client:
+            h.data = revision_archive(h.data)
+            prepared, admission = await _ready_replacement(h, h.data)
+            payload = _payload(prepared, admission)
+            response = await client.post(route, json=payload)
+            assert response.status_code == 201, response.text
+            assert response.json()["submission_version"] == 2
+            h.created = AdmissionBackedSubmissionResponse.model_validate(response.json())
+            outcome = await _fail_current_submission(h, terminal=True)
+            receipt = await terminal_facts(h, outcome, expected_round=0)
+            async with h.factory() as session:
+                assert (await session.execute(text(
+                    "SELECT array_agg(attempt_status ORDER BY version), "
+                    "array_agg(coalesce(status_reason, '-') ORDER BY version), "
+                    "array_agg(decided_at ORDER BY version) FROM public.submissions"
+                ))).one() == (
+                    ["needs_revision", "rejected"],
+                    ["checker_coverage_incomplete", "revision_limit_reached"],
+                    [first.requested_at, receipt.exhausted_at],
+                )
+            replay = await client.post(route, json=payload)
+            assert replay.status_code == 201, replay.text
+            assert replay.json() == response.json()
+        await assert_backfill_matches_live(h.factory)
 
 
 def test_revision_projection_preserves_deadline_and_distinguishes_policy_changes():
@@ -248,7 +310,7 @@ async def test_rebase_keeps_history_and_requires_exact_acknowledgement(
     async with remediation_source(tmp_path, isolated_database_env) as h:
         async with h.factory() as session:
             original = await session.scalar(text(
-                "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                "SELECT to_jsonb(s)-ARRAY['attempt_status','status_reason','decided_at','updated_at'] FROM public.submissions s WHERE id=:id"
             ), {"id": h.created.submission_id})
             retained_run = await session.scalar(text(
                 "SELECT to_jsonb(r) FROM public.checker_runs r WHERE id=:id"
@@ -310,7 +372,7 @@ async def test_rebase_keeps_history_and_requires_exact_acknowledgement(
             assert created.json()["submission_version"] == 2
         async with h.factory() as session:
             assert await session.scalar(text(
-                "SELECT to_jsonb(s) FROM public.submissions s WHERE id=:id"
+                "SELECT to_jsonb(s)-ARRAY['attempt_status','status_reason','decided_at','updated_at'] FROM public.submissions s WHERE id=:id"
             ), {"id": h.created.submission_id}) == original
             assert await session.scalar(text(
                 "SELECT to_jsonb(r) FROM public.checker_runs r WHERE id=:id"

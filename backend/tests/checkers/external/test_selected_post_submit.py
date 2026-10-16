@@ -166,6 +166,7 @@ class _Execution:
         self.requests.append(request)
         infrastructure = self.outcome == "infrastructure_failed"
         findings = () if self.verdict == "passed" or infrastructure else ({
+            "check_id": "post_evidence",
             "code": "post_evidence_failed",
             "level": "error",
             "message": "Post evidence failed.",
