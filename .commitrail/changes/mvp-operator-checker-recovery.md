@@ -71,7 +71,7 @@ eligible source or call the retry through a bearer-authenticated public route.
   direct product-row repair, mutable source evidence or changes to locked policy
   lineage.
 - Checker registration or REV lifecycle work owned by issue #580; CLI/CI,
-  credentials, cloud/deployment changes, frontend behavior, push, merge or
+  credentials, cloud/deployment changes, frontend behavior, merge or
   unrelated cleanup.
 
 ## Design and decisions
@@ -161,25 +161,32 @@ action or tests.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `34501cd64` | Hidden exact terminal retry and absent Operator read/command confirmed | Implementation and public proof await plan review |
+| Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `801b8dabb` | Hidden exact terminal retry and absent Operator read/command confirmed; implementation extends that owner | Public PostgreSQL proof remains pending |
 | UNKNOWN separation | Inspect OUTBOX dead-letter contracts and issue #581 | Unresolved invocation effects have no safe generic replay owner; excluded from this PR | Source-specific reconciliation remains a later bounded change |
 | Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | Pending | Hosted full-suite evidence remains with the lead |
-| Closed AUTH and docs | Catalogue/setup-finalization tests, stale wording scan, markdown links and roadmap reconciliation | Pending | Parallel #580 catalogue delta must be reconciled before final proof |
-| Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref origin/main` | Pending | Exact-head rerun required after implementation |
+| Closed AUTH and lane ownership | Three exact catalogue/setup-finalization tests and three canonical CI lane inventory/ownership/fingerprint tests | `6 passed`; new tests remain in the existing checker-delivery module and lane manifest | Parallel #580 catalogue delta must be preserved when the branches reconcile |
+| Static implementation checks | Changed-file Ruff; changed Python `compileall`; `git diff --check origin/main...HEAD` | Passed on the rebased implementation | Exact-head rerun required after evidence updates |
+| Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref origin/main` | Passed | Exact-head rerun required after evidence updates |
 
 ## Review findings
 
-Plan review is pending before product implementation. Material findings and
-their disposition will be recorded here after a clean candidate exists.
+Pre-implementation plan review required the URL project selector to constrain
+the canonical CHECKERS source lookup before any TASK or foreign product-row
+lock; a real held-lock wrong-project probe; a project/query-bound stable signed
+cursor; explicit caller-root rollback and canonical denial restaging; and clear
+separation between fresh AUTH evidence on replay and duplicate retry business
+effects. The implementation and focused tests incorporate those corrections.
+Runtime security, QA and other routed review remain pending until the focused
+PostgreSQL evidence is clean.
 
 ## Reconciliation
 
-- Current-source reconciliation: base `34501cd64`; issue #580's parallel branch
+- Current-source reconciliation: base `801b8dabb`; issue #580's parallel branch
   owns supported checker registration and a separate registry read action. This
   change owns only terminal checker recovery and will reconcile the shared AUTH
   catalogue/kernel without deleting either action.
 - Next usable boundary: source-specific observation and reconciliation for
   request execution, checker completion and acceptance commit/acknowledgement
   loss, followed by parent issue #555's real-project worker drill.
-- Remaining risks: plan review, implementation, exact-head PostgreSQL/public API
-  evidence and routed internal review remain pending. UNKNOWN effects stay held.
+- Remaining risks: exact-head PostgreSQL/public API evidence and routed internal
+  review remain pending. UNKNOWN effects stay held.

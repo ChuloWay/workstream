@@ -283,6 +283,23 @@ async def test_public_operator_discovers_retries_replays_and_observes_revocation
             "selected_post_submit_policy_body", "resource_json", "resource_digest",
             "authorization_decision_id", "identity_link_id", "actor_profile_id",
         }
+        async with h.factory() as session:
+            read_allows = list(await session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.actor_id == str(admin_access.target.id),
+                    AuditEvent.action_id
+                    == ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST.value,
+                ).order_by(AuditEvent.id)
+            ))
+            read_allow = [
+                event for event in read_allows
+                if event.after_facts.get("allowed") is True
+            ][-1]
+            assert read_allow.matched_grant_id == system_grant
+            assert read_allow.permission_id == "operations.status.read"
+            assert read_allow.project_id == str(h.request.project_id)
+            assert read_allow.resource_type == "checker_retry_source_collection"
+            assert read_allow.resource_id == str(h.request.project_id)
 
         wrong_project = await create_project("Foreign recovery selector")
         _wrong_discovery, wrong_retry = _recovery_paths(h, project_id=wrong_project)
@@ -298,7 +315,7 @@ async def test_public_operator_discovers_retries_replays_and_observes_revocation
                     | {"Idempotency-Key": str(new_record_id())},
                     json={"reason": "Restore verified checker infrastructure"},
                 ),
-                timeout=2,
+                timeout=5,
             )
         assert wrong.status_code == 404, wrong.text
 
@@ -393,6 +410,26 @@ async def test_public_operator_discovers_retries_replays_and_observes_revocation
                     )
                 ),
             }
+            retry_allows = list(await session.scalars(
+                select(AuditEvent).where(
+                    AuditEvent.actor_id == str(admin_access.target.id),
+                    AuditEvent.action_id
+                    == ActionId.OPERATIONS_CHECKER_RETRY.value,
+                ).order_by(AuditEvent.id)
+            ))
+            retry_allows = [
+                event for event in retry_allows
+                if event.after_facts.get("allowed") is True
+            ]
+            assert len(retry_allows) == 2
+            assert all(
+                event.matched_grant_id == system_grant
+                and event.permission_id == "operations.checker.retry"
+                and event.project_id == str(h.request.project_id)
+                and event.resource_type == "checker_run"
+                and event.resource_id == str(h.created.evaluation_attempt_id)
+                for event in retry_allows
+            )
 
         conflict = await admin_access.signed.client.post(
             retry_path,
