@@ -192,12 +192,12 @@ async def test_registry_read_conceals_entry_from_non_system_human_and_service_au
     entry = created.json()
     path = f"{PATH}/{entry['registry_entry_id']}"
 
-    project_operator = await admin_access.signed.actor("project-registry-operator")
+    project_manager = await admin_access.signed.actor("project-registry-manager")
     project_id = await create_project("Scoped registry denial")
     await admin_access.signed.grant(
         admin_access.admin,
-        project_operator,
-        role="operator",
+        project_manager,
+        role="project_manager",
         project_id=project_id,
     )
 
@@ -243,9 +243,9 @@ async def test_registry_read_conceals_entry_from_non_system_human_and_service_au
     counts_before = await _counts()
     reads_before = await _read_events()
     requests = (
-        (project_operator.headers, 404),
+        (project_manager.headers, 404),
         ({"Authorization": f"Bearer {service_token}"}, 404),
-        (revoked_actor.headers, 401),
+        (revoked_actor.headers, 404),
     )
     for headers, expected_status in requests:
         denied = await admin_access.signed.client.get(path, headers=headers)
