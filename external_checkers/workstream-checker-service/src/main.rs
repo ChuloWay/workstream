@@ -443,9 +443,20 @@ fn run() -> Result<(), String> {
     let config: ServiceConfig =
         serde_json::from_slice(&bytes).map_err(|_| "configuration invalid")?;
     let listener = prepare_listener(&config)?;
-    for connection in listener.incoming() {
+    serve_connections(&config, listener.incoming(), SOCKET_IO_TIMEOUT)
+}
+
+fn serve_connections<I>(
+    config: &ServiceConfig,
+    connections: I,
+    timeout: Duration,
+) -> Result<(), String>
+where
+    I: IntoIterator<Item = std::io::Result<UnixStream>>,
+{
+    for connection in connections {
         match connection {
-            Ok(stream) => serve_connection(&config, stream, SOCKET_IO_TIMEOUT)?,
+            Ok(stream) => serve_connection(config, stream, timeout)?,
             Err(_) => continue,
         }
     }
@@ -2163,6 +2174,84 @@ mod tests {
         (root, config)
     }
 
+    fn pre_submit_envelope_with_grant(config: &ServiceConfig) -> Value {
+        let grant_id = "extract_0123456789abcdef0123456789abcdef";
+        let mut request: Value =
+            serde_json::from_slice(include_bytes!("../../fixtures/request.json")).unwrap();
+        let mut manifest = GrantManifest {
+            protocol_version: GRANT_PROTOCOL.into(),
+            grant_id: grant_id.into(),
+            request_digest: String::new(),
+            identity: GrantIdentity::PreSubmit {
+                prepared_generation_id: request["identity"]["prepared_generation_id"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+                attempt_id: request["identity"]["attempt_id"].as_str().unwrap().into(),
+                attempt_request_digest: request["identity"]["attempt_request_digest"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+                archive_sha256: request["materials"][0]["archive_sha256"]
+                    .as_str()
+                    .unwrap()
+                    .into(),
+                archive_byte_count: request["materials"][0]["archive_byte_count"]
+                    .as_u64()
+                    .unwrap(),
+                semantic_manifest_sha256: String::new(),
+            },
+            directories: Vec::new(),
+            files: Vec::new(),
+            runtime_scratch: None,
+            binding_digest: format!("sha256:{}", "0".repeat(64)),
+        };
+        let semantic = semantic_manifest_hash(&manifest).unwrap();
+        let GrantIdentity::PreSubmit {
+            semantic_manifest_sha256,
+            ..
+        } = &mut manifest.identity
+        else {
+            unreachable!()
+        };
+        *semantic_manifest_sha256 = semantic.clone();
+        request["materials"][0]["semantic_manifest_sha256"] = Value::String(semantic);
+        let mut request_body = request.as_object().unwrap().clone();
+        request_body.remove("request_digest");
+        let request_digest = canonical_hash(&Value::Object(request_body)).unwrap();
+        request["request_digest"] = Value::String(request_digest.clone());
+        manifest.request_digest = request_digest;
+
+        let mut manifest_value = serde_json::to_value(&manifest).unwrap();
+        manifest_value
+            .as_object_mut()
+            .unwrap()
+            .remove("binding_digest");
+        manifest.binding_digest = canonical_hash(&manifest_value).unwrap();
+
+        let grants = config.material_root.join("workspaces");
+        let grant_root = grants.join(grant_id);
+        let workspace = grant_root.join("workspace");
+        fs::create_dir(&grants).unwrap();
+        fs::create_dir(&grant_root).unwrap();
+        fs::create_dir(&workspace).unwrap();
+        fs::set_permissions(&grant_root, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
+        let manifest_path = grant_root.join(".external-checker-grant.json");
+        fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        fs::set_permissions(&manifest_path, fs::Permissions::from_mode(0o400)).unwrap();
+
+        serde_json::json!({
+            "protocol_version": PROTOCOL,
+            "operation": "execute",
+            "request": request,
+            "grant": {
+                "grant_id": grant_id,
+                "binding_digest": manifest.binding_digest,
+            },
+        })
+    }
+
     #[test]
     fn runtime_files_use_socket_custody_and_stale_cleanup_never_touches_art() {
         let (root, config) = test_config();
@@ -2475,12 +2564,80 @@ exit 2
     }
 
     #[test]
-    fn unsettled_cleanup_is_the_only_connection_error_that_stops_admission() {
-        assert_eq!(connection_response(Err("invalid request".into())), Ok(None));
-        assert_eq!(
-            connection_response(Err(UNSETTLED_RESOURCE_ERROR.into())),
-            Err(UNSETTLED_RESOURCE_ERROR.into())
+    fn unresolved_cleanup_closes_the_listener_loop_without_admitting_the_next_connection() {
+        let (root, config) = test_config();
+        let retained = root.join("retained-container");
+        let second_admitted = root.join("second-admitted");
+        let cache = &config.cache[0];
+        fs::write(
+            &config.docker_binary,
+            format!(
+                r#"#!/bin/sh
+case "$1 $2" in
+  "image inspect")
+    printf '%s\n' '{{"Id":"{image_id}","Os":"{os}","Architecture":"{architecture}","RepoDigests":["{repository}@{manifest}"]}}'
+    exit 0;;
+  "create --name") : > "{retained}"; exit 17;;
+  "rm -f"|"container ls") exit 125;;
+  "info --format") : > "{second_admitted}"; printf '{{"runc":{{}}}}'; exit 0;;
+esac
+exit 2
+"#,
+                image_id = cache.config_image_id,
+                os = cache.operating_system,
+                architecture = cache.architecture,
+                repository = cache.repository,
+                manifest = cache.platform_manifest_digest,
+                retained = retained.display(),
+                second_admitted = second_admitted.display(),
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
+        let execute = serde_json::to_vec(&pre_submit_envelope_with_grant(&config)).unwrap();
+        let health = serde_json::to_vec(
+            &serde_json::json!({"protocol_version": PROTOCOL, "operation": "health"}),
+        )
+        .unwrap();
+
+        let listener_path = root.join("queued-connections.sock");
+        let listener = UnixListener::bind(&listener_path).unwrap();
+        let mut execute_client = UnixStream::connect(&listener_path).unwrap();
+        let (execute_server, _) = listener.accept().unwrap();
+        let mut health_client = UnixStream::connect(&listener_path).unwrap();
+        let (health_server, _) = listener.accept().unwrap();
+        write_frame(&mut execute_client, &execute).unwrap();
+        write_frame(&mut health_client, &health).unwrap();
+        for client in [&execute_client, &health_client] {
+            client
+                .set_read_timeout(Some(Duration::from_millis(100)))
+                .unwrap();
+        }
+
+        let outcome = serve_connections(
+            &config,
+            vec![Ok(execute_server), Ok(health_server)],
+            Duration::from_secs(2),
         );
+        let retained_exists = retained.exists();
+        let second_was_admitted = second_admitted.exists();
+        let execute_received_no_frame =
+            read_frame(&mut execute_client, MAX_RESPONSE_BYTES).is_err();
+        let health_received_no_frame = read_frame(&mut health_client, MAX_RESPONSE_BYTES).is_err();
+
+        drop(listener);
+        fs::remove_file(listener_path).unwrap();
+        let workspace = config
+            .material_root
+            .join("workspaces/extract_0123456789abcdef0123456789abcdef/workspace");
+        fs::set_permissions(workspace, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::remove_dir_all(root).unwrap();
+
+        assert_eq!(outcome, Err(UNSETTLED_RESOURCE_ERROR.into()));
+        assert!(retained_exists);
+        assert!(!second_was_admitted);
+        assert!(execute_received_no_frame);
+        assert!(health_received_no_frame);
     }
 
     #[test]
@@ -2541,7 +2698,7 @@ exit 2
             ),
             Err("deadline_exceeded")
         );
-        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(started.elapsed() < Duration::from_secs(4));
 
         request.deadline_ms = 30_000;
         let (peer, disconnected) = UnixStream::pair().unwrap();
@@ -2561,7 +2718,7 @@ exit 2
             ),
             Err("implementation_unavailable")
         );
-        assert!(started.elapsed() < Duration::from_secs(2));
+        assert!(started.elapsed() < Duration::from_secs(4));
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -435,7 +435,7 @@ can safely adopt the PILOT-00 mechanism.
 | Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, external grant publication and selected POST call order | Existing owner already provides aggregate byte quota and per-workspace entry ceiling, durable workspace ownership, failed-cleanup retention and crash recovery. Rust settles Docker before socket response; the live Python context then revokes/deletes before exposing the evaluation. Service death and Python-owner death have distinct cleanup paths | Focused exact-limit, cleanup-order, SIGKILL and dead-owner proof pending |
 | #582 ownership check | Coordinate exact paths and port ownership with the S3 activation owner | #582 does not touch `preparation.py` or `post_submit_materialization.py`; it owns provider-neutral ArtifactStore activation evidence and S3 composition, while this change reuses the separate existing ArtifactScratchManager/ledger without extending that activation port | Recheck after either branch changes its bounded files |
 | Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin. Work uses one absolute deadline/output meter; emergency cleanup uses one 10-second deadline and separate 256 KiB output ceiling | Actual Docker cancellation/resource behavior remains to be exercised in the local matrix |
-| Required Rust workspace gate | From `external_checkers/`: `CARGO_BUILD_JOBS=1 cargo fmt --all --check && CARGO_BUILD_JOBS=1 cargo test --workspace --locked` | PASS: 5 SDK, 34 service and 4 project-image tests. Service proof includes custody-first startup, disconnect/CLI stop, one cleanup budget, exact successful-absence queries, marker-preserving ambiguous removal, fatal admission stop, attempt-bound recovery names, production builder `fsize` arguments and kernel exact-byte/plus-one behavior | Pure/fake-Docker tests do not prove actual Docker/runsc behavior |
+| Required Rust workspace gate | From `external_checkers/`: `CARGO_BUILD_JOBS=1 cargo fmt --all --check && CARGO_BUILD_JOBS=1 cargo test --workspace --locked` | PASS on the `TEST493002` repair candidate: 5 SDK, 34 service and 4 project-image tests. The service tests cover custody-first startup, disconnect/CLI stop, one cleanup budget, exact successful-absence queries, marker-preserving ambiguous removal, attempt-bound recovery names, production builder `fsize` arguments, kernel exact-byte/plus-one behavior and fatal cleanup propagation through two real socket connections. Focused mutations of both the `handle_frame` fatal guard and listener-loop propagation fail this regression | Pure/fake-Docker tests do not prove actual Docker/runsc behavior |
 | Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame and `.github/workflows/backend.yml` inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced. The required `external-checker-runtime` CI lane runs locked workspace tests and formatting, not clippy | This optional local strict-clippy probe remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
 | Project image and SDK contracts | `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-terminal-benchmark-checker` and `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-sdk` | PASS: 4 project-package tests over all five originals and 5 SDK contract/canonicalization tests | Real image execution remains pending |
 | ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /home/abiorh/flow/workstream_product_builder/backend/.venv/bin/python -m pytest -q -p pytest_asyncio.plugin tests/checkers/external/test_runtime.py` from `backend/` | PASS: 11 tests, including exact existing-ledger POST byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering |
@@ -491,6 +491,18 @@ inventory absence, stops admission on unresolved cleanup, binds every recovered
 name to its attempt and allowed reference iteration, and captures the real
 builder command to prove the reserved `fsize` argument with a discriminating
 guard. These remain source/fake-Docker claims until the real runtime matrix.
+
+The affected replay at `d6bf41ca98b264f655eaaf8d36b879d0f6797383`
+passed security, architecture and reuse, but QA/test-delta found that fatal
+cleanup was proved only below `handle_frame` and by a synthetic connection
+result (`TEST493002`). A mutation converting the fatal state into an ordinary
+infrastructure result, or continuing the listener loop after it, would leave
+the tests green. The follow-up replaces that synthetic check with two real
+accepted Unix-stream connections: the first drives a valid verified-grant
+execute request through failed create and unresolved cleanup, and the second is
+a queued health request. The test requires retained-resource evidence, EOF with
+no first response, the fatal listener-loop error and no second-request Docker
+marker. Both mutations therefore fail without a hung thread or child process.
 
 ## Reconciliation
 

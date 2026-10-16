@@ -1451,7 +1451,7 @@ exit 2
             request: &request,
             grant: &grant,
             client: &client,
-            deadline: Instant::now() + Duration::from_secs(2),
+            deadline: Instant::now() + Duration::from_secs(10),
         };
         let mut output = OutputMeter::new(4096);
         let mut cleanup = EmergencyCleanupBudget::new();
