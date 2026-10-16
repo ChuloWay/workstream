@@ -216,11 +216,13 @@ external interface during proof execution, registers the verified gVisor binary
 only as the service's fixed `runsc` key, and receives the owned state directory
 at the same absolute path used by the host service. This offline claim applies
 only to DIND and the product containers; the Actions host shell need not change
-or claim its network state. Product builder/checker/oracle containers retain
-`--pull=never --network none`; no sandbox receives the host or inner Docker
-socket. Exact builder and approved-base boundary probes require the gVisor
-marker, loopback as the only interface and no Docker socket. The trusted Docker
-wrapper additionally inspects every actual builder/candidate/reference create
+or claim its network state. Builder and oracle continuation containers retain
+`--pull=never --network none`; the checker uses its exact verified local digest,
+and every product sandbox uses `--network none`. No sandbox receives the host
+or inner Docker socket. Exact builder and approved-base boundary probes require
+the gVisor marker, loopback as the only interface and no Docker socket. The
+trusted Docker wrapper additionally inspects every actual
+builder/candidate/reference create
 before returning and records exact `runsc`, network-none, capability, read-only
 root and mount facts.
 
@@ -595,7 +597,7 @@ can safely adopt the PILOT-00 mechanism.
 | Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame and `.github/workflows/backend.yml` inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced. The required `external-checker-runtime` CI lane runs locked workspace tests and formatting, not clippy | This optional local strict-clippy probe remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
 | Project image and SDK contracts | `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-terminal-benchmark-checker` and `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-sdk` | PASS: 4 project-package tests over all five originals and 5 SDK contract/canonicalization tests | Real image execution remains pending |
 | ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /home/abiorh/flow/workstream_product_builder/backend/.venv/bin/python -m pytest -q -p pytest_asyncio.plugin tests/checkers/external/test_runtime.py` from `backend/` | PASS: 11 tests, including exact existing-ledger POST byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering |
-| Real gVisor matrix | Path-scoped isolated-runner probe over the one interrupted and one complete `ledger-reconcile` POST | Planned by this record amendment; harness/workflow implementation is blocked on CI/security plan replay | Source/fake-Docker evidence is not real Docker/runsc proof; DIND evidence will remain development rather than hosted-deployment proof |
+| Real gVisor matrix | Path-scoped isolated-runner probe over the one interrupted and one complete `ledger-reconcile` POST | The plan replay passed and the bounded harness/workflow implementation is present; exact hosted execution and implementation review remain pending | Source/fake-Docker evidence is not real Docker/runsc proof; DIND evidence will remain development rather than hosted-deployment proof |
 | Current-source reconciliation | Merge current `main` at `a201d743`; inspect #575 result/findings and Python CHECKERS contracts; run focused existing checker tests | This branch contains the current result shape and no old/new compatibility path | Recheck after the final main reconciliation and hosted checks |
 
 ## Review findings
