@@ -59,8 +59,9 @@ eligible source or call the retry through a bearer-authenticated public route.
   regenerate its additive partition snapshot.
 - `backend/alembic/versions/0050_operational_read_audit.py`, the canonical
   head in `backend/alembic/env.py`, the existing external-checker migration
-  proof, and issue #580's bounded record: consume the byte-identical shared
-  prerequisite commit from #589 that admits exactly its registry-read pair and
+  proof, the real PostgreSQL schema fingerprint in `backend/tests/conftest.py`,
+  and issue #580's bounded record: consume the byte-identical shared
+  prerequisite commits from #589 that admit exactly its registry-read pair and
   this change's recovery-read pair. These files remain owned and merged by
   #589 before this PR; this branch adds no second migration variant. The
   revision identifier remains within Alembic's persisted 32-character bound.
@@ -202,8 +203,8 @@ PostgreSQL evidence is clean.
   change owns only terminal checker recovery and preserves the shared AUTH
   catalogue/kernel additions. PR #589 owns and merges the canonical shared
   audit-pair migration before #588 and #592; those dependent branches consume
-  commits `019ada270` and `ed8fe2275` byte-for-byte and introduce no sibling
-  revision.
+  commits `019ada270`, `ed8fe2275`, and `802a22260` byte-for-byte and introduce
+  no sibling revision.
 - Next usable boundary: source-specific observation and reconciliation for
   request execution, checker completion and acceptance commit/acknowledgement
   loss, followed by parent issue #555's real-project worker drill.
