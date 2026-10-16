@@ -76,6 +76,17 @@ identity and system Operator grant to perform startup registration.
   `backend/tests/test_ci_lane_catalogue.py`: assign the new public registry test
   module to the existing checker-delivery family and update only its exact
   membership fingerprints.
+- `backend/scripts/behavior_ownership.py` and
+  `.ci/behavior-ownership/partition.v1.json`: assign the new request dependency
+  to the existing registry/artifact behavior owner and update only the exact
+  partition membership and authority digest.
+- `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: refresh only the exact
+  whole-file fingerprint for the existing oversized AUTH kernel after its
+  closed action sets change and reuse of the existing shared project-scoped
+  mutation classification reduces that file by two lines; no limit or
+  exception changes are allowed.
+- `mcp_server/contracts/authorization_context_get.json`: refresh the captured
+  authorization-context schema for the newly active registry-read ActionId.
 - `docs/architecture_checker_framework.md` and `docs/roadmap_status.md`: state
   only the supported registration/readback capability delivered by this PR
   and retain the remaining REV/hosted-runtime boundary.
