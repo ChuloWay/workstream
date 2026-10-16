@@ -54,6 +54,7 @@ async def test_registry_upgrade_targets_public_schema_with_shadow_search_path(
     isolated_database_env,
     migration_lock,
 ) -> None:
+    assert len(current_schema_revision()) <= 32
     shadow = "pilot04_registry_shadow"
     url = isolated_database_env.replace("+asyncpg", "")
     with migration_lock():

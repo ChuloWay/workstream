@@ -47,7 +47,7 @@ identity and system Operator grant to perform startup registration.
   `backend/app/api/router.py`: one authenticated Operator registration route,
   one exact-entry read route, caller-root transaction composition and stable
   HTTP error mapping.
-- `backend/alembic/versions/0050_operational_read_audit_pairs.py` and
+- `backend/alembic/versions/0050_operational_read_audit.py` and
   `backend/alembic/env.py`: extend the existing closed AUTH audit vocabulary
   with exactly the current registry-read and retry-source-read action pairs.
   The registry's signed PostgreSQL readback exposed this concrete prerequisite;
