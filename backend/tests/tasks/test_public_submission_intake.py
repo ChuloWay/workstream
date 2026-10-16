@@ -23,7 +23,7 @@ from app.modules.checkers.models import CheckerRun, SelectedPreSubmitRun
 from app.modules.checkers.api.pre_submit_material import SubmissionPacketView
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import Submission
-from app.modules.tasks.models import WorkstreamTask
+from app.modules.tasks.models import TaskAssignment, WorkstreamTask
 from app.modules.tasks.api import SubmissionCreationRequest
 from app.modules.tasks.router import create_admission_backed_submission
 from app.modules.tasks.schemas import AdmissionBackedSubmissionCreate
@@ -41,7 +41,9 @@ from tests.test_submission_predecessor_custody import (
 
 
 @asynccontextmanager
-async def _client(h, monkeypatch, database_url, *, subject=None):
+async def _client(
+    h, monkeypatch, database_url, *, subject=None, raise_app_exceptions=True,
+):
     """Use a normal development bearer for the seeded exact human identity."""
     actor = getattr(h, "actor_context", None) or h.context
     monkeypatch.setenv("WORKSTREAM_AUTH_PROVIDER", "dev")
@@ -94,7 +96,10 @@ async def _client(h, monkeypatch, database_url, *, subject=None):
     app.dependency_overrides[get_rate_control_service] = lambda: rate_control
     try:
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://testserver",
+            transport=ASGITransport(
+                app=app, raise_app_exceptions=raise_app_exceptions,
+            ),
+            base_url="http://testserver",
             headers={"Authorization": "Bearer public-intake-token"},
         ) as client:
             yield client
@@ -113,6 +118,106 @@ def _payload(request, admission_id):
         "summary": request.summary,
         "contributor_attestation": request.contributor_attestation,
     }
+
+
+async def test_public_malformed_zip_returns_bounded_422_without_effects(
+    isolated_database_env, tmp_path, monkeypatch,
+):
+    """Reject unreadable contributor bytes before PRE, provider, or lifecycle effects."""
+    async with _prepared_packet(isolated_database_env, tmp_path, verify=False) as h:
+        route = f"/api/v1/tasks/{h.task_id}/submission-bundle-preparations"
+        headers = {
+            "Content-Type": "application/zip",
+            "X-Task-Assignment-Id": str(h.assignment_id),
+            "Idempotency-Key": str(new_record_id()),
+            "X-Submission-Summary": h.preparation_request.summary,
+            "X-Contributor-Attestation": h.preparation_request.contributor_attestation,
+        }
+        counted_models = (
+            Submission,
+            SubmissionBundleAdmission,
+            SelectedPreSubmitRun,
+            CheckerRun,
+            ArtifactPutAttempt,
+            OutboxEvent,
+        )
+
+        async with _client(
+            h,
+            monkeypatch,
+            isolated_database_env,
+            raise_app_exceptions=False,
+        ) as client:
+            async with h.factory() as session:
+                before_count_values = []
+                for model in counted_models:
+                    before_count_values.append(
+                        await session.scalar(select(func.count()).select_from(model))
+                    )
+                before_counts = tuple(before_count_values)
+                task = await session.get(WorkstreamTask, str(h.task_id))
+                assignment = await session.get(TaskAssignment, str(h.assignment_id))
+                before_state = (task.status, assignment.status)
+
+            from app.adapters.artifacts.local import LocalStorageAdapter
+            from app.modules.artifacts.selected_pre_submit_execution import (
+                SelectedPreSubmitExecutionService,
+            )
+
+            async def unexpected_effect(*_args, **_kwargs):
+                raise AssertionError("archive rejection reached checker or provider effects")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(LocalStorageAdapter, "put", unexpected_effect)
+                patch.setattr(
+                    SelectedPreSubmitExecutionService, "execute", unexpected_effect,
+                )
+                response = await client.post(
+                    route,
+                    headers=headers,
+                    content=b"PK\x03\x04not-a-readable-zip",
+                )
+
+            async with h.factory() as session:
+                after_count_values = []
+                for model in counted_models:
+                    after_count_values.append(
+                        await session.scalar(select(func.count()).select_from(model))
+                    )
+                after_counts = tuple(after_count_values)
+                task = await session.get(WorkstreamTask, str(h.task_id))
+                assignment = await session.get(TaskAssignment, str(h.assignment_id))
+                after_state = (task.status, assignment.status)
+
+            assert after_counts == before_counts
+            assert after_state == before_state == ("in_progress", "active")
+            assert not tuple((h.settings.artifact_scratch_root / "files").iterdir())
+            assert not tuple((h.settings.artifact_scratch_root / "workspaces").iterdir())
+            assert response.status_code == 422, response.text
+            payload = response.json()
+            assert payload["detail"] == "submission_archive_malformed"
+            assert payload["error"] == {
+                "code": "invalid_request",
+                "message": "Invalid request",
+                "details": {},
+                "correlation_id": response.headers["X-Correlation-ID"],
+                "retryable": False,
+            }
+            rendered = response.text
+            assert all(
+                value not in rendered
+                for value in ("/tmp/", "s3://", "not-a-readable-zip", "BadZipFile")
+            )
+
+            valid = await client.post(
+                route,
+                headers=headers | {"Idempotency-Key": str(new_record_id())},
+                content=h.archive_bytes,
+            )
+            assert valid.status_code == 202, valid.text
+            assert valid.json()["submission_bundle_preparation_status"] == (
+                "stored_pending_verification"
+            )
 
 
 def test_optional_public_text_keeps_packet_utf8_byte_limit():

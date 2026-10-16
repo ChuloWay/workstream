@@ -979,6 +979,16 @@ the authoritative result. The public
 without receiving scratch paths or rerunning the pre-submit plan. ARCH-02I-B
 exposes this operation for initial work and exact checker remediation.
 
+Unreadable or structurally rejected ZIP bytes return the existing non-retryable
+HTTP 422 `invalid_request` envelope with ART's exact closed
+`submission_archive_*` token as `detail`. The response exposes no submitted path,
+scratch/provider coordinate, parser exception, or raw archive content. This
+rejection occurs after fresh authority and selected materialization authorization
+preparation but before selected PRE reservation, checker execution, provider PUT,
+admission, Submission creation, or task/assignment transition. Owned scratch is
+released before the response. Unexpected failures remain private server or
+infrastructure errors rather than contributor archive feedback.
+
 Internal pre-submit materialization retains its execution boundary behind the
 public preparation route. The fixed materializer authorizes before any prepared-byte
 read or workspace reservation. One callback-scoped sealed tree is checked
