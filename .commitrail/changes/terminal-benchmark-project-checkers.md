@@ -112,9 +112,46 @@ code on the host would break the established boundary.
   timeout/OOM/disk/output bounds, cancellation, SIGKILL/restart recovery and
   complete owned cleanup. Tests may consume the fixed #576 corpus read-only;
   they must not make its trusted native verifier a production authority.
-- A bounded local probe under `experiments/terminal_benchmark_project_checkers/**`
-  for actual image build, service execution and retained evidence when the
-  repository lead allocates Docker capacity.
+- A bounded probe under `experiments/terminal_benchmark_project_checkers/**`
+  for actual image build, service execution and retained evidence. It may make
+  the smallest extension to `experiments/pilot00_gvisor_offline/**` needed to
+  reuse that harness with the service's fixed `runsc` runtime key and the same
+  absolute owned state-root mount; PILOT-00's default sample behavior, pins and
+  trust boundary remain unchanged.
+- One separate path-scoped PR proof workflow at
+  `.github/workflows/terminal-benchmark-project-checkers.yml`. It must leave the
+  existing required Backend topology, selectors, gates and package commands
+  unchanged. It runs only for `pull_request` (`opened`, `synchronize`,
+  `reopened`) path changes to
+  `.github/workflows/terminal-benchmark-project-checkers.yml`,
+  `.commitrail/changes/terminal-benchmark-project-checkers.md`,
+  `experiments/pilot00_gvisor_offline/**`,
+  `experiments/terminal_benchmark_project_checkers/**`,
+  `external_checkers/**`, `pilots/terminal_benchmark/**`,
+  `backend/app/adapters/checkers/**`,
+  `backend/app/interfaces/external_checker_execution.py`,
+  `backend/app/core/hashing.py`, `backend/app/core/identifiers.py`,
+  `backend/app/modules/artifacts/preparation.py`,
+  `backend/app/modules/checkers/api/external.py` and
+  `backend/tests/checkers/external/test_runtime.py`, plus the exact Python
+  dependency locks `backend/pyproject.toml` and `backend/uv.lock`; it never uses
+  `pull_request_target`. It uses the named ephemeral `ubuntu-24.04` runner,
+  per-PR/head-ref cancel-in-progress concurrency, only `contents: read`, and
+  `actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5` and
+  `actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02`.
+  Checkout selects
+  `github.event.pull_request.head.sha`, disables persisted credentials, and the
+  job records/asserts that value as the sole proof head rather than using the PR
+  merge `GITHUB_SHA`. It accepts no secrets or AWS/deployment inputs, uses no
+  cross-run Actions cache, and runs only this bounded experiment.
+- That workflow has three explicit phases: a networked preparation of exact
+  digest-pinned public images and the SHA-512-pinned gVisor archive; execution
+  in an externally networkless owned DIND; and unconditional label-checked
+  cleanup followed by upload of only a verified nonsecret staging directory. It
+  must fail before preparation when fewer than 10 GiB filesystem, 6 GiB
+  available memory or 2 CPUs are available, cap the outer harness at 2 CPUs,
+  4 GiB memory and 1,024 PIDs, serialize POST attempts, bound
+  prepare/run/cleanup to 1,200/900/180 seconds and bound the job to 40 minutes.
 - Exact immutable PRE and POST registration specifications, including schemas,
   resource ceilings, configuration, built platform-manifest digest and source
   provenance, stored outside the image build context so the image digest has no
@@ -136,7 +173,10 @@ code on the host would break the established boundary.
   resolution.
 - No changes to #576 corpus assets without explicit coordination with their
   owner and manager agreement. No private Terminal-Bench/Snorkel material.
-- No CI topology, hosted deployment, secret, merge or issue-closure change.
+- No change to existing required CI topology, Backend lane/gate selection or
+  package-script custody beyond the one independent path-scoped proof workflow
+  allowed above. No hosted deployment, credential/secret, AWS, merge or
+  issue-closure change.
 - No second scratch owner, service-private scratch root, durable build artifact,
   arbitrary caller-selected scratch size, or public/DB/registry schema change.
   The narrow ART grant extension is a concrete prerequisite in this PR because
@@ -144,6 +184,100 @@ code on the host would break the established boundary.
   extension has no useful standalone product behavior.
 
 ## Design and decisions
+
+### Isolated runtime proof
+
+The reviewed source and fake-Docker tests cannot establish the required real
+`runsc` behavior, and the current repository has no manual or hosted gVisor
+experiment seam. Keep that proof separate from the existing 10-minute
+`external-checker-runtime` Rust job. The one path-scoped workflow above checks
+out and verifies the exact PR head, then invokes only the bounded experiment.
+Its online preparation verifies gVisor `release-20260928.0` archive SHA-512
+`4ce35ca83aef7f96b06cde668e0b23aa98b05aa1829508e974196c2a1e02786c95f5bf79315fd7ddcfd88fe7a00f083ed8053e25eff7673d28d5256440caae8b`
+and pulls only exact inputs: DIND
+`sha256:173f284a4299164772a90f52b373e73e087583c0963f1334c9995f190ef6f3f5`,
+Kaniko index
+`sha256:d6d74217dc077acfd3094992e917c357080a2d3fdd1042a49e34e29a7e57c572`,
+CPython linux/amd64
+`sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af`,
+checker build
+`sha256:479476fa1dec14dfa9ed2dbcaa94cda5ab945e125d45c2d153267cc0135f3b69`,
+checker final
+`sha256:777e96cf322c46bc32aca926c263624c4dc8d7cf37e2fa65ba2c7e697318ebbb`
+and registry
+`sha256:a3d8aaa63ed8681a604f1dea0aa03f100d5895b6a58ace528858a7b332415373`.
+It records the complete linux/amd64 child manifests, media types, byte counts
+and config IDs before the networkless phase.
+
+Preparation builds the checker image, warms and canonically inventories the
+approved CPython cache, loads exact images into the owned DIND daemon, and
+publishes them to the pinned registry on that daemon's loopback. The DIND has no
+external interface during proof execution, registers the verified gVisor binary
+only as the service's fixed `runsc` key, and receives the owned state directory
+at the same absolute path used by the host service. This offline claim applies
+only to DIND and the product containers; the Actions host shell need not change
+or claim its network state. Product builder/checker/oracle containers retain
+`--pull=never --network none`; no sandbox receives the host or inner Docker
+socket. Exact builder and approved-base boundary probes require the gVisor
+marker, loopback as the only interface and no Docker socket. The trusted Docker
+wrapper additionally inspects every actual builder/candidate/reference create
+before returning and records exact `runsc`, network-none, capability, read-only
+root and mount facts.
+
+During the networked preparation phase, the workflow downloads and installs
+only Ubuntu 24.04's exact `xfsprogs=6.6.0-1ubuntu2.1` package through the signed
+Ubuntu archive. It rejects a different APT candidate or installed version,
+records the downloaded package SHA-256 and `dpkg-query` result, and records the
+versions of `mkfs.xfs`, `xfs_quota` and the runner-provided `losetup`, `findmnt`
+and `mountpoint`. It installs no kernel component and fails if the runner kernel
+lacks loop or XFS project-quota support.
+
+The runner creates one 6 GiB sparse harness-owned file, attaches it to one
+recorded loop device, formats it with XFS `ftype=1`, mounts it with project quota
+enabled at one owned directory, and binds that mount only to the owned DIND
+`/var/lib/docker`. Before images load, proof must show the recorded device and
+mount relationship, XFS, `prjquota`/`pquota`, active project-quota accounting
+and enforcement, inner Docker `overlay2`, XFS backing and `d_type=true`. Two
+fresh pinned-base containers then use the production
+`--storage-opt size=402653184`: a real 320 MiB allocated-and-fsynced regular-file
+write must succeed, while a real 400 MiB write must fail with the quota intact.
+Sparse truncation does not count. Any missing tool, mount fact, Docker driver
+fact or discriminating write result fails before POST; the harness never
+removes the production flag.
+
+The minimum real matrix uses only the reviewed `ledger-reconcile` package. For
+the interrupted attempt, the Docker wrapper recognizes the exact owner label,
+builder resource-kind and bound name, delegates the create, verifies the
+successful container identity, atomically records its container/wrapper/service
+PIDs, and blocks before returning to Rust on a one-use harness-owned release
+barrier. The controller verifies the labeled builder, sends SIGKILL only to the
+recorded Rust service PID, requires adapter failure and live ART workspace
+unwind, releases the still-bounded wrapper, then restarts the service. Startup
+must sweep the exact orphan while an unowned control survives. A timeout always
+releases the wrapper and fails evidence; no process-name or group-wide kill is
+allowed. The complete attempt must then show builder exit 0, unchanged starter
+exit 1 and three fresh reference exits 0 with stable observations. Both paths
+require unchanged sealed-cache inventory, positive absence queries for owned
+containers/images and empty ART workspace custody.
+
+Evidence custody is closed. The verifier first requires the exact proof head
+and complete matrix, then copies through no-follow descriptors into a fixed
+staging directory outside the raw state/cleanup root only the allowlisted
+result, exact public image/cache identity, hash, launch/exit/resource, bounded
+Docker event/argv, quota and service-diagnostic files. It rejects a missing or
+extra name, path escape, symlink, special file, non-owned file, unexpected mode,
+invalid schema, NUL, per-file overflow or aggregate overflow; no raw state
+directory is uploaded.
+Focused verifier fixtures must reject at least head substitution, a missing or
+false cleanup fact, extra entry, symlink, FIFO, path escape and oversized file.
+After staging, unconditional cleanup removes only exact labeled DIND/registry
+resources, unmounts the recorded XFS mount, detaches the recorded loop device
+and deletes the owned raw state, then adds one bounded cleanup receipt to
+staging. A final no-follow allowlist/schema/size/hash verification must pass
+before the commit-pinned upload action publishes staging; failures retain only
+ordinary Actions logs. Retained artifacts exclude package solution bytes,
+tokens, credentials, sockets and Docker state. DIND is development proof, not
+hosted deployment evidence.
 
 Use one phase-aware Rust project image with two immutable registry entries. PRE
 finishes in the ordinary checker sandbox. POST first validates the same package
@@ -402,8 +536,29 @@ can safely adopt the PILOT-00 mechanism.
 - [ ] Launch evidence proves no external network or host socket, exact cached
   platform identities, builder-only capabilities, non-root capability-free
   oracles, read-only inputs/root, fresh containers, fixed resources and complete
-  cleanup. Local `docker-dev` evidence is labeled local; hosted proof remains
-  #555/#583.
+  cleanup. Local `docker-dev` and isolated-runner DIND evidence is labeled as
+  development proof; hosted deployment remains #555/#583.
+- [ ] The path-scoped proof workflow binds the exact PR head, uses
+  `pull_request` only, named `ubuntu-24.04`, `contents: read`, commit-pinned
+  actions, no persisted checkout credential and no Actions cache. It receives no
+  secret/AWS input, asserts and records `pull_request.head.sha`, keeps networked
+  work confined to pinned preparation, proves DIND/product sandboxes are
+  networkless before execution, and always removes its exact owned resources.
+  Existing Backend jobs, required gates and selectors remain byte-for-byte
+  unchanged.
+- [ ] The owned XFS loopback reports active project-quota enforcement and the
+  required inner overlay2/XFS/d_type facts; a 320 MiB allocated write succeeds
+  and a 400 MiB allocated write fails under the exact 384 MiB production
+  storage option. Cleanup confirms unmount and loop-device detachment.
+- [ ] The interrupt barrier occurs only after successful exact builder create
+  and before the wrapper returns. Killing only the recorded Rust PID produces
+  adapter failure and ART unwind; releasing the wrapper permits restart to
+  remove the orphan while preserving an unowned control.
+- [ ] Evidence verifier fixtures reject head mismatch, missing/false cleanup,
+  extra files, links, special files, path escape and size overflow. The real
+  matrix is copied into a fixed bounded nonsecret allowlist before owned cleanup;
+  only staging plus the verified cleanup receipt is uploaded after a final
+  no-follow/hash/schema check.
 - [ ] Exact built image platform-manifest digest(s), canonical PRE/POST registry
   specs and approved configuration are independently validated by the current
   Python registry contract without writing the registry or depending on #580.
@@ -415,8 +570,9 @@ can safely adopt the PILOT-00 mechanism.
 - Risk class: L1 (bounded high-risk untrusted build/test execution and trusted
   launcher extension; no product authority or lifecycle mutation).
 - Required reviewers: architecture, security, reuse_dedup, qa, test_delta,
-  senior_engineering, product_ops and documentation. CI integrity is required
-  only if implementation changes workflow, lane or package-script custody.
+  senior_engineering, product_ops and documentation. CI integrity and security
+  must review this record amendment before workflow/harness implementation and
+  replay on the exact clean implementation head.
 - Human review focus: whether the service-private plan is the smallest safe
   bridge; exact service-profile authorization so arbitrary registered images
   cannot gain builder root/capabilities; cache/platform and submitted-path
@@ -439,7 +595,7 @@ can safely adopt the PILOT-00 mechanism.
 | Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame and `.github/workflows/backend.yml` inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced. The required `external-checker-runtime` CI lane runs locked workspace tests and formatting, not clippy | This optional local strict-clippy probe remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
 | Project image and SDK contracts | `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-terminal-benchmark-checker` and `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-sdk` | PASS: 4 project-package tests over all five originals and 5 SDK contract/canonicalization tests | Real image execution remains pending |
 | ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /home/abiorh/flow/workstream_product_builder/backend/.venv/bin/python -m pytest -q -p pytest_asyncio.plugin tests/checkers/external/test_runtime.py` from `backend/` | PASS: 11 tests, including exact existing-ledger POST byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering |
-| Real local matrix | Bounded project-checker probe over originals and work/infrastructure negatives | Future implementation proof; wait for lead-owned Docker capacity | Local `docker-dev` is not hosted gVisor proof |
+| Real gVisor matrix | Path-scoped isolated-runner probe over the one interrupted and one complete `ledger-reconcile` POST | Planned by this record amendment; harness/workflow implementation is blocked on CI/security plan replay | Source/fake-Docker evidence is not real Docker/runsc proof; DIND evidence will remain development rather than hosted-deployment proof |
 | Current-source reconciliation | Merge current `main` at `a201d743`; inspect #575 result/findings and Python CHECKERS contracts; run focused existing checker tests | This branch contains the current result shape and no old/new compatibility path | Recheck after the final main reconciliation and hosted checks |
 
 ## Review findings
