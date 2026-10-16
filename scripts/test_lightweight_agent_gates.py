@@ -397,6 +397,20 @@ class LightweightAgentGateTests(unittest.TestCase):
             workflow,
         )
         self.assertIn("cancel-in-progress: true", workflow)
+        # Description-only edits must not cancel or repeat proof for the same head.
+        self.assertIn(
+            "format('-description-edit-{0}', github.run_id)",
+            workflow,
+        )
+        self.assertIn("actions: read", workflow)
+        self.assertIn(
+            "if: ${{ github.event.action != 'edited' || github.event.changes.base }}",
+            workflow.split("\n  scope:\n", 1)[1].split("\n  minio-image:\n", 1)[0],
+        )
+        test_job = workflow.split("\n  test:\n", 1)[1]
+        self.assertIn("Mirror the existing proof for a description-only edit", test_job)
+        self.assertIn('select(.name == "scope")', test_job)
+        self.assertIn('test "${conclusion}" = success', test_job)
         scope_job = workflow.split("\n  scope:\n", 1)[1].split(
             "\n  minio-image:\n", 1
         )[0]

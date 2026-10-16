@@ -7,11 +7,15 @@ on:
     branches:
       - main
 
+# A title/description-only edit gets its own group so it never cancels proof
+# that is already running for the same head and base. Base retargets, pushes
+# and state changes keep the shared group and replace older runs.
 concurrency:
-  group: backend-${{ github.event.pull_request.number || github.ref }}
+  group: backend-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'edited' && !github.event.changes.base && format('-description-edit-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -20,6 +24,9 @@ env:
 
 jobs:
   scope:
+    # Description-only edits change no proof inputs; `test` mirrors the
+    # existing run for this head instead of repeating it.
+    if: ${{ github.event.action != 'edited' || github.event.changes.base }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -806,9 +813,50 @@ jobs:
     if: ${{ always() }}
     needs: [scope, auth-boundary-preflight, external-checker-runtime, lanes, minio-image, cli-public-contract, mcp-contract, full-suite]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 75
     steps:
+      - name: Mirror the existing proof for a description-only edit
+        if: ${{ github.event.action == 'edited' && !github.event.changes.base }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The newest other Backend run for this exact head whose scope job
+          # executed is the proof. Wait for it, then report its test result.
+          for _ in $(seq 1 140); do
+            proof=""
+            for run in $(gh api "repos/${REPOSITORY}/actions/workflows/backend.yml/runs?head_sha=${HEAD_SHA}&event=pull_request&per_page=50" \
+                --jq ".workflow_runs | sort_by(.created_at) | reverse | .[] | select(.id != ${RUN_ID}) | .id"); do
+              scope=$(gh api "repos/${REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name == "scope")][0].conclusion // "pending"')
+              if [[ "${scope}" != skipped ]]; then
+                proof="${run}"
+                break
+              fi
+            done
+            if [[ -z "${proof}" ]]; then
+              echo "No Backend proof exists for ${HEAD_SHA}." >&2
+              exit 1
+            fi
+            status=$(gh api "repos/${REPOSITORY}/actions/runs/${proof}" --jq .status)
+            if [[ "${status}" == completed ]]; then
+              conclusion=$(gh api "repos/${REPOSITORY}/actions/runs/${proof}/jobs?per_page=100" \
+                --jq '[.jobs[] | select(.name == "test" or .name == "draft-test")][0].conclusion // "missing"')
+              echo "Mirroring run ${proof}: test ${conclusion}."
+              test "${conclusion}" = success
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Proof run ${proof} did not complete in time." >&2
+          exit 1
+
       - name: Require the selected draft scope or complete merge proof
+        if: ${{ github.event.action != 'edited' || github.event.changes.base }}
         env:
           SCOPE_RESULT: ${{ needs.scope.result }}
           FULL_SUITE: ${{ needs.scope.outputs.full_suite }}
