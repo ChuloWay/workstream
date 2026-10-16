@@ -38,7 +38,7 @@ approved environment is available.
 No release image or topology currently composes those owners without the local
 source mount, reload, development packages, local authentication and MinIO.
 
-## Bounded Change
+## Bounded change
 
 ### Allowed files
 
@@ -125,7 +125,7 @@ bucket-policy digest and proof-job identity fields remain pending #582
 implementation and integration and are not treated as proof or invented as
 current application settings here.
 
-## Acceptance Criteria
+## Acceptance criteria
 
 - [ ] Release build targets use digest-pinned bases and committed Python/Rust
   locks, omit development dependencies and do not run Uvicorn reload.
@@ -174,7 +174,7 @@ verification, collector behavior, resource measurements, drain/restart under
 load and backup/restore execution require the approved hosted environment and
 remain parent #555/#583 evidence rather than local configuration proof.
 
-## Risk And Review Routing
+## Risk and review routing
 
 - Risk class: `L1`
 - Required reviewers: `architecture`, `security`, `product_ops`, `qa`,
@@ -211,8 +211,7 @@ Source/configuration candidate checks:
 - `uvx ruff@0.15.22 check deploy/hosted/preflight.py scripts/test_hosted_release_config.py`,
   `/bin/sh -n docker/backend/release-entrypoint.sh` and `git diff --check` pass.
 - `python3 scripts/check_markdown_links.py` passes for the three changed
-  Markdown files; stale-wording output is empty. The Commitrail check must be
-  replayed after the shared host's transient `GIT_TIMEOUT` clears.
+  Markdown files; the stale-wording and Commitrail record checks pass.
 - `docker build --file docker/checker/Dockerfile.release --tag
   workstream-checker-release:test .` passes with locked Cargo and two compiler
   jobs. Local image ID
