@@ -26,11 +26,20 @@ from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.interfaces.artifacts import ArtifactObjectMissingError
 from app.main import create_app
-from app.modules.authorization.catalogue import ActionId
+from app.modules.authorization.catalogue import ActionId, PermissionId
 from app.modules.authorization.checker_retry_read import (
     CheckerRetryDiscoveryAuthorization,
 )
+from app.modules.authorization.domain.audit import (
+    AuthorizationDecision,
+    AuthorizationDenialCode,
+)
+from app.modules.authorization.domain.audit_targets import project_authority_audit_target
+from app.modules.authorization.domain.checker_retry_reads import (
+    CheckerRetrySourceReadResourceContext,
+)
 from app.modules.audit.schemas import (
+    ActorReferenceKind, AuthorityAuditEventInput, AuthorityEventType,
     LifecycleAuditEntityType, LifecycleAuditEventInput, LifecycleAuditEventType,
     LifecycleAuditReason, LifecycleAuditReferenceKind,
 )
@@ -205,6 +214,60 @@ async def test_recovery_cursor_binds_project_limit_and_stable_position():
             await adapter.authorize_and_decode(changed)
     assert len(authority.resources) == 3
     assert len({resource.request_digest for resource in authority.resources}) == 3
+
+
+def test_recovery_read_builds_canonical_project_decision_and_audit_event():
+    """The recovery page reuses AUTH's closed project evidence vocabulary."""
+    project_id = new_record_id()
+    actor_id = new_record_id()
+    decision_id = new_record_id()
+    request_id = new_record_id()
+    digest = "sha256:" + "1" * 64
+    resource = CheckerRetrySourceReadResourceContext(
+        resource_id=project_id,
+        scope_project_id=project_id,
+        request_digest=digest,
+    )
+    decision = AuthorizationDecision(
+        decision_id=decision_id,
+        action_id=ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST,
+        permission_id=PermissionId.OPERATIONS_STATUS_READ,
+        allowed=False,
+        denial_code=AuthorizationDenialCode.PERMISSION_NOT_GRANTED,
+        resource_type=resource.resource_type,
+        resource_id=resource.resource_id,
+        resource_context_digest=digest,
+        matched_authority_kind=None,
+        revalidated=True,
+        request_id=request_id,
+        correlation_id=request_id,
+    )
+    target = project_authority_audit_target(resource, decision.action_id)
+    assert target == (
+        str(project_id), "project", str(project_id), "project", str(project_id),
+    )
+    event = AuthorityAuditEventInput(
+        event_id=decision_id,
+        event_type=AuthorityEventType.SENSITIVE_AUTHORIZATION_DENIED,
+        entity_type="authorization_decision",
+        entity_id=str(decision_id),
+        actor_ref_kind=ActorReferenceKind.ACTOR_PROFILE,
+        actor_ref=str(actor_id),
+        request_id=request_id,
+        correlation_id=request_id,
+        permission_id=decision.permission_id,
+        action_id=decision.action_id,
+        project_id=target[0],
+        resource_type=target[1],
+        resource_id=target[2],
+        target_ref_kind=target[3],
+        target_ref_id=target[4],
+        reason="authorization_evaluation",
+        denial_code=decision.denial_code.value,
+        after_facts={"allowed": False, "resource_context_digest": digest},
+    )
+    assert event.resource_type == "project"
+    assert event.permission_id is PermissionId.OPERATIONS_STATUS_READ
 
 
 def test_retry_reason_rejects_ascii_del_at_all_typed_boundaries():
