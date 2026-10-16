@@ -50,13 +50,6 @@ type LatestSubmission struct {
 	DecidedAt    *string  `json:"decided_at"`
 }
 
-type RevisionSummary struct {
-	NextRevisionRound *big.Int `json:"next_revision_round"`
-	MaxRevisionRounds *big.Int `json:"max_revision_rounds"`
-	DeadlineAt        string   `json:"deadline_at"`
-	Outcome           string   `json:"outcome"`
-}
-
 type ContributorAssignment struct {
 	AssignmentID       string            `json:"assignment_id"`
 	ProjectID          string            `json:"project_id"`
@@ -71,7 +64,7 @@ type ContributorAssignment struct {
 	LockedGuideVersion *string           `json:"locked_guide_version"`
 	Compensation       CompensationTerms `json:"compensation"`
 	LatestSubmission   *LatestSubmission `json:"latest_submission"`
-	Revision           *RevisionSummary  `json:"revision"`
+	Revision           *RevisionContext  `json:"revision"`
 	NextAction         string            `json:"next_action"`
 	UpdatedAt          string            `json:"updated_at"`
 }
@@ -261,20 +254,15 @@ func validLatestSubmission(raw json.RawMessage, value *LatestSubmission) bool {
 		validSubmissionOutcome(SubmissionHistory{Status: value.Status, StatusReason: value.StatusReason, DecidedAt: value.DecidedAt})
 }
 
-func validRevisionSummary(raw json.RawMessage, value *RevisionSummary) bool {
-	_, err := contextObject(raw, value, []string{"next_revision_round", "max_revision_rounds", "deadline_at", "outcome"}, nil)
-	return err == nil && nonNegative(value.NextRevisionRound, value.MaxRevisionRounds) &&
-		validTime(value.DeadlineAt) && oneOf(value.Outcome, "kept", "rebased", "blocked")
-}
-
 func decodeContributorAssignment(raw json.RawMessage) (ContributorAssignment, bool) {
 	var value ContributorAssignment
 	fields, err := contextObject(raw, &value, []string{"assignment_id", "project_id", "task_id", "title", "state", "assignment_status", "claimed_at", "compensation", "next_action", "updated_at"}, nil)
 	if err != nil || !requiredNullable(fields, "task_status", "started_at", "released_at", "locked_guide_version", "latest_submission", "revision") ||
 		!validUUID(value.AssignmentID) || !validUUID(value.ProjectID) || !validUUID(value.TaskID) ||
 		!oneOf(value.State, "active", "closed") ||
-		!oneOf(value.AssignmentStatus, "active", "completed", "revision_expired", "authority_revoked") ||
+		!oneOf(value.AssignmentStatus, "active", "completed", "revision_expired", "revision_exhausted", "authority_revoked") ||
 		(value.State == "active") != (value.AssignmentStatus == "active") || (value.State == "closed" && value.TaskStatus != nil) ||
+		(value.TaskStatus != nil && !oneOf(*value.TaskStatus, taskStatuses...)) ||
 		!oneOf(value.NextAction, "start", "prepare_submission", "awaiting_evaluation", "revise", "none") ||
 		!validTime(value.ClaimedAt) || !validTime(value.UpdatedAt) || !ValidCompensation(value.Compensation) ||
 		(value.StartedAt != nil && !validTime(*value.StartedAt)) || (value.ReleasedAt != nil && !validTime(*value.ReleasedAt)) {
@@ -283,7 +271,7 @@ func decodeContributorAssignment(raw json.RawMessage) (ContributorAssignment, bo
 	if value.LatestSubmission != nil && !validLatestSubmission(fields["latest_submission"], value.LatestSubmission) {
 		return value, false
 	}
-	return value, value.Revision == nil || validRevisionSummary(fields["revision"], value.Revision)
+	return value, value.Revision == nil || validateRevisionContext(fields["revision"], value.Revision) == nil
 }
 
 // MyAssignments lists the caller's claims in projects where it holds a Submitter grant.
@@ -460,7 +448,7 @@ func (c *Client) Preparation(ctx context.Context, task, preparation string) (Res
 	var value PreparationDetail
 	fields, err := contextObject(raw, &value, []string{"preparation_id", "task_id", "assignment_id", "outcome", "state", "archive_sha256", "archive_byte_count", "created_at", "findings"}, nil)
 	if err != nil || !validPreparation(fields, value.PreparationSummary, task) || !sameUUID(value.PreparationID, preparation) ||
-		value.Findings == nil || !c.safeMutationResponse(raw) {
+		value.Findings == nil || !validPreSubmissionResults(value.Findings, value.Outcome == "passed") || !c.safeMutationResponse(raw) {
 		return result, &Failure{Code: "invalid_api_response"}
 	}
 	return Result[PreparationDetail]{Raw: raw, Value: value}, nil

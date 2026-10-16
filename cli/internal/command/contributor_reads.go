@@ -176,8 +176,12 @@ func writeAssignment(w io.Writer, a api.ContributorAssignment) error {
 		}
 	}
 	if r := a.Revision; r != nil {
-		if _, err := fmt.Fprintf(w, "Revision: round %s of %s, %s, deadline %s\n",
-			count(r.NextRevisionRound), count(r.MaxRevisionRounds), safeText(r.Outcome), safeText(r.DeadlineAt)); err != nil {
+		clock := "clock paused"
+		if r.DeadlineAt != nil {
+			clock = "deadline " + safeText(*r.DeadlineAt)
+		}
+		if _, err := fmt.Fprintf(w, "Revision: round %d of %d, %s, %s, %s\n",
+			r.NextRevisionRound, r.MaxRevisionRounds, safeText(r.Outcome), safeText(r.Disposition), clock); err != nil {
 			return err
 		}
 	}

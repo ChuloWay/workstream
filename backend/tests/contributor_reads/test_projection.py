@@ -1,10 +1,12 @@
 """A Submitter reads their own claim, attempt, preparation and totals through public routes."""
 
+from datetime import datetime, timedelta
+
 from sqlalchemy import select
 
 from app.db import session as db_session
 from app.modules.checkers.models import SelectedPreSubmitRun
-from tests.submission_fixtures import route_retained_checker_remediation
+from tests.submission_fixtures import route_retained_checker_remediation, seed_retained_checker_run
 from tests.test_tasks import set_dev_actor
 from .support import ME, OWNER, as_actor, get_ok, preparations_path, submitted_case
 
@@ -39,10 +41,7 @@ async def test_assignment_revision_fields_equal_work_context(task_client, monkey
     await as_actor(task_client, monkeypatch, OWNER)
     context = (await get_ok(task_client, f"/api/v1/tasks/{task}/work-context"))["revision_context"]
     [item] = (await get_ok(task_client, f"{ME}/assignments"))["items"]
-    assert item["revision"] == {
-        name: context[name]
-        for name in ("next_revision_round", "max_revision_rounds", "deadline_at", "outcome")
-    }
+    assert item["revision"] == context
     assert item["task_status"] == "needs_revision"
     assert item["next_action"] == ("revise" if context["disposition"] == "ready" else "none")
 
@@ -57,6 +56,20 @@ async def test_submission_list_carries_stored_outcome_and_finding_counts(task_cl
     assert item["finding_counts"]["blocking"] >= 1
     history = await get_ok(task_client, f"/api/v1/submissions/{submission}")
     assert item["finding_counts"] == history["finding_counts"]
+
+
+async def test_incremental_submission_read_sees_findings_committed_before_routing(task_client, monkeypatch):
+    _project, _task, submission = await submitted_case(task_client, monkeypatch)
+    await as_actor(task_client, monkeypatch, OWNER)
+    [before] = (await get_ok(task_client, f"{ME}/submissions"))["items"]
+    since = (datetime.fromisoformat(before["updated_at"]) + timedelta(microseconds=1)).isoformat()
+    assert (await get_ok(task_client, f"{ME}/submissions", updated_since=since))["items"] == []
+    # A retry's failed run commits its findings; TASK routing has not restamped the submission.
+    await seed_retained_checker_run(submission, verdict="failed", generation=2)
+    [after] = (await get_ok(task_client, f"{ME}/submissions", updated_since=since))["items"]
+    assert after["submission_id"] == submission and after["status"] == "evaluation_pending"
+    assert after["finding_counts"]["blocking"] >= 1 > before["finding_counts"]["blocking"]
+    assert after["updated_at"] >= since
 
 
 async def test_preparation_reads_return_own_submitted_preparation(task_client, monkeypatch):

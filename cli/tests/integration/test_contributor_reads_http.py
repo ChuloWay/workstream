@@ -1,10 +1,13 @@
 """Built-process proof for the caller's own-work reads and manager task filters."""
 
+from copy import deepcopy
 import json
 from urllib.parse import parse_qs, urlsplit
 
 from test_contributor_task_http import COMPENSATION
 from test_http_boundary import PROJECT, TOKEN, assert_failure, http_fixture
+from test_submission_http import INTAKE_FEEDBACK
+from test_task_context_http import REVISION_CONTEXT
 from test_task_http_boundary import SUMMARY, TASK
 
 ASSIGNMENT = "018f0ebc-7966-7e8d-bc4d-1cae1e000010"
@@ -34,12 +37,7 @@ ASSIGNMENT_ROW = {
     "locked_guide_version": "v1",
     "compensation": COMPENSATION,
     "latest_submission": LATEST,
-    "revision": {
-        "next_revision_round": 1,
-        "max_revision_rounds": 2,
-        "deadline_at": WHEN,
-        "outcome": "kept",
-    },
+    "revision": REVISION_CONTEXT,
     "next_action": "revise",
     "updated_at": WHEN,
 }
@@ -121,7 +119,43 @@ def test_own_work_pages_preserve_bodies_and_wire(cli):
             assert text.returncode == 0 and text.stderr == ""
             assert "Next cursor: next\n" in text.stdout
         response["body"] = _page(ASSIGNMENT_ROW)
-        assert "Next action: revise\n" in cli(origin, TOKEN, "me", "assignments").stdout
+        text = cli(origin, TOKEN, "me", "assignments").stdout
+        assert "Next action: revise\n" in text
+        assert (
+            "Revision: round 1 of 2, kept, ready, deadline 2026-10-15T10:00:00Z\n"
+            in text
+        )
+
+
+def test_assignment_revision_is_the_work_context_projection(cli):
+    paused = deepcopy(REVISION_CONTEXT) | {
+        "max_revision_rounds": 0,
+        "next_revision_round": 0,
+        "deadline_at": None,
+        "clock_state": "paused",
+        "remaining_microseconds": 3_600_000_000,
+        "outcome": "blocked",
+        "disposition": "context_blocked",
+    }
+    exhausted = ASSIGNMENT_ROW | {
+        "state": "closed",
+        "assignment_status": "revision_exhausted",
+        "task_status": None,
+        "revision": None,
+        "next_action": "none",
+    }
+    with http_fixture() as (origin, response, _requests):
+        for row in (ASSIGNMENT_ROW | {"revision": paused}, exhausted):
+            response["body"] = _page(row)
+            result = cli(origin, TOKEN, "me", "assignments", "-o", "json")
+            assert result.returncode == 0 and result.stderr == "", result.stderr
+            assert result.stdout.strip().encode() == response["body"]
+        response["body"] = _page(ASSIGNMENT_ROW | {"revision": paused})
+        text = cli(origin, TOKEN, "me", "assignments")
+        assert text.returncode == 0, text.stderr
+        assert "Revision: round 0 of 0, blocked, context_blocked, clock paused\n" in (
+            text.stdout
+        )
 
 
 def test_own_work_filters_reach_the_query(cli):
@@ -169,7 +203,7 @@ def test_summary_and_preparation_detail_decode(cli):
         assert result.returncode == 0, result.stderr
         assert "Award total: project_points PTS 7\n" in result.stdout
         assert requests[-1][1] == "/api/v1/actors/me/summary"
-        detail = PREPARATION_ROW | {"findings": [{"source": "workstream_default"}]}
+        detail = PREPARATION_ROW | {"findings": INTAKE_FEEDBACK}
         response["body"] = json.dumps(detail).encode()
         result = cli(
             origin, TOKEN, "task", "preparation", TASK, PREPARATION, "-o", "json"
@@ -185,6 +219,26 @@ def test_own_work_reads_reject_malformed_success(cli):
     malformed = (
         (("me", "assignments"), ASSIGNMENT_ROW | {"state": "closed"}),
         (("me", "assignments"), ASSIGNMENT_ROW | {"next_action": "celebrate"}),
+        (("me", "assignments"), ASSIGNMENT_ROW | {"task_status": "invented"}),
+        (
+            ("me", "assignments"),
+            ASSIGNMENT_ROW | {"revision": REVISION_CONTEXT | {"clock_state": "paused"}},
+        ),
+        (
+            ("me", "assignments"),
+            ASSIGNMENT_ROW
+            | {
+                "revision": {
+                    key: REVISION_CONTEXT[key]
+                    for key in (
+                        "next_revision_round",
+                        "max_revision_rounds",
+                        "deadline_at",
+                        "outcome",
+                    )
+                }
+            },
+        ),
         (("me", "submissions"), SUBMISSION_ROW | {"decided_at": None}),
         (("me", "projects"), PROJECT_ROW | {"project_roles": ["owner"]}),
         (("task", "preparations", TASK), PREPARATION_ROW | {"submission_id": None}),
@@ -195,6 +249,14 @@ def test_own_work_reads_reject_malformed_success(cli):
             response["body"] = _page(row)
             assert_failure(
                 cli(origin, TOKEN, *args, "-o", "json"), "invalid_api_response"
+            )
+        for findings in ([None], [{"arbitrary": True}]):
+            response["body"] = json.dumps(
+                PREPARATION_ROW | {"findings": findings}
+            ).encode()
+            assert_failure(
+                cli(origin, TOKEN, "task", "preparation", TASK, PREPARATION, "-o", "json"),
+                "invalid_api_response",
             )
         response["body"] = json.dumps(SUMMARY_BODY | {"project_id": PROJECT}).encode()
         assert_failure(

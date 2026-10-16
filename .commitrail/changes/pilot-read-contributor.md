@@ -94,10 +94,15 @@ reads project; PR3 adds the Project Manager and Finance reads C1–C9 and D1).
 - A2 rows are ordered and filtered by an activity time: the greatest of the
   assignment, own latest submission and own revision preparation stamps, plus
   the task stamp while the assignment is active. So `updated_since` returns
-  exactly the rows whose projection changed. A closed assignment projects only
-  the contributor's own facts: no task status, revision or later task locks,
-  because those then describe someone else's work. A3 uses the stored
-  submission stamp and its PR1 index; A1 and A5 have no `updated_since`.
+  every row whose stored facts changed. A projection that changes only with
+  database time (a revision deadline passing turns `revise` into `none`) moves
+  no stamp and reappears with the next stored change. A closed assignment
+  projects only the contributor's own facts: no task status, revision or later
+  task locks, because those then describe someone else's work. A3 rows change
+  at the later of the submission stamp and the CHECKERS evidence stamp of the
+  current run (completion, or queueing of a retry run): findings commit with
+  their run before TASK routing restamps the submission, and the finding
+  counts change at that moment. A1 and A5 have no `updated_since`.
 - `updated_since` is inclusive (`>=`); cursors carry the last row's
   `(timestamp, id)` and are HMAC-bound to actor, filters, limit and order.
 - `next_action` is server computed by one pure rule: closed assignments
@@ -105,26 +110,44 @@ reads project; PR3 adds the Project Manager and Finance reads C1–C9 and D1).
   evaluation pending or review pending `awaiting_evaluation`; needs revision
   `revise` only when the latest attempt is `needs_revision` and the revision
   context is `ready`, otherwise `none`.
-- A2 revision fields are the work-context `revision_context` projection: one
-  batched `read_contributor_revisions` now serves both reads.
+- A2 `revision` is the work-context `revision_context` object itself, so a
+  paused clock (`deadline_at` null, remaining allowance), a zero-round policy
+  and every disposition carry over unchanged. One batched `read_task_revisions`
+  keyed by task and assignment serves the work context, management task detail
+  and the assignment list; an assignment ID determines its task, project and
+  contributor through the manifest and preparation foreign keys. Assignment
+  status includes `revision_exhausted`.
+- `next_action` takes the revision disposition, not the frozen preparation
+  outcome, because disposition is what decides whether revising is allowed
+  now.
 - A preparation is a selected PRE run. `outcome` is `pending`, `passed`,
   `failed` or `infrastructure_failed`; `state` adds intake storage progress
   (`checking`, `checks_failed`, `infrastructure_failed`, `storing`, `ready`,
   `submitted`, `stale`). Findings reuse the contributor intake projection.
   No `expires_at` is returned: v0.1 stores no preparation expiry (ready
   admissions turn stale on context change, not time), and inventing one would
-  be a new lifecycle rule.
+  be a new lifecycle rule. A passed preparation whose storage ended in a
+  terminal failure keeps `state=storing`; its `storage_status` carries the
+  failure, as on the existing preparation response.
 - B3 `import_batch_id` selects native batch membership, not the free-text
   source column; `assignee_actor_id` selects the current assignee.
 - Latency budget: no budget existed, so this change sets one list page or
   summary within 1 second on 10,000 tasks and 20,000 submissions on the
-  isolated PostgreSQL test database. The keyset reads use PR1's contributor
-  `(contributor_id, updated_at, id)` indexes; no new index was needed at the
-  measured scale.
-- Reads run in the caller's ordinary request transaction like the existing
-  queue and history reads; a page and its batched revision/latest-attempt
-  queries are separate statements, so a concurrent transition can show in one
-  and not the other until the next read.
+  isolated PostgreSQL test database. A2 and A3 order by a computed activity
+  time that no index serves; they are bounded per-contributor sorts over the
+  contributor-scoped indexes, measured by the scale test. No new index was
+  needed at that scale.
+- Consistency: every response reads one REPEATABLE READ snapshot. Task
+  resolution, the AUTH decision, the page and its batched revision,
+  latest-attempt, finding-count, compensation and award queries all see the
+  same committed state, so summary counts and award totals agree, as in the
+  contribution export.
+- A per-task read for a task the caller never held is the concealed 404
+  before any AUTH decision. A preparation ID on the caller's own task that
+  belongs to another contributor records the task-scoped ALLOW and then
+  returns the concealed 404; nothing of it is disclosed.
+- The project list reads the caller's exact grants without locking them; it
+  displays only the caller's own grants and authorizes nothing else.
 - MCP exposes no task, submission or preparation tool, so its only contract
   change is the action enum in the authorization-context snapshot.
 
@@ -162,14 +185,39 @@ reads project; PR3 adds the Project Manager and Finance reads C1–C9 and D1).
 
 ## Review findings
 
-- Recorded in the PR after the internal reviewer tracks run.
+Human review at `79868e14d` and internal security, architecture, qa,
+test_delta, documentation and reuse_dedup tracks at `fcbfa9562`.
+
+- Fixed: incremental A3 reads used only the submission stamp, so findings
+  committed before routing were missed (evidence stamp, interval test);
+  assignment schemas rejected `revision_exhausted`, zero-round limits and a
+  paused clock (A2 now returns `revision_context`; whole-object parity,
+  paused zero-round and exhausted closed-claim regressions); the record
+  promised REPEATABLE READ while runtime used ordinary transactions (one
+  snapshot per response); CLI decoders accepted malformed findings and task
+  statuses (existing validators reused, process regressions); a missing
+  compensation entry or execution facts raised a 500 instead of the typed
+  503; the chain-head rule was copied (one shared predicate); no test replayed
+  a cursor as another actor; stale reconciliation and roadmap wording.
+- Recorded, not changed: per-task decision evidence and the unlocked project
+  list (Design and decisions); `state=storing` after a terminal storage
+  failure (Design and decisions); preparation finding counts use the existing
+  intake count rule beside the intake projection rather than a second rule;
+  `TaskStatus` is the closed API vocabulary of the stored task statuses,
+  including `accepted`, which the transition constants do not list; the
+  `next_action` table derives its expected value by rule, with explicit cases
+  for `revise`; `updated_since` returning an assignment after a new own
+  submission or revision preparation follows from the same activity
+  expression the task-stamp test exercises.
 
 ## Reconciliation
 
-- Current-source reconciliation: stacked on PR1 (#575) at `cac15136d`. Main
-  has since merged #573 (revision exhaustion and paused revision time), which
-  conflicts with PR1; this change inherits that reconciliation through the
-  shared revision projection and assignment status enum.
+- Current-source reconciliation: based on main at `a201d7432` (PR1 #575, #573
+  revision exhaustion and paused revision time, #585 lane capacity). The audit
+  migration is `0050_contributor_reads` after `0049_attempt_outcome_findings`;
+  main's single-task revision read and this change's batch are one
+  implementation; the assignment list carries #573's exhausted status and
+  paused clock.
 - Next usable boundary: PILOT-READ-3 Project Manager and Finance reads
   C1–C9 and D1.
 - Retained state needing explicit handling: a retained selected PRE terminal

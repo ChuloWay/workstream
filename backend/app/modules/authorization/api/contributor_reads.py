@@ -31,6 +31,7 @@ class ContributorReadRequest:
     presented_cursor: str | None = None
 
     def __post_init__(self):
+        """Reject a request whose action, scope or query is not canonical."""
         if (
             self.action not in _ACTIONS or not isinstance(self.actor_profile_id, UUID)
             or not isinstance(self.resource_id, UUID)
@@ -53,6 +54,7 @@ class ContributorReadPosition:
     record_id: UUID
 
     def __post_init__(self):
+        """Reject a position without both a timestamp and a record ID."""
         if (not isinstance(self.record_id, UUID) or not isinstance(self.timestamp, datetime)
                 or self.timestamp.utcoffset() is None):
             raise ValueError("invalid contributor read position")
@@ -85,9 +87,13 @@ class ContributorReadUnavailable(RuntimeError):
 class ContributorReadAuthorizationPort(Protocol):
     """Live authority precedes cursor verification on every page."""
 
-    async def authorize(self, request: ContributorReadRequest) -> ContributorReadGrant: ...
+    async def authorize(self, request: ContributorReadRequest) -> ContributorReadGrant:
+        """Decide the read and validate any presented cursor against it."""
+        ...
 
-    def encode(self, request: ContributorReadRequest, position: ContributorReadPosition) -> str: ...
+    def encode(self, request: ContributorReadRequest, position: ContributorReadPosition) -> str:
+        """Sign the next position for exactly this request."""
+        ...
 
     async def project_roles(
         self, actor_profile_id: UUID, project_ids: tuple[UUID, ...],

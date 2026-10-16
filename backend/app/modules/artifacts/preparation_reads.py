@@ -21,9 +21,11 @@ class SubmissionBundlePreparationReader:
     """Read-only; the caller supplies authority and the response transaction."""
 
     def __init__(self, session: AsyncSession, *, runs: SelectedPreSubmitRunReadPort) -> None:
+        """Read selected PRE runs through the CHECKERS port."""
         self._session, self._runs = session, runs
 
     async def read(self, *, actor_profile_id, task_id, preparation_id, limit, before):
+        """Project own preparations with intake storage progress, newest first."""
         views, more = await self._runs.read_contributor_runs(
             actor_profile_id=actor_profile_id, task_id=task_id, run_id=preparation_id,
             limit=limit, before=before,
@@ -52,6 +54,8 @@ class SubmissionBundlePreparationReader:
                 outcome, state = "pending", "checking"
             elif view.status == "infrastructure_failed":
                 outcome, state = "infrastructure_failed", "infrastructure_failed"
+            elif execution is None:
+                raise ValueError("completed preparation has no execution facts")
             elif not execution.eligible:
                 outcome, state = "failed", "checks_failed"
             else:

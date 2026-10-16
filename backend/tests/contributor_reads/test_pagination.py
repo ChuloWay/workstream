@@ -8,7 +8,7 @@ from tests.test_tasks import (
     admit_and_grant_project_submitter, auth_headers, complete_submission_payload, create_active_project,
     set_dev_actor,
 )
-from .support import ME, MANAGER, OWNER, get_ok, start_another, submitted_case
+from .support import ME, MANAGER, OTHER, OWNER, as_actor, get_ok, start_another, submitted_case
 
 
 async def _walk(client, path, key, **params):
@@ -88,6 +88,12 @@ async def test_cursor_is_bound_to_its_actor_and_filters(task_client, monkeypatch
     submissions = await task_client.get(f"{ME}/submissions", params={"limit": 1, "cursor": cursor},
                                         headers=auth_headers())
     assert submissions.status_code == 422
+    # Another granted contributor cannot continue the owner's page.
+    await as_actor(task_client, monkeypatch, OTHER, grant_project=project)
+    replay = await task_client.get(f"{ME}/assignments", params={"limit": 1, "cursor": cursor},
+                                   headers=auth_headers())
+    assert replay.status_code == 422, replay.text
+    assert replay.json()["error"]["code"] == "contributor_read_cursor_invalid"
 
 
 async def test_project_pages_follow_exact_grants(task_client, monkeypatch):

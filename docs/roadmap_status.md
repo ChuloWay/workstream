@@ -273,11 +273,12 @@ Explicit CLI ZIP preparation, admission-backed creation/replay, submission histo
 and contributor checker findings now consume the public APIs. PILOT-READ-1 adds
 typed attempt status, `decided_at` and finding counts to history, and per-finding
 `check_id`/`path`/`line` to checker results. PILOT-READ-2 adds the contributor's
-own cross-project reads with their own AUTH actions: exact-grant projects,
-claimed assignments with a server-computed next action and the work-context
-revision fields, attempts with finding counts, intake preparations, and a
-summary with award totals, all limited to projects where the caller holds a
-current Submitter grant, plus filtered manager task lists; the CLI `me`,
+own cross-project reads with their own AUTH actions: the projects where the
+caller holds an exact grant, and, limited to projects where the caller holds a
+current Submitter grant, claimed assignments with a server-computed next
+action and the work-context revision context, attempts with finding counts,
+intake preparations, and a summary with award totals; plus filtered manager
+task lists; the CLI `me`,
 `task preparations` and `project tasks` filter commands consume them. The
 manager and Finance read APIs are the next PILOT-READ change. Preparation does
 not create a Submission; readiness recovery is an explicit same-key POST replay,

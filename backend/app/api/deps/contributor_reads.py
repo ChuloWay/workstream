@@ -39,6 +39,7 @@ AdminRoleName = Literal["access_administrator", "operator", "project_manager", "
 
 
 class ActiveGuide(BaseModel):
+    """The project's currently active guide identity."""
     model_config = _FROZEN
     guide_id: UUID
     version: str
@@ -57,6 +58,7 @@ class ActorProject(BaseModel):
 
     @classmethod
     def from_facts(cls, facts: ProjectSummaryFacts, roles: ActorProjectRoles) -> "ActorProject":
+        """Join one project's facts with the caller's roles on it."""
         guide = facts.active_guide
         return cls(
             project_id=facts.project_id, name=facts.name, status=facts.status,
@@ -66,6 +68,7 @@ class ActorProject(BaseModel):
 
 
 class ActorProjectPage(BaseModel):
+    """One page of the caller's exact-grant projects."""
     model_config = _FROZEN
     items: tuple[ActorProject, ...]
     next_cursor: str | None
@@ -81,6 +84,7 @@ class AwardTotal(BaseModel):
 
 
 class ContributorWorkSummary(BaseModel):
+    """The caller's own work counts and award totals in their Submitter projects."""
     model_config = _FROZEN
     project_id: UUID | None
     assignments: ContributorAssignmentCounts
@@ -89,6 +93,7 @@ class ContributorWorkSummary(BaseModel):
 
     @classmethod
     def from_facts(cls, project_id, counts: ContributorWorkCounts, totals) -> "ContributorWorkSummary":
+        """Build the summary from TASK counts and compensation totals."""
         return cls(
             project_id=project_id, assignments=counts.assignments, submissions=counts.submissions,
             award_totals=tuple(
@@ -99,6 +104,7 @@ class ContributorWorkSummary(BaseModel):
 
 
 def _missing() -> StructuredHTTPException:
+    """The concealed not-found response shared by every contributor read."""
     return StructuredHTTPException(
         status_code=404, detail="Project authorization resource not found",
         error_code="project_authorization_resource_not_found",
@@ -107,10 +113,12 @@ def _missing() -> StructuredHTTPException:
 
 
 def _instant(value: datetime | None) -> str | None:
+    """Canonical cursor-bound text for an optional instant."""
     return None if value is None else value.astimezone(UTC).isoformat(timespec="microseconds")
 
 
 def _id(value: UUID | None) -> str | None:
+    """Canonical cursor-bound text for an optional identifier."""
     return None if value is None else str(value)
 
 
@@ -122,13 +130,22 @@ class ContributorReadOperation:
         work: ContributorWorkReadPort, preparations: SubmissionBundlePreparationReadPort,
         projects: ProjectSummaryReadPort, awards: ContributorAwardTotalsPort,
     ) -> None:
+        """Compose the AUTH decision port and the owner read ports for one request."""
         self._session, self._actor_id, self._authority = session, actor_id, authority
         self._work, self._preparations = work, preparations
         self._projects, self._awards = projects, awards
 
-    async def _run(self, request: ContributorReadRequest, read):
+    async def _snapshot(self) -> None:
+        """Start the one REPEATABLE READ snapshot that every statement of this response reads."""
+        if self._session.in_transaction():
+            await self._session.commit()
+        await self._session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+
+    async def _run(self, request: ContributorReadRequest, read, *, in_snapshot: bool = False):
         """One bounded read: AUTH denials propagate to the decision owner for restaging."""
         try:
+            if not in_snapshot:
+                await self._snapshot()
             grant = await self._authority.authorize(request)
             response = await read(grant)
             response.model_dump(mode="json")
@@ -149,15 +166,18 @@ class ContributorReadOperation:
             ) from exc
 
     def _request(self, action, query, *, cursor=None, resource_id=None, project_id=None):
+        """Bind the action, actor, scope and canonical filters into one AUTH request."""
         return ContributorReadRequest(
             action=action, actor_profile_id=self._actor_id, resource_id=resource_id or self._actor_id,
             scope_project_id=project_id, query=tuple(sorted(query.items())), presented_cursor=cursor,
         )
 
     def _next(self, request, more, last_timestamp, last_id) -> str | None:
+        """Sign the last row's position only when another page exists."""
         return self._authority.encode(request, ContributorReadPosition(last_timestamp, last_id)) if more else None
 
     async def projects(self, *, limit: int, cursor: str | None):
+        """A1: projects where the caller holds an exact admin or contributor grant."""
         request = self._request("actor.project.list", {"limit": limit, "order": "created_at_id_asc"}, cursor=cursor)
 
         async def read(grant):
@@ -223,7 +243,9 @@ class ContributorReadOperation:
         return await self._run(request, read)
 
     async def _task_project(self, task_id: UUID) -> UUID:
+        """Resolve the task inside the response snapshot that the authorized read then uses."""
         try:
+            await self._snapshot()
             project_id = await self._work.resolve_contributor_task(task_id, self._actor_id)
         except SQLAlchemyError as exc:
             await self._session.rollback()
@@ -255,7 +277,7 @@ class ContributorReadOperation:
                 request, more, items[-1].created_at if items else None, items[-1].preparation_id if items else None,
             ))
 
-        return await self._run(request, read)
+        return await self._run(request, read, in_snapshot=True)
 
     async def preparation(self, *, task_id: UUID, preparation_id: UUID) -> SubmissionBundlePreparationDetail:
         project_id = await self._task_project(task_id)
@@ -274,7 +296,7 @@ class ContributorReadOperation:
                 raise _missing()
             return items[0]
 
-        return await self._run(request, read)
+        return await self._run(request, read, in_snapshot=True)
 
 
 async def get_contributor_reads(
@@ -283,6 +305,7 @@ async def get_contributor_reads(
     actor: Annotated[ActorIdentityFacts, Depends(get_authorization_actor_identity)],
     authority: Annotated[object, Depends(get_authorization_service)],
 ) -> ContributorReadOperation:
+    """Build the contributor read operation from request-scoped owner adapters."""
     from app.adapters.artifacts import submission_bundle_preparation_reader
     from app.adapters.auth import contributor_read_authorization
     from app.adapters.compensation import contributor_award_totals_port

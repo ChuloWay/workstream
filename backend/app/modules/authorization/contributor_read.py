@@ -23,6 +23,7 @@ class ContributorReadAuthorization:
     """One request-local adapter; the caller's response transaction owns evidence."""
 
     def __init__(self, kernel: AuthorizationService, repository: AdminAuthorizationRepository, secret):
+        """Bind the kernel, the grant repository and the cursor secret."""
         self._kernel, self._repository, self._secret = kernel, repository, secret
 
     @staticmethod
@@ -37,6 +38,7 @@ class ContributorReadAuthorization:
         })
 
     def _codec(self) -> AuthorizationReadCursorCodec:
+        """The HMAC cursor codec for contributor reads."""
         if self._secret is None:
             raise ContributorReadUnavailable("Contributor reads unavailable")
         return AuthorizationReadCursorCodec(decode_pagination_cursor_hmac_secret(self._secret))

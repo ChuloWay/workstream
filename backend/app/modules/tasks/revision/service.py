@@ -84,12 +84,16 @@ async def select_candidate(projects, prior) -> RevisionCandidate:
     )
 
 
+def _chain_head():
+    """A preparation is its chain's head while no successor names it as predecessor."""
+    child = TaskRevisionPreparation.__table__.alias("child")
+    return ~select(child.c.id).where(child.c.predecessor_id == TaskRevisionPreparation.id).exists()
+
+
 async def head_for_source(session, routing_manifest_id):
     """Select the unique chain head without falling back to an earlier preparation."""
-    child = TaskRevisionPreparation.__table__.alias("child")
     return await session.scalar(select(TaskRevisionPreparation).where(
-        TaskRevisionPreparation.routing_manifest_id == routing_manifest_id,
-        ~select(child.c.id).where(child.c.predecessor_id == TaskRevisionPreparation.id).exists(),
+        TaskRevisionPreparation.routing_manifest_id == routing_manifest_id, _chain_head(),
     ))
 
 
@@ -277,10 +281,8 @@ async def read_task_revisions(
     ).order_by(manifest.task_id, manifest.evaluation_generation.desc()))).all()
     if not manifest_ids:
         return {}
-    child = TaskRevisionPreparation.__table__.alias("child")
     heads = (await session.scalars(select(TaskRevisionPreparation).where(
-        TaskRevisionPreparation.routing_manifest_id.in_(list(manifest_ids)),
-        ~select(child.c.id).where(child.c.predecessor_id == TaskRevisionPreparation.id).exists(),
+        TaskRevisionPreparation.routing_manifest_id.in_(list(manifest_ids)), _chain_head(),
     ))).all()
     views = await project_current_revisions(session, tuple(heads))
     return {str(head.assignment_id): views[UUID(str(head.id))] for head in heads}

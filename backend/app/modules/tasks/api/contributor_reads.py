@@ -9,14 +9,14 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.modules.tasks.api.management_queue import TaskStatus
 from app.modules.tasks.api.ready_queue import TaskCompensationTerms
+from app.modules.tasks.api.revision import ContributorRevisionContext
 from app.modules.tasks.api.submission_history import (
     SubmissionAttemptStatus, SubmissionFindingCounts, SubmissionFindingCountsPort, SubmissionStatusReason,
 )
 
-AssignmentStatus = Literal["active", "completed", "revision_expired", "authority_revoked"]
+AssignmentStatus = Literal["active", "completed", "revision_expired", "revision_exhausted", "authority_revoked"]
 AssignmentState = Literal["active", "closed"]
 NextAction = Literal["start", "prepare_submission", "awaiting_evaluation", "revise", "none"]
-RevisionOutcome = Literal["kept", "rebased", "blocked"]
 RevisionDisposition = Literal[
     "ready", "context_blocked", "revision_limit_reached", "revision_deadline_expired",
 ]
@@ -36,16 +36,6 @@ class ContributorLatestSubmission(BaseModel):
     decided_at: AwareDatetime | None
 
 
-class ContributorRevisionSummary(BaseModel):
-    """The work-context revision fields a contributor needs to plan a revision."""
-
-    model_config = _FROZEN
-    next_revision_round: int = Field(ge=0)
-    max_revision_rounds: int = Field(gt=0)
-    deadline_at: AwareDatetime
-    outcome: RevisionOutcome
-
-
 class ContributorAssignment(BaseModel):
     """One own claim. A closed one projects only the contributor's own facts."""
 
@@ -63,7 +53,7 @@ class ContributorAssignment(BaseModel):
     locked_guide_version: str | None
     compensation: TaskCompensationTerms
     latest_submission: ContributorLatestSubmission | None
-    revision: ContributorRevisionSummary | None
+    revision: ContributorRevisionContext | None
     next_action: NextAction
     updated_at: AwareDatetime
 
@@ -164,8 +154,8 @@ class ContributorWorkReadPort(Protocol):
 __all__ = (
     "AssignmentState", "AssignmentStatus", "ContributorAssignment", "ContributorAssignmentCounts",
     "ContributorAssignmentPage", "ContributorAssignmentQuery", "ContributorLatestSubmission",
-    "ContributorRevisionSummary", "ContributorSubmission", "ContributorSubmissionCounts",
+    "ContributorSubmission", "ContributorSubmissionCounts",
     "ContributorSubmissionPage", "ContributorSubmissionQuery", "ContributorWorkCounts",
-    "ContributorWorkReadPort", "NextAction", "RevisionDisposition", "RevisionOutcome",
+    "ContributorWorkReadPort", "NextAction", "RevisionDisposition",
     "SubmissionFindingCountsPort", "TaskStatus",
 )

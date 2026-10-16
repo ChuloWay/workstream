@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.contributions.api import LockedCompensationTermsPort
 from app.modules.tasks.api.contributor_reads import (
     AssignmentState, ContributorAssignment, ContributorAssignmentCounts, ContributorAssignmentQuery,
-    ContributorLatestSubmission, ContributorRevisionSummary, ContributorSubmission,
+    ContributorLatestSubmission, ContributorSubmission,
     ContributorSubmissionCounts, ContributorSubmissionQuery, ContributorWorkCounts, NextAction,
     RevisionDisposition,
 )
@@ -41,6 +41,13 @@ def next_action(
     if task_status == "needs_revision" and latest_status == "needs_revision" and revision == "ready":
         return "revise"
     return "none"
+
+
+def _locked_terms(compensation, version_id):
+    """A claim without its locked terms is an integrity failure, reported as unavailable."""
+    if version_id not in compensation:
+        raise ValueError("assignment locked compensation terms are missing")
+    return compensation[version_id]
 
 
 class ContributorWorkReader:
@@ -122,13 +129,9 @@ class ContributorWorkReader:
                     row["locked_guide_version"] if state == "active"
                     else submission[1] if submission is not None else None
                 ),
-                compensation=compensation[row["submitter_contribution_policy_version_id"]],
+                compensation=_locked_terms(compensation, row["submitter_contribution_policy_version_id"]),
                 latest_submission=submission[0] if submission is not None else None,
-                revision=None if revision is None else ContributorRevisionSummary(
-                    next_revision_round=revision.next_revision_round,
-                    max_revision_rounds=revision.max_revision_rounds,
-                    deadline_at=revision.deadline_at, outcome=revision.outcome,
-                ),
+                revision=revision,
                 next_action=next_action(
                     state, row["task_status"], submission[0].status if submission is not None else None,
                     revision.disposition if revision is not None else None,
@@ -159,11 +162,17 @@ class ContributorWorkReader:
     async def read_submissions(self, query: ContributorSubmissionQuery):
         if not query.project_ids:
             return (), False
+        # Findings commit with their checker run, before TASK routing restamps the
+        # submission, so a row changes at the later of the two stamps.
+        evidence = self._finding_counts.evidence_stamps()
+        activity_at = func.greatest(Submission.updated_at, evidence.c.evidence_at).label("activity_at")
         statement = select(
             Submission.id, WorkstreamTask.project_id, Submission.task_id, WorkstreamTask.title,
             Submission.version, Submission.attempt_status, Submission.status_reason,
-            Submission.submitted_at, Submission.decided_at, Submission.updated_at,
-        ).join(WorkstreamTask, WorkstreamTask.id == Submission.task_id).where(
+            Submission.submitted_at, Submission.decided_at, activity_at,
+        ).join(WorkstreamTask, WorkstreamTask.id == Submission.task_id).outerjoin(
+            evidence, evidence.c.submission_id == Submission.id,
+        ).where(
             Submission.contributor_id == str(query.contributor_id),
             WorkstreamTask.project_id.in_([str(item) for item in query.project_ids]),
         )
@@ -171,14 +180,16 @@ class ContributorWorkReader:
             statement = statement.where(Submission.task_id == str(query.task_id))
         if query.status is not None:
             statement = statement.where(Submission.attempt_status == query.status)
+        page = statement.subquery()
+        statement = select(page)
         if query.updated_since is not None:
-            statement = statement.where(Submission.updated_at >= query.updated_since)
+            statement = statement.where(page.c.activity_at >= query.updated_since)
         if query.after is not None:
             statement = statement.where(
-                tuple_(Submission.updated_at, Submission.id) > (query.after[0], str(query.after[1])),
+                tuple_(page.c.activity_at, page.c.id) > (query.after[0], str(query.after[1])),
             )
         rows = (await self._session.execute(
-            statement.order_by(Submission.updated_at, Submission.id).limit(query.limit + 1),
+            statement.order_by(page.c.activity_at, page.c.id).limit(query.limit + 1),
         )).all()
         selected = rows[:query.limit]
         counts = await self._finding_counts.read_finding_counts(
@@ -192,7 +203,7 @@ class ContributorWorkReader:
                 finding_counts=SubmissionFindingCounts(**dict(zip(
                     ("blocking", "warning", "coverage_incomplete"), counts[UUID(str(row.id))],
                 ))),
-                updated_at=row.updated_at,
+                updated_at=row.activity_at,
             )
             for row in selected
         ), len(rows) > query.limit
