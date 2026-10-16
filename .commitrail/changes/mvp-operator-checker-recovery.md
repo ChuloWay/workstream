@@ -53,6 +53,16 @@ eligible source or call the retry through a bearer-authenticated public route.
   read/mutation denials through canonical restage/commit. The public read uses
   the existing authorization-read rate gate before AUTH or CHECKERS lookup.
   Mutation continues to use `operations.checker.retry` unchanged.
+- `backend/scripts/behavior_ownership.py` and
+  `.ci/behavior-ownership/partition.v1.json`: register only the three new
+  public recovery modules with the existing ARCH-04F4 ownership group and
+  regenerate its additive partition snapshot.
+- `backend/alembic/versions/0050_operational_read_audit_pairs.py`, the canonical
+  head in `backend/alembic/env.py`, the existing external-checker migration
+  proof, and issue #580's bounded record: consume the byte-identical shared
+  prerequisite commit from #589 that admits exactly its registry-read pair and
+  this change's recovery-read pair. These files remain owned and merged by
+  #589 before this PR; this branch adds no second migration variant.
 - `mcp_server/contracts/authorization_context_get.json`: regenerate only the
   selected authorization-context fragment and digest changed by the additive
   recovery-source action.
@@ -72,7 +82,7 @@ eligible source or call the retry through a bearer-authenticated public route.
   any claim that issue #581 is complete.
 - Retry of queued, running, completed business outcomes, unresolved invocation
   effects, stale/non-current runs, PRE checks or contributor resubmission.
-- New retry tables, migrations, alternate retry services, compatibility paths,
+- New retry tables, alternate retry services, compatibility paths,
   direct product-row repair, mutable source evidence or changes to locked policy
   lineage.
 - Checker registration or REV lifecycle work owned by issue #580; CLI/CI,
@@ -188,8 +198,10 @@ PostgreSQL evidence is clean.
 
 - Current-source reconciliation: base `a201d7432`; issue #580's parallel branch
   owns supported checker registration and a separate registry read action. This
-  change owns only terminal checker recovery and will reconcile the shared AUTH
-  catalogue/kernel without deleting either action.
+  change owns only terminal checker recovery and preserves the shared AUTH
+  catalogue/kernel additions. PR #589 owns and merges the canonical shared
+  audit-pair migration before #588 and #592; those dependent branches consume
+  commit `019ada270` byte-for-byte and introduce no sibling revision.
 - Next usable boundary: source-specific observation and reconciliation for
   request execution, checker completion and acceptance commit/acknowledgement
   loss, followed by parent issue #555's real-project worker drill.

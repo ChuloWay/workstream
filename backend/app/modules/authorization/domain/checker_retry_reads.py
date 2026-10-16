@@ -19,9 +19,7 @@ class CheckerRetrySourceReadResourceContext(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    resource_type: Literal["checker_retry_source_collection"] = (
-        "checker_retry_source_collection"
-    )
+    resource_type: Literal["project"] = "project"
     resource_id: UUID
     scope_project_id: UUID
     request_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")

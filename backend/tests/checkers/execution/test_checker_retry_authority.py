@@ -191,7 +191,7 @@ async def _operator_discovery(admin_access, h, discovery_path):
         assert read_allow.matched_grant_id == system_grant
         assert read_allow.permission_id == "operations.status.read"
         assert read_allow.project_id == str(h.request.project_id)
-        assert read_allow.resource_type == "checker_retry_source_collection"
+        assert read_allow.resource_type == "project"
         assert read_allow.resource_id == str(h.request.project_id)
     return system_grant, item
 

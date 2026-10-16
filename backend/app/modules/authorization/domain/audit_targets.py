@@ -25,8 +25,8 @@ def _checker_retry_read_target(resource):
     project_id = str(resource.scope_project_id)
     return (
         project_id,
-        resource.resource_type,
-        str(resource.resource_id),
+        "project",
+        project_id,
         "project",
         project_id,
     )
