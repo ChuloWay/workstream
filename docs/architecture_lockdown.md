@@ -4,6 +4,12 @@ Last updated: 2026-08-11
 
 ## Purpose
 
+Workstream defines a shared protocol for governed work and provides its
+software implementation. This lockdown governs the current implementation;
+the protocol framing does not change its runtime, authority, or v0.1 scope.
+See [Protocol And Implementation](protocol-and-implementation.md) for the
+distinction and the remaining specification and conformance work.
+
 This note locks the Workstream v0.1 architecture around a source-agnostic,
 governed contribution core: project guide discipline, task contracts, human
 accountability for agent-assisted work, immutable artifact custody,
@@ -380,6 +386,15 @@ These ideas remain architecture-compatible, but they are not part of the first b
 - x402 micropayments
 - marketplace discovery
 - adjudication lifecycle, queues, leases, decisions, and actions
+
+A future research hypothesis for assistive task/dependency proposals and
+contributor matching is documented in the
+[Product Brief](product_brief.md#future-research-hypothesis-accountable-orchestration).
+It does not alter this lockdown, create a Planned capability, or authorize an
+implementation. Any experiment must enter through a separately approved
+initiative and reuse the existing source/import, Task screening, Authorization,
+TaskAssignment, Review, FinalAcceptance, ContributionRecord, reputation, and
+external-adapter boundaries.
 
 ## Canonical Names
 

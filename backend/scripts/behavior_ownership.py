@@ -158,7 +158,12 @@ AUTH_OUTBOX_02_TARGETS = frozenset({
     "backend/app/workers/outbox.py",
 })
 CON_02B_DELIVERY_TARGETS = frozenset({'backend/app/modules/outbox/delivery_repository.py', 'backend/app/modules/outbox/api.py', 'backend/app/modules/outbox/delivery.py', 'backend/app/modules/outbox/registry.py'})
-CI_LANE_CATALOGUE_TARGETS = frozenset({"backend/scripts/test_lane_catalogue.py"})
+CI_LANE_CATALOGUE_TARGETS = frozenset(
+    {
+        "backend/scripts/select_ci_scope.py",
+        "backend/scripts/test_lane_catalogue.py",
+    }
+)
 PILOT_10_EXPORT_TARGETS = frozenset({
     "backend/app/adapters/reviews/contribution_reads.py",
     "backend/app/adapters/tasks/contribution_reads.py",

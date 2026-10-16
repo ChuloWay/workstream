@@ -1,9 +1,14 @@
 # AGENTS.md
 
-This repository is for Workstream, source-agnostic governed contribution
-infrastructure for work performed by humans, AI agents, or both.
+This repository is for Workstream, a shared protocol for governed work and
+the software that implements it for humans, AI agents, or both.
 
 ## Core Definition
+
+Distinguish protocol rules from the software enforcing them. A standalone
+versioned specification and conformance suite remain formalization work; do
+not claim delivered independent interoperability. See
+`docs/protocol-and-implementation.md`.
 
 Workstream turns project-defined tasks, immutable submissions, policy-governed
 checks, and policy-governed acceptance into trusted `ContributionRecord` facts. Those

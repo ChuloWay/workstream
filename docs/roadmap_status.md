@@ -53,6 +53,13 @@ Marketplace expansion, blockchain settlement, external source adapters,
 external task-routing systems, agent workspaces, and runtime reputation projection remain
 outside v0.1.
 
+A documented future research hypothesis considers a provider-neutral adapter
+that proposes task dependencies and contributor candidates for multi-human and
+multi-agent work. It is not Planned or implemented, adds no v0.1 milestone, and
+can advance only through a separately approved initiative after the current
+lifecycle is proven. See the
+[Product Brief](product_brief.md#future-research-hypothesis-accountable-orchestration).
+
 ## Status Vocabulary
 
 The public automated-acceptance journey passed its bounded connected local drill

@@ -15,8 +15,9 @@ outside Workstream. Workstream owns the governed source of truth:
 - compensation awards, fulfillment receipts, and projections
 - reputation projections when separately implemented
 
-The first product is governed contribution infrastructure, not an execution
-IDE. Its central outputs are immutable `ContributionRecord` facts that
+Workstream defines shared protocol rules and implements them as governed
+contribution infrastructure. The implementation is not an execution IDE.
+Its central outputs are immutable `ContributionRecord` facts that
 downstream payment, points, reputation, reporting, dataset, or other systems may
 consume without rewriting.
 

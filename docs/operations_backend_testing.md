@@ -109,19 +109,47 @@ creation must use the real admission-backed command, not this fixture.
 
 If provisioning fails, confirm the local PostgreSQL provisioning credential can create/drop databases and roles, terminate owned sessions, and reach the named admin database. Diagnostics omit credentials.
 
-## Hosted semantic-lane full-suite proof
+## Hosted component selection and complete backend proof
 
-The required GitHub check remains `Backend / test`. Thirteen matrix jobs each own a
-digest-pinned PostgreSQL service container, a pinned-source MinIO image,
-and exactly one dependency lane. A step-level curl health loop admits MinIO
-before collection. This is semantic fan-out, not arbitrary test-count sharding:
-lane ownership remains repository-defined and exact.
+The required GitHub check remains `Backend / test`. Every push to `main` and
+every cross-cutting or uncertain PR runs complete proof: thirteen matrix jobs each own a
+digest-pinned PostgreSQL service container, a pinned-source MinIO image, and
+exactly one dependency lane. A step-level curl health loop admits MinIO before
+collection. This is semantic fan-out, not arbitrary test-count sharding: lane
+ownership remains repository-defined and exact.
+
+Draft and ready PRs use the same conservative component rules. Backend changes,
+including backend tests, run the complete suite. CI controls, unknown paths,
+unavailable Git history and external-checker changes also require full execution.
+CLI-only and MCP-only changes require their respective public-contract workflows;
+mixed client changes require both. Documentation omits runtime checks only for
+`README.md`, `CHANGELOG.md`, and Markdown files under `docs/` or
+`.commitrail/changes/`; Agent Gates still runs. Other Markdown paths, including
+`AGENTS.md` and `CONTRIBUTING.md`, require full execution. Any backend or unknown
+path in a mixed change restores complete proof.
+
+Import-only backend test selection was rejected: source readers and injected
+ports can cross import boundaries, and shared fixtures can carry state into
+tests without executing the originating code again. There is no partial-backend
+receipt or alternate evidence validator. These component omissions reduce
+unrelated client/documentation work, not the cost of every backend PR.
+
+Draft fan-in publishes `draft-test`, not required `test`. Marking ready starts
+the required check even on an unchanged commit; an older green draft result
+cannot satisfy it.
+Base-branch edits also start a fresh run bound to the new base; ordinary PR
+title/body edits rerun as the conservative cost of subscribing to `edited`.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-Authorization preflight runs alongside the 13 lanes. The final `test` job
-requires both preflight and every lane to succeed before validating evidence and
-coverage; failed, cancelled or skipped prerequisites remain blocking. This saves
-serial waiting on valid changes at the cost of lane work when preflight fails.
+Authorization preflight runs alongside all thirteen lanes when backend proof is
+required. The internal `full-suite` aggregate validates all thirteen lanes and
+requires preflight and supporting contracts before validating evidence and coverage;
+failed, cancelled or skipped required prerequisites remain blocking. Both final
+check names require every selected component to succeed and unselected
+components to be skipped. MCP has one reusable workflow called by Backend,
+whose result participates in this required fan-in. This
+saves serial waiting on valid changes at the cost of lane work when preflight
+fails.
 Assertion-map validation analyzes each exact historical revision/module once per
 invocation, then checks every referenced node and assertion against that analysis.
 It does not cache current source or reuse analysis across validation calls.
@@ -131,6 +159,12 @@ to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
 data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
 before tests. Real SQL, transaction, lock, isolation, and full hosted behavior
 checks remain.
+Ordinary storage tests use the existing transactional data reset with canonical
+schema verification before and after each test. Tests that own persistent schema
+replacement use `postgres_schema_contract` to rebuild it. The contribution
+storage function-replacement and trigger-removal controls explicitly roll back
+their transaction-local DDL and retain canonical teardown verification. No
+assertions or storage tests are omitted.
 The schema-contract lane and aggregate job retain disk-backed databases.
 This is not a production configuration or proof of host-power-loss durability:
 [Docker tmpfs data disappears when the container stops](https://docs.docker.com/engine/storage/tmpfs/).
@@ -140,10 +174,13 @@ The `project_lifecycle_a`, `project_lifecycle_b`, `project_lifecycle_c`,
 `project_lifecycle_d`, and `project_lifecycle_e` lanes
 partition PROJECT nodes, checker execution, materialization, evaluation capacity,
 output custody and routing AUTH preparation beside initial dispatch/delivery.
-All use the existing exact-node hash across five lanes, including the broad
-project intake modules. The [capacity change record](../.commitrail/changes/backend-runtime-dependency-security.md)
-explains the measured expansion and removal of the superseded placement
-exceptions. The lane logs retain all setup/call/teardown phase durations,
+All use the existing exact-node hash within the project family. Measured module
+overrides in `PROJECT_MODULE_LANE_OVERRIDES` spread expensive proofs across
+specific project lanes. In particular, `test_projects.py` uses C/B/D after its
+former B/E allocation repeatedly exceeded E's deadline. The
+[CI change record](../.commitrail/changes/ci-pr-scope-segmentation.md) records this
+allocation repair; it changes neither semantic ownership nor test membership.
+The lane logs retain all setup/call/teardown phase durations,
 including phases below five milliseconds, for performance diagnosis. This output
 is bounded by the selected test inventory and remains diagnostic only: it cannot
 select tests or override completeness, cleanup or the unchanged execution deadline.
@@ -169,16 +206,27 @@ schema replacement. Transaction-local DDL that explicitly rolls back uses the
 ordinary isolated fixture, whose teardown verifies the canonical schema and
 rebuilds plus fails if a mutation escapes.
 
-The backend preflight, semantic lanes and aggregate job check the manifest
-against its lock with `uv lock --check`, install `uv sync --frozen --all-extras`,
-and execute through `uv run --frozen`. Their proof binds to the patched dependency
-graph; earlier pip-resolved runs do not establish compatibility with that exact
-lock. The separately required CLI workflow retains its own dependency installation.
-
-Each matrix job binds its checkout to `GITHUB_SHA`, installs and asserts exact
-Ruff `0.15.22`, runs lint and docstrings, and starts MinIO. The runner discovers,
-validates and collects the full canonical inventory before executing its one
-lane; the aggregate independently recollects and validates complete execution.
+Each affected Backend job binds its checkout to `GITHUB_SHA`, installs pinned
+`uv 0.10.7`, verifies the manifest with `uv lock --check`, recreates the backend environment with
+`uv sync --frozen --all-extras`, and runs subsequent Python, Ruff, pytest,
+docstring and coverage commands through `uv run --frozen`. Its download cache is
+keyed by `backend/uv.lock` and the workflow, but the environment itself is never
+restored from cache. This makes hosted proof use the exact selected backend lock
+without changing any lane or gate. The reusable CLI contract keeps its
+independent Go verification and build, while its Backend Ruff checks, isolated
+runner and five pytest groups use the same pinned, frozen all-extras environment.
+The reusable MCP real-API job runs its OpenAPI subprocess, isolated runner, API
+server and administrator bootstrap from the frozen Backend environment. Both
+lifecycle suites run in the separately locked adapter environment, because its
+MCP SDK differs from the Backend agent SDK. Fixture environment construction and
+the isolated-database guard execute in a Backend subprocess; API assertions remain
+in the adapter test process. The wheel-install independence check remains separate.
+Each matrix job then starts MinIO.
+Authorization preflight asserts the lock-selected Ruff `0.15.22`, then runs
+source-wide lint and docstring checks once for the selected run. The
+runner discovers, validates and collects the full canonical inventory before
+executing its one lane; the complete aggregate independently recollects and
+validates complete execution.
 There is no duplicate standalone inventory pass in each matrix job.
 Each lane receives a distinct
 runner-created database and role plus a distinct MinIO prefix custody record.
@@ -191,32 +239,38 @@ nodes directly with the admin URL while stripping application database URLs;
 every ordinary node remains behind isolated-runner custody and never receives
 the admin credential.
 
-Backend and Agent Gates do not run on review-state events. Agent Gates runs
-the repository process and documentation checks for each PR head; protected-branch
-review rules independently enforce exact-head human approval.
-Superseded Agent Gates runs for the same PR are cancelled without repeating the
-full backend suite.
+Backend listens to `ready_for_review` and `converted_to_draft` so feedback
+switches between separately named draft and required checks without an empty commit.
+Check names use event state even if scope planning fails. Agent Gates remains independent and runs repository process and
+documentation checks for each PR head; protected-branch review rules enforce
+exact-head human approval. Superseded runs for the same PR are cancelled.
 
 Each matrix job uploads an artifact named for GitHub's checked-out PR merge-tree
 SHA, lane and numeric run attempt, containing its manifest, lane evidence,
-isolation record, and coverage data. The final `test`
-job runs with `if: always()`, downloads available diagnostic bundles, then
-rejects any failed, cancelled, or skipped matrix result before fan-in. Fan-in
-selects the highest numeric attempt available for each of the 13 declared
+isolation record, and coverage data. On complete runs, the `full-suite` job
+runs with a fail-closed dependency guard, downloads available diagnostic
+bundles, then rejects any failed, cancelled, or skipped matrix result before
+fan-in. Fan-in selects the highest numeric attempt available for each of the thirteen declared
 lanes from separately downloaded artifact directories. It rejects malformed,
 foreign or future attempt names and never falls back from an incomplete or
 corrupt latest bundle to an older passing one. For the selected bundles it
 requires byte-identical manifests and heads, verifies every bound digest, and
 rejects symlinks or surplus lanes.
 
+MinIO consumers receive the
+successful producer's explicit attempt identity: a failed-only retry may use
+that same-head earlier artifact, never a future attempt or foreign tree.
+
 After fan-in, independent validation rejects missing, duplicated, foreign,
 deselected, unexpectedly skipped, interrupted, or partially completed nodes.
 It also binds the exact head, manifest, per-lane isolation metadata, evidence,
-and coverage-file SHA-256 digests. Only then are exactly 13 regular,
+and coverage-file SHA-256 digests. Only then are exactly the expected regular,
 non-symlink coverage files copied byte-for-byte for one literal
 `coverage combine`. Percentages are diagnostic, with no global or subsystem
-floor. The real API contract drill remains a separate
-isolated invocation inside the final required job.
+floor. The real API contract drill remains a separate isolated invocation inside
+the full backend aggregate. The stable required `test` status contains no database
+or artifact work; it accepts only successful required component/aggregate results. Draft results
+cannot fulfill this required context.
 
 ### Evidence bundle
 
@@ -266,8 +320,9 @@ its head and digests differ. Each lane bundle records its job-start epoch;
 missing or malformed timing fails the final evidence step. Hosted evidence
 records whole Backend wall time from the earliest selected lane start, lane
 aggregate/slowest execution timing, and whether
-the eight-minute target was met. Timing uses the same bundle selection as
-evidence. On a retry this wall time includes the wait between selected attempts;
+the recorded eight-minute threshold was met. Five minutes remains an aspirational
+goal, not the threshold of the `timing_target_met` evidence field. Timing uses
+the same bundle selection as evidence. On a retry this wall time includes the wait between selected attempts;
 it is not fresh-run execution latency. When the repository owner explicitly accepts
 a measured target miss at the human merge checkpoint, that performance result
 does not override otherwise passing correctness, custody, service-contract,
@@ -279,7 +334,7 @@ requires fresh CI; prior same-head retry evidence cannot be carried forward.
 The content-addressed MinIO cache can remove the measured 145-second image
 rebuild when its exact Docker context, Backend workflow and runner platform are
 unchanged. It does not solve observed 17-minute queue waits or 20-minute lanes
-and does not promise an eight-minute Backend completion time.
+and does not promise a five-minute Backend completion time.
 
 ## Retired changed-scope behavior mutation
 

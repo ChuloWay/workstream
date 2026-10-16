@@ -1850,10 +1850,6 @@
     },
     {
       "group": "lifecycle",
-      "target": "backend/app/modules/tasks/submission_attempts.py"
-    },
-    {
-      "group": "lifecycle",
       "target": "backend/app/modules/tasks/submission_composition.py"
     },
     {
@@ -2042,6 +2038,10 @@
     },
     {
       "group": "shared",
+      "target": "backend/scripts/select_ci_scope.py"
+    },
+    {
+      "group": "shared",
       "target": "backend/scripts/test_lane_catalogue.py"
     },
     {
@@ -2053,7 +2053,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "b12e255dcb06f0f9581a7e58607bb7a0483d6ccd8d4f0e2d66ea011e2296d182",
+  "authority_digest": "13d9fa6d97f8b3fb02d8efaf72d1f3e2bdecdf7ec6b6cc003cf646b23e32294c",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

@@ -2,6 +2,8 @@
 name = "workstream-backend"
 version = "0.1.0"
 description = "Workstream backend API"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
 requires-python = ">=3.11,<3.13"
 dependencies = [
   "aiobotocore==3.7.0",
@@ -22,7 +24,7 @@ dependencies = [
 ]
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
