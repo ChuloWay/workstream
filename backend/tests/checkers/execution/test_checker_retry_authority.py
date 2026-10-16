@@ -55,6 +55,28 @@ from tests.checkers.execution.test_checker_retry import (
 from tests.test_artifact_admission import _context
 
 
+def _checker_projection_columns(selected_columns) -> set[str]:
+    columns = set()
+    for selected in selected_columns:
+        column = getattr(selected, "element", selected)
+        if getattr(getattr(column, "table", None), "name", None) in {
+            "checker_runs", "checker_retry_receipts",
+        }:
+            columns.add(selected.name)
+    return columns
+
+
+def test_checker_projection_probe_unwraps_labels_and_detects_private_columns():
+    selected = select(
+        CheckerRun.project_id.label("project_id"),
+        CheckerRun.request_json.label("request_json"),
+        CheckerRetryReceipt.id.label("retry_receipt_id"),
+    ).selected_columns
+    assert _checker_projection_columns(selected) == {
+        "project_id", "request_json", "retry_receipt_id",
+    }
+
+
 async def _assert_project_manager_concealed(admin_access, h, discovery_path, retry_path):
     project_grant = await admin_access.signed.grant(
         admin_access.admin,
@@ -140,12 +162,7 @@ async def _operator_discovery(admin_access, h, discovery_path):
             "selected_post_submit_policy_body",
         )
     )
-    checker_columns = {
-        column.name
-        for column in selected_columns
-        if getattr(getattr(column, "table", None), "name", None)
-        in {"checker_runs", "checker_retry_receipts"}
-    }
+    checker_columns = _checker_projection_columns(selected_columns)
     assert checker_columns
     assert not checker_columns & {
         "request_json", "result_json", "material_custody",
