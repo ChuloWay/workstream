@@ -51,9 +51,12 @@ The reusable CLI contract keeps its independent Go build, while its Backend
 Ruff checks, isolated runner and five pytest groups use the same pinned frozen
 all-extras environment as the other affected Backend jobs.
 The reusable MCP real-API job also checks and installs `backend/uv.lock` frozen;
-its OpenAPI subprocess, isolated runner and both lifecycle suites execute in
-that Backend environment. The adapter retains its own frozen environment and
-independent wheel-install proof.
+its OpenAPI subprocess, isolated runner, API and bootstrap execute in that Backend
+environment. Both lifecycle suites execute in the adapter's own frozen environment,
+since the two locks select different MCP SDK generations. The integration fixture
+obtains its environment and runs the isolation guard through a Backend subprocess;
+it no longer imports Backend application dependencies into the adapter process.
+The independent wheel-install proof remains.
 
 | Change/event | Required runtime |
 |---|---|
@@ -99,8 +102,9 @@ reported as complete proof. No new selector/evidence service or paid runner.
   execution and focused internal reviews must pass before readiness.
 - Verify the reusable CLI contract preserves its Go build and runs all Backend
   Ruff and pytest commands through pinned `uv` with `--frozen` lock custody.
-- Verify MCP OpenAPI and both real-API suites use the frozen Backend environment,
-  preserve their exact suite arguments, and propagate failure and timeout exits.
+- Verify MCP OpenAPI, API and bootstrap use the frozen Backend environment, while
+  both real-API suites use the adapter lock. Preserve exact suite arguments and
+  isolation guards, and propagate failure and timeout exits.
 
 ## Risk and review routing
 
@@ -175,3 +179,13 @@ propagation. All 29 focused workflow tests passed; removing frozen mode from
 either the Backend install or child pytest invocation makes the new regression
 fail. Ruff, Markdown links and Commitrail checks passed. This repair requires
 a fresh complete hosted run.
+
+Run `38854829773` passed all thirteen Backend lanes and CLI, but exposed that
+executing MCP integration pytest in the Backend environment loads MCP 1.29 rather
+than the adapter's required 2.2. The correction keeps each process in its own
+locked environment and preserves the canonical Backend fixture/isolation guard
+through a subprocess. No package versions, API assertions or authority setup
+change. That failed aggregate does not qualify the corrected candidate.
+The repair adds process-boundary regressions for fixture construction, API
+startup and administrator bootstrap, alongside the exact workflow argv check.
+Only integration scaffolding changes; both full HTTP journeys remain required.

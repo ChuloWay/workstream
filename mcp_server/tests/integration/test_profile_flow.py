@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -19,14 +21,45 @@ from workstream_mcp.tools.profile import normalize_update_input
 
 ROOT = Path(__file__).resolve().parents[3]
 BACKEND = ROOT / "backend"
+BACKEND_PYTHON = str(BACKEND / ".venv" / "bin" / "python")
 sys.path.insert(0, str(BACKEND / "scripts"))
-from api_contract_e2e import (  # noqa: E402
-    api_environment,
-    assert_isolated_database_url,
-    find_free_port,
-    flow_settings,
-    issue_flow_token,
-)
+from local_flow_tokens import issue_flow_token  # noqa: E402
+
+
+def api_environment() -> dict[str, str]:
+    """Use the backend's fixture and isolation guard in its own locked environment."""
+    command = (
+        "import json, os, sys; sys.path.insert(0, 'scripts'); "
+        "from api_contract_e2e import api_environment, assert_isolated_database_url; "
+        "before = os.environ.copy(); "
+        "env = api_environment(); "
+        "assert_isolated_database_url(env['WORKSTREAM_DATABASE_URL']); "
+        "print(json.dumps({key: value for key, value in env.items() "
+        "if before.get(key) != value}))"
+    )
+    environment = os.environ.copy()
+    environment["VIRTUAL_ENV"] = str(BACKEND / ".venv")
+    result = subprocess.run(  # noqa: S603 - fixed local fixture command
+        [BACKEND_PYTHON, "-c", command], cwd=BACKEND,
+        env=environment, check=True, capture_output=True, text=True,
+    )
+    environment.update(json.loads(result.stdout))
+    return environment
+
+
+def flow_settings(env: dict[str, str]) -> tuple[str, str, str]:
+    """Read the exact values already resolved by the backend fixture."""
+    return (
+        env["WORKSTREAM_FLOW_AUTH_ISSUER"],
+        env["WORKSTREAM_FLOW_AUTH_AUDIENCE"],
+        env["WORKSTREAM_E2E_FLOW_SECRET"],
+    )
+
+
+def find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 def _stop(process: subprocess.Popen[str]) -> None:
@@ -87,7 +120,7 @@ def _bootstrap_access_administrator(actor_id: str, environment: dict[str, str]) 
     """Run the documented local trust-root command; never seed authority by SQL."""
     completed = subprocess.run(  # noqa: S603 - fixed repository command and generated UUID
         [
-            sys.executable,
+            BACKEND_PYTHON,
             "scripts/bootstrap_access_administrator.py",
             "--actor-profile-id",
             actor_id,
@@ -129,7 +162,7 @@ def _start_processes(
     mcp_log = open(Path(scratch) / "mcp.log", "w", encoding="utf-8")  # noqa: PTH123
     api = subprocess.Popen(  # noqa: S603
         [
-            sys.executable,
+            BACKEND_PYTHON,
             "-m",
             "uvicorn",
             "app.main:app",
@@ -161,7 +194,6 @@ def _start_processes(
 @pytest.mark.asyncio
 async def test_installed_mcp_preserves_profile_and_lifecycle_parity() -> None:
     env = api_environment()
-    assert_isolated_database_url(env["WORKSTREAM_DATABASE_URL"])
     issuer, audience, secret = flow_settings(env)
     tokens = {
         name: issue_flow_token(name, [], issuer=issuer, audience=audience, secret=secret)

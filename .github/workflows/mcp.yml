@@ -154,5 +154,5 @@ jobs:
             uv run --frozen python scripts/run_isolated_tests.py \
               --metadata-json "${RUNNER_TEMP}/workstream-mcp-${suite}-evidence.json" \
               --timeout-seconds 240 \
-              -- env PYTHONPATH="../mcp_server" uv run --frozen python -m pytest -q "../mcp_server/tests/integration/${suite}.py"
+              -- uv run --frozen --project ../mcp_server python -m pytest -q "../mcp_server/tests/integration/${suite}.py"
           done

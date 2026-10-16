@@ -111,8 +111,9 @@ class LightweightAgentGateTests(unittest.TestCase):
                         [
                             "run", "--frozen", "python", "scripts/run_isolated_tests.py",
                             "--metadata-json", str(scratch / f"workstream-mcp-{suite}-evidence.json"),
-                            "--timeout-seconds", "240", "--", "env", "PYTHONPATH=../mcp_server",
-                            "uv", "run", "--frozen", "python", "-m", "pytest", "-q",
+                            "--timeout-seconds", "240", "--",
+                            "uv", "run", "--frozen", "--project", "../mcp_server",
+                            "python", "-m", "pytest", "-q",
                             f"../mcp_server/tests/integration/{suite}.py",
                         ]
                         for suite in suites
