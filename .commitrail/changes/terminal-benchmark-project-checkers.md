@@ -33,12 +33,12 @@ code on the host would break the established boundary.
   packages, independent tests/reference solutions and reviewed local expected
   outcomes. Its verifier intentionally executes only trusted repository assets
   and is not an uploaded-code admission authority.
-- Read-only OCI inspection found that the proposed corpus `FROM` digest
-  `sha256:4766d8...` is an image index, while #493 requires the exact cached
-  linux/amd64 platform manifest. The current corresponding platform manifest is
-  `sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af`.
-  The #576 owner must reconcile that input before the real PRE originals can
-  honestly pass; this checker change must not silently accept the index.
+- Read-only OCI inspection found that the original corpus `FROM` digest
+  `sha256:4766d8...` was an image index. The reconciled #576 candidate at
+  `4628babe4` now uses its exact linux/amd64 platform manifest
+  `sha256:6e13e65c55e33adf203d77ee371cf8bf5d81bd4902ef07565721f46bf44917af`
+  and the exact reviewed Dockerfile recipe. PRE must require that platform
+  manifest and recipe; it must not silently accept the index.
 - The existing registry and selected PRE/POST owners already bind immutable
   image/configuration/schema/resource identities, verified input lineage,
   normalized findings, infrastructure outcomes and isolation receipts. #580
@@ -86,9 +86,24 @@ code on the host would break the established boundary.
     oracle conclusions as work findings and missing cache/runtime, launch,
     deadline, capacity, malformed output or uncertain cleanup as the existing
     infrastructure outcomes.
-- Focused Rust fixtures/tests for contract parsing, package rules, request/path
-  substitution, exact cache identity, no-op pass, reference fail, instability,
-  missing cache, build exit, timeout/OOM/disk/output bounds, disconnect and
+- `backend/app/modules/artifacts/preparation.py`,
+  `backend/app/modules/artifacts/post_submit_materialization.py`, and their
+  existing focused tests only for one narrow extension of the current
+  `ArtifactScratchManager` grant:
+  - before every POST external grant publication, raise that workspace's fixed
+    total reservation to the existing 512 MiB per-workspace maximum; the
+    runtime allowance is exactly that ceiling minus the verified expanded bytes;
+  - publish one empty `runtime/` sibling beside the sealed `workspace/`, bind its
+    derived allowance and existing grant owner UID/GID/mode into the
+    request-bound grant manifest, and keep it `0700` for that same OS identity
+    already shared by ART and the checker service; and
+  - keep that directory under the existing workspace TTL, aggregate quota,
+    no-follow cleanup, failed-cleanup retention and dead-process recovery. This
+    is not a second scratch ledger or artifact reference.
+- Focused Rust and existing backend fixtures/tests for contract parsing, package
+  rules, request/path substitution, exact cache identity, no-op pass, reference
+  fail, instability, missing or mutated cache, build exit,
+  timeout/OOM/disk/output bounds, cancellation, SIGKILL/restart recovery and
   complete owned cleanup. Tests may consume the fixed #576 corpus read-only;
   they must not make its trusted native verifier a production authority.
 - A bounded local probe under `experiments/terminal_benchmark_project_checkers/**`
@@ -116,9 +131,11 @@ code on the host would break the established boundary.
 - No changes to #576 corpus assets without explicit coordination with their
   owner and manager agreement. No private Terminal-Bench/Snorkel material.
 - No CI topology, hosted deployment, secret, merge or issue-closure change.
-- If a bounded builder/oracle scratch path cannot satisfy the existing aggregate
-  quota and crash-cleanup owner without expanding ART or registry contracts,
-  stop for a revised reviewed boundary instead of adding an ad hoc filesystem.
+- No second scratch owner, service-private scratch root, durable build artifact,
+  arbitrary caller-selected scratch size, or public/DB/registry schema change.
+  The narrow ART grant extension is a concrete prerequisite in this PR because
+  the builder cannot safely emit its temporary image without it and the
+  extension has no useful standalone product behavior.
 
 ## Design and decisions
 
@@ -131,34 +148,138 @@ tests. It converts observations into the existing final result family. Project
 paths and commands remain image-owned; Docker/runsc custody, image import,
 limits and cleanup remain service-owned.
 
-Registration and project-policy selection alone do not grant the stronger
-builder profile. The service configuration must separately bind the exact POST
-registry entry ID, entry digest and image platform-manifest digest to
-`terminal_benchmark_build_oracle.v1`, the exact Kaniko/base cache identities and
-fixed builder/oracle limits. A conventional or PRE image returning a plan is
-invalid output and receives no second launch. A configured entry cannot change
-its paths into arbitrary commands or ask for more phases, capabilities, network,
-mounts or resources. The original request deadline is the total wall-clock
-ceiling across checker planning, build, image import, four oracle containers and
-cleanup; phase ceilings must fit within it. Cleanup uses its existing separate
-bounded margin and a failed or uncertain cleanup can never become a work verdict.
+### Strong-profile authority
 
-The builder uses the reviewed PILOT-00 Kaniko identity and only the configured
-linux/amd64 platform-manifest cache. The submitted Dockerfile cannot select a
-different family or platform. A present but failing submitted build is a work
-finding. Missing or substituted trusted builder/base/cache material is
-`material_unavailable` or `implementation_unavailable`; deadlines and exhausted
-memory/PID/disk use the existing closed infrastructure categories. Networking is
-never enabled to repair a miss.
+Registration and project-policy selection alone do not grant the stronger
+builder profile. Administrator-owned service configuration separately contains
+one closed authorization tuple: exact POST registry entry ID, entry digest,
+checker platform-manifest digest, `terminal_benchmark_build_oracle.v1` profile
+version, Kaniko/base/cache identities, and fixed phase limits. The service first
+validates the ordinary request and grant, then requires every element of this
+tuple before it accepts a continuation. It also requires the checker-returned
+plan to repeat the request digest, grant binding digest, registry entry ID and
+digest, checker image digest, configuration digest and profile version. A
+conventional image, a PRE entry, or another registered POST image returning the
+same JSON receives `invalid_output` and no builder launch. Plan fields cannot
+add commands, mounts, phases, capabilities, network or resource limits; the
+service supplies those values from the closed profile.
+
+### ART-owned scratch and crash recovery
+
+The build output and context use a `runtime/` directory inside the same private
+`ArtifactScratchManager` extraction workspace that already owns `workspace/`.
+Before publishing any POST external grant, ART atomically raises that
+workspace's reservation from the verified expanded-byte count to the existing
+512 MiB per-workspace maximum. The runtime allowance is therefore exactly
+`512 MiB - verified expanded bytes`; it is never caller selected and the whole
+reservation still obeys the existing aggregate byte ceiling, free-space floor,
+entry ceiling and TTL. ART then creates `runtime/` descriptor-relatively with
+no-follow checks, keeps it `0700` for the existing OS identity already shared by
+ART and the checker service, and records the allowance plus observed UID/GID and
+    modes in the signed grant manifest. The ordinary service does not mount this
+    directory into checker
+containers; only the separately authorized continuation may use it. The opaque
+grant reference remains only an ID and binding digest; neither backend nor
+response exposes a path. If the larger reservation or directory publication
+cannot be proven, the invocation stops as infrastructure failure before the
+service call.
+
+The service may write only the bound `runtime/` child and must keep the projected
+context, image tar, bounded inventory and control files within its allowance.
+The Docker builder receives a bounded writable root and an output file under
+that directory; the service rejects a size overrun independently before image
+load. Normal completion, timeout, cancellation and client disconnect terminate
+the active phase, remove owned Docker resources, and return only after ART has
+revoked the grant and no-follow deleted the workspace. A cleanup error retains
+the existing ledger ownership for retry and produces infrastructure failure.
+On service SIGKILL, the ledger reservation and workspace remain; the existing
+dead-process/TTL reaper is the filesystem cleanup owner.
+
+Every service-created Docker container has exact trusted labels for deployment
+owner, request digest, grant ID, attempt nonce and resource kind. Before a
+temporary image is loaded, the service fsyncs a bounded inventory under
+`runtime/` containing its owned repository/tag namespace, expected output hash,
+container names and later observed image ID. Normal cleanup and the service
+startup reaper remove containers selected by the full label set, then remove
+only inventoried images whose IDs and names still match. A scan of the fixed
+service-owned temporary repository prefix recovers an image when SIGKILL occurs
+between load and inventory update; it never removes an image outside that
+prefix. ART deletes the remaining runtime files after Docker cleanup or TTL.
+The reaper uses one cleanup deadline and leaves ambiguous resources quarantined
+as infrastructure failure rather than claiming cleanup.
+
+### Physical build and oracle separation
+
+The service never gives the builder the original ART grant. It creates
+`runtime/build-context/` by reopening the sealed `workspace/` descriptor-
+relatively with `O_NOFOLLOW`, rehashing every copied source against the grant
+manifest, and projecting exactly `.dockerignore`, `environment/Dockerfile` and
+`workspace/**`. It rejects missing, extra, special, linked, changed or
+out-of-budget entries, seals and reinventories the projection, then mounts only
+that directory into Kaniko. `solution/**`, `tests/**`, the grant root, and the
+absolute submitted Dockerfile path are physically absent from the builder
+namespace. The Dockerfile must match the exact recipe reconciled at
+`4628babe4`, including the linux/amd64 base platform-manifest digest; PRE and
+POST both reject any other recipe before building.
 
 The produced image is attempt-specific evidence, not a reproducible artifact:
 Kaniko timestamps mean identical inputs need not produce identical tar bytes.
-The service hashes the exact attempt output, loads it under an owned temporary
-identity, uses it only for the bound oracle runs, and removes all containers,
-temporary image identities and scratch before returning. Candidate oracle runs
-never receive `solution/`; reference runs mount only the declared reference file
-over the candidate program and mount tests separately. Each run gets a fresh
-container and writable temporary workspace within its fixed limits.
+The service hashes the exact attempt output, loads it under the owned temporary
+identity, and uses that observed image ID only for the bound oracle runs.
+Candidate runs receive the produced image plus a read-only tests mount and no
+grant or reference path. Reference runs receive the same image and tests plus
+only the single declared `solution/program.py` mounted over the candidate
+program. Each run is a fresh non-root, capability-free, networkless, read-only-
+root container with its own bounded tmpfs. Absolute paths cannot reach the
+original grant because it is not mounted in either namespace.
+
+### One aggregate budget
+
+The immutable request registry's `cpu_millis`, `memory_bytes`, `deadline_ms` and
+`maximum_output_bytes` are ceilings for the entire invocation, including its
+continuation. Closed profile values may be smaller and can never enlarge them.
+Phases are sequential; the next container is not created until the prior one is
+confirmed removed. Each phase's CPU and memory limits are at most the request
+ceilings, and the sum for concurrently live service-owned containers is also at
+most those ceilings. PID, tmpfs, writable-root and ART scratch bounds are fixed
+profile limits within the same request and scratch ceilings.
+
+The service computes one monotonic absolute work deadline before cache checking
+or the checker launch. Checker planning, context projection, offline build,
+image load and all four oracle runs consume its remaining time; no phase or
+retry resets it. One byte meter likewise aggregates checker output, builder and
+Docker control logs, every oracle's stdout/stderr and the final normalized
+result under `maximum_output_bytes`; it is never reset per resource or phase.
+Cancellation starts one aggregate emergency cleanup deadline. All stop/remove/
+unload operations share the service's existing 10-second `CLEANUP_TIMEOUT`,
+which remains within the existing 60-second external-checker cleanup margin;
+there is no 10-second allowance per resource.
+
+### Sealed offline cache
+
+The trusted service configuration binds a canonical absolute cache root; owner
+UID/GID; exact root, directory and regular-file modes; sorted relative-file
+inventory with per-file byte count and SHA-256; total count and bytes; canonical
+inventory digest; exact operating system and architecture; and exact repository,
+platform-manifest media type/digest and config image ID for both the Kaniko
+builder and approved base. The root and every member must be administrator-owned
+and free of symlinks or special files.
+
+At startup and immediately before each build, the service opens the configured
+root without following links, walks and fully rehashes every member descriptor-
+relatively, and requires the complete canonical inventory: no missing, extra,
+changed, linked, wrong-owner or wrong-mode entry and exact count, bytes and
+digest. It also inspects the locally cached builder/base images and requires the
+bound platform and config identities. Any mismatch is infrastructure failure
+before Docker create. The cache is mounted read-only; the service performs a
+second complete inventory check before returning to detect concurrent mutation.
+There is no pull, registry lookup or network fallback on a miss.
+
+A present but invalid submitted Dockerfile/build or a completed oracle
+conclusion is a work finding. Missing or substituted trusted builder/base/cache
+material, launch/runtime unavailability, deadline or resource exhaustion,
+malformed output, or failed/uncertain cleanup uses an existing recoverable
+infrastructure category and cannot become a work verdict.
 
 The five fixed corpus packages calibrate behavior, while registration
 configuration records the manager-agreed project version, allowed task IDs,
@@ -170,9 +291,12 @@ change's implementation diff.
 
 Rejected alternatives are a host socket in the checker, Docker-in-Docker inside
 the project image, host execution of package Python, treating the native corpus
-verifier as admission, and a general DAG/job protocol. Each either breaks the
-trust boundary or adds a broader subsystem than the one concrete build/oracle
-sequence requires.
+verifier as admission, a service-private scratch ledger, and a general DAG/job
+protocol. Each either breaks an existing trust/cleanup boundary or adds a
+broader subsystem than the one concrete build/oracle sequence requires. The ART
+grant extension stays in this PR because it has no independent useful behavior:
+the exact POST execution needs one ledger-owned output path before the service
+can safely adopt the PILOT-00 mechanism.
 
 ## Acceptance criteria
 
@@ -190,6 +314,26 @@ sequence requires.
 - [ ] Missing/substituted builder or base cache, unavailable `runsc`, deadline,
   memory/PID/disk exhaustion, malformed output, disconnect and uncertain cleanup
   produce the existing recoverable infrastructure outcomes and no work verdict.
+- [ ] The builder context contains exactly `.dockerignore`,
+  `environment/Dockerfile`, and `workspace/**`; it cannot read `solution/**`,
+  `tests/**`, the original grant, or an absolute submitted Dockerfile path.
+  Descriptor-relative copy and a second exact inventory reject links, special
+  files, substitutions, additions and byte changes before launch.
+- [ ] One request-bound work deadline and one aggregate output meter cover
+  planning, build, import and every oracle run without per-phase reset. Sequential
+  container CPU/memory values and any concurrent total never exceed the immutable
+  registry ceilings. All emergency cleanup shares one deadline no greater than
+  the existing 60-second cleanup margin.
+- [ ] ART reserves the existing fixed 512 MiB workspace total and derives the
+  runtime allowance from verified expanded bytes before POST grant publication.
+  Cancellation cleans synchronously;
+  simulated service SIGKILL leaves owned state for dead-process/TTL cleanup; an
+  unconfirmed delete retains quota ownership and returns infrastructure failure.
+- [ ] Cache tests mutate one blob and independently cover extra, missing,
+  symlink/special, wrong-owner and wrong-mode entries; each fails before Docker
+  create with no pull. Startup recovery removes seeded stale containers and
+  temporary images with the exact owned labels/inventory while leaving an
+  unowned control resource untouched.
 - [ ] Launch evidence proves no external network or host socket, exact cached
   platform identities, builder-only capabilities, non-root capability-free
   oracles, read-only inputs/root, fresh containers, fixed resources and complete
@@ -221,25 +365,41 @@ sequence requires.
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
 | Existing owner and gap | Inspect PILOT-00, PILOT-04 service/SDK, ART grants, selected PRE/POST owners and #493/#576/#555 | The selected service has exact verified input and image custody but only one conventional checker launch; it cannot safely build a submitted Dockerfile or launch a separate oracle | Plan review and representative execution pending |
-| Platform pin feasibility | `docker buildx imagetools inspect --raw` for the proposed CPython and Kaniko digests, without pulling either image | Both proposed top-level digests are OCI indexes; linux/amd64 resolves to CPython `sha256:6e13e65c...` and Kaniko `sha256:c73ca67a...` | #576 must correct the corpus `FROM`; trusted builder config must record the platform manifest and config image ID |
-| Corpus dependency | `python3 pilots/terminal_benchmark/verify_corpus.py` on the reviewed #576 candidate | Pending on this worktree after dependency reconciliation | Trusted local calibration is not sandbox proof |
+| Platform pin feasibility | `docker buildx imagetools inspect --raw` for the proposed CPython and Kaniko digests, without pulling either image | Both proposed top-level digests are OCI indexes; linux/amd64 resolves to CPython `sha256:6e13e65c...` and Kaniko `sha256:c73ca67a...`; raw nonsecret manifests and SHA-256 commands are retained under `/tmp/workstream-493-python-*` | Trusted builder config must bind the full canonical cache inventory plus both platform manifests and config IDs |
+| Corpus dependency | Merge `4628babe4`; run `python3 pilots/terminal_benchmark/verify_corpus.py` on that reviewed #576 candidate | PASS: all five originals report three reference passes plus starter and near-miss rejection; corrected exact base recipe/platform, workspace ownership, UTF-8 and UTC-overflow inputs are present | This is explicitly `trusted_native_corpus_only`, not Docker/gVisor or production admission proof; parent assets remain outside this change's implementation diff |
+| Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, and external grant publication | Existing owner already provides aggregate quota, durable workspace ownership, failed-cleanup retention and crash recovery; the plan extends that same ledger/grant narrowly for runtime output | Focused implementation and SIGKILL/restart proof pending |
+| #582 ownership check | Coordinate exact paths and port ownership with the S3 activation owner | #582 does not touch `preparation.py` or `post_submit_materialization.py`; it owns provider-neutral ArtifactStore activation evidence and S3 composition, while this change reuses the separate existing ArtifactScratchManager/ledger without extending that activation port | Recheck after either branch changes its bounded files |
+| Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin and the service has one 10-second cleanup timeout | Continuation must prove it never resets these ceilings per phase/resource |
 | Rust contracts and logic | `cargo fmt --all --check && cargo test --workspace --locked` in `external_checkers/` | Future implementation proof | Does not prove Docker/runsc behavior |
 | Real local matrix | Bounded project-checker probe over originals and work/infrastructure negatives | Future implementation proof; wait for lead-owned Docker capacity | Local `docker-dev` is not hosted gVisor proof |
 | Current-source reconciliation | Diff against merged #576 and current `main`; focused existing checker tests and repository gates | Future final proof | PR #575 result-contract merge state must be rechecked |
 
 ## Review findings
 
-Plan review is required before product edits. No reviewer verdict is recorded yet.
+The first plan review was blocked before product edits. Its four valid findings
+were: no concrete aggregate scratch/crash owner; no physically separated build
+context; per-phase wording that did not prove one immutable request budget; and
+an under-specified sealed-cache identity/revalidation boundary. This revision
+assigns scratch to the existing ART ledger and TTL reaper, defines labeled
+Docker/startup recovery, projects an exact no-follow context, uses one absolute
+deadline/output meter with concurrent CPU/memory ceilings, and binds plus fully
+rehashes a canonical offline-cache inventory. Focused architecture and security
+plan replay is required on the frozen revision before product edits.
 
 ## Reconciliation
 
-- Current-source reconciliation: Discovery used stacked corpus candidate
-  `a4bc11a1564d7c9f063f3d662b66a297edd6e7d3`; its owner has since merged current
-  main into the dependency branch. This change must incorporate the final merged
-  corpus and current main before final proof and must exclude parent corpus assets
-  from its own implementation diff.
+- Current-source reconciliation: This branch merged corrected stacked corpus
+  commit `4628babe4`, which already incorporates `main` at `801b8dabb`. The
+  corpus now carries the exact linux/amd64 base recipe and the reviewed ownership,
+  UTF-8 and UTC-overflow fixes. Final proof must still incorporate the eventual
+  human-merged #576 and then-current `main`; parent corpus assets must remain
+  outside this change's implementation diff.
 - Next usable boundary: plan review, manager agreement on #576 mechanical
   configuration, then bounded implementation; #580 may register the resulting
   exact specs, and #555 may combine registration with the public/hosted journey.
+- Ownership reconciliation: #582 confirmed no file or port overlap. It owns
+  provider activation evidence and S3 composition; this change owns only the
+  existing ephemeral `ArtifactScratchManager` workspace/grant extension and must
+  not depend on or extend #582's activation guard.
 - Remaining risks: representative disk/resource ceilings, exact approved
   linux/amd64 base cache identity, and hosted `runsc` hardening remain unproved.
