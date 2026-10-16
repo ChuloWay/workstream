@@ -93,9 +93,10 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   and their integration fixtures.
 - Update the authorization OpenAPI field-set assertions, the CI lane catalogue
   for the new test modules (keeping main's measured project-lane allocation of
-  the batch-transition journeys, and pinning the two new stored-outcome proof
-  modules to project lanes A and C after hosted lane D crossed its 1200-second
-  deadline with main at 1148 seconds), the journey probe's outcome assertions, the Alembic
+  the batch-transition journeys, and placing the two new stored-outcome proof
+  modules in the task family: hosted project lanes measured 944 to 1190
+  seconds against the 1200-second deadline, and pinning them to project lanes
+  pushed C over), the journey probe's outcome assertions, the Alembic
   environment head pin, and current docs (README revision-round sentence,
   checker framework, data model, lifecycle state machine, first-user flows,
   roadmap).

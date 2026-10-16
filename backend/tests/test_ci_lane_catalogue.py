@@ -261,12 +261,12 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "980cbd9fb01c7f8c870ef348cb2f56d2cfc200d810ec1e25c841338d4ae83be1",
         ),
         "project": (
-            198,
-            "3ba4a6bcc1ce86e48d363e8b7e739d52f17bfeb6176e646f40406c1a5463f905",
+            196,
+            "22c5c14b692cf39c879be2f520721b302cb92fc5a29949e48c1281b8e497f349",
         ),
         "task": (
-            76,
-            "fb5fc262987697caa67c96f20b0706fccce5aac77ce1e0dbdbeeb4fe8283eb7d",
+            78,
+            "176f9e790672591101fef1a9c8278532ffea684a5ff7a814610a24ee560061f2",
         ),
     }
     actual = {
@@ -283,14 +283,6 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
 
 def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
     expected = {
-        "tests/checkers/execution/test_findings_and_coverage.py": (
-            "project_lifecycle_a",
-            "project_lifecycle_c",
-        ),
-        "tests/tasks/post_submit_routing/test_attempt_outcome_custody.py": (
-            "project_lifecycle_c",
-            "project_lifecycle_a",
-        ),
         "tests/test_projects.py": (
             "project_lifecycle_c",
             "project_lifecycle_b",
@@ -341,9 +333,9 @@ def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
         )
         + "\n"
     )
-    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 198
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
     assert hashlib.sha256(canonical.encode()).hexdigest() == (
-        "541debe0e7d5f6c08285e4d72f4e3ffe160ae9e5fe6faef3f730881c19235a70"
+        "e0c8672b13522e025542740cda87527a3a46bb2fef8a4de0bfccb51853f609a2"
     )
 
 
