@@ -92,7 +92,7 @@ established by the native corpus verifier.
 | Required POST checks pass, locked human review is false | Shared authorized FinalAcceptance, accepted task and submitter ContributionRecord; applicable conditional awards commit atomically. No fabricated Review or reviewer contribution. |
 | Required POST checks pass, locked human review is true | Task becomes `review_pending`; passing checks alone creates no acceptance. Live human review remains outside this first automated drill. |
 | Contributor-correctable POST failure with a revision remaining | Governed `needs_revision` and the locked revision window; this failure creates no Review, FinalAcceptance, ContributionRecord or award. |
-| POST work failure with the revision allowance exhausted | Record rejection, close the exhausted assignment and return the task to ready, preserving submissions and findings. No acceptance or award for the failed attempt. |
+| POST work failure with the revision allowance exhausted | Retain TaskRevisionExhaustion and rejection evidence, close the exhausted assignment and return the task to ready, preserving submissions and findings. This failure creates no Review, FinalAcceptance, ContributionRecord or award. |
 | POST infrastructure failure or uncertain delivery | Operator recovery or held uncertainty; no contributor revision round consumed or work-quality penalty. Preserve any already committed outcome and never repeat acceptance effects. |
 
 ## Five example briefs

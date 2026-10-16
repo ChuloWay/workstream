@@ -24,7 +24,7 @@
   "sha256": {
     "README.md": "682998d74dee02308b66771d578703a02af6d46ec7c1c5fe935f29fec75f4f75",
     "guide-request.json": "2aa9a922a9d3336a35eab873a4abcd4ad807ef300bb466858a9821f3f0379816",
-    "guide.md": "338dd40011821d69d5aedd30990c5783ce872b66936940c166ebe3d49906d966",
+    "guide.md": "aad70fa5fb3e293612e5604118e41e93f7bf17268f4ed0a289b7ca2f589e1a95",
     "negative-cases.json": "5c2bdb50c7954fb5bdc1a1c7f6a3285ef751153c66d70027e5d990e40030ede3",
     "packages/atomic-import/.dockerignore": "9b7d929a2285f8429ff68cebfb38684286e1ee9328727832681e3638f7fdaecb",
     "packages/atomic-import/environment/Dockerfile": "e5e25ef130409f56dfeed7c04b1de2c6538c5dd4f6864367c702d6b15eb6e2cb",

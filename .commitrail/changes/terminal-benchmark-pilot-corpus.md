@@ -121,7 +121,7 @@ handoff intent requiring separate authorized manager or Finance operations.
 | Corpus correctness | `python3 pilots/terminal_benchmark/verify_corpus.py` | Five references each pass three runs; all five starters and named near-miss mutations reject; malformed package and ineffective-test probes distinguish the intended boundary | Local trusted-code execution only |
 | Public input shapes | Validate `guide-request.json` with `ProjectGuideCreate` and `tasks.json` with `TaskImportDocument` from current backend | One declared Markdown guide, five examples and five native tasks validate | No product API invoked or authority granted |
 | Executable asset lint | Ruff over `pilots/terminal_benchmark` | Passed | Full current-head hosted checks remain required |
-| Scope/links/current docs | Repository link checks, diff check, focused reviewer inspection | Planned | Full current-head CI remains required |
+| Scope/links/current docs | Repository link checks, diff check, focused reviewer inspection | Passed | Full current-head CI remains required |
 
 ## Review findings
 
