@@ -2,6 +2,7 @@ FROM rust:1.84-bookworm@sha256:479476fa1dec14dfa9ed2dbcaa94cda5ab945e125d45c2d15
 WORKDIR /source
 COPY Cargo.toml Cargo.lock ./
 COPY workstream-checker-sdk ./workstream-checker-sdk
+COPY workstream-checker-service ./workstream-checker-service
 COPY workstream-terminal-benchmark-checker ./workstream-terminal-benchmark-checker
 RUN cargo build --locked --release --package workstream-terminal-benchmark-checker
 
