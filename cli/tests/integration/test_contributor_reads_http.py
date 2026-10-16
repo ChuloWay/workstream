@@ -255,7 +255,16 @@ def test_own_work_reads_reject_malformed_success(cli):
                 PREPARATION_ROW | {"findings": findings}
             ).encode()
             assert_failure(
-                cli(origin, TOKEN, "task", "preparation", TASK, PREPARATION, "-o", "json"),
+                cli(
+                    origin,
+                    TOKEN,
+                    "task",
+                    "preparation",
+                    TASK,
+                    PREPARATION,
+                    "-o",
+                    "json",
+                ),
                 "invalid_api_response",
             )
         response["body"] = json.dumps(SUMMARY_BODY | {"project_id": PROJECT}).encode()
