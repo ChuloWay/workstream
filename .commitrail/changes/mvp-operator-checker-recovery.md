@@ -47,11 +47,12 @@ eligible source or call the retry through a bearer-authenticated public route.
 - `backend/app/modules/authorization/catalogue.py`, the existing checker-retry
   authorization adapter, a focused CHECKERS recovery read domain/adapter,
   `backend/app/modules/authorization/kernel.py`, its closed audit-target mapper,
-  and only the minimum AUTH
+  `backend/app/modules/audit/schemas.py`, and only the minimum AUTH
   composition exports: activate an exact recovery-source read action backed by
   the existing system Operator `operations.status.read` permission and retain
-  mutation denials through canonical restage/commit. Mutation continues to use
-  `operations.checker.retry` unchanged.
+  read/mutation denials through canonical restage/commit. The public read uses
+  the existing authorization-read rate gate before AUTH or CHECKERS lookup.
+  Mutation continues to use `operations.checker.retry` unchanged.
 - `mcp_server/contracts/authorization_context_get.json`: regenerate only the
   selected authorization-context fragment and digest changed by the additive
   recovery-source action.

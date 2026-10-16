@@ -5,9 +5,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from contextlib import AbstractAsyncContextManager
 from datetime import UTC
-from typing import Literal, Protocol
+from typing import Annotated, Literal, Protocol
 
-from pydantic import AwareDatetime, Field, field_validator, model_validator
+from pydantic import AfterValidator, AwareDatetime, Field, model_validator
 
 from app.core.hashing import canonical_json_hash
 
@@ -43,35 +43,34 @@ class CheckerRetryCursorInvalid(ValueError):
     """The presented recovery cursor does not match its exact signed query."""
 
 
+def _checker_retry_reason(value: str) -> str:
+    if not value.strip() or any(
+        ord(character) < 32 or ord(character) == 127 for character in value
+    ):
+        raise ValueError("checker retry reason is invalid")
+    return value
+
+
+CheckerRetryReason = Annotated[
+    str,
+    Field(min_length=1, max_length=500),
+    AfterValidator(_checker_retry_reason),
+]
+
+
 class CheckerRetryCommand(CheckerValue):
     """Operator's exact source, reason and replay key; no caller-selected successor."""
 
     project_id: ResourceId
     source_run_id: ResourceId
     request_key: ResourceId
-    reason: str = Field(min_length=1, max_length=500)
-
-    @field_validator("reason")
-    @classmethod
-    def nonblank_reason(cls, value: str) -> str:
-        if not value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
-            raise ValueError("checker retry reason is invalid")
-        return value
+    reason: CheckerRetryReason
 
 
 class CheckerRetryRequest(CheckerValue):
     """Public body for one exact project/run retry command."""
 
-    reason: str = Field(min_length=1, max_length=500)
-
-    @field_validator("reason")
-    @classmethod
-    def nonblank_reason(cls, value: str) -> str:
-        if not value.strip() or any(
-            ord(character) < 32 or ord(character) == 127 for character in value
-        ):
-            raise ValueError("checker retry reason is invalid")
-        return value
+    reason: CheckerRetryReason
 
 
 class CheckerRetrySource(CheckerValue):
@@ -97,15 +96,8 @@ class CheckerRetryPreparation(CheckerValue):
 
     actor_profile_id: ResourceId
     request_key: ResourceId
-    reason: str = Field(min_length=1, max_length=500)
+    reason: CheckerRetryReason
     source: CheckerRetrySource
-
-    @field_validator("reason")
-    @classmethod
-    def nonblank_reason(cls, value: str) -> str:
-        if not value.strip() or any(ord(character) < 32 or ord(character) == 127 for character in value):
-            raise ValueError("checker retry reason is invalid")
-        return value
 
 
 class CheckerRetrySuccessor(CheckerValue):

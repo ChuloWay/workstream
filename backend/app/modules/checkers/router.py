@@ -3,6 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query
+from app.api.deps.api_controls import enforce_authorization_read_rate_limit
 from app.api.deps.authorization import enforce_human_authorization_read
 from app.api.deps.checker_recovery import (
     CheckerRetryCommands, CheckerRetryReads,
@@ -34,6 +35,7 @@ CHECKER_RETRY_KEY_PARAMETER = {
 @router.get(
     "/operations/projects/{project_id}/checker-retry-sources",
     response_model=CheckerRetrySourcePage,
+    dependencies=[Depends(enforce_authorization_read_rate_limit)],
     openapi_extra={
         "x-workstream-action-id": "operations.checker_retry_source.list",
     },

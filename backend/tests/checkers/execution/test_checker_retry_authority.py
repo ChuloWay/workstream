@@ -4,7 +4,8 @@ import asyncio
 from uuid import UUID
 
 import pytest
-from sqlalchemy import func, select, text
+from sqlalchemy import event, func, select, text
+from sqlalchemy.engine import Engine
 
 from app.adapters.audit import task_transition_audit
 from app.adapters.checkers import checker_retry_service
@@ -28,14 +29,314 @@ from app.modules.authorization.schemas import (
 )
 from app.modules.authorization.task_authorization import PreparedTaskAuthorization
 from app.modules.checkers.api.execution import CheckerExecutionUnavailable
+from app.modules.audit.schemas import LifecycleAuditEventType
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import AuditEvent, TaskCommandReceipt
 from app.modules.tasks.api import TaskAuthorityDenied
 from app.modules.tasks.repository import TaskRepository
 from auth_concurrency_support import wait_for_named_database_lock
-from tests.checkers.execution.test_checker_retry import _command, _failed_source, _operator_for
+from tests.authentication.fixtures import auth_database_env as auth_database_env
+from tests.authorization.admin_access.fixtures import admin_access as admin_access
+from tests.authorization.admin_access.support import create_project
+from tests.checkers.execution.test_checker_retry import (
+    _command,
+    _failed_source,
+    _operator_for,
+    _recovery_paths,
+)
 from tests.test_artifact_admission import _context
+
+
+async def _assert_project_manager_concealed(admin_access, h, discovery_path, retry_path):
+    project_grant = await admin_access.signed.grant(
+        admin_access.admin,
+        admin_access.target,
+        role="project_manager",
+        project_id=h.request.project_id,
+    )
+    denied_statements = []
+
+    def capture_denied(_conn, _cursor, statement, _parameters, _context, _many):
+        denied_statements.append(statement)
+
+    event.listen(Engine, "before_cursor_execute", capture_denied)
+    try:
+        denied = await admin_access.signed.client.get(
+            discovery_path, headers=admin_access.target.headers,
+        )
+    finally:
+        event.remove(Engine, "before_cursor_execute", capture_denied)
+    assert denied.status_code == 404, denied.text
+    assert not any("checker_runs" in statement.lower() for statement in denied_statements)
+    denied_retry = await admin_access.signed.client.post(
+        retry_path,
+        headers=admin_access.target.headers | {"Idempotency-Key": str(new_record_id())},
+        json={"reason": "Restore verified checker infrastructure"},
+    )
+    assert denied_retry.status_code == 404, denied_retry.text
+    async with h.factory() as session:
+        assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+        assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+    return project_grant
+
+
+async def _operator_discovery(admin_access, h, discovery_path):
+    system_grant = await admin_access.signed.grant(
+        admin_access.admin, admin_access.target,
+    )
+    selected_columns = []
+
+    def capture_projection(_conn, _cursor, _statement, _parameters, context, _many):
+        compiled = getattr(context, "compiled", None)
+        selected = getattr(getattr(compiled, "statement", None), "selected_columns", ())
+        if selected is not None:
+            selected_columns.extend(selected)
+
+    event.listen(Engine, "before_cursor_execute", capture_projection)
+    try:
+        page = await admin_access.signed.client.get(
+            discovery_path, headers=admin_access.target.headers,
+        )
+    finally:
+        event.remove(Engine, "before_cursor_execute", capture_projection)
+    assert page.status_code == 200, page.text
+    body = page.json()
+    assert set(body) == {"project_id", "items", "next_cursor"}
+    assert body["project_id"] == str(h.request.project_id)
+    assert body["next_cursor"] is None and len(body["items"]) == 1
+    item = body["items"][0]
+    assert set(item) == {
+        "source", "recovery_state", "created_at", "completed_at",
+        "retry_receipt_id", "successor",
+    }
+    assert item["recovery_state"] == "eligible"
+    assert item["retry_receipt_id"] is None and item["successor"] is None
+    assert item["source"] == {
+        "project_id": str(h.request.project_id),
+        "task_id": str(h.request.task_id),
+        "submission_id": str(h.request.submission_id),
+        "submission_version": h.request.submission_version,
+        "source_run_id": str(h.created.evaluation_attempt_id),
+        "source_request_id": str(h.request.evaluation_request_id),
+        "source_request_digest": h.request.request_sha256,
+        "source_result_id": str(h.created.evaluation_result_id),
+        "source_result_digest": item["source"]["source_result_digest"],
+        "source_finalize_evidence_id": item["source"]["source_finalize_evidence_id"],
+        "source_generation": 1,
+        "failure_code": "material_unavailable",
+    }
+    assert all(
+        private not in page.text
+        for private in (
+            "request_json", "result_json", "material_custody", "package_uri",
+            "selected_post_submit_policy_body",
+        )
+    )
+    checker_columns = {
+        column.name
+        for column in selected_columns
+        if getattr(getattr(column, "table", None), "name", None)
+        in {"checker_runs", "checker_retry_receipts"}
+    }
+    assert checker_columns
+    assert not checker_columns & {
+        "request_json", "result_json", "material_custody",
+        "selected_post_submit_policy_body", "resource_json", "resource_digest",
+        "authorization_decision_id", "identity_link_id", "actor_profile_id",
+    }
+    async with h.factory() as session:
+        read_allows = list(await session.scalars(select(AuditEvent).where(
+            AuditEvent.actor_id == str(admin_access.target.id),
+            AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST.value,
+        ).order_by(AuditEvent.id)))
+        read_allow = [item for item in read_allows if item.after_facts.get("allowed")][-1]
+        assert read_allow.matched_grant_id == system_grant
+        assert read_allow.permission_id == "operations.status.read"
+        assert read_allow.project_id == str(h.request.project_id)
+        assert read_allow.resource_type == "checker_retry_source_collection"
+        assert read_allow.resource_id == str(h.request.project_id)
+    return system_grant, item
+
+
+async def _wrong_project_refuses_before_task_lock(admin_access, h):
+    wrong_project = await create_project("Foreign recovery selector")
+    _wrong_discovery, wrong_retry = _recovery_paths(h, project_id=wrong_project)
+    async with h.factory.begin() as blocker:
+        await blocker.execute(
+            text("SELECT id FROM workstream_tasks WHERE id=:task FOR UPDATE"),
+            {"task": str(h.request.task_id)},
+        )
+        wrong = await asyncio.wait_for(
+            admin_access.signed.client.post(
+                wrong_retry,
+                headers=admin_access.target.headers
+                | {"Idempotency-Key": str(new_record_id())},
+                json={"reason": "Restore verified checker infrastructure"},
+            ),
+            timeout=5,
+        )
+    assert wrong.status_code == 404, wrong.text
+    return wrong_retry
+
+
+async def _assert_real_audit_failure_rolls_back(admin_access, h, retry_path):
+    key = new_record_id()
+    headers = admin_access.target.headers | {"Idempotency-Key": str(key)}
+    payload = {"reason": "Restore verified checker infrastructure"}
+    async with h.factory() as session:
+        evidence_before = tuple(await session.scalars(select(AuditEvent.id).where(
+            AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value
+        ).order_by(AuditEvent.id)))
+    async with h.factory.begin() as session:
+        await session.execute(text("""
+            CREATE FUNCTION test_public_checker_retry_audit_failure()
+            RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+              RAISE EXCEPTION 'public checker retry audit insert rejected'
+                USING ERRCODE='23514';
+            END $$
+        """))
+        await session.execute(text("""
+            CREATE TRIGGER test_public_checker_retry_audit_failure
+            BEFORE INSERT ON audit_events FOR EACH ROW
+            WHEN (NEW.event_type='CheckerRetryRequested')
+            EXECUTE FUNCTION test_public_checker_retry_audit_failure()
+        """))
+    failed = await admin_access.signed.client.post(retry_path, headers=headers, json=payload)
+    assert failed.status_code == 503, failed.text
+    async with h.factory() as session:
+        assert await session.scalar(select(func.count()).select_from(CheckerRun)) == 1
+        assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 0
+        assert await session.scalar(select(func.count()).select_from(OutboxEvent)) == 1
+        assert tuple(await session.scalars(select(AuditEvent.id).where(
+            AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value
+        ).order_by(AuditEvent.id))) == evidence_before
+        fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
+        assert fence.current_run_id == str(h.created.evaluation_attempt_id)
+    async with h.factory.begin() as session:
+        await session.execute(text(
+            "DROP TRIGGER test_public_checker_retry_audit_failure ON audit_events"
+        ))
+        await session.execute(text("DROP FUNCTION test_public_checker_retry_audit_failure()"))
+    return headers, payload
+
+
+async def _create_and_replay(admin_access, h, retry_path, headers, payload, item, grant):
+    created = await admin_access.signed.client.post(retry_path, headers=headers, json=payload)
+    assert created.status_code == 201, created.text
+    result = created.json()
+    assert result["source"] == item["source"]
+    assert result["successor"]["generation"] == 2
+    async with h.factory() as session:
+        committed = {
+            "runs": await session.scalar(select(func.count()).select_from(CheckerRun)),
+            "receipts": await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)),
+            "events": await session.scalar(select(func.count()).select_from(OutboxEvent)),
+            "business_audits": await session.scalar(select(func.count()).select_from(
+                AuditEvent
+            ).where(
+                AuditEvent.event_type == LifecycleAuditEventType.CHECKER_RETRY_REQUESTED.value
+            )),
+        }
+    replay = await admin_access.signed.client.post(retry_path, headers=headers, json=payload)
+    assert replay.status_code == 201, replay.text
+    assert replay.json() == result
+    async with h.factory() as session:
+        assert committed == {
+            "runs": await session.scalar(select(func.count()).select_from(CheckerRun)),
+            "receipts": await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)),
+            "events": await session.scalar(select(func.count()).select_from(OutboxEvent)),
+            "business_audits": await session.scalar(select(func.count()).select_from(
+                AuditEvent
+            ).where(
+                AuditEvent.event_type == LifecycleAuditEventType.CHECKER_RETRY_REQUESTED.value
+            )),
+        }
+        allows = list(await session.scalars(select(AuditEvent).where(
+            AuditEvent.actor_id == str(admin_access.target.id),
+            AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value,
+        ).order_by(AuditEvent.id)))
+        allows = [entry for entry in allows if entry.after_facts.get("allowed")]
+        assert len(allows) == 2
+        assert all(
+            entry.matched_grant_id == grant
+            and entry.permission_id == "operations.checker.retry"
+            and entry.project_id == str(h.request.project_id)
+            and entry.resource_type == "checker_run"
+            and entry.resource_id == str(h.created.evaluation_attempt_id)
+            for entry in allows
+        )
+    return result
+
+
+async def _assert_conflict_retried_and_revoked(
+    admin_access, h, discovery_path, retry_path, wrong_retry, headers, payload, result, grant,
+):
+    conflict = await admin_access.signed.client.post(
+        retry_path, headers=headers, json={"reason": "A different recovery assertion"},
+    )
+    assert conflict.status_code == 409, conflict.text
+    wrong_replay = await admin_access.signed.client.post(
+        wrong_retry, headers=headers, json=payload,
+    )
+    assert wrong_replay.status_code == 404, wrong_replay.text
+    page = await admin_access.signed.client.get(
+        discovery_path, headers=admin_access.target.headers,
+    )
+    assert page.status_code == 200, page.text
+    retried = page.json()["items"][0]
+    assert retried["recovery_state"] == "retried"
+    assert retried["retry_receipt_id"] == result["receipt_id"]
+    assert retried["successor"] == result["successor"]
+    revoked = await admin_access.signed.revoke(
+        admin_access.admin, grant, reason="End terminal checker recovery duty",
+    )
+    assert revoked.status_code == 200, revoked.text
+    refused_read = await admin_access.signed.client.get(
+        discovery_path, headers=admin_access.target.headers,
+    )
+    refused_replay = await admin_access.signed.client.post(
+        retry_path, headers=headers, json=payload,
+    )
+    assert refused_read.status_code == refused_replay.status_code == 404
+    async with h.factory() as session:
+        decisions = list(await session.scalars(select(AuditEvent).where(
+            AuditEvent.actor_id == str(admin_access.target.id),
+            AuditEvent.action_id.in_((
+                ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST.value,
+                ActionId.OPERATIONS_CHECKER_RETRY.value,
+            )),
+        )))
+        denials = [entry for entry in decisions if entry.after_facts.get("allowed") is False]
+        assert {
+            ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST.value,
+            ActionId.OPERATIONS_CHECKER_RETRY.value,
+        }.issubset({entry.action_id for entry in denials})
+        assert await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)) == 1
+
+
+async def test_public_operator_discovers_retries_replays_and_observes_revocation(
+    tmp_path, auth_database_env, monkeypatch, admin_access,
+):
+    async with _failed_source(tmp_path, auth_database_env, monkeypatch) as (h, _delivery):
+        discovery_path, retry_path = _recovery_paths(h)
+        project_grant = await _assert_project_manager_concealed(
+            admin_access, h, discovery_path, retry_path,
+        )
+        system_grant, item = await _operator_discovery(admin_access, h, discovery_path)
+        wrong_retry = await _wrong_project_refuses_before_task_lock(admin_access, h)
+        headers, payload = await _assert_real_audit_failure_rolls_back(
+            admin_access, h, retry_path,
+        )
+        result = await _create_and_replay(
+            admin_access, h, retry_path, headers, payload, item, system_grant,
+        )
+        await _assert_conflict_retried_and_revoked(
+            admin_access, h, discovery_path, retry_path, wrong_retry,
+            headers, payload, result, system_grant,
+        )
+        assert project_grant != system_grant
 
 
 async def _named_retry(h, operator, name, *, named=None, backend_pids=None):
