@@ -37,7 +37,7 @@ def _schema_values(prefix: str, schema: ExternalCheckerSchema) -> dict[str, obje
 def _row_entry(row: ExternalCheckerRegistryEntryRecord) -> ExternalCheckerRegistryEntry:
     """Revalidate a stored row through the immutable public registry value."""
     return ExternalCheckerRegistryEntry(
-        registry_entry_id=row.id,
+        registry_entry_id=UUID(str(row.id)),
         registration_operation_id=row.registration_operation_id,
         registered_by_actor_profile_id=UUID(row.registered_by_actor_profile_id),
         authorization_decision_event_id=UUID(row.authorization_decision_event_id),
