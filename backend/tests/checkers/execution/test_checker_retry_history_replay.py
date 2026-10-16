@@ -6,7 +6,7 @@ from sqlalchemy import text
 from app.adapters.checkers import checker_retry_service
 from app.adapters.tasks import evaluation_completion_handler, task_submission_context_port
 from app.core.identifiers import new_record_id
-from app.modules.checkers.api.execution import CheckerExecutionUnavailable
+from app.modules.checkers.api.execution import CheckerRetrySourceUnavailable
 from app.modules.outbox.api import HandlerOutcome
 from app.modules.tasks.api import TaskSubmissionContextRequest
 from tests.authorization.post_submit_routing.support import provision_router
@@ -148,7 +148,10 @@ async def test_retry_replays_after_real_later_submission_without_reopening_old_s
             patch.setattr(LocalStorageAdapter, "open", forbidden_open)
             # A new key must pass current TASK ownership; the later Submission
             # makes the old source fail the shared latest-Submission guard.
-            with pytest.raises(CheckerExecutionUnavailable, match="checker_reservation_scope_unavailable"):
+            with pytest.raises(
+                CheckerRetrySourceUnavailable,
+                match="checker_retry_source_unavailable",
+            ):
                 async with h.factory.begin() as session:
                     await checker_retry_service(session, other_operator).retry(
                         command.model_copy(update={"request_key": other_key})

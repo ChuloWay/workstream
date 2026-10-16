@@ -1,6 +1,7 @@
 """HTTP transaction roots for exact Operator checker recovery."""
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
 from uuid import UUID
 
@@ -105,11 +106,12 @@ class CheckerRetryReads:
         return result
 
 
-async def get_checker_retry_commands(
+@asynccontextmanager
+async def _checker_retry_commands(
     request: Request,
-    key: Annotated[UUID, Depends(require_checker_retry_key)],
-    resolved: Annotated[ResolvedActor, Depends(get_authorization_actor)],
-    session: Annotated[AsyncSession, Depends(get_db_session)],
+    key: UUID,
+    resolved: ResolvedActor,
+    session: AsyncSession,
 ) -> AsyncIterator[CheckerRetryCommands]:
     """Own mutation commit, canonical denial evidence and fail-closed rollback."""
     context = _authorization_context(resolved, key, key)
@@ -154,6 +156,17 @@ async def get_checker_retry_commands(
     finally:
         if session.in_transaction():
             await session.rollback()
+
+
+async def get_checker_retry_commands(
+    request: Request,
+    key: Annotated[UUID, Depends(require_checker_retry_key)],
+    resolved: Annotated[ResolvedActor, Depends(get_authorization_actor)],
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> AsyncIterator[CheckerRetryCommands]:
+    """Forward endpoint failures through the mutation transaction owner."""
+    async with _checker_retry_commands(request, key, resolved, session) as commands:
+        yield commands
 
 
 async def get_checker_retry_reads(
