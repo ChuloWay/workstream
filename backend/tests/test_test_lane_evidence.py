@@ -30,15 +30,18 @@ LANES = (
     "project_lifecycle_c",
     "project_lifecycle_d",
     "project_lifecycle_e",
+    "project_lifecycle_f",
+    "project_lifecycle_g",
     "task_lifecycle_a",
     "task_lifecycle_b",
     "task_lifecycle_c",
     "task_lifecycle_d",
+    "task_lifecycle_e",
 )
 
 
 def test_validator_requires_exact_expanded_lane_and_shared_s3_custody() -> None:
-    assert validator.LANE_COUNT == len(LANES) == 13
+    assert validator.LANE_COUNT == len(LANES) == 16
     assert validator.SHARED_S3_LANES == {
         "shared_foundations_a",
         "shared_foundations_b",

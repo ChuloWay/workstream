@@ -15,12 +15,15 @@ PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_c",
     "project_lifecycle_d",
     "project_lifecycle_e",
+    "project_lifecycle_f",
+    "project_lifecycle_g",
 )
 PARTITIONED_TASK_LANES = (
     "task_lifecycle_a",
     "task_lifecycle_b",
     "task_lifecycle_c",
     "task_lifecycle_d",
+    "task_lifecycle_e",
 )
 
 STATIC_FOUNDATION_MODULES = (
@@ -598,11 +601,12 @@ PROJECT_PARTITIONED_MODULES = (
 # exact lane ownership so their waits and large fixtures do not collide.
 PROJECT_MODULE_LANE_OVERRIDES = {
     "tests/test_projects.py": (
-        # Retained durations put this broad module on C/B/D, relieving the
-        # repeated E timeout without adding work to the already busy A lane.
+        # Seven-lane placement from hosted main durations (34501cd64): every
+        # project lane lands between 621 and 737 seconds of measured test time.
         "project_lifecycle_c",
         "project_lifecycle_b",
-        "project_lifecycle_d",
+        "project_lifecycle_g",
+        "project_lifecycle_f",
     ),
     "tests/tasks/test_task_batch_transitions.py": (
         # Tuple order spreads the measured 500/200-row cases away from E.
@@ -612,21 +616,21 @@ PROJECT_MODULE_LANE_OVERRIDES = {
         "project_lifecycle_b",
         "project_lifecycle_c",
     ),
-    "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_b",),
+    "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_f",),
     "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
-        # The measured historical cases land on A/D after the deadline-wait repair.
+        # The measured historical cases move from D to the new G lane.
         "project_lifecycle_a",
         "project_lifecycle_c",
-        "project_lifecycle_d",
+        "project_lifecycle_g",
     ),
     "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
-        # Current waits hash one each to C/D/E, leaving inflated A and busy B clear.
+        # The waits move from D to the new F lane, leaving busy B clear.
         "project_lifecycle_a",
         "project_lifecycle_c",
-        "project_lifecycle_d",
         "project_lifecycle_e",
+        "project_lifecycle_f",
     ),
-    "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_d",),
+    "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_g",),
     "tests/tasks/submission_dispatch/test_revision_expiry.py": (
         # Five residues split the prior B collision while preserving project custody.
         "project_lifecycle_a",
