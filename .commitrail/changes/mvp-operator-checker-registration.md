@@ -74,6 +74,10 @@ identity and system Operator grant to perform startup registration.
   mutation classification without changing its action set.
 - `backend/tests/checkers/external/{support.py,test_contracts.py,test_registry.py,test_postgresql.py,test_public_api.py,test_migration.py}`:
   focused service and signed public-API/PostgreSQL proof.
+- `backend/tests/conftest.py`: refresh the exact canonical public-schema
+  fingerprint measured from a fresh real PostgreSQL graph through revision
+  `0050_operational_read_audit`; the graph delta is limited to the existing
+  audit constraint's two allowed operational-read pairs.
 - `backend/tests/authorization/catalogue_fixtures.py`,
   `backend/tests/authorization/test_catalogue.py`, and
   `backend/tests/authorization/setup_finalization/test_catalogue.py`, plus
