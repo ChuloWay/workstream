@@ -44,6 +44,13 @@ for the head, or it does not complete within the job timeout, the mirror fails.
 A base retarget sets `github.event.changes.base`, so it keeps the shared group
 and full proof.
 
+The mirrored run must be bound to this PR number and base branch through the
+run's `pull_requests` record, and only the check name this PR currently needs
+(`test`, or `draft-test` while a draft) is accepted. Fork PR runs carry no
+`pull_requests` binding, so fork PRs keep the previous rerun-on-edit behavior
+rather than accept an unbound proof. Branch and job names reach `jq` as typed
+arguments, not filter text.
+
 ## Acceptance criteria
 
 - [x] Workflow gate test asserts the edit group, `actions: read`, the `scope`
@@ -68,7 +75,13 @@ and full proof.
 
 ## Review findings
 
-None yet.
+An automated security review of the first version found that matching only the
+head SHA could mirror a run from another PR or base, or accept `draft-test` for
+a ready PR. Both are fixed by the PR/base binding and exact check-name rule.
+
+The first hosted probe on #593 edited the description during proof: the
+running proof was not cancelled, and both edit runs skipped every proof job
+while their `test` jobs waited to mirror it.
 
 ## Reconciliation
 

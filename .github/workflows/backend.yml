@@ -7,11 +7,11 @@ on:
     branches:
       - main
 
-# A title/description-only edit gets its own group so it never cancels proof
-# that is already running for the same head and base. Base retargets, pushes
-# and state changes keep the shared group and replace older runs.
+# A same-repository title/description-only edit gets its own group so it never
+# cancels proof already running for this PR. Base retargets, pushes, state
+# changes and fork PRs (whose runs carry no PR binding) keep the shared group.
 concurrency:
-  group: backend-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'edited' && !github.event.changes.base && format('-description-edit-{0}', github.run_id) || '' }}
+  group: backend-${{ github.event.pull_request.number || github.ref }}${{ github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository && format('-description-edit-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
   scope:
     # Description-only edits change no proof inputs; `test` mirrors the
     # existing run for this head instead of repeating it.
-    if: ${{ github.event.action != 'edited' || github.event.changes.base }}
+    if: ${{ !(github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -816,21 +816,27 @@ jobs:
     timeout-minutes: 75
     steps:
       - name: Mirror the existing proof for a description-only edit
-        if: ${{ github.event.action == 'edited' && !github.event.changes.base }}
+        if: ${{ github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EXPECTED_JOB: ${{ github.event.pull_request.draft && 'draft-test' || 'test' }}
           RUN_ID: ${{ github.run_id }}
         shell: bash
         run: |
           set -euo pipefail
-          # The newest other Backend run for this exact head whose scope job
-          # executed is the proof. Wait for it, then report its test result.
+          # The proof is the newest other Backend run for this exact head, this
+          # PR and this base branch whose scope job executed. Wait for it, then
+          # report its result for the check name this PR currently requires.
           for _ in $(seq 1 140); do
             proof=""
             for run in $(gh api "repos/${REPOSITORY}/actions/workflows/backend.yml/runs?head_sha=${HEAD_SHA}&event=pull_request&per_page=50" \
-                --jq ".workflow_runs | sort_by(.created_at) | reverse | .[] | select(.id != ${RUN_ID}) | .id"); do
+                | jq -r --argjson self "${RUN_ID}" --argjson pr "${PR_NUMBER}" --arg base "${BASE_REF}" \
+                  '.workflow_runs | sort_by(.created_at) | reverse | .[] | select(.id != $self)
+                   | select(any(.pull_requests[]?; .number == $pr and .base.ref == $base)) | .id'); do
               scope=$(gh api "repos/${REPOSITORY}/actions/runs/${run}/jobs?per_page=100" \
                 --jq '[.jobs[] | select(.name == "scope")][0].conclusion // "pending"')
               if [[ "${scope}" != skipped ]]; then
@@ -845,8 +851,8 @@ jobs:
             status=$(gh api "repos/${REPOSITORY}/actions/runs/${proof}" --jq .status)
             if [[ "${status}" == completed ]]; then
               conclusion=$(gh api "repos/${REPOSITORY}/actions/runs/${proof}/jobs?per_page=100" \
-                --jq '[.jobs[] | select(.name == "test" or .name == "draft-test")][0].conclusion // "missing"')
-              echo "Mirroring run ${proof}: test ${conclusion}."
+                | jq -r --arg name "${EXPECTED_JOB}" '[.jobs[] | select(.name == $name)][0].conclusion // "missing"')
+              echo "Mirroring run ${proof}: ${EXPECTED_JOB} ${conclusion}."
               test "${conclusion}" = success
               exit 0
             fi
@@ -856,7 +862,7 @@ jobs:
           exit 1
 
       - name: Require the selected draft scope or complete merge proof
-        if: ${{ github.event.action != 'edited' || github.event.changes.base }}
+        if: ${{ !(github.event.action == 'edited' && !github.event.changes.base && github.event.pull_request.head.repo.full_name == github.repository) }}
         env:
           SCOPE_RESULT: ${{ needs.scope.result }}
           FULL_SUITE: ${{ needs.scope.outputs.full_suite }}
