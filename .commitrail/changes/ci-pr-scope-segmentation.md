@@ -173,12 +173,13 @@ speedup has been established. Fresh hosted full-suite proof is required after
 these final documentation corrections; earlier green runs do not qualify it.
 
 Final CI review identified a remaining floating Backend install in MCP's real-API
-job. It now uses the same frozen Backend lock for OpenAPI and lifecycle parity.
-An extracted-workflow regression checks both exact suite invocations and error
-propagation. All 29 focused workflow tests passed; removing frozen mode from
-either the Backend install or child pytest invocation makes the new regression
-fail. Ruff, Markdown links and Commitrail checks passed. This repair requires
-a fresh complete hosted run.
+job. The first repair used the Backend lock for both OpenAPI and lifecycle pytest;
+its 29 workflow tests passed but did not prove SDK compatibility. Hosted execution
+exposed that error. The current workflow instead binds Backend installation and
+OpenAPI to the Backend lock, and child pytest to the adapter lock. The extracted
+workflow regression checks both exact suite invocations, project selection and
+error propagation. Frozen-mode mutations remain rejected. Ruff, Markdown links
+and Commitrail checks passed; fresh complete hosted proof remains required.
 
 Run `38854829773` passed all thirteen Backend lanes and CLI, but exposed that
 executing MCP integration pytest in the Backend environment loads MCP 1.29 rather
