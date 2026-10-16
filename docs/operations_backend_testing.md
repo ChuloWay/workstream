@@ -112,7 +112,7 @@ If provisioning fails, confirm the local PostgreSQL provisioning credential can 
 ## Hosted component selection and complete backend proof
 
 The required GitHub check remains `Backend / test`. Every push to `main` and
-every cross-cutting or uncertain PR runs complete proof: thirteen matrix jobs each own a
+every cross-cutting or uncertain PR runs complete proof: sixteen matrix jobs each own a
 digest-pinned PostgreSQL service container, a pinned-source MinIO image, and
 exactly one dependency lane. A step-level curl health loop admits MinIO before
 collection. This is semantic fan-out, not arbitrary test-count sharding: lane
@@ -141,8 +141,8 @@ Base-branch edits also start a fresh run bound to the new base; ordinary PR
 title/body edits rerun as the conservative cost of subscribing to `edited`.
 
 The explicit inventory lives in `backend/scripts/test_lane_catalogue.py`.
-Authorization preflight runs alongside all thirteen lanes when backend proof is
-required. The internal `full-suite` aggregate validates all thirteen lanes and
+Authorization preflight runs alongside all sixteen lanes when backend proof is
+required. The internal `full-suite` aggregate validates all sixteen lanes and
 requires preflight and supporting contracts before validating evidence and coverage;
 failed, cancelled or skipped required prerequisites remain blocking. Both final
 check names require every selected component to succeed and unselected
@@ -154,7 +154,7 @@ Assertion-map validation analyzes each exact historical revision/module once per
 invocation, then checks every referenced node and assertion against that analysis.
 It does not cache current source or reuse analysis across validation calls.
 
-The twelve ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
+The fifteen ordinary lanes use private, 2 GiB RAM-backed PostgreSQL data directories
 to reduce ephemeral reset I/O. A runtime guard verifies the mount, capacity,
 data directory and enabled `fsync`, `full_page_writes` and `synchronous_commit`
 before tests. Real SQL, transaction, lock, isolation, and full hosted behavior
@@ -249,7 +249,7 @@ SHA, lane and numeric run attempt, containing its manifest, lane evidence,
 isolation record, and coverage data. On complete runs, the `full-suite` job
 runs with a fail-closed dependency guard, downloads available diagnostic
 bundles, then rejects any failed, cancelled, or skipped matrix result before
-fan-in. Fan-in selects the highest numeric attempt available for each of the thirteen declared
+fan-in. Fan-in selects the highest numeric attempt available for each of the sixteen declared
 lanes from separately downloaded artifact directories. It rejects malformed,
 foreign or future attempt names and never falls back from an incomplete or
 corrupt latest bundle to an older passing one. For the selected bundles it
@@ -332,7 +332,7 @@ A source push or base-branch change creates a different current tree and
 requires fresh CI; prior same-head retry evidence cannot be carried forward.
 The content-addressed MinIO cache can remove the measured 145-second image
 rebuild when its exact Docker context, Backend workflow and runner platform are
-unchanged. It does not solve observed 17-minute queue waits or 20-minute lanes
+unchanged. It does not solve observed 17-minute queue waits or near-deadline lanes
 and does not promise a five-minute Backend completion time.
 
 ## Retired changed-scope behavior mutation

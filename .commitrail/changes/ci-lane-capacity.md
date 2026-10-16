@@ -65,7 +65,7 @@ time is close to its combined budget.
 - [x] 16 lanes cover the recursive test inventory exactly once.
 - [x] Fan-in requires 16 lane bundles and 16 coverage files.
 - [x] Lane deadline is 1500 seconds.
-- [ ] A hosted Backend run passes every lane within the deadline.
+- [x] A hosted Backend run passes every lane within the deadline.
 
 ## Risk and review routing
 
@@ -83,7 +83,11 @@ time is close to its combined budget.
 
 ## Review findings
 
-None yet.
+The hosted run at `e33eabd3` passed all 16 lanes. The project lanes took
+557–847 seconds, the task lanes 639–762 seconds, the shared lanes 584–688
+seconds, and `schema_contracts` took 929 seconds. Codex found lane-count wording
+that still said thirteen, twelve, five project or four task lanes in the testing
+guide and the roadmap ledger; it is now reconciled.
 
 ## Reconciliation
 
