@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from fastapi import Depends  # type: ignore[import-not-found]
+from types import SimpleNamespace
+from fastapi import APIRouter, Depends  # type: ignore[import-not-found]
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 import pytest
@@ -882,12 +883,50 @@ async def test_rate_dependency_unavailability_is_private_503(
     assert subject not in response.text
 
 
+RATE_DEPENDENCIES = {
+    enforce_first_access_rate_limit,
+    enforce_admin_mutation_rate_limit,
+    enforce_authorization_read_rate_limit,
+}
+
+
+def _dependency_calls(dependant) -> set:
+    calls = {dependant.call}
+    for dependency in dependant.dependencies:
+        calls.update(_dependency_calls(dependency))
+    return calls
+
+
+def _production_routes(routes):
+    visited: set[int] = set()
+
+    def collect(candidates):
+        for route in candidates:
+            if hasattr(route, "dependant"):
+                yield route
+            original_router = getattr(route, "original_router", None)
+            if original_router is None or id(original_router) in visited:
+                continue
+            visited.add(id(original_router))
+            yield from collect(original_router.routes)
+
+    yield from collect(routes)
+
+
+def _rate_dependency_bindings(routes) -> dict[tuple[str, str], set]:
+    bindings: dict[tuple[str, str], set] = {}
+    for route in _production_routes(routes):
+        attached = RATE_DEPENDENCIES.intersection(
+            _dependency_calls(route.dependant)
+        )
+        if not attached:
+            continue
+        for method in route.methods:
+            bindings.setdefault((method, route.path), set()).update(attached)
+    return bindings
+
+
 def test_checker_operation_rate_dependencies_match_exact_route_allowlist() -> None:
-    rate_dependencies = {
-        enforce_first_access_rate_limit,
-        enforce_admin_mutation_rate_limit,
-        enforce_authorization_read_rate_limit,
-    }
     expected = {
         ("POST", "/operations/external-checker-registry"): {
             enforce_admin_mutation_rate_limit
@@ -904,41 +943,23 @@ def test_checker_operation_rate_dependencies_match_exact_route_allowlist() -> No
         ): {enforce_admin_mutation_rate_limit},
     }
 
-    def dependency_calls(dependant) -> set:
-        calls = {dependant.call}
-        for dependency in dependant.dependencies:
-            calls.update(dependency_calls(dependency))
-        return calls
+    assert _rate_dependency_bindings(create_app().routes) == expected
 
-    def production_routes(routes):
-        visited: set[int] = set()
 
-        def collect(candidates):
-            for route in candidates:
-                if hasattr(route, "dependant"):
-                    yield route
-                original_router = getattr(route, "original_router", None)
-                if original_router is None or id(original_router) in visited:
-                    continue
-                visited.add(id(original_router))
-                yield from collect(original_router.routes)
+def test_rate_dependency_inventory_discovers_unexpected_nested_route() -> None:
+    nested_router = APIRouter()
 
-        yield from collect(routes)
-
-    app = create_app()
-    assert all(
-        rate_dependencies.isdisjoint(dependency_calls(route.dependant))
-        for route in app.routes
-        if hasattr(route, "dependant")
+    @nested_router.get(
+        "/unexpected-nested-rate-control",
+        dependencies=[Depends(enforce_first_access_rate_limit)],
     )
+    async def unexpected_nested_rate_control() -> None:
+        return None
 
-    actual = {}
-    expected_paths = {path for _method, path in expected}
-    for route in production_routes(app.routes):
-        if route.path not in expected_paths:
-            continue
-        calls = dependency_calls(route.dependant)
-        attached = rate_dependencies.intersection(calls)
-        for method in route.methods:
-            actual[method, route.path] = attached
-    assert actual == expected
+    wrapper = SimpleNamespace(original_router=nested_router)
+
+    assert _rate_dependency_bindings([wrapper]) == {
+        ("GET", "/unexpected-nested-rate-control"): {
+            enforce_first_access_rate_limit
+        }
+    }
