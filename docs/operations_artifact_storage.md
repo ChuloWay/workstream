@@ -49,6 +49,28 @@ readiness run compares them with `GetRole`, rejects shared workload subjects,
 and rejects any trust grant that lets one configured workload role assume
 another.
 
+The readiness and negative roles each accept exactly one closed trust shape:
+one `Allow` statement with one IAM OIDC provider, the exact
+`sts:AssumeRoleWithWebIdentity` action, and `StringEquals` claims containing
+only that provider issuer's exact `sub` plus audience `sts.amazonaws.com`.
+The runtime role may use the same shape, or the Linux VM shape consisting of
+one condition-free `Allow` for service principal `ec2.amazonaws.com` and action
+`sts:AssumeRole`. In the VM shape, the trusted environment provisioner owns the
+instance-profile attachment; untrusted runtime workloads cannot select or
+attach another role. Wildcard subjects, negative or pattern operators,
+missing or foreign audience claims, AWS principals, role chaining, ECS or
+other service principals, additional statements and additional condition keys
+fail activation. A deployment using a different trust shape must change its
+infrastructure to one of these reviewed shapes or land a separately reviewed
+proof extension; the configured digest alone does not make unsupported IAM
+semantics safe.
+
+PostgreSQL stores the three pairwise-distinct role ARNs and reviewed trust
+digests and rejects a probe or activation tuple that collapses them. The live
+readiness executor proves the corresponding trust documents and disjoint exact
+OIDC subjects. The database binds those observed digests; it does not
+independently attest external IAM truth after the observation.
+
 Do not supply bootstrap credentials or run all modes under one identity. The
 readiness identity may inspect only the exact three role attachments/inline
 policies and the exact two required managed-policy documents. A failed,

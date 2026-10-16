@@ -56,6 +56,19 @@ def _trust_policy(subject: str, *, audience: str = "sts.amazonaws.com") -> dict[
     }
 
 
+def _ec2_runtime_trust_policy() -> dict[str, Any]:
+    return {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"Service": "ec2.amazonaws.com"},
+                "Action": "sts:AssumeRole",
+            }
+        ],
+    }
+
+
 def _trust_policies() -> dict[str, dict[str, Any]]:
     return {
         _RUNTIME_ROLE: _trust_policy("system:serviceaccount:workstream:runtime"),
@@ -504,19 +517,23 @@ async def test_validate_iam_accepts_only_exact_roles_trusts_attachments_and_poli
 
 
 @pytest.mark.asyncio
+async def test_validate_iam_accepts_closed_ec2_trust_only_for_runtime_role(
+    tmp_path: Path,
+) -> None:
+    trusts = _trust_policies()
+    trusts[_RUNTIME_ROLE] = _ec2_runtime_trust_policy()
+    proof = AwsArtifactLiveProof(
+        _settings(tmp_path, trust_policies=trusts),
+        _Session(iam=_IamClient(trusts)),
+    )
+
+    await proof._validate_iam()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("mutate", "message"),
     [
-        (
-            lambda trusts: trusts.__setitem__(
-                _READINESS_ROLE,
-                _trust_policy(
-                    "system:serviceaccount:workstream:runtime",
-                    audience="workstream-readiness",
-                ),
-            ),
-            "subjects are not distinct",
-        ),
         (
             lambda trusts: trusts[_READINESS_ROLE]["Statement"][0].__setitem__(
                 "Principal",
@@ -538,10 +555,14 @@ async def test_validate_iam_accepts_only_exact_roles_trusts_attachments_and_poli
                     ],
                 },
             ),
-            "can assume another workload role",
+            "principal is not closed",
+        ),
+        (
+            lambda trusts: trusts.__setitem__(_READINESS_ROLE, _ec2_runtime_trust_policy()),
+            "supported only for the runtime role",
         ),
     ],
-    ids=["same-oidc-subject", "unexpected-principal-shape", "cross-assume"],
+    ids=["unexpected-principal-shape", "cross-assume", "service-readiness-role"],
 )
 async def test_validate_iam_rejects_unsafe_trust_even_when_each_digest_matches(
     tmp_path: Path,
@@ -619,6 +640,19 @@ def test_trust_policy_subjects_distinguishes_role_arns_from_workload_subjects() 
     )
 
 
+def test_trust_policy_subjects_accepts_only_the_closed_ec2_runtime_shape() -> None:
+    roles = frozenset({_RUNTIME_ROLE, _READINESS_ROLE, _NEGATIVE_ROLE})
+    assert _trust_policy_subjects(
+        _ec2_runtime_trust_policy(),
+        workload_roles=roles,
+    ) == frozenset({("service", "ec2.amazonaws.com")})
+
+    unsafe = _ec2_runtime_trust_policy()
+    unsafe["Statement"][0]["Condition"] = {"StringEquals": {"aws:SourceAccount": _ACCOUNT}}
+    with pytest.raises(ArtifactConfigurationError, match="service trust is not supported"):
+        _trust_policy_subjects(unsafe, workload_roles=roles)
+
+
 def test_trust_policy_subjects_rejects_wildcard_oidc_subjects() -> None:
     roles = frozenset({_RUNTIME_ROLE, _READINESS_ROLE, _NEGATIVE_ROLE})
 
@@ -626,6 +660,93 @@ def test_trust_policy_subjects_rejects_wildcard_oidc_subjects() -> None:
         _trust_policy_subjects(
             _trust_policy("system:serviceaccount:workstream:*"),
             workload_roles=roles,
+        )
+
+
+def test_trust_policy_subjects_rejects_foreign_oidc_provider_account() -> None:
+    policy = _trust_policy("system:serviceaccount:workstream:runtime")
+    policy["Statement"][0]["Principal"] = {
+        "Federated": _OIDC_PROVIDER.replace(_ACCOUNT, "999999999999")
+    }
+
+    with pytest.raises(ArtifactConfigurationError, match="provider is invalid"):
+        _trust_policy_subjects(
+            policy,
+            workload_roles=frozenset({_RUNTIME_ROLE, _READINESS_ROLE, _NEGATIVE_ROLE}),
+        )
+
+
+@pytest.mark.parametrize(
+    ("condition", "message"),
+    [
+        (
+            {
+                "StringNotEquals": {
+                    "identity.example.test:aud": "sts.amazonaws.com",
+                    "identity.example.test:sub": "system:serviceaccount:workstream:runtime",
+                }
+            },
+            "condition is not closed",
+        ),
+        (
+            {
+                "StringEquals": {
+                    "identity.example.test:sub": "system:serviceaccount:workstream:runtime",
+                }
+            },
+            "claims are not exact",
+        ),
+        (
+            {
+                "StringEquals": {
+                    "identity.example.test:aud": "foreign-audience",
+                    "identity.example.test:sub": "system:serviceaccount:workstream:runtime",
+                }
+            },
+            "audience is not exact",
+        ),
+        (
+            {
+                "StringEquals": {
+                    "foreign.example.test:aud": "sts.amazonaws.com",
+                    "foreign.example.test:sub": "system:serviceaccount:workstream:runtime",
+                }
+            },
+            "claims are not exact",
+        ),
+    ],
+    ids=["negative-operator", "missing-audience", "foreign-audience", "foreign-issuer"],
+)
+def test_trust_policy_subjects_rejects_non_exact_oidc_conditions(
+    condition: dict[str, object],
+    message: str,
+) -> None:
+    policy = _trust_policy("system:serviceaccount:workstream:runtime")
+    policy["Statement"][0]["Condition"] = condition
+
+    with pytest.raises(ArtifactConfigurationError, match=message):
+        _trust_policy_subjects(
+            policy,
+            workload_roles=frozenset({_RUNTIME_ROLE, _READINESS_ROLE, _NEGATIVE_ROLE}),
+        )
+
+
+@pytest.mark.parametrize(
+    "principal",
+    [
+        "*",
+        {"AWS": f"arn:aws:iam::{_ACCOUNT}:role/deployment-runner"},
+    ],
+    ids=["wildcard", "role-chaining"],
+)
+def test_trust_policy_subjects_rejects_unsupported_principals(principal: object) -> None:
+    policy = _trust_policy("system:serviceaccount:workstream:runtime")
+    policy["Statement"][0]["Principal"] = principal
+
+    with pytest.raises(ArtifactConfigurationError, match="principal is not closed"):
+        _trust_policy_subjects(
+            policy,
+            workload_roles=frozenset({_RUNTIME_ROLE, _READINESS_ROLE, _NEGATIVE_ROLE}),
         )
 
 

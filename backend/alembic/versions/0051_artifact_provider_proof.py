@@ -3,8 +3,8 @@
 from alembic import op
 from scripts.schema_baseline_sql import split_sql_statements
 
-revision = "0050_artifact_provider_proof"
-down_revision = "0049_attempt_outcome_findings"
+revision = "0051_artifact_provider_proof"
+down_revision = "0050_operational_read_audit"
 branch_labels = None
 depends_on = None
 
@@ -77,6 +77,14 @@ CREATE TABLE public.artifact_provider_probe_results (
   evidence_sha256 ~ '^sha256:[0-9a-f]{64}$'),
  CONSTRAINT ck_artifact_provider_probe_results_account_shape CHECK (
   aws_account_id ~ '^[0-9]{12}$'),
+ CONSTRAINT ck_artifact_provider_probe_results_roles_distinct CHECK (
+  runtime_role_arn<>readiness_role_arn AND
+  runtime_role_arn<>negative_role_arn AND
+  readiness_role_arn<>negative_role_arn),
+ CONSTRAINT ck_artifact_provider_probe_results_trust_digests_distinct CHECK (
+  runtime_trust_policy_sha256<>readiness_trust_policy_sha256 AND
+  runtime_trust_policy_sha256<>negative_trust_policy_sha256 AND
+  readiness_trust_policy_sha256<>negative_trust_policy_sha256),
  CONSTRAINT ck_artifact_provider_probe_results_completion_order CHECK (
   completed_at>=started_at),
  CONSTRAINT ck_artifact_provider_probe_results_expiry_order CHECK (
@@ -133,6 +141,14 @@ CREATE TABLE public.artifact_provider_activations (
   negative_trust_policy_sha256 ~ '^sha256:[0-9a-f]{64}$'),
  CONSTRAINT ck_artifact_provider_activations_account_shape CHECK (
   aws_account_id ~ '^[0-9]{12}$'),
+ CONSTRAINT ck_artifact_provider_activations_roles_distinct CHECK (
+  runtime_role_arn<>readiness_role_arn AND
+  runtime_role_arn<>negative_role_arn AND
+  readiness_role_arn<>negative_role_arn),
+ CONSTRAINT ck_artifact_provider_activations_trust_digests_distinct CHECK (
+  runtime_trust_policy_sha256<>readiness_trust_policy_sha256 AND
+  runtime_trust_policy_sha256<>negative_trust_policy_sha256 AND
+  readiness_trust_policy_sha256<>negative_trust_policy_sha256),
  CONSTRAINT ck_artifact_provider_activations_expiry_order CHECK (expires_at>activated_at),
  CONSTRAINT fk_artifact_provider_activation_readiness FOREIGN KEY(readiness_result_id)
   REFERENCES public.artifact_provider_probe_results(id) ON DELETE RESTRICT,

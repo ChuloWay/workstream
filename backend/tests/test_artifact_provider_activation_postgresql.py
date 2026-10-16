@@ -7,12 +7,13 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.adapters.artifacts.s3_compatible import aws_s3_namespace_fingerprint
 from app.core.config import Settings
 from app.core.identifiers import new_record_id
+from app.db.errors import integrity_constraint_name
 from app.interfaces.artifacts import ArtifactProviderLiveProofRequiredError
 from app.modules.artifacts.provider_activation import (
     SqlAlchemyArtifactProviderActivationGuard,
@@ -265,6 +266,95 @@ async def test_failed_or_mixed_binding_group_cannot_activate(
                     namespace_fingerprint=namespace,
                     group_nonce=group_nonce,
                 )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("overlap", "constraint_name"),
+    [
+        ("role", "ck_artifact_provider_probe_results_roles_distinct"),
+        (
+            "trust_digest",
+            "ck_artifact_provider_probe_results_trust_digests_distinct",
+        ),
+    ],
+)
+async def test_direct_probe_insert_rejects_shared_executor_bindings(
+    isolated_database_env: str,
+    tmp_path: Path,
+    overlap: str,
+    constraint_name: str,
+) -> None:
+    settings = _settings(tmp_path)
+    namespace = aws_s3_namespace_fingerprint(settings)
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    source_group = uuid4()
+    try:
+        rows = await _insert_group(factory, settings, namespace, source_group)
+        with pytest.raises(IntegrityError) as failure:
+            async with factory() as session, session.begin():
+                await session.execute(
+                    text(
+                        """
+                        INSERT INTO artifact_provider_probe_results (
+                          id,probe_type,proof_version,result,release_id,namespace_fingerprint,
+                          aws_partition,aws_account_id,region,runtime_role_arn,
+                          runtime_trust_policy_sha256,runtime_policy_arn,readiness_role_arn,
+                          readiness_trust_policy_sha256,readiness_policy_arn,negative_role_arn,
+                          negative_trust_policy_sha256,bootstrap_principal_arn,
+                          expected_principal_arn,observed_principal_arn,bucket_policy_sha256,
+                          group_nonce,evidence_sha256,error_code,started_at,completed_at,expires_at)
+                        SELECT :id,probe_type,proof_version,result,release_id,namespace_fingerprint,
+                          aws_partition,aws_account_id,region,runtime_role_arn,
+                          runtime_trust_policy_sha256,runtime_policy_arn,
+                          CASE WHEN :overlap='role' THEN runtime_role_arn
+                               ELSE readiness_role_arn END,
+                          CASE WHEN :overlap='trust_digest' THEN runtime_trust_policy_sha256
+                               ELSE readiness_trust_policy_sha256 END,
+                          readiness_policy_arn,negative_role_arn,
+                          negative_trust_policy_sha256,bootstrap_principal_arn,
+                          CASE WHEN :overlap='role' THEN runtime_role_arn
+                               ELSE expected_principal_arn END,
+                          CASE WHEN :overlap='role' THEN runtime_role_arn
+                               ELSE observed_principal_arn END,
+                          bucket_policy_sha256,
+                          :group_nonce,evidence_sha256,error_code,started_at,completed_at,expires_at
+                        FROM artifact_provider_probe_results WHERE id=:source_id
+                        """
+                    ),
+                    {
+                        "id": str(new_record_id()),
+                        "overlap": overlap,
+                        "group_nonce": str(uuid4()),
+                        "source_id": str(rows["readiness"]),
+                    },
+                )
+        assert integrity_constraint_name(failure.value) == constraint_name
+
+        async with factory() as session:
+            constraint_names = set(
+                (
+                    await session.execute(
+                        text(
+                            """
+                            SELECT conname FROM pg_catalog.pg_constraint
+                            WHERE conrelid IN (
+                              'public.artifact_provider_probe_results'::regclass,
+                              'public.artifact_provider_activations'::regclass)
+                            """
+                        )
+                    )
+                ).scalars()
+            )
+        assert {
+            "ck_artifact_provider_probe_results_roles_distinct",
+            "ck_artifact_provider_probe_results_trust_digests_distinct",
+            "ck_artifact_provider_activations_roles_distinct",
+            "ck_artifact_provider_activations_trust_digests_distinct",
+        } <= constraint_names
     finally:
         await engine.dispose()
 

@@ -704,8 +704,15 @@ assumes another proof role:
 The readiness role cannot assume the runtime or negative-test role. The
 runtime workload cannot assume either deployment role. Readiness reads each
 exact role trust policy, requires its configured canonical digest, rejects any
-configured workload role as an `sts:AssumeRole` principal, and requires the
-three policies to identify disjoint workload subjects. The three reviewed
+readiness or negative trust shape except one exact OIDC `Allow` statement using
+`sts:AssumeRoleWithWebIdentity`, `StringEquals`, the provider issuer's exact
+`sub`, and audience `sts.amazonaws.com`, and requires the three policies to
+identify disjoint workload subjects. Runtime accepts that same shape or the
+closed Linux VM trust of one condition-free `sts:AssumeRole` `Allow` for
+`ec2.amazonaws.com`; the trusted provisioner owns the instance-profile
+attachment. AWS principals, role chaining, other service principals,
+wildcards, negative or pattern operators, foreign/missing audiences and extra
+statements or condition keys are unsupported and fail closed. The three reviewed
 trust-policy digests are part of every probe result and activation, so trust
 drift invalidates an otherwise matching group. The bootstrap principal
 is never supplied to any probe. Each probe asks STS for its observed caller ARN

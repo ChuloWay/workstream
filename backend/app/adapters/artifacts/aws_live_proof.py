@@ -298,16 +298,19 @@ class AwsArtifactLiveProof:
         }
 
     async def _validate_iam(self) -> None:
+        runtime_role = self._required(self._settings.artifact_s3_runtime_role_arn)
+        readiness_role = self._required(self._settings.artifact_s3_readiness_role_arn)
+        negative_role = self._required(self._settings.artifact_s3_negative_role_arn)
         role_policies = {
-            self._required(self._settings.artifact_s3_runtime_role_arn): (
+            runtime_role: (
                 self._required(self._settings.artifact_s3_runtime_policy_arn),
                 self._required(self._settings.artifact_s3_runtime_trust_policy_sha256),
             ),
-            self._required(self._settings.artifact_s3_readiness_role_arn): (
+            readiness_role: (
                 self._required(self._settings.artifact_s3_readiness_policy_arn),
                 self._required(self._settings.artifact_s3_readiness_trust_policy_sha256),
             ),
-            self._required(self._settings.artifact_s3_negative_role_arn): (
+            negative_role: (
                 None,
                 self._required(self._settings.artifact_s3_negative_trust_policy_sha256),
             ),
@@ -328,6 +331,12 @@ class AwsArtifactLiveProof:
                     trust_policy,
                     workload_roles=workload_roles,
                 )
+                if role_arn != runtime_role and any(
+                    subject_kind == "service" for subject_kind, _subject in trust_subjects[role_arn]
+                ):
+                    raise ArtifactConfigurationError(
+                        "AWS IAM service trust is supported only for the runtime role"
+                    )
                 inline = await iam.list_role_policies(RoleName=role_name)
                 if inline.get("PolicyNames") or inline.get("IsTruncated"):
                     raise ArtifactConfigurationError("AWS IAM role has an inline policy")
@@ -562,57 +571,81 @@ def _trust_policy_subjects(
     *,
     workload_roles: frozenset[str],
 ) -> frozenset[tuple[str, str]]:
-    """Return closed workload subjects and reject cross-role assumption grants."""
-    subjects: set[tuple[str, str]] = set()
-    for statement in _statements(policy):
-        if statement.get("Effect") != "Allow":
-            continue
-        actions = _values(statement.get("Action"))
-        principal = statement.get("Principal")
-        if not isinstance(principal, dict) or set(principal) not in (
-            {"Federated"},
-            {"Service"},
-            {"AWS"},
+    """Return one exact OIDC subject or the closed EC2 runtime trust subject."""
+    statements = _statements(policy)
+    if len(statements) != 1:
+        raise ArtifactConfigurationError("AWS IAM trust policy is not closed")
+    statement = statements[0]
+    principal = statement.get("Principal")
+    if not isinstance(principal, dict) or set(principal) not in (
+        {"Federated"},
+        {"Service"},
+    ):
+        raise ArtifactConfigurationError("AWS IAM trust principal is not closed")
+    if "Service" in principal:
+        if (
+            set(statement) != {"Effect", "Principal", "Action"}
+            or statement.get("Effect") != "Allow"
+            or _values(statement.get("Action")) != {"sts:AssumeRole"}
+            or principal["Service"] != "ec2.amazonaws.com"
         ):
-            raise ArtifactConfigurationError("AWS IAM trust principal is not closed")
-        if "AWS" in principal:
-            principals = _values(principal["AWS"])
-            if actions != {"sts:AssumeRole"} or principals & workload_roles:
-                raise ArtifactConfigurationError(
-                    "AWS IAM workload roles can assume another workload role"
-                )
-            subjects.update((value, value) for value in principals)
-            continue
-        if "Federated" in principal:
-            providers = _values(principal["Federated"])
-            if actions != {"sts:AssumeRoleWithWebIdentity"}:
-                raise ArtifactConfigurationError("AWS IAM federated trust action differs")
-            condition = statement.get("Condition")
-            if not isinstance(condition, dict):
-                raise ArtifactConfigurationError("AWS IAM federated trust lacks a subject")
-            subject_values: set[str] = set()
-            for operator_values in condition.values():
-                if not isinstance(operator_values, dict):
-                    raise ArtifactConfigurationError("AWS IAM trust condition is invalid")
-                for key, value in operator_values.items():
-                    if isinstance(key, str) and key.endswith(":sub"):
-                        subject_values.update(_values(value))
-            if not subject_values:
-                raise ArtifactConfigurationError("AWS IAM federated trust lacks a subject")
-            if any("*" in value or "?" in value for value in subject_values):
-                raise ArtifactConfigurationError("AWS IAM federated trust subject is not exact")
-            subjects.update(
-                (provider, subject) for provider in providers for subject in subject_values
-            )
-            continue
-        services = _values(principal["Service"])
-        if actions != {"sts:AssumeRole"}:
-            raise ArtifactConfigurationError("AWS IAM service trust action differs")
-        condition_key = canonical_json_hash(statement.get("Condition", {}))
-        subjects.update((service, condition_key) for service in services)
-    if not subjects:
-        raise ArtifactConfigurationError("AWS IAM trust policy grants no workload subject")
-    return frozenset(subjects)
+            raise ArtifactConfigurationError("AWS IAM service trust is not supported")
+        return frozenset({("service", "ec2.amazonaws.com")})
+
+    if set(statement) != {"Effect", "Principal", "Action", "Condition"}:
+        raise ArtifactConfigurationError("AWS IAM trust statement is not closed")
+    if statement.get("Effect") != "Allow" or _values(statement.get("Action")) != {
+        "sts:AssumeRoleWithWebIdentity"
+    }:
+        raise ArtifactConfigurationError("AWS IAM trust action is not supported")
+    provider = principal["Federated"]
+    if (
+        not isinstance(provider, str)
+        or provider in workload_roles
+        or any(marker in provider for marker in ("*", "?"))
+    ):
+        raise ArtifactConfigurationError("AWS IAM federated trust provider is not exact")
+    provider_parts = provider.split(":", 5)
+    workload_scopes = {
+        (parts[1], parts[4])
+        for role in workload_roles
+        if len(parts := role.split(":", 5)) == 6
+    }
+    if (
+        len(provider_parts) != 6
+        or provider_parts[0] != "arn"
+        or provider_parts[2] != "iam"
+        or provider_parts[3]
+        or len(provider_parts[4]) != 12
+        or not provider_parts[4].isdigit()
+        or not provider_parts[5].startswith("oidc-provider/")
+        or workload_scopes != {(provider_parts[1], provider_parts[4])}
+    ):
+        raise ArtifactConfigurationError("AWS IAM federated trust provider is invalid")
+    issuer = provider_parts[5].removeprefix("oidc-provider/")
+    if not issuer or issuer.startswith("https://") or issuer.endswith("/"):
+        raise ArtifactConfigurationError("AWS IAM federated trust issuer is invalid")
+
+    condition = statement.get("Condition")
+    if not isinstance(condition, dict) or set(condition) != {"StringEquals"}:
+        raise ArtifactConfigurationError("AWS IAM federated trust condition is not closed")
+    claims = condition["StringEquals"]
+    if not isinstance(claims, dict) or set(claims) != {
+        f"{issuer}:aud",
+        f"{issuer}:sub",
+    }:
+        raise ArtifactConfigurationError("AWS IAM federated trust claims are not exact")
+    audience = claims[f"{issuer}:aud"]
+    subject = claims[f"{issuer}:sub"]
+    if audience != "sts.amazonaws.com":
+        raise ArtifactConfigurationError("AWS IAM federated trust audience is not exact")
+    if (
+        not isinstance(subject, str)
+        or not subject
+        or any(marker in subject for marker in ("*", "?"))
+    ):
+        raise ArtifactConfigurationError("AWS IAM federated trust subject is not exact")
+    return frozenset({(provider, subject)})
 
 
 def _allowed_pairs(policy: dict[str, Any]) -> frozenset[tuple[str, str]]:

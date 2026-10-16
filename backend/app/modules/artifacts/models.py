@@ -953,6 +953,18 @@ class ArtifactProviderProbeResult(Base):
             name="evidence_sha256_shape",
         ),
         CheckConstraint("aws_account_id ~ '^[0-9]{12}$'", name="account_shape"),
+        CheckConstraint(
+            "runtime_role_arn <> readiness_role_arn and "
+            "runtime_role_arn <> negative_role_arn and "
+            "readiness_role_arn <> negative_role_arn",
+            name="roles_distinct",
+        ),
+        CheckConstraint(
+            "runtime_trust_policy_sha256 <> readiness_trust_policy_sha256 and "
+            "runtime_trust_policy_sha256 <> negative_trust_policy_sha256 and "
+            "readiness_trust_policy_sha256 <> negative_trust_policy_sha256",
+            name="trust_digests_distinct",
+        ),
         CheckConstraint("completed_at >= started_at", name="completion_order"),
         CheckConstraint("expires_at > completed_at", name="expiry_order"),
         CheckConstraint(
@@ -1031,6 +1043,18 @@ class ArtifactProviderActivation(Base):
             name="negative_trust_policy_sha256_shape",
         ),
         CheckConstraint("aws_account_id ~ '^[0-9]{12}$'", name="account_shape"),
+        CheckConstraint(
+            "runtime_role_arn <> readiness_role_arn and "
+            "runtime_role_arn <> negative_role_arn and "
+            "readiness_role_arn <> negative_role_arn",
+            name="roles_distinct",
+        ),
+        CheckConstraint(
+            "runtime_trust_policy_sha256 <> readiness_trust_policy_sha256 and "
+            "runtime_trust_policy_sha256 <> negative_trust_policy_sha256 and "
+            "readiness_trust_policy_sha256 <> negative_trust_policy_sha256",
+            name="trust_digests_distinct",
+        ),
         CheckConstraint("expires_at > activated_at", name="expiry_order"),
         UniqueConstraint("readiness_result_id", name="uq_artifact_activation_readiness"),
         UniqueConstraint("runtime_result_id", name="uq_artifact_activation_runtime"),
