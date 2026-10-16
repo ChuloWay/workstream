@@ -888,7 +888,9 @@ RATE_DEPENDENCIES = {
     enforce_admin_mutation_rate_limit,
     enforce_authorization_read_rate_limit,
 }
-EXPECTED_ADMIN_MUTATION_RATE_ROUTES = {
+# These 61 bindings are the explicit unchanged production baseline from main.
+# Registry and recovery routes extend it through their owner-specific maps below.
+ESTABLISHED_ADMIN_MUTATION_RATE_ROUTES = {
     ("POST", "/actor-identity-links/{identity_link_id}/reactivate"),
     ("POST", "/actor-identity-links/{identity_link_id}/revoke"),
     ("POST", "/actors/{actor_profile_id}/deactivate"),
@@ -896,17 +898,15 @@ EXPECTED_ADMIN_MUTATION_RATE_ROUTES = {
     ("POST", "/actors/{actor_profile_id}/suspend"),
     ("POST", "/admin-role-grants"),
     ("POST", "/admin-role-grants/{grant_id}/revoke"),
-    ("POST", "/operations/external-checker-registry"),
     ("POST", "/projects/{project_id}/role-grants"),
     ("POST", "/projects/{project_id}/role-grants/{grant_id}/revoke"),
     ("POST", "/service-actors"),
 }
-EXPECTED_AUTHORIZATION_READ_RATE_ROUTES = {
+ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES = {
     ("GET", "/actors/me/authorization-context"),
     ("GET", "/actors/me/contributions"),
     ("GET", "/audit/projects/{project_id}/tasks/{task_id}/evidence"),
     ("GET", "/audit/projects/{project_id}/tasks/{task_id}/locked-context"),
-    ("GET", "/operations/external-checker-registry/{registry_entry_id}"),
     ("GET", "/operations/projects/{project_id}/tasks"),
     ("GET", "/operations/projects/{project_id}/tasks/{task_id}/locked-context"),
     ("GET", "/projects/{project_id}"),
@@ -1000,6 +1000,14 @@ EXPECTED_AUTHORIZATION_READ_RATE_ROUTES = {
         "/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}",
     ),
 }
+CHECKER_REGISTRY_RATE_BINDINGS = {
+    ("POST", "/operations/external-checker-registry"): {
+        enforce_admin_mutation_rate_limit
+    },
+    ("GET", "/operations/external-checker-registry/{registry_entry_id}"): {
+        enforce_authorization_read_rate_limit
+    },
+}
 
 
 def _dependency_calls(dependant) -> set:
@@ -1042,12 +1050,13 @@ def test_production_rate_dependencies_match_exact_route_allowlist() -> None:
     expected = {
         **{
             route: {enforce_admin_mutation_rate_limit}
-            for route in EXPECTED_ADMIN_MUTATION_RATE_ROUTES
+            for route in ESTABLISHED_ADMIN_MUTATION_RATE_ROUTES
         },
         **{
             route: {enforce_authorization_read_rate_limit}
-            for route in EXPECTED_AUTHORIZATION_READ_RATE_ROUTES
+            for route in ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES
         },
+        **CHECKER_REGISTRY_RATE_BINDINGS,
     }
 
     assert _rate_dependency_bindings(create_app().routes) == expected
