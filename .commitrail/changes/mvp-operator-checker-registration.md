@@ -47,6 +47,9 @@ identity and system Operator grant to perform startup registration.
   `backend/app/api/router.py`: one authenticated Operator registration route,
   one exact-entry read route, caller-root transaction composition and stable
   HTTP error mapping.
+- `backend/app/adapters/auth/__init__.py`: compose the existing AUTH kernel and
+  opaque prepared-authority service for the request-scoped registry adapter;
+  no second factory or fallback composition is allowed.
 - `backend/app/modules/authorization/catalogue.py`,
   `backend/app/modules/authorization/domain/checker_registry.py`,
   `backend/app/modules/authorization/checker_registry_authorization.py`, and
@@ -60,7 +63,8 @@ identity and system Operator grant to perform startup registration.
   focused service and signed public-API/PostgreSQL proof.
 - `backend/tests/authorization/catalogue_fixtures.py`,
   `backend/tests/authorization/test_catalogue.py`, and
-  `backend/tests/authorization/setup_finalization/test_catalogue.py`: closed
+  `backend/tests/authorization/setup_finalization/test_catalogue.py`, plus
+  `backend/tests/test_api_controls.py`: closed
   AUTH catalogue and active-action parity for the read action.
 - `backend/tests/projects/guide_activation/source_fixtures.py`: update the one
   existing direct registration caller to the server-selected registry-ID

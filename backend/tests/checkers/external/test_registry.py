@@ -14,6 +14,7 @@ from app.modules.authorization.checker_registry_authorization import (
     ExternalCheckerRegistryAuthorizationAdapter,
 )
 from app.modules.authorization.kernel import AuthorizationService
+from app.modules.authorization.prepared import PreparedAuthorizationService
 from app.modules.authorization.runtime import (
     ActorKind,
     ActorStatus,
@@ -23,9 +24,12 @@ from app.modules.authorization.runtime import (
 from app.modules.checkers.api.external import (
     ExternalCheckerRegistrationAuthorityFacts,
     ExternalCheckerRegistrationAuthorityReceipt,
+    ExternalCheckerRegistrationCommand,
+    ExternalCheckerRegistrationPreparation,
     ExternalCheckerRegistryConflict,
+    ExternalCheckerRegistryNotFound,
     ExternalCheckerRegistryUnavailable,
-    make_external_checker_registration_request,
+    external_checker_registration_request_digest,
 )
 from app.modules.checkers.external_registry import ExternalCheckerRegistryService
 from tests.checkers.external.support import registration_request, schema
@@ -52,14 +56,29 @@ class _Session:
 
 class _Authority:
     def __init__(self) -> None:
+        self.preparations: list[ExternalCheckerRegistrationPreparation] = []
         self.calls: list[ExternalCheckerRegistrationAuthorityFacts] = []
+        self.closed: list[object] = []
 
-    async def authorize_registration(self, facts):
+    async def prepare_registration(self, facts):
+        self.preparations.append(facts)
+        return object()
+
+    async def consume_registration(self, prepared, preparation, facts):
         self.calls.append(facts)
         return ExternalCheckerRegistrationAuthorityReceipt(
             actor_profile_id=facts.actor_profile_id,
             authorization_decision_event_id=uuid4(),
         )
+
+    def close_registration(self, prepared):
+        self.closed.append(prepared)
+
+    async def prepare_read(self, actor_profile_id):
+        return None
+
+    async def authorize_read(self, facts):
+        self.calls.append(facts)
 
 
 class _KernelAdminRepository:
@@ -72,13 +91,23 @@ class _KernelAdminRepository:
 
     async def lock_request_actor(self, identity_link_id, actor_profile_id):
         return (
-            SimpleNamespace(id=str(identity_link_id), status="active"),
-            SimpleNamespace(id=str(actor_profile_id), actor_kind="human", status="active"),
+            SimpleNamespace(
+                id=str(identity_link_id),
+                actor_profile_id=str(actor_profile_id),
+                status="active",
+            ),
+            SimpleNamespace(
+                id=str(actor_profile_id), actor_kind="human", status="active"
+            ),
         )
 
     async def find_effective_grant(self, *_args, **kwargs):
         self.filters = kwargs
-        return SimpleNamespace(id=self.grant_id)
+        return SimpleNamespace(
+            id=self.grant_id,
+            status="active",
+            scope_project_id=None,
+        )
 
 
 class _Evidence:
@@ -142,6 +171,13 @@ async def test_register_flushes_once_and_freshly_authorizes_exact_replay() -> No
     assert replay == first
     assert len(repository.rows) == 1
     assert authority.calls == [authority.calls[0], authority.calls[0]]
+    assert len(authority.preparations) == len(authority.closed) == 2
+    assert {call.registry_entry_id for call in authority.calls} == {
+        first.registry_entry_id
+    }
+    assert {call.request_digest for call in authority.calls} == {
+        repository.rows[0].request_digest
+    }
     assert first.entry_digest == request.spec.spec_digest
     assert first.registered_by_actor_profile_id == request.actor_profile_id
 
@@ -160,7 +196,8 @@ async def test_register_rejects_operation_or_logical_identity_substitution() -> 
         await service.register(changed_operation)
 
     assert len(repository.rows) == 1
-    assert len(authority.calls) == 2
+    assert len(authority.preparations) == 2
+    assert len(authority.calls) == 1
 
 
 @pytest.mark.asyncio
@@ -181,17 +218,15 @@ async def test_same_operation_rejects_every_mutated_payload_and_preserves_row() 
         | {"resources": spec.resources.model_dump() | {"cpu_millis": 600}}
     )
     mutations = (
-        make_external_checker_registration_request(
+        ExternalCheckerRegistrationCommand(
             actor_profile_id=request.actor_profile_id,
             operation_id=request.operation_id,
-            registry_entry_id=registry_entry_id,
             spec=changed,
         )
-        for registry_entry_id, changed in (
-            (new_record_id(), spec),
-            (request.registry_entry_id, changed_image),
-            (request.registry_entry_id, changed_schema),
-            (request.registry_entry_id, changed_resources),
+        for changed in (
+            changed_image,
+            changed_schema,
+            changed_resources,
         )
     )
     for mutation in mutations:
@@ -199,7 +234,8 @@ async def test_same_operation_rejects_every_mutated_payload_and_preserves_row() 
             await service.register(mutation)
 
     assert len(repository.rows) == 1
-    assert len(authority.calls) == 5
+    assert len(authority.preparations) == 4
+    assert len(authority.calls) == 1
     assert await service.read_exact(stored.registry_entry_id, stored.entry_digest) == stored
 
 
@@ -208,53 +244,24 @@ async def test_register_requires_an_active_caller_owned_root_transaction() -> No
     service, authority, repository = _service(active=False)
     with pytest.raises(ExternalCheckerRegistryUnavailable):
         await service.register(registration_request())
-    assert authority.calls == []
+    assert authority.preparations == authority.calls == []
     assert repository.rows == []
 
 
 @pytest.mark.asyncio
-async def test_authority_adapter_binds_actor_correlation_and_exact_resource() -> None:
-    operation_id, actor_id, event_id = uuid4(), uuid4(), uuid4()
-    context = HumanAuthorizationContext(
-        actor_profile_id=actor_id,
-        actor_kind=ActorKind.HUMAN,
-        actor_status=ActorStatus.ACTIVE,
-        identity_link_id=uuid4(),
-        identity_link_status=IdentityLinkStatus.ACTIVE,
-        request_id=uuid4(),
-        correlation_id=operation_id,
-    )
-    calls = []
+async def test_authorized_read_returns_only_the_exact_validated_entry() -> None:
+    service, authority, _repository = _service()
+    command = registration_request()
+    stored = await service.register(command)
 
-    async def require(action, resource):
-        calls.append((action, resource))
-        return SimpleNamespace(decision_id=event_id)
+    assert await service.read_authorized(
+        command.actor_profile_id, stored.registry_entry_id
+    ) == stored
+    assert authority.calls[-1].registry_entry_id == stored.registry_entry_id
+    assert authority.calls[-1].entry_digest == stored.entry_digest
 
-    authorization = SimpleNamespace(_context=context, require=require)
-    adapter = ExternalCheckerRegistryAuthorizationAdapter(authorization)  # type: ignore[arg-type]
-    facts = ExternalCheckerRegistrationAuthorityFacts(
-        actor_profile_id=actor_id,
-        operation_id=operation_id,
-        registry_entry_id=uuid4(),
-        request_digest="sha256:" + "1" * 64,
-        entry_digest="sha256:" + "2" * 64,
-    )
-
-    receipt = await adapter.authorize_registration(facts)
-
-    assert receipt.authorization_decision_event_id == event_id
-    assert calls[0][0] is ActionId.CHECKER_REGISTRY_REGISTER
-    assert calls[0][1].model_dump() == {
-        "resource_type": "external_checker_registry_entry",
-        "resource_id": facts.registry_entry_id,
-        "operation_id": operation_id,
-        "request_digest": facts.request_digest,
-        "entry_digest": facts.entry_digest,
-    }
-
-    authorization._context = context.model_copy(update={"correlation_id": uuid4()})
-    with pytest.raises(ExternalCheckerRegistryUnavailable):
-        await adapter.authorize_registration(facts)
+    with pytest.raises(ExternalCheckerRegistryNotFound):
+        await service.read_authorized(command.actor_profile_id, new_record_id())
 
 
 @pytest.mark.asyncio
@@ -270,28 +277,58 @@ async def test_real_kernel_classifies_registry_as_system_operator_mutation() -> 
         correlation_id=operation_id,
     )
     repository = _KernelAdminRepository()
+    session = _Session()
     authorization = AuthorizationService(
-        _Session(),
+        session,
         context,
         admin_repository=repository,  # type: ignore[arg-type]
     )
     evidence = _Evidence()
     authorization._audit = evidence  # type: ignore[assignment]
+    prepared = PreparedAuthorizationService(
+        session, context, authorization, repository  # type: ignore[arg-type]
+    )
+    adapter = ExternalCheckerRegistryAuthorizationAdapter(authorization, prepared)
+    command = registration_request(actor_profile_id=actor_id)
+    command = command.model_copy(update={"operation_id": operation_id})
+    preparation = ExternalCheckerRegistrationPreparation(
+        actor_profile_id=actor_id,
+        operation_id=operation_id,
+        entry_digest=command.spec.spec_digest,
+    )
+    handle = await adapter.prepare_registration(preparation)
+    registry_entry_id = new_record_id()
     facts = ExternalCheckerRegistrationAuthorityFacts(
         actor_profile_id=actor_id,
         operation_id=operation_id,
-        registry_entry_id=uuid4(),
-        request_digest="sha256:" + "1" * 64,
-        entry_digest="sha256:" + "2" * 64,
+        registry_entry_id=registry_entry_id,
+        request_digest=external_checker_registration_request_digest(
+            command, registry_entry_id
+        ),
+        entry_digest=command.spec.spec_digest,
     )
 
-    receipt = await ExternalCheckerRegistryAuthorizationAdapter(
-        authorization
-    ).authorize_registration(facts)
+    receipt = await adapter.consume_registration(handle, preparation, facts)
+    adapter.close_registration(handle)
 
     assert receipt.actor_profile_id == actor_id
     assert len(evidence.events) == 1
+    assert evidence.events[0].action_id == ActionId.CHECKER_REGISTRY_REGISTER
+    assert evidence.events[0].resource_id == str(registry_entry_id)
     assert repository.filters is not None
     assert repository.filters["scope_project_id"] is None
     assert repository.filters["system_scope_only"] is True
     assert {role.value for role in repository.filters["allowed_roles"]} == {"operator"}
+
+    mismatched = context.model_copy(update={"correlation_id": uuid4()})
+    other_repository = _KernelAdminRepository()
+    other_authorization = AuthorizationService(
+        session, mismatched, admin_repository=other_repository  # type: ignore[arg-type]
+    )
+    other_prepared = PreparedAuthorizationService(
+        session, mismatched, other_authorization, other_repository  # type: ignore[arg-type]
+    )
+    with pytest.raises(ExternalCheckerRegistryUnavailable):
+        await ExternalCheckerRegistryAuthorizationAdapter(
+            other_authorization, other_prepared
+        ).prepare_registration(preparation)

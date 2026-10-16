@@ -59,6 +59,14 @@ class ExternalCheckerRegistryConflict(ExternalCheckerRegistryUnavailable):
     """Reject replay or immutable identity substitution without partial effects."""
 
 
+class ExternalCheckerRegistryAuthorizationDenied(ExternalCheckerRegistryUnavailable):
+    """Conceal a current caller that lacks exact registry authority."""
+
+
+class ExternalCheckerRegistryNotFound(ExternalCheckerRegistryUnavailable):
+    """Conceal an absent exact registry identity."""
+
+
 class ExternalCheckerValue(BaseModel):
     """Strict immutable values shared across the registry and execution protocol."""
 
@@ -239,32 +247,20 @@ class ExternalCheckerRegistryEntry(ExternalCheckerRegistrySpec):
         return self
 
 
-class ExternalCheckerRegistrationRequest(ExternalCheckerValue):
-    """Idempotent human registration command with a derived request digest."""
+class ExternalCheckerRegistrationCommand(ExternalCheckerValue):
+    """Idempotent human command before the server selects a durable row ID."""
 
     actor_profile_id: UUID = Field(strict=True)
     operation_id: UUID = Field(strict=True)
-    registry_entry_id: UUID = Field(strict=True)
     spec: ExternalCheckerRegistrySpec
-    request_digest: Sha256
 
-    @field_validator("registry_entry_id")
-    @classmethod
-    def validate_registry_entry_id(cls, value: UUID) -> UUID:
-        """Require the requested durable identity to be canonical UUIDv7."""
-        if value.version != 7 or value.variant != RFC_4122:
-            raise ExternalCheckerContractError("external checker registry entry ID must be UUIDv7")
-        return value
 
-    @model_validator(mode="after")
-    def validate_request_digest(self) -> Self:
-        """Reject registration commands whose complete request digest differs."""
-        body = self.model_dump(mode="json", exclude={"request_digest"})
-        if self.request_digest != external_checker_json_hash(body):
-            raise ExternalCheckerContractError(
-                "external checker registration request digest mismatch"
-            )
-        return self
+class ExternalCheckerRegistrationPreparation(ExternalCheckerValue):
+    """Stable command facts prepared before CHECKERS locks or selects a row."""
+
+    actor_profile_id: UUID = Field(strict=True)
+    operation_id: UUID = Field(strict=True)
+    entry_digest: Sha256
 
 
 class ExternalCheckerRegistrationAuthorityFacts(ExternalCheckerValue):
@@ -285,21 +281,43 @@ class ExternalCheckerRegistrationAuthorityReceipt(ExternalCheckerValue):
 
 
 class ExternalCheckerRegistrationAuthorityPort(Protocol):
-    """Authorize one exact system-scoped immutable registry publication."""
+    """Prepare and finalize one exact system-scoped registry publication."""
 
-    async def authorize_registration(
-        self, facts: ExternalCheckerRegistrationAuthorityFacts
+    async def prepare_registration(
+        self, facts: ExternalCheckerRegistrationPreparation
+    ) -> object:
+        """Lock current actor, identity-link and system Operator authority."""
+
+    async def consume_registration(
+        self, prepared: object, preparation: ExternalCheckerRegistrationPreparation,
+        facts: ExternalCheckerRegistrationAuthorityFacts,
     ) -> ExternalCheckerRegistrationAuthorityReceipt:
-        """Return exact allowed evidence after fresh actor/grant validation."""
+        """Finalize exact selected row facts and return durable allow evidence."""
+
+    def close_registration(self, prepared: object) -> None:
+        """Invalidate an unconsumed or consumed transaction-local capability."""
+
+    async def prepare_read(self, actor_profile_id: UUID) -> None:
+        """Lock and revalidate the current human actor before registry access."""
+
+    async def authorize_read(
+        self, facts: ExternalCheckerRegistrationAuthorityFacts
+    ) -> None:
+        """Authorize disclosure of one exact immutable registry entry."""
 
 
 class ExternalCheckerRegistryPort(Protocol):
     """Hidden registry operation; policy and execution owners consume later."""
 
     async def register(
-        self, request: ExternalCheckerRegistrationRequest
+        self, command: ExternalCheckerRegistrationCommand
     ) -> ExternalCheckerRegistryEntry:
         """Publish or exactly replay one immutable authorized entry."""
+
+    async def read_authorized(
+        self, actor_profile_id: UUID, registry_entry_id: UUID
+    ) -> ExternalCheckerRegistryEntry:
+        """Read one exact immutable entry under current system Operator authority."""
 
     async def read_exact(
         self, registry_entry_id: UUID, entry_digest: str
@@ -313,6 +331,29 @@ class ExternalCheckerRegistryPort(Protocol):
 
     async def list_entries(self) -> tuple[ExternalCheckerRegistryEntry, ...]:
         """Return every immutable identity in canonical phase/name/version order."""
+
+
+def external_checker_registration_request_digest(
+    command: ExternalCheckerRegistrationCommand, registry_entry_id: UUID,
+) -> str:
+    """Commit one server-selected row ID to the database's canonical request."""
+    command = ExternalCheckerRegistrationCommand.model_validate(command)
+    if (
+        type(registry_entry_id) is not UUID
+        or registry_entry_id.version != 7
+        or registry_entry_id.variant != RFC_4122
+    ):
+        raise ExternalCheckerContractError(
+            "external checker registry entry ID must be UUIDv7"
+        )
+    return external_checker_json_hash(
+        {
+            "actor_profile_id": str(command.actor_profile_id),
+            "operation_id": str(command.operation_id),
+            "registry_entry_id": str(registry_entry_id),
+            "spec": command.spec.model_dump(mode="json"),
+        }
+    )
 
 
 class ExternalCheckerCapabilityDefinition(ExternalCheckerValue):
@@ -640,10 +681,6 @@ class ExternalCheckerExecutionResult(ExternalCheckerValue):
             raise ExternalCheckerContractError("external checker result exceeds registry limit")
 
 
-_REGISTRATION_FIELDS = {
-    name: TypeAdapter(field.rebuild_annotation())
-    for name, field in ExternalCheckerRegistrationRequest.model_fields.items()
-}
 _REQUEST_FIELDS = {
     name: TypeAdapter(field.rebuild_annotation())
     for name, field in ExternalCheckerExecutionRequest.model_fields.items()
@@ -667,18 +704,6 @@ def _make_derived(model, adapters, digest_field: str, fields: dict[str, object])
         candidate.model_dump(mode="json", exclude={digest_field})
     )
     return model.model_validate(values)
-
-
-def make_external_checker_registration_request(
-    **fields: object,
-) -> ExternalCheckerRegistrationRequest:
-    """Build one registration request with a derived canonical digest."""
-    return _make_derived(
-        ExternalCheckerRegistrationRequest,
-        _REGISTRATION_FIELDS,
-        "request_digest",
-        fields,
-    )
 
 
 def make_external_checker_execution_request(

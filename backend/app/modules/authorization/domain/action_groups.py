@@ -3,7 +3,7 @@ from app.modules.authorization.catalogue import GUIDE_PROPOSAL_ACTION_IDS, POST_
 
 from app.modules.authorization.domain.task_authority import TASK_IMPORT_BATCH_ACTIONS, TaskImportBatchResourceContext
 from app.modules.authorization.catalogue import ActionId
-from app.modules.authorization.domain import adapter_bindings, contribution_policies
+from app.modules.authorization.domain import adapter_bindings, checker_registry, contribution_policies
 from app.modules.authorization.runtime import PROJECT_SUBMISSION_POLICY_TARGET_KIND_BY_ACTION
 
 GUIDE_BOUND_PROJECT_MANAGER_ACTIONS = frozenset(
@@ -68,6 +68,12 @@ def supports_prepared_denial(action_id: ActionId, resource_context: object) -> b
         ProjectPolicyMutationPrepareDenialResourceContext, ProjectSubmissionArtifactPolicyMutationResourceContext,
     )
     return (
+        (
+            action_id in checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS
+            and type(resource_context)
+            is checker_registry.ExternalCheckerRegistryResourceContext
+        )
+        or
         (
             action_id in contribution_policies.CONTRIBUTION_POLICY_MUTATION_ACTIONS
             and type(resource_context) is contribution_policies.ContributionPolicyMutationScopeDenialResourceContext

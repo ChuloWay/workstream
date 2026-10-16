@@ -78,6 +78,20 @@ def checker_retry_authorization(session: AsyncSession, context: AuthorizationCon
     return PreparedCheckerRetryAuthorization(session, context)
 
 
+def checker_registry_authorization(
+    session: AsyncSession, context: AuthorizationContext,
+):
+    """Compose CHECKERS registry access through one canonical AUTH/PREP graph."""
+    from app.modules.authorization.checker_registry_authorization import (
+        ExternalCheckerRegistryAuthorizationAdapter,
+    )
+
+    repository = AdminAuthorizationRepository(session)
+    kernel = AuthorizationService(session, context, admin_repository=repository)
+    prepared = PreparedAuthorizationService(session, context, kernel, repository)
+    return ExternalCheckerRegistryAuthorizationAdapter(kernel, prepared)
+
+
 def guide_sufficiency_projection_authorization(
     session: AsyncSession,
 ) -> GuideSufficiencyProjectionAuthorization:
@@ -128,6 +142,7 @@ __all__ = (
     "assignment_invalidation_publication",
     "task_authorization",
     "task_import_source_authorization",
+    "checker_registry_authorization",
     "guide_compilation_request_authority",
     "guide_compilation_execution_authority",
     "ContributionPolicyAuthorization",

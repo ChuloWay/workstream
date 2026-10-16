@@ -165,7 +165,7 @@ _SERIALIZED_ADMIN_READS = frozenset(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
         ActionId.PROJECT_ACTIVE_GUIDE_READ,
     }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS
+) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_READ_ACTIONS
 _ADMIN_MUTATIONS = frozenset(
     {
         ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
@@ -180,7 +180,7 @@ _ADMIN_MUTATIONS = frozenset(
         ActionId.PROJECT_ROLE_GRANT_ISSUE,
         ActionId.PROJECT_ROLE_GRANT_REVOKE,
     }
-) | adapter_bindings.ADAPTER_BINDING_MUTATION_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_MUTATION_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | frozenset({ActionId.OPERATIONS_CHECKER_RETRY})
+) | adapter_bindings.ADAPTER_BINDING_MUTATION_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_MUTATION_ACTIONS | checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS | frozenset({ActionId.OPERATIONS_CHECKER_RETRY})
 
 
 def _prepared_admin_role_locker(action_id):

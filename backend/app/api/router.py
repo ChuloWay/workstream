@@ -13,6 +13,7 @@ from fastapi import APIRouter
 from app.api.routes.auth import actors_router
 from app.api.routes.health import router as health_router
 from app.modules.checkers.router import router as checkers_router
+from app.modules.checkers.registry_router import router as checker_registry_router
 from app.api.routes.artifact_submissions import router as artifact_submission_router
 from app.modules.artifacts.router import router as artifacts_router
 from app.api.routes.artifact_task_import_sources import router as task_import_source_router
@@ -34,6 +35,7 @@ api_router.include_router(policy_mutation_router, prefix="/api/v1")
 api_router.include_router(projects_router, prefix="/api/v1")
 api_router.include_router(tasks_router, prefix="/api/v1")
 api_router.include_router(checkers_router, prefix="/api/v1")
+api_router.include_router(checker_registry_router, prefix="/api/v1")
 api_router.include_router(artifacts_router, prefix="/api/v1")
 api_router.include_router(task_import_source_router, prefix="/api/v1")
 api_router.include_router(artifact_submission_router, prefix="/api/v1")
