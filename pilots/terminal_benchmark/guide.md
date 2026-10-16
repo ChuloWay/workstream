@@ -8,8 +8,8 @@ correctness tests and a working reference solution. Workstream contributors
 create these benchmark packages; the future solver runs the task inside the
 package. These are different roles.
 
-This original, shareable pilot exercises the complete governed contribution
-journey. It checks bounded mechanical properties. It does not certify task
+This original, shareable corpus provides inputs for the governed contribution
+journey. Its checks cover bounded mechanical properties. It does not certify task
 novelty, difficulty, absence of solution leakage, or general semantic quality.
 No private contributor material or external benchmark dataset belongs here.
 
@@ -79,6 +79,21 @@ Evaluate the exact retained Submission under its locked policy:
 A test that always returns success is invalid. A reference that only passes the
 example input is insufficient. Infrastructure failure supplies no judgment of
 contributor quality and must remain separate from a work failure.
+
+## Expected outcome matrix
+
+These are required outcomes for the connected drill, not runtime results
+established by the native corpus verifier.
+
+| Observed boundary | Required product outcome |
+|---|---|
+| PRE package/work rejection | Actionable contributor feedback; no Submission; task remains in progress. |
+| PRE infrastructure or uncertain execution | Recoverable failure or held uncertainty; no Submission and no judgment of work quality. Never blindly repeat uncertain effects. |
+| Required POST checks pass, locked human review is false | Shared authorized FinalAcceptance, accepted task and submitter ContributionRecord; applicable conditional awards commit atomically. No fabricated Review or reviewer contribution. |
+| Required POST checks pass, locked human review is true | Task becomes `review_pending`; passing checks alone creates no acceptance. Live human review remains outside this first automated drill. |
+| Contributor-correctable POST failure with a revision remaining | Governed `needs_revision` and the locked revision window; this failure creates no Review, FinalAcceptance, ContributionRecord or award. |
+| POST work failure with the revision allowance exhausted | Record rejection, close the exhausted assignment and return the task to ready, preserving submissions and findings. No acceptance or award for the failed attempt. |
+| POST infrastructure failure or uncertain delivery | Operator recovery or held uncertainty; no contributor revision round consumed or work-quality penalty. Preserve any already committed outcome and never repeat acceptance effects. |
 
 ## Five example briefs
 

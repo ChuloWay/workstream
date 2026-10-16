@@ -1,7 +1,7 @@
 # Terminal benchmark pilot — real project inputs and reference corpus
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: A shareable project guide, five task-authoring briefs and independently checkable reference/negative packages provide concrete inputs for #493 and the first automated hosted pilot #555.
 
 ## Intent
@@ -90,17 +90,17 @@ handoff intent requiring separate authorized manager or Finance operations.
 
 ## Acceptance criteria
 
-- [ ] Five real task-authoring briefs and a self-contained guide explain package
+- [x] Five real task-authoring briefs and a self-contained guide explain package
   layout, mechanical acceptance, offline requirements and omitted quality claims.
-- [ ] Guide/task JSON matches current public request/import shapes, with no
+- [x] Guide/task JSON matches current public request/import shapes, with no
   invented required task-local criteria or identity selectors.
-- [ ] Five positive reference packages have independently reviewed expected
+- [x] Five positive reference packages have independently reviewed expected
   outputs; local execution passes their assertions while unchanged starters fail.
-- [ ] Repeatability, corpus hashes and locally supported negative mutations are
+- [x] Repeatability, corpus hashes and locally supported negative mutations are
   reproducible without network, provider secrets or product database access.
-- [ ] Every claimed observed result is distinguished from future sandbox/build,
+- [x] Every claimed observed result is distinguished from future sandbox/build,
   live-inference, manager-approval and hosted-runtime proof.
-- [ ] #493 receives an unambiguous package/configuration contract and #555 receives
+- [x] #493 receives an unambiguous package/configuration contract and #555 receives
   the same versioned corpus for real public integration, without closure cycles.
 
 ## Risk and review routing
@@ -130,6 +130,12 @@ isolation, public guide fields and native-versus-sandbox proof boundaries before
 authoring. Expected outputs must be checked independently; deriving assertions
 from the reference implementation is not proof. Implementation review must
 inspect the independently authored goldens and their named near-miss probes.
+Implementation review independently matched all five packages' golden results.
+It corrected an overstatement of connected-journey proof, added the explicit
+PRE/POST/infrastructure outcome matrix, and removed an invalid build-negative
+claim: fixed-recipe validation would reject that mutation before Docker. Actual
+build/cache/platform proof remains with #493. These assets do not complete #576's
+manager agreement or #555's hosted release evidence.
 
 ## Reconciliation
 

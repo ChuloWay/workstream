@@ -68,12 +68,6 @@
       "replace": "environment/Dockerfile",
       "content": "FROM python:latest\n",
       "expected": "package validation rejects"
-    },
-    {
-      "name": "broken-copy",
-      "replace": "environment/Dockerfile",
-      "content": "COPY missing/ /workspace/",
-      "expected": "Docker build rejects; execution belongs to #493, not native verification"
     }
   ]
 }
