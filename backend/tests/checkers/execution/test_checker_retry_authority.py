@@ -36,8 +36,15 @@ from app.modules.tasks.models import AuditEvent, TaskCommandReceipt
 from app.modules.tasks.api import TaskAuthorityDenied
 from app.modules.tasks.repository import TaskRepository
 from auth_concurrency_support import wait_for_named_database_lock
-from tests.authentication.fixtures import auth_database_env as auth_database_env
-from tests.authorization.admin_access.fixtures import admin_access as admin_access
+from tests.authentication.fixtures import (
+    auth_database_env as auth_database_env,
+    clear_settings_cache as clear_settings_cache,
+    rsa_signing_material as rsa_signing_material,
+)
+from tests.authorization.admin_access.fixtures import (
+    admin_access as admin_access,
+    signed_access as signed_access,
+)
 from tests.authorization.admin_access.support import create_project
 from tests.checkers.execution.test_checker_retry import (
     _command,
