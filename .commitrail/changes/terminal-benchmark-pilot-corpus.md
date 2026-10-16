@@ -145,6 +145,13 @@ reads use explicit UTF-8. The fixed Dockerfile recipe gives the non-root runtime
 user ownership of the workspace directory itself, including relative output
 creation. Actual container execution remains #493 proof, not native calibration.
 
+Candidate timeouts, malformed UTF-8/JSON output and unreadable required SQLite
+rows now reject through the sample harness's assertion boundary. The native
+verifier exercises each program-failure case without treating a broken harness
+as a successful rejection. Event aggregation and atomic import explicitly reject
+non-object input, with independent golden cases; solver instructions use repair
+titles while task-import briefs retain their contributor-facing authoring titles.
+
 The checker implementation inspection also distinguished the originally pinned
 OCI index from its Linux/AMD64 child manifest. The corpus now pins that exact
 platform manifest; registry bytes were SHA-256 checked against both identities and

@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 import math
 
 def solve(payload):
+    if not isinstance(payload, dict):
+        return {"error": "invalid_input"}
     events = payload.get("events")
     if not isinstance(events, list):
         return {"error": "invalid_input"}

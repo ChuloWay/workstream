@@ -300,5 +300,16 @@
         }
       }
     ]
+  },
+  {
+    "name": "non-object-input",
+    "steps": [
+      {
+        "input": [],
+        "expected": {
+          "error": "invalid_input"
+        }
+      }
+    ]
   }
 ]

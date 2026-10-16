@@ -162,5 +162,18 @@
         }
       }
     ]
+  },
+  {
+    "name": "non-object-input",
+    "steps": [
+      {
+        "input": [],
+        "expected": {
+          "status": "rejected",
+          "rows": []
+        },
+        "database_rows": []
+      }
+    ]
   }
 ]
