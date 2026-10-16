@@ -391,9 +391,9 @@ async def test_expired_direct_probe_group_cannot_activate(
                           negative_trust_policy_sha256,bootstrap_principal_arn,
                           expected_principal_arn,observed_principal_arn,bucket_policy_sha256,
                           :group_nonce,evidence_sha256,error_code,
-                          clock_timestamp()-interval '16 minutes',
-                          clock_timestamp()-interval '15 minutes 30 seconds',
-                          clock_timestamp()-interval '1 minute'
+                          statement_timestamp()-interval '16 minutes',
+                          statement_timestamp()-interval '15 minutes 30 seconds',
+                          statement_timestamp()-interval '1 minute'
                         FROM artifact_provider_probe_results WHERE id=:source_id
                         """
                     ),
