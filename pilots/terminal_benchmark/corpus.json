@@ -31,7 +31,7 @@
     "packages/atomic-import/instruction.md": "4a6111a0af4f85abcfe7988a20c5d29710db09e8b71f4e8a222ffdf72c3ea8fe",
     "packages/atomic-import/solution/program.py": "9aee8d2eaf33e054d3e4f85f291ce4247481e777dbd45133f33a7108f1f04b51",
     "packages/atomic-import/task.toml": "3b06358607986bcc0e16cb550d9c84ba91cbe69df0d2065c994968f054f66f90",
-    "packages/atomic-import/tests/cases.json": "b05c330cfce78cb1aa4bf6eefa8e109e8b27900343470e34f2e51e5558676649",
+    "packages/atomic-import/tests/cases.json": "3051717faeeeb5ee89afd83094f925cdfa11ab1a25defdd8dc0a25ac52a71283",
     "packages/atomic-import/tests/test_task.py": "25672b3dc69844e65614962434318fac433e145553eb8677b8c4566d5be4a76e",
     "packages/atomic-import/workspace/program.py": "7c775caf5b3b65f4c178ad3c61524828aba34b69cf79e8ef38b9c5b9e0111890",
     "packages/config-overlay/.dockerignore": "9b7d929a2285f8429ff68cebfb38684286e1ee9328727832681e3638f7fdaecb",
