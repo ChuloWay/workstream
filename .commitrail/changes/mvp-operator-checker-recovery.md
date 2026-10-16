@@ -33,7 +33,8 @@ eligible source or call the retry through a bearer-authenticated public route.
 - `.commitrail/changes/mvp-operator-checker-recovery.md`: this bounded contract
   and durable evidence.
 - `backend/app/modules/checkers/api/execution.py`: privacy-bounded Operator
-  discovery/request/response values and a typed discovery authority port.
+  discovery/request/response values, a typed discovery authority port, and a
+  required project selector on the existing retry command.
 - `backend/app/modules/checkers/checker_retry.py`: extend the existing owner
   with a bounded project page of retained finalized infrastructure failures and
   their exact current/retried state; leave retry mutation semantics intact.
@@ -43,15 +44,18 @@ eligible source or call the retry through a bearer-authenticated public route.
   `backend/app/api/deps/`: authenticated project-scoped discovery and exact-run
   retry routes, caller-root transaction handling, stable concealment/error
   mapping and UUID `Idempotency-Key` parsing.
-- `backend/app/modules/authorization/catalogue.py`, a focused CHECKERS recovery
-  read domain/adapter, `backend/app/modules/authorization/kernel.py`, and only
-  the minimum AUTH composition exports: activate an exact recovery-source read
-  action backed by the existing system Operator `operations.status.read`
-  permission. Mutation continues to use `operations.checker.retry` unchanged.
-- `backend/tests/checkers/execution/test_checker_retry_public_api.py` and only
-  directly affected AUTH catalogue fixtures/tests: signed bearer-token, real
-  AUTH and PostgreSQL proof for discovery, retry, denial, revocation, replay,
-  currentness, rollback and nonterminal refusal.
+- `backend/app/modules/authorization/catalogue.py`, the existing checker-retry
+  authorization adapter, a focused CHECKERS recovery read domain/adapter,
+  `backend/app/modules/authorization/kernel.py`, and only the minimum AUTH
+  composition exports: activate an exact recovery-source read action backed by
+  the existing system Operator `operations.status.read` permission and retain
+  mutation denials through canonical restage/commit. Mutation continues to use
+  `operations.checker.retry` unchanged.
+- `backend/tests/checkers/execution/test_checker_retry*.py` and only directly
+  affected AUTH catalogue fixtures/tests: update existing callers for the
+  required project selector and add signed bearer-token, real AUTH and
+  PostgreSQL proof for discovery, retry, denial, revocation, replay,
+  currentness, rollback, cross-project locking and nonterminal refusal.
 - `docs/operations_roles_permissions.md`, `docs/operations_operator_workflow.md`
   and `docs/roadmap_status.md`: describe the newly supported terminal-failure
   path and retain uncertain delivery as a visible remaining boundary.
@@ -79,18 +83,26 @@ receipt already exists and the exact successor identities when present. It does
 not return request/result payloads, artifact data, credentials or provider
 coordinates. AUTH revalidates an active human identity and system Operator grant
 for each page before disclosure, binds the project and query digest in audit,
-and conceals missing or unauthorized projects.
+and conceals missing or unauthorized projects. Pagination reuses the canonical
+signed authorization-read cursor codec, binds the exact project/query, and uses
+stable `(created_at, run_id)` keyset ordering.
 
-The retry route accepts the source run in the path, a bounded reason in the
-body, and one UUID `Idempotency-Key`. The dependency builds the existing retry
-context with that key as its request/correlation identity, then calls
-`CheckerRetryService.retry` inside the request transaction. The service remains
-the only writer and still locks TASK currentness before AUTH, revalidates fresh
-authority before any successor commits, and returns the retained receipt on an
-exact lost-response replay. The route maps absent, foreign, stale, nonterminal
-and unauthorized sources to one concealed response; key/payload reuse maps to a
-stable conflict. Database or required-authority evidence failures roll back the
-whole operation and return retryable unavailability.
+The retry route accepts a required project and source run in the path, a bounded
+reason in the body, and one UUID `Idempotency-Key`. The command requires that
+project selector for every caller. The existing owner first resolves the source
+by the exact `(project_id, run_id, post_submission)` tuple, before loading its
+request or taking any TASK lock, so a wrong-project request cannot lock a foreign
+task. The dependency builds the existing retry context with the key as its
+request/correlation identity, then calls `CheckerRetryService.retry` inside the
+request transaction. The service remains the only writer and still locks TASK
+currentness before AUTH, revalidates fresh authority before any successor
+commits, and returns the retained receipt on an exact lost-response replay. The
+route maps absent, foreign, stale, nonterminal and unauthorized sources to one
+concealed response; key/payload reuse maps to a stable conflict. AUTH denials
+roll back product effects, then restage and commit their exact canonical denial
+evidence. Conflict, storage, audit and outbox errors roll back any staged allow
+decision and the whole successor. Required-authority evidence failure returns
+retryable unavailability.
 
 Discovery explicitly reports only known finalized infrastructure failures. A
 queued/running run, a dead-letter `UNKNOWN`, or any unresolved invocation effect
@@ -118,11 +130,17 @@ action or tests.
   contributor revision, Review, acceptance, contribution or award is created.
 - [ ] Exact committed replay, including simulated response loss, performs fresh
   authority and returns the same receipt/successor without another run, event or
-  audit mutation; changed reason/source under the key conflicts.
+  retry-initiation audit effect; it validates the retained original allow and
+  may retain only canonical fresh-request AUTH evidence if AUTH requires it.
+  Changed reason/source/project under the key conflicts.
 - [ ] Wrong/foreign/stale sources and queued, running or completed outcomes
   refuse before a successor effect. Revocation, concurrent retry, forced audit
   or outbox failure and caller rollback retain the service's existing atomic
   guarantees through the public request path.
+- [ ] A request whose URL project differs from the source project is rejected
+  before loading source payloads or taking the foreign TASK row lock; a real
+  PostgreSQL held-lock probe distinguishes that ordering from a coincidental
+  denial.
 - [ ] Discovery never treats dead-letter or `UNKNOWN` delivery as eligible and
   the supported operations documentation names that remaining hold explicitly.
 - [ ] Focused signed public-API tests use real PostgreSQL and canonical AUTH;
@@ -138,8 +156,6 @@ action or tests.
 - Human review focus: exact read scope/concealment, source/currentness proof,
   request-key-to-AUTH binding, denial evidence, lock order, response-loss replay,
   rollback and the hard exclusion of unresolved-effect retry.
-- Human gate: plan review before product edits; an eligible human separately
-  reviews the final PR and explicitly authorizes any merge.
 
 ## Evidence
 
