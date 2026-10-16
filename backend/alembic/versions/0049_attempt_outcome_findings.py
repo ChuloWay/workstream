@@ -399,7 +399,11 @@ UPDATE public.submissions SET updated_at=greatest(submitted_at, coalesce(decided
 
 """
 
+# Terminal revision assignments are immutable from 0048 onward. The backfill
+# only adds the new derived columns, so the upgrade bypasses that guard for
+# these two statements and restores it in the same transaction.
 BACKFILL_ASSIGNMENT_STARTS = """
+ALTER TABLE public.task_assignments DISABLE TRIGGER a_revision_terminal_assignment_immutable;
 UPDATE public.task_assignments a SET started_at=(
   SELECT min(e.created_at) FROM public.audit_events e
   WHERE e.entity_type='task' AND e.entity_id=a.task_id
@@ -408,6 +412,7 @@ UPDATE public.task_assignments a SET started_at=(
     AND (a.released_at IS NULL OR e.created_at <= a.released_at));
 UPDATE public.task_assignments SET updated_at=greatest(assigned_at,
   coalesce(started_at, assigned_at), coalesce(released_at, assigned_at));
+ALTER TABLE public.task_assignments ENABLE TRIGGER a_revision_terminal_assignment_immutable;
 
 """
 

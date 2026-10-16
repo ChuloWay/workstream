@@ -209,3 +209,42 @@ async def test_retained_cap_recovery_releases_once_and_preserves_exact_routing_r
             with pytest.raises((AuthorizationDenied, PreparedAuthorizationUnsupported)):
                 await _apply(h, original_envelope)
             assert await _snapshot(h) == revoked
+
+
+async def test_upgrade_backfills_assignments_around_a_retained_exhausted_assignment(
+    tmp_path, isolated_database_env, migration_lock, monkeypatch,
+):
+    """0049's assignment backfill must not trip the terminal-assignment immutability guard."""
+    database_url = isolated_database_env
+    await _execute(database_url, "drop schema public cascade; create schema public")
+    await asyncio.to_thread(command.upgrade, _alembic_config(), "0048_revision_exhaustion")
+    shape = pytest.MonkeyPatch()
+    await enter_predecessor_owner_shape(_execute, database_url, shape)
+    async with remediation_source(tmp_path, database_url, max_revision_rounds=0) as h:
+        exhausted = await _apply(h)
+        async with h.factory() as session:
+            receipt = await session.scalar(select(TaskRevisionExhaustion).where(
+                TaskRevisionExhaustion.routing_manifest_id == exhausted.routing_manifest_id,
+            ))
+            assert receipt is not None
+            before = await session.scalar(text(
+                "SELECT to_jsonb(a)-ARRAY['started_at','updated_at'] "
+                "FROM public.task_assignments a WHERE id=:id"
+            ), {"id": receipt.assignment_id})
+            assert before["status"] == "revision_exhausted"
+        shape.undo()
+        await leave_predecessor_owner_shape(_execute, database_url)
+        await asyncio.to_thread(command.upgrade, _alembic_config(), current_schema_revision())
+        async with h.factory() as session:
+            after = (await session.execute(text(
+                "SELECT to_jsonb(a)-ARRAY['started_at','updated_at'],a.updated_at "
+                "FROM public.task_assignments a WHERE id=:id"
+            ), {"id": receipt.assignment_id})).one()
+            assert after[0] == before
+            assert after[1] == receipt.exhausted_at
+            assert await session.scalar(text("""
+                SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid
+                JOIN pg_namespace n ON n.oid=c.relnamespace
+                WHERE n.nspname='public' AND NOT t.tgisinternal AND t.tgenabled='D'
+            """)) == 0
+        await _assert_exhausted_assignment_immutable(h, receipt)

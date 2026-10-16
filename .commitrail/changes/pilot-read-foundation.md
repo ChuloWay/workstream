@@ -222,6 +222,11 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   and backfill is defence in depth. Terminal custody already makes a
   zero-failure `needs_revision` imply such a finding, so tests cannot
   discriminate the clause.
+- CodeRabbit's terminal-assignment finding was real: the 0049
+  assignment backfill aborted on a retained `revision_exhausted` or
+  `revision_expired` assignment. The backfill now bypasses that guard for its
+  two derived-column updates and re-enables it in the same transaction; a
+  retained-upgrade test covers an exhausted assignment and the guard afterwards.
 - Observed outside scope: on the public bundle-preparation route, an upload
   that is not a readable ZIP fails archive inspection before any pre-submit
   check runs, and `SubmissionArchiveRejectedError` surfaces as a 500 instead of

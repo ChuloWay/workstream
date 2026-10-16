@@ -1647,7 +1647,8 @@ Attempt outcome (`attempt_status`, published as the read `status`):
   finding accompanies it. A coverage gap under a true ReviewPolicy is
   `review_pending` instead.
 - `rejected` — a revision expiration receipt names this Submission as its
-  source; `status_reason` is `revision_deadline_expired`
+  source, with `status_reason` `revision_deadline_expired`; or a revision
+  exhaustion receipt names it, with `status_reason` `revision_limit_reached`
 
 The deciding owner requests each transition in its own transaction. A
 PostgreSQL guard refuses any transition without that owner's evidence, derives
@@ -2118,8 +2119,10 @@ locked revision policy identity/generation/hash, PostgreSQL exhaustion time and
 AUTH/audit/outbox references. One assignment has one exhaustion receipt. The
 routing transaction releases it as `revision_exhausted`, clears the task's
 assignee and returns the task to `ready`, without creating another preparation
-or expiry intent. History projects `rejected` with
-`status_reason=revision_limit_reached`; the stored Submission is unchanged.
+or expiry intent. The source Submission's packet facts stay unchanged; its
+attempt outcome moves to `rejected` with `status_reason=revision_limit_reached`
+and `decided_at` copied from the receipt by the attempt-status guard, and
+history reads those stored columns.
 Contributor task detail exposes only that actor's `last_assignment_outcome`,
 while covered PM detail exposes the latest closed assignment. Its `next_action`
 is `none`, even when the task permits a fresh claim under a new assignment.
