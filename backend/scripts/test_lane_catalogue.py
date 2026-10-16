@@ -602,10 +602,11 @@ PROJECT_PARTITIONED_MODULES = (
 # exact lane ownership so their waits and large fixtures do not collide.
 PROJECT_MODULE_LANE_OVERRIDES = {
     "tests/test_projects.py": (
-        # Hosted lane D ran 1181 seconds of tests with 101 of them here, while
-        # C and B had the most spare time; A and E stay clear as before.
+        # Retained durations put this broad module on C/B/D, relieving the
+        # repeated E timeout without adding work to the already busy A lane.
         "project_lifecycle_c",
         "project_lifecycle_b",
+        "project_lifecycle_d",
     ),
     "tests/tasks/test_task_batch_transitions.py": (
         # Tuple order spreads the measured 500/200-row cases away from E.

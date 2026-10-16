@@ -176,9 +176,8 @@ partition PROJECT nodes, checker execution, materialization, evaluation capacity
 output custody and routing AUTH preparation beside initial dispatch/delivery.
 All use the existing exact-node hash within the project family. Measured module
 overrides in `PROJECT_MODULE_LANE_OVERRIDES` spread expensive proofs across
-specific project lanes. In particular, `test_projects.py` uses C/B: its
-former B/E allocation repeatedly exceeded E's deadline, and its later C/B/D
-allocation left D at its deadline once PILOT-READ-1 added stored-outcome tests. The
+specific project lanes. In particular, `test_projects.py` uses C/B/D after its
+former B/E allocation repeatedly exceeded E's deadline. The
 [CI change record](../.commitrail/changes/ci-pr-scope-segmentation.md) records this
 allocation repair; it changes neither semantic ownership nor test membership.
 The lane logs retain all setup/call/teardown phase durations,

@@ -227,9 +227,6 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   `revision_expired` assignment. The backfill now bypasses that guard for its
   two derived-column updates and re-enables it in the same transaction; a
   retained-upgrade test covers an exhausted assignment and the guard afterwards.
-- Hosted lane D then passed all 543 nodes in 1181 seconds but crossed the
-  1200-second lane deadline. `tests/test_projects.py` (101 seconds there) now
-  runs on C/B, which had the most spare time (761 and 925 seconds).
 - Observed outside scope: on the public bundle-preparation route, an upload
   that is not a readable ZIP fails archive inspection before any pre-submit
   check runs, and `SubmissionArchiveRejectedError` surfaces as a 500 instead of
