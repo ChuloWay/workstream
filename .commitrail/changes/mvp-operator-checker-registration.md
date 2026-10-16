@@ -81,6 +81,9 @@ identity and system Operator grant to perform startup registration.
   fingerprint measured from a fresh real PostgreSQL graph through revision
   `0050_operational_read_audit`; the graph delta is limited to the existing
   audit constraint's two allowed operational-read pairs.
+- `backend/tests/test_alembic.py`: retain the exact single-root migration graph
+  through merged revision `0049_attempt_outcome_findings` and this change's
+  `0050_operational_read_audit` head.
 - `backend/tests/authorization/catalogue_fixtures.py`,
   `backend/tests/authorization/test_catalogue.py`, and
   `backend/tests/authorization/setup_finalization/test_catalogue.py`, plus
