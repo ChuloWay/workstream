@@ -1,6 +1,9 @@
 """PostgreSQL proofs for checker-retry authority ordering and revocation."""
 
 import asyncio
+from pathlib import Path
+import sys
+import traceback
 from uuid import UUID
 
 import pytest
@@ -10,6 +13,7 @@ from sqlalchemy.engine import Engine
 from app.adapters.audit import task_transition_audit
 from app.adapters.checkers import checker_retry_service
 from app.adapters.tasks import task_commands
+from app.core import api_controls
 from app.core.config import get_settings
 from app.core.identifiers import new_record_id
 from app.modules.actors.models import ActorIdentityLink, ActorProfile
@@ -55,7 +59,25 @@ from tests.checkers.execution.test_checker_retry import (
 from tests.test_artifact_admission import _context
 
 
-async def _assert_project_manager_concealed(admin_access, h, discovery_path, retry_path):
+def _unexpected_api_exception_signature():
+    error = sys.exc_info()[1]
+    pending = [error] if error is not None else []
+    types = []
+    frames = []
+    while pending:
+        current = pending.pop()
+        types.append(type(current).__name__)
+        pending.extend(getattr(current, "exceptions", ()))
+        for frame in traceback.extract_tb(current.__traceback__):
+            path = Path(frame.filename)
+            if "workstream_mvp_recovery_581" in path.parts:
+                frames.append(f"{path.name}:{frame.lineno}:{frame.name}")
+    return ",".join(types), ";".join(frames)
+
+
+async def _assert_project_manager_concealed(
+    admin_access, h, discovery_path, retry_path, monkeypatch,
+):
     project_grant = await admin_access.signed.grant(
         admin_access.admin,
         admin_access.target,
@@ -69,9 +91,17 @@ async def _assert_project_manager_concealed(admin_access, h, discovery_path, ret
 
     event.listen(Engine, "before_cursor_execute", capture_denied)
     try:
-        denied = await admin_access.signed.client.get(
-            discovery_path, headers=admin_access.target.headers,
-        )
+        with monkeypatch.context() as diagnostic:
+            def reveal_unexpected_error(*_args, **_kwargs):
+                types, frames = _unexpected_api_exception_signature()
+                raise AssertionError(
+                    f"unexpected API exception types={types}; frames={frames}"
+                ) from None
+
+            diagnostic.setattr(api_controls.LOGGER, "error", reveal_unexpected_error)
+            denied = await admin_access.signed.client.get(
+                discovery_path, headers=admin_access.target.headers,
+            )
     finally:
         event.remove(Engine, "before_cursor_execute", capture_denied)
     assert denied.status_code == 404, denied.text
@@ -329,7 +359,7 @@ async def test_public_operator_discovers_retries_replays_and_observes_revocation
     async with _failed_source(tmp_path, auth_database_env, monkeypatch) as (h, _delivery):
         discovery_path, retry_path = _recovery_paths(h)
         project_grant = await _assert_project_manager_concealed(
-            admin_access, h, discovery_path, retry_path,
+            admin_access, h, discovery_path, retry_path, monkeypatch,
         )
         system_grant, item = await _operator_discovery(admin_access, h, discovery_path)
         wrong_retry = await _wrong_project_refuses_before_task_lock(admin_access, h)
