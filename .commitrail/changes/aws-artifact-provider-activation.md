@@ -101,6 +101,11 @@ unknown provider outcome fails closed and cannot commit success evidence.
 - Focused unit, real-PostgreSQL and existing S3/entry-point tests under
   `backend/tests/`; schema manifest/custody files only where the additive
   migration requires their normal update.
+- `backend/app/modules/checkers/external_registry.py` and
+  `backend/tests/checkers/external/test_postgresql.py`: preserve the exact
+  shared `0050_operational_read_audit` prerequisite repair while stacking the
+  provider proof migration after it; no registry behavior is otherwise in
+  scope.
 - `backend/scripts/test_lane_catalogue.py`,
   `backend/tests/test_ci_lane_catalogue.py` and
   `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: assign the new focused tests

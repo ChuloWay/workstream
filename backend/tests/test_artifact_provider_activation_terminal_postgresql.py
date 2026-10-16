@@ -435,7 +435,6 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
     local_settings = _settings(tmp_path)
     activation_settings = _aws_activation_settings(local_settings)
     namespace = _namespace(local_settings)
-    bootstrap, store = _local_store(local_settings, namespace)
     engine = create_async_engine(admission_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     policy_bundle = await create_standalone_unified_policy(factory, namespace)
@@ -461,9 +460,21 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
                     source,
                     relationships=relationships,
                 )
+
+                class SeedPutStore:
+                    identity = SimpleNamespace(provider_key=namespace.adapter)
+
+                    async def put(self, put_source, *, operation_evidence):
+                        return ArtifactPutResult(
+                            "sha256/"
+                            f"{put_source.commitment.sha256[7:9]}/"
+                            f"{put_source.commitment.sha256[9:]}",
+                            replayed=False,
+                        )
+
                 initial = ArtifactStorageOrchestrator(
                     session,
-                    store,
+                    SeedPutStore(),
                     namespace,
                     local_settings,
                     _AllowArtifactAuthority(),
@@ -531,5 +542,4 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
                     prior_replica_state=prior_replica_state,
                 )
     finally:
-        bootstrap.close()
         await engine.dispose()
