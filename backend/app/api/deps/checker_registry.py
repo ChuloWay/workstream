@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.auth import checker_registry_authorization
+from app.adapters.checkers import external_checker_registry_service
 from app.api.deps.authorization import _authorization_context, get_authorization_actor
 from app.core.api_controls import StructuredHTTPException, parse_idempotency_key, request_ids
 from app.db.session import get_db_session
@@ -22,9 +23,9 @@ from app.modules.checkers.api import (
     ExternalCheckerRegistryConflict,
     ExternalCheckerRegistryEntry,
     ExternalCheckerRegistryNotFound,
+    ExternalCheckerRegistryPort,
     ExternalCheckerRegistryUnavailable,
 )
-from app.modules.checkers.external_registry import ExternalCheckerRegistryService
 
 
 REGISTRY_IDEMPOTENCY_PARAMETER = {
@@ -46,7 +47,7 @@ class CheckerRegistryOperation:
     """One authenticated actor and caller-root CHECKERS registry operation."""
 
     session: AsyncSession
-    service: ExternalCheckerRegistryService
+    service: ExternalCheckerRegistryPort
     actor_profile_id: UUID
 
 
@@ -88,7 +89,7 @@ async def _registry_operation(
             try:
                 yield CheckerRegistryOperation(
                     session=session,
-                    service=ExternalCheckerRegistryService(session, authority),
+                    service=external_checker_registry_service(session, authority),
                     actor_profile_id=context.actor_profile_id,
                 )
             except ExternalCheckerRegistryAuthorizationDenied as exc:

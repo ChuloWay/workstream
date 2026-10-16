@@ -42,7 +42,7 @@ identity and system Operator grant to perform startup registration.
   lock registry operation/logical identity, recover or select the durable
   UUIDv7, then finalize exact authority before insert or replay; keep the same
   repository, immutable row and digest contract.
-- `backend/app/modules/checkers/registry_router.py`,
+- `backend/app/modules/checkers/router.py`,
   `backend/app/api/deps/checker_registry.py`, and
   `backend/app/api/router.py`: one authenticated Operator registration route,
   one exact-entry read route, caller-root transaction composition and stable
@@ -50,6 +50,9 @@ identity and system Operator grant to perform startup registration.
 - `backend/app/adapters/auth/__init__.py`: compose the existing AUTH kernel and
   opaque prepared-authority service for the request-scoped registry adapter;
   no second factory or fallback composition is allowed.
+- `backend/app/adapters/checkers/__init__.py`: compose the existing private
+  registry service through CHECKERS' established adapter root without adding a
+  delivery-to-private-module dependency.
 - `backend/app/modules/authorization/catalogue.py`,
   `backend/app/modules/authorization/domain/checker_registry.py`,
   `backend/app/modules/authorization/checker_registry_authorization.py`, and
