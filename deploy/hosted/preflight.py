@@ -6,7 +6,9 @@ from __future__ import annotations
 import argparse
 from decimal import Decimal, InvalidOperation
 import json
+import os
 from pathlib import Path
+import pwd
 import re
 import stat
 import subprocess
@@ -30,6 +32,36 @@ SECRET_FILE_KEYS = (
     "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE",
     "OPENAI_API_KEY_FILE",
 )
+SECRET_FILE_TARGETS = {
+    "WORKSTREAM_DATABASE_URL_FILE": ("database_url", "/run/secrets/database_url"),
+    "WORKSTREAM_CELERY_BROKER_URL_FILE": (
+        "celery_broker_url",
+        "/run/secrets/celery_broker_url",
+    ),
+    "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE": (
+        "api_rate_limit_key",
+        "/run/secrets/api_rate_limit_key",
+    ),
+    "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE": (
+        "pagination_cursor_hmac",
+        "/run/secrets/pagination_cursor_hmac",
+    ),
+    "OPENAI_API_KEY_FILE": ("openai_api_key", "/run/secrets/openai_api_key"),
+}
+ROLE_SECRET_FILE_KEYS = {
+    "api": (
+        "WORKSTREAM_DATABASE_URL_FILE",
+        "WORKSTREAM_CELERY_BROKER_URL_FILE",
+        "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE",
+        "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE",
+    ),
+    "worker": (
+        "WORKSTREAM_DATABASE_URL_FILE",
+        "WORKSTREAM_CELERY_BROKER_URL_FILE",
+        "OPENAI_API_KEY_FILE",
+    ),
+    "beat": ("WORKSTREAM_CELERY_BROKER_URL_FILE",),
+}
 FORBIDDEN_RELEASE_KEYS = (
     "AWS_ACCESS_KEY_ID",
     "AWS_CONFIG_FILE",
@@ -67,6 +99,37 @@ TIMEOUT_KEYS = (
     "WORKSTREAM_ARTIFACT_COMPLETE_READ_DEADLINE_SECONDS",
     "WORKSTREAM_ARTIFACT_TERMINAL_PERSISTENCE_MARGIN_SECONDS",
 )
+REQUIRED_RELEASE_KEYS = (
+    "COMPOSE_PROJECT_NAME",
+    "WORKSTREAM_BACKEND_IMAGE",
+    "WORKSTREAM_CHECKER_SERVICE_IMAGE",
+    "WORKSTREAM_RUNTIME_UID",
+    "WORKSTREAM_RUNTIME_GID",
+    "WORKSTREAM_DOCKER_SOCKET_GID",
+    "WORKSTREAM_TOKEN_ISSUER",
+    "WORKSTREAM_TOKEN_AUDIENCE",
+    "WORKSTREAM_TOKEN_JWKS_URL",
+    "WORKSTREAM_TOKEN_ALGORITHMS",
+    "WORKSTREAM_TOKEN_INTROSPECTION_MODE",
+    "WORKSTREAM_TOKEN_INTROSPECTION_DISABLED_REASON",
+    "WORKSTREAM_REQUIRED_HUMAN_SCOPE",
+    "WORKSTREAM_REQUIRED_SERVICE_SCOPE",
+    "WORKSTREAM_ARTIFACT_S3_REGION",
+    "WORKSTREAM_ARTIFACT_S3_BUCKET",
+    "WORKSTREAM_ARTIFACT_S3_PRIVATE_PREFIX",
+    "WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD",
+    "WORKSTREAM_CHECKER_CONFIG_FILE",
+    *TIMEOUT_KEYS,
+    *SECRET_FILE_KEYS,
+)
+OPTIONAL_RELEASE_KEYS = (
+    "WORKSTREAM_API_HOST_PORT",
+    "WORKSTREAM_CELERY_WORKER_CONCURRENCY",
+    "WORKSTREAM_OBSERVABILITY_LOG_LEVEL",
+    "WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT",
+    "WORKSTREAM_OBSERVABILITY_TRACE_SAMPLE_RATIO",
+)
+RELEASE_KEYS = frozenset((*REQUIRED_RELEASE_KEYS, *OPTIONAL_RELEASE_KEYS))
 
 
 class PreflightError(RuntimeError):
@@ -124,26 +187,14 @@ def _positive_decimal(values: dict[str, str], key: str) -> Decimal:
 
 def validate_environment(values: dict[str, str]) -> None:
     """Validate only invariants introduced by the hosted release profile."""
+    unknown = sorted(set(values) - RELEASE_KEYS)
+    if unknown:
+        raise PreflightError(f"release environment contains an unsupported key: {unknown[0]}")
+    for key in REQUIRED_RELEASE_KEYS:
+        _required(values, key)
     for key in ("WORKSTREAM_BACKEND_IMAGE", "WORKSTREAM_CHECKER_SERVICE_IMAGE"):
         if not IMAGE_REFERENCE.fullmatch(_required(values, key)):
             raise PreflightError(f"release image must use repository@sha256: {key}")
-    for key in (
-        "COMPOSE_PROJECT_NAME",
-        "WORKSTREAM_TOKEN_ISSUER",
-        "WORKSTREAM_TOKEN_AUDIENCE",
-        "WORKSTREAM_TOKEN_JWKS_URL",
-        "WORKSTREAM_TOKEN_ALGORITHMS",
-        "WORKSTREAM_TOKEN_INTROSPECTION_DISABLED_REASON",
-        "WORKSTREAM_REQUIRED_HUMAN_SCOPE",
-        "WORKSTREAM_REQUIRED_SERVICE_SCOPE",
-        "WORKSTREAM_ARTIFACT_S3_REGION",
-        "WORKSTREAM_ARTIFACT_S3_BUCKET",
-        "WORKSTREAM_ARTIFACT_S3_PRIVATE_PREFIX",
-        "WORKSTREAM_CHECKER_CONFIG_FILE",
-        *TIMEOUT_KEYS,
-        *SECRET_FILE_KEYS,
-    ):
-        _required(values, key)
     for key in (
         "WORKSTREAM_RUNTIME_UID",
         "WORKSTREAM_RUNTIME_GID",
@@ -265,7 +316,18 @@ def validate_private_host_inputs(values: dict[str, str]) -> None:
         raise PreflightError("Docker socket group differs from release configuration")
 
 
-def _run_json(command: list[str], *, failure: str) -> Any:
+def compose_environment(values: dict[str, str]) -> dict[str, str]:
+    """Return the sole environment used for release Compose interpolation."""
+    environment = {key: value for key, value in values.items() if key in RELEASE_KEYS}
+    environment["PATH"] = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    environment["HOME"] = pwd.getpwuid(os.getuid()).pw_dir
+    environment["DOCKER_HOST"] = f"unix://{DOCKER_SOCKET}"
+    return environment
+
+
+def _run_json(
+    command: list[str], *, failure: str, environment: dict[str, str] | None = None
+) -> Any:
     try:
         completed = subprocess.run(
             command,
@@ -273,13 +335,14 @@ def _run_json(command: list[str], *, failure: str) -> Any:
             capture_output=True,
             text=True,
             timeout=30,
+            env=environment,
         )
         return json.loads(completed.stdout)
     except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
         raise PreflightError(failure) from exc
 
 
-def render_compose(environment_path: Path) -> dict[str, Any]:
+def render_compose(environment_path: Path, values: dict[str, str]) -> dict[str, Any]:
     """Render Compose from non-secret values without emitting the result."""
     rendered = _run_json(
         [
@@ -294,10 +357,36 @@ def render_compose(environment_path: Path) -> dict[str, Any]:
             "json",
         ],
         failure="release Compose configuration did not render",
+        environment=compose_environment(values),
     )
     if not isinstance(rendered, dict):
         raise PreflightError("release Compose output is invalid")
     return rendered
+
+
+def run_compose(
+    environment_path: Path, values: dict[str, str], compose_arguments: list[str]
+) -> int:
+    """Run one documented Compose operation with no ambient interpolation."""
+    if not compose_arguments or compose_arguments[0] not in {"pull", "up", "ps", "stop"}:
+        raise PreflightError("unsupported hosted Compose operation")
+    try:
+        completed = subprocess.run(
+            [
+                "docker",
+                "compose",
+                "--env-file",
+                str(environment_path),
+                "--file",
+                str(COMPOSE_PATH),
+                *compose_arguments,
+            ],
+            check=False,
+            env=compose_environment(values),
+        )
+    except OSError as exc:
+        raise PreflightError("hosted Compose operation could not start") from exc
+    return completed.returncode
 
 
 def _service_mounts(service: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -380,12 +469,50 @@ def validate_compose(rendered: dict[str, Any]) -> None:
                 raise PreflightError(f"{name} does not preserve exact host path {path}")
             if mount.get("read_only") is True:
                 raise PreflightError(f"{name} requires a writable private path {path}")
-    environment = services["api"].get("environment")
-    if not isinstance(environment, dict):
-        raise PreflightError("API release environment is unavailable")
-    for name in ("worker", "beat"):
-        if services[name].get("environment") != environment:
-            raise PreflightError(f"{name} must use the exact backend environment")
+    environments: dict[str, dict[str, Any]] = {}
+    for role in ROLE_SECRET_FILE_KEYS:
+        environment = services[role].get("environment")
+        if not isinstance(environment, dict):
+            raise PreflightError(f"{role} release environment is unavailable")
+        if environment.get("WORKSTREAM_RELEASE_ROLE") != role:
+            raise PreflightError(f"{role} has an unsafe release role")
+        required_file_keys = set(ROLE_SECRET_FILE_KEYS[role])
+        for key, (_, target) in SECRET_FILE_TARGETS.items():
+            if key in required_file_keys:
+                if environment.get(key) != target:
+                    raise PreflightError(f"{role} lacks a required secret selector: {key}")
+            elif key in environment:
+                raise PreflightError(f"{role} contains an unrelated secret selector: {key}")
+        mounted = services[role].get("secrets")
+        if not isinstance(mounted, list):
+            raise PreflightError(f"{role} release secrets are unavailable")
+        expected_sources = {
+            SECRET_FILE_TARGETS[key][0] for key in ROLE_SECRET_FILE_KEYS[role]
+        }
+        service_uid, service_gid = services[role]["user"].split(":", maxsplit=1)
+        if len(mounted) != len(expected_sources) or any(
+            not isinstance(item, dict)
+            or item.get("source") not in expected_sources
+            or item.get("target") != item.get("source")
+            or item.get("uid") != service_uid
+            or item.get("gid") != service_gid
+            or item.get("mode") != 0o400
+            for item in mounted
+        ):
+            raise PreflightError(f"{role} mounted secrets differ from its release role")
+        environments[role] = environment
+    common_environments = []
+    for environment in environments.values():
+        common_environments.append(
+            {
+                key: value
+                for key, value in environment.items()
+                if key not in SECRET_FILE_KEYS and key != "WORKSTREAM_RELEASE_ROLE"
+            }
+        )
+    if any(environment != common_environments[0] for environment in common_environments[1:]):
+        raise PreflightError("backend roles must share the same non-secret environment")
+    environment = environments["api"]
     exact = {
         "WORKSTREAM_AUTH_PROVIDER": "flow",
         "WORKSTREAM_DEBUG": "false",
@@ -415,11 +542,12 @@ def validate_compose(rendered: dict[str, Any]) -> None:
             raise PreflightError(f"secret value was interpolated into Compose: {key}")
 
 
-def validate_docker_runtime(config: dict[str, Any]) -> None:
+def validate_docker_runtime(config: dict[str, Any], values: dict[str, str]) -> None:
     """Check local runsc registration and exact preloaded image identities."""
     runtimes = _run_json(
         ["docker", "info", "--format", "{{json .Runtimes}}"],
         failure="Docker runtime inventory is unavailable",
+        environment=compose_environment(values),
     )
     if not isinstance(runtimes, dict) or "runsc" not in runtimes:
         raise PreflightError("Docker does not report the required runsc runtime")
@@ -428,6 +556,7 @@ def validate_docker_runtime(config: dict[str, Any]) -> None:
         inspected = _run_json(
             ["docker", "image", "inspect", reference],
             failure="one configured checker image is not preloaded",
+            environment=compose_environment(values),
         )
         if not isinstance(inspected, list) or len(inspected) != 1:
             raise PreflightError("checker image inspection is ambiguous")
@@ -459,14 +588,14 @@ def main() -> int:
         validate_environment(values)
         checker_config = load_checker_config(Path(values["WORKSTREAM_CHECKER_CONFIG_FILE"]))
         validate_checker_config(checker_config, values)
-        validate_compose(render_compose(args.env_file))
+        validate_compose(render_compose(args.env_file, values))
         if args.configuration_only:
             print(
                 "configuration valid; host identity, runsc/cache, cloud, health and recovery checks skipped"
             )
             return 0
         validate_private_host_inputs(values)
-        validate_docker_runtime(checker_config)
+        validate_docker_runtime(checker_config, values)
     except PreflightError as exc:
         print(f"hosted release preflight failed: {exc}", file=sys.stderr)
         return 1

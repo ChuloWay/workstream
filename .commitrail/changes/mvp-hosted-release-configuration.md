@@ -48,6 +48,7 @@ source mount, reload, development packages, local authentication and MinIO.
 - `docker/backend/release-entrypoint.sh`
 - `docker/checker/Dockerfile.release`
 - `deploy/hosted/compose.yml`
+- `deploy/hosted/compose.py`
 - `deploy/hosted/release.env.example`
 - `deploy/hosted/checker-service.example.json`
 - `deploy/hosted/preflight.py`
@@ -95,22 +96,32 @@ dedicated runner host and trusted daemon, restricts the checker service to the
 exact Docker-socket group, publishes no runner port, and gives the controller no
 network. This change does not claim to reduce Docker-controller authority.
 
-Application secrets are mounted as private files and loaded only by an
-allowlisted entrypoint mapping. The loader requires nonempty regular files,
-requires the running identity and mode `0400`, never evaluates file content,
-never logs it and removes the file-selector variables before executing the
-application. The operator must protect host ownership and modes; release
-preflight checks file presence, ownership/mode and nonzero size without reading
-content. Missing required secrets or settings stop startup. No local-HMAC,
-development-auth, MinIO/static-AWS credential or debug setting is accepted by
-the release profile.
+Application secrets are mounted as private files and loaded through one explicit
+role mapping. The API receives database, broker, rate-limit and pagination
+secrets; the worker receives database, broker and OpenAI secrets because it
+hosts setup jobs; Beat receives only the broker secret. The loader rejects an
+unknown role or missing role-required file, clears possible ambient secret
+values, requires nonempty regular files with the running identity and mode
+`0400`, never evaluates file content, never logs it and removes every selector
+before executing the application. The operator must protect host ownership and
+modes; release preflight checks file presence, ownership/mode and nonzero size
+without reading content. No local-HMAC, development-auth, MinIO/static-AWS
+credential or debug setting is accepted by the release profile.
+
+Docker Compose gives shell variables precedence over `--env-file`. Both
+preflight rendering and every documented Compose operation therefore use the
+same small wrapper environment constructed only from the parsed, allowlisted
+release file plus fixed process-path values. Ambient image, Flow URL, secret
+path, Compose selector and Docker daemon selector values are never forwarded.
 
 Preflight stays release-specific. It checks digest-qualified service images,
 the fixed mount/path relationship, private host inputs, exact gVisor/runsc
 configuration, configured cache identities, local Docker runsc registration
-and the presence of matching locally cached images. It uses the existing
-application settings and checker health owners for runtime validation rather
-than duplicating their domains. Preflight cannot attest the active cloud
+and the point-in-time presence of matching locally cached images. The health
+check covers only the canonical socket and registered runsc runtime; the runner
+revalidates exact cache identity for each execution. Preflight uses the existing
+application settings and checker runtime owners rather than duplicating their
+domains. Preflight cannot attest the active cloud
 identity, absence of extra IAM permissions, external service availability,
 diagnostic delivery, backup/restore recoverability or live product health.
 
@@ -135,12 +146,14 @@ current application settings here.
 - [x] API and worker use the identical fixed absolute scratch and checker-socket
   paths; the checker service uses the same host-visible material path.
 - [x] The checker service is non-root, read-only, networkless, attached only to
-  the exact Docker-socket group, and becomes ready only with the configured
-  private cache, exact cached image identities and registered `runsc` runtime.
+  the exact Docker-socket group, and health checks only its canonical socket and
+  registered `runsc` runtime. Full preflight checks cache identity once and the
+  existing runner revalidates it for each execution.
 - [x] Real Flow verification and AWS workload identity are required; local auth,
   local Flow-HMAC, static AWS keys, MinIO and debug settings fail preflight.
-- [x] Required secrets are file-mounted, allowlisted and never printed or
-  evaluated; absent, broad-mode, wrong-owner or empty files fail preflight.
+- [x] Required secrets are mounted and loaded only for their API, worker or Beat
+  role and are never printed or evaluated; absent, unrelated, broad-mode,
+  wrong-owner or empty files fail closed.
 - [x] API, worker and Beat have bounded health/restart/drain configuration;
   runner/cache absence fails closed and existing product owners retain
   infrastructure-result classification.
@@ -156,7 +169,8 @@ current application settings here.
 ## Verification Plan
 
 1. Run focused unit tests for the secret loader contract and release preflight,
-   including mutated tag/local-auth/static-key/non-runsc/cache/path/mode cases.
+   including hostile ambient interpolation, role/mount isolation and mutated
+   tag/local-auth/static-key/non-runsc/cache/path/mode cases.
 2. Render `deploy/hosted/compose.yml` with disposable placeholder identities and
    secret files; assert service commands, immutable images, mounts, security
    options, health checks and absence of development services/settings.
@@ -182,7 +196,8 @@ remain parent #555/#583 evidence rather than local configuration proof.
 - Conditional reviewer: `ci_integrity` only if workflow or gate wiring changes
 - Human review focus: Docker-socket host authority; dedicated runner-host
   assumption; same-path material custody; secret ownership and non-disclosure;
-  fail-closed Flow/AWS settings; runsc/cache readiness; worker drain and restart;
+  fail-closed Flow/AWS settings; socket/runsc health and point-in-time cache
+  proof; worker drain and restart;
   retained-data backup/forward-recovery semantics; honest separation of
   configuration, deployment and live proof.
 
@@ -205,14 +220,15 @@ explicitly provisional.
 
 Source/configuration candidate checks:
 
-- `python3 -m unittest -v scripts.test_hosted_release_config`: eight focused
-  tests pass, including real Compose rendering and executed secret-loader
-  failure/non-evaluation/non-disclosure cases.
-- `uvx ruff@0.15.22 check deploy/hosted/preflight.py scripts/test_hosted_release_config.py`,
+- `python3 -m unittest -v scripts.test_hosted_release_config`: ten focused tests
+  pass, including hostile ambient Compose rendering/operation and executed
+  role-specific secret-loader failure/non-evaluation/non-disclosure cases.
+- `uvx ruff@0.15.22 check deploy/hosted/preflight.py deploy/hosted/compose.py
+  scripts/test_hosted_release_config.py`,
   `/bin/sh -n docker/backend/release-entrypoint.sh` and `git diff --check` pass.
 - `python3 scripts/check_markdown_links.py` passes for the three changed
   Markdown files; the stale-wording and Commitrail record checks pass.
-- `docker build --file docker/checker/Dockerfile.release --tag
+- Historical evidence: `docker build --file docker/checker/Dockerfile.release --tag
   workstream-checker-release:test .` passes with locked Cargo and two compiler
   jobs. Local image ID
   `sha256:fe6d6905d1d600d3957536301aded948b03a72448fa4b8193d60760df5d14362`
@@ -220,8 +236,9 @@ Source/configuration candidate checks:
   binary. This is a local image ID, not a published repository digest or release
   identity.
 
-The earlier backend image build predates the final loader hardening and is not
-candidate evidence. Its exact-source rebuild and inspection remain queued behind
-the shared PostgreSQL proof workload. AWS, Flow, runsc workload, selected
+The earlier backend and checker image builds predate the latest merged backend
+and Rust SDK source plus this loader hardening and are historical evidence only.
+Exact-source rebuild and inspection remain queued behind the shared proof
+workload. AWS, Flow, runsc workload, selected
 checker-image, diagnostics, recovery and backup/restore proof remain unavailable
 by design; no deployment or hosted readiness is claimed.

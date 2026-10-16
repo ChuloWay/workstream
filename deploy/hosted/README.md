@@ -74,14 +74,17 @@ The release profile uses `WORKSTREAM_AUTH_PROVIDER=flow`; local Flow-HMAC and
 development authentication are absent.
 
 Create each secret as a one-value regular file at the configured path. Make it
-owned by the runtime UID/GID with mode `0400`. The allowlisted entrypoint loads
-only the database URL, broker URL, API rate-limit key, pagination HMAC key and
-OpenAI key. It independently requires the running identity and mode `0400`,
-performs no shell evaluation and never prints a value. Do not put AWS static
-keys in these files: the runtime uses the selected AWS workload identity. This
-first single-host profile requires the dedicated host's IAM role; web-identity
-token and container-role transports need a different reviewed topology and fail
-this preflight.
+owned by the runtime UID/GID with mode `0400`. The explicit role loader gives the
+API only the database, broker, rate-limit and pagination secrets; the worker
+gets the database, broker and OpenAI secrets because it hosts setup jobs; Beat
+gets only the broker secret. An absent required selector or unknown role stops
+startup, and an unrelated secret is neither mounted nor loaded. The loader
+independently requires the running identity and mode `0400`, performs no shell
+evaluation and never prints a value. Do not put AWS static keys in these files:
+the runtime uses the selected AWS workload identity. This first single-host
+profile requires the dedicated host's IAM role; web-identity token and
+container-role transports need a different reviewed topology and fail this
+preflight.
 
 The example S3 and completion timeouts are unmeasured starting values supplied
 by the current #582 contract:
@@ -102,8 +105,10 @@ and the same runtime owner. Replace the example cache with every approved
 single-platform checker image supplied by the project checker/registry work.
 For each entry, preserve the exact repository, platform manifest digest/media
 type/byte count, Linux architecture and Docker config image ID. Pull every
-`repository@sha256:...` identity before preflight. The checked-in runner rejects
-a tag, missing image, substituted config ID, platform mismatch or absent runsc.
+`repository@sha256:...` identity before preflight. Full preflight checks that
+point-in-time local cache identity. The checked-in runner independently rejects
+a tag, missing image, substituted config ID, platform mismatch or absent runsc
+for each execution.
 
 ## Validate without disclosure
 
@@ -112,8 +117,9 @@ operator account cannot read the runtime-owned `0400` checker configuration or
 access the Docker socket; the script never opens application secret files.
 
 The configuration-only check renders Compose and validates fixed topology,
-digest identities, Flow/AWS profile and the hosted checker selectors/cache
-identities needed by this topology. The existing application and checker
+digest identities, Flow/AWS profile and the hosted checker selectors plus
+declared cache-identity shape needed by this topology. The existing application
+and checker
 startup owners validate their complete settings and config schemas. This check
 does not inspect host ownership, Docker, cache or any external service:
 
@@ -125,7 +131,8 @@ python3 deploy/hosted/preflight.py \
 
 The full preflight additionally checks secret/config metadata without reading
 secret contents, validates the private directories and Docker-socket group, and
-requires locally registered runsc plus every exact cached image:
+requires locally registered runsc plus every exact cached image at that point in
+time:
 
 ```sh
 python3 deploy/hosted/preflight.py --env-file /etc/workstream/release.env
@@ -139,22 +146,26 @@ facts from these settings.
 
 ## Start and inspect
 
-Use the same explicit environment and Compose file for every operation:
+Use the checked-in wrapper for every Compose operation. It parses and validates
+the approved environment file, renders the fixed topology, and gives Docker
+Compose only that parsed allowlist plus fixed process path, operator home and
+local Docker-socket values. Ambient shell values cannot replace an image, Flow
+URL, secret path, Compose selector or Docker daemon selector:
 
 ```sh
-docker compose --env-file /etc/workstream/release.env \
-  --file deploy/hosted/compose.yml pull
-docker compose --env-file /etc/workstream/release.env \
-  --file deploy/hosted/compose.yml up --detach --wait
-docker compose --env-file /etc/workstream/release.env \
-  --file deploy/hosted/compose.yml ps
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env pull
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
+  up --detach --wait
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env ps
 ```
 
 The API applies forward migrations before serving. Worker startup uses the
 existing prefork lifecycle. Beat runs the existing recovery and cleanup
-schedules. The checker health check requires both its private socket and Docker's
-registered runsc runtime. API health checks a lightweight endpoint; the worker
-and Beat health checks verify their local Celery processes. These checks do not
+schedules. The checker health check requires its private socket and Docker's
+registered runsc runtime. It does not attest cache identity; full preflight
+observes the cache once, and the canonical runner verifies the exact image again
+for each execution. API health checks a lightweight endpoint; the worker and
+Beat health checks verify their local Celery processes. These checks do not
 replace a public authenticated journey or dependency-specific provider probes.
 Each process stops after five consecutive failed restarts so an invalid release
 cannot remain in an unbounded crash loop.
@@ -182,12 +193,12 @@ window. Celery task hard limits and durable database/outbox custody remain owned
 by the application.
 
 ```sh
-docker compose --env-file /etc/workstream/release.env \
-  --file deploy/hosted/compose.yml stop beat api
-docker compose --env-file /etc/workstream/release.env \
-  --file deploy/hosted/compose.yml stop --timeout 3700 worker
-docker compose --env-file /etc/workstream/release.env \
-  --file deploy/hosted/compose.yml stop checker-service
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
+  stop beat api
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
+  stop --timeout 3700 worker
+python3 deploy/hosted/compose.py --env-file /etc/workstream/release.env \
+  stop checker-service
 ```
 
 For a restart or upgrade, preserve scratch until cleanup/recovery has classified

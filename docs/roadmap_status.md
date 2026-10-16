@@ -293,7 +293,7 @@ never supplies product authority. Collector deployment, diagnostic-store access
 and finite-retention controls, and an operational end-to-end drill remain
 release work; diagnostics do not establish lifecycle truth.
 
-The first hosted release configuration now separates immutable API/worker/Beat
+The first hosted release configuration now separates immutable API/Celery/Beat
 and checker-service images from the development stack, requires real Flow
 verification and AWS workload identity, and binds the existing checker service
 to a dedicated Docker/runsc host with exact private material paths and cached
@@ -374,7 +374,7 @@ cannot be reused as post-submission review-gate evidence. See the
 | Contribution evidence reads | **Public fixed-membership REST and complete CLI export** | PILOT-10A exposes current human self-read and one-project JSON/CSV export for covering Project Managers or exact-project Finance Authorities. Each page has fresh authority and one repeatable-read response transaction; selections through 100,000 contributions retain page-one membership behind signed scope/filter/format/limit-bound cursors, with complete zero/one/two immutable awards, exact decimals, recorded-time filters and formula-neutralized CSV. The CLI follows JSON or CSV continuation internally with unchanged filters, validates cross-page order/identity, and publishes only the complete JSON result or one private no-overwrite CSV | No recognition mutation, fulfillment, payout, deployed-service or published-binary claim |
 | Fulfillment, reconciliation, and audit | **Planned** | Shared audit foundations, provider-neutral adapter convention, AUTH-OUTBOX-02 live dispatcher authority, retained phase audit decisions, Celery delivery/recovery scans and CON-02B custody | Feature-specific handlers and authority, conditional award fulfillment, callbacks, idempotent recovery, reconciliation, bounded operational reads, and release controls |
 | Runtime diagnostics | **Implemented foundation; release configuration prepared** | Closed structured logging, explicit API/Celery tracing, bounded metrics, safe correlation and optional typed OTLP export; hosted composition accepts only an optional HTTPS collector origin and keeps exporter outage outside product correctness | Restrict broker publishers; configure and secure collector/log access, egress, encryption and finite deletion; prove privacy, correlation and collector outage during the deployed release drill; no deployed monitoring claim |
-| Frontend and pilot | **Local runtime foundation; hosted release configuration prepared; product pilot planned** | Checkout-isolated Docker Compose API, prefork Celery process, beat, PostgreSQL, Redis and MinIO stack with local Flow-HMAC identities, existing authority bootstrap/grants, configurable loopback ports and project-scoped state; separate digest-only release composition for API, prefork worker, Beat and the existing networkless checker service against external PostgreSQL/Redis and AWS S3; a pinned offline sample image build and separate oracle were proved under gVisor; React + Vite + TypeScript stack decision | Deploy the exact release candidate with real Flow/AWS/registry inputs; benchmark representative project checker images and prove hosted isolation and limits; prove secured diagnostics, drain/restart and backup/restore; run the real internal pilot and repair findings. Rendered configuration and local builds are not deployment evidence; Docker Desktop/macOS runtime proof remains |
+| Frontend and pilot | **Local runtime foundation; hosted release configuration prepared; product pilot planned** | Checkout-isolated Docker Compose API, prefork Celery process, beat, PostgreSQL, Redis and MinIO stack with local Flow-HMAC identities, existing authority bootstrap/grants, configurable loopback ports and project-scoped state; separate digest-only release composition for API, prefork Celery worker, Beat and the existing networkless checker service against external PostgreSQL/Redis and AWS S3; a pinned offline sample image build and separate oracle were proved under gVisor; React + Vite + TypeScript stack decision | Deploy the exact release candidate with real Flow/AWS/registry inputs; benchmark representative project checker images and prove hosted isolation and limits; prove secured diagnostics, drain/restart and backup/restore; run the real internal pilot and repair findings. Rendered configuration and local builds are not deployment evidence; Docker Desktop/macOS runtime proof remains |
 
 ## What Has Been Completed
 
@@ -998,7 +998,7 @@ service drill starts from public guide inputs with recorded inference.
 ```text
 Delivered foundations (bounded local journey proven; no deployment claim)
   privacy-bounded API/Celery diagnostics (collector deployment still required)
-  digest-only API/worker/Beat/checker release configuration (hosted proof still required)
+  digest-only API/Celery/Beat/checker release configuration (hosted proof still required)
   automatic unified setup + separate manager pre/post approvals
   public Finance ContributionPolicy administration + exact selected-version validation
   public manager activation context + exact guide activation/binding

@@ -1,7 +1,6 @@
 name: ${COMPOSE_PROJECT_NAME:?set COMPOSE_PROJECT_NAME in the release environment file}
 
 x-backend-environment: &backend-environment
-  WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE: /run/secrets/api_rate_limit_key
   WORKSTREAM_ARTIFACT_ADMISSION_DEPLOYMENT_MAXIMUM_BYTES: "4294967296"
   WORKSTREAM_ARTIFACT_ADMISSION_PRODUCER_MAXIMUM_BYTES: "268435456"
   WORKSTREAM_ARTIFACT_ADMISSION_PROJECT_MAXIMUM_BYTES: "1073741824"
@@ -23,8 +22,6 @@ x-backend-environment: &backend-environment
   WORKSTREAM_ARTIFACT_COMPLETE_READ_DEADLINE_SECONDS: ${WORKSTREAM_ARTIFACT_COMPLETE_READ_DEADLINE_SECONDS:?set the measured complete-read deadline}
   WORKSTREAM_ARTIFACT_TERMINAL_PERSISTENCE_MARGIN_SECONDS: ${WORKSTREAM_ARTIFACT_TERMINAL_PERSISTENCE_MARGIN_SECONDS:?set the measured terminal persistence margin}
   WORKSTREAM_AUTH_PROVIDER: flow
-  WORKSTREAM_CELERY_BROKER_URL_FILE: /run/secrets/celery_broker_url
-  WORKSTREAM_DATABASE_URL_FILE: /run/secrets/database_url
   WORKSTREAM_DEBUG: "false"
   WORKSTREAM_ENVIRONMENT: production
   WORKSTREAM_EXTERNAL_CHECKER_MATERIAL_ROOT: /var/lib/workstream/scratch
@@ -32,7 +29,6 @@ x-backend-environment: &backend-environment
   WORKSTREAM_OBSERVABILITY_LOG_LEVEL: ${WORKSTREAM_OBSERVABILITY_LOG_LEVEL:-INFO}
   WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT: ${WORKSTREAM_OBSERVABILITY_OTLP_ENDPOINT:-}
   WORKSTREAM_OBSERVABILITY_TRACE_SAMPLE_RATIO: ${WORKSTREAM_OBSERVABILITY_TRACE_SAMPLE_RATIO:-0.1}
-  WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE: /run/secrets/pagination_cursor_hmac
   WORKSTREAM_REQUIRED_HUMAN_SCOPE: ${WORKSTREAM_REQUIRED_HUMAN_SCOPE:?set the Flow human scope}
   WORKSTREAM_REQUIRED_SERVICE_SCOPE: ${WORKSTREAM_REQUIRED_SERVICE_SCOPE:?set the Flow service scope}
   WORKSTREAM_TOKEN_ALGORITHMS: ${WORKSTREAM_TOKEN_ALGORITHMS:?set the pinned Flow algorithms}
@@ -41,7 +37,6 @@ x-backend-environment: &backend-environment
   WORKSTREAM_TOKEN_INTROSPECTION_MODE: ${WORKSTREAM_TOKEN_INTROSPECTION_MODE:?set the Flow introspection policy}
   WORKSTREAM_TOKEN_ISSUER: ${WORKSTREAM_TOKEN_ISSUER:?set the Flow issuer}
   WORKSTREAM_TOKEN_JWKS_URL: ${WORKSTREAM_TOKEN_JWKS_URL:?set the Flow JWKS URL}
-  OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
 
 x-backend-runtime: &backend-runtime
   image: ${WORKSTREAM_BACKEND_IMAGE:?set a digest-qualified backend image}
@@ -54,32 +49,6 @@ x-backend-runtime: &backend-runtime
   security_opt: [no-new-privileges:true]
   tmpfs:
     - /tmp:mode=0700,uid=${WORKSTREAM_RUNTIME_UID},gid=${WORKSTREAM_RUNTIME_GID}
-  secrets: &backend-secrets
-    - source: database_url
-      target: database_url
-      uid: "${WORKSTREAM_RUNTIME_UID}"
-      gid: "${WORKSTREAM_RUNTIME_GID}"
-      mode: 0400
-    - source: celery_broker_url
-      target: celery_broker_url
-      uid: "${WORKSTREAM_RUNTIME_UID}"
-      gid: "${WORKSTREAM_RUNTIME_GID}"
-      mode: 0400
-    - source: api_rate_limit_key
-      target: api_rate_limit_key
-      uid: "${WORKSTREAM_RUNTIME_UID}"
-      gid: "${WORKSTREAM_RUNTIME_GID}"
-      mode: 0400
-    - source: pagination_cursor_hmac
-      target: pagination_cursor_hmac
-      uid: "${WORKSTREAM_RUNTIME_UID}"
-      gid: "${WORKSTREAM_RUNTIME_GID}"
-      mode: 0400
-    - source: openai_api_key
-      target: openai_api_key
-      uid: "${WORKSTREAM_RUNTIME_UID}"
-      gid: "${WORKSTREAM_RUNTIME_GID}"
-      mode: 0400
 
 services:
   checker-service:
@@ -120,6 +89,34 @@ services:
 
   api:
     <<: *backend-runtime
+    environment:
+      <<: *backend-environment
+      WORKSTREAM_RELEASE_ROLE: api
+      WORKSTREAM_DATABASE_URL_FILE: /run/secrets/database_url
+      WORKSTREAM_CELERY_BROKER_URL_FILE: /run/secrets/celery_broker_url
+      WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE: /run/secrets/api_rate_limit_key
+      WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE: /run/secrets/pagination_cursor_hmac
+    secrets:
+      - source: database_url
+        target: database_url
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
+      - source: celery_broker_url
+        target: celery_broker_url
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
+      - source: api_rate_limit_key
+        target: api_rate_limit_key
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
+      - source: pagination_cursor_hmac
+        target: pagination_cursor_hmac
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
     command:
       - /bin/sh
       - -c
@@ -147,6 +144,28 @@ services:
 
   worker:
     <<: *backend-runtime
+    environment:
+      <<: *backend-environment
+      WORKSTREAM_RELEASE_ROLE: worker
+      WORKSTREAM_DATABASE_URL_FILE: /run/secrets/database_url
+      WORKSTREAM_CELERY_BROKER_URL_FILE: /run/secrets/celery_broker_url
+      OPENAI_API_KEY_FILE: /run/secrets/openai_api_key
+    secrets:
+      - source: database_url
+        target: database_url
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
+      - source: celery_broker_url
+        target: celery_broker_url
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
+      - source: openai_api_key
+        target: openai_api_key
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
     command:
       - python
       - -m
@@ -182,6 +201,16 @@ services:
 
   beat:
     <<: *backend-runtime
+    environment:
+      <<: *backend-environment
+      WORKSTREAM_RELEASE_ROLE: beat
+      WORKSTREAM_CELERY_BROKER_URL_FILE: /run/secrets/celery_broker_url
+    secrets:
+      - source: celery_broker_url
+        target: celery_broker_url
+        uid: "${WORKSTREAM_RUNTIME_UID}"
+        gid: "${WORKSTREAM_RUNTIME_GID}"
+        mode: 0400
     command:
       - python
       - -m

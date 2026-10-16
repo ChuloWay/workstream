@@ -58,7 +58,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
     def test_valid_configuration_and_rendered_topology(self) -> None:
         preflight.validate_environment(self.environment)
         preflight.validate_checker_config(self.checker, self.environment)
-        rendered = preflight.render_compose(self.environment_path)
+        rendered = preflight.render_compose(self.environment_path, self.environment)
         preflight.validate_compose(rendered)
         self.assertEqual(set(rendered["services"]), {"api", "worker", "beat", "checker-service"})
         self.assertNotIn("build", rendered["services"]["api"])
@@ -86,18 +86,65 @@ class HostedReleaseConfigTests(unittest.TestCase):
         self.assertEqual(services["beat"]["stop_grace_period"], "30s")
         self.assertEqual(services["api"]["ports"][0]["host_ip"], "127.0.0.1")
         expected_secrets = {
-            "database_url",
-            "celery_broker_url",
-            "api_rate_limit_key",
-            "pagination_cursor_hmac",
-            "openai_api_key",
+            target[0] for target in preflight.SECRET_FILE_TARGETS.values()
         }
         self.assertEqual(set(rendered["secrets"]), expected_secrets)
-        for name in ("api", "worker", "beat"):
+        for name, file_keys in preflight.ROLE_SECRET_FILE_KEYS.items():
+            self.assertEqual(services[name]["environment"]["WORKSTREAM_RELEASE_ROLE"], name)
             mounted = services[name]["secrets"]
-            self.assertEqual({item["source"] for item in mounted}, expected_secrets)
+            expected_role_secrets = {
+                preflight.SECRET_FILE_TARGETS[key][0] for key in file_keys
+            }
+            self.assertEqual({item["source"] for item in mounted}, expected_role_secrets)
             self.assertTrue(all(item["mode"] == 0o400 for item in mounted))
+            for key in preflight.SECRET_FILE_KEYS:
+                if key in file_keys:
+                    self.assertEqual(
+                        services[name]["environment"][key],
+                        preflight.SECRET_FILE_TARGETS[key][1],
+                    )
+                else:
+                    self.assertNotIn(key, services[name]["environment"])
         self.assertNotIn("secrets", services["checker-service"])
+
+    def test_render_and_compose_operation_ignore_hostile_ambient_environment(self) -> None:
+        hostile = {
+            "WORKSTREAM_TOKEN_JWKS_URL": "https://attacker.invalid/jwks",
+            "WORKSTREAM_DATABASE_URL_FILE": "/tmp/attacker-database",
+            "WORKSTREAM_BACKEND_IMAGE": "attacker.invalid/backend:latest",
+            "COMPOSE_FILE": "/tmp/attacker-compose.yml",
+            "DOCKER_HOST": "tcp://attacker.invalid:2375",
+            "AWS_ACCESS_KEY_ID": "ambient-secret",
+        }
+        with patch.dict(os.environ, hostile):
+            rendered = preflight.render_compose(self.environment_path, self.environment)
+            self.assertEqual(
+                rendered["services"]["api"]["environment"]["WORKSTREAM_TOKEN_JWKS_URL"],
+                self.environment["WORKSTREAM_TOKEN_JWKS_URL"],
+            )
+            self.assertEqual(
+                rendered["secrets"]["database_url"]["file"],
+                self.environment["WORKSTREAM_DATABASE_URL_FILE"],
+            )
+            with patch.object(preflight.subprocess, "run") as run:
+                run.return_value.returncode = 0
+                self.assertEqual(
+                    preflight.run_compose(
+                        self.environment_path,
+                        self.environment,
+                        ["up", "--detach", "--wait"],
+                    ),
+                    0,
+                )
+        operation_environment = run.call_args.kwargs["env"]
+        self.assertEqual(
+            operation_environment["WORKSTREAM_TOKEN_JWKS_URL"],
+            self.environment["WORKSTREAM_TOKEN_JWKS_URL"],
+        )
+        self.assertEqual(operation_environment["DOCKER_HOST"], "unix:///var/run/docker.sock")
+        for key in ("COMPOSE_FILE", "AWS_ACCESS_KEY_ID"):
+            self.assertNotIn(key, operation_environment)
+        self.assertIn("deploy/hosted/compose.py", (ROOT / "deploy/hosted/README.md").read_text())
 
     def test_environment_rejects_mutable_or_development_settings(self) -> None:
         cases = {
@@ -145,7 +192,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
             preflight.validate_checker_config(changed, self.environment)
 
     def test_rendered_topology_rejects_privilege_and_path_drift(self) -> None:
-        rendered = preflight.render_compose(self.environment_path)
+        rendered = preflight.render_compose(self.environment_path, self.environment)
         cases = []
         mutable = copy.deepcopy(rendered)
         mutable["services"]["worker"]["image"] = "registry.example/workstream/backend:latest"
@@ -170,6 +217,24 @@ class HostedReleaseConfigTests(unittest.TestCase):
         expanded_worker = copy.deepcopy(rendered)
         expanded_worker["services"]["worker"]["environment"]["UNREVIEWED"] = "true"
         cases.append(("worker environment drift", expanded_worker))
+        unknown_role = copy.deepcopy(rendered)
+        unknown_role["services"]["worker"]["environment"]["WORKSTREAM_RELEASE_ROLE"] = "setup"
+        cases.append(("unknown backend role", unknown_role))
+        missing_role_secret = copy.deepcopy(rendered)
+        del missing_role_secret["services"]["api"]["environment"][
+            "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE"
+        ]
+        cases.append(("missing role secret selector", missing_role_secret))
+        unrelated_role_secret = copy.deepcopy(rendered)
+        unrelated_role_secret["services"]["beat"]["environment"][
+            "OPENAI_API_KEY_FILE"
+        ] = "/run/secrets/openai_api_key"
+        cases.append(("unrelated role secret selector", unrelated_role_secret))
+        unrelated_role_mount = copy.deepcopy(rendered)
+        unrelated_role_mount["services"]["beat"]["secrets"].append(
+            copy.deepcopy(rendered["services"]["worker"]["secrets"][-1])
+        )
+        cases.append(("unrelated role secret mount", unrelated_role_mount))
         for label, changed in cases:
             with self.subTest(label=label), self.assertRaises(preflight.PreflightError):
                 preflight.validate_compose(changed)
@@ -268,36 +333,77 @@ class HostedReleaseConfigTests(unittest.TestCase):
 
 
 class ReleaseSecretLoaderTests(unittest.TestCase):
+    FILE_TO_SECRET = {
+        "WORKSTREAM_DATABASE_URL_FILE": "WORKSTREAM_DATABASE_URL",
+        "WORKSTREAM_CELERY_BROKER_URL_FILE": "WORKSTREAM_CELERY_BROKER_URL",
+        "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE": (
+            "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET"
+        ),
+        "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE": (
+            "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET"
+        ),
+        "OPENAI_API_KEY_FILE": "OPENAI_API_KEY",
+    }
+    ROLE_FILES = {
+        "api": (
+            "WORKSTREAM_DATABASE_URL_FILE",
+            "WORKSTREAM_CELERY_BROKER_URL_FILE",
+            "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE",
+            "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE",
+        ),
+        "worker": (
+            "WORKSTREAM_DATABASE_URL_FILE",
+            "WORKSTREAM_CELERY_BROKER_URL_FILE",
+            "OPENAI_API_KEY_FILE",
+        ),
+        "beat": ("WORKSTREAM_CELERY_BROKER_URL_FILE",),
+    }
+
     def _run_loader(
         self,
         root: Path,
         *,
+        role: str = "worker",
         content: str = "safe-value",
         override: tuple[str, Path] | None = None,
+        unset_selector: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
         environment = os.environ.copy()
-        secret_names = {
+        file_names = {
             "WORKSTREAM_DATABASE_URL_FILE": "database",
             "WORKSTREAM_CELERY_BROKER_URL_FILE": "broker",
             "WORKSTREAM_API_RATE_LIMIT_KEY_SECRET_FILE": "rate",
             "WORKSTREAM_PAGINATION_CURSOR_HMAC_SECRET_FILE": "cursor",
             "OPENAI_API_KEY_FILE": "openai",
         }
-        for variable, name in secret_names.items():
+        for variable, name in file_names.items():
             path = root / name
             if path.exists():
                 path.chmod(0o600)
             path.write_text(content, encoding="utf-8")
             path.chmod(0o400)
             environment[variable] = str(path)
+        for secret_name in self.FILE_TO_SECRET.values():
+            environment[secret_name] = "ambient-value-must-not-survive"
         if override is not None:
             environment[override[0]] = str(override[1])
-        environment["EXPECTED_OPENAI_SHA256"] = hashlib.sha256(content.encode()).hexdigest()
+        if unset_selector is not None:
+            environment.pop(unset_selector, None)
+        environment["WORKSTREAM_RELEASE_ROLE"] = role
+        expected = {
+            self.FILE_TO_SECRET[key] for key in self.ROLE_FILES.get(role, ())
+        }
+        environment["EXPECTED_SECRET_NAMES"] = ",".join(sorted(expected))
+        environment["EXPECTED_SECRET_SHA256"] = hashlib.sha256(content.encode()).hexdigest()
         program = (
             "import hashlib,os;"
-            "value=os.environ['OPENAI_API_KEY'].encode();"
-            "assert hashlib.sha256(value).hexdigest()==os.environ['EXPECTED_OPENAI_SHA256'];"
-            "assert 'OPENAI_API_KEY_FILE' not in os.environ;"
+            "expected=set(filter(None,os.environ['EXPECTED_SECRET_NAMES'].split(',')));"
+            f"all_names={set(self.FILE_TO_SECRET.values())!r};"
+            "assert all((hashlib.sha256(os.environ[name].encode()).hexdigest()"
+            "==os.environ['EXPECTED_SECRET_SHA256']) for name in expected);"
+            "assert all(name not in os.environ for name in all_names-expected);"
+            f"assert all(name not in os.environ for name in {set(self.FILE_TO_SECRET)!r});"
+            "assert 'WORKSTREAM_RELEASE_ROLE' not in os.environ;"
             "print('loader-ok')"
         )
         return subprocess.run(
@@ -320,6 +426,29 @@ class ReleaseSecretLoaderTests(unittest.TestCase):
             self.assertEqual(completed.stderr, "")
             self.assertFalse(marker.exists())
             self.assertNotIn(content, completed.stdout + completed.stderr)
+
+    def test_loader_loads_only_role_secrets_and_rejects_missing_or_unknown_role(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for role in self.ROLE_FILES:
+                with self.subTest(role=role):
+                    completed = self._run_loader(root, role=role)
+                    self.assertEqual(completed.returncode, 0, completed.stderr)
+                    self.assertEqual(completed.stdout, "loader-ok\n")
+                    self.assertEqual(completed.stderr, "")
+                    missing = self._run_loader(
+                        root,
+                        role=role,
+                        unset_selector=self.ROLE_FILES[role][0],
+                    )
+                    self.assertNotEqual(missing.returncode, 0)
+                    self.assertIn("required secret file is unavailable", missing.stderr)
+            unknown = self._run_loader(root, role="unknown")
+            self.assertNotEqual(unknown.returncode, 0)
+            self.assertEqual(unknown.stdout, "")
+            self.assertIn("release role is unavailable or unsupported", unknown.stderr)
 
     def test_loader_rejects_empty_missing_directory_and_symlink_without_disclosure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
