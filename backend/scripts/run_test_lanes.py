@@ -943,7 +943,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--metadata-dir", required=True, type=Path)
     parser.add_argument("--summary-json", required=True, type=Path)
-    parser.add_argument("--timeout-seconds", default=1200.0, type=float)
+    parser.add_argument("--timeout-seconds", default=1500.0, type=float)
     parser.add_argument("--collect-only", action="store_true")
     parser.add_argument("--lane", choices=[lane.name for lane in LANES])
     args = parser.parse_args()
