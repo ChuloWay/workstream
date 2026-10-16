@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from uuid import UUID
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, tuple_
 
 from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
@@ -242,36 +242,81 @@ def project_revision(row, now) -> ContributorRevisionContext:
     )
 
 
+async def project_current_revisions(session, rows) -> dict[UUID, ContributorRevisionContext]:
+    """Keep frozen receipt facts while projecting current source and window eligibility.
+
+    One statement checks every source and one database clock reading serves the batch.
+    """
+    if not rows:
+        return {}
+    current = {UUID(str(key)): value for key, value in (await session.execute(text(
+        "SELECT p.id, public.revision_preparation_source_current(p) "
+        "FROM public.task_revision_preparations p WHERE p.id = ANY(CAST(:ids AS uuid[]))"
+    ), {"ids": [str(row.id) for row in rows]})).all()}
+    now = await session.scalar(select(func.clock_timestamp()))
+    views = {}
+    for row in rows:
+        view = project_revision(row, now)
+        if current.get(UUID(str(row.id))) is not True and view.disposition not in {
+            "revision_limit_reached", "revision_deadline_expired",
+        }:
+            view = view.model_copy(update={"disposition": "context_blocked"})
+        views[UUID(str(row.id))] = view
+    return views
+
+
 async def project_current_revision(session, row) -> ContributorRevisionContext:
-    """Keep frozen receipt facts while projecting current source and window eligibility."""
-    current = await session.scalar(text(
-        "SELECT public.revision_preparation_source_current(p) "
-        "FROM public.task_revision_preparations p WHERE p.id=:id"
-    ), {"id": str(row.id)})
-    view = project_revision(row, await session.scalar(select(func.clock_timestamp())))
-    if current is True or view.disposition in {"revision_limit_reached", "revision_deadline_expired"}:
-        return view
-    return view.model_copy(update={"disposition": "context_blocked"})
+    """Project one preparation through the shared batch rule."""
+    return (await project_current_revisions(session, (row,)))[UUID(str(row.id))]
+
+
+@dataclass(frozen=True, slots=True)
+class ContributorRevisionSource:
+    """One continuing contributor's active assignment on a task awaiting revision."""
+
+    project_id: str
+    task_id: str
+    assignment_id: str
+    contributor_id: str
+
+
+async def read_contributor_revisions(
+    session, sources: tuple[ContributorRevisionSource, ...],
+) -> dict[str, ContributorRevisionContext]:
+    """Read each source's latest revision head, keyed by assignment, in bounded queries."""
+    if not sources:
+        return {}
+    latest = select(
+        Submission.task_id, func.max(Submission.version).label("version"),
+    ).where(Submission.task_id.in_([source.task_id for source in sources])).group_by(Submission.task_id).subquery()
+    manifest = TaskPostSubmitRoutingManifest
+    manifest_ids = (await session.scalars(select(manifest.id).distinct(manifest.task_id).join(
+        latest, (latest.c.task_id == manifest.task_id),
+    ).join(
+        Submission, (Submission.id == manifest.submission_id) & (Submission.version == latest.c.version),
+    ).where(
+        tuple_(manifest.project_id, manifest.task_id, manifest.assignment_id, manifest.contributor_id).in_([
+            (source.project_id, source.task_id, source.assignment_id, source.contributor_id)
+            for source in sources
+        ]),
+        manifest.routing_recommendation == "needs_revision",
+    ).order_by(manifest.task_id, manifest.evaluation_generation.desc()))).all()
+    if not manifest_ids:
+        return {}
+    child = TaskRevisionPreparation.__table__.alias("child")
+    heads = (await session.scalars(select(TaskRevisionPreparation).where(
+        TaskRevisionPreparation.routing_manifest_id.in_(list(manifest_ids)),
+        ~select(child.c.id).where(child.c.predecessor_id == TaskRevisionPreparation.id).exists(),
+    ))).all()
+    views = await project_current_revisions(session, tuple(heads))
+    return {str(head.assignment_id): views[UUID(str(head.id))] for head in heads}
 
 
 async def read_contributor_revision(session, task, assignment):
     """Read only the authorized continuing contributor's latest revision source."""
     if task.status != "needs_revision" or assignment is None:
         return None
-    latest = select(Submission.id).where(
-        Submission.task_id == task.id,
-    ).order_by(Submission.version.desc()).limit(1).scalar_subquery()
-    manifest_id = await session.scalar(select(TaskPostSubmitRoutingManifest.id).where(
-        TaskPostSubmitRoutingManifest.project_id == task.project_id,
-        TaskPostSubmitRoutingManifest.task_id == task.id,
-        TaskPostSubmitRoutingManifest.assignment_id == assignment.id,
-        TaskPostSubmitRoutingManifest.contributor_id == assignment.contributor_id,
-        TaskPostSubmitRoutingManifest.submission_id == latest,
-        TaskPostSubmitRoutingManifest.routing_recommendation == "needs_revision",
-    ).order_by(TaskPostSubmitRoutingManifest.evaluation_generation.desc()).limit(1))
-    if manifest_id is None:
-        return None
-    preparation = await head_for_source(session, manifest_id)
-    if preparation is None:
-        return None
-    return await project_current_revision(session, preparation)
+    source = ContributorRevisionSource(
+        str(task.project_id), str(task.id), str(assignment.id), str(assignment.contributor_id),
+    )
+    return (await read_contributor_revisions(session, (source,))).get(source.assignment_id)

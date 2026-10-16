@@ -125,6 +125,22 @@ evaluator and retain their DENY evidence. Missing or ungranted Project selectors
 are absent from audit target evidence. See the
 [bounded CON read contract](spec_contribution_compensation.md#bounded-contribution-evidence-reads).
 
+PILOT-READ-2 activates six caller-owned reads. `actor.project.list` maps to
+`actor.profile.read_self`: any freshly locked active human reads only the
+projects where they hold an exact-project grant, with their effective admin
+roles (system or exact) and contributor roles; a system grant adds roles but
+lists no project. `actor.assignment.list`, `actor.submission.list`,
+`actor.work_summary.read`, `task.submission_bundle_preparation.list` and
+`task.submission_bundle_preparation.read` map to `submission.read_own`. Without
+a project filter the actor-wide reads are self decisions, and the response then
+locks and selects only projects where the actor holds a current Submitter grant.
+A project filter, or the project TASK resolves for a task the caller holds or
+held, requires that exact Submitter grant; the kernel locks actor, grant and
+Project in that order. Denials and unheld tasks use the concealed not-found
+response. Each decision digest binds the caller, resource, normalized filters,
+limit, order and a hash of any presented cursor; signed cursors bind the same
+query.
+
 ### Project Contributor Grants
 
 | Grant | Exact-project capability |
@@ -794,7 +810,10 @@ and `operations.task.queue.read` under `operations.status.read` for system Opera
 All three lock the live actor profile/link, matched grant and exact Project in
 that order, then read TASK without row locks. Contributor discovery requires an
 active project. Signed cursors bind action/project/limit/order, while decision
-evidence separately binds the hash of the presented cursor. Authority, projection,
+evidence separately binds the hash of the presented cursor. PILOT-READ-2 adds
+optional `status`, `assignee_actor_id`, `import_batch_id` (native batch
+membership) and `updated_since` filters to the manager list; its cursor also
+binds the selected filters. Authority, projection,
 JSON validation and the successful decision commit share one transaction.
 ARCH-03C5 activates detail/requirements and ARCH-03C6 activates the three
 locked-context actions. ARCH-03C7 activates bounded task-history reads under

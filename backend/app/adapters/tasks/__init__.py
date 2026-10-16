@@ -434,6 +434,18 @@ def submission_history_repository(session) -> SubmissionHistoryReadPort:
     )
 
 
+def contributor_work_reader(session: AsyncSession):
+    """Compose TASK's own-work projections with CON terms and CHECKERS counts."""
+    from app.adapters.checkers import checker_history_repository
+    from app.adapters.contributions import locked_compensation_terms_port
+    from app.modules.tasks.contributor_reads import ContributorWorkReader
+
+    return ContributorWorkReader(
+        session, compensation_terms=locked_compensation_terms_port(session),
+        finding_counts=checker_history_repository(session),
+    )
+
+
 def submitted_bundle_port(session: AsyncSession) -> SubmittedBundlePort:
     """Compose the exact immutable Submission read without private owner imports in ART."""
     from app.modules.tasks.submitted_bundle import SubmittedBundleReader

@@ -28,7 +28,7 @@ contribution-evidence exports:
 | `workstream project guide correct PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE --idempotency-key UUID` | Exact compilation `POST .../corrections` |
 | `workstream project guide dispatch-correction PROJECT_ID GUIDE_ID COMPILATION_ID --input FILE` | Exact saved correction `POST .../corrections/OPERATION_ID/dispatch` |
 | `workstream project guide activate PROJECT_ID GUIDE_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/guides/GUIDE_ID/activate` |
-| `workstream project tasks PROJECT_ID` | `GET /api/v1/projects/PROJECT_ID/tasks` |
+| `workstream project tasks PROJECT_ID [--status S] [--assignee UUID] [--import-batch UUID] [--updated-since TIME]` | `GET /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task PROJECT_ID TASK_ID` | `GET /api/v1/projects/PROJECT_ID/tasks/TASK_ID` |
 | `workstream project task create PROJECT_ID --input FILE --idempotency-key UUID` | `POST /api/v1/projects/PROJECT_ID/tasks` |
 | `workstream project task screen PROJECT_ID TASK_ID --idempotency-key UUID [--reason TEXT]` | `POST /api/v1/tasks/TASK_ID/screen` |
@@ -58,6 +58,12 @@ contribution-evidence exports:
 | `workstream submission show SUBMISSION_ID` | `GET /api/v1/submissions/SUBMISSION_ID` |
 | `workstream submission findings SUBMISSION_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/submissions/SUBMISSION_ID/checker-runs` |
 | `workstream submission findings SUBMISSION_ID --run UUID` | `GET /api/v1/submissions/SUBMISSION_ID/checker-runs/UUID` |
+| `workstream task preparations TASK_ID [--limit N] [--cursor TOKEN]` | `GET /api/v1/tasks/TASK_ID/submission-bundle-preparations` |
+| `workstream task preparation TASK_ID PREPARATION_ID` | `GET /api/v1/tasks/TASK_ID/submission-bundle-preparations/PREPARATION_ID` |
+| `workstream me projects` | `GET /api/v1/actors/me/projects` |
+| `workstream me assignments [--project UUID] [--state active\|closed] [--updated-since TIME]` | `GET /api/v1/actors/me/assignments` |
+| `workstream me submissions [--project UUID] [--task UUID] [--status S] [--updated-since TIME]` | `GET /api/v1/actors/me/submissions` |
+| `workstream me summary [--project UUID]` | `GET /api/v1/actors/me/summary` |
 | `workstream task show TASK_ID` | `GET /api/v1/tasks/TASK_ID` |
 | `workstream task claim TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/claim` |
 | `workstream task start TASK_ID --idempotency-key UUID` | `POST /api/v1/tasks/TASK_ID/start` |
@@ -1041,8 +1047,14 @@ guide setup fixtures are not live inference or deployed-service certification.
 ```sh
 workstream project tasks PROJECT_ID --limit 10 --output json
 workstream project tasks PROJECT_ID --limit 10 --cursor PREVIOUS_NEXT_CURSOR --output json
+workstream project tasks PROJECT_ID --status needs_revision --updated-since 2026-10-01T00:00:00Z
 workstream project task PROJECT_ID TASK_ID --output json
 ```
+
+`--status`, `--assignee` (current assignee actor UUID), `--import-batch`
+(native import batch membership) and `--updated-since` (RFC 3339, inclusive)
+narrow the list. Workstream binds a continuation to the same filters, so keep
+them unchanged when using `--cursor`.
 
 These commands use the management queue and management detail routes; they
 require covering Project Manager authority, not a Submitter/Reviewer grant.
@@ -1069,6 +1081,29 @@ output. Foreign items, duplicate identities, unknown/duplicate fields and
 malformed replies fail with empty stdout. The existing 64 KiB response bound
 applies to a whole page: an oversized response fails without partial output;
 request a smaller `--limit` if needed.
+
+## See your own work
+
+```sh
+workstream me projects
+workstream me assignments --state active
+workstream me submissions --status needs_revision --output json
+workstream me summary --project PROJECT_ID
+workstream task preparations TASK_ID
+workstream task preparation TASK_ID PREPARATION_ID --output json
+```
+
+These read only your own records. `me projects` lists projects where you hold
+an exact grant, with your roles and the active guide version. The other reads
+return your assignments, attempts, preparations and totals only in projects
+where you currently hold a Submitter grant; another project, a task you never
+held or someone else's preparation is reported as not found. Each assignment
+carries the server's `next_action` (`start`, `prepare_submission`,
+`awaiting_evaluation`, `revise` or `none`) and, while a revision is open, the
+same revision fields as `task context`. Lists page with `--limit` and an opaque
+`--cursor` bound to the same filters; `--updated-since` is inclusive. Award
+totals are immutable earned terms, not payment status. Text output summarizes;
+use `--output json` for complete records, including preparation findings.
 
 ## Discover work as a contributor
 

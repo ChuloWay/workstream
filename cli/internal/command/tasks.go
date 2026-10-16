@@ -10,7 +10,7 @@ import (
 
 func addTaskReads(project *cobra.Command, client func() (*api.Client, error), output *string, stdout io.Writer) {
 	var limit int
-	var cursor string
+	var cursor, status, assignee, importBatch, updatedSince string
 	tasks := &cobra.Command{
 		Use: "tasks PROJECT_ID", Short: "List one page of tasks under project-manager authority", Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -22,7 +22,17 @@ func addTaskReads(project *cobra.Command, client func() (*api.Client, error), ou
 			if err != nil {
 				return err
 			}
-			result, err := apiClient.Tasks(cmd.Context(), args[0], limit, continuation)
+			filters := api.TaskFilters{}
+			for name, target := range map[string]**string{
+				"status": &filters.Status, "assignee": &filters.Assignee,
+				"import-batch": &filters.ImportBatch, "updated-since": &filters.UpdatedSince,
+			} {
+				if cmd.Flags().Changed(name) {
+					value, _ := cmd.Flags().GetString(name)
+					*target = &value
+				}
+			}
+			result, err := apiClient.Tasks(cmd.Context(), args[0], limit, continuation, filters)
 			if err != nil {
 				return err
 			}
@@ -43,6 +53,10 @@ func addTaskReads(project *cobra.Command, client func() (*api.Client, error), ou
 	}
 	tasks.Flags().IntVar(&limit, "limit", 50, "Page size (1–100; keep unchanged when continuing)")
 	tasks.Flags().StringVar(&cursor, "cursor", "", "Opaque next cursor from the previous page")
+	tasks.Flags().StringVar(&status, "status", "", "Only tasks in this status")
+	tasks.Flags().StringVar(&assignee, "assignee", "", "Only tasks currently assigned to this actor UUID")
+	tasks.Flags().StringVar(&importBatch, "import-batch", "", "Only members of this native import batch UUID")
+	tasks.Flags().StringVar(&updatedSince, "updated-since", "", "Only tasks changed at or after this RFC 3339 time")
 	project.AddCommand(tasks)
 	task := &cobra.Command{
 		Use: "task PROJECT_ID TASK_ID", Short: "Inspect a task under project-manager authority", Args: cobra.ExactArgs(2),

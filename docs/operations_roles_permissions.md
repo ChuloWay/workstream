@@ -90,6 +90,7 @@ or the exact project; own means record-level ownership still applies.
 | Ready task queue/detail | no | no | no | no | no | exact project under guards | exact project under guards |
 | Task claim/start | no | explicit recovery only | no | no | no | exact project under guards | no |
 | Submission create/read | no | operational projection only | management projection only | no | read covered | own assignment | read-for-review only |
+| Own projects, claims, attempts, preparations and totals | own grants only | own grants only | own grants only | own grants only | own grants only | own records, exact project under current grant | own grants only |
 | Human review decision | no | no | no without reviewer grant | no | no | no | exact project under review guards |
 | Adjudication action | no | no | no | no | no | no | no |
 | Compensation award read and delivery reconciliation | no | no | no | covered | read covered | no | no |
@@ -113,6 +114,16 @@ exact canonical project, never grant identifiers, identity-link data, planned
 actions, or unrelated system authority. A caller without local authority for
 the project receives the concealed not-found response. Token roles do not
 affect either read.
+
+`GET /api/v1/actors/me/projects` lists only projects where the caller holds an
+exact-project grant, with the caller's effective admin and contributor roles
+and the active guide identity. `GET /api/v1/actors/me/assignments`,
+`/submissions` and `/summary`, and the contributor's
+`GET /api/v1/tasks/{task_id}/submission-bundle-preparations[/{preparation_id}]`,
+return only the caller's own records in projects where the caller holds a
+current Submitter grant. A project filter or task without that grant, and
+another contributor's preparation, receive the concealed not-found response.
+Administrative grants add no contributor records to these reads.
 
 ## Separation Rules
 

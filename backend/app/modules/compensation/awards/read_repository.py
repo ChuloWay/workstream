@@ -2,9 +2,10 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.compensation.api.award_reads import ContributorAwardTotal
 from app.modules.compensation.api.awards import CompensationAwardFacts
 from app.modules.compensation.api.instruments import CompensationInstrumentType
 from app.modules.compensation.awards.models import CompensationAward
@@ -41,3 +42,22 @@ class ContributionAwardReadRepository:
             unit_code=row.unit_code, quantity=row.quantity,
             created_at=row.created_at, correlation_id=row.correlation_id,
         ) for row in rows)
+
+    async def read_award_totals(
+        self, contributor_id: UUID, project_ids: frozenset[UUID],
+    ) -> tuple[ContributorAwardTotal, ...]:
+        """Exact Decimal sums per instrument and unit, in a stable order."""
+        if not project_ids:
+            return ()
+        rows = (await self._session.execute(
+            select(
+                CompensationAward.instrument_type, CompensationAward.unit_code,
+                func.sum(CompensationAward.quantity),
+            ).where(
+                CompensationAward.contributor_id == str(contributor_id),
+                CompensationAward.project_id.in_([str(item) for item in project_ids]),
+            ).group_by(CompensationAward.instrument_type, CompensationAward.unit_code).order_by(
+                CompensationAward.instrument_type, CompensationAward.unit_code,
+            )
+        )).all()
+        return tuple(ContributorAwardTotal(row[0], row[1], row[2]) for row in rows)

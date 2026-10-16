@@ -190,6 +190,36 @@ async def test_cli_public_preparation_creation_replay_history_and_suspension(
                     )
                     == run
                 )
+                # The caller's own-work reads decode the same real records.
+                [assignment] = (await call("me", "assignments"))["items"]
+                assert assignment["task_id"] == str(h.task_id)
+                assert assignment["latest_submission"]["submission_id"] == submission_id
+                assert assignment["next_action"] == "awaiting_evaluation"
+                [attempt] = (await call("me", "submissions", "--task", str(h.task_id)))[
+                    "items"
+                ]
+                assert attempt["submission_id"] == submission_id
+                assert attempt["status"] == detail["status"]
+                summary = await call("me", "summary")
+                assert summary["assignments"] == {"active": 1, "closed": 0}
+                [project] = (await call("me", "projects"))["items"]
+                assert project["project_id"] == assignment["project_id"]
+                assert project["project_roles"] == ["submitter"]
+                preparations = (await call("task", "preparations", str(h.task_id)))[
+                    "items"
+                ]
+                [preparation] = [
+                    item for item in preparations if item["state"] == "submitted"
+                ]
+                assert preparation["submission_id"] == submission_id
+                one = await call(
+                    "task", "preparation", str(h.task_id), preparation["preparation_id"]
+                )
+                assert {k: v for k, v in one.items() if k != "findings"} == preparation
+                assert one["findings"] == prepared["pre_submission_results"]
+                await call(
+                    "task", "preparation", str(h.task_id), str(uuid4()), denied=404
+                )
                 await call("submission", "show", str(uuid4()), denied=404)
                 async with h.factory() as session:
                     assert (

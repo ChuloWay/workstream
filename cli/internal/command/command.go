@@ -165,6 +165,7 @@ func Run(args []string, stdout, stderr io.Writer, getenv environment, version st
 	})
 	root.AddCommand(project)
 	addContributorTasks(root, client, &output, stdout)
+	addContributorReads(root, client, &output, stdout)
 
 	err := root.ExecuteContext(context.Background())
 	if err == nil {
