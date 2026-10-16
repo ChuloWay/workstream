@@ -132,7 +132,10 @@ prepare_images() {
   kaniko_child="$(python3 "${SCRIPT_DIR}/image_facts.py" select-child "${work}/kaniko-index.json" "${kaniko_index_digest}")"
   local kaniko_repository="${KANIKO_INDEX%@*}"
   local kaniko_reference="${kaniko_repository}@${kaniko_child}"
+  local kaniko_transfer="ws493-kaniko:${EXPECTED_HEAD}"
   manifest_raw "${kaniko_reference}" "${work}/kaniko-manifest.json"
+  python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
+    "${work}/kaniko-manifest.json" "${kaniko_child}" "${kaniko_repository}" >"${work}/upstream-builder-fact.json"
   manifest_raw "${BASE_PLATFORM_IMAGE}" "${work}/base-manifest.json"
 
   docker pull "${kaniko_reference}" >/dev/null
@@ -156,11 +159,12 @@ prepare_images() {
   find "${CACHE_ROOT}" -type d -exec chmod 0555 {} +
   find "${CACHE_ROOT}" -type f -exec chmod 0444 {} +
 
-  docker save "${kaniko_reference}" | "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker load >/dev/null
+  docker tag "${kaniko_reference}" "${kaniko_transfer}"
+  docker save "${kaniko_transfer}" | "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker load >/dev/null
   docker save "${BASE_PLATFORM_IMAGE}" | "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker load >/dev/null
   docker save "${REGISTRY_IMAGE}" | "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker load >/dev/null
   docker save "ws493-checker:${EXPECTED_HEAD}" | "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker load >/dev/null
-  inner_docker image inspect "${kaniko_reference}" >/dev/null
+  inner_docker image inspect "${kaniko_transfer}" >/dev/null
   inner_docker image inspect "${BASE_PLATFORM_IMAGE}" >/dev/null
 
   inner_docker run -d --name "${PROOF_PREFIX}-registry" \
@@ -173,6 +177,19 @@ prepare_images() {
     sleep 1
   done
   "${REAL_DOCKER}" exec "${DIND_NAME}" wget -qO- http://127.0.0.1:5000/v2/ >/dev/null
+  local builder_repository=127.0.0.1:5000/workstream/builder
+  local builder_tag="${builder_repository}:${EXPECTED_HEAD}"
+  inner_docker tag "${kaniko_transfer}" "${builder_tag}"
+  inner_docker push "${builder_tag}" >/dev/null
+  local builder_reference builder_digest
+  builder_reference="$(inner_docker image inspect "${builder_tag}" --format '{{json .RepoDigests}}' | \
+    python3 -c 'import json,sys; matches=[value for value in json.load(sys.stdin) if value.startswith(sys.argv[1]+"@")]; len(matches) == 1 or sys.exit(1); print(matches[0])' "${builder_repository}")"
+  builder_digest="${builder_reference##*@}"
+  [[ "${builder_reference}" == "${builder_repository}@${builder_digest}" ]]
+  [[ "${builder_digest}" == "${kaniko_child}" ]]
+  "${REAL_DOCKER}" exec "${DIND_NAME}" wget -qO "${work}/builder-manifest.json" \
+    --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
+    "http://127.0.0.1:5000/v2/workstream/builder/manifests/${builder_digest}"
   local checker_repository=127.0.0.1:5000/workstream/checker
   local checker_tag="${checker_repository}:${EXPECTED_HEAD}"
   inner_docker tag "ws493-checker:${EXPECTED_HEAD}" "${checker_tag}"
@@ -186,7 +203,7 @@ prepare_images() {
     "http://127.0.0.1:5000/v2/workstream/checker/manifests/${checker_digest}"
 
   python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
-    "${work}/kaniko-manifest.json" "${kaniko_child}" "${kaniko_repository}" >"${work}/builder-fact.json"
+    "${work}/builder-manifest.json" "${builder_digest}" "${builder_repository}" >"${work}/builder-fact.json"
   python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
     "${work}/base-manifest.json" "${BASE_PLATFORM_IMAGE##*@}" "${BASE_PLATFORM_IMAGE%@*}" >"${work}/base-fact.json"
   python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
@@ -566,10 +583,11 @@ cleanup() {
     pilot cleanup
   fi
   local outer_absent=false
-  docker image rm -f "ws493-checker:${EXPECTED_HEAD}" >/dev/null 2>&1 || true
+  docker image rm -f "ws493-checker:${EXPECTED_HEAD}" "ws493-kaniko:${EXPECTED_HEAD}" >/dev/null 2>&1 || true
   if [[ -z "$(docker ps -aq --no-trunc --filter "label=${OUTER_OWNER_LABEL}")" ]] \
     && [[ -z "$(docker ps -aq --no-trunc --filter "label=org.workstream.ws493.run=${RUN_ID}")" ]] \
-    && [[ -z "$(docker image ls --quiet "ws493-checker:${EXPECTED_HEAD}")" ]]; then
+    && [[ -z "$(docker image ls --quiet "ws493-checker:${EXPECTED_HEAD}")" ]] \
+    && [[ -z "$(docker image ls --quiet "ws493-kaniko:${EXPECTED_HEAD}")" ]]; then
     outer_absent=true
   fi
   local unmounted=false detached=false deleted=false

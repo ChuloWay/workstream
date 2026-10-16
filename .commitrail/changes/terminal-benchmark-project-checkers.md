@@ -213,8 +213,11 @@ and config IDs before the networkless phase.
 
 Preparation builds the checker image, warms and canonically inventories the
 approved CPython cache, loads exact images into the owned DIND daemon, and
-publishes them to the pinned registry on that daemon's loopback. The DIND has no
-external interface during proof execution, registers the verified gVisor binary
+publishes them to the pinned registry on that daemon's loopback. The exact Kaniko
+child receives a run-owned transfer tag only for save/load; its loopback-registry
+push must reproduce the byte-identical verified upstream child manifest and digest or
+preparation fails, and cleanup removes the transfer tag. The DIND has no external
+interface during proof execution, registers the verified gVisor binary
 only as the service's fixed `runsc` key, and receives the owned state directory
 at the same absolute path used by the host service. This offline claim applies
 only to DIND and the product containers; the Actions host shell need not change
