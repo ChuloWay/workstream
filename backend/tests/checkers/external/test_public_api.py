@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import session as db_session
 from app.main import create_app
@@ -174,6 +175,68 @@ async def test_registration_conflict_and_denials_leave_no_partial_row(admin_acce
     assert missing.status_code == 404, missing.text
     assert await _counts() == baseline
     assert await _registration_denials() == 1
+
+
+@pytest.mark.asyncio
+async def test_registration_commit_boundary_db_failure_rolls_back_and_same_key_retries(
+    admin_access,
+    monkeypatch,
+) -> None:
+    await admin_access.signed.grant(
+        admin_access.admin, admin_access.target, role="operator"
+    )
+    operation_id = uuid4()
+    headers = admin_access.target.headers | {"Idempotency-Key": str(operation_id)}
+    payload = registry_spec().model_dump(mode="json")
+    original_commit = AsyncSession.commit
+    staged_effects: tuple[int, int] | None = None
+
+    async def fail_exact_registry_commit_with_postgresql(session: AsyncSession) -> None:
+        nonlocal staged_effects
+        registry_rows = await session.scalar(
+            text(
+                "select count(*) from external_checker_registry_entries "
+                "where registration_operation_id=:operation_id"
+            ),
+            {"operation_id": operation_id},
+        )
+        if not registry_rows:
+            await original_commit(session)
+            return
+        allowed = await session.scalar(
+            text(
+                "select count(*) from audit_events "
+                "where action_id='checker.registry.register' "
+                "and correlation_id=:operation_id "
+                "and after_facts->>'allowed'='true'"
+            ),
+            {"operation_id": operation_id},
+        )
+        staged_effects = int(registry_rows), int(allowed or 0)
+        await session.execute(text("select cast('forced-invalid-uuid' as uuid)"))
+
+    with monkeypatch.context() as commit_failure:
+        commit_failure.setattr(
+            AsyncSession, "commit", fail_exact_registry_commit_with_postgresql
+        )
+        failed = await admin_access.signed.client.post(
+            PATH, headers=headers, json=payload
+        )
+
+    assert failed.status_code == 503, failed.text
+    error = failed.json()["error"]
+    assert set(error) == {"code", "message", "retryable", "correlation_id", "details"}
+    assert error["code"] == "external_checker_registry_unavailable"
+    assert error["retryable"] is True
+    assert error["details"] == {}
+    UUID(error["correlation_id"])
+    assert staged_effects == (1, 1)
+    assert await _counts() == (0, 0)
+
+    retried = await admin_access.signed.client.post(PATH, headers=headers, json=payload)
+    assert retried.status_code == 201, retried.text
+    assert retried.json()["registration_operation_id"] == str(operation_id)
+    assert await _counts() == (1, 1)
 
 
 @pytest.mark.asyncio
