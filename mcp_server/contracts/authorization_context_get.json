@@ -1,5 +1,5 @@
 {
-  "canonical_sha256": "3d0089165c877d8e4e933c5090e0a75911a9a85c3c17912e0a155a48811c4c5f",
+  "canonical_sha256": "97f042b73538633a6f994b3acb8395b152c158f33eb5ddd65ebf8759ba85ffb0",
   "components": {
     "schemas": {
       "ActionId": {
@@ -150,6 +150,7 @@
           "artifact.checker_output.write",
           "artifact.review_packet.materialize",
           "artifact.review_evidence.binding.create",
+          "checker.registry.read",
           "checker.registry.register",
           "compensation.adapter_binding.read",
           "compensation.adapter_binding.create",
@@ -548,7 +549,7 @@
   "schema_version": 1,
   "source": {
     "action_id": "actor.authorization_context.read",
-    "backend_git_sha": "a3eae54fb66096baf1974cff97a0ed54461d07ec",
+    "backend_git_sha": "596b3c3b2d4327e795ba62e1e66d1d3a56e51984",
     "method": "GET",
     "openapi_version": "3.1.0",
     "path": "/api/v1/actors/me/authorization-context"
