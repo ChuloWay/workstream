@@ -47,6 +47,12 @@ identity and system Operator grant to perform startup registration.
   `backend/app/api/router.py`: one authenticated Operator registration route,
   one exact-entry read route, caller-root transaction composition and stable
   HTTP error mapping.
+- `backend/alembic/versions/0050_operational_read_audit_pairs.py` and
+  `backend/alembic/env.py`: extend the existing closed AUTH audit vocabulary
+  with exactly the current registry-read and retry-source-read action pairs.
+  The registry's signed PostgreSQL readback exposed this concrete prerequisite;
+  the adjacent recovery chunk consumes the same canonical migration rather
+  than creating a sibling schema head.
 - `backend/app/adapters/auth/__init__.py`: compose the existing AUTH kernel and
   opaque prepared-authority service for the request-scoped registry adapter;
   no second factory or fallback composition is allowed.
@@ -66,7 +72,7 @@ identity and system Operator grant to perform startup registration.
   The existing prepared-denial classifier admits only the exact registry
   mutation resource, and the kernel reuses the existing project-scoped admin
   mutation classification without changing its action set.
-- `backend/tests/checkers/external/{support.py,test_contracts.py,test_registry.py,test_postgresql.py,test_public_api.py}`:
+- `backend/tests/checkers/external/{support.py,test_contracts.py,test_registry.py,test_postgresql.py,test_public_api.py,test_migration.py}`:
   focused service and signed public-API/PostgreSQL proof.
 - `backend/tests/authorization/catalogue_fixtures.py`,
   `backend/tests/authorization/test_catalogue.py`, and
@@ -101,9 +107,9 @@ identity and system Operator grant to perform startup registration.
   behavior, automatic enablement, checker execution, policy approval, routing,
   acceptance, model judges or human-review activation.
 - A second registry, generic administrative bypass, direct product-row writes,
-  fixture/test-package imports in production, CLI behavior, migrations, schema
-  changes, retained-row update/deletion, compatibility aliases or fallback
-  constructors.
+  fixture/test-package imports in production, CLI behavior, schema changes
+  beyond the exact two current operational-read audit pairs, retained-row
+  update/deletion, compatibility aliases or fallback constructors.
 - Changes owned by pull requests #575 or #577, CI behavior owned by #585 beyond
   the required exact registration of this new test module, README work owned by
   #586, private project inputs, credentials, deployment, push, merge or cloud
@@ -158,11 +164,16 @@ validate it, then commits the registry row and allow evidence together before
 returning. Read success likewise commits its allow evidence only after the
 detached response is valid.
 
-No migration is expected: the persisted registry and audit-event action field
-already support the exact facts. If implementation reveals a required schema
-change or an inability to keep fresh read authority and exact replay in one
-caller-owned transaction, stop for a new bounded decision instead of widening
-this record.
+Runtime proof revealed one concrete closed-vocabulary gap: PostgreSQL accepted
+the existing registry mutation audit pair but rejected the active registry
+read pair before its allowed decision could commit. The same constraint also
+omitted the adjacent retry-source read action that recovery proved through its
+public API. One forward migration therefore admits exactly
+`checker.registry.read` and `operations.checker_retry_source.list`, both with
+the existing `operations.status.read` permission. Direct SQL regression proof
+accepts those two pairs and rejects each crossed to
+`operations.reconcile.run`; no table, column, retained row or permission is
+added or rewritten.
 
 ## Acceptance criteria
 
@@ -187,6 +198,9 @@ this record.
   actor, system scope, operation/resource ID and immutable digests. Registration
   rollback removes both the row and staged allow evidence; replay after
   revocation fails before returning the stored result.
+- [ ] The closed PostgreSQL audit vocabulary accepts only the exact registry
+  and retry-source read actions with `operations.status.read`; crossed
+  permissions still fail the existing action-evidence constraint.
 - [ ] Crossed real-session Operator-grant and identity-link revocation races
   prove both legal serial orders: registration holding prepared authority
   completes with exact evidence before revocation, while revocation winning
@@ -248,4 +262,5 @@ of this corrected clean plan is required before implementation.
   state/readback and guarded `disabled -> shadow -> live` controls, followed by
   the parent #555 real-project drill combining actual checker images.
 - Remaining risks: exact-head PostgreSQL/public API proof and routed internal
-  review remain pending; no registry migration or REV behavior is authorized.
+  review remain pending; the shared read-pair migration must remain one linear
+  prerequisite for recovery and S3, and no REV behavior is authorized.
