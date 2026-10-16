@@ -235,6 +235,17 @@ the fixed repository. The Docker reaper uses one cleanup deadline and leaves
 ambiguous resources quarantined as infrastructure failure rather than claiming
 cleanup.
 
+Removal never treats a failed Docker command or failed inspect as proof of
+absence. Work, emergency and startup paths require a successful exact
+container/image inventory query with no matching entry. If emergency cleanup
+still cannot establish absence, the service sends no result and terminates its
+listener before another request can start. Restart, under socket-parent
+custody, reconciles both conventional checker containers and the project
+profile's labeled containers/images before admission. Conventional names must
+match their attempt label exactly; project builder/candidate names must match
+their attempt label exactly and reference names additionally allow only
+iterations zero through two.
+
 ### Physical build and oracle separation
 
 The service never gives the builder the original ART grant. It creates
@@ -424,8 +435,8 @@ can safely adopt the PILOT-00 mechanism.
 | Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, external grant publication and selected POST call order | Existing owner already provides aggregate byte quota and per-workspace entry ceiling, durable workspace ownership, failed-cleanup retention and crash recovery. Rust settles Docker before socket response; the live Python context then revokes/deletes before exposing the evaluation. Service death and Python-owner death have distinct cleanup paths | Focused exact-limit, cleanup-order, SIGKILL and dead-owner proof pending |
 | #582 ownership check | Coordinate exact paths and port ownership with the S3 activation owner | #582 does not touch `preparation.py` or `post_submit_materialization.py`; it owns provider-neutral ArtifactStore activation evidence and S3 composition, while this change reuses the separate existing ArtifactScratchManager/ledger without extending that activation port | Recheck after either branch changes its bounded files |
 | Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin. Work uses one absolute deadline/output meter; emergency cleanup uses one 10-second deadline and separate 256 KiB output ceiling | Actual Docker cancellation/resource behavior remains to be exercised in the local matrix |
-| Rust service contracts and logic | `cargo fmt --manifest-path external_checkers/Cargo.toml --all && CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-service` | PASS: 27 tests, including startup custody before cleanup, disconnect/CLI stop, one cleanup budget, initial control-output charging, uncertain-removal retry, exact recovery image identity and kernel exact-byte/plus-one behavior | Pure/fake-Docker tests do not prove actual Docker/runsc behavior |
-| Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced | Strict clippy remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
+| Required Rust workspace gate | From `external_checkers/`: `CARGO_BUILD_JOBS=1 cargo fmt --all --check && CARGO_BUILD_JOBS=1 cargo test --workspace --locked` | PASS: 5 SDK, 34 service and 4 project-image tests. Service proof includes custody-first startup, disconnect/CLI stop, one cleanup budget, exact successful-absence queries, marker-preserving ambiguous removal, fatal admission stop, attempt-bound recovery names, production builder `fsize` arguments and kernel exact-byte/plus-one behavior | Pure/fake-Docker tests do not prove actual Docker/runsc behavior |
+| Rust strict lint | `CARGO_BUILD_JOBS=1 cargo clippy --manifest-path external_checkers/Cargo.toml -p workstream-checker-service --all-targets -- -D warnings` plus blame and `.github/workflows/backend.yml` inspection | The repaired head reports only `clippy::large_enum_variant` at the unchanged pre-existing `GrantIdentity` (128-byte PRE versus 424-byte POST variant); no suppression or new diagnostic was introduced. The required `external-checker-runtime` CI lane runs locked workspace tests and formatting, not clippy | This optional local strict-clippy probe remains nonzero on that baseline warning; changing the existing serialized grant type is outside this bounded repair |
 | Project image and SDK contracts | `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-terminal-benchmark-checker` and `CARGO_BUILD_JOBS=1 cargo test --manifest-path external_checkers/Cargo.toml -p workstream-checker-sdk` | PASS: 4 project-package tests over all five originals and 5 SDK contract/canonicalization tests | Real image execution remains pending |
 | ART scratch integration | `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /home/abiorh/flow/workstream_product_builder/backend/.venv/bin/python -m pytest -q -p pytest_asyncio.plugin tests/checkers/external/test_runtime.py` from `backend/` | PASS: 11 tests, including exact existing-ledger POST byte/entry reservation and cleanup | Does not by itself prove service/Python process-crash ordering |
 | Real local matrix | Bounded project-checker probe over originals and work/infrastructure negatives | Future implementation proof; wait for lead-owned Docker capacity | Local `docker-dev` is not hosted gVisor proof |
@@ -470,6 +481,16 @@ meter; removes the redundant inventory; and gives all emergency cleanup one
 bounded deadline/output budget. The affected reviewer tracks must replay on the
 next clean candidate; these source repairs are not Docker or hosted runtime
 proof.
+
+The affected replay at `746881b3514f5e52c2703faf3c31a79b73f6c4e1` found
+that nonzero remove plus nonzero inspect could be misread as absence
+(`SEC493004`), recovered container names were not bound to the labeled attempt
+(`ARCH493005`), and the kernel-only file-limit test did not prove the production
+builder arguments (`TEST493001`). The repair requires successful exact
+inventory absence, stops admission on unresolved cleanup, binds every recovered
+name to its attempt and allowed reference iteration, and captures the real
+builder command to prove the reserved `fsize` argument with a discriminating
+guard. These remain source/fake-Docker claims until the real runtime matrix.
 
 ## Reconciliation
 

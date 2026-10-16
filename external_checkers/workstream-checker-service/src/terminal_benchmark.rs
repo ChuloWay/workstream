@@ -69,7 +69,13 @@ pub(super) fn cleanup_stale_resources(
     let deadline = Instant::now() + CLEANUP_TIMEOUT;
     let listed = run_bounded_command(
         &config.docker_binary,
-        &["ps", "-aq", "--filter", &format!("label={OWNER_LABEL}")],
+        &[
+            "ps",
+            "-aq",
+            "--no-trunc",
+            "--filter",
+            &format!("label={OWNER_LABEL}"),
+        ],
         deadline,
         1024 * 1024,
     )
@@ -80,7 +86,7 @@ pub(super) fn cleanup_stale_resources(
     let ids = String::from_utf8(listed.stdout)
         .map_err(|_| "terminal benchmark container recovery invalid")?;
     for id in ids.lines().filter(|line| !line.is_empty()) {
-        if !valid_docker_id(id) {
+        if !valid_full_container_id(id) {
             return Err("terminal benchmark container recovery invalid".into());
         }
         let inspected = run_bounded_command(
@@ -144,14 +150,6 @@ pub(super) fn cleanup_stale_resources(
     Ok(())
 }
 
-fn valid_docker_id(value: &str) -> bool {
-    let value = value.strip_prefix("sha256:").unwrap_or(value);
-    (12..=64).contains(&value.len())
-        && value
-            .chars()
-            .all(|item| item.is_ascii_hexdigit() && !item.is_ascii_uppercase())
-}
-
 fn valid_attempt(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 32
@@ -164,9 +162,10 @@ fn owned_container(bytes: &[u8]) -> bool {
     let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
         return false;
     };
-    let Some(container) = value.as_array().and_then(|items| items.first()) else {
+    let Some(containers) = value.as_array().filter(|items| items.len() == 1) else {
         return false;
     };
+    let container = &containers[0];
     let Some(name) = container.get("Name").and_then(Value::as_str) else {
         return false;
     };
@@ -179,10 +178,19 @@ fn owned_container(bytes: &[u8]) -> bool {
     let kind = labels
         .get("workstream.resource-kind")
         .and_then(Value::as_str);
-    let expected_prefix = match kind {
-        Some("builder") => "/ws-terminal-builder-",
-        Some("candidate") => "/ws-terminal-candidate-",
-        Some("reference") => "/ws-terminal-reference-",
+    let Some(attempt) = labels
+        .get("workstream.attempt")
+        .and_then(Value::as_str)
+        .filter(|attempt| valid_attempt(attempt))
+    else {
+        return false;
+    };
+    let name_matches_attempt = match kind {
+        Some("builder") => name == format!("/ws-terminal-builder-{attempt}"),
+        Some("candidate") => name == format!("/ws-terminal-candidate-{attempt}"),
+        Some("reference") => [0, 1, 2]
+            .into_iter()
+            .any(|iteration| name == format!("/ws-terminal-reference-{attempt}-{iteration}")),
         _ => return false,
     };
     labels.get("workstream.owner").and_then(Value::as_str)
@@ -195,11 +203,7 @@ fn owned_container(bytes: &[u8]) -> bool {
             .get("workstream.grant-id")
             .and_then(Value::as_str)
             .is_some_and(valid_grant_id)
-        && labels
-            .get("workstream.attempt")
-            .and_then(Value::as_str)
-            .is_some_and(valid_attempt)
-        && name.starts_with(expected_prefix)
+        && name_matches_attempt
 }
 
 fn image_has_identity(bytes: &[u8], tag: &str, listed_id: &str) -> bool {
@@ -437,8 +441,13 @@ pub(super) fn execute_terminal_benchmark(
             output,
             cleanup,
         )?;
-        if !remove_container_work(config, &builder, client, deadline, output, cleanup) {
-            return Err("implementation_unavailable");
+        match remove_container_work(config, &builder, client, deadline, output, cleanup) {
+            RemovalOutcome::Confirmed => {}
+            RemovalOutcome::Recovered => {
+                containers.retain(|item| item != &builder);
+                return Err("implementation_unavailable");
+            }
+            RemovalOutcome::Unsettled => return Err("implementation_unavailable"),
         }
         containers.retain(|item| item != &builder);
         match builder_outcome {
@@ -481,8 +490,13 @@ pub(super) fn execute_terminal_benchmark(
             output,
             cleanup,
         )?;
-        if !remove_container_work(config, &candidate, client, deadline, output, cleanup) {
-            return Err("implementation_unavailable");
+        match remove_container_work(config, &candidate, client, deadline, output, cleanup) {
+            RemovalOutcome::Confirmed => {}
+            RemovalOutcome::Recovered => {
+                containers.retain(|item| item != &candidate);
+                return Err("implementation_unavailable");
+            }
+            RemovalOutcome::Unsettled => return Err("implementation_unavailable"),
         }
         containers.retain(|item| item != &candidate);
         if candidate_status.status == 0 {
@@ -508,8 +522,13 @@ pub(super) fn execute_terminal_benchmark(
                 output,
                 cleanup,
             )?;
-            if !remove_container_work(config, &name, client, deadline, output, cleanup) {
-                return Err("implementation_unavailable");
+            match remove_container_work(config, &name, client, deadline, output, cleanup) {
+                RemovalOutcome::Confirmed => {}
+                RemovalOutcome::Recovered => {
+                    containers.retain(|item| item != &name);
+                    return Err("implementation_unavailable");
+                }
+                RemovalOutcome::Unsettled => return Err("implementation_unavailable"),
             }
             containers.retain(|item| item != &name);
             if status.status != 0 {
@@ -545,7 +564,7 @@ pub(super) fn execute_terminal_benchmark(
     }
     cleanup_ok &= remove_image_cleanup(config, &tag, cleanup);
     if !cleanup_ok {
-        return Err("implementation_unavailable");
+        return Err(UNSETTLED_RESOURCE_ERROR);
     }
     verify_sealed_cache(&profile.sealed_cache).map_err(|_| "implementation_unavailable")?;
     attempt
@@ -1092,31 +1111,6 @@ fn inspect_loaded_image(
     Ok(id.into())
 }
 
-fn remove_container_until(config: &ServiceConfig, name: &str, deadline: Instant) -> bool {
-    if Instant::now() >= deadline {
-        return false;
-    }
-    if run_bounded_command(
-        &config.docker_binary,
-        &["rm", "-f", name],
-        deadline,
-        64 * 1024,
-    )
-    .is_err()
-    {
-        return false;
-    }
-    matches!(
-        run_bounded_command(
-            &config.docker_binary,
-            &["container", "inspect", name],
-            deadline,
-            64 * 1024,
-        ),
-        Ok(output) if !output.status.success()
-    )
-}
-
 fn remove_image_until(config: &ServiceConfig, tag: &str, deadline: Instant) -> bool {
     if Instant::now() >= deadline {
         return false;
@@ -1134,11 +1128,11 @@ fn remove_image_until(config: &ServiceConfig, tag: &str, deadline: Instant) -> b
     matches!(
         run_bounded_command(
             &config.docker_binary,
-            &["image", "inspect", tag],
+            &["image", "ls", "--no-trunc", "--quiet", tag],
             deadline,
             64 * 1024,
         ),
-        Ok(output) if !output.status.success()
+        Ok(output) if successful_empty_inventory(&output)
     )
 }
 
@@ -1160,13 +1154,13 @@ fn remove_image_cleanup(
     if cleanup.charge(&removed).is_err() {
         return false;
     }
-    let inspected = run_bounded_command(
+    let inventory = run_bounded_command(
         &config.docker_binary,
-        &["image", "inspect", tag],
+        &["image", "ls", "--no-trunc", "--quiet", tag],
         deadline,
         cleanup.remaining_output,
     );
-    matches!(inspected, Ok(output) if cleanup.charge(&output).is_ok() && !output.status.success())
+    matches!(inventory, Ok(output) if cleanup.charge(&output).is_ok() && successful_empty_inventory(&output))
 }
 
 fn verify_sealed_cache(cache: &SealedCache) -> Result<(), String> {
@@ -1413,6 +1407,92 @@ mod tests {
     }
 
     #[test]
+    fn builder_command_applies_the_reserved_file_size_limit() {
+        let root = temporary_directory("builder-fsize-command");
+        let context = root.join("context");
+        let runtime = root.join("runtime");
+        let capture = root.join("arguments");
+        fs::create_dir_all(&context).unwrap();
+        fs::create_dir(&runtime).unwrap();
+        let docker = root.join("docker");
+        fs::write(
+            &docker,
+            format!(
+                r#"#!/bin/sh
+if test "$1" = create; then
+  printf '%s\n' "$@" > "{capture}"
+  previous=
+  matched=
+  for argument in "$@"; do
+    if test "$previous" = --ulimit && test "$argument" = fsize=4096:4096; then
+      matched=yes
+    fi
+    previous="$argument"
+  done
+  test "$matched" = yes || exit 64
+  exit 0
+fi
+test "$1 $2" = "start --attach" && exit 0
+exit 2
+"#,
+                capture = capture.display(),
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&docker, fs::Permissions::from_mode(0o700)).unwrap();
+        let profile = test_profile();
+        let request = request("post_submit");
+        let grant = test_grant(&root);
+        let config = test_service_config(&root, docker);
+        let (_peer, client) = UnixStream::pair().unwrap();
+        let execution = ExecutionContext {
+            config: &config,
+            profile: &profile,
+            request: &request,
+            grant: &grant,
+            client: &client,
+            deadline: Instant::now() + Duration::from_secs(2),
+        };
+        let mut output = OutputMeter::new(4096);
+        let mut cleanup = EmergencyCleanupBudget::new();
+
+        assert!(matches!(
+            run_builder(
+                &execution,
+                BuilderInputs {
+                    context: &context,
+                    runtime: &runtime,
+                    name: "ws-terminal-builder-a1",
+                    tag: "workstream.local/terminal-benchmark-candidate:a1",
+                    attempt_id: "a1",
+                    candidate_tar_byte_limit: 4096,
+                },
+                &mut output,
+                &mut cleanup,
+            ),
+            Ok(BuilderOutcome::Succeeded)
+        ));
+        let captured = fs::read_to_string(&capture).unwrap();
+        assert!(captured.contains("--ulimit\nfsize=4096:4096\n"));
+
+        assert!(run_builder(
+            &execution,
+            BuilderInputs {
+                context: &context,
+                runtime: &runtime,
+                name: "ws-terminal-builder-a2",
+                tag: "workstream.local/terminal-benchmark-candidate:a2",
+                attempt_id: "a2",
+                candidate_tar_byte_limit: 4095,
+            },
+            &mut output,
+            &mut cleanup,
+        )
+        .is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn profile_authority_is_exact_and_post_only() {
         let profile = TerminalBenchmarkProfile {
             profile_version: PROFILE_VERSION.into(),
@@ -1626,6 +1706,51 @@ mod tests {
     }
 
     #[test]
+    fn recovered_container_name_is_bound_to_attempt_and_reference_iteration() {
+        let metadata = |name: &str, attempt: &str, kind: &str| {
+            serde_json::to_vec(&json!([{
+                "Name": name,
+                "Config": {"Labels": {
+                    "workstream.owner": "terminal-benchmark-checker-service-v1",
+                    "workstream.request-digest": format!("sha256:{}", "1".repeat(64)),
+                    "workstream.grant-id": "extract_0123456789abcdef0123456789abcdef",
+                    "workstream.attempt": attempt,
+                    "workstream.resource-kind": kind,
+                }}
+            }]))
+            .unwrap()
+        };
+
+        assert!(owned_container(&metadata(
+            "/ws-terminal-builder-a1",
+            "a1",
+            "builder"
+        )));
+        assert!(!owned_container(&metadata(
+            "/ws-terminal-builder-a1",
+            "b2",
+            "builder"
+        )));
+        assert!(!owned_container(&metadata(
+            "/foreign-ws-terminal-builder-a1",
+            "a1",
+            "builder"
+        )));
+        for iteration in 0..3 {
+            assert!(owned_container(&metadata(
+                &format!("/ws-terminal-reference-a1-{iteration}"),
+                "a1",
+                "reference"
+            )));
+        }
+        assert!(!owned_container(&metadata(
+            "/ws-terminal-reference-a1-3",
+            "a1",
+            "reference"
+        )));
+    }
+
+    #[test]
     fn startup_recovery_removes_only_labeled_and_prefixed_resources() {
         let root = temporary_directory("recovery");
         fs::create_dir(&root).unwrap();
@@ -1639,12 +1764,13 @@ mod tests {
         let script = format!(
             r#"#!/bin/sh
 case "$1 $2" in
-  "ps -aq") test -e "{container}" && printf 'aaaaaaaaaaaa\n'; exit 0;;
+  "ps -aq") test -e "{container}" && printf '{container_id}\n'; exit 0;;
   "container inspect")
     test -e "{container}" || exit 1
     printf '%s\n' '[{{"Name":"/ws-terminal-builder-a1","Config":{{"Labels":{{"workstream.owner":"terminal-benchmark-checker-service-v1","workstream.request-digest":"sha256:{digest}","workstream.grant-id":"extract_0123456789abcdef0123456789abcdef","workstream.attempt":"a1","workstream.resource-kind":"builder"}}}}}}]'
     exit 0;;
   "rm -f") rm -f "{container}"; exit 0;;
+  "container ls") test -e "{container}" && printf '{container_id}\n'; exit 0;;
   "image ls") test -e "{image}" && printf 'workstream.local/terminal-benchmark-candidate a1 sha256:{image_id}\n'; exit 0;;
   "image inspect")
     test -e "{image}" || exit 1
@@ -1655,6 +1781,7 @@ esac
 exit 2
 "#,
             container = container.display(),
+            container_id = "a".repeat(64),
             image = image.display(),
             image_id = "b".repeat(64),
             digest = "1".repeat(64),
@@ -1688,6 +1815,36 @@ exit 2
         assert!(!container.exists());
         assert!(!image.exists());
         assert_eq!(fs::read(&control).unwrap(), b"preserved");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ambiguous_startup_and_image_cleanup_preserve_resource_markers() {
+        let root = temporary_directory("ambiguous-cleanup");
+        fs::create_dir(&root).unwrap();
+        let container = root.join("container");
+        let image = root.join("image");
+        fs::write(&container, b"live").unwrap();
+        fs::write(&image, b"live").unwrap();
+        let docker = root.join("docker");
+        fs::write(
+            &docker,
+            b"#!/bin/sh\ncase \"$1 $2\" in\n  \"rm -f\"|\"container ls\"|\"image rm\"|\"image ls\") exit 125;;\nesac\nexit 2\n",
+        )
+        .unwrap();
+        fs::set_permissions(&docker, fs::Permissions::from_mode(0o700)).unwrap();
+        let config = test_service_config(&root, docker);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let container_id = "a".repeat(64);
+        let tag = "workstream.local/terminal-benchmark-candidate:a1";
+
+        assert!(!remove_container_until(&config, &container_id, deadline));
+        assert!(container.exists());
+        assert!(!remove_image_until(&config, tag, deadline));
+        assert!(image.exists());
+        let mut cleanup = EmergencyCleanupBudget::new();
+        assert!(!remove_image_cleanup(&config, tag, &mut cleanup));
+        assert!(image.exists());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1748,6 +1905,46 @@ exit 2
             operating_system: "linux".into(),
             architecture: "amd64".into(),
             config_image_id: format!("sha256:{}", "4".repeat(64)),
+        }
+    }
+
+    fn test_profile() -> TerminalBenchmarkProfile {
+        TerminalBenchmarkProfile {
+            profile_version: PROFILE_VERSION.into(),
+            registry_entry_id: "019a0000-0000-7000-8000-000000000001".into(),
+            registry_entry_digest: format!("sha256:{}", "1".repeat(64)),
+            checker_image_digest: format!("sha256:{}", "2".repeat(64)),
+            builder: image_entry(),
+            approved_base: image_entry(),
+            sealed_cache: empty_cache(),
+            temporary_repository: TEMPORARY_REPOSITORY.into(),
+        }
+    }
+
+    fn test_service_config(root: &Path, docker_binary: PathBuf) -> ServiceConfig {
+        ServiceConfig {
+            socket_path: root.join("checker.sock"),
+            material_root: root.to_path_buf(),
+            docker_binary,
+            runtime: "runc".into(),
+            isolation_mode: "docker-dev".into(),
+            operating_system: "linux".into(),
+            architecture: "amd64".into(),
+            sandbox_uid: 65532,
+            sandbox_gid: 65532,
+            cache: vec![image_entry()],
+            terminal_benchmark: None,
+        }
+    }
+
+    fn test_grant(root: &Path) -> VerifiedGrant {
+        VerifiedGrant {
+            grant_id: "extract_0123456789abcdef0123456789abcdef".into(),
+            root: root.to_path_buf(),
+            workspace: root.join("workspace"),
+            files: Vec::new(),
+            runtime: None,
+            binding_digest: format!("sha256:{}", "1".repeat(64)),
         }
     }
 

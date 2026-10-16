@@ -32,6 +32,7 @@ const DOCKER_CONTROL_TIMEOUT: Duration = Duration::from_secs(10);
 const CLEANUP_TIMEOUT: Duration = Duration::from_secs(10);
 const CLEANUP_MAXIMUM_OUTPUT_BYTES: usize = 256 * 1024;
 const RUNTIME_FILE_PREFIX: &str = ".workstream-checker-runtime-";
+const UNSETTLED_RESOURCE_ERROR: &str = "owned runtime resource cleanup unsettled";
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -224,6 +225,20 @@ struct RequestExecutionBudget {
     deadline: Instant,
     output: OutputMeter,
     cleanup: EmergencyCleanupBudget,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ExecutionFailure {
+    code: &'static str,
+    launched: bool,
+    cleanup_unsettled: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RemovalOutcome {
+    Confirmed,
+    Recovered,
+    Unsettled,
 }
 
 impl OutputMeter {
@@ -430,7 +445,7 @@ fn run() -> Result<(), String> {
     let listener = prepare_listener(&config)?;
     for connection in listener.incoming() {
         match connection {
-            Ok(stream) => serve_connection(&config, stream, SOCKET_IO_TIMEOUT),
+            Ok(stream) => serve_connection(&config, stream, SOCKET_IO_TIMEOUT)?,
             Err(_) => continue,
         }
     }
@@ -444,20 +459,34 @@ fn prepare_listener(config: &ServiceConfig) -> Result<OwnedSocketListener, Strin
     let listener = OwnedSocketListener::bind(&config.socket_path)?;
     validate_config(config)?;
     cleanup_stale_runtime_files(config)?;
+    cleanup_stale_checker_containers(config)?;
     if let Some(profile) = &config.terminal_benchmark {
         terminal_benchmark::cleanup_stale_resources(config, profile)?;
     }
     Ok(listener)
 }
 
-fn serve_connection(config: &ServiceConfig, mut stream: UnixStream, timeout: Duration) {
+fn serve_connection(
+    config: &ServiceConfig,
+    mut stream: UnixStream,
+    timeout: Duration,
+) -> Result<(), String> {
     if stream.set_nonblocking(true).is_err() {
-        return;
+        return Ok(());
     }
     let response = read_frame_until(&mut stream, MAX_ENVELOPE_BYTES, Instant::now() + timeout)
         .and_then(|bytes| handle_frame(config, &stream, &bytes));
-    if let Ok(bytes) = response {
+    if let Some(bytes) = connection_response(response)? {
         let _ = write_frame_until(&mut stream, &bytes, Instant::now() + timeout);
+    }
+    Ok(())
+}
+
+fn connection_response(response: Result<Vec<u8>, String>) -> Result<Option<Vec<u8>>, String> {
+    match response {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error == UNSETTLED_RESOURCE_ERROR => Err(error),
+        Err(_) => Ok(None),
     }
 }
 
@@ -646,6 +675,9 @@ fn handle_frame(
                             &plan,
                         ) {
                             Ok(result) => (result, Some(isolation)),
+                            Err(code) if code == UNSETTLED_RESOURCE_ERROR => {
+                                return Err(UNSETTLED_RESOURCE_ERROR.into());
+                            }
                             Err(code) => (
                                 infrastructure_result(&request, code)
                                     .map_err(|_| "result construction failed")?,
@@ -659,10 +691,13 @@ fn handle_frame(
                         ),
                     }
                 }
-                Err((code, launched)) => (
-                    infrastructure_result(&request, code)
+                Err(failure) if failure.cleanup_unsettled => {
+                    return Err(UNSETTLED_RESOURCE_ERROR.into());
+                }
+                Err(failure) => (
+                    infrastructure_result(&request, failure.code)
                         .map_err(|_| "result construction failed")?,
-                    launched.then_some(isolation),
+                    failure.launched.then_some(isolation),
                 ),
             },
             Err(_) => (
@@ -1317,15 +1352,16 @@ fn execute_container(
     workspace: &Path,
     client: &UnixStream,
     budget: &mut RequestExecutionBudget,
-) -> Result<ExecutedChecker, (&'static str, bool)> {
+) -> Result<ExecutedChecker, ExecutionFailure> {
     // Revalidate immediately before handing the path to Docker.
     inspect_workspace(workspace, config.sandbox_uid, config.sandbox_gid)
-        .map_err(|_| ("material_unavailable", false))?;
+        .map_err(|_| ExecutionFailure::ordinary("material_unavailable", false))?;
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|_| ("implementation_unavailable", false))?
+        .map_err(|_| ExecutionFailure::ordinary("implementation_unavailable", false))?
         .as_nanos();
     let name = format!("ws-checker-{nonce:x}");
+    let attempt_label = format!("workstream.external-checker-attempt={nonce:x}");
     let image = format!("{}@{}", cache.repository, cache.platform_manifest_digest);
     let sandbox_user = format!("{}:{}", config.sandbox_uid, config.sandbox_gid);
     let cpus = format!("{:.3}", request.cpu_millis as f64 / 1000.0);
@@ -1341,6 +1377,8 @@ fn execute_container(
         &name,
         "--label",
         "workstream.external-checker=true",
+        "--label",
+        &attempt_label,
         "--runtime",
         &config.runtime,
         "--network",
@@ -1376,9 +1414,9 @@ fn execute_container(
         Ok(output) => output,
         Err(error) => {
             if !remove_container_cleanup(config, &name, &mut budget.cleanup) {
-                return Err(("implementation_unavailable", false));
+                return Err(ExecutionFailure::unsettled(false));
             }
-            return Err((
+            return Err(ExecutionFailure::ordinary(
                 if error == "process deadline exceeded" {
                     "deadline_exceeded"
                 } else {
@@ -1390,16 +1428,19 @@ fn execute_container(
     };
     if budget.output.charge(&created).is_err() {
         return if remove_container_cleanup(config, &name, &mut budget.cleanup) {
-            Err(("invalid_output", false))
+            Err(ExecutionFailure::ordinary("invalid_output", false))
         } else {
-            Err(("implementation_unavailable", false))
+            Err(ExecutionFailure::unsettled(false))
         };
     }
     if !created.status.success() {
         if !remove_container_cleanup(config, &name, &mut budget.cleanup) {
-            return Err(("implementation_unavailable", false));
+            return Err(ExecutionFailure::unsettled(false));
         }
-        return Err(("implementation_unavailable", false));
+        return Err(ExecutionFailure::ordinary(
+            "implementation_unavailable",
+            false,
+        ));
     }
     let result = run_started_container(
         config,
@@ -1410,7 +1451,7 @@ fn execute_container(
         &mut budget.output,
         &mut budget.cleanup,
     );
-    if !remove_container_work(
+    match remove_container_work(
         config,
         &name,
         client,
@@ -1418,9 +1459,16 @@ fn execute_container(
         &mut budget.output,
         &mut budget.cleanup,
     ) {
-        return Err(("implementation_unavailable", true));
+        RemovalOutcome::Confirmed => {}
+        RemovalOutcome::Recovered => {
+            return Err(ExecutionFailure::ordinary(
+                "implementation_unavailable",
+                true,
+            ));
+        }
+        RemovalOutcome::Unsettled => return Err(ExecutionFailure::unsettled(true)),
     }
-    result.map_err(|code| (code, true))
+    result.map_err(|code| ExecutionFailure::ordinary(code, true))
 }
 
 fn remove_container_work(
@@ -1430,7 +1478,7 @@ fn remove_container_work(
     deadline: Instant,
     output_meter: &mut OutputMeter,
     cleanup: &mut EmergencyCleanupBudget,
-) -> bool {
+) -> RemovalOutcome {
     let removed = run_bounded_command_cancellable(
         &config.docker_binary,
         &["rm", "-f", name],
@@ -1440,30 +1488,47 @@ fn remove_container_work(
         cleanup,
     );
     let Ok(removed) = removed else {
-        let _ = remove_container_cleanup(config, name, cleanup);
-        return false;
+        return removal_recovery(config, name, cleanup);
     };
     if output_meter.charge(&removed).is_err() {
-        let _ = remove_container_cleanup(config, name, cleanup);
-        return false;
+        return removal_recovery(config, name, cleanup);
     }
-    let inspected = run_bounded_command_cancellable(
+    let filter = format!("name=^/{name}$");
+    let inventory = run_bounded_command_cancellable(
         &config.docker_binary,
-        &["container", "inspect", name],
+        &[
+            "container",
+            "ls",
+            "--all",
+            "--quiet",
+            "--no-trunc",
+            "--filter",
+            &filter,
+        ],
         deadline,
         output_meter.remaining,
         client,
         cleanup,
     );
-    let Ok(inspected) = inspected else {
-        let _ = remove_container_cleanup(config, name, cleanup);
-        return false;
+    let Ok(inventory) = inventory else {
+        return removal_recovery(config, name, cleanup);
     };
-    if output_meter.charge(&inspected).is_err() || inspected.status.success() {
-        let _ = remove_container_cleanup(config, name, cleanup);
-        return false;
+    if output_meter.charge(&inventory).is_err() || !successful_empty_inventory(&inventory) {
+        return removal_recovery(config, name, cleanup);
     }
-    true
+    RemovalOutcome::Confirmed
+}
+
+fn removal_recovery(
+    config: &ServiceConfig,
+    name: &str,
+    cleanup: &mut EmergencyCleanupBudget,
+) -> RemovalOutcome {
+    if remove_container_cleanup(config, name, cleanup) {
+        RemovalOutcome::Recovered
+    } else {
+        RemovalOutcome::Unsettled
+    }
 }
 
 fn remove_container_cleanup(
@@ -1484,13 +1549,160 @@ fn remove_container_cleanup(
     if cleanup.charge(&removed).is_err() {
         return false;
     }
-    let inspected = run_bounded_command(
+    let filter = format!("name=^/{name}$");
+    let inventory = run_bounded_command(
         &config.docker_binary,
-        &["container", "inspect", name],
+        &[
+            "container",
+            "ls",
+            "--all",
+            "--quiet",
+            "--no-trunc",
+            "--filter",
+            &filter,
+        ],
         deadline,
         cleanup.remaining_output,
     );
-    matches!(inspected, Ok(output) if cleanup.charge(&output).is_ok() && !output.status.success())
+    matches!(inventory, Ok(output) if cleanup.charge(&output).is_ok() && successful_empty_inventory(&output))
+}
+
+fn successful_empty_inventory(output: &BoundedCommandOutput) -> bool {
+    output.status.success() && output.stdout.iter().all(u8::is_ascii_whitespace)
+}
+
+fn cleanup_stale_checker_containers(config: &ServiceConfig) -> Result<(), String> {
+    let deadline = Instant::now() + CLEANUP_TIMEOUT;
+    let listed = run_bounded_command(
+        &config.docker_binary,
+        &[
+            "container",
+            "ls",
+            "--all",
+            "--quiet",
+            "--no-trunc",
+            "--filter",
+            "label=workstream.external-checker=true",
+        ],
+        deadline,
+        1024 * 1024,
+    )
+    .map_err(|_| "external checker container recovery unavailable")?;
+    if !listed.status.success() {
+        return Err("external checker container recovery unavailable".into());
+    }
+    let ids = String::from_utf8(listed.stdout)
+        .map_err(|_| "external checker container recovery invalid")?;
+    for id in ids.lines().filter(|line| !line.is_empty()) {
+        if !valid_full_container_id(id) {
+            return Err("external checker container recovery invalid".into());
+        }
+        let inspected = run_bounded_command(
+            &config.docker_binary,
+            &["container", "inspect", id],
+            deadline,
+            1024 * 1024,
+        )
+        .map_err(|_| "external checker container recovery unavailable")?;
+        if !inspected.status.success() || !owned_checker_container(&inspected.stdout) {
+            return Err("external checker container recovery identity differs".into());
+        }
+        if !remove_container_until(config, id, deadline) {
+            return Err("external checker container recovery failed".into());
+        }
+    }
+    Ok(())
+}
+
+fn valid_full_container_id(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+fn owned_checker_container(bytes: &[u8]) -> bool {
+    let Ok(value) = serde_json::from_slice::<Value>(bytes) else {
+        return false;
+    };
+    let Some(containers) = value.as_array().filter(|items| items.len() == 1) else {
+        return false;
+    };
+    let container = &containers[0];
+    let Some(attempt) = container
+        .get("Name")
+        .and_then(Value::as_str)
+        .and_then(|name| name.strip_prefix("/ws-checker-"))
+        .filter(|attempt| {
+            !attempt.is_empty()
+                && attempt.len() <= 32
+                && attempt
+                    .bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        })
+    else {
+        return false;
+    };
+    container
+        .pointer("/Config/Labels/workstream.external-checker")
+        .and_then(Value::as_str)
+        == Some("true")
+        && container
+            .pointer("/Config/Labels/workstream.external-checker-attempt")
+            .and_then(Value::as_str)
+            == Some(attempt)
+}
+
+fn remove_container_until(config: &ServiceConfig, id: &str, deadline: Instant) -> bool {
+    if Instant::now() >= deadline {
+        return false;
+    }
+    if run_bounded_command(
+        &config.docker_binary,
+        &["rm", "-f", id],
+        deadline,
+        64 * 1024,
+    )
+    .is_err()
+    {
+        return false;
+    }
+    let filter = format!("id={id}");
+    matches!(
+        run_bounded_command(
+            &config.docker_binary,
+            &[
+                "container",
+                "ls",
+                "--all",
+                "--quiet",
+                "--no-trunc",
+                "--filter",
+                &filter,
+            ],
+            deadline,
+            64 * 1024,
+        ),
+        Ok(output) if successful_empty_inventory(&output)
+    )
+}
+
+impl ExecutionFailure {
+    fn ordinary(code: &'static str, launched: bool) -> Self {
+        Self {
+            code,
+            launched,
+            cleanup_unsettled: false,
+        }
+    }
+
+    fn unsettled(launched: bool) -> Self {
+        Self {
+            code: "implementation_unavailable",
+            launched,
+            cleanup_unsettled: true,
+        }
+    }
 }
 
 fn run_started_container(
@@ -1918,7 +2130,11 @@ mod tests {
         fs::set_permissions(&material_root, fs::Permissions::from_mode(0o700)).unwrap();
         fs::set_permissions(&socket_root, fs::Permissions::from_mode(0o700)).unwrap();
         let docker = root.join("docker");
-        fs::write(&docker, b"#!/bin/sh\nprintf '{\"runc\":{}}'\n").unwrap();
+        fs::write(
+            &docker,
+            b"#!/bin/sh\ncase \"$1 $2\" in\n  \"container ls\") exit 0;;\n  \"info --format\") printf '{\"runc\":{}}'; exit 0;;\nesac\nexit 2\n",
+        )
+        .unwrap();
         fs::set_permissions(&docker, fs::Permissions::from_mode(0o700)).unwrap();
         let owner = fs::metadata(&material_root).unwrap();
         let sandbox_uid = owner.uid();
@@ -2070,6 +2286,62 @@ mod tests {
     }
 
     #[test]
+    fn startup_recovery_requires_exact_generic_container_identity_and_absence() {
+        let (root, config) = test_config();
+        let container = root.join("generic-container");
+        let preserved = root.join("preserved");
+        fs::write(&container, b"owned").unwrap();
+        fs::write(&preserved, b"foreign").unwrap();
+        let container_id = "a".repeat(64);
+        fs::write(
+            &config.docker_binary,
+            format!(
+                r#"#!/bin/sh
+case "$1 $2" in
+  "container ls") test -e "{container}" && printf '{container_id}\n'; exit 0;;
+  "container inspect")
+    printf '%s\n' '[{{"Name":"/ws-checker-a1","Config":{{"Labels":{{"workstream.external-checker":"true","workstream.external-checker-attempt":"a1"}}}}}}]'
+    exit 0;;
+  "rm -f") rm -f "{container}"; exit 0;;
+esac
+exit 2
+"#,
+                container = container.display(),
+            ),
+        )
+        .unwrap();
+        fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
+
+        cleanup_stale_checker_containers(&config).unwrap();
+        assert!(!container.exists());
+        assert_eq!(fs::read(&preserved).unwrap(), b"foreign");
+
+        let mismatched = serde_json::to_vec(&serde_json::json!([{
+            "Name": "/ws-checker-a1",
+            "Config": {"Labels": {
+                "workstream.external-checker": "true",
+                "workstream.external-checker-attempt": "b2"
+            }}
+        }]))
+        .unwrap();
+        assert!(!owned_checker_container(&mismatched));
+
+        fs::write(&container, b"ambiguous").unwrap();
+        fs::write(
+            &config.docker_binary,
+            b"#!/bin/sh\ncase \"$1 $2\" in\n  \"rm -f\"|\"container ls\") exit 125;;\nesac\nexit 2\n",
+        )
+        .unwrap();
+        assert!(!remove_container_until(
+            &config,
+            &container_id,
+            Instant::now() + Duration::from_secs(2),
+        ));
+        assert!(container.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn grant_ids_and_cache_repositories_are_closed() {
         assert!(valid_grant_id("extract_0123456789abcdef0123456789abcdef"));
         assert!(!valid_grant_id(
@@ -2183,7 +2455,7 @@ mod tests {
             }
         });
         let started = Instant::now();
-        serve_connection(&config, stalled_server, Duration::from_millis(100));
+        serve_connection(&config, stalled_server, Duration::from_millis(100)).unwrap();
         assert!(started.elapsed() < Duration::from_millis(300));
 
         let (mut client, server) = UnixStream::pair().unwrap();
@@ -2192,7 +2464,7 @@ mod tests {
         )
         .unwrap();
         write_frame(&mut client, &request).unwrap();
-        serve_connection(&config, server, Duration::from_secs(1));
+        serve_connection(&config, server, Duration::from_secs(1)).unwrap();
         let response = read_frame(&mut client, MAX_RESPONSE_BYTES).unwrap();
         assert_eq!(
             serde_json::from_slice::<Value>(&response).unwrap()["status"],
@@ -2200,6 +2472,15 @@ mod tests {
         );
         writer.join().unwrap();
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unsettled_cleanup_is_the_only_connection_error_that_stops_admission() {
+        assert_eq!(connection_response(Err("invalid request".into())), Ok(None));
+        assert_eq!(
+            connection_response(Err(UNSETTLED_RESOURCE_ERROR.into())),
+            Err(UNSETTLED_RESOURCE_ERROR.into())
+        );
     }
 
     #[test]
@@ -2298,7 +2579,7 @@ root=$(dirname "$0")
 case "$1 $2" in
   "start --attach") printf '%s' "$$" > "{cli_pid}"; while :; do :; done;;
   "rm -f") rm -f "{container}"; printf 'removed'; exit 0;;
-  "container inspect") test -e "{container}"; exit $?;;
+  "container ls") test -e "{container}" && printf '%064d\n' 0; exit 0;;
 esac
 exit 2
 "#,
@@ -2353,7 +2634,7 @@ exit 2
         let (root, config) = test_config();
         fs::write(
             &config.docker_binary,
-            b"#!/bin/sh\nroot=$(dirname \"$0\")\ncase \"$1\" in\n  create) printf 'abcd'; exit 17;;\n  rm) rm -f \"$root/container\"; exit 0;;\n  container) exit 1;;\nesac\n",
+            b"#!/bin/sh\nroot=$(dirname \"$0\")\ncase \"$1\" in\n  create) printf 'abcd'; exit 17;;\n  rm) rm -f \"$root/container\"; exit 0;;\n  container) exit 0;;\nesac\n",
         )
         .unwrap();
         fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
@@ -2373,7 +2654,10 @@ exit 2
                 &client,
                 &mut budget,
             ),
-            Err(("implementation_unavailable", false))
+            Err(ExecutionFailure::ordinary(
+                "implementation_unavailable",
+                false
+            ))
         );
         assert_eq!(budget.output.remaining, 0);
 
@@ -2401,7 +2685,7 @@ case "$1 $2" in
       printf 'cleanup'
     fi
     exit 0;;
-  "container inspect") test -e "{container}"; exit $?;;
+  "container ls") test -e "{container}" && printf '%064d\n' 0; exit 0;;
 esac
 exit 2
 "#,
@@ -2415,18 +2699,93 @@ exit 2
         let mut output = OutputMeter::new(1024);
         let mut cleanup = EmergencyCleanupBudget::new();
 
-        assert!(!remove_container_work(
-            &config,
-            "candidate",
-            &client,
-            Instant::now() + Duration::from_secs(2),
-            &mut output,
-            &mut cleanup,
-        ));
+        assert_eq!(
+            remove_container_work(
+                &config,
+                "candidate",
+                &client,
+                Instant::now() + Duration::from_secs(2),
+                &mut output,
+                &mut cleanup,
+            ),
+            RemovalOutcome::Recovered
+        );
         assert!(!container.exists());
-        assert_eq!(output.remaining, 1020);
+        assert!(output.remaining < 1020);
         assert!(cleanup.deadline.is_some());
         assert!(cleanup.remaining_output < CLEANUP_MAXIMUM_OUTPUT_BYTES);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn ambiguous_container_removal_preserves_the_resource_for_work_and_cleanup() {
+        let (root, config) = test_config();
+        let container = root.join("container-ambiguous");
+        fs::write(&container, b"live").unwrap();
+        fs::write(
+            &config.docker_binary,
+            b"#!/bin/sh\ncase \"$1 $2\" in\n  \"rm -f\") exit 125;;\n  \"container ls\") exit 125;;\nesac\nexit 2\n",
+        )
+        .unwrap();
+        fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
+        let (_peer, client) = UnixStream::pair().unwrap();
+        let mut output = OutputMeter::new(1024);
+        let mut cleanup = EmergencyCleanupBudget::new();
+
+        assert_eq!(
+            remove_container_work(
+                &config,
+                "candidate",
+                &client,
+                Instant::now() + Duration::from_secs(2),
+                &mut output,
+                &mut cleanup,
+            ),
+            RemovalOutcome::Unsettled
+        );
+        assert!(container.exists());
+        assert!(!remove_container_cleanup(
+            &config,
+            "candidate",
+            &mut cleanup,
+        ));
+        assert!(container.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn unresolved_create_cleanup_is_a_fatal_execution_failure() {
+        let (root, config) = test_config();
+        let container = root.join("container");
+        fs::write(
+            &config.docker_binary,
+            b"#!/bin/sh\nroot=$(dirname \"$0\")\ncase \"$1 $2\" in\n  \"create --name\") : > \"$root/container\"; exit 17;;\n  \"rm -f\"|\"container ls\") exit 125;;\nesac\nexit 2\n",
+        )
+        .unwrap();
+        fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
+        let workspace = config.material_root.join("workspace-fatal-cleanup");
+        fs::create_dir(&workspace).unwrap();
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o500)).unwrap();
+        let request = parse_request(include_bytes!("../../fixtures/request.json")).unwrap();
+        let (_peer, client) = UnixStream::pair().unwrap();
+        let mut budget = RequestExecutionBudget::new(
+            Instant::now() + Duration::from_secs(2),
+            request.maximum_output_bytes,
+        );
+
+        assert_eq!(
+            execute_container(
+                &config,
+                &config.cache[0],
+                &request,
+                &workspace,
+                &client,
+                &mut budget,
+            ),
+            Err(ExecutionFailure::unsettled(false))
+        );
+        assert!(container.exists());
+        fs::set_permissions(&workspace, fs::Permissions::from_mode(0o700)).unwrap();
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -2435,7 +2794,7 @@ exit 2
         let (root, config) = test_config();
         fs::write(
             &config.docker_binary,
-            b"#!/bin/sh\nroot=$(dirname \"$0\")\ncase \"$1\" in\n  create) : > \"$root/container\"; exit 17;;\n  rm) rm -f \"$root/container\"; exit 0;;\n  container) test -e \"$root/container\";;\nesac\n",
+            b"#!/bin/sh\nroot=$(dirname \"$0\")\ncase \"$1\" in\n  create) : > \"$root/container\"; exit 17;;\n  rm) rm -f \"$root/container\"; exit 0;;\n  container) test -e \"$root/container\" && printf '%064d\\n' 0; exit 0;;\nesac\n",
         )
         .unwrap();
         fs::set_permissions(&config.docker_binary, fs::Permissions::from_mode(0o700)).unwrap();
@@ -2458,7 +2817,10 @@ exit 2
                 &client,
                 &mut budget,
             ),
-            Err(("implementation_unavailable", false))
+            Err(ExecutionFailure::ordinary(
+                "implementation_unavailable",
+                false
+            ))
         );
         assert!(!root.join("container").exists());
 

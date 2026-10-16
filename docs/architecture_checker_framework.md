@@ -260,14 +260,20 @@ validation or recovery, so a losing concurrent startup cannot inspect or clean
 the live owner's resources. Startup preserves a live listener and every foreign
 or linked path, but may remove a connection-refused socket only after its owned
 inode remains unchanged. Clean shutdown removes only the listener inode it
-created. Terminal-benchmark startup recovery likewise removes only resources
-carrying the complete service-owned container labels or an exact tag inside its
-fixed temporary image repository; it does not depend on a parallel runtime
-inventory. The candidate tar's one entry and remaining ART byte allowance are
+created. Startup recovery removes a conventional checker container only when
+its exact generated name and attempt label agree. Terminal-benchmark recovery
+likewise requires exact attempt-bound builder/candidate names, one of the three
+allowed reference iterations, the complete service-owned labels, or an exact
+tag inside its fixed temporary image repository; it does not depend on a
+parallel runtime inventory. The candidate tar's one entry and remaining ART byte allowance are
 reserved before launch and enforced in the builder with a hard file-size limit.
 All work commands share the request deadline/output meter and poll cancellation;
 all emergency cleanup shares one 10-second deadline and separate 256 KiB output
-ceiling within the adapter's 60-second margin. Ambiguous cleanup fails closed.
+ceiling within the adapter's 60-second margin. Cleanup is complete only after a
+successful exact container/image inventory query reports absence. If that
+cannot be established after emergency cleanup, the service suppresses the
+result and exits without admitting another request; restart performs the same
+owned-resource reconciliation while retaining socket-parent custody.
 
 The Rust launcher owns sandbox execution; durable CHECKERS owners retain
 approved policy binding, phase authority/currentness, attempts, results and
