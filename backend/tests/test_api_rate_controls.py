@@ -888,6 +888,118 @@ RATE_DEPENDENCIES = {
     enforce_admin_mutation_rate_limit,
     enforce_authorization_read_rate_limit,
 }
+EXPECTED_ADMIN_MUTATION_RATE_ROUTES = {
+    ("POST", "/actor-identity-links/{identity_link_id}/reactivate"),
+    ("POST", "/actor-identity-links/{identity_link_id}/revoke"),
+    ("POST", "/actors/{actor_profile_id}/deactivate"),
+    ("POST", "/actors/{actor_profile_id}/reactivate"),
+    ("POST", "/actors/{actor_profile_id}/suspend"),
+    ("POST", "/admin-role-grants"),
+    ("POST", "/admin-role-grants/{grant_id}/revoke"),
+    ("POST", "/operations/external-checker-registry"),
+    ("POST", "/projects/{project_id}/role-grants"),
+    ("POST", "/projects/{project_id}/role-grants/{grant_id}/revoke"),
+    ("POST", "/service-actors"),
+}
+EXPECTED_AUTHORIZATION_READ_RATE_ROUTES = {
+    ("GET", "/actors/me/authorization-context"),
+    ("GET", "/actors/me/contributions"),
+    ("GET", "/audit/projects/{project_id}/tasks/{task_id}/evidence"),
+    ("GET", "/audit/projects/{project_id}/tasks/{task_id}/locked-context"),
+    ("GET", "/operations/external-checker-registry/{registry_entry_id}"),
+    ("GET", "/operations/projects/{project_id}/tasks"),
+    ("GET", "/operations/projects/{project_id}/tasks/{task_id}/locked-context"),
+    ("GET", "/projects/{project_id}"),
+    ("GET", "/projects/{project_id}/active-guide"),
+    ("GET", "/projects/{project_id}/contribution-policies/current"),
+    ("GET", "/projects/{project_id}/contribution-policies/{policy_id}"),
+    ("GET", "/projects/{project_id}/contributions/export"),
+    ("GET", "/projects/{project_id}/contributor-candidates"),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}",
+    ),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/proposal",
+    ),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/effective-submission-artifact-policy",
+    ),
+    ("GET", "/projects/{project_id}/guides/{guide_id}/pre-submit-checker-policy"),
+    ("GET", "/projects/{project_id}/guides/{guide_id}/setup-runs/latest"),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/submission-artifact-policies",
+    ),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/submission-artifact-policies/{policy_id}",
+    ),
+    ("GET", "/projects/{project_id}/guides/{guide_id}/sufficiency-reports"),
+    (
+        "GET",
+        "/projects/{project_id}/guides/{guide_id}/sufficiency-reports/{report_id}",
+    ),
+    ("GET", "/projects/{project_id}/role-grants"),
+    ("GET", "/projects/{project_id}/role-grants/{grant_id}"),
+    ("GET", "/projects/{project_id}/submissions/{submission_id}"),
+    ("GET", "/projects/{project_id}/submissions/{submission_id}/checker-runs"),
+    (
+        "GET",
+        "/projects/{project_id}/submissions/{submission_id}/checker-runs/{checker_run_id}",
+    ),
+    ("GET", "/projects/{project_id}/task-import-batches/{batch_id}"),
+    ("GET", "/projects/{project_id}/task-import-sources/{source_id}"),
+    ("GET", "/projects/{project_id}/task-import-sources/{source_id}/content"),
+    ("GET", "/projects/{project_id}/tasks"),
+    ("GET", "/projects/{project_id}/tasks/ready"),
+    ("GET", "/projects/{project_id}/tasks/{task_id}"),
+    ("GET", "/projects/{project_id}/tasks/{task_id}/locked-context"),
+    ("GET", "/projects/{project_id}/tasks/{task_id}/submission-requirements"),
+    ("GET", "/projects/{project_id}/tasks/{task_id}/submissions"),
+    ("GET", "/submissions/{submission_id}"),
+    ("GET", "/submissions/{submission_id}/checker-runs"),
+    ("GET", "/submissions/{submission_id}/checker-runs/{checker_run_id}"),
+    ("GET", "/tasks/{task_id}"),
+    ("GET", "/tasks/{task_id}/submission-requirements"),
+    ("GET", "/tasks/{task_id}/submissions"),
+    ("POST", "/projects/{project_id}/contribution-policies/drafts"),
+    (
+        "POST",
+        "/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}/publication",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}/retirement",
+    ),
+    ("POST", "/projects/{project_id}/guides/{guide_id}/activate"),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/corrections",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/corrections/{correction_operation_id}/dispatch",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}/approval",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/post-submission-policies/{policy_id}/corrections",
+    ),
+    (
+        "POST",
+        "/projects/{project_id}/guides/{guide_id}/compilations/{compilation_id}/pre-submission-approval",
+    ),
+    (
+        "PUT",
+        "/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}",
+    ),
+}
 
 
 def _dependency_calls(dependant) -> set:
@@ -926,13 +1038,15 @@ def _rate_dependency_bindings(routes) -> dict[tuple[str, str], set]:
     return bindings
 
 
-def test_checker_registry_rate_dependencies_match_exact_route_allowlist() -> None:
+def test_production_rate_dependencies_match_exact_route_allowlist() -> None:
     expected = {
-        ("POST", "/operations/external-checker-registry"): {
-            enforce_admin_mutation_rate_limit
+        **{
+            route: {enforce_admin_mutation_rate_limit}
+            for route in EXPECTED_ADMIN_MUTATION_RATE_ROUTES
         },
-        ("GET", "/operations/external-checker-registry/{registry_entry_id}"): {
-            enforce_authorization_read_rate_limit
+        **{
+            route: {enforce_authorization_read_rate_limit}
+            for route in EXPECTED_AUTHORIZATION_READ_RATE_ROUTES
         },
     }
 
