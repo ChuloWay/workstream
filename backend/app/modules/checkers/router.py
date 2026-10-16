@@ -21,9 +21,6 @@ from app.modules.checkers.api.history import (
 from app.modules.checkers.api.execution import (
     CheckerRetryRequest, CheckerRetryResult, CheckerRetrySourcePage,
 )
-from app.modules.authorization.catalogue import ActionId
-
-
 router = APIRouter(tags=["checkers"])
 
 CHECKER_RETRY_KEY_PARAMETER = {
@@ -38,7 +35,7 @@ CHECKER_RETRY_KEY_PARAMETER = {
     "/operations/projects/{project_id}/checker-retry-sources",
     response_model=CheckerRetrySourcePage,
     openapi_extra={
-        "x-workstream-action-id": ActionId.OPERATIONS_CHECKER_RETRY_SOURCE_LIST.value,
+        "x-workstream-action-id": "operations.checker_retry_source.list",
     },
 )
 async def list_checker_retry_sources(
@@ -56,7 +53,7 @@ async def list_checker_retry_sources(
     response_model=CheckerRetryResult,
     status_code=201,
     openapi_extra={
-        "x-workstream-action-id": ActionId.OPERATIONS_CHECKER_RETRY.value,
+        "x-workstream-action-id": "operations.checker.retry",
         "parameters": [CHECKER_RETRY_KEY_PARAMETER],
     },
 )

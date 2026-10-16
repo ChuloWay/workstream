@@ -39,6 +39,10 @@ class CheckerRetryAuthorityDenied(CheckerExecutionUnavailable):
     """An exact retry authority denial available for canonical HTTP restaging."""
 
 
+class CheckerRetryCursorInvalid(ValueError):
+    """The presented recovery cursor does not match its exact signed query."""
+
+
 class CheckerRetryCommand(CheckerValue):
     """Operator's exact source, reason and replay key; no caller-selected successor."""
 
@@ -140,10 +144,27 @@ class CheckerRetrySourcePosition(CheckerValue):
     source_run_id: ResourceId
 
 
+class CheckerRetryDiscoverySource(CheckerValue):
+    """Bounded failed-run identity sufficient to select one recovery source."""
+
+    project_id: ResourceId
+    task_id: ResourceId
+    submission_id: ResourceId
+    submission_version: VersionNumber
+    source_run_id: ResourceId
+    source_request_id: ResourceId
+    source_request_digest: Sha256
+    source_result_id: ResourceId
+    source_result_digest: Sha256
+    source_finalize_evidence_id: ResourceId
+    source_generation: VersionNumber
+    failure_code: str = Field(min_length=1, max_length=100)
+
+
 class CheckerRetrySourceItem(CheckerValue):
     """Privacy-bounded known terminal failure and its immutable retry state."""
 
-    source: CheckerRetrySource
+    source: CheckerRetryDiscoverySource
     recovery_state: Literal["eligible", "retried", "not_current"]
     created_at: AwareDatetime
     completed_at: AwareDatetime

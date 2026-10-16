@@ -17,6 +17,7 @@ from app.modules.authorization.pagination import (
 )
 from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable,
+    CheckerRetryCursorInvalid,
     CheckerRetrySourcePosition,
     CheckerRetrySourceQuery,
 )
@@ -75,7 +76,9 @@ class CheckerRetryDiscoveryAuthorization:
                 cursor, query_digest=query_digest,
             )
         except InvalidPaginationCursor as exc:
-            raise ValueError("invalid checker retry discovery cursor") from exc
+            raise CheckerRetryCursorInvalid(
+                "invalid checker retry discovery cursor"
+            ) from exc
         return CheckerRetrySourcePosition(
             created_at=timestamp,
             source_run_id=run_id,

@@ -252,7 +252,6 @@ async def test_public_operator_discovers_retries_replays_and_observes_revocation
         assert item["source"] == {
             "project_id": str(h.request.project_id),
             "task_id": str(h.request.task_id),
-            "assignment_id": str(h.request.assignment_id),
             "submission_id": str(h.request.submission_id),
             "submission_version": h.request.submission_version,
             "source_run_id": str(h.created.evaluation_attempt_id),

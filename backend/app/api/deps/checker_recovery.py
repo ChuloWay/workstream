@@ -9,18 +9,21 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.checkers import checker_retry_service
-from app.api.deps.authorization import _authorization_context, get_authorization_actor
+from app.api.deps.authorization import (
+    AuthorizationDenied,
+    AuthorizationEvidenceUnavailable,
+    ResolvedActor,
+    _authorization_context,
+    get_authorization_actor,
+)
 from app.core.api_controls import StructuredHTTPException, parse_idempotency_key, request_ids
 from app.db.session import get_db_session
-from app.modules.actors.service import ResolvedActor
-from app.modules.authorization.runtime import (
-    AuthorizationDenied, AuthorizationEvidenceUnavailable,
-)
 from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable,
     CheckerRequestConflict,
     CheckerRetryAuthorityDenied,
     CheckerRetryCommand,
+    CheckerRetryCursorInvalid,
     CheckerRetryRequest,
     CheckerRetryResult,
     CheckerRetrySourcePage,
@@ -160,7 +163,7 @@ async def get_checker_retry_reads(
             await session.rollback()
             raise _unavailable() from evidence_error
         raise _concealed() from exc
-    except ValueError as exc:
+    except CheckerRetryCursorInvalid as exc:
         await session.rollback()
         raise StructuredHTTPException(
             status_code=422,

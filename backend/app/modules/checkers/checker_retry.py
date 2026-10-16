@@ -15,6 +15,7 @@ from app.modules.checkers.api.execution import (
     CheckerExecutionUnavailable, CheckerRequestConflict, CheckerRetryAuditPort,
     CheckerRetryAuthorizationPort, CheckerRetryCommand, CheckerRetryDelivery,
     CheckerRetryDiscoveryAuthorizationPort, CheckerRetryAuthorityDenied,
+    CheckerRetryDiscoverySource,
     CheckerRetryEventExpectation,
     CheckerRetryPreparation, CheckerRetryResult, CheckerRetrySource,
     CheckerRetrySourceItem, CheckerRetrySourcePage, CheckerRetrySourcePosition,
@@ -30,7 +31,6 @@ from app.modules.checkers.models import (
     CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence,
 )
 from app.modules.outbox.api import OutboxAppendInput, OutboxAppendPort
-from app.modules.tasks.models import Submission
 
 
 def _source_from_run(run: CheckerRun) -> tuple[PostSubmissionExecutionRequest, CheckerRetrySource]:
@@ -136,7 +136,6 @@ class CheckerRetryService:
             select(
                 CheckerRun.project_id.label("project_id"),
                 CheckerRun.task_id.label("task_id"),
-                Submission.task_assignment_id.label("assignment_id"),
                 CheckerRun.submission_id.label("submission_id"),
                 CheckerRun.submission_version.label("submission_version"),
                 CheckerRun.id.label("source_run_id"),
@@ -161,7 +160,6 @@ class CheckerRetryService:
                 CheckerRetryReceipt.audit_event_id.label("successor_audit_event_id"),
                 CheckerSubmissionFence.current_run_id.label("current_run_id"),
             )
-            .join(Submission, Submission.id == CheckerRun.submission_id)
             .outerjoin(
                 CheckerRetryReceipt,
                 CheckerRetryReceipt.source_run_id == CheckerRun.id,
@@ -194,10 +192,9 @@ class CheckerRetryService:
         ).mappings().all()
         items = []
         for row in rows[: query.limit]:
-            source = CheckerRetrySource(
+            source = CheckerRetryDiscoverySource(
                 project_id=UUID(row.project_id),
                 task_id=UUID(row.task_id),
-                assignment_id=UUID(row.assignment_id),
                 submission_id=UUID(row.submission_id),
                 submission_version=row.submission_version,
                 source_run_id=UUID(row.source_run_id),

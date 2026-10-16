@@ -37,6 +37,9 @@ def project_authority_audit_target(
     )
     from app.modules.authorization.domain.checker_registry import ExternalCheckerRegistryResourceContext
     from app.modules.authorization.domain.checker_retry import CheckerRetryResourceContext
+    from app.modules.authorization.domain.checker_retry_reads import (
+        CheckerRetrySourceReadResourceContext,
+    )
     from app.modules.authorization.domain.guide_compilation import (
         ProjectGuideCompilationRequestResourceContext,
         ProjectGuideCompilationExecuteResourceContext,
@@ -86,6 +89,15 @@ def project_authority_audit_target(
     if type(resource) is CheckerRetryResourceContext:
         project_id = str(resource.project_id)
         return project_id, "checker_run", str(resource.resource_id), "project", project_id
+    if type(resource) is CheckerRetrySourceReadResourceContext:
+        project_id = str(resource.scope_project_id)
+        return (
+            project_id,
+            resource.resource_type,
+            str(resource.resource_id),
+            "project",
+            project_id,
+        )
     if action_id in SUBMISSION_POLICY_MUTATIONS and isinstance(
         resource, ProjectSubmissionArtifactPolicyMutationResourceContext,
     ):

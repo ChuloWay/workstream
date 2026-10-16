@@ -46,11 +46,15 @@ eligible source or call the retry through a bearer-authenticated public route.
   mapping and UUID `Idempotency-Key` parsing.
 - `backend/app/modules/authorization/catalogue.py`, the existing checker-retry
   authorization adapter, a focused CHECKERS recovery read domain/adapter,
-  `backend/app/modules/authorization/kernel.py`, and only the minimum AUTH
+  `backend/app/modules/authorization/kernel.py`, its closed audit-target mapper,
+  and only the minimum AUTH
   composition exports: activate an exact recovery-source read action backed by
   the existing system Operator `operations.status.read` permission and retain
   mutation denials through canonical restage/commit. Mutation continues to use
   `operations.checker.retry` unchanged.
+- `mcp_server/contracts/authorization_context_get.json`: regenerate only the
+  selected authorization-context fragment and digest changed by the additive
+  recovery-source action.
 - `backend/tests/checkers/execution/test_checker_retry*.py` and only directly
   affected AUTH catalogue fixtures/tests: update existing callers for the
   required project selector and add signed bearer-token, real AUTH and
@@ -161,10 +165,10 @@ action or tests.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `801b8dabb` | Hidden exact terminal retry and absent Operator read/command confirmed; implementation extends that owner | Public PostgreSQL proof remains pending |
+| Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `a201d7432` | Hidden exact terminal retry and absent Operator read/command confirmed; implementation extends that owner | Public PostgreSQL proof remains pending |
 | UNKNOWN separation | Inspect OUTBOX dead-letter contracts and issue #581 | Unresolved invocation effects have no safe generic replay owner; excluded from this PR | Source-specific reconciliation remains a later bounded change |
-| Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | Pending | Hosted full-suite evidence remains with the lead |
-| Closed AUTH and lane ownership | Three exact catalogue/setup-finalization tests and three canonical CI lane inventory/ownership/fingerprint tests | `6 passed`; new tests remain in the existing checker-delivery module and lane manifest | Parallel #580 catalogue delta must be preserved when the branches reconcile |
+| Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | At `17320d1d0`, 10 passed and the public denial case failed 422/404, exposing the missing closed audit target; the repair is staged for exact-head rerun | Hosted full-suite evidence remains with the lead |
+| Closed AUTH and lane ownership | Cursor/reason contracts, three exact catalogue/setup-finalization tests and three canonical CI lane inventory/ownership/fingerprint tests | `8 passed`; new tests remain in the existing checker-delivery module and lane manifest | Parallel #580 catalogue delta must be preserved when the branches reconcile |
 | Static implementation checks | Changed-file Ruff; changed Python `compileall`; `git diff --check origin/main...HEAD` | Passed on the rebased implementation | Exact-head rerun required after evidence updates |
 | Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref origin/main` | Passed | Exact-head rerun required after evidence updates |
 
@@ -181,7 +185,7 @@ PostgreSQL evidence is clean.
 
 ## Reconciliation
 
-- Current-source reconciliation: base `801b8dabb`; issue #580's parallel branch
+- Current-source reconciliation: base `a201d7432`; issue #580's parallel branch
   owns supported checker registration and a separate registry read action. This
   change owns only terminal checker recovery and will reconcile the shared AUTH
   catalogue/kernel without deleting either action.
