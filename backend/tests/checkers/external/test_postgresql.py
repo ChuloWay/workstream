@@ -141,6 +141,7 @@ async def test_real_operator_registration_replay_conflict_and_rollback(admin_acc
     first = await _register(admin_access, request)
     replay = await _register(admin_access, request)
     assert replay == first
+    assert type(first.registry_entry_id) is UUID
     rows, events = await _snapshot()
     assert len(rows) == 1 and len(events) == 2
     assert rows[0]["authorization_decision_event_id"] == events[0]["id"]
