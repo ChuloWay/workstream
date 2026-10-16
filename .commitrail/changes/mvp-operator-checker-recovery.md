@@ -143,8 +143,9 @@ action or tests.
   code, timestamps and eligible/retried current state without private payloads.
 - [ ] Missing project, wrong role, project-scoped grant, service identity,
   revoked identity link or revoked Operator grant returns the same concealed
-  discovery response and discloses no failed-work facts; read AUTH evidence is
-  exact and denial evidence follows the canonical read path.
+  discovery response and discloses no failed-work facts; service identity also
+  reaches no CHECKERS or TASK lookup through the mutation route. Read AUTH
+  evidence is exact and denial evidence follows the canonical read path.
 - [ ] POST of an eligible source, reason and UUID key calls the existing owner
   and returns its immutable source, successor, receipt and authorization IDs;
   the original Submission/run/result/finalization remain unchanged and no
@@ -158,8 +159,9 @@ action or tests.
   TASK lock.
 - [ ] Wrong/foreign/stale sources and queued, running or completed outcomes
   refuse before a successor effect. Revocation, concurrent retry, forced audit
-  or outbox failure and caller rollback retain the service's existing atomic
-  guarantees through the public request path.
+  or typed outbox failure and caller rollback retain the service's existing
+  atomic guarantees through the public request path; internal outbox conflicts,
+  invalid input and persistence failures return bounded retryable unavailability.
 - [ ] The existing authorization-read and mutation rate controls refuse their
   exact recovery routes before AUTH or CHECKERS access. Absent, foreign, stale
   and ineligible sources stay concealed, while retained authority, reservation,

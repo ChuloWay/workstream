@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.checkers import checker_retry_service
+from app.api.deps.auth import get_auth_verification_result
 from app.api.deps.authorization import (
     AuthorizationDenied,
     AuthorizationEvidenceUnavailable,
@@ -31,12 +32,23 @@ from app.modules.checkers.api.execution import (
     CheckerRetrySourcePage,
     CheckerRetrySourceQuery,
 )
+from app.schemas.auth import AuthVerificationResult
 
 
 def require_checker_retry_key(request: Request) -> UUID:
     """Reject absent, duplicate or malformed retry keys before product mutation."""
     values = request.headers.getlist("Idempotency-Key")
     return parse_idempotency_key(values[0] if len(values) == 1 else "")
+
+
+async def require_checker_retry_human(
+    key: Annotated[UUID, Depends(require_checker_retry_key)],
+    result: Annotated[AuthVerificationResult, Depends(get_auth_verification_result)],
+) -> None:
+    """Conceal nonhuman retry callers before resolving product dependencies."""
+    del key
+    if result.token.subject_kind != "human":
+        raise _concealed()
 
 
 def _concealed() -> StructuredHTTPException:

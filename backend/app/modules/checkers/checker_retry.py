@@ -32,7 +32,10 @@ from app.modules.checkers.execution_repository import (
 from app.modules.checkers.models import (
     CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence,
 )
-from app.modules.outbox.api import OutboxAppendInput, OutboxAppendPort
+from app.modules.outbox.api import (
+    OutboxAppendInput, OutboxAppendPort, OutboxAppendResult,
+    OutboxIdempotencyConflict, OutboxInputError, OutboxPersistenceError,
+)
 
 
 def _source_from_run(run: CheckerRun) -> tuple[PostSubmissionExecutionRequest, CheckerRetrySource]:
@@ -136,6 +139,26 @@ def retry_request_event(
             "retry_receipt_id": str(receipt_id),
         },
     )
+
+
+async def _append_retry_event(
+    events: OutboxAppendPort, source: CheckerRetrySource, *, receipt_id: UUID,
+    request_id: UUID, request_digest: str, run_id: UUID, result_id: UUID,
+) -> OutboxAppendResult:
+    """Normalize exact OUTBOX contract failures into retry-owner unavailability."""
+    try:
+        return await events.append(retry_request_event(
+            source, receipt_id=receipt_id, request_id=request_id,
+            request_digest=request_digest, run_id=run_id, result_id=result_id,
+        ))
+    except (
+        OutboxIdempotencyConflict,
+        OutboxInputError,
+        OutboxPersistenceError,
+    ) as exc:
+        raise CheckerRetryOperationUnavailable(
+            "checker_retry_outbox_unavailable"
+        ) from exc
 
 
 class CheckerRetryService:
@@ -381,11 +404,12 @@ class CheckerRetryService:
                     "checker_retry_reservation_unavailable"
                 )
             receipt_id = new_record_id()
-            event = await self._events.append(retry_request_event(
-                source, receipt_id=receipt_id, request_id=reserved.request_id,
+            event = await _append_retry_event(
+                self._events, source, receipt_id=receipt_id,
+                request_id=reserved.request_id,
                 request_digest=reserved.request_digest,
                 run_id=reserved.attempt_id, result_id=reserved.result_id,
-            ))
+            )
             successor = CheckerRetrySuccessor(
                 request_id=reserved.request_id, request_digest=reserved.request_digest,
                 run_id=reserved.attempt_id, result_id=reserved.result_id,

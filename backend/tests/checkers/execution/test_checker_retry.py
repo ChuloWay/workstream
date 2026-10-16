@@ -27,6 +27,7 @@ from app.api.deps.api_controls import (
 from app.api.deps.checker_recovery import (
     get_checker_retry_commands,
     get_checker_retry_reads,
+    require_checker_retry_human,
 )
 from app.api.deps.authorization import get_authorization_actor
 from app.core.api_controls import StructuredHTTPException
@@ -60,9 +61,11 @@ from app.modules.checkers.api.execution import (
     CheckerRetrySourcePosition, CheckerRetrySourceQuery,
 )
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence
+from app.modules.checkers.checker_retry import _append_retry_event
 from app.modules.outbox.api import (
     HandlerOutcome, OutboxAppendDisposition, OutboxAppendInput,
-    OutboxAppendResult, OutboxIdempotencyConflict,
+    OutboxAppendResult, OutboxIdempotencyConflict, OutboxInputError,
+    OutboxPersistenceError,
 )
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import AuditEvent, TaskAssignment, WorkstreamTask
@@ -251,6 +254,7 @@ async def test_recovery_internal_unavailability_rolls_back_and_returns_retryable
     )
     app = create_app(Settings(environment="test"))
     app.dependency_overrides[enforce_admin_mutation_rate_limit] = lambda: None
+    app.dependency_overrides[require_checker_retry_human] = lambda: None
     app.dependency_overrides[get_authorization_actor] = lambda: resolved
     app.dependency_overrides[get_db_session] = lambda: session
     monkeypatch.setattr(
@@ -280,6 +284,38 @@ async def test_recovery_internal_unavailability_rolls_back_and_returns_retryable
     }
     assert session.rollbacks == 2
     assert session.commits == 0
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    (OutboxIdempotencyConflict, OutboxInputError, OutboxPersistenceError),
+)
+async def test_retry_translates_exact_outbox_failures(error_type):
+    class Events:
+        async def append(self, _event):
+            raise error_type("private outbox detail")
+
+    source = CheckerRetrySource(
+        project_id=new_record_id(), task_id=new_record_id(),
+        assignment_id=new_record_id(), submission_id=new_record_id(),
+        submission_version=1, source_run_id=new_record_id(),
+        source_request_id=new_record_id(),
+        source_request_digest="sha256:" + "0" * 64,
+        source_result_id=new_record_id(),
+        source_result_digest="sha256:" + "1" * 64,
+        source_finalize_evidence_id=new_record_id(), source_generation=1,
+        failure_code="material_unavailable",
+    )
+    with pytest.raises(
+        CheckerRetryOperationUnavailable,
+        match="checker_retry_outbox_unavailable",
+    ) as raised:
+        await _append_retry_event(
+            Events(), source, receipt_id=new_record_id(),
+            request_id=new_record_id(), request_digest="sha256:" + "2" * 64,
+            run_id=new_record_id(), result_id=new_record_id(),
+        )
+    assert isinstance(raised.value.__cause__, error_type)
 
 
 async def test_recovery_cursor_binds_project_limit_and_stable_position():
@@ -736,9 +772,13 @@ async def test_retry_real_outbox_conflict_rolls_back_successor(
                 idempotency_key="checker-retry:" + str(command.source_run_id),
                 payload={"collision": "reserved by another producer"},
             ))
-        with pytest.raises(OutboxIdempotencyConflict):
+        with pytest.raises(
+            CheckerRetryOperationUnavailable,
+            match="checker_retry_outbox_unavailable",
+        ) as raised:
             async with h.factory.begin() as session:
                 await checker_retry_service(session, operator).retry(command)
+        assert isinstance(raised.value.__cause__, OutboxIdempotencyConflict)
         async with h.factory() as session:
             fence = await session.get(CheckerSubmissionFence, str(h.request.submission_id))
             assert fence.current_run_id == str(command.source_run_id)

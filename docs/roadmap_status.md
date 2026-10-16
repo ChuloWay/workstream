@@ -226,10 +226,11 @@ a final failed assignment immediately and returns the task to ready. Both
 create no Review, FinalAcceptance, ContributionRecord or award under either
 ReviewPolicy mode. 04F3 admits a changed full ZIP from that exact current
 authorized cause under either mode, with no failure economics or human Review.
-04F4 adds a separate public Operator discovery/retry path for known terminal
-infrastructure failure through the existing owner; it creates no Review,
-acceptance, contribution or award. Uncertain request/completion effects are not
-eligible for this retry. Selected production request/completion composition and
+04F4 supplies the hidden retry owner for known terminal infrastructure failure;
+the supported Operator recovery change exposes project-scoped public discovery
+and invokes that owner. Recovery creates no Review, acceptance, contribution or
+award. Uncertain request/completion effects are not eligible for this retry.
+Selected production request/completion composition and
 supported false-guide activation are implemented. A known pre-effect non-live REV refusal returns bounded OUTBOX retry after rollback; exhaustion dead-letters without automatic reopen. A setup-fault hold is future safety work because no current selected production result emits `task_setup_blocked`. Human review/revision, conditional fulfillment, operations and
 release proof remain later v0.1 work.
 
@@ -330,7 +331,7 @@ rejects unrepresentable evaluation content before durable admission.
 commits each new Submission, verified ART binding, exact creation/binding AUTH
 receipts, generation-one reservation and shared outbox request together.
 Fresh-authorized replay verifies retained owners without creating missing rows.
-B7 delivers the hidden request handler with exact invocation fencing. 04E2-B delivers the hidden authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff; 04F3 supplies exact-cause replacement; 04F4 supplies supported public discovery and retry for known terminal checker infrastructure failure. Uncertain delivery remains a separate recovery boundary. A manager-visible setup-fault hold remains future safety work, with no current `task_setup_blocked` production result.
+B7 delivers the hidden request handler with exact invocation fencing. 04E2-B delivers the hidden authorized success outcomes; B8 supplies hidden completion delivery; 04F2 supplies the hidden remediation handoff; 04F3 supplies exact-cause replacement; 04F4 supplies the hidden terminal infrastructure retry owner, and the supported Operator recovery change supplies its project-scoped public discovery and invocation. Uncertain delivery remains a separate recovery boundary. A manager-visible setup-fault hold remains future safety work, with no current `task_setup_blocked` production result.
 
 ## Pre-Submission And Post-Submission Checking
 

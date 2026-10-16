@@ -9,6 +9,7 @@ from sqlalchemy.engine import Engine
 
 from app.adapters.audit import task_transition_audit
 from app.adapters.checkers import checker_retry_service
+from app.adapters.outbox import outbox_append
 from app.adapters.tasks import task_commands
 from app.core.config import get_settings
 from app.core.identifiers import new_record_id
@@ -33,6 +34,7 @@ from app.modules.checkers.api.execution import CheckerExecutionUnavailable
 from app.modules.audit.schemas import LifecycleAuditEventType
 from app.modules.checkers.models import CheckerRetryReceipt, CheckerRun, CheckerSubmissionFence
 from app.modules.checkers.execution_coordination import EvaluationCoordinator
+from app.modules.outbox.api import OutboxAppendInput
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import AuditEvent, TaskCommandReceipt
 from app.modules.tasks.api import TaskAuthorityDenied
@@ -190,7 +192,9 @@ async def _operator_discovery(admin_access, h, discovery_path):
     return system_grant, item
 
 
-async def _assert_concealed_discovery_principals(admin_access, h, discovery_path):
+async def _assert_concealed_discovery_principals(
+    admin_access, h, discovery_path, retry_path,
+):
     service_subject = "checker-recovery-reader-" + uuid4().hex
     provisioned = await admin_access.signed.client.post(
         "/api/v1/service-actors",
@@ -219,17 +223,18 @@ async def _assert_concealed_discovery_principals(admin_access, h, discovery_path
         link_id = await session.scalar(select(ActorIdentityLink.id).where(
             ActorIdentityLink.actor_profile_id == str(revoked_actor.id)
         ))
-        before = (
-            await session.scalar(select(func.count()).select_from(CheckerRun)),
-            await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)),
-            await session.scalar(select(func.count()).select_from(OutboxEvent)),
-        )
     revoked = await admin_access.signed.client.post(
         f"/api/v1/actor-identity-links/{link_id}/revoke",
         headers=admin_access.admin.headers | {"Idempotency-Key": str(new_record_id())},
         json={"reason": "Withdraw checker recovery discovery identity"},
     )
     assert revoked.status_code == 200, revoked.text
+    async with h.factory() as session:
+        before = (
+            await session.scalar(select(func.count()).select_from(CheckerRun)),
+            await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)),
+            await session.scalar(select(func.count()).select_from(OutboxEvent)),
+        )
     missing_discovery, _missing_retry = _recovery_paths(
         h, project_id=new_record_id(),
     )
@@ -245,12 +250,21 @@ async def _assert_concealed_discovery_principals(admin_access, h, discovery_path
 
     event.listen(Engine, "before_cursor_execute", capture)
     try:
+        service_retry = await admin_access.signed.client.post(
+            retry_path,
+            headers={
+                "Authorization": f"Bearer {service_token}",
+                "Idempotency-Key": str(new_record_id()),
+            },
+            json={"reason": "Restore verified checker infrastructure"},
+        )
         responses = [
             await admin_access.signed.client.get(path, headers=headers)
             for path, headers in requests
         ]
     finally:
         event.remove(Engine, "before_cursor_execute", capture)
+    responses.append(service_retry)
     assert all(response.status_code == 404 for response in responses)
     assert all(
         str(h.created.evaluation_attempt_id) not in response.text
@@ -260,7 +274,10 @@ async def _assert_concealed_discovery_principals(admin_access, h, discovery_path
     assert not any(
         table in statement.lower()
         for statement in statements
-        for table in ("checker_runs", "checker_retry_receipts")
+        for table in (
+            "checker_runs", "checker_retry_receipts", "checker_submission_fences",
+            "workstream_tasks", "task_assignments", "submissions",
+        )
     )
     async with h.factory() as session:
         after = (
@@ -482,7 +499,9 @@ async def test_public_operator_discovers_retries_replays_and_observes_revocation
             admin_access, h, discovery_path, retry_path,
         )
         system_grant, item = await _operator_discovery(admin_access, h, discovery_path)
-        await _assert_concealed_discovery_principals(admin_access, h, discovery_path)
+        await _assert_concealed_discovery_principals(
+            admin_access, h, discovery_path, retry_path,
+        )
         wrong_retry = await _wrong_project_refuses_before_task_lock(admin_access, h)
         await _assert_internal_reservation_failure_rolls_back(
             admin_access, h, retry_path, monkeypatch,
@@ -498,6 +517,58 @@ async def test_public_operator_discovers_retries_replays_and_observes_revocation
             headers, payload, result, system_grant,
         )
         assert project_grant != system_grant
+
+
+async def test_public_retry_real_outbox_conflict_is_retryable_and_rolls_back(
+    tmp_path, auth_database_env, monkeypatch, admin_access,
+):
+    async with _failed_source(tmp_path, auth_database_env, monkeypatch) as (h, _delivery):
+        await admin_access.signed.grant(admin_access.admin, admin_access.target)
+        _discovery_path, retry_path = _recovery_paths(h)
+        async with h.factory.begin() as session:
+            await outbox_append(session).append(OutboxAppendInput(
+                event_type="RetryCollision", event_version=1,
+                aggregate_type="submission", aggregate_id=h.request.submission_id,
+                project_id=h.request.project_id,
+                correlation_id=str(h.created.evaluation_attempt_id),
+                idempotency_key=(
+                    "checker-retry:" + str(h.created.evaluation_attempt_id)
+                ),
+                payload={"collision": "reserved by another producer"},
+            ))
+        async with h.factory() as session:
+            before = (
+                await session.scalar(select(func.count()).select_from(CheckerRun)),
+                await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)),
+                await session.scalar(select(func.count()).select_from(OutboxEvent)),
+                await session.scalar(select(func.count()).select_from(AuditEvent).where(
+                    AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value
+                )),
+            )
+        failed = await admin_access.signed.client.post(
+            retry_path,
+            headers=admin_access.target.headers
+            | {"Idempotency-Key": str(new_record_id())},
+            json={"reason": "Restore verified checker infrastructure"},
+        )
+        assert failed.status_code == 503, failed.text
+        assert failed.json()["error"]["code"] == "checker_recovery_unavailable"
+        assert failed.json()["error"]["retryable"] is True
+        assert "reserved by another producer" not in failed.text
+        async with h.factory() as session:
+            after = (
+                await session.scalar(select(func.count()).select_from(CheckerRun)),
+                await session.scalar(select(func.count()).select_from(CheckerRetryReceipt)),
+                await session.scalar(select(func.count()).select_from(OutboxEvent)),
+                await session.scalar(select(func.count()).select_from(AuditEvent).where(
+                    AuditEvent.action_id == ActionId.OPERATIONS_CHECKER_RETRY.value
+                )),
+            )
+            fence = await session.get(
+                CheckerSubmissionFence, str(h.request.submission_id)
+            )
+        assert after == before
+        assert fence.current_run_id == str(h.created.evaluation_attempt_id)
 
 
 async def _named_retry(h, operator, name, *, named=None, backend_pids=None):
