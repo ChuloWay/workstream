@@ -125,7 +125,7 @@ prepare_filesystem() {
 
 prepare_images() {
   local work="${STATE_ROOT}/work"
-  mkdir -m 0700 "${work}"
+  install -d -m 0700 "${work}"
   manifest_raw "${KANIKO_INDEX}" "${work}/kaniko-index.json"
   local kaniko_index_digest="${KANIKO_INDEX##*@}"
   local kaniko_child
@@ -297,6 +297,7 @@ print("oracle_runtime=gvisor\noracle_network=loopback-only\noracle_host_socket=a
 }
 
 capture_harness_boundary() {
+  install -d -m 0700 "${STATE_ROOT}/work"
   docker inspect "${DIND_NAME}" >"${STATE_ROOT}/work/dind-inspect.json"
   inner_docker info --format '{{json .Runtimes}}' >"${STATE_ROOT}/work/dind-runtimes.json"
   python3 - "${STATE_ROOT}/work/dind-inspect.json" "${STATE_ROOT}/work/dind-runtimes.json" \
