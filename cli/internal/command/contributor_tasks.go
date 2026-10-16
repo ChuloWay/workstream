@@ -76,6 +76,9 @@ func addContributorTasks(root *cobra.Command, client func() (*api.Client, error)
 			if err := writeCompensation(stdout, t.Compensation); err != nil {
 				return err
 			}
+			if err := writeAssignmentOutcome(stdout, t.LastAssignmentOutcome); err != nil {
+				return err
+			}
 			_, err = fmt.Fprintf(stdout, "Description: %s\nAcceptance criteria: %s\nRejection criteria: %s\n",
 				safeText(t.Description), optional(t.AcceptanceCriteria), optional(t.RejectionCriteria))
 			return err

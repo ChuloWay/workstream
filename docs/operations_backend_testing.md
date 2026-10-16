@@ -182,14 +182,23 @@ Measure final-report overhead alongside test execution when comparing allocation
 `task_lifecycle_a`, `task_lifecycle_b`, `task_lifecycle_c`, and
 `task_lifecycle_d` use the same
 deterministic partition mechanism for the remaining TASK and checker nodes. The single `schema_contracts` lane owns all baseline/PostgreSQL schema, reset and
-isolated-runner contracts. The
+isolated-runner contracts, together with database-backed migration, storage, and
+custody proofs. The
 `shared_foundations_a`, `shared_foundations_b`, and `shared_foundations_c` lanes deterministically
 partition exact node IDs from the remaining authorization, artifact, API, and
 infrastructure modules. This includes the database-independent repository inspections
 in `test_artifact_architecture.py`, `architecture/test_module_boundaries.py`, and
-`architecture/test_test_structure_boundary.py`; schema, reset and isolated-runner
-contracts stay in `schema_contracts`. Every collected test node, including each Alembic and
+`architecture/test_test_structure_boundary.py`, together with the static authorization
+boundary, identifier inventory and record-ID collection checks; schema, reset and
+isolated-runner contracts stay in `schema_contracts`. Every collected test node, including each Alembic and
 shared-foundation node, belongs to exactly one lane.
+An explicit per-module owner tuple may order its eligible lanes for measured
+distribution. The manifest builder rejects missing, duplicate, or foreign lane
+membership before using that order for the exact-node hash.
+PostgreSQL schema-contract markers are reserved for tests that own persistent
+schema replacement. Transaction-local DDL that explicitly rolls back uses the
+ordinary isolated fixture, whose teardown verifies the canonical schema and
+rebuilds plus fails if a mutation escapes.
 
 Each affected Backend job binds its checkout to `GITHUB_SHA`, installs pinned
 `uv 0.10.7`, verifies the manifest with `uv lock --check`, recreates the backend environment with

@@ -43,7 +43,7 @@ from app.modules.tasks.api.submission_context import TaskSubmissionContextUnavai
 from app.modules.tasks.command_replay import TaskCommandReplay, TaskReplayConflict
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.revision.models import TaskRevisionPreparation
-from app.modules.tasks.revision.expiry_event import revision_expiry_event
+from app.modules.tasks.revision.expiry_event import revision_preparation_event
 from app.modules.outbox.api import OutboxAppendPort
 from app.modules.tasks.revision.service import (
     RevisionRepairReceipt, candidate_from_packet, head_for_source, prepare_revision, project_current_revision,
@@ -415,7 +415,7 @@ class AuthorizedTaskCommands:
             if parent.blocked_reason == "revision_limit_reached":
                 await reject("revision_limit_reached")
             now = await self._session.scalar(select(func.clock_timestamp()))
-            if now >= parent.deadline_at:
+            if parent.deadline_at is not None and now >= parent.deadline_at:
                 await reject("revision_deadline_expired")
             try:
                 historical = await self._contexts._project_contexts.lock_locked_policy_context(
@@ -439,13 +439,9 @@ class AuthorizedTaskCommands:
                 await reject("revision_context_blocked")
             if candidate.prior != original.prior or candidate.prior != snapshot(historical):
                 await reject("revision_context_changed")
-            if candidate.target is None:
-                await reject("revision_context_blocked")
-            if (parent.next_revision_round > parent.max_revision_rounds
-                    or candidate.target_max_revision_rounds is not None
-                    and parent.next_revision_round > candidate.target_max_revision_rounds):
+            if parent.next_revision_round > parent.max_revision_rounds:
                 await reject("revision_limit_reached")
-            if candidate.target == original.target:
+            if candidate == original:
                 await reject("revision_context_unchanged")
             decision = await self._authorize_facts(facts)
             audit_event_id = new_record_id()
@@ -461,14 +457,22 @@ class AuthorizedTaskCommands:
                 )
             except TaskSubmissionContextUnavailable as exc:
                 raise TaskRevisionRepairError(exc.code) from exc
-            if child.id == parent.id or child.outcome == "blocked":
+            if child.id == parent.id:
                 raise TaskRevisionRepairError("revision_context_changed")
+            root = await self._session.scalar(select(TaskRevisionPreparation).where(
+                TaskRevisionPreparation.routing_manifest_id == manifest.id,
+                TaskRevisionPreparation.sequence == 1,
+            ))
+            if root is None or self._outbox is None:
+                raise RuntimeError("revision preparation publication unavailable")
+            event = await self._outbox.append(revision_preparation_event(manifest, root, child))
             await self._audit.record_revision_repair(TaskRevisionRepairAuditFacts(
                 event_id=audit_event_id, project_id=project_id, task_id=task_id,
                 assignment_id=UUID(assignment.id), submission_id=UUID(latest.id),
                 routing_manifest_id=manifest.id, preparation_id=child.id,
                 actor_profile_id=self._actor_id, authorization_decision_id=decision.decision_id,
-                reason=request.reason,
+                reason=request.reason, outbox_event_id=event.event_id,
+                authorization_resource_digest=decision.resource_context_digest,
             ))
             await self._session.flush()
             return await project_current_revision(self._session, child)
@@ -574,13 +578,14 @@ class AuthorizedTaskCommands:
                 raise TaskRevisionRepairError(exc.code) from exc
             if self._outbox is None:
                 raise RuntimeError("revision expiry publication unavailable")
-            await self._outbox.append(revision_expiry_event(manifest, child))
+            event = await self._outbox.append(revision_preparation_event(manifest, child))
             await self._audit.record_revision_repair(TaskRevisionRepairAuditFacts(
                 event_id=audit_event_id, project_id=project_id, task_id=task_id,
                 assignment_id=UUID(assignment.id), submission_id=UUID(latest.id),
                 routing_manifest_id=manifest.id, preparation_id=child.id,
                 actor_profile_id=self._actor_id, authorization_decision_id=decision.decision_id,
-                reason=request.reason,
+                reason=request.reason, outbox_event_id=event.event_id,
+                authorization_resource_digest=decision.resource_context_digest,
             ))
             await self._session.flush()
             return await project_current_revision(self._session, child)

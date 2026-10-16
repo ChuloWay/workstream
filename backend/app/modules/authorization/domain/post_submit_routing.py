@@ -48,6 +48,25 @@ class CheckerRemediationConsequence(_RoutingValue):
     target_task_status: Literal["needs_revision"] = "needs_revision"
 
 
+class CheckerExhaustionConsequence(_RoutingValue):
+    """Authorize immediate assignment closure and task release on its final attempt."""
+
+    kind: Literal["checker_exhaustion"] = "checker_exhaustion"
+    expected_task_status: Literal["evaluation_pending"] = "evaluation_pending"
+    target_task_status: Literal["ready"] = "ready"
+    assignment_status: Literal["revision_exhausted"] = "revision_exhausted"
+    exhaustion_receipt_id: UUID
+    revision_round: int = Field(ge=0)
+    max_revision_rounds: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def final_round(self):
+        """Reject inconsistent caps or an identity without canonical record provenance."""
+        if self.revision_round != self.max_revision_rounds or self.exhaustion_receipt_id.version != 7:
+            raise ValueError("exhaustion must bind the final permitted attempt")
+        return self
+
+
 class PostSubmitRoutingResourceContext(_RoutingValue):
     """Closed, detached facts awaiting owner verification in one transaction."""
 
@@ -62,7 +81,8 @@ class PostSubmitRoutingResourceContext(_RoutingValue):
     consequence: Annotated[
         HumanAdmissionConsequence
         | AutomatedAcceptanceConsequence
-        | CheckerRemediationConsequence,
+        | CheckerRemediationConsequence
+        | CheckerExhaustionConsequence,
         Field(discriminator="kind"),
     ]
 
@@ -89,9 +109,9 @@ class PostSubmitRoutingResourceContext(_RoutingValue):
             if getattr(request, field) != getattr(source, field):
                 raise ValueError("routing request source differs")
         if source.routing_recommendation == "needs_revision":
-            if type(self.consequence) is not CheckerRemediationConsequence:
+            if type(self.consequence) not in (CheckerRemediationConsequence, CheckerExhaustionConsequence):
                 raise ValueError("routing consequence differs from recommendation")
-            CheckerRemediationConsequence.model_validate(self.consequence.model_dump())
+            type(self.consequence).model_validate(self.consequence.model_dump())
         elif source.human_review_required:
             if type(self.consequence) is not HumanAdmissionConsequence:
                 raise ValueError("routing consequence differs from review policy")

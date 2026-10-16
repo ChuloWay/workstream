@@ -130,8 +130,22 @@ def test_work_context_openapi():
         assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {"$ref": f"#/components/schemas/{name}"}
         assert set(definitions[name]["properties"]) == fields
         assert definitions[name]["additionalProperties"] is False
-    assert set(definitions["ContributorTaskDetail"]["properties"]) == CONTRIBUTOR
-    assert set(definitions["ManagementTaskDetail"]["properties"]) == COMMON | MANAGEMENT
+    assert set(definitions["ContributorTaskDetail"]["properties"]) == CONTRIBUTOR | {"last_assignment_outcome"}
+    assert set(definitions["ManagementTaskDetail"]["properties"]) == COMMON | MANAGEMENT | {
+        "last_assignment_outcome", "revision_context",
+    }
+    for name, field, target in (
+        ("ContributorTaskDetail", "last_assignment_outcome", "TaskAssignmentOutcome"),
+        ("ManagementTaskDetail", "last_assignment_outcome", "TaskAssignmentOutcome"),
+        ("ManagementTaskDetail", "revision_context", "ContributorRevisionContext"),
+    ):
+        nullable = definitions[name]["properties"][field]
+        assert nullable["anyOf"] == [{"$ref": f"#/components/schemas/{target}"}, {"type": "null"}]
+        assert field not in definitions[name].get("required", [])
+    assert set(definitions["TaskAssignmentOutcome"]["properties"]) == {
+        "assignment_id", "submission_id", "status", "status_reason", "closed_at", "next_action",
+    }
+    assert definitions["TaskAssignmentOutcome"]["additionalProperties"] is False
     assert set(definitions["ContributorTaskLifecycle"]["properties"]) == {"assigned_to_current_actor", "next_actions"}
     assert set(definitions["GuidePolicySelection"]["properties"]) == {"policy_id", "generation", "policy_hash"}
     assert definitions["ContributorTaskWorkContext"]["properties"]["contribution_policy_version_id"]["format"] == "uuid"

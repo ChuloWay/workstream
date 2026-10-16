@@ -36,13 +36,12 @@ not fully proven by a hosted green run.
    attempt binding, frozen uv environments, and one source-wide preflight for
    Ruff/docstring checks. Keep strict Git path validation, no-renames diff,
    full fallback on unavailable history, and base-retarget event coverage.
-3. Narrow blanket `postgres_schema_contract` markers in
-   `backend/tests/contributions/records/test_storage.py` and
-   `backend/tests/tasks/post_submit_routing/test_storage.py`. Retain the marker
-   on `test_reviewer_award_definition_substitution` (dynamic function replacement)
-   and only the `remove_guard=True` parameter (trigger removal). Ordinary tests
-   use the unchanged canonical schema check, transactional reset and teardown
-   verification. Leaked schema changes still fail and trigger recovery.
+3. Remove the blanket `postgres_schema_contract` marker from
+   `backend/tests/tasks/post_submit_routing/test_storage.py`. Its ordinary tests
+   retain canonical schema verification, transactional reset and teardown proof.
+   Preserve current main's contribution storage tests unchanged: merged #573
+   already removed their redundant rebuilds and explicitly rolls back its two
+   mutation controls. Do not reintroduce those markers during reconciliation.
 4. Update affected workflow/selector/evidence tests, ownership registration and
    `docs/operations_backend_testing.md` together. Reconcile current main before
    final verification. No product roadmap impact: no capability or public API
@@ -85,8 +84,8 @@ reported as complete proof. No new selector/evidence service or paid runner.
   no mixing of incompatible artifact attempts.
 - Check removed selected-mode imports, flags, artifacts and registrations have
   no remaining consumers. Run affected runner/merger/validator/catalogue tests.
-- Run both complete storage modules against PostgreSQL 16 and MinIO, including
-  both DDL controls. Compare identical representative tests before/after with
+- Run the affected routing storage module against PostgreSQL 16 and MinIO.
+  Preserve current main’s contribution storage mutation controls unchanged. Compare identical representative tests before/after with
   coverage enabled; report setup/call/teardown separately. Preserve exact nodes
   and all assertions. Coverage percentages remain diagnostic only.
 - Run lint, markdown links, stale wording and Commitrail checks. Final hosted
@@ -135,8 +134,9 @@ The PostgreSQL storage guard uses explicit failure branches for invalid mounts,
 capacity or write settings so Bash version differences cannot turn a failed
 predicate into a successful job.
 
-The marker plan received focused feasibility review: both actual schema
-mutations retain rebuild isolation; ordinary tests retain verified reset.
+The original marker plan retained rebuild isolation on two mutation cases.
+Current main supersedes that portion with explicit transactional rollback and
+verified reset; only routing storage marker removal remains new in this PR.
 Earlier draft-only and backend-selection plans are superseded, not additional
 acceptance contracts.
 

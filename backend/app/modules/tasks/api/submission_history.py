@@ -55,7 +55,7 @@ class ContributorSubmissionHistory(BaseModel):
     task_id: UUID
     version: int
     status: str
-    status_reason: Literal["revision_deadline_expired"] | None = None
+    status_reason: Literal["revision_deadline_expired", "revision_limit_reached"] | None = None
     summary: str
     submitted_at: datetime
     locked_at: datetime | None

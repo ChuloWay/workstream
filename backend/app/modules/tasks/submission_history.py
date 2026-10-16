@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.tasks.api.submission_history import SubmissionHistoryTarget
 from app.modules.tasks.models import EvidenceItem, Submission, WorkstreamTask
 from app.modules.tasks.revision.models import TaskRevisionExpiration
+from app.modules.tasks.revision.models import TaskRevisionExhaustion
 from app.modules.tasks.api.submission_history import ContributorSubmissionHistory, ManagementSubmissionHistory
 
 
@@ -60,10 +61,20 @@ class SubmissionHistoryRepository:
         fields = [name for name in schema.model_fields if name not in {"evidence_items", "status", "status_reason"}]
         statement = select(
             *(getattr(Submission, name) for name in fields),
-            case((TaskRevisionExpiration.id.is_not(None), "rejected"), else_=Submission.status).label("status"),
-            case((TaskRevisionExpiration.id.is_not(None), "revision_deadline_expired"), else_=None).label("status_reason"),
+            case(
+                (TaskRevisionExpiration.id.is_not(None), "rejected"),
+                (TaskRevisionExhaustion.id.is_not(None), "rejected"),
+                else_=Submission.status,
+            ).label("status"),
+            case(
+                (TaskRevisionExpiration.id.is_not(None), "revision_deadline_expired"),
+                (TaskRevisionExhaustion.id.is_not(None), "revision_limit_reached"),
+                else_=None,
+            ).label("status_reason"),
         ).outerjoin(TaskRevisionExpiration,
             TaskRevisionExpiration.source_submission_id == Submission.id,
+        ).outerjoin(TaskRevisionExhaustion,
+            TaskRevisionExhaustion.source_submission_id == Submission.id,
         ).where(
             Submission.task_id == str(target.task_id),
         )

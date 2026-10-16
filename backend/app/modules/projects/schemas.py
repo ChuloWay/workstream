@@ -38,7 +38,7 @@ class RevisionPolicyInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    max_revision_rounds: int = Field(ge=1)
+    max_revision_rounds: int = Field(ge=0, strict=True)
     revision_deadline_hours: int = Field(ge=1)
     allowed_resubmission_states: list[Literal["needs_revision"]] = Field(
         default_factory=lambda: ["needs_revision"],

@@ -13,6 +13,7 @@ from app.core.hashing import canonical_json_hash
 
 REVISION_EXPIRY_EVENT = "TaskRevisionExpiryRequested"
 REVISION_EXPIRED_EVENT = "TaskRevisionExpired"
+REVISION_CONTEXT_BLOCKED_EVENT = "TaskRevisionContextBlocked"
 
 
 class TaskRevisionExpiryUnavailable(RuntimeError):
@@ -81,7 +82,7 @@ class TaskRevisionExpiryAuthorizationPort(Protocol):
     def prepare_revision_expiry(
         self, facts: TaskRevisionExpiryAuthorityFacts,
     ) -> AbstractAsyncContextManager[PreparedTaskRevisionExpiry]:
-        """Bind one delivery generation and its original revision deadline."""
+        """Bind one delivery generation and its immutable scheduled deadline."""
         ...
 
 

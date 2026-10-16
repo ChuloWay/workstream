@@ -75,7 +75,8 @@ def test_authorization_adapter_requires_exact_branch_inputs(human, recommendatio
     from app.adapters.auth import _routing_resource
 
     resource = resource_for(human_review_required=human, routing_recommendation=recommendation)
-    source = SimpleNamespace(source=resource.source, request=resource.request)
+    from app.modules.tasks.api.post_submit_routing import TaskRoutingSourcePreparation
+    source = TaskRoutingSourcePreparation(source=resource.source, request=resource.request)
     effects = accepted_effects_for(resource.source) if has_effects else None
     generation = 7 if has_generation else None
     arguments = (source, resource.claim, effects, generation, resource.router_actor_id, resource.router_identity_link_id)
@@ -521,3 +522,25 @@ def test_receipt_digest_binds_principal_and_original_generation(field):
     assert post_submit_routing_resource_digest(changed) != post_submit_routing_resource_digest(
         original
     )
+
+
+@pytest.mark.parametrize("human", [True, False])
+def test_exhaustion_authority_binds_terminal_round_and_exact_receipt(human):
+    """Exhaustion is a distinct authorized consequence, including zero revisions."""
+    from app.modules.authorization.domain.post_submit_routing import CheckerExhaustionConsequence
+
+    original = resource_for(human_review_required=human, routing_recommendation="needs_revision")
+    terminal = original.model_copy(update={"consequence": CheckerExhaustionConsequence(
+        exhaustion_receipt_id=new_record_id(), revision_round=0, max_revision_rounds=0,
+    )})
+    assert terminal.validate_identity() is terminal
+    assert post_submit_routing_resource_digest(terminal) != post_submit_routing_resource_digest(original)
+    altered = terminal.model_copy(update={"consequence": terminal.consequence.model_copy(update={
+        "max_revision_rounds": 1,
+    })})
+    with pytest.raises(ValueError):
+        post_submit_routing_resource_digest(altered)
+    another = terminal.model_copy(update={"consequence": terminal.consequence.model_copy(update={
+        "exhaustion_receipt_id": new_record_id(),
+    })})
+    assert post_submit_routing_resource_digest(another) != post_submit_routing_resource_digest(terminal)

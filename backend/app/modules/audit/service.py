@@ -96,7 +96,9 @@ class LifecycleAuditParticipant:
                     value.task_reason if value.task_reason is not None else value.reason.value),
             event_payload={"references": references,
                            **({"authorization_resource_digest": value.authorization_resource_digest}
-                              if value.event_type.value == "TaskRevisionContextRepaired"
+                              if value.event_type.value in {
+                                  "TaskRevisionContextRepaired", "TaskRevisionExhausted",
+                              }
                               and value.authorization_resource_digest is not None else {}),
                            **({"source_type": value.source_type} if value.source_type is not None else {}),
                            **(value.locked_lineage if value.locked_lineage is not None else {}),

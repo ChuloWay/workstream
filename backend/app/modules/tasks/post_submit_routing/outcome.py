@@ -12,8 +12,9 @@ from app.modules.outbox.api import OutboxAppendInput, OutboxEventEnvelope
 from app.modules.tasks.api.accepted_effects import TaskAcceptedEffectsRequest
 from app.modules.tasks.models import Submission, WorkstreamTask
 from app.modules.tasks.revision.service import prepare_revision
-from app.modules.tasks.revision.expiry_event import revision_expiry_event
+from app.modules.tasks.revision.expiry_event import revision_preparation_event
 from app.modules.tasks.revision.models import TaskRevisionPreparation
+from app.modules.tasks.revision.exhaustion import exhaust_assignment
 from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.api.routing_outcome import RoutingAuthorityFacts, TaskRoutingOutcome
 from app.modules.tasks.post_submit_routing.requests import (
@@ -145,7 +146,9 @@ class TaskPostSubmitOutcome:
             economic = None
             if source.source.routing_recommendation == "needs_revision":
                 task = await self._session.get(WorkstreamTask, str(source.source.task_id))
-                if not replay:
+                if source.exhaustion is not None:
+                    await exhaust_assignment(self._session, manifest=stored, source=source, replay=replay)
+                elif not replay:
                     task.status = "needs_revision"
                     await self._session.flush()
                     if source.revision_candidate is None:
@@ -154,14 +157,14 @@ class TaskPostSubmitOutcome:
                         self._session, manifest=stored, candidate=source.revision_candidate,
                         audit_event_id=audit_id,
                     )
-                    await self._outbox.append(revision_expiry_event(stored, root))
+                    await self._outbox.append(revision_preparation_event(stored, root))
                 else:
                     root = await self._session.scalar(select(TaskRevisionPreparation).where(
                         TaskRevisionPreparation.routing_manifest_id == stored.id,
                         TaskRevisionPreparation.sequence == 1,
                     ))
                     if root is not None:
-                        await self._outbox.require_existing(None, revision_expiry_event(stored, root))
+                        await self._outbox.require_existing(None, revision_preparation_event(stored, root))
             elif human:
                 task = await self._session.get(WorkstreamTask, str(source.source.task_id))
                 if not replay:
@@ -250,6 +253,11 @@ def _notice(source, receipt, acceptance_id):
             "authorization_decision_id": str(receipt.decision_id),
             "human_review_required": source.source.human_review_required,
             "final_acceptance_id": str(acceptance_id) if acceptance_id else None,
+            **({
+                "exhaustion_receipt_id": str(source.exhaustion.exhaustion_receipt_id),
+                "assignment_status": "revision_exhausted",
+                "status_reason": "revision_limit_reached",
+            } if source.exhaustion is not None and not source.recovered_exhaustion else {}),
         },
     )
 

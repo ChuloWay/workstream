@@ -2,7 +2,6 @@
 
 import json
 from dataclasses import dataclass
-from datetime import timedelta
 from uuid import UUID
 
 from sqlalchemy import func, select, text
@@ -105,10 +104,7 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
         raise TaskSubmissionContextUnavailable("revision_context_changed")
     if predecessor is not None and repair_receipt is None:
         raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
-    now = await session.scalar(select(func.clock_timestamp()))
     requested_at = predecessor.requested_at if predecessor else manifest.created_at
-    deadline_at = (predecessor.deadline_at if predecessor else
-                   requested_at + timedelta(hours=candidate.revision_deadline_hours))
     limit = predecessor.max_revision_rounds if predecessor else candidate.max_revision_rounds
     source_round = await session.scalar(select(func.count(Submission.id)).where(
         Submission.task_assignment_id == manifest.assignment_id,
@@ -118,16 +114,12 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
         predecessor is not None and source_round != predecessor.next_revision_round
     ):
         raise TaskSubmissionContextUnavailable("revision_context_changed")
-    reason = None
-    if source_round > limit or (
-        candidate.target_max_revision_rounds is not None
+    if source_round > limit:
+        raise TaskSubmissionContextUnavailable("revision_limit_reached")
+    reason = "context_blocked" if (
+        candidate.target is None or candidate.target_max_revision_rounds is not None
         and source_round > candidate.target_max_revision_rounds
-    ):
-        reason = "revision_limit_reached"
-    elif now >= deadline_at:
-        reason = "revision_deadline_expired"
-    elif candidate.target is None:
-        reason = "context_blocked"
+    ) else None
     outcome = "blocked" if reason else (
         "kept" if candidate.prior == candidate.target else "rebased"
     )
@@ -138,7 +130,8 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
         "id": str(preparation_id), "routing_manifest_id": str(manifest.id),
         "predecessor_id": str(predecessor.id) if predecessor else None,
         "sequence": predecessor.sequence + 1 if predecessor else 1,
-        "requested_at": requested_at.isoformat(), "deadline_at": deadline_at.isoformat(),
+        "requested_at": requested_at.isoformat(), "deadline_at": None,
+        "remaining_microseconds": None, "clock_observed_at": None,
         "source_submission_version": manifest.submission_version,
         "next_revision_round": source_round, "max_revision_rounds": limit,
         "outcome": outcome, "blocked_reason": reason,
@@ -155,7 +148,8 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
         predecessor_id=predecessor.id if predecessor else None,
         sequence=packet["sequence"], source_submission_version=manifest.submission_version,
         next_revision_round=source_round,
-        max_revision_rounds=limit, requested_at=requested_at, deadline_at=deadline_at,
+        max_revision_rounds=limit, requested_at=requested_at, deadline_at=None,
+        remaining_microseconds=None, clock_observed_at=None,
         outcome=outcome, blocked_reason=reason, packet=packet,
         preparation_sha256=canonical_json_hash(packet),
         authorization_decision_id=str(authorization_decision_id or manifest.authorization_decision_id),
@@ -170,7 +164,8 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
     session.add(row)
     # The immutable receipt precedes its guarded Task/Assignment changes.
     await session.flush()
-    if outcome != "blocked":
+    await session.refresh(row)
+    if row.outcome != "blocked":
         task = await session.get(WorkstreamTask, manifest.task_id)
         assignment = await session.get(TaskAssignment, manifest.assignment_id)
         for name, value in candidate.target.lineage.model_dump(mode="json").items():
@@ -197,7 +192,9 @@ def project_revision(row, now) -> ContributorRevisionContext:
             if before != after:
                 changes.append(RevisionContextChange(component=component, before=before, after=after))
     disposition = row.blocked_reason or "ready"
-    if disposition != "revision_limit_reached" and now >= row.deadline_at:
+    if disposition == "revision_limit_reached" and row.next_revision_round <= row.max_revision_rounds:
+        disposition = "context_blocked"
+    if disposition != "revision_limit_reached" and row.deadline_at is not None and now >= row.deadline_at:
         disposition = "revision_deadline_expired"
     direction = None if target is None else (
         "kept" if prior == target else
@@ -210,6 +207,8 @@ def project_revision(row, now) -> ContributorRevisionContext:
         source_routing_manifest_id=UUID(str(row.routing_manifest_id)), sequence=row.sequence,
         next_revision_round=row.next_revision_round, max_revision_rounds=row.max_revision_rounds,
         requested_at=row.requested_at, deadline_at=row.deadline_at, outcome=row.outcome,
+        clock_state="paused" if row.deadline_at is None else "running",
+        remaining_microseconds=row.remaining_microseconds if row.deadline_at is None else None,
         disposition=disposition, direction=direction, prior=prior, target=target, changes=tuple(changes),
     )
 
@@ -228,16 +227,23 @@ async def project_current_revision(session, row) -> ContributorRevisionContext:
 
 async def read_contributor_revision(session, task, assignment):
     """Read only the authorized continuing contributor's latest revision source."""
-    if task.status != "needs_revision" or assignment is None:
+    if assignment is None:
+        return None
+    return await read_task_revision(
+        session, task_id=task.id, status=task.status, assignment_id=assignment.id,
+    )
+
+
+async def read_task_revision(session, *, task_id, status, assignment_id):
+    """Project the current revision under an already authorized task read."""
+    if status != "needs_revision" or assignment_id is None:
         return None
     latest = select(Submission.id).where(
-        Submission.task_id == task.id,
+        Submission.task_id == task_id,
     ).order_by(Submission.version.desc()).limit(1).scalar_subquery()
     manifest_id = await session.scalar(select(TaskPostSubmitRoutingManifest.id).where(
-        TaskPostSubmitRoutingManifest.project_id == task.project_id,
-        TaskPostSubmitRoutingManifest.task_id == task.id,
-        TaskPostSubmitRoutingManifest.assignment_id == assignment.id,
-        TaskPostSubmitRoutingManifest.contributor_id == assignment.contributor_id,
+        TaskPostSubmitRoutingManifest.task_id == task_id,
+        TaskPostSubmitRoutingManifest.assignment_id == assignment_id,
         TaskPostSubmitRoutingManifest.submission_id == latest,
         TaskPostSubmitRoutingManifest.routing_recommendation == "needs_revision",
     ).order_by(TaskPostSubmitRoutingManifest.evaluation_generation.desc()).limit(1))

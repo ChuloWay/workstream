@@ -154,8 +154,12 @@ Acceptance:
 1. Checker runner validates the submission-stamped locked `PostSubmitCheckerPolicy` id/version/hash/body.
 2. Runner executes enabled checks from that locked policy body.
 3. Results are saved with `passed`, `warning`, or `failed`, plus severity, message, and evidence.
-4. Contributor-fixable checker failures route the Task to `NEEDS_REVISION` with
-   `CheckerResult` lineage and no Review or reviewer contribution.
+4. Contributor-fixable checker failures route the Task to `NEEDS_REVISION` only
+   when another revision is allowed by the locked project RevisionPolicy.
+   Failure of the final allowed attempt records rejection, closes the Assignment
+   as `revision_exhausted`, and returns the Task to `ready` atomically, without a
+   revision preparation or deadline. Both outcomes retain `CheckerResult`
+   lineage and create no Review or reviewer contribution.
 5. A manager-visible hold for setup faults is planned safety work, not a
    current route: the selected completion classifier cannot emit
    `task_setup_blocked`. It is not a prerequisite for this first journey.
@@ -230,10 +234,13 @@ Acceptance:
 - Each required finding has an immutable response and later resolution.
 - Revision count is tracked against the locked revision policy.
 - Each assignment starts at round 0 with its own revision allowance.
-- Every committed `needs_revision` starts a fresh PostgreSQL-time window from
+- Every fixable failure with a revision remaining starts a fresh PostgreSQL-time window from
   the failed attempt's locked policy; only immutable resubmission ends it.
-  Upload, replay, repair and infrastructure retry preserve the window.
-- Cap exhaustion refuses another attempt. At expiry, an immutable rejection
+  Upload, replay and infrastructure retry cannot reset the window. A setup block
+  pauses it and records durable PM attention, visible in the covered PM task
+  detail; repair resumes only the remaining allowance.
+- Final-attempt failure immediately records exhaustion and returns the task to
+  ready without another window. At expiry, an immutable rejection
   receipt, assignment release and return to `ready` commit atomically with
   AUTH/audit/outbox evidence and no new economic facts. Checker expiry is
   implemented; #554 owns the future genuine human trigger under the same policy.

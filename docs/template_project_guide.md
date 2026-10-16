@@ -239,17 +239,22 @@ Define:
 - maximum revision rounds:
 - revision deadline hours:
 - allowed resubmission states:
-- exhaustion behavior: cap refuses another attempt; expiry retains rejection
-  evidence, releases the assignment and returns the task to `ready` atomically
-  without a synthetic Review or economic facts
+- exhaustion behavior: failure on the final permitted attempt immediately
+  retains rejection and exhaustion evidence, closes the assignment as
+  `revision_exhausted`, and returns the task to `ready` atomically without
+  another preparation or window, a synthetic Review, or economic facts
 - reviewer reassignment rule:
 
-Revision-policy activation and task screening require positive limit and
-deadline values. Each assignment starts at round 0 with its own allowance.
-Every committed `needs_revision` starts a fresh PostgreSQL-time window from the
-failed attempt's locked policy. Only immutable resubmission ends it; upload,
-replay and repair preserve it. Checker revision implements this policy; #554
-owns future human decision integration under the same intended rules.
+Revision-policy activation and task screening require an explicit integer
+maximum revision count `N >= 0` and positive deadline hours. Each assignment
+starts at round 0 with its own allowance. A committed `needs_revision` with
+another revision remaining freezes the next preparation from the failed
+attempt's locked policy, with either a running PostgreSQL deadline or a paused
+remaining allowance while setup is blocked. Only immutable resubmission ends
+that opportunity; upload, replay and repair preserve its clock. Expiry retains
+rejection evidence, releases the assignment, and returns the task to `ready`.
+Checker revision implements this policy; #554 owns future human decision
+integration under the same intended rules.
 
 ## Acceptance Policy
 

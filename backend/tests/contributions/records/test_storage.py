@@ -50,7 +50,12 @@ async def test_review_contribution_sources(tmp_path, isolated_database_env, deci
                 source_task_assignment_id=h.request.assignment_id,
             )
             await insert_record(session, h.reviewer_record)
-            await reject_record(session, h.reviewer_record, "uq_contribution_records_source_review_id", id=new_record_id())
+            await reject_record(
+                session,
+                h.reviewer_record,
+                "uq_contribution_records_source_review_id",
+                id=new_record_id(),
+            )
         async with h.factory() as session:
             stored = await rows(session, "contribution_records")
             assert len(stored) == 1
@@ -138,7 +143,6 @@ async def test_review_contribution_foreign_source_substitutions(tmp_path, isolat
                 await session.commit()
 
 
-@pytest.mark.postgres_schema_contract
 async def test_reviewer_award_definition_substitution(tmp_path, isolated_database_env):
     async with reviewer_contribution_source(tmp_path, isolated_database_env, paid=True) as h:
         async with h.factory() as session, session.begin():
@@ -156,9 +160,9 @@ async def test_reviewer_award_definition_substitution(tmp_path, isolated_databas
             await reject_award(
                 session, money, "award contribution lineage mismatch", contributor_id=h.submitter_id
             )
-            definition = await session.scalar(text(
-                "SELECT pg_get_functiondef('public.guard_compensation_award()'::regprocedure)"
-            ))
+            definition = await session.scalar(
+                text("SELECT pg_get_functiondef('public.guard_compensation_award()'::regprocedure)")
+            )
             predicate = "AND definition.quantity=NEW.quantity"
             assert definition.count(predicate) == 1
             await session.execute(text(definition.replace(predicate, "")))
@@ -190,9 +194,13 @@ async def test_reviewer_award_definition_substitution(tmp_path, isolated_databas
                     await reject_award(
                         session, money, "award contribution lineage mismatch", **change
                     )
-                await reject_award(session, money, "award frozen definition mismatch",
-                                   award_definition_id=foreign_money["award_definition_id"],
-                                   adapter_binding_id=foreign_money["adapter_binding_id"])
+                await reject_award(
+                    session,
+                    money,
+                    "award frozen definition mismatch",
+                    award_definition_id=foreign_money["award_definition_id"],
+                    adapter_binding_id=foreign_money["adapter_binding_id"],
+                )
                 await insert_award(session, money)
                 await insert_award(session, points)
                 await session.commit()
@@ -272,11 +280,7 @@ async def test_reviewer_source_and_award_uniqueness_race(
         tmp_path, isolated_database_env, paid=kind == "award"
     ) as h:
         async with h.factory() as session:
-            award = (
-                (await award_values(session, h.reviewer_record))[0]
-                if kind == "award"
-                else None
-            )
+            award = (await award_values(session, h.reviewer_record))[0] if kind == "award" else None
             if award:
                 await insert_record(session, h.reviewer_record)
                 await session.commit()
@@ -319,9 +323,7 @@ async def test_reviewer_source_and_award_uniqueness_race(
             ]
 
 
-@pytest.mark.parametrize(
-    "remove_guard", [False, pytest.param(True, marks=pytest.mark.postgres_schema_contract)]
-)
+@pytest.mark.parametrize("remove_guard", [False, True])
 async def test_routed_accepted_submission_requires_complete_awards(
     tmp_path,
     isolated_database_env,
@@ -384,16 +386,23 @@ async def test_routed_accepted_submission_requires_complete_awards(
 
 
 async def test_uncommitted_acceptance_and_contribution_parents_are_invisible(
-    tmp_path, isolated_database_env, live_acceptance_lifecycle,
+    tmp_path,
+    isolated_database_env,
+    live_acceptance_lifecycle,
 ):
     import json
     from app.modules.contributions.records.schemas import ContributionRecordInput
-    async with authorized_routing_source(tmp_path, isolated_database_env, contribution_awards=("money",)) as h:
+
+    async with authorized_routing_source(
+        tmp_path, isolated_database_env, contribution_awards=("money",)
+    ) as h:
         async with h.factory() as parent:
             await parent.begin()
             pending = await apply_outcome(parent, h, 2)
-            value = await parent.scalar(text("SELECT to_jsonb(c) FROM public.contribution_records c WHERE id=:id"),
-                {"id": pending.economic.contribution_record_id})
+            value = await parent.scalar(
+                text("SELECT to_jsonb(c) FROM public.contribution_records c WHERE id=:id"),
+                {"id": pending.economic.contribution_record_id},
+            )
             value.pop("created_at")
             record = ContributionRecordInput.model_validate_json(json.dumps(value))
             awards = await award_values(parent, record)

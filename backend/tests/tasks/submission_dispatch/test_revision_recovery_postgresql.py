@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import timedelta
 from uuid import UUID
 
 import pytest
@@ -12,7 +13,10 @@ from sqlalchemy.exc import IntegrityError
 from app.adapters.tasks import scan_task_revision_sources, task_revision_recovery
 from app.core.identifiers import new_record_id
 from app.modules.outbox.models import OutboxEvent
+from app.modules.projects.api import ProjectLockedPolicyContextUnavailable
+from app.modules.tasks.revision.expiry_event import revision_preparation_event
 from app.modules.tasks.revision.models import TaskRevisionPreparation
+from app.modules.tasks.post_submit_routing.models import TaskPostSubmitRoutingManifest
 from app.modules.tasks.repository import TaskRepository
 from tests.auth_concurrency_support import wait_for_named_database_lock
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
@@ -20,6 +24,85 @@ from tests.tasks.post_submit_routing.support import activate_successor_guide
 from tests.tasks.submission_dispatch.test_revision_capacity import _retain_pre_revision_source
 from tests.tasks.submission_dispatch.test_revision_expiry import _provision_expirer
 from tests.test_submission_predecessor_custody import _fixture_revision_context
+
+
+async def _recovery_source_custody(h, source_id):
+    """Include immutable evidence and physical rows without new recovery receipts."""
+    async with h.factory() as session:
+        return (await session.execute(text("""
+            SELECT to_jsonb(t),t.xmin::text,to_jsonb(a),a.xmin::text,
+              to_jsonb(s),s.xmin::text,to_jsonb(m),m.xmin::text,
+              (SELECT jsonb_agg(jsonb_build_array(to_jsonb(p),p.xmin::text) ORDER BY p.sequence)
+                 FROM public.task_revision_preparations p WHERE p.routing_manifest_id=m.id),
+              (SELECT count(*) FROM public.task_revision_exhaustions),
+              (SELECT count(*) FROM public.task_revision_expirations)
+            FROM public.task_post_submit_routing_manifests m
+            JOIN public.workstream_tasks t ON t.id=m.task_id
+            JOIN public.task_assignments a ON a.id=m.assignment_id
+            JOIN public.submissions s ON s.id=m.submission_id WHERE m.id=:id
+        """), {"id": source_id})).one()
+
+
+@pytest.mark.parametrize("existing_root", [False, True])
+async def test_unavailable_locked_policy_preserves_existing_root_event_recovery(
+    tmp_path, isolated_database_env, monkeypatch, existing_root,
+):
+    """A missing PROJECT context cannot prevent exact frozen-head event recovery."""
+    async with remediation_source(tmp_path, isolated_database_env) as h:
+        source_id = await _fixture_revision_context(h)
+        await _provision_expirer(h.factory)
+        if existing_root:
+            async with h.factory() as session, session.begin():
+                root = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+                manifest = await session.get(TaskPostSubmitRoutingManifest, source_id)
+                expected = revision_preparation_event(manifest, root)
+                await session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+                await session.execute(text(
+                    "ALTER TABLE public.outbox_events DISABLE TRIGGER outbox_events_custody"
+                ))
+                removed = await session.execute(text("""
+                    DELETE FROM public.outbox_events WHERE idempotency_key=:key
+                      AND event_type='TaskRevisionExpiryRequested' AND attempt_count=0
+                      AND claimed_at IS NULL AND delivery_state='pending' RETURNING event_id
+                """), {"key": expected.idempotency_key})
+                assert len(removed.all()) == 1
+                await session.execute(text(
+                    "ALTER TABLE public.outbox_events ENABLE TRIGGER outbox_events_custody"
+                ))
+        else:
+            await _retain_pre_revision_source(h, source_id)
+        before = await _recovery_source_custody(h, source_id)
+        unavailable_calls = []
+
+        async def unavailable(request):
+            unavailable_calls.append(request)
+            assert request.project_id == h.request.project_id
+            raise ProjectLockedPolicyContextUnavailable("project_locked_policy_context_changed")
+
+        for attempt in range(2):
+            async with h.factory() as session, session.begin():
+                recovery = task_revision_recovery(session)
+                monkeypatch.setattr(recovery._projects, "lock_locked_policy_context", unavailable)
+                assert await recovery.recover(source_id) is (existing_root and attempt == 0)
+            assert await _recovery_source_custody(h, source_id) == before
+        assert len(unavailable_calls) == (2 if existing_root else 4)
+        async with h.factory() as session:
+            events = (await session.scalars(select(OutboxEvent).where(
+                OutboxEvent.idempotency_key == f"task.revision.expire:{source_id}",
+            ))).all()
+            assert len(events) == int(existing_root)
+            if existing_root:
+                event = events[0]
+                assert event.project_id == str(expected.project_id)
+                for field in ("event_type", "event_version", "aggregate_type", "aggregate_id",
+                              "correlation_id", "causation_event_id",
+                              "idempotency_key", "payload", "not_before_at"):
+                    assert getattr(event, field) == getattr(expected, field), field
+            assert await session.scalar(text("""
+                SELECT count(*) FROM public.audit_events
+                WHERE event_type='TaskRevisionContextRepaired'
+                  AND event_payload->'references'->>'routing_manifest_id'=:source
+            """), {"source": str(source_id)}) == int(existing_root)
 
 
 @pytest.mark.parametrize("new_active_guide", [False, True])
@@ -70,7 +153,15 @@ async def test_discovery_freezes_original_retained_window_without_pm_or_rebase(
             assert root.repair_actor_id == service_actor
             assert root.repair_idempotency_key == source_id
             assert root.requested_at == source_window[0]
-            assert root.deadline_at == source_window[1]
+            assert root.deadline_at == (None if new_active_guide else source_window[1])
+            assert root.remaining_microseconds == (
+                (source_window[1] - root.clock_observed_at) // timedelta(microseconds=1)
+                if new_active_guide else None
+            )
+            if new_active_guide:
+                assert 0 < root.remaining_microseconds < (
+                    source_window[1] - source_window[0]
+                ) // timedelta(microseconds=1)
             assert root.outcome == ("blocked" if new_active_guide else "kept")
             assert root.blocked_reason == ("context_blocked" if new_active_guide else None)
             if new_active_guide:
@@ -85,13 +176,17 @@ async def test_discovery_freezes_original_retained_window_without_pm_or_rebase(
                 "SELECT action_id FROM public.audit_events WHERE id=:decision"
             ), {"decision": root.authorization_decision_id})
             assert action == "task.revision.recover"
+            from app.modules.tasks.revision.expiry_event import revision_preparation_event
+
+            expected = revision_preparation_event(
+                await session.get(TaskPostSubmitRoutingManifest, source_id), root,
+            )
             event = await session.scalar(select(OutboxEvent).where(
-                OutboxEvent.idempotency_key == f"task.revision.expire:{source_id}",
+                OutboxEvent.idempotency_key == expected.idempotency_key,
             ))
             assert event is not None
             assert event.not_before_at == root.deadline_at
-            assert event.payload["root_preparation_id"] == str(root.id)
-            assert event.payload["root_preparation_sha256"] == root.preparation_sha256
+            assert event.payload == expected.payload
         if not new_active_guide:
             # The same root, packet, digest and service decision cannot be
             # replayed with a different AUTH request/correlation receipt.
@@ -125,6 +220,11 @@ async def test_discovery_freezes_original_retained_window_without_pm_or_rebase(
                         "ENABLE TRIGGER audit_events_reject_update_delete"
                     ))
                     row["creation_xid"] = await session.scalar(text("SELECT pg_current_xact_id()::text"))
+                    # Supply the canonical INSERT clock inputs so the intended
+                    # changed AUTH receipt, rather than an earlier clock guard, rejects.
+                    for field in ("deadline_at", "remaining_microseconds", "clock_observed_at"):
+                        row[field] = None
+                        row["packet"][field] = None
                     await session.execute(text(
                         "INSERT INTO public.task_revision_preparations SELECT * FROM "
                         "jsonb_populate_record(NULL::public.task_revision_preparations, CAST(:row AS jsonb))"

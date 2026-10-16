@@ -45,10 +45,11 @@ type ReadyTaskPage struct {
 // ContributorTaskDetail excludes management-only source and actor metadata.
 type ContributorTaskDetail struct {
 	TaskSummary
-	Description        string            `json:"description"`
-	AcceptanceCriteria *string           `json:"acceptance_criteria"`
-	RejectionCriteria  *string           `json:"rejection_criteria"`
-	Compensation       CompensationTerms `json:"compensation"`
+	Description           string             `json:"description"`
+	AcceptanceCriteria    *string            `json:"acceptance_criteria"`
+	RejectionCriteria     *string            `json:"rejection_criteria"`
+	Compensation          CompensationTerms  `json:"compensation"`
+	LastAssignmentOutcome *AssignmentOutcome `json:"last_assignment_outcome,omitempty"`
 }
 
 var exactQuantity = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.[0-9]+)?$`)

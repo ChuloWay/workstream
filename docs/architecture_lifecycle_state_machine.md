@@ -52,7 +52,7 @@ Required before leaving:
 - source type recorded
 - title
 - description
-- acceptance criteria
+- project guide defines acceptance requirements; task-local criteria are optional
 - required output
 
 ### SCREENING
@@ -101,7 +101,8 @@ Required before entering:
 - `locked_contribution_policy_version_id` bound to the activated guide's
   same-project published, complete, binding-valid ContributionPolicyVersion
 - source reference recorded when imported
-- acceptance criteria frozen; a controlled new guide/task context follows its
+- guide-defined acceptance requirements frozen and supplied task-local criteria
+  retained; a controlled new guide/task context follows its
   owning policy/rebase path and never rewrites existing locked context
 
 ### CLAIMED
@@ -144,9 +145,11 @@ Automated checks are running inside the pre-review gate.
 
 `pre_review_gate` is a checker phase and audit label, not a separate v0.1 task
 status. The persisted task remains `evaluation_pending` until authorized routing
-moves it to `review_pending`, `needs_revision`, or `accepted` through the shared
-acceptance operation for successful required checks under the locked
-`human_review_required=false` policy. The current completion classifier cannot
+moves it to `review_pending` or, when another revision is permitted,
+`needs_revision`. Final-attempt failure instead closes the exhausted assignment
+and returns the Task to `ready`. Successful required checks under the locked
+`human_review_required=false` policy reach `accepted` through the shared
+acceptance operation. The current completion classifier cannot
 emit `task_setup_blocked`; a manager-visible setup-fault hold remains future
 safety work, as recorded in the [capability ledger](roadmap_status.md).
 
@@ -330,15 +333,18 @@ checker or human revision may rebase every changed valid component to the comple
 applicable context. The immutable preparation records that next-attempt context
 and never rewrites an earlier Submission, Review, contribution, or award.
 
-Each assignment starts at round 0 with its own revision allowance. Every
-committed `needs_revision` freezes a fresh PostgreSQL-time window using the
-failed attempt's locked RevisionPolicy. Only a committed immutable successor
-Submission ends the prior window. Cap exhaustion refuses a successor; expiry
-records rejection in an immutable receipt, marks the assignment
-`revision_expired`, releases it and returns TASK to `READY` atomically with
-AUTH/audit/outbox evidence. No economic facts are created. Checker-triggered
-expiry is implemented; #554 owns future human decision integration using the
-same policy. Stale jobs cannot release a newer assignment.
+The task's locked project RevisionPolicy supplies the required cap N>=0. Each
+assignment starts at round 0, with at most revisions 1 through N. Final-attempt
+failure records exhaustion, closes the assignment and returns TASK to `READY`
+immediately, without another window. A failure with a revision remaining freezes
+its complete next context and a PostgreSQL-time allowance. Setup blocks pause
+it and publish PM attention; repair resumes only the remainder. Only committed
+immutable resubmission ends the opportunity. Timeout records a distinct rejection
+and also releases the task to `READY`, atomically with AUTH/audit/outbox evidence.
+Any eligible contributor, including the previous claimant, can start a new
+assignment at round 0; no contributor-count limit applies. Neither rejection
+creates economic facts. Human Review integration remains #554 work under the
+same intended policy. Stale jobs cannot release newer work.
 
 ## Revision Replay
 
