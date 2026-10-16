@@ -69,6 +69,10 @@ identity and system Operator grant to perform startup registration.
 - `backend/tests/projects/guide_activation/source_fixtures.py`: update the one
   existing direct registration caller to the server-selected registry-ID
   contract without an optional-ID or compatibility path.
+- `backend/scripts/test_lane_catalogue.py` and
+  `backend/tests/test_ci_lane_catalogue.py`: assign the new public registry test
+  module to the existing checker-delivery family and update only its exact
+  membership fingerprints.
 - `docs/architecture_checker_framework.md` and `docs/roadmap_status.md`: state
   only the supported registration/readback capability delivered by this PR
   and retain the remaining REV/hosted-runtime boundary.
@@ -82,9 +86,10 @@ identity and system Operator grant to perform startup registration.
   fixture/test-package imports in production, CLI behavior, migrations, schema
   changes, retained-row update/deletion, compatibility aliases or fallback
   constructors.
-- Changes owned by pull requests #575 or #577, CI work owned by #585, README
-  work owned by #586, private project inputs, credentials, deployment, push,
-  merge or cloud configuration.
+- Changes owned by pull requests #575 or #577, CI behavior owned by #585 beyond
+  the required exact registration of this new test module, README work owned by
+  #586, private project inputs, credentials, deployment, push, merge or cloud
+  configuration.
 
 ## Design and decisions
 
