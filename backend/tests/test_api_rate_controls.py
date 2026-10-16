@@ -882,7 +882,7 @@ async def test_rate_dependency_unavailability_is_private_503(
     assert subject not in response.text
 
 
-def test_checker_registry_rate_dependencies_match_exact_route_allowlist() -> None:
+def test_checker_operation_rate_dependencies_match_exact_route_allowlist() -> None:
     rate_dependencies = {
         enforce_first_access_rate_limit,
         enforce_admin_mutation_rate_limit,
@@ -895,6 +895,13 @@ def test_checker_registry_rate_dependencies_match_exact_route_allowlist() -> Non
         ("GET", "/operations/external-checker-registry/{registry_entry_id}"): {
             enforce_authorization_read_rate_limit
         },
+        ("GET", "/operations/projects/{project_id}/checker-retry-sources"): {
+            enforce_authorization_read_rate_limit
+        },
+        (
+            "POST",
+            "/operations/projects/{project_id}/checker-runs/{source_run_id}/retry",
+        ): {enforce_admin_mutation_rate_limit},
     }
 
     def dependency_calls(dependant) -> set:
@@ -926,8 +933,9 @@ def test_checker_registry_rate_dependencies_match_exact_route_allowlist() -> Non
     )
 
     actual = {}
+    expected_paths = {path for _method, path in expected}
     for route in production_routes(app.routes):
-        if "external-checker-registry" not in route.path:
+        if route.path not in expected_paths:
             continue
         calls = dependency_calls(route.dependant)
         attached = rate_dependencies.intersection(calls)

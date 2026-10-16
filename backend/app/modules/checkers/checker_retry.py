@@ -17,7 +17,9 @@ from app.modules.checkers.api.execution import (
     CheckerRetryDiscoveryAuthorizationPort, CheckerRetryAuthorityDenied,
     CheckerRetryDiscoverySource,
     CheckerRetryEventExpectation,
+    CheckerRetryOperationUnavailable,
     CheckerRetryPreparation, CheckerRetryResult, CheckerRetrySource,
+    CheckerRetrySourceUnavailable,
     CheckerRetrySourceItem, CheckerRetrySourcePage, CheckerRetrySourcePosition,
     CheckerRetrySourceQuery, CheckerRetrySuccessor, EvaluationTaskGuard,
 )
@@ -40,52 +42,75 @@ def _source_from_run(run: CheckerRun) -> tuple[PostSubmissionExecutionRequest, C
         or run.result_json is None or run.result_digest is None
         or run.completion_event_id is not None or run.failure_code is None
     ):
-        raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
-    request = stored_request(run)
-    result = stored_result(run)
+        raise CheckerRetrySourceUnavailable("checker_retry_source_unavailable")
+    try:
+        request = stored_request(run)
+        result = stored_result(run)
+    except CheckerExecutionUnavailable as exc:
+        raise CheckerRetryOperationUnavailable(
+            "checker_retry_evidence_unavailable"
+        ) from exc
+    if result.outcome != "infrastructure_failed":
+        raise CheckerRetrySourceUnavailable("checker_retry_source_unavailable")
     if (
-        result.outcome != "infrastructure_failed"
-        or result.infrastructure_failure_code != run.failure_code
+        result.infrastructure_failure_code != run.failure_code
         or request.evaluation_generation != run.evaluation_generation
     ):
-        raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
-    return request, CheckerRetrySource(
-        project_id=request.project_id, task_id=request.task_id,
-        assignment_id=request.assignment_id, submission_id=request.submission_id,
-        submission_version=request.submission_version,
-        source_run_id=UUID(run.id), source_request_id=request.evaluation_request_id,
-        source_request_digest=request.request_sha256,
-        source_result_id=UUID(run.result_id), source_result_digest=run.result_digest,
-        source_finalize_evidence_id=UUID(run.finalize_evidence_id),
-        source_generation=run.evaluation_generation, failure_code=run.failure_code,
-    )
+        raise CheckerRetryOperationUnavailable("checker_retry_evidence_unavailable")
+    try:
+        source = CheckerRetrySource(
+            project_id=request.project_id, task_id=request.task_id,
+            assignment_id=request.assignment_id, submission_id=request.submission_id,
+            submission_version=request.submission_version,
+            source_run_id=UUID(run.id), source_request_id=request.evaluation_request_id,
+            source_request_digest=request.request_sha256,
+            source_result_id=UUID(run.result_id), source_result_digest=run.result_digest,
+            source_finalize_evidence_id=UUID(run.finalize_evidence_id),
+            source_generation=run.evaluation_generation, failure_code=run.failure_code,
+        )
+    except (TypeError, ValueError) as exc:
+        raise CheckerRetryOperationUnavailable(
+            "checker_retry_evidence_unavailable"
+        ) from exc
+    return request, source
 
 
 def _source_from_receipt(receipt: CheckerRetryReceipt) -> CheckerRetrySource:
-    return CheckerRetrySource(
-        project_id=UUID(receipt.project_id), task_id=UUID(receipt.task_id),
-        assignment_id=UUID(receipt.assignment_id), submission_id=UUID(receipt.submission_id),
-        submission_version=receipt.submission_version,
-        source_run_id=UUID(receipt.source_run_id),
-        source_request_id=UUID(receipt.source_request_id),
-        source_request_digest=receipt.source_request_digest,
-        source_result_id=UUID(receipt.source_result_id),
-        source_result_digest=receipt.source_result_digest,
-        source_finalize_evidence_id=UUID(receipt.source_finalize_evidence_id),
-        source_generation=receipt.source_generation, failure_code=receipt.failure_code,
-    )
+    try:
+        return CheckerRetrySource(
+            project_id=UUID(receipt.project_id), task_id=UUID(receipt.task_id),
+            assignment_id=UUID(receipt.assignment_id),
+            submission_id=UUID(receipt.submission_id),
+            submission_version=receipt.submission_version,
+            source_run_id=UUID(receipt.source_run_id),
+            source_request_id=UUID(receipt.source_request_id),
+            source_request_digest=receipt.source_request_digest,
+            source_result_id=UUID(receipt.source_result_id),
+            source_result_digest=receipt.source_result_digest,
+            source_finalize_evidence_id=UUID(receipt.source_finalize_evidence_id),
+            source_generation=receipt.source_generation, failure_code=receipt.failure_code,
+        )
+    except (TypeError, ValueError) as exc:
+        raise CheckerRetryOperationUnavailable(
+            "checker_retry_replay_unavailable"
+        ) from exc
 
 
 def _successor_from_receipt(receipt: CheckerRetryReceipt) -> CheckerRetrySuccessor:
-    return CheckerRetrySuccessor(
-        request_id=UUID(receipt.successor_request_id),
-        request_digest=receipt.successor_request_digest,
-        run_id=UUID(receipt.successor_run_id),
-        result_id=UUID(receipt.successor_result_id),
-        generation=receipt.successor_generation,
-        event_id=receipt.event_id,
-        audit_event_id=UUID(receipt.audit_event_id),
-    )
+    try:
+        return CheckerRetrySuccessor(
+            request_id=UUID(receipt.successor_request_id),
+            request_digest=receipt.successor_request_digest,
+            run_id=UUID(receipt.successor_run_id),
+            result_id=UUID(receipt.successor_result_id),
+            generation=receipt.successor_generation,
+            event_id=receipt.event_id,
+            audit_event_id=UUID(receipt.audit_event_id),
+        )
+    except (TypeError, ValueError) as exc:
+        raise CheckerRetryOperationUnavailable(
+            "checker_retry_replay_unavailable"
+        ) from exc
 
 
 def retry_request_event(
@@ -262,20 +287,41 @@ class CheckerRetryService:
             CheckerRetryReceipt.request_key == str(command.request_key),
         ).execution_options(populate_existing=True))
         if existing is not None and existing.project_id != str(command.project_id):
-            raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
-        source_id = UUID(existing.source_run_id) if existing is not None else command.source_run_id
+            raise CheckerRetrySourceUnavailable("checker_retry_source_unavailable")
+        if existing is not None:
+            try:
+                source_id = UUID(existing.source_run_id)
+            except (TypeError, ValueError) as exc:
+                raise CheckerRetryOperationUnavailable(
+                    "checker_retry_replay_unavailable"
+                ) from exc
+        else:
+            source_id = command.source_run_id
         source_run = await self._session.scalar(select(CheckerRun).where(
             CheckerRun.id == str(source_id),
             CheckerRun.project_id == str(command.project_id),
             CheckerRun.phase == "post_submission",
         ).execution_options(populate_existing=True))
         if source_run is None:
-            raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
-        source_request = stored_request(source_run)
+            raise CheckerRetrySourceUnavailable("checker_retry_source_unavailable")
+        try:
+            source_request = stored_request(source_run)
+        except CheckerExecutionUnavailable as exc:
+            raise CheckerRetryOperationUnavailable(
+                "checker_retry_evidence_unavailable"
+            ) from exc
         # Both branches first hold the same historical TASK owner rows. A
         # contender that saw no detached receipt must reread it after this
         # lock: the first transaction may have committed while it waited.
-        await self._tasks.lock_retry_replay_scope(source_request)
+        try:
+            await self._tasks.lock_retry_replay_scope(source_request)
+        except CheckerExecutionUnavailable as exc:
+            unavailable = (
+                CheckerRetryOperationUnavailable
+                if existing is not None
+                else CheckerRetrySourceUnavailable
+            )
+            raise unavailable("checker_retry_scope_unavailable") from exc
         existing = await self._session.scalar(select(CheckerRetryReceipt).where(
             CheckerRetryReceipt.actor_profile_id == str(self._actor_profile_id),
             CheckerRetryReceipt.request_key == str(command.request_key),
@@ -286,17 +332,22 @@ class CheckerRetryService:
         ):
             raise CheckerRequestConflict("checker_retry_request_conflict")
         if existing is None:
-            await self._tasks.lock_terminal_retry_scope(source_request)
+            try:
+                await self._tasks.lock_terminal_retry_scope(source_request)
+            except CheckerExecutionUnavailable as exc:
+                raise CheckerRetrySourceUnavailable(
+                    "checker_retry_source_unavailable"
+                ) from exc
         source_run = await self._session.scalar(select(CheckerRun).where(
             CheckerRun.id == str(source_id),
             CheckerRun.project_id == str(command.project_id),
             CheckerRun.phase == "post_submission",
         ).execution_options(populate_existing=True))
         if source_run is None:
-            raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
+            raise CheckerRetrySourceUnavailable("checker_retry_source_unavailable")
         locked_request, source = _source_from_run(source_run)
         if locked_request != source_request:
-            raise CheckerExecutionUnavailable("checker_retry_source_unavailable")
+            raise CheckerRetrySourceUnavailable("checker_retry_source_unavailable")
         if existing is not None:
             return await self._replay(command, existing, source)
         preparation = CheckerRetryPreparation(
@@ -313,15 +364,22 @@ class CheckerRetryService:
                 "evaluation_generation": source.source_generation + 1,
             }
             next_request = make_selected_post_submit_request(**request_fields)
-            reserved = await self._evaluations._reserve_after_task_lock(
-                next_request, terminal_source_id=source.source_run_id,
-            )
+            try:
+                reserved = await self._evaluations._reserve_after_task_lock(
+                    next_request, terminal_source_id=source.source_run_id,
+                )
+            except CheckerExecutionUnavailable as exc:
+                raise CheckerRetryOperationUnavailable(
+                    "checker_retry_reservation_unavailable"
+                ) from exc
             if (
                 reserved.request_id != next_request.evaluation_request_id
                 or reserved.request_digest != next_request.request_sha256
                 or reserved.evaluation_generation != source.source_generation + 1
             ):
-                raise CheckerExecutionUnavailable("checker_retry_reservation_unavailable")
+                raise CheckerRetryOperationUnavailable(
+                    "checker_retry_reservation_unavailable"
+                )
             receipt_id = new_record_id()
             event = await self._events.append(retry_request_event(
                 source, receipt_id=receipt_id, request_id=reserved.request_id,
@@ -395,7 +453,9 @@ class CheckerRetryService:
                 CheckerRetryReceipt.request_key == str(command.request_key),
             ).with_for_update().execution_options(populate_existing=True))
             if receipt is None or _source_from_receipt(receipt) != source or receipt.reason != command.reason:
-                raise CheckerExecutionUnavailable("checker_retry_replay_unavailable")
+                raise CheckerRetryOperationUnavailable(
+                    "checker_retry_replay_unavailable"
+                )
             successor = _successor_from_receipt(receipt)
             delivery = await read_retry_delivery(
                 self._session, self._evaluations,
@@ -404,14 +464,23 @@ class CheckerRetryService:
             )
             # The reader already binds the retained run/result/generation to this receipt.
             if delivery is None or delivery.request.evaluation_request_id != successor.request_id:
-                raise CheckerExecutionUnavailable("checker_retry_replay_unavailable")
+                raise CheckerRetryOperationUnavailable(
+                    "checker_retry_replay_unavailable"
+                )
+            try:
+                identity_link_id = UUID(receipt.identity_link_id)
+                decision_id = UUID(receipt.authorization_decision_id)
+                receipt_id = UUID(receipt.id)
+            except (TypeError, ValueError) as exc:
+                raise CheckerRetryOperationUnavailable(
+                    "checker_retry_replay_unavailable"
+                ) from exc
             await self._authorization.validate_replay(
-                handle, preparation, successor, UUID(receipt.identity_link_id),
-                UUID(receipt.authorization_decision_id),
+                handle, preparation, successor, identity_link_id, decision_id,
             )
             return CheckerRetryResult(
-                receipt_id=UUID(receipt.id), source=source, successor=successor,
-                authorization_decision_id=UUID(receipt.authorization_decision_id),
+                receipt_id=receipt_id, source=source, successor=successor,
+                authorization_decision_id=decision_id,
             )
         finally:
             self._authorization.close(handle)
@@ -430,10 +499,15 @@ async def read_retry_delivery(
     if receipt is None:
         return None
     source, successor = _source_from_receipt(receipt), _successor_from_receipt(receipt)
-    stored = await evaluations.read_reserved_evaluation(
-        project_id=source.project_id, task_id=source.task_id,
-        submission_id=source.submission_id, request_id=successor.request_id,
-    )
+    try:
+        stored = await evaluations.read_reserved_evaluation(
+            project_id=source.project_id, task_id=source.task_id,
+            submission_id=source.submission_id, request_id=successor.request_id,
+        )
+    except CheckerExecutionUnavailable as exc:
+        raise CheckerRetryOperationUnavailable(
+            "checker_retry_delivery_unavailable"
+        ) from exc
     if (
         stored.reservation.request_digest != successor.request_digest
         or stored.reservation.attempt_id != successor.run_id
@@ -442,9 +516,15 @@ async def read_retry_delivery(
         or stored.request.assignment_id != source.assignment_id
         or stored.request.submission_version != source.submission_version
     ):
-        raise CheckerExecutionUnavailable("checker_retry_delivery_unavailable")
+        raise CheckerRetryOperationUnavailable("checker_retry_delivery_unavailable")
+    try:
+        receipt_id = UUID(receipt.id)
+    except (TypeError, ValueError) as exc:
+        raise CheckerRetryOperationUnavailable(
+            "checker_retry_delivery_unavailable"
+        ) from exc
     expected = retry_request_event(
-        source, receipt_id=UUID(receipt.id), request_id=successor.request_id,
+        source, receipt_id=receipt_id, request_id=successor.request_id,
         request_digest=successor.request_digest,
         run_id=successor.run_id, result_id=successor.result_id,
     )

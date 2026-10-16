@@ -120,6 +120,7 @@ async def list_checker_retry_sources(
     "/operations/projects/{project_id}/checker-runs/{source_run_id}/retry",
     response_model=CheckerRetryResult,
     status_code=201,
+    dependencies=[Depends(enforce_admin_mutation_rate_limit)],
     openapi_extra={
         "x-workstream-action-id": "operations.checker.retry",
         "parameters": [CHECKER_RETRY_KEY_PARAMETER],

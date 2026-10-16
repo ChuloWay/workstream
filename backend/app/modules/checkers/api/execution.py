@@ -35,6 +35,14 @@ class CheckerRequestConflict(CheckerExecutionUnavailable):
     """A request key or generation already belongs to different facts."""
 
 
+class CheckerRetrySourceUnavailable(CheckerExecutionUnavailable):
+    """Conceal an absent, foreign, stale or ineligible retry source."""
+
+
+class CheckerRetryOperationUnavailable(CheckerExecutionUnavailable):
+    """Fail closed when retained retry or authority evidence is inconsistent."""
+
+
 class CheckerRetryAuthorityDenied(CheckerExecutionUnavailable):
     """An exact retry authority denial available for canonical HTTP restaging."""
 

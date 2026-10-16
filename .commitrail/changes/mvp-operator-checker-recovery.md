@@ -68,6 +68,10 @@ eligible source or call the retry through a bearer-authenticated public route.
 - `mcp_server/contracts/authorization_context_get.json`: regenerate only the
   selected authorization-context fragment and digest changed by the additive
   recovery-source action.
+- `backend/tests/test_api_controls.py` and
+  `backend/tests/test_api_rate_controls.py`: preserve the closed public
+  route/action inventory and bind only the existing read and mutation rate
+  controls to their exact recovery routes.
 - `backend/tests/checkers/execution/test_checker_retry*.py` and only directly
   affected AUTH catalogue fixtures/tests: update existing callers for the
   required project selector and add signed bearer-token, real AUTH and
@@ -149,11 +153,18 @@ action or tests.
   authority and returns the same receipt/successor without another run, event or
   retry-initiation audit effect; it validates the retained original allow and
   may retain only canonical fresh-request AUTH evidence if AUTH requires it.
-  Changed reason/source/project under the key conflicts.
+  Changed reason or source under the key in the same URL project conflicts;
+  reuse under another URL project stays concealed with `404` before any foreign
+  TASK lock.
 - [ ] Wrong/foreign/stale sources and queued, running or completed outcomes
   refuse before a successor effect. Revocation, concurrent retry, forced audit
   or outbox failure and caller rollback retain the service's existing atomic
   guarantees through the public request path.
+- [ ] The existing authorization-read and mutation rate controls refuse their
+  exact recovery routes before AUTH or CHECKERS access. Absent, foreign, stale
+  and ineligible sources stay concealed, while retained authority, reservation,
+  replay or delivery inconsistency returns retryable unavailability and rolls
+  back every staged effect.
 - [ ] A request whose URL project differs from the source project is rejected
   before loading source payloads or taking the foreign TASK row lock; a real
   PostgreSQL held-lock probe distinguishes that ordering from a coincidental

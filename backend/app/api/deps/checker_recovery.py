@@ -24,8 +24,10 @@ from app.modules.checkers.api.execution import (
     CheckerRetryAuthorityDenied,
     CheckerRetryCommand,
     CheckerRetryCursorInvalid,
+    CheckerRetryOperationUnavailable,
     CheckerRetryRequest,
     CheckerRetryResult,
+    CheckerRetrySourceUnavailable,
     CheckerRetrySourcePage,
     CheckerRetrySourceQuery,
 )
@@ -124,10 +126,14 @@ async def get_checker_retry_commands(
             error_code="checker_retry_request_conflict",
             error_message="Checker retry request conflicts with retained facts",
         ) from exc
-    except CheckerExecutionUnavailable as exc:
+    except CheckerRetrySourceUnavailable as exc:
         await session.rollback()
         raise _concealed() from exc
-    except (AuthorizationEvidenceUnavailable, SQLAlchemyError) as exc:
+    except (
+        CheckerRetryOperationUnavailable,
+        AuthorizationEvidenceUnavailable,
+        SQLAlchemyError,
+    ) as exc:
         await session.rollback()
         raise _unavailable() from exc
     except BaseException:

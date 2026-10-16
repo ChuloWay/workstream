@@ -16,8 +16,8 @@ from app.modules.authorization.runtime import (
     authorization_resource_digest,
 )
 from app.modules.checkers.api.execution import (
-    CheckerExecutionUnavailable, CheckerRetryAuthorityDenied, CheckerRetryAuthorityReceipt,
-    CheckerRetryPreparation, CheckerRetrySuccessor,
+    CheckerRetryAuthorityDenied, CheckerRetryAuthorityReceipt,
+    CheckerRetryOperationUnavailable, CheckerRetryPreparation, CheckerRetrySuccessor,
 )
 
 
@@ -58,7 +58,7 @@ class PreparedCheckerRetryAuthorization:
             or self._context.request_id != facts.request_key
             or self._context.correlation_id != facts.request_key
         ):
-            raise CheckerExecutionUnavailable("checker_retry_authority_unavailable")
+            raise CheckerRetryOperationUnavailable("checker_retry_authority_unavailable")
         try:
             return await self._service.prepare(
                 ActionId.OPERATIONS_CHECKER_RETRY,
@@ -68,7 +68,9 @@ class PreparedCheckerRetryAuthorization:
         except AuthorizationDenied as exc:
             raise CheckerRetryAuthorityDenied("checker_retry_authority_unavailable") from exc
         except (PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
-            raise CheckerExecutionUnavailable("checker_retry_authority_unavailable") from exc
+            raise CheckerRetryOperationUnavailable(
+                "checker_retry_authority_unavailable"
+            ) from exc
 
     async def consume(
         self, handle: object, facts: CheckerRetryPreparation,
@@ -83,10 +85,12 @@ class PreparedCheckerRetryAuthorization:
         except AuthorizationDenied as exc:
             raise CheckerRetryAuthorityDenied("checker_retry_authority_unavailable") from exc
         except (PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
-            raise CheckerExecutionUnavailable("checker_retry_authority_unavailable") from exc
+            raise CheckerRetryOperationUnavailable(
+                "checker_retry_authority_unavailable"
+            ) from exc
         digest = authorization_resource_digest(resource)
         if decision.resource_context_digest != digest:
-            raise CheckerExecutionUnavailable("checker_retry_authority_unavailable")
+            raise CheckerRetryOperationUnavailable("checker_retry_authority_unavailable")
         return CheckerRetryAuthorityReceipt(
             actor_profile_id=facts.actor_profile_id,
             identity_link_id=self._context.identity_link_id,
@@ -109,7 +113,9 @@ class PreparedCheckerRetryAuthorization:
         except AuthorizationDenied as exc:
             raise CheckerRetryAuthorityDenied("checker_retry_replay_unavailable") from exc
         except (PreparedAuthorizationUnsupported, PreparedAuthorizationHandleInvalid) as exc:
-            raise CheckerExecutionUnavailable("checker_retry_replay_unavailable") from exc
+            raise CheckerRetryOperationUnavailable(
+                "checker_retry_replay_unavailable"
+            ) from exc
 
     def close(self, handle: object) -> None:
         self._service.close()
