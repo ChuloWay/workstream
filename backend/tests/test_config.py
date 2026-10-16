@@ -19,6 +19,7 @@ from app.adapters.auth.flow import FlowAuthVerifier
 from app.api.deps.auth import get_application_auth_verifier
 from app.core.auth import clear_auth_verifier_cache, get_auth_verifier
 from app.core.config import (
+    ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS,
     Settings,
     decode_pagination_cursor_hmac_secret,
     get_settings,
@@ -753,10 +754,13 @@ def _aws_settings(tmp_path: Path, **overrides: object) -> Settings:
         "artifact_s3_aws_workload_identity_method": "container-role",
         "release_id": "sha256:" + "1" * 64,
         "artifact_s3_runtime_role_arn": "arn:aws:iam::123456789012:role/workstream-runtime",
+        "artifact_s3_runtime_trust_policy_sha256": "sha256:" + "3" * 64,
         "artifact_s3_runtime_policy_arn": "arn:aws:iam::123456789012:policy/workstream-runtime",
         "artifact_s3_readiness_role_arn": "arn:aws:iam::123456789012:role/workstream-readiness",
+        "artifact_s3_readiness_trust_policy_sha256": "sha256:" + "4" * 64,
         "artifact_s3_readiness_policy_arn": "arn:aws:iam::123456789012:policy/workstream-readiness",
         "artifact_s3_negative_role_arn": "arn:aws:iam::123456789012:role/workstream-negative",
+        "artifact_s3_negative_trust_policy_sha256": "sha256:" + "5" * 64,
         "artifact_s3_bootstrap_principal_arn": "arn:aws:iam::123456789012:role/workstream-bootstrap",
         "artifact_s3_bucket_policy_sha256": "sha256:" + "2" * 64,
         "artifact_s3_operation_total_timeout_seconds": 300,
@@ -1458,10 +1462,13 @@ def test_aws_s3_settings_fail_closed(
     [
         "release_id",
         "artifact_s3_runtime_role_arn",
+        "artifact_s3_runtime_trust_policy_sha256",
         "artifact_s3_runtime_policy_arn",
         "artifact_s3_readiness_role_arn",
+        "artifact_s3_readiness_trust_policy_sha256",
         "artifact_s3_readiness_policy_arn",
         "artifact_s3_negative_role_arn",
+        "artifact_s3_negative_trust_policy_sha256",
         "artifact_s3_bootstrap_principal_arn",
         "artifact_s3_bucket_policy_sha256",
     ],
@@ -1484,6 +1491,27 @@ def test_aws_s3_rejects_cross_account_bindings_and_oversized_deadline(
         )
     with pytest.raises(ValidationError, match="activation window"):
         _aws_settings(tmp_path, artifact_s3_operation_total_timeout_seconds=600)
+    with pytest.raises(ValidationError, match="trust policies must be distinct"):
+        _aws_settings(
+            tmp_path,
+            artifact_s3_negative_trust_policy_sha256="sha256:" + "3" * 64,
+        )
+
+
+def test_aws_activation_uses_the_fixed_production_clock_safety_margin(
+    tmp_path: Path,
+) -> None:
+    settings = _aws_settings(tmp_path)
+
+    assert ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS == 30
+    assert (
+        max(
+            settings.artifact_s3_operation_total_timeout_seconds,
+            settings.artifact_complete_read_deadline_seconds,
+        )
+        + settings.artifact_terminal_persistence_margin_seconds
+        + ARTIFACT_AWS_CLOCK_SAFETY_MARGIN_SECONDS
+    ) == 450
 
 
 def test_aws_factory_fails_with_live_proof_before_constructing_provider(

@@ -756,9 +756,10 @@ The repository-managed MinIO port is bound to host loopback. A Workstream
 process running on a separate non-production container network may instead use
 an operator-controlled private MinIO endpoint; that remains development/test
 protocol proof and never qualifies as hosted-provider activation evidence.
-Native AWS S3 uses exact release, namespace, role/policy and bucket-policy
-bindings. API, worker and Beat startup require a matching fresh immutable
-three-probe activation. The adapter also reloads that activation before every
+Native AWS S3 uses exact release, namespace, role/policy, reviewed role-trust
+policy digest and bucket-policy bindings. API, Celery task-process and Beat
+startup require a matching fresh immutable three-probe activation. The adapter
+also reloads that activation before every
 AWS SDK call and before committing provider-derived terminal facts. Missing,
 stale or mismatched proof fails with `artifact_provider_live_proof_required`
 before credential probing or provider I/O. See the

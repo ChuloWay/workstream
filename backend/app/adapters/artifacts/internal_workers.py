@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager, contextmanager
+from contextvars import ContextVar
 from threading import Condition
 from typing import Iterator
 from uuid import UUID, uuid4
@@ -17,7 +18,13 @@ from app.adapters.artifacts import (
 )
 from app.core.config import Settings, get_settings
 from app.db.session import get_database_url
-from app.interfaces.artifacts import ArtifactStore, ArtifactStoreBootstrap
+from app.interfaces.artifacts import (
+    ArtifactProviderActivationGuard,
+    ArtifactProviderActivationLease,
+    ArtifactProviderLiveProofRequiredError,
+    ArtifactStore,
+    ArtifactStoreBootstrap,
+)
 from app.modules.actors.api import ServiceIdentity
 from app.modules.artifacts.authorization import PreparedArtifactInternalAuthority
 from app.modules.artifacts.service import (
@@ -40,16 +47,63 @@ _runtime: (
 ) = None
 _runtime_active_operations = 0
 _runtime_shutting_down = False
+_loop_sessions: ContextVar[async_sessionmaker[AsyncSession] | None] = ContextVar(
+    "artifact_worker_loop_sessions",
+    default=None,
+)
 
 
 @asynccontextmanager
 async def _artifact_worker_database() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     """Own SQLAlchemy resources for exactly one worker event loop."""
     engine = create_async_engine(get_database_url(), pool_pre_ping=True)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    token = _loop_sessions.set(sessions)
     try:
-        yield async_sessionmaker(engine, expire_on_commit=False)
+        yield sessions
     finally:
+        _loop_sessions.reset(token)
         await engine.dispose()
+
+
+class _LoopScopedArtifactProviderActivationGuard(ArtifactProviderActivationGuard):
+    """Resolve every worker activation through the current event loop's DB owner."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+
+    def _delegate(self) -> ArtifactProviderActivationGuard:
+        sessions = _loop_sessions.get()
+        if sessions is None:
+            raise ArtifactProviderLiveProofRequiredError(
+                "AWS artifact worker operation lacks loop-scoped database custody"
+            )
+        guard = artifact_provider_activation_guard(self._settings, sessions)
+        if guard is None:
+            raise ArtifactProviderLiveProofRequiredError(
+                "AWS artifact worker activation guard is unavailable"
+            )
+        return guard
+
+    async def select_for_call(
+        self,
+        *,
+        namespace_fingerprint: str,
+    ) -> ArtifactProviderActivationLease:
+        return await self._delegate().select_for_call(
+            namespace_fingerprint=namespace_fingerprint,
+        )
+
+    async def require_for_call(
+        self,
+        activation_id: UUID,
+        *,
+        namespace_fingerprint: str,
+    ) -> ArtifactProviderActivationLease:
+        return await self._delegate().require_for_call(
+            activation_id,
+            namespace_fingerprint=namespace_fingerprint,
+        )
 
 
 async def initialize_artifact_internal_runtime() -> None:
@@ -98,7 +152,11 @@ async def _initialize_artifact_internal_runtime(
     with _runtime_condition:
         if _runtime is not None and not _runtime_shutting_down:
             return
-    activation_guard = artifact_provider_activation_guard(settings, session_factory)
+    activation_guard = (
+        _LoopScopedArtifactProviderActivationGuard(settings)
+        if settings.artifact_s3_provider_profile == "aws_s3"
+        else artifact_provider_activation_guard(settings, session_factory)
+    )
     bootstrap = create_artifact_store_bootstrap(
         settings,
         activation_guard=activation_guard,

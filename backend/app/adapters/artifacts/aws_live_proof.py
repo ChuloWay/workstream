@@ -102,7 +102,13 @@ class AwsArtifactLiveProof:
                 evidence.update(await self._negative_access(group_nonce))
             else:
                 raise ArtifactConfigurationError("AWS artifact proof mode is invalid")
-        except (ArtifactConfigurationError, BotoCoreError, ClientError, OSError, TimeoutError) as error:
+        except (
+            ArtifactConfigurationError,
+            BotoCoreError,
+            ClientError,
+            OSError,
+            TimeoutError,
+        ) as error:
             return self._failed(
                 probe_type,
                 expected,
@@ -225,9 +231,15 @@ class AwsArtifactLiveProof:
                 raise ArtifactConfigurationError("AWS bucket policy is public")
             public = await s3.get_public_access_block(Bucket=bucket)
             public_config = public.get("PublicAccessBlockConfiguration", {})
-            if any(public_config.get(name) is not True for name in (
-                "BlockPublicAcls", "IgnorePublicAcls", "BlockPublicPolicy", "RestrictPublicBuckets"
-            )):
+            if any(
+                public_config.get(name) is not True
+                for name in (
+                    "BlockPublicAcls",
+                    "IgnorePublicAcls",
+                    "BlockPublicPolicy",
+                    "RestrictPublicBuckets",
+                )
+            ):
                 raise ArtifactConfigurationError("AWS public access block is incomplete")
             ownership = await s3.get_bucket_ownership_controls(Bucket=bucket)
             rules = ownership.get("OwnershipControls", {}).get("Rules", [])
@@ -237,7 +249,9 @@ class AwsArtifactLiveProof:
             if versioning.get("Status") != "Enabled":
                 raise ArtifactConfigurationError("AWS bucket versioning is not enabled")
             encryption = await s3.get_bucket_encryption(Bucket=bucket)
-            encryption_rules = encryption.get("ServerSideEncryptionConfiguration", {}).get("Rules", [])
+            encryption_rules = encryption.get("ServerSideEncryptionConfiguration", {}).get(
+                "Rules", []
+            )
             if not _has_only_sse_s3(encryption_rules):
                 raise ArtifactConfigurationError("AWS bucket encryption is not exact SSE-S3")
             acl = await s3.get_bucket_acl(Bucket=bucket)
@@ -261,7 +275,9 @@ class AwsArtifactLiveProof:
                 if _client_error_code(error) != "NoSuchLifecycleConfiguration":
                     raise
                 lifecycle = {"Rules": []}
-            _validate_lifecycle(lifecycle.get("Rules", []), self._settings.artifact_s3_private_prefix)
+            _validate_lifecycle(
+                lifecycle.get("Rules", []), self._settings.artifact_s3_private_prefix
+            )
         await self._validate_iam()
         await self._validate_access_analyzer(policy_text)
         await self._prove_object_denials(key, content)
@@ -285,18 +301,33 @@ class AwsArtifactLiveProof:
         role_policies = {
             self._required(self._settings.artifact_s3_runtime_role_arn): (
                 self._required(self._settings.artifact_s3_runtime_policy_arn),
+                self._required(self._settings.artifact_s3_runtime_trust_policy_sha256),
             ),
             self._required(self._settings.artifact_s3_readiness_role_arn): (
                 self._required(self._settings.artifact_s3_readiness_policy_arn),
+                self._required(self._settings.artifact_s3_readiness_trust_policy_sha256),
             ),
-            self._required(self._settings.artifact_s3_negative_role_arn): (),
+            self._required(self._settings.artifact_s3_negative_role_arn): (
+                None,
+                self._required(self._settings.artifact_s3_negative_trust_policy_sha256),
+            ),
         }
+        workload_roles = frozenset(role_policies)
+        trust_subjects: dict[str, frozenset[tuple[str, str]]] = {}
         async with self._session.create_client("iam", config=self._config) as iam:
-            for role_arn, expected_policies in role_policies.items():
+            for role_arn, (expected_policy, expected_trust_digest) in role_policies.items():
                 role_name = role_arn.rsplit("/", 1)[-1]
                 role = await iam.get_role(RoleName=role_name)
-                if role.get("Role", {}).get("Arn") != role_arn:
+                role_data = role.get("Role", {})
+                if role_data.get("Arn") != role_arn:
                     raise ArtifactConfigurationError("AWS IAM role identity differs")
+                trust_policy = _load_policy(role_data.get("AssumeRolePolicyDocument"))
+                if canonical_json_hash(trust_policy) != expected_trust_digest:
+                    raise ArtifactConfigurationError("AWS IAM role trust policy digest differs")
+                trust_subjects[role_arn] = _trust_policy_subjects(
+                    trust_policy,
+                    workload_roles=workload_roles,
+                )
                 inline = await iam.list_role_policies(RoleName=role_name)
                 if inline.get("PolicyNames") or inline.get("IsTruncated"):
                     raise ArtifactConfigurationError("AWS IAM role has an inline policy")
@@ -304,8 +335,16 @@ class AwsArtifactLiveProof:
                 attached_arns = tuple(
                     sorted(item.get("PolicyArn") for item in attached.get("AttachedPolicies", []))
                 )
-                if attached.get("IsTruncated") or attached_arns != tuple(sorted(expected_policies)):
+                expected_policies = () if expected_policy is None else (expected_policy,)
+                if attached.get("IsTruncated") or attached_arns != expected_policies:
                     raise ArtifactConfigurationError("AWS IAM role attachments differ")
+            subject_sets = tuple(trust_subjects.values())
+            if any(
+                subject_sets[left] & subject_sets[right]
+                for left in range(len(subject_sets))
+                for right in range(left + 1, len(subject_sets))
+            ):
+                raise ArtifactConfigurationError("AWS IAM workload trust subjects are not distinct")
             for policy_arn in (
                 self._required(self._settings.artifact_s3_runtime_policy_arn),
                 self._required(self._settings.artifact_s3_readiness_policy_arn),
@@ -342,9 +381,7 @@ class AwsArtifactLiveProof:
             if public.get("result") != "PASS":
                 raise ArtifactConfigurationError("AWS bucket policy permits public access")
             object_actions = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
-            partition = self._required(self._settings.artifact_s3_runtime_role_arn).split(
-                ":", 2
-            )[1]
+            partition = self._required(self._settings.artifact_s3_runtime_role_arn).split(":", 2)[1]
             object_arn = (
                 f"arn:{partition}:s3:::{self._settings.artifact_s3_bucket}/"
                 f"{self._settings.artifact_s3_private_prefix}/sha256/*"
@@ -520,6 +557,64 @@ def _values(value: object) -> frozenset[str]:
     return frozenset(rows)
 
 
+def _trust_policy_subjects(
+    policy: dict[str, Any],
+    *,
+    workload_roles: frozenset[str],
+) -> frozenset[tuple[str, str]]:
+    """Return closed workload subjects and reject cross-role assumption grants."""
+    subjects: set[tuple[str, str]] = set()
+    for statement in _statements(policy):
+        if statement.get("Effect") != "Allow":
+            continue
+        actions = _values(statement.get("Action"))
+        principal = statement.get("Principal")
+        if not isinstance(principal, dict) or set(principal) not in (
+            {"Federated"},
+            {"Service"},
+            {"AWS"},
+        ):
+            raise ArtifactConfigurationError("AWS IAM trust principal is not closed")
+        if "AWS" in principal:
+            principals = _values(principal["AWS"])
+            if actions != {"sts:AssumeRole"} or principals & workload_roles:
+                raise ArtifactConfigurationError(
+                    "AWS IAM workload roles can assume another workload role"
+                )
+            subjects.update((value, value) for value in principals)
+            continue
+        if "Federated" in principal:
+            providers = _values(principal["Federated"])
+            if actions != {"sts:AssumeRoleWithWebIdentity"}:
+                raise ArtifactConfigurationError("AWS IAM federated trust action differs")
+            condition = statement.get("Condition")
+            if not isinstance(condition, dict):
+                raise ArtifactConfigurationError("AWS IAM federated trust lacks a subject")
+            subject_values: set[str] = set()
+            for operator_values in condition.values():
+                if not isinstance(operator_values, dict):
+                    raise ArtifactConfigurationError("AWS IAM trust condition is invalid")
+                for key, value in operator_values.items():
+                    if isinstance(key, str) and key.endswith(":sub"):
+                        subject_values.update(_values(value))
+            if not subject_values:
+                raise ArtifactConfigurationError("AWS IAM federated trust lacks a subject")
+            if any("*" in value or "?" in value for value in subject_values):
+                raise ArtifactConfigurationError("AWS IAM federated trust subject is not exact")
+            subjects.update(
+                (provider, subject) for provider in providers for subject in subject_values
+            )
+            continue
+        services = _values(principal["Service"])
+        if actions != {"sts:AssumeRole"}:
+            raise ArtifactConfigurationError("AWS IAM service trust action differs")
+        condition_key = canonical_json_hash(statement.get("Condition", {}))
+        subjects.update((service, condition_key) for service in services)
+    if not subjects:
+        raise ArtifactConfigurationError("AWS IAM trust policy grants no workload subject")
+    return frozenset(subjects)
+
+
 def _allowed_pairs(policy: dict[str, Any]) -> frozenset[tuple[str, str]]:
     pairs: set[tuple[str, str]] = set()
     for statement in _statements(policy):
@@ -610,9 +705,7 @@ def _has_only_sse_s3(rules: object) -> bool:
     return (
         default == {"SSEAlgorithm": "AES256"}
         and rules[0].get("BucketKeyEnabled") in {None, False}
-        and set(rules[0]) <= {
-            "ApplyServerSideEncryptionByDefault", "BucketKeyEnabled"
-        }
+        and set(rules[0]) <= {"ApplyServerSideEncryptionByDefault", "BucketKeyEnabled"}
     )
 
 

@@ -393,8 +393,9 @@ cannot be reused as post-submission review-gate evidence. See the
   development and CI, and all storage access stays behind `ArtifactStore`.
   Development/CI MinIO uses a shared pinned-source build; existing artifact
   volumes and real S3-protocol tests remain unchanged. Native AWS composition
-  is guarded by immutable, exact three-probe activations at startup, each SDK
-  call and provider-derived terminal commit. No hosted readiness claim exists
+  is guarded by immutable, exact three-probe activations bound to reviewed role
+  trust-policy digests and distinct workload subjects at startup, each SDK call
+  and provider-derived terminal commit. No hosted readiness claim exists
   until the intended environment runs those identity-separated live probes and
   the public guide/Submission custody drill.
 - Private extraction scratch is bounded by `ArtifactScratchManager`; it is not

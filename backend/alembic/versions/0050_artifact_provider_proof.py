@@ -39,10 +39,13 @@ CREATE TABLE public.artifact_provider_probe_results (
  aws_account_id varchar(12) NOT NULL,
  region varchar(32) NOT NULL,
  runtime_role_arn varchar(700) NOT NULL,
+ runtime_trust_policy_sha256 varchar(71) NOT NULL,
  runtime_policy_arn varchar(700) NOT NULL,
  readiness_role_arn varchar(700) NOT NULL,
+ readiness_trust_policy_sha256 varchar(71) NOT NULL,
  readiness_policy_arn varchar(700) NOT NULL,
  negative_role_arn varchar(700) NOT NULL,
+ negative_trust_policy_sha256 varchar(71) NOT NULL,
  bootstrap_principal_arn varchar(700) NOT NULL,
  expected_principal_arn varchar(700) NOT NULL,
  observed_principal_arn varchar(700),
@@ -64,6 +67,12 @@ CREATE TABLE public.artifact_provider_probe_results (
   namespace_fingerprint ~ '^sha256:[0-9a-f]{64}$'),
  CONSTRAINT ck_artifact_provider_probe_results_bucket_policy_sha256_shape CHECK (
   bucket_policy_sha256 ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT ck_artifact_provider_probe_results_runtime_trust_policy_sha256_shape CHECK (
+  runtime_trust_policy_sha256 ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT ck_artifact_provider_probe_results_readiness_trust_policy_sha256_shape CHECK (
+  readiness_trust_policy_sha256 ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT ck_artifact_provider_probe_results_negative_trust_policy_sha256_shape CHECK (
+  negative_trust_policy_sha256 ~ '^sha256:[0-9a-f]{64}$'),
  CONSTRAINT ck_artifact_provider_probe_results_evidence_sha256_shape CHECK (
   evidence_sha256 ~ '^sha256:[0-9a-f]{64}$'),
  CONSTRAINT ck_artifact_provider_probe_results_account_shape CHECK (
@@ -96,10 +105,13 @@ CREATE TABLE public.artifact_provider_activations (
  aws_account_id varchar(12) NOT NULL,
  region varchar(32) NOT NULL,
  runtime_role_arn varchar(700) NOT NULL,
+ runtime_trust_policy_sha256 varchar(71) NOT NULL,
  runtime_policy_arn varchar(700) NOT NULL,
  readiness_role_arn varchar(700) NOT NULL,
+ readiness_trust_policy_sha256 varchar(71) NOT NULL,
  readiness_policy_arn varchar(700) NOT NULL,
  negative_role_arn varchar(700) NOT NULL,
+ negative_trust_policy_sha256 varchar(71) NOT NULL,
  bootstrap_principal_arn varchar(700) NOT NULL,
  bucket_policy_sha256 varchar(71) NOT NULL,
  group_nonce uuid NOT NULL,
@@ -113,6 +125,14 @@ CREATE TABLE public.artifact_provider_activations (
   namespace_fingerprint ~ '^sha256:[0-9a-f]{64}$'),
  CONSTRAINT ck_artifact_provider_activations_bucket_policy_sha256_shape CHECK (
   bucket_policy_sha256 ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT ck_artifact_provider_activations_runtime_trust_policy_sha256_shape CHECK (
+  runtime_trust_policy_sha256 ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT ck_artifact_provider_activations_readiness_trust_policy_sha256_shape CHECK (
+  readiness_trust_policy_sha256 ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT ck_artifact_provider_activations_negative_trust_policy_sha256_shape CHECK (
+  negative_trust_policy_sha256 ~ '^sha256:[0-9a-f]{64}$'),
+ CONSTRAINT ck_artifact_provider_activations_account_shape CHECK (
+  aws_account_id ~ '^[0-9]{12}$'),
  CONSTRAINT ck_artifact_provider_activations_expiry_order CHECK (expires_at>activated_at),
  CONSTRAINT fk_artifact_provider_activation_readiness FOREIGN KEY(readiness_result_id)
   REFERENCES public.artifact_provider_probe_results(id) ON DELETE RESTRICT,
@@ -149,6 +169,12 @@ BEGIN
   OR octet_length(NEW.expected_principal_arn) NOT BETWEEN 20 AND 700
   OR (NEW.observed_principal_arn IS NOT NULL AND
       octet_length(NEW.observed_principal_arn) NOT BETWEEN 20 AND 700)
+  OR NEW.expected_principal_arn<>CASE NEW.probe_type
+      WHEN 'readiness' THEN NEW.readiness_role_arn
+      WHEN 'runtime_immutability' THEN NEW.runtime_role_arn
+      WHEN 'negative_access' THEN NEW.negative_role_arn
+      ELSE NULL
+     END
  THEN
   RAISE EXCEPTION 'artifact provider probe result is invalid' USING ERRCODE='23514';
  END IF;
@@ -191,42 +217,59 @@ BEGIN
   OR negative.expected_principal_arn<>negative.observed_principal_arn
   OR ROW(readiness.proof_version,readiness.release_id,readiness.namespace_fingerprint,
          readiness.aws_partition,readiness.aws_account_id,readiness.region,
-         readiness.runtime_role_arn,readiness.runtime_policy_arn,
-         readiness.readiness_role_arn,readiness.readiness_policy_arn,
-         readiness.negative_role_arn,readiness.bootstrap_principal_arn,
+         readiness.runtime_role_arn,readiness.runtime_trust_policy_sha256,
+         readiness.runtime_policy_arn,
+         readiness.readiness_role_arn,readiness.readiness_trust_policy_sha256,
+         readiness.readiness_policy_arn,
+         readiness.negative_role_arn,readiness.negative_trust_policy_sha256,
+         readiness.bootstrap_principal_arn,
          readiness.bucket_policy_sha256,readiness.group_nonce)
      IS DISTINCT FROM
      ROW(runtime.proof_version,runtime.release_id,runtime.namespace_fingerprint,
          runtime.aws_partition,runtime.aws_account_id,runtime.region,
-         runtime.runtime_role_arn,runtime.runtime_policy_arn,
-         runtime.readiness_role_arn,runtime.readiness_policy_arn,
-         runtime.negative_role_arn,runtime.bootstrap_principal_arn,
+         runtime.runtime_role_arn,runtime.runtime_trust_policy_sha256,
+         runtime.runtime_policy_arn,
+         runtime.readiness_role_arn,runtime.readiness_trust_policy_sha256,
+         runtime.readiness_policy_arn,
+         runtime.negative_role_arn,runtime.negative_trust_policy_sha256,
+         runtime.bootstrap_principal_arn,
          runtime.bucket_policy_sha256,runtime.group_nonce)
   OR ROW(readiness.proof_version,readiness.release_id,readiness.namespace_fingerprint,
          readiness.aws_partition,readiness.aws_account_id,readiness.region,
-         readiness.runtime_role_arn,readiness.runtime_policy_arn,
-         readiness.readiness_role_arn,readiness.readiness_policy_arn,
-         readiness.negative_role_arn,readiness.bootstrap_principal_arn,
+         readiness.runtime_role_arn,readiness.runtime_trust_policy_sha256,
+         readiness.runtime_policy_arn,
+         readiness.readiness_role_arn,readiness.readiness_trust_policy_sha256,
+         readiness.readiness_policy_arn,
+         readiness.negative_role_arn,readiness.negative_trust_policy_sha256,
+         readiness.bootstrap_principal_arn,
          readiness.bucket_policy_sha256,readiness.group_nonce)
      IS DISTINCT FROM
      ROW(negative.proof_version,negative.release_id,negative.namespace_fingerprint,
          negative.aws_partition,negative.aws_account_id,negative.region,
-         negative.runtime_role_arn,negative.runtime_policy_arn,
-         negative.readiness_role_arn,negative.readiness_policy_arn,
-         negative.negative_role_arn,negative.bootstrap_principal_arn,
+         negative.runtime_role_arn,negative.runtime_trust_policy_sha256,
+         negative.runtime_policy_arn,
+         negative.readiness_role_arn,negative.readiness_trust_policy_sha256,
+         negative.readiness_policy_arn,
+         negative.negative_role_arn,negative.negative_trust_policy_sha256,
+         negative.bootstrap_principal_arn,
          negative.bucket_policy_sha256,negative.group_nonce)
   OR ROW(NEW.proof_version,NEW.release_id,NEW.namespace_fingerprint,
          NEW.aws_partition,NEW.aws_account_id,NEW.region,
-         NEW.runtime_role_arn,NEW.runtime_policy_arn,
-         NEW.readiness_role_arn,NEW.readiness_policy_arn,
-         NEW.negative_role_arn,NEW.bootstrap_principal_arn,
+         NEW.runtime_role_arn,NEW.runtime_trust_policy_sha256,NEW.runtime_policy_arn,
+         NEW.readiness_role_arn,NEW.readiness_trust_policy_sha256,
+         NEW.readiness_policy_arn,
+         NEW.negative_role_arn,NEW.negative_trust_policy_sha256,
+         NEW.bootstrap_principal_arn,
          NEW.bucket_policy_sha256,NEW.group_nonce)
      IS DISTINCT FROM
      ROW(readiness.proof_version,readiness.release_id,readiness.namespace_fingerprint,
          readiness.aws_partition,readiness.aws_account_id,readiness.region,
-         readiness.runtime_role_arn,readiness.runtime_policy_arn,
-         readiness.readiness_role_arn,readiness.readiness_policy_arn,
-         readiness.negative_role_arn,readiness.bootstrap_principal_arn,
+         readiness.runtime_role_arn,readiness.runtime_trust_policy_sha256,
+         readiness.runtime_policy_arn,
+         readiness.readiness_role_arn,readiness.readiness_trust_policy_sha256,
+         readiness.readiness_policy_arn,
+         readiness.negative_role_arn,readiness.negative_trust_policy_sha256,
+         readiness.bootstrap_principal_arn,
          readiness.bucket_policy_sha256,readiness.group_nonce)
   OR NEW.activated_at>clock_timestamp()
   OR NEW.expires_at<>least(readiness.expires_at,runtime.expires_at,negative.expires_at)
@@ -237,17 +280,23 @@ BEGIN
       OR ROW(predecessor.proof_version,predecessor.release_id,
              predecessor.namespace_fingerprint,predecessor.aws_partition,
              predecessor.aws_account_id,predecessor.region,
-             predecessor.runtime_role_arn,predecessor.runtime_policy_arn,
-             predecessor.readiness_role_arn,predecessor.readiness_policy_arn,
-             predecessor.negative_role_arn,predecessor.bootstrap_principal_arn,
+             predecessor.runtime_role_arn,predecessor.runtime_trust_policy_sha256,
+             predecessor.runtime_policy_arn,
+             predecessor.readiness_role_arn,predecessor.readiness_trust_policy_sha256,
+             predecessor.readiness_policy_arn,
+             predecessor.negative_role_arn,predecessor.negative_trust_policy_sha256,
+             predecessor.bootstrap_principal_arn,
              predecessor.bucket_policy_sha256)
          IS DISTINCT FROM
          ROW(NEW.proof_version,NEW.release_id,
              NEW.namespace_fingerprint,NEW.aws_partition,
              NEW.aws_account_id,NEW.region,
-             NEW.runtime_role_arn,NEW.runtime_policy_arn,
-             NEW.readiness_role_arn,NEW.readiness_policy_arn,
-             NEW.negative_role_arn,NEW.bootstrap_principal_arn,
+             NEW.runtime_role_arn,NEW.runtime_trust_policy_sha256,
+             NEW.runtime_policy_arn,
+             NEW.readiness_role_arn,NEW.readiness_trust_policy_sha256,
+             NEW.readiness_policy_arn,
+             NEW.negative_role_arn,NEW.negative_trust_policy_sha256,
+             NEW.bootstrap_principal_arn,
              NEW.bucket_policy_sha256)))
  THEN
   RAISE EXCEPTION 'artifact provider activation proof group is invalid' USING ERRCODE='23514';

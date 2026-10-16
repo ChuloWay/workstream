@@ -15,8 +15,9 @@ authority. It grants no Operator route. Do not add role checks, fallback
 constructors, or artifact-owned grant evaluation.
 
 AWS S3 is activation-gated. Configuration supplies only non-secret exact
-release, namespace, role/policy and bucket-policy bindings; it cannot assert a
-pass. API, worker and Beat startup load an exact fresh activation after the
+release, namespace, role/policy, reviewed trust-policy digest and bucket-policy
+bindings; it cannot assert a pass. API, Celery task-process and Beat startup load
+an exact fresh activation after the
 namespace claim and before credential inspection. Every AWS SDK call reloads
 the same activation selected for its logical operation, and ART reloads that ID
 inside any provider-derived terminal transaction.
@@ -43,6 +44,10 @@ their individual starts, so overlapping unexpired groups are expected.
 Each independently deployed executor supplies its own selected workload-identity
 method and identity environment; the common settings contract does not imply
 that the runtime, readiness and negative jobs share one credential method.
+The exact three trust-policy digests are shared non-secret configuration. The
+readiness run compares them with `GetRole`, rejects shared workload subjects,
+and rejects any trust grant that lets one configured workload role assume
+another.
 
 Do not supply bootstrap credentials or run all modes under one identity. The
 readiness identity may inspect only the exact three role attachments/inline
@@ -50,6 +55,48 @@ policies and the exact two required managed-policy documents. A failed,
 expired, mixed or drifted group cannot activate AWS. An expired activation
 during a possibly successful write leaves recoverable acknowledgement-unknown
 state; rerun proof and let the existing resolver observe the object.
+
+## Safe activation evidence inspection
+
+Inspect only bounded custody metadata. Filter by the known release, group nonce,
+or activation ID and select record IDs, proof type/result, error code, configured
+digests, and PostgreSQL timestamps. Do not dump raw provider responses, process
+environments, SDK configuration, credential sources, or an unbounded table.
+For example, an operator with the existing read-only database path can inspect
+one group without changing its evidence:
+
+```sql
+SELECT id, probe_type, result, error_code, evidence_sha256,
+       started_at, completed_at, expires_at
+FROM artifact_provider_probe_results
+WHERE group_nonce = '<known-uuid>'
+ORDER BY probe_type
+LIMIT 3;
+
+SELECT id, group_nonce, supersedes_activation_id, activated_at, expires_at
+FROM artifact_provider_activations
+WHERE release_id = 'sha256:<known-release-digest>'
+ORDER BY activated_at DESC, id DESC
+LIMIT 20;
+```
+
+The rows are append-only evidence. Never update, delete, truncate, restamp, or
+copy them to manufacture freshness. An expired or failed row is diagnostic and
+cannot authorize provider I/O.
+
+## Backup and restore boundary
+
+Database and S3 backup execution remains environment-owned. A restore must
+preserve retained object bytes, the exact private namespace, and all immutable
+Workstream custody rows together. It must not rebind an object, activation,
+probe result, content record, replica, receipt, or audit fact to a different
+release, bucket, prefix, role, policy, or trust-policy digest. Restored
+activations remain governed by their original PostgreSQL timestamps and will
+normally be expired; run a fresh three-identity proof group before allowing AWS
+provider I/O. There is no Workstream restore-by-rebinding or retained-data
+deletion path in v0.1. Environment backup/restore drill evidence is still a
+hosted release prerequisite and is not supplied by this offline activation
+change.
 
 ## Diagnosis sequence
 

@@ -192,10 +192,13 @@ class Settings(BaseSettings):
     ) = None
     release_id: str | None = None
     artifact_s3_runtime_role_arn: str | None = None
+    artifact_s3_runtime_trust_policy_sha256: str | None = None
     artifact_s3_runtime_policy_arn: str | None = None
     artifact_s3_readiness_role_arn: str | None = None
+    artifact_s3_readiness_trust_policy_sha256: str | None = None
     artifact_s3_readiness_policy_arn: str | None = None
     artifact_s3_negative_role_arn: str | None = None
+    artifact_s3_negative_trust_policy_sha256: str | None = None
     artifact_s3_bootstrap_principal_arn: str | None = None
     artifact_s3_bucket_policy_sha256: str | None = None
     artifact_s3_connect_timeout_seconds: float = Field(default=5.0, gt=0.0, le=60.0)
@@ -692,6 +695,18 @@ class Settings(BaseSettings):
             raise ValueError("native AWS S3 requires exact workload role ARNs")
         if len(set(role_arns)) != len(role_arns):
             raise ValueError("native AWS S3 workload roles must be distinct")
+        trust_policy_digests = (
+            self.artifact_s3_runtime_trust_policy_sha256,
+            self.artifact_s3_readiness_trust_policy_sha256,
+            self.artifact_s3_negative_trust_policy_sha256,
+        )
+        if any(
+            value is None or _SHA256_IDENTITY.fullmatch(value) is None
+            for value in trust_policy_digests
+        ):
+            raise ValueError("native AWS S3 requires exact workload trust policy digests")
+        if len(set(trust_policy_digests)) != len(trust_policy_digests):
+            raise ValueError("native AWS S3 workload trust policies must be distinct")
         policy_arns = (
             self.artifact_s3_runtime_policy_arn,
             self.artifact_s3_readiness_policy_arn,

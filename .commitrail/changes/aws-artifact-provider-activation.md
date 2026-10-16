@@ -65,8 +65,9 @@ unknown provider outcome fails closed and cannot commit success evidence.
 
 - `.commitrail/changes/aws-artifact-provider-activation.md`.
 - `backend/app/core/config.py` and `backend/.env.example`: non-secret, closed AWS
-  activation bindings only (release digest, exact role/policy ARNs, expected
-  bucket-policy digest and timeout invariants). No credential values.
+  activation bindings only (release digest, exact role/policy ARNs, reviewed
+  role-trust-policy digests, expected bucket-policy digest and timeout
+  invariants). No credential values.
 - `backend/app/adapters/artifacts/__init__.py`,
   `backend/app/adapters/artifacts/s3_compatible.py` and
   `backend/app/adapters/artifacts/internal_workers.py`: complete the existing
@@ -85,9 +86,10 @@ unknown provider outcome fails closed and cannot commit success evidence.
   proof/activation custody, exact matching, per-operation leases and terminal
   revalidation under the existing ART owner.
 - `backend/app/main.py`, `backend/app/workers/celery_app.py` and
-  `backend/app/workers/artifacts.py`: activation-aware API, prefork worker, Beat
-  and direct-cleanup entry boundaries. Beat may use its startup signal; module
-  import must not become a credential or provider probe.
+  `backend/app/workers/artifacts.py`: activation-aware API, prefork worker and
+  Beat entry boundaries; direct scratch cleanup remains provider-independent.
+  Beat may use its startup signal; module import must not become a credential
+  or provider probe.
 - One additive Alembic revision after the current head for append-only probe and
   activation records, including database immutability and exact FK/check/unique
   constraints.
@@ -99,6 +101,11 @@ unknown provider outcome fails closed and cannot commit success evidence.
 - Focused unit, real-PostgreSQL and existing S3/entry-point tests under
   `backend/tests/`; schema manifest/custody files only where the additive
   migration requires their normal update.
+- `backend/scripts/test_lane_catalogue.py`,
+  `backend/tests/test_ci_lane_catalogue.py` and
+  `.ci/auth-boundaries/TEST_STRUCTURE_DEBT.json`: assign the new focused tests
+  to the existing shared-foundation lanes and refresh only the existing,
+  shrinking artifact-admission debt facts after rehoming terminal proof.
 - `README.md`, `docs/spec_artifact_storage_service.md`,
   `docs/operations_artifact_storage.md` and `docs/roadmap_status.md`: exact
   configuration, proof, recovery, exposure and remaining hosted-proof claims.
@@ -188,8 +195,9 @@ to fit within `15-minute validity - 5-minute refresh interval`. Native AWS stays
 invalid under the current 1,800-second development operation default until #583
 supplies a smaller measured deadline. Local and MinIO settings are unchanged.
 
-The live readiness probe validates the exact runtime/readiness/negative roles
-and managed policies, closed bucket policy, Block Public Access, owner-enforced
+The live readiness probe validates the exact runtime/readiness/negative roles,
+their reviewed trust-policy digests and disjoint workload subjects, the exact
+managed policies, closed bucket policy, Block Public Access, owner-enforced
 ownership, SSE-S3, versioning/retention and every lifecycle rule intersecting
 the completed prefix. Runtime proof uses the deployed runtime identity for a
 conditional content-addressed write, exact head/readback, replay, unconditional
@@ -326,6 +334,7 @@ rebinding route.
 - negative-test role ARN;
 - infrastructure bootstrap principal ARN used only for policy evaluation;
 - canonical bucket-policy digest;
+- canonical reviewed runtime, readiness and negative role trust-policy digests;
 - selected runtime workload-identity method;
 - independent readiness-job and negative-job OIDC issuer/audience/service-account
   identities;
@@ -344,9 +353,24 @@ rebinding route.
 | Current composition/guard traced | Source inspection at base `34501cd64` | AWS adapter/resolver foundations exist; factory is MinIO-only and AWS is denied before factory construction | No live AWS observation |
 | Current provider call owners traced | `rg` over every `ArtifactStore` consumer and ART composition root | Writable calls remain in `ArtifactStorageOrchestrator`; four current direct-read owners also require gating | Implementation must keep this inventory closed |
 | Normative activation contract traced | `docs/spec_artifact_storage_service.md:694-740` | Three live probes, immutable activation, per-I/O and terminal checks are current canonical requirements; the exact-role IAM inspection contradiction is resolved above | Measured AWS deadlines remain a later live-run prerequisite |
-| Offline static proof | `py_compile`; focused Ruff; `git diff --check`; stale-wording and changed-Markdown-link checks | Passed on the authored candidate | PostgreSQL, migration and focused pytest execution remains serialized behind the shared host test slot |
-| Offline behavior proof | Focused activation/config/startup/factory pytest batch | 230 passed; seven focused failures exposed eager local DB composition and one overstrict structural assertion; both were repaired and the exact seven-test replay passed | PostgreSQL/migration and provider-orchestration tests remain pending; fakes cannot establish AWS/IAM/bucket behavior |
+| Offline static proof | `py_compile`; focused Ruff; `git diff --check`; stale-wording, stale artifact/authorization contract and changed-Markdown-link checks | Initial candidate passed all checks; repaired source and all five new test modules pass `py_compile`, focused Ruff and `git diff --check`; all named documentation checks pass | Full affected selection requires exact repaired-head replay |
+| Offline behavior proof | Focused activation/config/startup/factory pytest batches | Initial candidate: 230 passed and seven failed; the seven repaired cases then passed. Repair batch: exact replay guard and composition-level two-loop worker regressions pass; native proof transport/CLI 32 passed; lane-catalogue contract 58 passed; all nine moved terminal-test cases pass `--setup-plan` fixture closure | These results have separate provenance and are not one exact-head total. PostgreSQL/migration, full affected offline selection and live AWS proof remain pending |
+| CI/test metadata proof | `python -m scripts.test_structure_boundary validate ...`; `pytest -q tests/test_ci_lane_catalogue.py`; AST comparison of the three moved functions | Debt transition passes while `test_artifact_admission.py` shrinks from 2,779 to 2,596 lines; 58 lane tests pass; all three moved function ASTs are identical | CI-integrity and test-delta reviewer replay remain pending on the clean target |
 | Live proof | Three separately identified executors, credential-free coordination, then hosted public guide/Submission drill | Not authorized or run | Requires approved #583 environment and explicit live authorization |
+
+The terminal-custody tests moved together from the oversized admission module;
+their parameterized cases keep the same assertion bodies and fixture closure:
+
+| Old node | New node |
+|---|---|
+| `tests/test_artifact_admission.py::test_activation_expiry_during_put_terminal_transaction_rolls_back_to_unknown` | `tests/test_artifact_provider_activation_terminal_postgresql.py::test_activation_expiry_during_put_terminal_transaction_rolls_back_to_unknown` |
+| `tests/test_artifact_admission.py::test_checker_output_shared_put_and_verification_lifecycle` | `tests/test_artifact_provider_activation_terminal_postgresql.py::test_checker_output_shared_put_and_verification_lifecycle` |
+| `tests/test_artifact_admission.py::test_checker_output_put_observation_terminal_outcomes` | `tests/test_artifact_provider_activation_terminal_postgresql.py::test_checker_output_put_observation_terminal_outcomes` |
+
+The crossed-expiry test uses the normal production minimum-TTL selection path,
+then shortens only its copied Settings deadlines and the test-local fixed clock
+margin so real PostgreSQL time reaches terminal expiry. Production retains the
+30-second fixed margin and its separate boundary test.
 
 ## Review findings
 
@@ -361,6 +385,20 @@ then untracked; implementation review must bind to the eventual clean candidate.
 No historical XINT plan is treated as authorization or copied without current
 owner proof.
 
+The first clean implementation review at `332549d05` found that the recorder
+and database did not bind probe type to its configured role, the persistent
+Celery store retained the initialization loop's session factory, readiness did
+not validate role trust policy, ORM metadata drifted from the migration, and
+transport/CLI, SDK-call and crossed-expiry coverage was incomplete. It also
+identified contradictory startup/direct-cleanup wording and missing evidence
+inspection and restore boundaries. The current repair derives and enforces the
+probe principal in ART and PostgreSQL, resolves worker guards through the
+current loop owner, binds three exact reviewed trust-policy digests and
+disjoint workload subjects into activation, reconciles schema metadata, adds
+the focused regressions, and corrects the documentation. Those tracks remain
+blocked until reviewers replay against a new clean repaired target; the source
+repairs alone do not establish live AWS readiness.
+
 Focused regressions must independently prove: a guard immediately before nested
 SDK calls; `open` guarding at iterator consumption; same-ID terminal rechecks
 for success, missing and integrity mismatch; crossed expiry and unknown write;
@@ -370,8 +408,8 @@ read owner. These are separate failure boundaries, not one broad mock graph.
 ## Reconciliation
 
 - Current-source reconciliation: the implementation began at `34501cd64` and
-  has been reconciled against `origin/main` at `801b8dabb`, whose intervening
-  change is CI-only. Issue #583 is parallel and owns hosted process topology,
+  has been reconciled against `origin/main` at `a201d743`. Issue #583 is
+  parallel and owns hosted process topology,
   scheduling and backup execution. Merged PR #575 owns migration `0049`; this
   branch now chains `0050` to that actual merged predecessor.
 - Next usable boundary: after plan approval, complete offline implementation and

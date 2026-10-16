@@ -702,7 +702,12 @@ assumes another proof role:
 | negative access | independent deployment job with the short-lived OIDC negative-test role; known-object read/write/delete denials only |
 
 The readiness role cannot assume the runtime or negative-test role. The
-runtime workload cannot assume either deployment role. The bootstrap principal
+runtime workload cannot assume either deployment role. Readiness reads each
+exact role trust policy, requires its configured canonical digest, rejects any
+configured workload role as an `sts:AssumeRole` principal, and requires the
+three policies to identify disjoint workload subjects. The three reviewed
+trust-policy digests are part of every probe result and activation, so trust
+drift invalidates an otherwise matching group. The bootstrap principal
 is never supplied to any probe. Each probe asks STS for its observed caller ARN
 and commits one immutable result bound to probe type, expected/observed caller
 ARN, release ID, namespace fingerprint, bucket-policy digest, common challenge
@@ -965,10 +970,13 @@ The S3-compatible provider settings use the same prefix:
 | `WORKSTREAM_ARTIFACT_S3_AWS_WORKLOAD_IDENTITY_METHOD` | unset | Native AWS selection: `assume-role-with-web-identity`, `container-role`, or `iam-role`; never used by MinIO. |
 | `WORKSTREAM_RELEASE_ID` | unset | Native AWS-only immutable deployed image/release digest in `sha256:<64 lowercase hex>` form. |
 | `WORKSTREAM_ARTIFACT_S3_RUNTIME_ROLE_ARN` | unset | Exact runtime IAM role ARN used for product object calls and runtime proof. |
+| `WORKSTREAM_ARTIFACT_S3_RUNTIME_TRUST_POLICY_SHA256` | unset | Canonical digest of the reviewed runtime role trust policy. |
 | `WORKSTREAM_ARTIFACT_S3_RUNTIME_POLICY_ARN` | unset | Exact sole customer-managed runtime policy ARN. |
 | `WORKSTREAM_ARTIFACT_S3_READINESS_ROLE_ARN` | unset | Exact independent readiness-job role ARN. |
+| `WORKSTREAM_ARTIFACT_S3_READINESS_TRUST_POLICY_SHA256` | unset | Canonical digest of the reviewed readiness role trust policy. |
 | `WORKSTREAM_ARTIFACT_S3_READINESS_POLICY_ARN` | unset | Exact sole customer-managed readiness policy ARN. |
 | `WORKSTREAM_ARTIFACT_S3_NEGATIVE_ROLE_ARN` | unset | Exact independent negative-test role ARN; it has no attached or inline policy. |
+| `WORKSTREAM_ARTIFACT_S3_NEGATIVE_TRUST_POLICY_SHA256` | unset | Canonical digest of the reviewed negative-test role trust policy. |
 | `WORKSTREAM_ARTIFACT_S3_BOOTSTRAP_PRINCIPAL_ARN` | unset | Exact environment provisioning principal evaluated without supplying its credentials. |
 | `WORKSTREAM_ARTIFACT_S3_BUCKET_POLICY_SHA256` | unset | Expected canonical bucket-policy digest in `sha256:<64 lowercase hex>` form. |
 | `WORKSTREAM_ARTIFACT_S3_ACCESS_KEY_ID` | unset | MinIO local/CI secret only; forbidden for native AWS. |
@@ -992,10 +1000,12 @@ environment allowlist; every other `AWS_*` or `BOTOCORE_*` SDK behavior control
 fails before SDK session construction. S3 object operations and credential
 metadata operations explicitly ignore ambient HTTP proxy variables. IAM-role
 validation requires IMDSv2 and the isolated fetcher disables IMDSv1. Even valid
-native AWS settings fail with `artifact_provider_live_proof_required` at API,
-Celery scheduler/task, and direct-cleanup entry points before credential-source
-probing, factory construction, scratch cleanup, namespace claim, resolver
-loading, or provider I/O.
+native AWS settings let API, Celery task-process and Beat construct the inert
+typed bootstrap and validate the persisted namespace claim before requiring an activation.
+Absent activation still fails before credential-source probing, SDK session
+construction, resolver loading, or provider I/O. The direct scratch-cleanup
+task uses only `ArtifactScratchManager`; it neither constructs a provider nor
+claims provider activation.
 
 Every process sharing a scratch root must use the identical complete setting
 set. The root marker binds a canonical fingerprint of those limits and startup

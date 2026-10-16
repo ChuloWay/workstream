@@ -919,8 +919,7 @@ class ArtifactProviderProbeResult(Base):
     __tablename__ = "artifact_provider_probe_results"
     __table_args__ = (
         CheckConstraint(
-            "(get_byte(uuid_send(id), 6) >> 4) = 7 and "
-            "(get_byte(uuid_send(id), 8) & 192) = 128",
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
             name="id_uuid7",
         ),
         CheckConstraint(
@@ -938,9 +937,22 @@ class ArtifactProviderProbeResult(Base):
             name="bucket_policy_sha256_shape",
         ),
         CheckConstraint(
+            SHA256_CHECK.format(column="runtime_trust_policy_sha256"),
+            name="runtime_trust_policy_sha256_shape",
+        ),
+        CheckConstraint(
+            SHA256_CHECK.format(column="readiness_trust_policy_sha256"),
+            name="readiness_trust_policy_sha256_shape",
+        ),
+        CheckConstraint(
+            SHA256_CHECK.format(column="negative_trust_policy_sha256"),
+            name="negative_trust_policy_sha256_shape",
+        ),
+        CheckConstraint(
             SHA256_CHECK.format(column="evidence_sha256"),
             name="evidence_sha256_shape",
         ),
+        CheckConstraint("aws_account_id ~ '^[0-9]{12}$'", name="account_shape"),
         CheckConstraint("completed_at >= started_at", name="completion_order"),
         CheckConstraint("expires_at > completed_at", name="expiry_order"),
         CheckConstraint(
@@ -949,8 +961,12 @@ class ArtifactProviderProbeResult(Base):
             name="result_error",
         ),
         UniqueConstraint(
-            "probe_type", "proof_version", "release_id", "namespace_fingerprint",
-            "bucket_policy_sha256", "group_nonce",
+            "probe_type",
+            "proof_version",
+            "release_id",
+            "namespace_fingerprint",
+            "bucket_policy_sha256",
+            "group_nonce",
             name="uq_artifact_provider_probe_group_type",
         ),
     )
@@ -965,10 +981,13 @@ class ArtifactProviderProbeResult(Base):
     aws_account_id: Mapped[str] = mapped_column(String(12), nullable=False)
     region: Mapped[str] = mapped_column(String(32), nullable=False)
     runtime_role_arn: Mapped[str] = mapped_column(String(700), nullable=False)
+    runtime_trust_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     runtime_policy_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     readiness_role_arn: Mapped[str] = mapped_column(String(700), nullable=False)
+    readiness_trust_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     readiness_policy_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     negative_role_arn: Mapped[str] = mapped_column(String(700), nullable=False)
+    negative_trust_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     bootstrap_principal_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     expected_principal_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     observed_principal_arn: Mapped[str | None] = mapped_column(String(700))
@@ -987,8 +1006,7 @@ class ArtifactProviderActivation(Base):
     __tablename__ = "artifact_provider_activations"
     __table_args__ = (
         CheckConstraint(
-            "(get_byte(uuid_send(id), 6) >> 4) = 7 and "
-            "(get_byte(uuid_send(id), 8) & 192) = 128",
+            "(get_byte(uuid_send(id), 6) >> 4) = 7 and (get_byte(uuid_send(id), 8) & 192) = 128",
             name="id_uuid7",
         ),
         CheckConstraint(SHA256_CHECK.format(column="release_id"), name="release_id_shape"),
@@ -1000,29 +1018,68 @@ class ArtifactProviderActivation(Base):
             SHA256_CHECK.format(column="bucket_policy_sha256"),
             name="bucket_policy_sha256_shape",
         ),
+        CheckConstraint(
+            SHA256_CHECK.format(column="runtime_trust_policy_sha256"),
+            name="runtime_trust_policy_sha256_shape",
+        ),
+        CheckConstraint(
+            SHA256_CHECK.format(column="readiness_trust_policy_sha256"),
+            name="readiness_trust_policy_sha256_shape",
+        ),
+        CheckConstraint(
+            SHA256_CHECK.format(column="negative_trust_policy_sha256"),
+            name="negative_trust_policy_sha256_shape",
+        ),
+        CheckConstraint("aws_account_id ~ '^[0-9]{12}$'", name="account_shape"),
         CheckConstraint("expires_at > activated_at", name="expiry_order"),
         UniqueConstraint("readiness_result_id", name="uq_artifact_activation_readiness"),
         UniqueConstraint("runtime_result_id", name="uq_artifact_activation_runtime"),
         UniqueConstraint("negative_result_id", name="uq_artifact_activation_negative"),
         UniqueConstraint(
-            "proof_version", "release_id", "namespace_fingerprint",
-            "bucket_policy_sha256", "group_nonce",
+            "supersedes_activation_id",
+            name="uq_artifact_activation_supersedes",
+        ),
+        UniqueConstraint(
+            "proof_version",
+            "release_id",
+            "namespace_fingerprint",
+            "bucket_policy_sha256",
+            "group_nonce",
             name="uq_artifact_provider_activation_group",
         ),
     )
 
     id: Mapped[str] = mapped_column(Uuid(as_uuid=False), primary_key=True)
     readiness_result_id: Mapped[str] = mapped_column(
-        ForeignKey("artifact_provider_probe_results.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey(
+            "artifact_provider_probe_results.id",
+            ondelete="RESTRICT",
+            name="fk_artifact_provider_activation_readiness",
+        ),
+        nullable=False,
     )
     runtime_result_id: Mapped[str] = mapped_column(
-        ForeignKey("artifact_provider_probe_results.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey(
+            "artifact_provider_probe_results.id",
+            ondelete="RESTRICT",
+            name="fk_artifact_provider_activation_runtime",
+        ),
+        nullable=False,
     )
     negative_result_id: Mapped[str] = mapped_column(
-        ForeignKey("artifact_provider_probe_results.id", ondelete="RESTRICT"), nullable=False
+        ForeignKey(
+            "artifact_provider_probe_results.id",
+            ondelete="RESTRICT",
+            name="fk_artifact_provider_activation_negative",
+        ),
+        nullable=False,
     )
     supersedes_activation_id: Mapped[str | None] = mapped_column(
-        ForeignKey("artifact_provider_activations.id", ondelete="RESTRICT"), unique=True
+        ForeignKey(
+            "artifact_provider_activations.id",
+            ondelete="RESTRICT",
+            name="fk_artifact_provider_activation_supersedes",
+        )
     )
     proof_version: Mapped[str] = mapped_column(String(32), nullable=False)
     release_id: Mapped[str] = mapped_column(String(71), nullable=False)
@@ -1031,15 +1088,38 @@ class ArtifactProviderActivation(Base):
     aws_account_id: Mapped[str] = mapped_column(String(12), nullable=False)
     region: Mapped[str] = mapped_column(String(32), nullable=False)
     runtime_role_arn: Mapped[str] = mapped_column(String(700), nullable=False)
+    runtime_trust_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     runtime_policy_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     readiness_role_arn: Mapped[str] = mapped_column(String(700), nullable=False)
+    readiness_trust_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     readiness_policy_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     negative_role_arn: Mapped[str] = mapped_column(String(700), nullable=False)
+    negative_trust_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     bootstrap_principal_arn: Mapped[str] = mapped_column(String(700), nullable=False)
     bucket_policy_sha256: Mapped[str] = mapped_column(String(71), nullable=False)
     group_nonce: Mapped[str] = mapped_column(Uuid(as_uuid=False), nullable=False)
     activated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+Index(
+    "ix_artifact_provider_probe_group",
+    ArtifactProviderProbeResult.group_nonce,
+    ArtifactProviderProbeResult.proof_version,
+    ArtifactProviderProbeResult.release_id,
+    ArtifactProviderProbeResult.namespace_fingerprint,
+    ArtifactProviderProbeResult.probe_type,
+    ArtifactProviderProbeResult.expires_at,
+)
+Index(
+    "ix_artifact_provider_activation_runtime_lookup",
+    ArtifactProviderActivation.release_id,
+    ArtifactProviderActivation.namespace_fingerprint,
+    ArtifactProviderActivation.bucket_policy_sha256,
+    ArtifactProviderActivation.expires_at.desc(),
+    ArtifactProviderActivation.activated_at.desc(),
+    ArtifactProviderActivation.id.desc(),
+)
 
 
 class ArtifactAdmissionScope(Base):

@@ -47,6 +47,25 @@ def _required(value: str | None, name: str) -> str:
     return value
 
 
+def expected_artifact_probe_principal(
+    settings: Settings,
+    probe_type: ArtifactProviderProbeType,
+) -> str:
+    """Return the only configured role allowed to execute one proof mode."""
+    values = {
+        "readiness": settings.artifact_s3_readiness_role_arn,
+        "runtime_immutability": settings.artifact_s3_runtime_role_arn,
+        "negative_access": settings.artifact_s3_negative_role_arn,
+    }
+    try:
+        value = values[probe_type]
+    except KeyError as exc:
+        raise ArtifactProviderLiveProofRequiredError(
+            "AWS artifact probe identity is invalid"
+        ) from exc
+    return _required(value, f"{probe_type} role")
+
+
 def _activation_filters(
     settings: Settings,
     *,
@@ -60,14 +79,29 @@ def _activation_filters(
         ArtifactProviderActivation.region == _required(settings.artifact_s3_region, "region"),
         ArtifactProviderActivation.runtime_role_arn
         == _required(settings.artifact_s3_runtime_role_arn, "runtime role"),
+        ArtifactProviderActivation.runtime_trust_policy_sha256
+        == _required(
+            settings.artifact_s3_runtime_trust_policy_sha256,
+            "runtime trust policy",
+        ),
         ArtifactProviderActivation.runtime_policy_arn
         == _required(settings.artifact_s3_runtime_policy_arn, "runtime policy"),
         ArtifactProviderActivation.readiness_role_arn
         == _required(settings.artifact_s3_readiness_role_arn, "readiness role"),
+        ArtifactProviderActivation.readiness_trust_policy_sha256
+        == _required(
+            settings.artifact_s3_readiness_trust_policy_sha256,
+            "readiness trust policy",
+        ),
         ArtifactProviderActivation.readiness_policy_arn
         == _required(settings.artifact_s3_readiness_policy_arn, "readiness policy"),
         ArtifactProviderActivation.negative_role_arn
         == _required(settings.artifact_s3_negative_role_arn, "negative role"),
+        ArtifactProviderActivation.negative_trust_policy_sha256
+        == _required(
+            settings.artifact_s3_negative_trust_policy_sha256,
+            "negative trust policy",
+        ),
         ArtifactProviderActivation.bootstrap_principal_arn
         == _required(settings.artifact_s3_bootstrap_principal_arn, "bootstrap principal"),
         ArtifactProviderActivation.bucket_policy_sha256
@@ -112,10 +146,13 @@ async def record_artifact_provider_probe_result(
     """Persist only bounded observations produced by one completed proof call set."""
     if probe_type not in _REQUIRED_PROBE_TYPES or type(group_nonce) is not UUID:
         raise ArtifactProviderLiveProofRequiredError("AWS artifact probe identity is invalid")
+    if expected_principal_arn != expected_artifact_probe_principal(settings, probe_type):
+        raise ArtifactProviderLiveProofRequiredError(
+            "AWS artifact probe principal does not match its proof mode"
+        )
     if (
-        (passed and (error_code is not None or observed_principal_arn != expected_principal_arn))
-        or (not passed and error_code is None)
-    ):
+        passed and (error_code is not None or observed_principal_arn != expected_principal_arn)
+    ) or (not passed and error_code is None):
         raise ArtifactProviderLiveProofRequiredError("AWS artifact probe result is inconsistent")
     completed_at = await artifact_provider_database_time(session)
     if completed_at < started_at:
@@ -134,6 +171,10 @@ async def record_artifact_provider_probe_result(
         aws_account_id=arn_parts[4],
         region=_required(settings.artifact_s3_region, "region"),
         runtime_role_arn=_required(settings.artifact_s3_runtime_role_arn, "runtime role"),
+        runtime_trust_policy_sha256=_required(
+            settings.artifact_s3_runtime_trust_policy_sha256,
+            "runtime trust policy",
+        ),
         runtime_policy_arn=_required(
             settings.artifact_s3_runtime_policy_arn,
             "runtime policy",
@@ -142,11 +183,19 @@ async def record_artifact_provider_probe_result(
             settings.artifact_s3_readiness_role_arn,
             "readiness role",
         ),
+        readiness_trust_policy_sha256=_required(
+            settings.artifact_s3_readiness_trust_policy_sha256,
+            "readiness trust policy",
+        ),
         readiness_policy_arn=_required(
             settings.artifact_s3_readiness_policy_arn,
             "readiness policy",
         ),
         negative_role_arn=_required(settings.artifact_s3_negative_role_arn, "negative role"),
+        negative_trust_policy_sha256=_required(
+            settings.artifact_s3_negative_trust_policy_sha256,
+            "negative trust policy",
+        ),
         bootstrap_principal_arn=_required(
             settings.artifact_s3_bootstrap_principal_arn,
             "bootstrap principal",
@@ -162,8 +211,7 @@ async def record_artifact_provider_probe_result(
         error_code=error_code,
         started_at=started_at,
         completed_at=completed_at,
-        expires_at=started_at
-        + timedelta(seconds=ARTIFACT_AWS_ACTIVATION_VALIDITY_SECONDS),
+        expires_at=started_at + timedelta(seconds=ARTIFACT_AWS_ACTIVATION_VALIDITY_SECONDS),
     )
     session.add(result)
     await session.flush()
@@ -289,20 +337,34 @@ async def coordinate_artifact_provider_activation(
                     ArtifactProviderProbeResult.result == "pass",
                     ArtifactProviderProbeResult.release_id
                     == _required(settings.release_id, "release"),
-                    ArtifactProviderProbeResult.namespace_fingerprint
-                    == namespace_fingerprint,
+                    ArtifactProviderProbeResult.namespace_fingerprint == namespace_fingerprint,
                     ArtifactProviderProbeResult.region
                     == _required(settings.artifact_s3_region, "region"),
                     ArtifactProviderProbeResult.runtime_role_arn
                     == _required(settings.artifact_s3_runtime_role_arn, "runtime role"),
+                    ArtifactProviderProbeResult.runtime_trust_policy_sha256
+                    == _required(
+                        settings.artifact_s3_runtime_trust_policy_sha256,
+                        "runtime trust policy",
+                    ),
                     ArtifactProviderProbeResult.runtime_policy_arn
                     == _required(settings.artifact_s3_runtime_policy_arn, "runtime policy"),
                     ArtifactProviderProbeResult.readiness_role_arn
                     == _required(settings.artifact_s3_readiness_role_arn, "readiness role"),
+                    ArtifactProviderProbeResult.readiness_trust_policy_sha256
+                    == _required(
+                        settings.artifact_s3_readiness_trust_policy_sha256,
+                        "readiness trust policy",
+                    ),
                     ArtifactProviderProbeResult.readiness_policy_arn
                     == _required(settings.artifact_s3_readiness_policy_arn, "readiness policy"),
                     ArtifactProviderProbeResult.negative_role_arn
                     == _required(settings.artifact_s3_negative_role_arn, "negative role"),
+                    ArtifactProviderProbeResult.negative_trust_policy_sha256
+                    == _required(
+                        settings.artifact_s3_negative_trust_policy_sha256,
+                        "negative trust policy",
+                    ),
                     ArtifactProviderProbeResult.bootstrap_principal_arn
                     == _required(
                         settings.artifact_s3_bootstrap_principal_arn,
@@ -327,12 +389,32 @@ async def coordinate_artifact_provider_activation(
         raise ArtifactProviderLiveProofRequiredError(
             "AWS artifact proof group is incomplete or mixed"
         )
+    if any(
+        row.expected_principal_arn != expected_artifact_probe_principal(settings, row.probe_type)
+        for row in rows
+    ):
+        raise ArtifactProviderLiveProofRequiredError(
+            "AWS artifact proof result principal does not match its proof mode"
+        )
     canonical = by_type["readiness"]
     exact_fields = (
-        "proof_version", "release_id", "namespace_fingerprint", "aws_partition",
-        "aws_account_id", "region", "runtime_role_arn", "runtime_policy_arn",
-        "readiness_role_arn", "readiness_policy_arn", "negative_role_arn",
-        "bootstrap_principal_arn", "bucket_policy_sha256", "group_nonce",
+        "proof_version",
+        "release_id",
+        "namespace_fingerprint",
+        "aws_partition",
+        "aws_account_id",
+        "region",
+        "runtime_role_arn",
+        "runtime_trust_policy_sha256",
+        "runtime_policy_arn",
+        "readiness_role_arn",
+        "readiness_trust_policy_sha256",
+        "readiness_policy_arn",
+        "negative_role_arn",
+        "negative_trust_policy_sha256",
+        "bootstrap_principal_arn",
+        "bucket_policy_sha256",
+        "group_nonce",
     )
     if any(
         any(getattr(row, field) != getattr(canonical, field) for field in exact_fields)
@@ -367,10 +449,13 @@ async def coordinate_artifact_provider_activation(
         aws_account_id=canonical.aws_account_id,
         region=canonical.region,
         runtime_role_arn=canonical.runtime_role_arn,
+        runtime_trust_policy_sha256=canonical.runtime_trust_policy_sha256,
         runtime_policy_arn=canonical.runtime_policy_arn,
         readiness_role_arn=canonical.readiness_role_arn,
+        readiness_trust_policy_sha256=canonical.readiness_trust_policy_sha256,
         readiness_policy_arn=canonical.readiness_policy_arn,
         negative_role_arn=canonical.negative_role_arn,
+        negative_trust_policy_sha256=canonical.negative_trust_policy_sha256,
         bootstrap_principal_arn=canonical.bootstrap_principal_arn,
         bucket_policy_sha256=canonical.bucket_policy_sha256,
         group_nonce=canonical.group_nonce,

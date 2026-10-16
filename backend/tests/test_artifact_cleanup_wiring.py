@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import importlib
+import asyncio
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from uuid import UUID
 
 import pytest
 
@@ -41,10 +43,13 @@ def _aws_setting_values(tmp_path: Path) -> dict[str, object]:
         "artifact_s3_aws_workload_identity_method": "container-role",
         "release_id": "sha256:" + "1" * 64,
         "artifact_s3_runtime_role_arn": "arn:aws:iam::123456789012:role/workstream-runtime",
+        "artifact_s3_runtime_trust_policy_sha256": "sha256:" + "3" * 64,
         "artifact_s3_runtime_policy_arn": "arn:aws:iam::123456789012:policy/workstream-runtime",
         "artifact_s3_readiness_role_arn": "arn:aws:iam::123456789012:role/workstream-readiness",
+        "artifact_s3_readiness_trust_policy_sha256": "sha256:" + "4" * 64,
         "artifact_s3_readiness_policy_arn": "arn:aws:iam::123456789012:policy/workstream-readiness",
         "artifact_s3_negative_role_arn": "arn:aws:iam::123456789012:role/workstream-negative",
+        "artifact_s3_negative_trust_policy_sha256": "sha256:" + "5" * 64,
         "artifact_s3_bootstrap_principal_arn": "arn:aws:iam::123456789012:role/workstream-bootstrap",
         "artifact_s3_bucket_policy_sha256": "sha256:" + "2" * 64,
         "artifact_s3_operation_total_timeout_seconds": 300,
@@ -230,6 +235,114 @@ async def test_aws_s3_startup_requires_live_provider_proof(
     assert events == ["construct", "namespace", "activation", "close"]
 
 
+def test_aws_worker_guard_rebinds_to_each_sync_task_loop_and_disposes_resources(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A process store must not retain the initialization loop's session factory."""
+    from app.adapters.artifacts import internal_workers
+    from app.interfaces.artifacts import ArtifactProviderActivationLease
+    from app.workers.async_runner import run_async_task
+
+    settings = Settings(**_aws_setting_values(tmp_path))
+    events: list[tuple[str, int, int | None]] = []
+    loops: list[asyncio.AbstractEventLoop] = []
+    activation_id = UUID("0199e648-0b77-7000-8000-000000000001")
+
+    def loop_number() -> int:
+        loop = asyncio.get_running_loop()
+        if loop not in loops:
+            loops.append(loop)
+        return loops.index(loop)
+
+    class Engine:
+        def __init__(self) -> None:
+            self.identifier = len([event for event in events if event[0] == "engine"]) + 1
+            events.append(("engine", self.identifier, None))
+
+        async def dispose(self) -> None:
+            events.append(("dispose", self.identifier, loop_number()))
+
+    class Guard:
+        def __init__(self, sessions: object) -> None:
+            self.sessions = sessions
+
+        async def select_for_call(self, *, namespace_fingerprint: str):
+            del namespace_fingerprint
+            events.append(("guard", id(self.sessions), loop_number()))
+            return ArtifactProviderActivationLease(activation_id)
+
+        async def require_for_call(self, activation_id, *, namespace_fingerprint: str):
+            del namespace_fingerprint
+            return ArtifactProviderActivationLease(activation_id)
+
+    class Store(_Store):
+        def __init__(self, guard) -> None:
+            super().__init__([])
+            self.guard = guard
+
+        async def guarded_call(self) -> None:
+            await self.guard.select_for_call(namespace_fingerprint="sha256:" + "3" * 64)
+
+    class Bootstrap:
+        def __init__(self, guard) -> None:
+            self.store = Store(guard)
+
+        def initialize_after_namespace_claim(self, _claim: object):
+            return self.store
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(internal_workers, "get_settings", lambda: settings)
+    monkeypatch.setattr(internal_workers, "get_database_url", lambda: "postgresql+asyncpg://unused")
+    monkeypatch.setattr(internal_workers, "create_async_engine", lambda *_a, **_k: Engine())
+    monkeypatch.setattr(
+        internal_workers,
+        "artifact_provider_activation_guard",
+        lambda _settings, sessions: Guard(sessions),
+    )
+    monkeypatch.setattr(
+        internal_workers,
+        "create_artifact_store_bootstrap",
+        lambda _settings, *, activation_guard: Bootstrap(activation_guard),
+    )
+    monkeypatch.setattr(
+        internal_workers,
+        "artifact_storage_namespace_spec",
+        lambda *_a: SimpleNamespace(namespace_fingerprint="sha256:" + "3" * 64),
+    )
+    monkeypatch.setattr(
+        internal_workers,
+        "validate_artifact_storage_namespace_at_startup",
+        lambda *_a: _async_value(SimpleNamespace(namespace_fingerprint="sha256:" + "3" * 64)),
+    )
+
+    async def guarded_operation() -> None:
+        async with internal_workers._artifact_worker_database():
+            with internal_workers._artifact_internal_runtime() as (store, _namespace):
+                await store.guarded_call()
+
+    internal_workers.shutdown_artifact_internal_runtime()
+    try:
+        run_async_task(internal_workers.initialize_artifact_internal_runtime)
+        run_async_task(guarded_operation)
+        run_async_task(guarded_operation)
+    finally:
+        internal_workers.shutdown_artifact_internal_runtime()
+
+    guards = [event for event in events if event[0] == "guard"]
+    disposals = [event for event in events if event[0] == "dispose"]
+    assert len(guards) == 3
+    assert len({event[1] for event in guards}) == 3
+    assert len({event[2] for event in guards}) == 3
+    assert len(disposals) == 3
+
+
+async def _async_value(value: object) -> object:
+    return value
+
+
 async def test_namespace_failure_is_fail_closed_and_skips_cleanup(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -324,10 +437,7 @@ def test_preparation_limit_mapping_uses_every_canonical_setting(tmp_path: Path) 
     assert limits.aggregate_reserved_bytes == settings.artifact_scratch_aggregate_reserved_bytes
     assert limits.maximum_files == settings.artifact_scratch_maximum_files
     assert limits.maximum_concurrency == settings.artifact_scratch_maximum_concurrency
-    assert (
-        limits.maximum_workspace_entries
-        == settings.artifact_scratch_maximum_workspace_entries
-    )
+    assert limits.maximum_workspace_entries == settings.artifact_scratch_maximum_workspace_entries
     assert limits.minimum_free_bytes == settings.artifact_scratch_minimum_free_bytes
     assert limits.reservation_ttl_seconds == settings.artifact_scratch_reservation_ttl_seconds
     assert limits.total_deadline_seconds == settings.artifact_preparation_total_deadline_seconds
