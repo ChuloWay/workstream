@@ -77,6 +77,10 @@ eligible source or call the retry through a bearer-authenticated public route.
   required project selector and add signed bearer-token, real AUTH and
   PostgreSQL proof for discovery, retry, denial, revocation, replay,
   currentness, rollback, cross-project locking and nonterminal refusal.
+- `backend/scripts/test_lane_catalogue.py` and
+  `backend/tests/test_ci_lane_catalogue.py`: keep the focused recovery HTTP
+  proof in exactly one canonical project lane after splitting it from the
+  oversized integration module; refresh only the affected family fingerprints.
 - `docs/operations_roles_permissions.md`, `docs/operations_operator_workflow.md`
   and `docs/roadmap_status.md`: describe the newly supported terminal-failure
   path and retain uncertain delivery as a visible remaining boundary.
