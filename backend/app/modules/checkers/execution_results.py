@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from app.modules.checkers.api.evaluation_contract import (
     PostSubmissionExecutionRequest,
     PostSubmissionExecutionResult,
+    coverage_gap_without_failure,
 )
 
 
@@ -34,12 +35,7 @@ def classify_result(
         return ResultClassification("not_evaluated", 0, 0, 0, 0)
     members = result.execution.external_members if result.execution else ()
     failed = sum(member.result.verdict == "failed" for member in members)
-    coverage_incomplete = any(
-        finding.level == "coverage_incomplete"
-        for member in members
-        for finding in member.result.findings
-    )
-    returned = failed or (coverage_incomplete and not human_review_required)
+    returned = failed or (coverage_gap_without_failure(result) and not human_review_required)
     return ResultClassification(
         "needs_revision" if returned else "allow_review",
         sum(member.result.verdict == "passed" for member in members),

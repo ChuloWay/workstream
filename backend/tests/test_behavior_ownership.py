@@ -2533,3 +2533,16 @@ def test_retry_ownership_does_not_allow_a_parallel_checker_runner():
         ownership._validate_additive_partition_transition(_partition(sorted({
             retained, *targets, "backend/app/modules/checkers/retry_runner.py",
         })), trusted)
+
+
+def test_revision_ownership_does_not_allow_a_parallel_exhaustion_writer():
+    retained = "backend/app/core/config.py"
+    trusted = _partition([retained])
+    targets = ownership.PILOT_08_REVISION_TARGETS
+    ownership._validate_additive_partition_transition(
+        _partition(sorted({retained, *targets})), trusted,
+    )
+    with pytest.raises(ownership.BehaviorOwnershipError, match="untrusted_partition_change"):
+        ownership._validate_additive_partition_transition(_partition(sorted({
+            retained, *targets, "backend/app/workers/assignment_exhaustion.py",
+        })), trusted)

@@ -177,11 +177,45 @@ class TransactionalTaskRevisionExpiredNoticeHandler:
             return HandlerOutcome.REJECT
 
 
+class TransactionalTaskRevisionBlockedNoticeHandler:
+    """Validate a durable paused-context notice without external delivery claims."""
+
+    def __init__(self, session_factory, *, observer):
+        self._sessions, self._observer = session_factory, observer
+
+    async def __call__(self, envelope):
+        from app.modules.tasks.revision.blocked_notice import TaskRevisionBlockedNoticeOperation
+
+        async with self._sessions() as session:
+            return await TaskRevisionBlockedNoticeOperation(
+                session, observer=self._observer,
+            ).acknowledge(envelope)
+
+
+class TransactionalTaskRevisionExhaustedNoticeHandler:
+    """Validate the committed recovery outcome against immutable terminal evidence."""
+
+    def __init__(self, session_factory, *, observer):
+        """Bind caller sessions and the committed delivery observer."""
+        self._sessions, self._observer = session_factory, observer
+
+    async def __call__(self, envelope):
+        """Acknowledge exact terminal facts without changing lifecycle state."""
+        from app.modules.tasks.revision.exhausted_notice import TaskRevisionExhaustedNoticeOperation
+
+        async with self._sessions() as session:
+            return await TaskRevisionExhaustedNoticeOperation(
+                session, observer=self._observer,
+            ).acknowledge(envelope)
+
+
 __all__ = (
     "selected_pre_submit_task_guard",
     "TransactionalAssignmentInvalidationHandler",
     "TransactionalTaskRevisionExpiryHandler",
     "TransactionalTaskRevisionExpiredNoticeHandler",
+    "TransactionalTaskRevisionBlockedNoticeHandler",
+    "TransactionalTaskRevisionExhaustedNoticeHandler",
     "task_commands",
     "task_service",
     "TransactionalSubmissionCreationCommand",

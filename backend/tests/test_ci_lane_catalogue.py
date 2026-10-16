@@ -8,7 +8,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 
@@ -17,6 +16,7 @@ import pytest
 import scripts.run_test_lanes as runner
 from scripts import test_lane_catalogue as catalogue
 from scripts.run_test_lanes import LANES, LaneError
+from scripts.select_ci_scope import ALL_LANES
 
 
 def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
@@ -24,7 +24,7 @@ def test_committed_lanes_cover_recursive_inventory_exactly_once() -> None:
     runner.validate_lane_inventory(discovered)
 
     assigned = [module for lane in LANES for module in lane.modules]
-    assert len(LANES) == 13
+    assert len(LANES) == 16
     assert all(lane.requires_postgres for lane in LANES)
     assert Counter(assigned)[catalogue.SCHEMA_MODULE] == 1
     assert all(
@@ -90,7 +90,6 @@ def test_checker_delivery_and_routing_preparation_partition_every_node_once() ->
         "tests/checkers/execution/test_checker_retry_authority.py",
         "tests/checkers/execution/test_checker_retry_history_replay.py",
         "tests/checkers/execution/test_checker_retry_migration.py",
-        "tests/checkers/execution/test_findings_and_coverage.py",
         "tests/test_post_submit_materialization.py",
         "tests/test_post_submit_selection.py",
         "tests/test_checker_output_custody.py",
@@ -128,14 +127,19 @@ def test_project_intake_partitions_across_the_project_family() -> None:
     }
     assert set(catalogue.PROJECT_INTAKE_MODULES) == expected
     assert not expected & set(catalogue.PROJECT_MODULES)
-    assert all(
-        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_PROJECT_LANES
-        for module in expected
+    assert catalogue.PARTITION_LANES_BY_MODULE["tests/test_guide_document_intake.py"] == (
+        catalogue.PARTITIONED_PROJECT_LANES
+    )
+    assert catalogue.PARTITION_LANES_BY_MODULE["tests/test_projects.py"] == (
+        "project_lifecycle_c",
+        "project_lifecycle_b",
+        "project_lifecycle_g",
+        "project_lifecycle_f",
     )
 
     for module in expected:
-        assert tuple(lane.name for lane in LANES if module in lane.modules) == (
-            catalogue.PARTITIONED_PROJECT_LANES
+        assert {lane.name for lane in LANES if module in lane.modules} == set(
+            catalogue.PARTITION_LANES_BY_MODULE[module]
         )
 
     nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
@@ -144,8 +148,8 @@ def test_project_intake_partitions_across_the_project_family() -> None:
     assert {row["lane"] for row in manifest["nodes"]} == set(catalogue.PARTITIONED_PROJECT_LANES)
 
 
-def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
-    """Every capacity lane retains its complete semantic-family catalogue."""
+def test_expanded_lane_families_keep_exact_semantic_owners() -> None:
+    """Every capacity lane retains its exact semantic-family ownership."""
     modules_by_lane = {lane.name: set(lane.modules) for lane in LANES}
 
     expected_families = (
@@ -164,6 +168,8 @@ def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
                 "project_lifecycle_c",
                 "project_lifecycle_d",
                 "project_lifecycle_e",
+                "project_lifecycle_f",
+                "project_lifecycle_g",
             ),
             catalogue.PROJECT_PARTITIONED_MODULES,
         ),
@@ -173,6 +179,7 @@ def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
                 "task_lifecycle_b",
                 "task_lifecycle_c",
                 "task_lifecycle_d",
+                "task_lifecycle_e",
             ),
             catalogue.TASK_MODULES,
         ),
@@ -181,20 +188,26 @@ def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
         (lane_names, modules) for lane_names, modules in expected_families
     )
     for lane_names, modules in expected_families:
-        assert all(modules_by_lane[name] == set(modules) for name in lane_names)
-        assert all(catalogue.PARTITION_LANES_BY_MODULE[module] == lane_names for module in modules)
+        for name in lane_names:
+            assert modules_by_lane[name] == {
+                module for module in modules if name in catalogue.PARTITION_LANES_BY_MODULE[module]
+            }
+        assert all(catalogue.PARTITION_LANES_BY_MODULE[module] for module in modules)
+        assert all(
+            set(catalogue.PARTITION_LANES_BY_MODULE[module]) <= set(lane_names)
+            for module in modules
+        )
 
-    static_contracts = {
-        "tests/architecture/test_authorization_boundary.py",
-        "tests/test_identifier_inventory.py",
-        "tests/test_record_id_collection.py",
+    schema_static_contracts = {
         "tests/test_ci_lane_catalogue.py",
+        "tests/test_ci_scope_selection.py",
         "tests/test_ci_test_lanes.py",
         "tests/test_test_lane_evidence.py",
         "tests/test_merge_test_lane_evidence.py",
     }
     partitioned_modules = set().union(*(set(modules) for _, modules in expected_families))
-    assert static_contracts.isdisjoint(partitioned_modules)
+    assert set(catalogue.STATIC_FOUNDATION_MODULES) <= set(catalogue.SHARED_FOUNDATION_MODULES)
+    assert schema_static_contracts.isdisjoint(partitioned_modules)
     assert {
         "tests/test_alembic.py",
         "tests/migrations/test_contribution_export_snapshots.py",
@@ -212,25 +225,52 @@ def test_expanded_lane_families_keep_complete_semantic_owners() -> None:
         "tests/reviews/acceptance/test_storage.py",
         "tests/reviews/acceptance/test_migration.py",
         runner.ADMIN_RUNNER_MODULE,
-    } | static_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(
+    } | schema_static_contracts | set(catalogue.OBSERVABILITY_MODULES) | set(
         catalogue.TASK_ROUTING_REQUEST_MODULES
-    ) | set(catalogue.TASK_BATCH_TRANSITION_MODULES) == modules_by_lane["schema_contracts"]
+    ) == modules_by_lane["schema_contracts"]
+
+
+def test_static_architecture_inventory_partitions_only_in_shared_foundations() -> None:
+    expected = {
+        "tests/test_artifact_architecture.py",
+        "tests/architecture/test_module_boundaries.py",
+        "tests/architecture/test_authorization_boundary.py",
+        "tests/architecture/test_test_structure_boundary.py",
+        "tests/test_identifier_inventory.py",
+        "tests/test_record_id_collection.py",
+    }
+    assert set(catalogue.STATIC_FOUNDATION_MODULES) == expected
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module] == catalogue.PARTITIONED_SHARED_LANES
+        for module in expected
+    )
+    assert all(
+        tuple(lane.name for lane in LANES if module in lane.modules)
+        == catalogue.PARTITIONED_SHARED_LANES
+        for module in expected
+    )
+
+    nodes = [f"{module}::test_owned[{index}]" for module in expected for index in range(256)]
+    rows = runner.build_manifest("a" * 40, list(reversed(nodes)))["nodes"]
+
+    assert Counter(row["nodeid"] for row in rows) == Counter(nodes)
+    assert {row["lane"] for row in rows} == set(catalogue.PARTITIONED_SHARED_LANES)
 
 
 def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
     """A catalogue-internal move across semantic families must fail this contract."""
     expected = {
         "shared": (
-            234,
-            "5b03621152431541df7c85861e26c80f333ce25d81274faf77632ea377a8eaef",
+            237,
+            "980cbd9fb01c7f8c870ef348cb2f56d2cfc200d810ec1e25c841338d4ae83be1",
         ),
         "project": (
-            190,
-            "01a2feb99328e223131f8723ef16aec580468be80fa4d3a88d5ec37128f657b2",
+            196,
+            "22c5c14b692cf39c879be2f520721b302cb92fc5a29949e48c1281b8e497f349",
         ),
         "task": (
-            82,
-            "b33c633c199ca87c846becbac0f556ec4bb3fc7862131a5a73e4347781e87496",
+            84,
+            "c3b165c03497f0ba9df25475d3a2a4293b5cbea98d18a4241aae99c9ff310a88",
         ),
     }
     actual = {
@@ -243,6 +283,143 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
         canonical = "\n".join(sorted(modules)) + "\n"
         assert len(modules) == len(set(modules)) == count
         assert hashlib.sha256(canonical.encode()).hexdigest() == digest
+
+
+def test_project_module_lane_overrides_are_exact_and_bounded() -> None:
+    expected = {
+        "tests/test_projects.py": (
+            "project_lifecycle_c",
+            "project_lifecycle_b",
+            "project_lifecycle_g",
+            "project_lifecycle_f",
+        ),
+        "tests/tasks/test_task_batch_transitions.py": (
+            "project_lifecycle_e",
+            "project_lifecycle_d",
+            "project_lifecycle_a",
+            "project_lifecycle_b",
+            "project_lifecycle_c",
+        ),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_f",),
+        "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_c",
+            "project_lifecycle_g",
+        ),
+        "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_c",
+            "project_lifecycle_e",
+            "project_lifecycle_f",
+        ),
+        "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_g",),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py": (
+            "project_lifecycle_a",
+            "project_lifecycle_e",
+            "project_lifecycle_c",
+            "project_lifecycle_b",
+            "project_lifecycle_d",
+        ),
+    }
+    assert catalogue.PROJECT_MODULE_LANE_OVERRIDES == expected
+    assert set(expected) <= set(catalogue.PROJECT_PARTITIONED_MODULES)
+    assert all(
+        catalogue.PARTITION_LANES_BY_MODULE[module]
+        == expected.get(module, catalogue.PARTITIONED_PROJECT_LANES)
+        for module in catalogue.PROJECT_PARTITIONED_MODULES
+    )
+
+
+def test_project_lane_ownership_has_an_independent_fingerprint() -> None:
+    canonical = (
+        "\n".join(
+            f"{module}:{','.join(catalogue.PARTITION_LANES_BY_MODULE[module])}"
+            for module in sorted(catalogue.PROJECT_PARTITIONED_MODULES)
+        )
+        + "\n"
+    )
+    assert len(catalogue.PROJECT_PARTITIONED_MODULES) == 196
+    assert hashlib.sha256(canonical.encode()).hexdigest() == (
+        "1af35702d873709f8404e0b21c7a5bef706d7483d8a6ef4db87b34a1aec463de"
+    )
+
+
+def test_project_lane_override_nodes_execute_exactly_once_in_owned_lanes() -> None:
+    nodes = [
+        f"{module}::test_owned_{index}"
+        for module in catalogue.PROJECT_MODULE_LANE_OVERRIDES
+        for index in range(256)
+    ]
+    rows = runner.build_manifest("a" * 40, list(reversed(nodes)))["nodes"]
+
+    assert Counter(row["nodeid"] for row in rows) == Counter(nodes)
+    assert len(rows) == len(nodes)
+    for module, lane_names in catalogue.PROJECT_MODULE_LANE_OVERRIDES.items():
+        assert {row["lane"] for row in rows if row["module"] == module} == set(lane_names)
+    pause_module = "tests/tasks/submission_dispatch/test_revision_pause_races.py"
+    retained_module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
+    expected = {
+        f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[False]": (
+            "project_lifecycle_e"
+        ),
+        f"{pause_module}::test_due_old_timer_cannot_expire_paused_or_resumed_head[True]": (
+            "project_lifecycle_c"
+        ),
+        f"{pause_module}::test_expiry_beats_real_pm_repair_waiting_for_task_past_deadline": (
+            "project_lifecycle_f"
+        ),
+        f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[False]": (
+            "project_lifecycle_a"
+        ),
+        f"{retained_module}::test_retained_blocked_clock_pauses_once_or_stays_due[True]": (
+            "project_lifecycle_g"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py::test_due_expiry_and_ready_final_submission_wait_for_task_lock": (
+            "project_lifecycle_b"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py::test_final_submission_commit_boundary_serializes_expiry[False]": (
+            "project_lifecycle_a"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_expiry.py::test_final_submission_commit_boundary_serializes_expiry[True]": (
+            "project_lifecycle_c"
+        ),
+        "tests/tasks/test_task_batch_transitions.py::test_public_source_import_screen_release_complete_journey[500]": (
+            "project_lifecycle_a"
+        ),
+        "tests/tasks/test_task_batch_transitions.py::test_public_source_import_screen_release_complete_journey[200]": (
+            "project_lifecycle_b"
+        ),
+        "tests/test_projects.py::test_submission_artifact_policy_removed_agent_route_performs_no_runtime_calls": (
+            "project_lifecycle_g"
+        ),
+        "tests/test_projects.py::test_submission_artifact_policy_update_conceals_foreign_policy_id": (
+            "project_lifecycle_g"
+        ),
+        "tests/test_projects.py::test_submission_artifact_policy_update_fault_rolls_back_replacement": (
+            "project_lifecycle_c"
+        ),
+        "tests/test_projects.py::test_sufficiency_report_rejects_unknown_request_fields": (
+            "project_lifecycle_f"
+        ),
+        "tests/test_projects.py::test_unified_warnings_do_not_use_the_manual_report_acknowledgement_path": (
+            "project_lifecycle_f"
+        ),
+        "tests/test_projects.py::test_worker_cannot_create_project_records": (
+            "project_lifecycle_b"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_direct_sql_cannot_supply_authoritative_clock_values": (
+            "project_lifecycle_f"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_large_revision_allowance_preserves_every_microsecond": (
+            "project_lifecycle_f"
+        ),
+        "tests/tasks/submission_dispatch/test_revision_clock_sql.py::test_pause_cannot_commit_after_running_parent_deadline": (
+            "project_lifecycle_f"
+        ),
+    }
+    rows = runner.build_manifest("a" * 40, list(reversed(expected)))["nodes"]
+
+    assert {row["nodeid"]: row["lane"] for row in rows} == expected
 
 
 def test_discovery_is_recursive_and_lexically_canonical(tmp_path: Path) -> None:
@@ -489,6 +666,66 @@ def test_partition_rejects_wrong_owner_pair(monkeypatch: pytest.MonkeyPatch) -> 
         runner.build_manifest("a" * 40, [f"{project.modules[0]}::test_one"])
 
 
+def test_partition_accepts_exact_noncanonical_owner_order() -> None:
+    module = "tests/tasks/test_task_batch_transitions.py"
+    declared = catalogue.PARTITION_LANES_BY_MODULE[module]
+    attached = tuple(lane.name for lane in LANES if module in lane.modules)
+
+    assert declared == (
+        "project_lifecycle_e",
+        "project_lifecycle_d",
+        "project_lifecycle_a",
+        "project_lifecycle_b",
+        "project_lifecycle_c",
+    )
+    assert attached == catalogue.PARTITIONED_PROJECT_LANES[:5]
+    node = f"{module}::test_public_source_import_screen_release_complete_journey[500]"
+    assert runner.build_manifest("a" * 40, [node])["nodes"][0]["lane"] == declared[2]
+
+
+@pytest.mark.parametrize("mutation", ("missing", "duplicate", "foreign"))
+def test_partition_rejects_inexact_ordered_owners(
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    module = catalogue.PROJECT_MODULES[0]
+    owners = catalogue.PARTITION_LANES_BY_MODULE[module]
+    changed = {
+        "missing": owners[:-1],
+        "duplicate": (*owners[:-1], owners[0]),
+        "foreign": (*owners[:-1], "schema_contracts"),
+    }[mutation]
+    monkeypatch.setitem(runner.PARTITION_LANES_BY_MODULE, module, changed)
+
+    with pytest.raises(LaneError, match="invalid_partition_lanes"):
+        runner.build_manifest("a" * 40, [f"{module}::test_one"])
+
+
+def test_partition_rejects_coordinated_duplicate_owners(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = "tests/tasks/submission_dispatch/test_revision_retained_pause.py"
+    duplicate_owners = (
+        "project_lifecycle_a",
+        "project_lifecycle_a",
+        "project_lifecycle_c",
+    )
+    changed = tuple(
+        replace(
+            lane,
+            modules=tuple(item for item in lane.modules if item != module)
+            + (module,) * duplicate_owners.count(lane.name),
+        )
+        for lane in LANES
+    )
+    monkeypatch.setitem(runner.PARTITION_LANES_BY_MODULE, module, duplicate_owners)
+    monkeypatch.setattr(runner, "LANES", changed)
+    runner.validate_lane_inventory(runner.discover_test_modules(), lanes=changed)
+
+    with pytest.raises(LaneError, match="invalid_partition_lanes"):
+        runner.build_manifest("a" * 40, [f"{module}::test_one"])
+
+
 def test_direct_runner_cli_remains_runnable(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.pop("PYTHONPATH", None)
@@ -507,10 +744,8 @@ def test_direct_runner_cli_remains_runnable(tmp_path: Path) -> None:
 
 def test_workflow_lane_inventory_matches_catalogue() -> None:
     source = (runner.ROOT.parent / ".github/workflows/backend.yml").read_text()
-    expected = Counter(lane.name for lane in LANES)
-    matrix = re.search(r"        lane:\n((?:          - [a-z_]+\n)+)", source)
-    assert matrix is not None
-    assert Counter(re.findall(r"- ([a-z_]+)", matrix[1])) == expected
+    assert ALL_LANES == tuple(lane.name for lane in LANES)
+    assert source.count("matrix: ${{ fromJSON(needs.scope.outputs.lane_matrix) }}") == 1
     assert (
         source.count(
             "name: backend-lane-${{ github.sha }}-${{ matrix.lane }}-attempt-${{ github.run_attempt }}"
@@ -521,8 +756,8 @@ def test_workflow_lane_inventory_matches_catalogue() -> None:
     assert source.count("path: backend/.ci/download\n          merge-multiple: false") == 1
     assert '--expected-head "${GITHUB_SHA}"' in source
     assert '--run-attempt "${GITHUB_RUN_ATTEMPT}"' in source
-    assert 'test "${#coverage_files[@]}" -eq 13' in source
-    assert "len(lanes) != 13" in source
+    assert 'test "${#coverage_files[@]}" -eq 16' in source
+    assert "len(lanes) != 16" in source
     assert 'Path(".ci/download"), expected_head, int(os.environ["GITHUB_RUN_ATTEMPT"])' in source
     assert 'timing_path = bundle / "job-start-epoch.txt"' in source
     assert (
@@ -538,7 +773,7 @@ def test_workflow_requires_the_locked_external_checker_workspace() -> None:
     assert "cargo fmt --all --check" in source
     assert "cargo test --workspace --locked" in source
     assert "EXTERNAL_CHECKER_RESULT: ${{ needs.external-checker-runtime.result }}" in source
-    assert 'test "${EXTERNAL_CHECKER_RESULT}" = success' in source
+    assert 'require_expected "${EXTERNAL_EXPECTED}" "${EXTERNAL_CHECKER_RESULT}"' in source
 
 
 def test_former_coverage_reruns_remain_in_full_suite_lanes() -> None:
@@ -656,16 +891,6 @@ def test_routing_request_proofs_use_schema_lane_with_measured_headroom():
         "tests/tasks/post_submit_routing/test_request_storage.py",
     }
     assert set(catalogue.TASK_ROUTING_REQUEST_MODULES) == expected
-    for lane in LANES:
-        assert set(lane.modules) & expected == (
-            expected if lane.name == "schema_contracts" else set()
-        )
-    assert not expected & set(catalogue.PARTITION_LANES_BY_MODULE)
-
-
-def test_batch_transition_journeys_use_schema_lane_with_measured_headroom():
-    expected = {"tests/tasks/test_task_batch_transitions.py"}
-    assert set(catalogue.TASK_BATCH_TRANSITION_MODULES) == expected
     for lane in LANES:
         assert set(lane.modules) & expected == (
             expected if lane.name == "schema_contracts" else set()

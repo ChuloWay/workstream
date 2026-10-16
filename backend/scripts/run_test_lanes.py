@@ -419,10 +419,14 @@ def build_manifest(tree_sha: str, nodes: list[str]) -> dict[str, Any]:
         candidates = lanes_by_module[module]
         partition_lanes = PARTITION_LANES_BY_MODULE.get(module)
         if partition_lanes is not None:
-            if tuple(candidates) != partition_lanes:
+            if (
+                len(candidates) != len(set(candidates))
+                or len(partition_lanes) != len(set(partition_lanes))
+                or set(candidates) != set(partition_lanes)
+            ):
                 raise LaneError("invalid_partition_lanes")
             digest = hashlib.sha256(node.encode("utf-8")).digest()
-            return candidates[digest[0] % len(candidates)]
+            return partition_lanes[digest[0] % len(partition_lanes)]
         if len(candidates) != 1:
             raise LaneError("ambiguous_lane_module")
         return candidates[0]
@@ -939,7 +943,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--metadata-dir", required=True, type=Path)
     parser.add_argument("--summary-json", required=True, type=Path)
-    parser.add_argument("--timeout-seconds", default=1200.0, type=float)
+    parser.add_argument("--timeout-seconds", default=1500.0, type=float)
     parser.add_argument("--collect-only", action="store_true")
     parser.add_argument("--lane", choices=[lane.name for lane in LANES])
     args = parser.parse_args()

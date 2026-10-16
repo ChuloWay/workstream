@@ -3,8 +3,8 @@
 from alembic import op
 from sqlalchemy import text
 
-revision = "0049_contributor_reads"
-down_revision = "0048_attempt_outcome_findings"
+revision = "0050_contributor_reads"
+down_revision = "0049_attempt_outcome_findings"
 branch_labels = None
 depends_on = None
 

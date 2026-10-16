@@ -1176,15 +1176,21 @@ Fields:
 - `reviewer_reassignment_rule`
 - `created_at`
 
-Revision rounds are assignment-scoped: initial round 0, then at most
-`max_revision_rounds` replacements. A checker coverage return
-(`checker_coverage_incomplete`) is not counted, so the next attempt keeps the
-source attempt's current round (0 only when no counted revision preceded it);
-`next_revision_round` therefore allows 0. Each committed `needs_revision` starts a
-fresh PostgreSQL-time window using the failed attempt's locked policy. Only
-immutable resubmission ends it. Cap exhaustion refuses a successor; expiry
-retains an immutable rejection receipt, releases the outstanding assignment
-and returns the task to `ready` without a reject Review or economic facts.
+Revision rounds come from the task's locked project RevisionPolicy and are
+assignment-scoped: initial round 0, then at most `max_revision_rounds`
+replacements. The required cap permits zero, with no per-task override or
+default. Final-attempt failure immediately records exhaustion and releases the
+assignment; the task returns to `ready` without a new preparation or window.
+When revisions remain, a fixable failure starts a fresh PostgreSQL-time
+allowance. Setup blocks pause it; repair resumes only the stored remainder.
+Expiry records a separate rejection receipt and also returns the task to ready.
+Neither outcome creates a Review or economic facts. There is no contributor
+limit: any eligible claimant can start a new assignment at round 0.
+A checker coverage return (`checker_coverage_incomplete`) is not counted and
+never exhausts, so the next attempt keeps the source attempt's current round
+(`next_revision_round` therefore allows 0, including under N=0). Consecutive
+coverage returns keep the first return's window; `revision_window_origin`
+supplies it to the PostgreSQL clock.
 Checker-triggered enforcement is implemented; #554 owns future human decision
 integration under the same intended policy. Complete next-attempt context selection is
 deterministic: exact prior component matches keep, every changed valid active
@@ -1641,7 +1647,8 @@ Attempt outcome (`attempt_status`, published as the read `status`):
   finding accompanies it. A coverage gap under a true ReviewPolicy is
   `review_pending` instead.
 - `rejected` — a revision expiration receipt names this Submission as its
-  source; `status_reason` is `revision_deadline_expired`
+  source, with `status_reason` `revision_deadline_expired`; or a revision
+  exhaustion receipt names it, with `status_reason` `revision_limit_reached`
 
 The deciding owner requests each transition in its own transaction. A
 PostgreSQL guard refuses any transition without that owner's evidence, derives
@@ -2079,18 +2086,22 @@ TASK's implemented checker-rooted immutable preparation is distinct from the
 planned Review-rooted record above. It binds exact project/task/assignment/
 contributor/Submission references, the authorized `routing_manifest_id`,
 `source_submission_version`, `next_revision_round`, `max_revision_rounds`,
-PostgreSQL `requested_at` and `deadline_at`, and a complete prior/target context
-packet. The packet retains guide activation operation/generation/time custody;
+PostgreSQL `requested_at`, nullable `deadline_at`, nullable
+`remaining_microseconds`, `clock_observed_at`, and a complete prior/target
+context packet. The insertion guard computes the clock and packet digest. The packet retains guide activation operation/generation/time custody;
 it does not claim the planned activation-sequence fields above are live.
 `outcome` is `kept`, `rebased` or `blocked`; `blocked_reason` distinguishes
-`context_blocked`, `revision_limit_reached` and `revision_deadline_expired`.
+`context_blocked` and `revision_deadline_expired`. Retained older cap-blocked
+records remain immutable history; new cap exhaustion has its own receipt.
 
 `preparation_sha256` freezes that packet and source/window facts. Exactly one
 root belongs to a routing manifest; `predecessor_id` and consecutive `sequence`
 form a non-branching immutable repair chain. Each repair retains its actor,
 idempotency key, request digest, bounded reason, exact AUTH resource facts and
-audit references. Fresh authorization is required for replay. The original
-source deadline survives repair and retained-source recovery.
+audit references. Fresh authorization is required for replay. A running repair preserves its deadline; a paused repair resumes only the
+frozen remainder. A fresh blocked root starts paused with its full allowance.
+A recovered missing root preserves only the unspent original allowance;
+an already-expired window stays expired.
 
 The authorized contributor work-context read exposes the exact current head
 ID/digest, source Submission/manifest, local round/limit, original timestamps,
@@ -2100,14 +2111,41 @@ limit or elapsed deadline using PostgreSQL time. Intake acknowledges the exact
 head and digest in headers; ART evidence/admission and TASK final creation bind
 that acknowledgement. New writes reject stale sources, heads, caps or windows.
 
+## TaskRevisionExhaustion
+
+TASK's immutable final-attempt rejection binds exact project/task/assignment,
+contributor, source Submission/routing manifest, assignment-local round and cap,
+locked revision policy identity/generation/hash, PostgreSQL exhaustion time and
+AUTH/audit/outbox references. One assignment has one exhaustion receipt. The
+routing transaction releases it as `revision_exhausted`, clears the task's
+assignee and returns the task to `ready`, without creating another preparation
+or expiry intent. The source Submission's packet facts stay unchanged; its
+attempt outcome moves to `rejected` with `status_reason=revision_limit_reached`
+and `decided_at` copied from the receipt by the attempt-status guard, and
+history reads those stored columns.
+Contributor task detail exposes only that actor's `last_assignment_outcome`,
+while covered PM detail exposes the latest closed assignment. Its `next_action`
+is `none`, even when the task permits a fresh claim under a new assignment.
+
+Retained cap-blocked sources use this same terminal writer under fresh
+`task.revision.recover` authority. Their receipt additionally retains
+`recovery_authority_context`, with its own audit and outcome event references;
+new routing receipts leave it null. The recovery request binds the original
+root, current head and allocated exhaustion receipt. `TaskRevisionExhausted`
+is the durable recovery outcome notice. Original routing manifests,
+preparations, timers and Submission evidence remain unchanged. Exact original
+routing replay validates those original facts and the terminal receipt, including
+after reclaim, without creating a second outcome.
+
 ## TaskRevisionExpiration
 
 TASK's immutable checker-window rejection receipt binds project/task/assignment/
 contributor, source Submission and routing manifest, exact root/head preparation
-IDs and digests, original `deadline_at`, PostgreSQL `expired_at`, delivery and
+IDs and digests, effective `deadline_at`, PostgreSQL `expired_at`, delivery and
 outcome event IDs, AUTH decision/resource facts and audit event. There is one
 receipt per routing manifest. Scheduled OUTBOX intent freezes `not_before_at`
-at the original deadline; due delivery revalidates current source, assignment,
+at the running clock deadline; resumed clocks use distinct immutable intents.
+Stale intents are harmless; due delivery revalidates current source, assignment,
 head and authority under TASK-first locks.
 
 Receipt, assignment `revision_expired`/release timestamp, Task `ready`/cleared
@@ -2120,7 +2158,8 @@ remain consecutive. Exact replay recovers the same receipt; stale delivery canno
 reject a successor or release a newer assignment. Expiry creates no Review,
 FinalAcceptance, ContributionRecord, CompensationAward or fulfillment record.
 The recurring authorized scan recovers missing roots/scheduling and overdue
-work using the original source-policy deadline, without an automatic rebase.
+work using the exact running/paused clock, without an automatic rebase or
+additional allowance.
 
 ## FinalAcceptance
 

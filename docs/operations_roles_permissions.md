@@ -168,8 +168,9 @@ contribution award rules.
 Checker revision repair uses
 `POST /api/v1/projects/{project_id}/tasks/{task_id}/revision-context/repair`
 with the exact parent preparation ID/digest, a bounded reason and an idempotency
-key. It appends an authorized successor and cannot bypass the revision cap or
-deadline. The expiry and retained-source recovery actions require the exact
+key. It appends an authorized successor, resuming only a paused clock's
+remaining allowance or preserving a running deadline. It cannot reopen an
+exhausted assignment or an already elapsed running window. The expiry and retained-source recovery actions require the exact
 active fixed-service profile and identity link; no human grant substitutes for
 that identity. Recovery preserves the source-policy window and cannot authorize
 a rebase. See [Revision Replay](operations_revision_replay.md).

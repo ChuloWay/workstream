@@ -117,11 +117,13 @@ supplies response text and evidence, while the later reviewer records the
 immutable FindingResolution. Neither path accepts guide/policy versions or
 finding closure as contributor authority.
 
-Each assignment starts at round 0. Every committed `needs_revision` starts a
+Each assignment starts at round 0. Each fixable failure with another revision remaining starts a
 fresh PostgreSQL-time window under the failed attempt's locked policy. Only
 immutable resubmission ends it; upload, ready admission, replay and repair do
-not. Cap exhaustion refuses another attempt; expiry retains rejection evidence,
-releases the assignment and returns the task to `ready` without economic facts.
+not. Setup blocks pause the allowance and record durable PM attention, visible
+in the covered PM task detail; repair resumes only its remainder. Final-attempt failure immediately rejects and releases the
+assignment without another window. Timeout also returns the task to ready.
+Either permits any eligible contributor to claim a fresh assignment at round 0.
 
 ## Contributor Attestation
 

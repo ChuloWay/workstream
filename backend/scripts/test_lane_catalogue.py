@@ -15,12 +15,24 @@ PARTITIONED_PROJECT_LANES = (
     "project_lifecycle_c",
     "project_lifecycle_d",
     "project_lifecycle_e",
+    "project_lifecycle_f",
+    "project_lifecycle_g",
 )
 PARTITIONED_TASK_LANES = (
     "task_lifecycle_a",
     "task_lifecycle_b",
     "task_lifecycle_c",
     "task_lifecycle_d",
+    "task_lifecycle_e",
+)
+
+STATIC_FOUNDATION_MODULES = (
+    "tests/test_artifact_architecture.py",
+    "tests/architecture/test_module_boundaries.py",
+    "tests/architecture/test_authorization_boundary.py",
+    "tests/architecture/test_test_structure_boundary.py",
+    "tests/test_identifier_inventory.py",
+    "tests/test_record_id_collection.py",
 )
 
 
@@ -34,9 +46,6 @@ class TestLane:
 
 
 SHARED_FOUNDATION_MODULES = (
-    "tests/test_artifact_architecture.py",
-    "tests/architecture/test_module_boundaries.py",
-    "tests/architecture/test_test_structure_boundary.py",
     "tests/reviews/lifecycle/test_transitions.py",
     "tests/reviews/lifecycle/test_authority_binding.py",
     "tests/artifacts/test_review_packet_contract.py",
@@ -268,7 +277,7 @@ SHARED_FOUNDATION_MODULES = (
     "tests/projects/review_policy/test_migration.py",
     "tests/projects/test_compensation_binding_eligibility.py",
     "tests/test_review_authorization_contracts.py",
-)
+) + STATIC_FOUNDATION_MODULES
 
 PROJECT_MODULES = (
     # Project-bound batch custody stays in the project semantic family.
@@ -276,6 +285,7 @@ PROJECT_MODULES = (
     "tests/tasks/test_task_import_batch_bindings.py",
     "tests/tasks/test_task_import_batches.py",
     "tests/tasks/test_task_batch_transition_contract.py",
+    "tests/tasks/test_task_batch_transitions.py",
     "tests/contributions/test_export_csv.py",
     "tests/contributions/test_export_projection.py",
     "tests/authorization/test_contribution_read_scope.py",
@@ -294,6 +304,13 @@ PROJECT_MODULES = (
     "tests/tasks/submission_dispatch/test_replacement_migration.py",
     "tests/tasks/submission_dispatch/test_replacement_creation.py",
     "tests/tasks/submission_dispatch/test_revision_capacity.py",
+    "tests/tasks/submission_dispatch/test_revision_exhaustion.py",
+    "tests/tasks/submission_dispatch/test_revision_exhaustion_races.py",
+    "tests/tasks/submission_dispatch/test_revision_pause.py",
+    "tests/tasks/submission_dispatch/test_revision_pause_races.py",
+    "tests/tasks/submission_dispatch/test_revision_clock_sql.py",
+    "tests/tasks/submission_dispatch/test_revision_exhaustion_recovery.py",
+    "tests/tasks/submission_dispatch/test_revision_retained_pause.py",
     "tests/tasks/submission_dispatch/test_revision_expiry.py",
     "tests/tasks/submission_dispatch/test_revision_expiry_security.py",
     "tests/tasks/submission_dispatch/test_revision_recovery_postgresql.py",
@@ -303,7 +320,6 @@ PROJECT_MODULES = (
     "tests/reviews/acceptance/test_prepared.py",
     "tests/tasks/post_submit_routing/test_outcome_concurrency.py",
     "tests/tasks/post_submit_routing/test_outcome.py",
-    "tests/tasks/post_submit_routing/test_attempt_outcome_custody.py",
     "tests/tasks/post_submit_routing/test_outcome_storage.py",
     "tests/tasks/post_submit_routing/test_outcome_migration.py",
     "tests/reviews/acceptance/test_participant_contracts.py",
@@ -465,7 +481,6 @@ CHECKER_DELIVERY_MODULES = (
     "tests/checkers/execution/test_checker_retry_authority.py",
     "tests/checkers/execution/test_checker_retry_history_replay.py",
     "tests/checkers/execution/test_checker_retry_migration.py",
-    "tests/checkers/execution/test_findings_and_coverage.py",
     "tests/test_post_submit_materialization.py",
     "tests/test_post_submit_selection.py",
     "tests/test_checker_output_custody.py",
@@ -485,7 +500,10 @@ TASK_MODULES = (
     "tests/tasks/post_submit_routing/test_remediation_storage.py",
     "tests/tasks/post_submit_routing/test_remediation_currentness.py",
     "tests/tasks/post_submit_routing/test_remediation_migration.py",
-
+    # Stored attempt-outcome proofs use TASK custody; every project lane runs
+    # within measured variance of the hosted execution deadline.
+    "tests/tasks/post_submit_routing/test_attempt_outcome_custody.py",
+    "tests/checkers/execution/test_findings_and_coverage.py",
     # New completion proofs use TASK custody and its measured lane headroom.
     "tests/tasks/evaluation_delivery/test_completion.py",
     "tests/tasks/evaluation_delivery/test_completion_contracts.py",
@@ -568,10 +586,6 @@ TASK_ROUTING_REQUEST_MODULES = (
     "tests/tasks/post_submit_routing/test_request_storage.py",
 )
 
-# The public batch-transition journeys use schema capacity after the project
-# partition reached its hosted execution deadline (project_lifecycle_c).
-TASK_BATCH_TRANSITION_MODULES = ("tests/tasks/test_task_batch_transitions.py",)
-
 # Core diagnostics stay on the schema/architecture lane with measured hosted
 # headroom; the shared and task lanes are already closest to the hard cap.
 OBSERVABILITY_MODULES = (
@@ -593,13 +607,59 @@ PROJECT_PARTITIONED_MODULES = (
     + PROJECT_INTAKE_MODULES
 )
 
+# Measured long-running proofs stay in their project semantic family but need
+# exact lane ownership so their waits and large fixtures do not collide.
+PROJECT_MODULE_LANE_OVERRIDES = {
+    "tests/test_projects.py": (
+        # Seven-lane placement from hosted main durations (34501cd64): every
+        # project lane lands between 621 and 737 seconds of measured test time.
+        "project_lifecycle_c",
+        "project_lifecycle_b",
+        "project_lifecycle_g",
+        "project_lifecycle_f",
+    ),
+    "tests/tasks/test_task_batch_transitions.py": (
+        # Tuple order spreads the measured 500/200-row cases away from E.
+        "project_lifecycle_e",
+        "project_lifecycle_d",
+        "project_lifecycle_a",
+        "project_lifecycle_b",
+        "project_lifecycle_c",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_clock_sql.py": ("project_lifecycle_f",),
+    "tests/tasks/submission_dispatch/test_revision_retained_pause.py": (
+        # The measured historical cases move from D to the new G lane.
+        "project_lifecycle_a",
+        "project_lifecycle_c",
+        "project_lifecycle_g",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_pause_races.py": (
+        # The waits move from D to the new F lane, leaving busy B clear.
+        "project_lifecycle_a",
+        "project_lifecycle_c",
+        "project_lifecycle_e",
+        "project_lifecycle_f",
+    ),
+    "tests/tasks/submission_dispatch/test_revision_exhaustion.py": ("project_lifecycle_g",),
+    "tests/tasks/submission_dispatch/test_revision_expiry.py": (
+        # Five residues split the prior B collision while preserving project custody.
+        "project_lifecycle_a",
+        "project_lifecycle_e",
+        "project_lifecycle_c",
+        "project_lifecycle_b",
+        "project_lifecycle_d",
+    ),
+}
+
 PARTITION_GROUPS = (
     (PARTITIONED_SHARED_LANES, SHARED_FOUNDATION_MODULES),
     (PARTITIONED_PROJECT_LANES, PROJECT_PARTITIONED_MODULES),
     (PARTITIONED_TASK_LANES, TASK_MODULES),
 )
 PARTITION_LANES_BY_MODULE = {
-    module: names for names, modules in PARTITION_GROUPS for module in modules
+    module: PROJECT_MODULE_LANE_OVERRIDES.get(module, names)
+    for names, modules in PARTITION_GROUPS
+    for module in modules
 }
 
 LANES = (
@@ -622,19 +682,26 @@ LANES = (
             "tests/reviews/acceptance/test_storage.py",
             "tests/reviews/acceptance/test_migration.py",
             "tests/test_database_reset.py",
-            "tests/architecture/test_authorization_boundary.py",
-            "tests/test_identifier_inventory.py",
-            "tests/test_record_id_collection.py",
             "tests/test_ci_lane_catalogue.py",
+            "tests/test_ci_scope_selection.py",
             "tests/test_ci_test_lanes.py",
             "tests/test_test_lane_evidence.py",
             "tests/test_merge_test_lane_evidence.py",
             *TASK_ROUTING_REQUEST_MODULES,
-            *TASK_BATCH_TRANSITION_MODULES,
             *OBSERVABILITY_MODULES,
             ADMIN_RUNNER_MODULE,
         ),
     ),
-    *(TestLane(name, PROJECT_PARTITIONED_MODULES) for name in PARTITIONED_PROJECT_LANES),
+    *(
+        TestLane(
+            name,
+            tuple(
+                module
+                for module in PROJECT_PARTITIONED_MODULES
+                if name in PARTITION_LANES_BY_MODULE[module]
+            ),
+        )
+        for name in PARTITIONED_PROJECT_LANES
+    ),
     *(TestLane(name, TASK_MODULES) for name in PARTITIONED_TASK_LANES),
 )

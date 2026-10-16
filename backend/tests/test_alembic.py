@@ -136,7 +136,8 @@ def test_v01_graph_has_one_root_and_head() -> None:
 
     assert [revision.revision for revision in revisions] == [
         HEAD_REVISION,
-        "0048_attempt_outcome_findings",
+        "0049_attempt_outcome_findings",
+        "0048_revision_exhaustion",
         "0047_revision_recovery",
         "0046_revision_expiry_retry",
         "0045_task_revision_expiry",
@@ -318,6 +319,9 @@ def test_repeated_upgrade_head_preserves_current_database(
     "0044_outbox_not_before",
     "0045_task_revision_expiry",
     "0046_revision_expiry_retry",
+    "0047_revision_recovery",
+    "0048_revision_exhaustion",
+    "0049_attempt_outcome_findings",
 ])
 def test_preceding_head_upgrades_to_current_without_recreation(
     isolated_database_env: str, migration_lock, installed_revision: str,
@@ -353,6 +357,70 @@ def test_preceding_head_upgrades_to_current_without_recreation(
     assert after["versions"] == [HEAD_REVISION]
     assert after["reference_rows"] == before["reference_rows"]
     assert repeated == after
+
+
+async def test_revision_upgrade_retains_policy_source_and_running_window(
+    tmp_path, isolated_database_env, migration_lock, monkeypatch,
+):
+    """A genuine guarded 0047 window survives and remains usable on the new head."""
+    from sqlalchemy import select, text
+    from app.adapters.tasks import task_post_submit_outcome
+    from app.modules.tasks.revision.models import TaskRevisionPreparation
+    from app.modules.tasks.revision.service import project_current_revision
+    from tests.migration_revision_fixtures import (
+        enter_predecessor_owner_shape, insert_0047_preparation, leave_predecessor_owner_shape,
+        retained_revision_rows,
+    )
+    from tests.tasks.post_submit_routing.remediation_support import remediation_source
+    from tests.tasks.post_submit_routing.support import revision_archive
+    from tests.tasks.submission_dispatch.test_replacement_creation import (
+        _create, _creation_request, _ready_replacement,
+    )
+
+    with migration_lock():
+        await _execute(isolated_database_env, "drop schema public cascade; create schema public")
+        await asyncio.to_thread(command.upgrade, _alembic_config(), "0047_revision_recovery")
+        shape = pytest.MonkeyPatch()
+        await enter_predecessor_owner_shape(_execute, isolated_database_env, shape)
+        async with remediation_source(tmp_path, isolated_database_env) as h:
+            with monkeypatch.context() as patch:
+                patch.setattr("app.modules.tasks.post_submit_routing.outcome.prepare_revision", insert_0047_preparation)
+                async with h.factory() as session, session.begin():
+                    outcome = await task_post_submit_outcome(session, h.factory).apply(
+                        h.envelope, current_generation=None,
+                    )
+            async with h.factory() as session:
+                assert await session.scalar(text(
+                    "SELECT count(*) FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid "
+                    "JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' "
+                    "AND NOT t.tgisinternal AND t.tgenabled='D'"
+                )) == 0
+                before = await retained_revision_rows(session, outcome.routing_manifest_id)
+                source = before["task_revision_preparations"][0][0]
+                assert "remaining_microseconds" not in source
+            shape.undo()
+            await leave_predecessor_owner_shape(_execute, isolated_database_env)
+            await asyncio.to_thread(command.upgrade, _alembic_config(), HEAD_REVISION)
+            async with h.factory() as session:
+                assert await retained_revision_rows(session, outcome.routing_manifest_id) == before
+                preparation = await session.scalar(select(TaskRevisionPreparation))
+                assert preparation.clock_observed_at is None
+                assert preparation.remaining_microseconds is None and preparation.deadline_at is not None
+                view = await project_current_revision(session, preparation)
+                assert view.disposition == "ready" and view.outcome == "kept"
+                assert view.preparation_sha256 == json.loads(source)["preparation_sha256"]
+                assert view.deadline_at == preparation.deadline_at
+                h.revision_preparation_id = preparation.id
+                h.revision_preparation_sha256 = preparation.preparation_sha256
+            prepared, admission_id = await _ready_replacement(h, revision_archive(h.data))
+            creation = _creation_request(h, prepared, admission_id)
+            successor = await _create(h, creation)
+            assert successor.submission_version == 2
+            assert successor.submission_id != h.created.submission_id
+            async with h.factory() as session:
+                retained = await retained_revision_rows(session, outcome.routing_manifest_id)
+                for owner in ("revision_policies", "submissions", "task_revision_preparations", "outbox_events"):
+                    assert retained[owner] == before[owner], owner
 
 
 def test_current_head_installs_selected_only_checker_custody(

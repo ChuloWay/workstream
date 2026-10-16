@@ -1,12 +1,12 @@
-"""Prove migration 0048's backfill reproduces what the live deciding owners wrote."""
+"""Prove migration 0049's backfill reproduces what the live deciding owners wrote."""
 
 import importlib.util
 from pathlib import Path
 
 from sqlalchemy import text
 
-_PATH = Path(__file__).resolve().parents[3] / "alembic/versions/0048_attempt_outcome_findings.py"
-_SPEC = importlib.util.spec_from_file_location("migration_0048", _PATH)
+_PATH = Path(__file__).resolve().parents[3] / "alembic/versions/0049_attempt_outcome_findings.py"
+_SPEC = importlib.util.spec_from_file_location("migration_0049", _PATH)
 _MIGRATION = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MIGRATION)
 _SUBMISSION_FACTS = (
@@ -52,5 +52,44 @@ async def assert_backfill_matches_live(factory, *, assignments=False):
                     assert (restored is None) == (started_at is None), assignment_id
                     if started_at is not None:
                         assert 0 <= (started_at - restored).total_seconds() < 5
+        finally:
+            await session.rollback()
+
+
+_STALE_FINDING = {
+    "checker_runs": (
+        "UPDATE public.checker_runs SET result_json=v.body, result_digest='sha256:'||"
+        "encode(sha256(convert_to(v.body,'UTF8')),'hex') FROM (SELECT (result_json::jsonb #- "
+        "CAST(:path AS text[]))::text AS body FROM public.checker_runs WHERE id=:id) v WHERE id=:id"
+    ),
+    "selected_pre_submit_runs": (
+        "UPDATE public.selected_pre_submit_runs SET terminal_json=terminal_json #- "
+        "CAST(:path AS text[]) WHERE id=:id"
+    ),
+}
+
+
+async def assert_upgrade_refuses_stale_findings(factory, *, store, row_id):
+    """0049 accepts the live finding shape and refuses a retained pre-0049 one.
+
+    Removing ``check_id`` from one retained finding reproduces evidence written
+    before the contract required it. The rollback leaves custody untouched.
+    """
+    path = ["execution", "external_members", "0", "result", "findings", "0", "check_id"]
+    async with factory() as session:
+        await session.begin()
+        try:
+            connection = await session.connection()
+            await connection.run_sync(_MIGRATION.refuse_incompatible_retained_findings)
+            await session.execute(text(f"ALTER TABLE public.{store} DISABLE TRIGGER USER"))
+            changed = await session.execute(text(_STALE_FINDING[store]), {"id": str(row_id), "path": path})
+            assert changed.rowcount == 1
+            try:
+                await connection.run_sync(_MIGRATION.refuse_incompatible_retained_findings)
+            except RuntimeError as refused:
+                assert f"{store}: 1 rows (e.g. {row_id})" in str(refused)
+                assert "recreate this database" in str(refused)
+            else:
+                raise AssertionError("upgrade accepted a finding without check_id")
         finally:
             await session.rollback()

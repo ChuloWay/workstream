@@ -14,6 +14,7 @@ from app.modules.checkers.models import CheckerRun
 from app.modules.outbox.models import OutboxEvent
 from app.modules.tasks.models import Submission
 from tests.checkers.execution.support import ControlledSelectedExecution, live_executor
+from tests.tasks.post_submit_routing.backfill_support import assert_backfill_matches_live
 from tests.tasks.post_submit_routing.outcome_support import invoked_completion
 from tests.tasks.post_submit_routing.remediation_support import remediation_source
 from tests.tasks.post_submit_routing.support import revision_archive
@@ -52,7 +53,7 @@ COVERAGE_GAP = ({
 },)
 
 
-async def _fail_current_submission(h, *, findings=None, route=True):
+async def _fail_current_submission(h, *, findings=None, route=True, terminal=False):
     """Complete the actual reserved successor using controlled external work failure."""
     async with h.factory() as session, session.begin():
         reserved = await evaluation_coordinator(session).read_reserved_evaluation(
@@ -74,6 +75,13 @@ async def _fail_current_submission(h, *, findings=None, route=True):
         ))
         h.source = {"completion_event_id": event.event_id}
     h.envelope = await invoked_completion(h)
+    if terminal:
+        from app.adapters.tasks import task_post_submit_outcome
+
+        async with h.factory() as session, session.begin():
+            return await task_post_submit_outcome(session, h.factory).apply(
+                h.envelope, current_generation=None,
+            )
     if route:
         await _fixture_revision_context(h)
 
@@ -81,7 +89,7 @@ async def _fail_current_submission(h, *, findings=None, route=True):
 async def test_two_revisions_then_public_and_sql_refusal(
     tmp_path, isolated_database_env, monkeypatch,
 ):
-    """Initial0 and revisions1/2 commit; preparation/POST/SQL cannot create round3."""
+    """Initial0 and revisions1/2 commit; the final failure closes without a window."""
     from app.modules.tasks.schemas import AdmissionBackedSubmissionResponse
     from app.modules.tasks.revision.models import TaskRevisionPreparation
 
@@ -110,16 +118,23 @@ async def test_two_revisions_then_public_and_sql_refusal(
                 h.created = AdmissionBackedSubmissionResponse.model_validate(response.json())
                 saved_payload = payload
                 saved_response = response.json()
-                await _fail_current_submission(h)
+                outcome = await _fail_current_submission(h, terminal=round_number == 2)
                 async with h.factory() as session:
-                    window = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
-                    assert window.requested_at > previous_start
-                    assert window.deadline_at - window.requested_at == window_length
-                    assert window.next_revision_round == round_number + 1
-                    previous_start = window.requested_at
+                    if round_number == 1:
+                        window = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+                        assert window.requested_at > previous_start
+                        assert window.deadline_at - window.requested_at == window_length
+                        assert window.next_revision_round == 2
+                        previous_start = window.requested_at
+                    else:
+                        from tests.tasks.submission_dispatch.test_revision_exhaustion import terminal_facts
+
+                        receipt = await terminal_facts(h, outcome, expected_round=2)
+                        assert receipt.source_submission_id == str(h.created.submission_id)
 
             before = await _creation_snapshot(h)
-            # Empty/malformed ZIP would fail archive checks if capacity were checked too late.
+            # The exhausted assignment cannot submit a new ZIP, including with
+            # its preceding preparation acknowledgement. No pending window exists.
             denied = await client.post(
                 f"/api/v1/tasks/{h.request.task_id}/submission-bundle-preparations",
                 headers={
@@ -132,7 +147,9 @@ async def test_two_revisions_then_public_and_sql_refusal(
                 }, content=b"not a zip",
             )
             assert denied.status_code == 409, denied.text
-            assert denied.json()["error"]["code"] == "revision_limit_reached"
+            assert denied.json()["error"]["code"] == "conflict"
+            assert denied.json()["error"]["message"] == "Request conflict"
+            assert denied.json()["detail"] == "submission_bundle_preparation_context_changed"
             assert await _creation_snapshot(h) == before
             replay = await client.post(route, json=saved_payload)
             assert replay.status_code == 201, replay.text
@@ -174,73 +191,53 @@ async def test_two_revisions_then_public_and_sql_refusal(
             assert rows[2].supersedes_submission_id == rows[1].id
 
 
-async def test_coverage_return_leaves_the_full_revision_allowance(
+async def test_coverage_return_spends_no_round_under_a_zero_revision_policy(
     tmp_path, isolated_database_env, monkeypatch,
 ):
-    """Under one allowed revision, a coverage return v1 leaves v2 as the initial attempt.
+    """With no revisions allowed, a coverage return v1 still returns the work.
 
-    Failed v2 and v3 then spend round zero and the single revision; a fourth
-    attempt is refused. Counting the coverage return would refuse v3 instead.
+    It neither exhausts nor spends round zero, so v2 is the initial attempt and
+    its genuine failure exhausts the assignment immediately. Counting the
+    coverage return would make v2 a round beyond the policy instead.
     """
     from app.modules.tasks.schemas import AdmissionBackedSubmissionResponse
     from app.modules.tasks.revision.models import TaskRevisionPreparation
+    from tests.tasks.submission_dispatch.test_revision_exhaustion import terminal_facts
 
     async with remediation_source(
         tmp_path, isolated_database_env, human_review_required=False, findings=COVERAGE_GAP,
-        max_revision_rounds=1,
+        max_revision_rounds=0,
     ) as h:
         await _fixture_revision_context(h)
         async with h.factory() as session:
             first = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
-            first_start = first.requested_at
-            window_length = first.deadline_at - first.requested_at
-            assert (first.next_revision_round, first.max_revision_rounds) == (0, 1)
+            assert (first.next_revision_round, first.max_revision_rounds) == (0, 0)
+            assert first.deadline_at is not None and first.outcome != "blocked"
         route = f"/api/v1/tasks/{h.request.task_id}/submissions"
         async with _client(h, monkeypatch, isolated_database_env) as client:
-            # Contributor failures each start a fresh window and spend a round.
-            for version, expected_round in ((2, 1), (3, 2)):
-                h.data = revision_archive(h.data)
-                prepared, admission = await _ready_replacement(h, h.data)
-                payload = _payload(prepared, admission)
-                response = await client.post(route, json=payload)
-                assert response.status_code == 201, response.text
-                assert response.json()["submission_version"] == version
-                h.created = AdmissionBackedSubmissionResponse.model_validate(response.json())
-                saved_payload, saved_response = payload, response.json()
-                await _fail_current_submission(h)
-                async with h.factory() as session:
-                    window = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
-                    assert window.next_revision_round == expected_round
-                    assert window.requested_at > first_start
-                    assert window.deadline_at - window.requested_at == window_length
+            h.data = revision_archive(h.data)
+            prepared, admission = await _ready_replacement(h, h.data)
+            payload = _payload(prepared, admission)
+            response = await client.post(route, json=payload)
+            assert response.status_code == 201, response.text
+            assert response.json()["submission_version"] == 2
+            h.created = AdmissionBackedSubmissionResponse.model_validate(response.json())
+            outcome = await _fail_current_submission(h, terminal=True)
+            receipt = await terminal_facts(h, outcome, expected_round=0)
             async with h.factory() as session:
                 assert (await session.execute(text(
                     "SELECT array_agg(attempt_status ORDER BY version), "
-                    "array_agg(coalesce(status_reason, '-') ORDER BY version) "
-                    "FROM public.submissions"
+                    "array_agg(coalesce(status_reason, '-') ORDER BY version), "
+                    "array_agg(decided_at ORDER BY version) FROM public.submissions"
                 ))).one() == (
-                    ["needs_revision"] * 3,
-                    ["checker_coverage_incomplete", "-", "-"],
+                    ["needs_revision", "rejected"],
+                    ["checker_coverage_incomplete", "revision_limit_reached"],
+                    [first.requested_at, receipt.exhausted_at],
                 )
-
-            before = await _creation_snapshot(h)
-            denied = await client.post(
-                f"/api/v1/tasks/{h.request.task_id}/submission-bundle-preparations",
-                headers={
-                    "Content-Type": "application/zip",
-                    "X-Task-Assignment-Id": str(h.request.assignment_id),
-                    "X-Predecessor-Submission-Id": str(h.created.submission_id),
-                    "Idempotency-Key": str(new_record_id()),
-                    "X-Revision-Preparation-Id": str(h.revision_preparation_id),
-                    "X-Revision-Preparation-Sha256": h.revision_preparation_sha256,
-                }, content=b"not a zip",
-            )
-            assert denied.status_code == 409, denied.text
-            assert denied.json()["error"]["code"] == "revision_limit_reached"
-            assert await _creation_snapshot(h) == before
-            replay = await client.post(route, json=saved_payload)
+            replay = await client.post(route, json=payload)
             assert replay.status_code == 201, replay.text
-            assert replay.json() == saved_response
+            assert replay.json() == response.json()
+        await assert_backfill_matches_live(h.factory)
 
 
 def test_revision_projection_preserves_deadline_and_distinguishes_policy_changes():
@@ -297,6 +294,7 @@ def test_revision_projection_preserves_deadline_and_distinguishes_policy_changes
     assert [change.component for change in repaired.changes] == ["guide", "contribution"]
     assert repaired.prior == prior and repaired.target == target
     row.blocked_reason = "revision_limit_reached"
+    row.next_revision_round = 3
     row.outcome = "blocked"
     assert project_revision(row, row.deadline_at).disposition == "revision_limit_reached"
 

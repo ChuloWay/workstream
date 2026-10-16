@@ -66,12 +66,14 @@ class TaskRevisionExpiryOperation:
         if (manifest is None or manifest.routing_recommendation != "needs_revision"
                 or root is None or root.sequence != 1 or root.predecessor_id is not None
                 or root.preparation_sha256 != target.root_preparation_sha256
-                or root.deadline_at != target.deadline_at
                 or root.routing_manifest_id != target.routing_manifest_id
                 or root.assignment_id != str(target.assignment_id)
                 or root.submission_id != str(target.source_submission_id)):
             return HandlerOutcome.REJECT
-        expected = revision_expiry_event(manifest, root)
+        scheduled = await self._scheduled_preparation(envelope, manifest, root, target)
+        if scheduled is None:
+            return HandlerOutcome.REJECT
+        expected = revision_expiry_event(manifest, root, scheduled)
         if (envelope.idempotency_key != expected.idempotency_key
                 or envelope.correlation_id != expected.correlation_id
                 or envelope.causation_event_id != expected.causation_event_id
@@ -80,8 +82,13 @@ class TaskRevisionExpiryOperation:
         head = await self._session.scalar(select(TaskRevisionPreparation).where(
             TaskRevisionPreparation.routing_manifest_id == target.routing_manifest_id,
         ).order_by(TaskRevisionPreparation.sequence.desc()).limit(1))
-        if head is None or head.deadline_at != target.deadline_at:
+        if head is None:
             return HandlerOutcome.REJECT
+        if (head.deadline_at is None or head.deadline_at != target.deadline_at
+                or head.next_revision_round > head.max_revision_rounds):
+            # Retained cap holds belong to the canonical recovery scan; their
+            # obsolete timer must not replace exhaustion with a timeout outcome.
+            return HandlerOutcome.ACKNOWLEDGE
         now = await self._session.scalar(select(func.clock_timestamp()))
         if now < target.deadline_at:
             return HandlerOutcome.RETRY
@@ -93,7 +100,6 @@ class TaskRevisionExpiryOperation:
             if (prior.source_submission_id != str(target.source_submission_id)
                     or prior.root_preparation_id != target.root_preparation_id
                     or prior.root_preparation_sha256 != target.root_preparation_sha256
-                    or prior.delivery_event_id != envelope.claim.event_id
                     or assignment.status != "revision_expired"
                     or assignment.released_at != prior.expired_at
                     or evidence is None or evidence.receipt_id != prior.id):
@@ -125,6 +131,23 @@ class TaskRevisionExpiryOperation:
                 target=target, envelope=envelope, head=head, authority=authority,
                 facts=facts, task=task, assignment=assignment,
             )
+
+    async def _scheduled_preparation(self, envelope, manifest, root, target):
+        """Resolve the exact immutable clock head that originally scheduled this timer."""
+        scheduled = root
+        prefix = "task.revision.expire:" + str(manifest.id)
+        if envelope.idempotency_key != prefix:
+            try:
+                scheduled_id = UUID(envelope.idempotency_key.removeprefix(prefix + ":"))
+            except (ValueError, AttributeError):
+                return None
+            scheduled = await self._session.get(TaskRevisionPreparation, scheduled_id)
+            if (scheduled is None or scheduled.id == root.id
+                    or scheduled.routing_manifest_id != manifest.id):
+                return None
+        if scheduled.deadline_at is None or scheduled.deadline_at != target.deadline_at:
+            return None
+        return scheduled
 
     async def _record_expiration(self, *, target, envelope, head, authority, facts, task, assignment):
         """Atomically persist the rejection, its notice, custody release, and audit."""

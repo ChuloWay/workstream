@@ -49,7 +49,7 @@ reads project; PR3 adds the Project Manager and Finance reads C1–C9 and D1).
   `task.submission_bundle_preparation.read` (`submission.read_own`, Submitter).
   One closed AUTH evaluator for the six reads; catalogue counts, active
   boundary, audit resource types, docs and the MCP contract snapshot that
-  embeds the action enum. Migration `0049_contributor_reads` extends only the
+  embeds the action enum. Migration `0050_contributor_reads` extends only the
   closed audit action/permission vocabulary so the decisions can be recorded
   (the `0033_contribution_reads` precedent); it changes no data.
 - Routes `GET /actors/me/projects`, `/actors/me/assignments`,

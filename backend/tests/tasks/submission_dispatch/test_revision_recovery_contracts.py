@@ -66,6 +66,23 @@ def test_recovery_authority_binds_only_exact_service_source():
     ) is None
 
 
+def test_existing_preparation_recovery_uses_its_exact_natural_key():
+    resource = _resource()
+    preparation_id = new_record_id()
+    value = resource.model_dump(mode="json") | {
+        "revision_preparation_id": str(preparation_id),
+        "revision_preparation_sha256": "sha256:" + "c" * 64,
+        "idempotency_key": str(preparation_id),
+    }
+    decoded = parse_revision_recovery_binding(ActionId.TASK_REVISION_RECOVER, value, ValueError)
+    assert decoded.revision_preparation_id == decoded.idempotency_key == preparation_id
+    for key in (str(resource.revision_routing_manifest_id), str(new_record_id())):
+        with pytest.raises(ValueError, match="invalid revision recovery authority"):
+            parse_revision_recovery_binding(
+                ActionId.TASK_REVISION_RECOVER, value | {"idempotency_key": key}, ValueError,
+            )
+
+
 def test_recovery_audit_pairs_service_digest_with_expiry_event_only():
     task = new_record_id()
     references = {

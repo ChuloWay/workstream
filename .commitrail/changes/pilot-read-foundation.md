@@ -92,9 +92,11 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   feedback findings, successful preparation feedback, revision context round)
   and their integration fixtures.
 - Update the authorization OpenAPI field-set assertions, the CI lane catalogue
-  for the new test modules (moving the public batch-transition journeys to the
-  schema lane once `project_lifecycle_c` exceeded its 1200-second execution
-  deadline), the journey probe's outcome assertions, the Alembic
+  for the new test modules (keeping main's measured project-lane allocation of
+  the batch-transition journeys, and placing the two new stored-outcome proof
+  modules in the task family: hosted project lanes measured 944 to 1190
+  seconds against the 1200-second deadline, and pinning them to project lanes
+  pushed C over), the journey probe's outcome assertions, the Alembic
   environment head pin, and current docs (README revision-round sentence,
   checker framework, data model, lifecycle state machine, first-user flows,
   roadmap).
@@ -103,6 +105,17 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   Python's.
 - Batch the per-row evidence and per-run result queries the history reads
   already issue, removing their N+1 shape.
+- Reconcile with #573 as migration 0049 after `0048_revision_exhaustion`:
+  zero-revision policies and paused setup-blocked deadlines stay as #573 built
+  them. Every exhaustion round count uses one SQL round helper that excludes
+  coverage returns, and a coverage return on the final permitted attempt
+  returns the work instead of exhausting it. The consecutive-coverage window is
+  supplied to #573's PostgreSQL revision clock by one `revision_window_origin`
+  function instead of a Python copy. Exhaustion records the attempt as
+  `rejected` with `revision_limit_reached` through the same guarded transition.
+- Refuse the 0049 upgrade, before any change, while a retained checker result
+  or selected PRE terminal holds a finding that the required `check_id` or safe
+  path rule would reject on replay, with a retained-state regression.
 
 ### Not allowed
 
@@ -167,6 +180,12 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   fingerprint and baseline checks pass.
 - [ ] Existing routing, acceptance, expiry and replay suites pass unchanged in
   behavior; Go CLI decoders accept the new fields.
+- [ ] Under a zero-revision policy a coverage return keeps round 0 without
+  exhausting, and the next genuine failure exhausts immediately and records
+  `rejected`/`revision_limit_reached`; #573's exhaustion, pause and expiry
+  suites pass on the merged chain.
+- [ ] The 0049 upgrade refuses retained checker or selected PRE findings
+  without `check_id` before changing the database, and accepts live evidence.
 
 ## Risk and review routing
 
@@ -203,6 +222,11 @@ in `evaluation_pending` indefinitely was explicitly rejected.
   and backfill is defence in depth. Terminal custody already makes a
   zero-failure `needs_revision` imply such a finding, so tests cannot
   discriminate the clause.
+- CodeRabbit's terminal-assignment finding was real: the 0049
+  assignment backfill aborted on a retained `revision_exhausted` or
+  `revision_expired` assignment. The backfill now bypasses that guard for its
+  two derived-column updates and re-enables it in the same transaction; a
+  retained-upgrade test covers an exhausted assignment and the guard afterwards.
 - Observed outside scope: on the public bundle-preparation route, an upload
   that is not a readable ZIP fails archive inspection before any pre-submit
   check runs, and `SubmissionArchiveRejectedError` surfaces as a 500 instead of
@@ -210,17 +234,20 @@ in `evaluation_pending` indefinitely was explicitly rejected.
 
 ## Reconciliation
 
-- Current-source reconciliation: based on main at the PILOT-08 merge (#569).
+- Current-source reconciliation: merged with main at #573
+  (`ce60d0f02`); this migration follows `0048_revision_exhaustion` in one chain.
 - Next usable boundary: PILOT-READ-2 contributor reads A1–A6 and B3.
 - Retained state needing explicit handling: the migration rewrites no checker
   evidence. A retained `checker_runs.result_json` or selected PRE
-  `terminal_json` whose findings lack `check_id` fails current validation if it
-  is replayed or re-read through `stored_result` or exact PRE replay: exact PRE
-  replay then fails the preparation request (HTTP 500), and completion or
-  retry delivery for such a run exhausts its retries and dead-letters. Retained
-  terminal rows are otherwise unaffected, and runs completed before 0048 have
-  no finding rows, so their reads show one entry per member. Hosted data was not
-  inspected from the authoring sandbox.
+  `terminal_json` whose findings lack `check_id` (or carry an unsafe path)
+  would fail current validation on replay, so 0049 refuses to upgrade such a
+  database before changing it and names the affected rows; v0.1 recreates it.
+  Rewriting the digest-bound results would forge evidence, so no transition
+  exists. The intake copy in `submission_bundle_durable_intents` is compared
+  byte-for-byte with the checked PRE terminal, never re-parsed. Runs completed
+  before 0049 have no finding rows, so their reads show one entry per member.
+  Whether hosted data holds affected rows was not inspected; the refusal makes
+  that visible at upgrade instead of as replay failures.
 - The pilot04 checker image source changed (`check_id`, `line`); an image built
   from the previous source emits findings the contract now rejects as invalid
   output, never a silent pass. No repository fixture pins a real image digest

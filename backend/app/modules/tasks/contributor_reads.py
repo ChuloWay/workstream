@@ -20,7 +20,7 @@ from app.modules.tasks.api.submission_history import (
 from app.modules.tasks.models import Submission, TaskAssignment, WorkstreamTask
 from app.modules.tasks.repository import TaskRepository
 from app.modules.tasks.revision.models import TaskRevisionPreparation
-from app.modules.tasks.revision.service import ContributorRevisionSource, read_contributor_revisions
+from app.modules.tasks.revision.service import RevisionSource, read_task_revisions
 
 _AWAITING = frozenset({"submitted", "evaluation_pending", "review_pending"})
 
@@ -98,8 +98,8 @@ class ContributorWorkReader:
         )).mappings().all()
         selected = result[:query.limit]
         latest = await self._latest_submissions(tuple(row["id"] for row in selected))
-        revisions = await read_contributor_revisions(self._session, tuple(
-            ContributorRevisionSource(str(row["project_id"]), str(row["task_id"]), str(row["id"]), contributor)
+        revisions = await read_task_revisions(self._session, tuple(
+            RevisionSource(str(row["task_id"]), str(row["id"]))
             for row in selected if row["status"] == "active" and row["task_status"] == "needs_revision"
         ))
         compensation = {}

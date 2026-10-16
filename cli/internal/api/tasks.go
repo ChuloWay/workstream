@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
@@ -27,16 +28,18 @@ type TaskSummary struct {
 
 type TaskDetail struct {
 	TaskSummary
-	Description        string  `json:"description"`
-	AcceptanceCriteria *string `json:"acceptance_criteria"`
-	RejectionCriteria  *string `json:"rejection_criteria"`
-	SourceType         string  `json:"source_type"`
-	SourceRef          *string `json:"source_ref"`
-	SourcePayloadHash  *string `json:"source_payload_hash"`
-	ImportBatchID      *string `json:"import_batch_id"`
-	ExternalTaskID     *string `json:"external_task_id"`
-	CreatedBy          string  `json:"created_by"`
-	AssignedTo         *string `json:"assigned_to"`
+	Description           string             `json:"description"`
+	AcceptanceCriteria    *string            `json:"acceptance_criteria"`
+	RejectionCriteria     *string            `json:"rejection_criteria"`
+	SourceType            string             `json:"source_type"`
+	SourceRef             *string            `json:"source_ref"`
+	SourcePayloadHash     *string            `json:"source_payload_hash"`
+	ImportBatchID         *string            `json:"import_batch_id"`
+	ExternalTaskID        *string            `json:"external_task_id"`
+	CreatedBy             string             `json:"created_by"`
+	AssignedTo            *string            `json:"assigned_to"`
+	LastAssignmentOutcome *AssignmentOutcome `json:"last_assignment_outcome,omitempty"`
+	RevisionContext       *RevisionContext   `json:"revision_context,omitempty"`
 }
 
 type TaskPage struct {
@@ -218,5 +221,19 @@ func decodeTaskFields(raw json.RawMessage, value any, strings, required []string
 			return errors.New("invalid required task string")
 		}
 	}
-	return decode(raw, value, append(append([]string{}, required...), strings...), []string{"skill_tags"})
+	if err := decode(raw, value, append(append([]string{}, required...), strings...), []string{"skill_tags"}); err != nil {
+		return err
+	}
+	if outcome, ok := fields["last_assignment_outcome"]; ok && !bytes.Equal(bytes.TrimSpace(outcome), []byte("null")) {
+		if err := validateAssignmentOutcome(outcome); err != nil {
+			return err
+		}
+	}
+	if revision, ok := fields["revision_context"]; ok && !bytes.Equal(bytes.TrimSpace(revision), []byte("null")) {
+		var context RevisionContext
+		if err := validateRevisionContext(revision, &context); err != nil {
+			return err
+		}
+	}
+	return nil
 }

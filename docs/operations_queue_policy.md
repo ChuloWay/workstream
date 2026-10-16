@@ -191,11 +191,18 @@ Policy:
   human-Review-rooted preparation or finding response
 - human-review resubmission includes one immutable response per unresolved
   blocking finding; live human decision integration remains #554 work
-- each committed `needs_revision` starts a fresh PostgreSQL-time window under
-  the failed attempt's locked policy; only immutable resubmission ends it
-- cap exhaustion refuses another attempt; expiry retains rejection evidence,
-  releases the assignment and returns the Task to `ready` without economic facts
-- each assignment has initial round 0 and its own revision allowance
+- the project policy requires an explicit integer maximum revision count `N >= 0`
+  and positive revision-deadline hours; each assignment starts at round 0 with
+  its own allowance
+- each committed `needs_revision` with another revision remaining freezes the
+  next preparation under the failed attempt's locked policy, with either a
+  running PostgreSQL deadline or a paused remaining allowance while setup is
+  blocked; only immutable resubmission ends that revision opportunity
+- failure on the final permitted attempt immediately records rejection and
+  exhaustion, closes the assignment as `revision_exhausted`, and returns the
+  Task to `ready` without another preparation or window
+- expiry of a running window retains rejection evidence, releases the assignment
+  and returns the Task to `ready` without economic facts
 
 ### Accepted
 

@@ -421,7 +421,7 @@ class Submission(Base):
         ),
         CheckConstraint(
             "status_reason is null or (attempt_status='rejected' and "
-            "status_reason='revision_deadline_expired') or "
+            "status_reason in ('revision_deadline_expired','revision_limit_reached')) or "
             "(attempt_status='needs_revision' and "
             "status_reason='checker_coverage_incomplete')",
             name="status_reason",

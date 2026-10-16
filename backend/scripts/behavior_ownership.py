@@ -70,6 +70,15 @@ TASK_CHECKER_CLEANUP_TARGETS = frozenset({
     "backend/app/modules/authorization/history_authorization.py",
 })
 PILOT_08_REVISION_TARGETS = frozenset({
+    "backend/app/modules/tasks/api/assignment_outcome.py",
+    "backend/app/modules/tasks/api/revision_exhaustion.py",
+    "backend/app/modules/tasks/post_submit_routing/terminal_replay.py",
+    "backend/app/modules/tasks/revision/blocked_notice.py",
+    "backend/app/modules/tasks/revision/exhausted_notice.py",
+    "backend/app/modules/tasks/revision/exhaustion.py",
+    "backend/app/modules/tasks/revision/exhaustion_event.py",
+    "backend/app/modules/tasks/revision/exhaustion_recovery.py",
+    "backend/app/modules/tasks/revision/terminal_read.py",
     "backend/app/modules/authorization/domain/revision_expiry.py",
     "backend/app/modules/authorization/domain/revision_recovery.py",
     "backend/app/modules/authorization/fixed_service_revalidation.py",
@@ -162,7 +171,12 @@ AUTH_OUTBOX_02_TARGETS = frozenset({
     "backend/app/workers/outbox.py",
 })
 CON_02B_DELIVERY_TARGETS = frozenset({'backend/app/modules/outbox/delivery_repository.py', 'backend/app/modules/outbox/api.py', 'backend/app/modules/outbox/delivery.py', 'backend/app/modules/outbox/registry.py'})
-CI_LANE_CATALOGUE_TARGETS = frozenset({"backend/scripts/test_lane_catalogue.py"})
+CI_LANE_CATALOGUE_TARGETS = frozenset(
+    {
+        "backend/scripts/select_ci_scope.py",
+        "backend/scripts/test_lane_catalogue.py",
+    }
+)
 PILOT_10_EXPORT_TARGETS = frozenset({
     "backend/app/adapters/reviews/contribution_reads.py",
     "backend/app/adapters/tasks/contribution_reads.py",

@@ -706,21 +706,24 @@ History and findings lists fetch one page only; use the returned opaque cursor
 explicitly (up to 1024 characters; no local decoding). `--run` cannot be combined with pagination flags. Revision change
 summary is available through `task context` as `revision_context.changes`,
 not in the current public history rows.
-History may show a source Submission as `rejected` with
-`status_reason=revision_deadline_expired` after the durable deadline worker
-closes its outstanding revision attempt. This is the server's status projection
-from an immutable expiration receipt, not a CLI inference or a change to the
-stored Submission. Other history rows have no status reason.
+History projects `rejected` with `status_reason=revision_limit_reached` after
+immediate exhaustion, or `revision_deadline_expired` after timeout. Both come
+from immutable TASK receipts without editing the original Submission.
+`task show` and PM task reads expose `last_assignment_outcome`; the contributor
+view includes only that actor's closed work. `next_action=none` applies to that
+closed assignment, while the task is ready for a fresh claim.
 
-Each assignment's initial attempt is round 0; a limit of 2 permits revisions
-1 and 2. Every committed `needs_revision` starts a fresh PostgreSQL-time window
-from the failed attempt's locked policy. Only immutable resubmission ends it;
-ZIP upload, a ready admission, explicit replay, infrastructure retry and manager
-repair preserve its original deadline. Cap exhaustion blocks a new attempt;
-expiry retains rejection evidence and returns the task to `ready` after releasing
-the old assignment, without economic facts. A new claimant receives their own
-round-0 allowance. Checker revision is implemented; genuine human decision
-integration remains #554 work under the same intended policy.
+The cap comes from the task's locked project RevisionPolicy. N=2 permits
+attempts 0, 1 and 2; N=0 permits only attempt 0. Final-attempt failure immediately
+closes the assignment and returns the task to ready, without another window.
+A fixable failure with revisions remaining starts a fresh PostgreSQL-time
+allowance. Setup-blocked revision contexts show `clock_state=paused`, a null
+`deadline_at` and the frozen `remaining_microseconds`. Repair resumes that
+remainder; running repair preserves its deadline. Only immutable resubmission
+ends a running opportunity. Timeout also returns the task to ready. Anyone
+eligible may claim a new assignment at round 0, including a previous claimant;
+there is no contributor-count limit. Human decision integration remains #554.
+
 
 The native process test uses real HTTP, PostgreSQL and local ART custody, with
 approved-policy/assignment prerequisites arranged by fixtures. It drives the real
