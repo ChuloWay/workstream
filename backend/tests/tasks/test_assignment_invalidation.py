@@ -53,9 +53,12 @@ async def test_exact_real_cause_releases_only_pre_submit_assignment(
     assert {k: v for k, v in task.items() if k.startswith("locked_")} == {
         k: v for k, v in before[0].items() if k.startswith("locked_")
     }
-    assert {k: v for k, v in assignments[0].items() if k not in {"status", "released_at"}} == {
-        k: v for k, v in before[1][0].items() if k not in {"status", "released_at"}
+    # Release changes only status, release time and the database-owned stamp.
+    changed = {"status", "released_at", "updated_at"}
+    assert {k: v for k, v in assignments[0].items() if k not in changed} == {
+        k: v for k, v in before[1][0].items() if k not in changed
     }
+    assert assignments[0]["updated_at"] > before[1][0]["updated_at"]
     added = [event for event in events if event["id"] not in {old["id"] for old in before[2]}]
     assert len(added) == 1 and UUID(str(added[0]["id"])).version == 7
     assert added[0]["event_payload"]["references"]["assignment_id"] == str(target.assignment_id)

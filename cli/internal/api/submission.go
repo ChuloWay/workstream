@@ -32,10 +32,11 @@ type RevisionAcknowledgement struct {
 var revisionPreparationDigest = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
 type PreparationReceipt struct {
-	PutAttemptID string  `json:"put_attempt_id"`
-	AdmissionID  *string `json:"admission_id"`
-	Status       string  `json:"submission_bundle_preparation_status"`
-	Replayed     bool    `json:"replayed"`
+	PutAttemptID string            `json:"put_attempt_id"`
+	AdmissionID  *string           `json:"admission_id"`
+	Status       string            `json:"submission_bundle_preparation_status"`
+	Replayed     bool              `json:"replayed"`
+	Feedback     []json.RawMessage `json:"pre_submission_results,omitempty"`
 }
 
 type SubmissionReceipt struct {
@@ -148,9 +149,10 @@ func (c *Client) PrepareSubmission(ctx context.Context, task, key string, packet
 	}
 	kind, _, typeErr := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	var value PreparationReceipt
-	fields, decodeErr := contextObject(raw, &value, []string{"put_attempt_id", "submission_bundle_preparation_status", "replayed"}, nil)
+	fields, decodeErr := contextObject(raw, &value, []string{"put_attempt_id", "submission_bundle_preparation_status", "replayed", "pre_submission_results"}, nil)
 	if typeErr != nil || kind != "application/json" || decodeErr != nil || !requiredNullable(fields, "admission_id") ||
 		!validUUID(value.PutAttemptID) || !c.safeMutationResponse(raw) ||
+		value.Feedback == nil || !validPreSubmissionResults(value.Feedback, true) ||
 		(response.Header.Get("Content-Encoding") != "" && response.Header.Get("Content-Encoding") != "identity") {
 		return result, submissionFailure(invalid, true)
 	}

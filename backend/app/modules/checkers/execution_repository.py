@@ -20,7 +20,9 @@ from app.modules.checkers.api.evaluation_contract import (
     validate_stored_execution_result,
 )
 from app.modules.checkers.api.canonical_values import canonical_checker_bytes
-from app.modules.checkers.models import CheckerResult, CheckerRun, CheckerSubmissionFence
+from app.modules.checkers.models import (
+    CheckerResult, CheckerResultFinding, CheckerRun, CheckerSubmissionFence,
+)
 
 
 def require_transaction(session: AsyncSession) -> None:
@@ -145,9 +147,10 @@ class ExecutionRepository:
     async def write_members(self, run: CheckerRun, result: PostSubmissionExecutionResult) -> None:
         """Flush ordered closed results under the locked running parent."""
         for member in result.execution.external_members if result.execution else ():
+            member_id = str(new_record_id())
             self.session.add(
                 CheckerResult(
-                    id=str(new_record_id()),
+                    id=member_id,
                     checker_run_id=run.id,
                     task_id=run.task_id,
                     submission_id=run.submission_id,
@@ -170,4 +173,21 @@ class ExecutionRepository:
                     counters=[],
                 )
             )
+            for finding_order, finding in enumerate(member.result.findings):
+                self.session.add(
+                    CheckerResultFinding(
+                        id=str(new_record_id()),
+                        checker_result_id=member_id,
+                        checker_run_id=run.id,
+                        task_id=run.task_id,
+                        submission_id=run.submission_id,
+                        member_order=member.order,
+                        finding_order=finding_order,
+                        check_id=finding.check_id,
+                        code=finding.code,
+                        level=finding.level,
+                        path=finding.path,
+                        line=finding.line,
+                    )
+                )
         await self.session.flush()

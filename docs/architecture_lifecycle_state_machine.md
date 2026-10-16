@@ -346,6 +346,14 @@ assignment at round 0; no contributor-count limit applies. Neither rejection
 creates economic facts. Human Review integration remains #554 work under the
 same intended policy. Stale jobs cannot release newer work.
 
+A checker coverage return (`needs_revision` with `checker_coverage_incomplete`,
+used when no failed member exists and the locked ReviewPolicy does not require
+human review) spends no round and never exhausts, so the next attempt keeps its
+current round; under a true ReviewPolicy the same gap goes to `review_pending`
+instead. A genuine failure accompanied by a coverage finding spends a round and
+exhausts normally. A coverage return whose immediate predecessor was also a
+coverage return keeps that first return's window.
+
 ## Revision Replay
 
 After a human Review enters NEEDS_REVISION, the next submission must include one

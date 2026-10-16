@@ -96,6 +96,9 @@ PILOT_08_REVISION_TARGETS = frozenset({
     "backend/app/modules/tasks/revision/service.py",
     "backend/app/workers/revision_recovery.py",
 })
+PILOT_READ_1_TARGETS = frozenset({
+    "backend/app/modules/tasks/submission_attempts.py",
+})
 TASK_CHECKER_CLEANUP_REMOVED_TARGETS = frozenset({
     "backend/app/core/permissions.py",
     "backend/app/modules/tasks/authorization.py",
@@ -930,6 +933,7 @@ def _validate_additive_partition_transition(
     approved_additions = (
         AUTH_BOUNDARY_FOUNDATION_TARGETS | TASK_CHECKER_CLEANUP_TARGETS
         | PILOT_08_REVISION_TARGETS
+        | PILOT_READ_1_TARGETS
         | CON_02B_DELIVERY_TARGETS
         | AUTH_OUTBOX_02_TARGETS
         | ARCH_03C1_TARGETS

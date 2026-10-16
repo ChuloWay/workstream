@@ -57,7 +57,9 @@ from tests.tasks.submission_lineage_support import (
 
 
 @asynccontextmanager
-async def _prepared_packet(isolated_database_env, tmp_path, *, verify=True):
+async def _prepared_packet(
+    isolated_database_env, tmp_path, *, verify=True, pre_submit_registry_spec=None,
+):
     engine = create_async_engine(isolated_database_env)
     factory = async_sessionmaker(engine, expire_on_commit=False)
     settings = _settings(tmp_path, maximum_bytes=1024 * 1024).model_copy(
@@ -68,7 +70,8 @@ async def _prepared_packet(isolated_database_env, tmp_path, *, verify=True):
     bootstrap, store = _local_store(settings, namespace)
     try:
         plan, policy = await approved_selected_policy_fixture(
-            factory, namespace, guide_version="v1"
+            factory, namespace, guide_version="v1",
+            pre_submit_registry_spec=pre_submit_registry_spec,
         )
         context = _context()
         await _seed_services(factory)

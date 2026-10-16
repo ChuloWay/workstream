@@ -15,23 +15,31 @@ from .support import ControlledSelectedExecution, live_executor, reserve
 
 
 @asynccontextmanager
-async def completed_evidence(tmp_path, database_url, recommendation="needs_revision", **options):
-    """Use real selected material, AUTH, finalization and event publication."""
+async def completed_evidence(
+    tmp_path, database_url, recommendation="needs_revision", *, findings=None, **options,
+):
+    """Use real selected material, AUTH, finalization and event publication.
+
+    ``findings`` replaces the default single error finding; the verdict follows
+    the contract (failed exactly when an error finding exists).
+    """
     if recommendation not in {"allow_review", "needs_revision"}:
         raise ValueError("selected completion recommendation is unsupported")
     failed = recommendation == "needs_revision"
+    verdict = (
+        ("failed" if failed else "passed") if findings is None
+        else "failed" if any(item["level"] == "error" for item in findings) else "passed"
+    )
     async with material_fixture(
         tmp_path,
         database_url,
-        post_submit_registry_spec=post_registry_spec() if failed else None,
+        post_submit_registry_spec=post_registry_spec() if failed or findings else None,
         **options,
     ) as h:
         await reserve(h)
         h.result = await live_executor(
             h,
-            selected_execution=ControlledSelectedExecution(
-                verdict="failed" if failed else "passed"
-            ),
+            selected_execution=ControlledSelectedExecution(verdict=verdict, findings=findings),
         ).evaluate_post_submission(h.request)
         async with h.factory() as session:
             h.run = await session.get(CheckerRun, str(h.result.attempt_id))

@@ -37,7 +37,9 @@ from app.modules.artifacts.submission_admission import (
 )
 from app.modules.authorization.api import ActorIdentityFacts, ActorKind
 from app.modules.authorization.prepared import PreparedAuthorizationHandle
+from app.modules.artifacts.api.submission_preparation import public_pre_submission_results
 from tests.artifact_store_helpers import artifact_byte_stream
+from tests.test_submission_bundle_preparation_recovery import _feedback_facts
 from tests.artifact_store_helpers import artifact_admission_limit_settings
 from app.main import create_app
 from app.api.routes.artifact_submissions import router as submission_router
@@ -419,16 +421,19 @@ async def test_selected_replay_projects_current_admission_state(
         runtime_factory=Mock(),
     )
 
+    execution = _feedback_facts(eligible=True)
     result = await command._selected_replay_result(SimpleNamespace(
         run_id=new_record_id(), status="completed",
-        terminal=SimpleNamespace(outcome="completed", execution=SimpleNamespace(eligible=True)),
+        terminal=SimpleNamespace(outcome="completed", execution=execution),
     ))
 
+    # Exact replay returns the retained intake feedback, not a fresh check.
     assert result == SubmissionBundlePreparationResult(
         put_attempt_id=attempt_id,
         admission_id=admission_id if admission_status == "ready" else None,
         submission_bundle_preparation_status=expected_status,
         replayed=True,
+        pre_submission_results=tuple(public_pre_submission_results(execution)),
     )
 
 
@@ -461,12 +466,14 @@ def test_durable_put_result_projects_every_closed_preparation_status(
         status=durable_status,
         replayed=True,
     )
-    assert PreparedSubmissionBundlePreparationCommand._result(durable) == (
+    execution = _feedback_facts(eligible=True)
+    assert PreparedSubmissionBundlePreparationCommand._result(durable, execution) == (
         SubmissionBundlePreparationResult(
             put_attempt_id=durable.put_attempt_id,
             admission_id=None,
             submission_bundle_preparation_status=durable_status,
             replayed=True,
+            pre_submission_results=tuple(public_pre_submission_results(execution)),
         )
     )
 

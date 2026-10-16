@@ -239,6 +239,14 @@ Acceptance:
   Upload, replay and infrastructure retry cannot reset the window. A setup block
   pauses it and records durable PM attention, visible in the covered PM task
   detail; repair resumes only the remaining allowance.
+- A post-submit coverage gap with no error goes to human review when the
+  locked ReviewPolicy requires it; otherwise it returns to the contributor
+  without spending a round, so the next attempt keeps its current round and
+  the gap never exhausts the assignment. Consecutive coverage returns keep the
+  first return's window, so the same gap cannot return the work forever.
+- Successful preparation and its exact replay return the bounded intake
+  results, so nonblocking findings such as coverage gaps stay visible; the CLI
+  prints them. Intake feedback never decides acceptance.
 - Final-attempt failure immediately records exhaustion and returns the task to
   ready without another window. At expiry, an immutable rejection
   receipt, assignment release and return to `ready` commit atomically with

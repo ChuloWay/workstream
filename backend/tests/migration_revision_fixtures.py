@@ -82,10 +82,66 @@ async def retained_revision_rows(session, manifest_id, *, root_only=False):
         selectors["task_revision_preparations"] += " AND predecessor_id IS NULL"
     result = {}
     for table, where in selectors.items():
+        # 0049 backfills every submission and assignment by design, so those
+        # rows keep their bytes minus its columns, not their physical version.
+        rewritten = table in _ATTEMPT_OUTCOME_COLUMNS
+        excluded = ("remaining_microseconds", "clock_observed_at", *_ATTEMPT_OUTCOME_COLUMNS.get(table, ()))
         values = await session.execute(text(
-            "SELECT (to_jsonb(row)-'remaining_microseconds'-'clock_observed_at')::text,"
-            f"tableoid::bigint,xmin::text FROM public.{table} row WHERE {where}"
-        ), {"id": manifest_id})
+            f"SELECT (to_jsonb(row)-CAST(:excluded AS text[]))::text,tableoid::bigint,"
+            f"{'NULL' if rewritten else 'xmin::text'} FROM public.{table} row WHERE {where}"
+        ), {"id": manifest_id, "excluded": list(excluded)})
         result[table] = [tuple(row) for row in values]
         assert len(result[table]) == 1, table
     return result
+
+
+_ATTEMPT_OUTCOME_COLUMNS = {
+    "submissions": ("attempt_status", "status_reason", "decided_at", "updated_at"),
+    "task_assignments": ("started_at", "updated_at"),
+}
+_PREDECESSOR_SHAPE = """
+ALTER TABLE public.submissions ADD COLUMN attempt_status varchar(30) DEFAULT 'evaluation_pending' NOT NULL,
+  ADD COLUMN status_reason varchar(40), ADD COLUMN decided_at timestamptz,
+  ADD COLUMN updated_at timestamptz DEFAULT now() NOT NULL;
+ALTER TABLE public.task_assignments ADD COLUMN started_at timestamptz,
+  ADD COLUMN updated_at timestamptz DEFAULT now() NOT NULL;
+CREATE TABLE public.checker_result_findings (
+  id uuid PRIMARY KEY, checker_result_id uuid NOT NULL, checker_run_id uuid NOT NULL,
+  task_id uuid NOT NULL, submission_id uuid NOT NULL, member_order integer NOT NULL,
+  finding_order integer NOT NULL, check_id varchar(100) NOT NULL, code varchar(100) NOT NULL,
+  level varchar(30) NOT NULL, path varchar(1000), line integer,
+  created_at timestamptz DEFAULT now() NOT NULL)
+"""
+_ATTEMPT_OUTCOME_WRITERS = (
+    "app.modules.tasks.post_submit_routing.outcome",
+    "app.modules.tasks.accepted_effects",
+    "app.modules.tasks.revision.expiry",
+    "app.modules.tasks.revision.exhaustion",
+)
+
+
+async def enter_predecessor_owner_shape(execute, database_url, patch):
+    """Let current owners build history on a pre-0049 schema, as its owners did.
+
+    Predecessor owners stored no attempt outcomes, assignment starts or finding
+    rows, so those writes are disabled and the ORM gets placeholder columns.
+    ``leave_predecessor_owner_shape`` removes them before the real upgrade, so
+    0049 runs against the genuine predecessor shape.
+    """
+    await execute(database_url, _PREDECESSOR_SHAPE)
+
+    async def no_attempt_outcome(*_args, **_kwargs):
+        return None
+
+    for module in _ATTEMPT_OUTCOME_WRITERS:
+        patch.setattr(f"{module}.record_attempt_outcome", no_attempt_outcome)
+
+
+async def leave_predecessor_owner_shape(execute, database_url):
+    """Remove the placeholders so the upgrade sees only predecessor DDL."""
+    await execute(database_url, (
+        "DROP TABLE public.checker_result_findings; "
+        "ALTER TABLE public.submissions DROP COLUMN attempt_status, DROP COLUMN status_reason, "
+        "DROP COLUMN decided_at, DROP COLUMN updated_at; "
+        "ALTER TABLE public.task_assignments DROP COLUMN started_at, DROP COLUMN updated_at"
+    ))

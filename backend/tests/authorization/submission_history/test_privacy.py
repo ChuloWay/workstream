@@ -101,7 +101,7 @@ async def test_denied_read_never_loads_private_rows(task_client, monkeypatch):
 @pytest.mark.parametrize("manager", [False, True])
 async def test_nested_values_match_exact_stored_parents(task_client, monkeypatch, manager):
     from app.modules.tasks.models import EvidenceItem
-    from app.modules.checkers.models import CheckerResult
+    from app.modules.checkers.models import CheckerResult, CheckerResultFinding
     from app.modules.checkers.execution_results import RESULT_STATUS_MESSAGES
     project = await create_active_project(task_client, post_submit_registry_spec=post_registry_spec())
     task = await create_started_task(task_client, project["id"], monkeypatch)
@@ -117,6 +117,14 @@ async def test_nested_values_match_exact_stored_parents(task_client, monkeypatch
     async with db_session.get_session_factory()() as session:
         evidence = list(await session.scalars(select(EvidenceItem).order_by(EvidenceItem.id)))
         rows = list(await session.scalars(select(CheckerResult).order_by(CheckerResult.member_order)))
+        findings = {}
+        for finding in await session.scalars(select(CheckerResultFinding).order_by(
+            CheckerResultFinding.finding_order,
+        )):
+            findings.setdefault(str(finding.checker_result_id), []).append(finding)
+        level_status = {"info": ("passed", "info"), "warning": ("warning", "low"),
+                        "error": ("failed", "error"),
+                        "coverage_incomplete": ("coverage_incomplete", "medium")}
         assert {str(row.checker_run_id) for row in rows} == {run, sibling, foreign_run}
         expected_evidence = [{field: str(getattr(row, field)) if field == "id" else getattr(row, field)
                               for field in EVIDENCE_FIELDS} for row in evidence if row.submission_id == submission]
@@ -127,12 +135,25 @@ async def test_nested_values_match_exact_stored_parents(task_client, monkeypatch
                 if row.checker_run_id != run_id:
                     continue
                 assert row.task_id == task["id"] and row.submission_id == submission
-                message, fix = RESULT_STATUS_MESSAGES[row.status]
-                entry = {field:getattr(row,field) for field in ("id","checker_name","status","severity")}
-                entry.update(worker_message=message, worker_suggested_fix=fix)
-                if manager:
-                    entry.update(message=message, blocks_review=row.status=="failed")
-                expected_results[run_id].append(entry)
+                # One entry per stored finding; a member without findings keeps one entry.
+                for finding in findings.get(str(row.id)) or [None]:
+                    status, severity = (
+                        (row.status, row.severity) if finding is None
+                        else level_status[finding.level]
+                    )
+                    message, fix = RESULT_STATUS_MESSAGES[status]
+                    entry = {
+                        "id": row.id if finding is None else finding.id,
+                        "checker_name": row.checker_name,
+                        "check_id": None if finding is None else finding.check_id,
+                        "path": None if finding is None else finding.path,
+                        "line": None if finding is None else finding.line,
+                        "status": status, "severity": severity,
+                        "worker_message": message, "worker_suggested_fix": fix,
+                    }
+                    if manager:
+                        entry.update(message=message, blocks_review=status == "failed")
+                    expected_results[run_id].append(entry)
         assert expected_results[run] != expected_results[sibling] and expected_evidence
     set_dev_actor(monkeypatch, roles="", subject="project-manager-subject" if manager else "worker-one")
     for action, path in history_paths(project["id"],task["id"],submission,run,manager=manager).items():

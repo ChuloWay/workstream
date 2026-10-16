@@ -10,6 +10,7 @@ from app.core.hashing import canonical_json_hash
 from app.core.identifiers import new_record_id
 from app.modules.projects.api.locked_policy import ProjectLockedPolicyContextUnavailable
 from app.modules.projects.api.policy_lineage import RevisionPolicySemantics
+from app.modules.tasks.submission_attempts import COVERAGE_RETURN_REASON
 from app.modules.tasks.api.revision import (
     ContributorRevisionContext, RevisionCandidate, RevisionContextChange, RevisionContextSnapshot,
 )
@@ -104,13 +105,18 @@ async def prepare_revision(session, *, manifest, candidate, audit_event_id, pred
         raise TaskSubmissionContextUnavailable("revision_context_changed")
     if predecessor is not None and repair_receipt is None:
         raise TaskSubmissionContextUnavailable("task_submission_context_invalid")
-    requested_at = predecessor.requested_at if predecessor else manifest.created_at
+    # PostgreSQL owns the window: consecutive coverage returns keep the first one's start.
+    requested_at = predecessor.requested_at if predecessor else await session.scalar(text(
+        "SELECT requested_at FROM public.revision_window_origin(:manifest)"
+    ), {"manifest": str(manifest.id)})
     limit = predecessor.max_revision_rounds if predecessor else candidate.max_revision_rounds
+    # A checker coverage return is not a revision round (PostgreSQL counts alike).
     source_round = await session.scalar(select(func.count(Submission.id)).where(
         Submission.task_assignment_id == manifest.assignment_id,
         Submission.version <= manifest.submission_version,
+        Submission.status_reason.is_distinct_from(COVERAGE_RETURN_REASON),
     ))
-    if source_round is None or source_round < 1 or (
+    if source_round is None or source_round < 0 or (
         predecessor is not None and source_round != predecessor.next_revision_round
     ):
         raise TaskSubmissionContextUnavailable("revision_context_changed")

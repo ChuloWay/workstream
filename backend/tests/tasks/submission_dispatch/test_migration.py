@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import datetime
 
 import asyncpg
 import pytest
@@ -40,7 +41,9 @@ async def test_upgrade_preserves_retained_owners_without_backfill(tmp_path, isol
                     "outbox_events": {"not_before_at"},
                     "submissions": {
                         "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
+                        "attempt_status", "status_reason", "decided_at", "updated_at",
                     },
+                    "task_assignments": {"started_at", "updated_at"},
                     "checker_runs": {
                         "selected_post_submit_policy_sha256", "selected_post_submit_policy_body",
                     },
@@ -61,8 +64,26 @@ async def test_upgrade_preserves_retained_owners_without_backfill(tmp_path, isol
                     assert len(upgraded_rows) == len(retained_rows)
                     for retained, upgraded in zip(retained_rows, upgraded_rows, strict=True):
                         assert set(upgraded) == set(retained) | columns_added
-                        for column in columns_added:
-                            assert upgraded.pop(column) is None
+                        # 0048 backfills from retained owner evidence only: an unrouted
+                        # attempt stays pending and its stamps come from its own facts.
+                        backfilled = {
+                            "attempt_status": "evaluation_pending",
+                            "updated_at": retained.get("submitted_at"),
+                        } if table == "submissions" else {}
+                        if table == "task_assignments":
+                            started = upgraded.pop("started_at")
+                            stamps = [retained["assigned_at"], started, retained["released_at"]]
+                            assert started is None or datetime.fromisoformat(
+                                started
+                            ) >= datetime.fromisoformat(retained["assigned_at"])
+                            assert upgraded.pop("updated_at") == max(
+                                (stamp for stamp in stamps if stamp is not None),
+                                key=datetime.fromisoformat,
+                            )
+                        for column in columns_added - {"started_at", "updated_at"} if (
+                            table == "task_assignments"
+                        ) else columns_added:
+                            assert upgraded.pop(column) == backfilled.get(column), column
                         assert upgraded == retained
                 assert after == before
                 columns = await connection.fetch("""
