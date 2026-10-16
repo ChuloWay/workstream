@@ -47,6 +47,9 @@ identity and system Operator grant to perform startup registration.
   `backend/app/api/router.py`: one authenticated Operator registration route,
   one exact-entry read route, caller-root transaction composition and stable
   HTTP error mapping.
+- `backend/app/api/deps/api_controls.py`: describe the existing administrative
+  mutation limiter now attached to the registration route without changing its
+  policy or adding a new rate-control path.
 - `backend/alembic/versions/0050_operational_read_audit.py` and
   `backend/alembic/env.py`: extend the existing closed AUTH audit vocabulary
   with exactly the current registry-read and retry-source-read action pairs.

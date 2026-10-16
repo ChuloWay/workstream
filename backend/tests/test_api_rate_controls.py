@@ -882,11 +882,19 @@ async def test_rate_dependency_unavailability_is_private_503(
     assert subject not in response.text
 
 
-def test_rate_dependencies_are_not_attached_to_production_routes() -> None:
-    forbidden = {
+def test_checker_registry_rate_dependencies_match_exact_route_allowlist() -> None:
+    rate_dependencies = {
         enforce_first_access_rate_limit,
         enforce_admin_mutation_rate_limit,
         enforce_authorization_read_rate_limit,
+    }
+    expected = {
+        ("POST", "/operations/external-checker-registry"): {
+            enforce_admin_mutation_rate_limit
+        },
+        ("GET", "/operations/external-checker-registry/{registry_entry_id}"): {
+            enforce_authorization_read_rate_limit
+        },
     }
 
     def dependency_calls(dependant) -> set:
@@ -895,9 +903,34 @@ def test_rate_dependencies_are_not_attached_to_production_routes() -> None:
             calls.update(dependency_calls(dependency))
         return calls
 
+    def production_routes(routes):
+        visited: set[int] = set()
+
+        def collect(candidates):
+            for route in candidates:
+                if hasattr(route, "dependant"):
+                    yield route
+                original_router = getattr(route, "original_router", None)
+                if original_router is None or id(original_router) in visited:
+                    continue
+                visited.add(id(original_router))
+                yield from collect(original_router.routes)
+
+        yield from collect(routes)
+
     app = create_app()
     assert all(
-        forbidden.isdisjoint(dependency_calls(route.dependant))
+        rate_dependencies.isdisjoint(dependency_calls(route.dependant))
         for route in app.routes
         if hasattr(route, "dependant")
     )
+
+    actual = {}
+    for route in production_routes(app.routes):
+        if "external-checker-registry" not in route.path:
+            continue
+        calls = dependency_calls(route.dependant)
+        attached = rate_dependencies.intersection(calls)
+        for method in route.methods:
+            actual[method, route.path] = attached
+    assert actual == expected
