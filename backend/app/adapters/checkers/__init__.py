@@ -135,6 +135,13 @@ def external_checker_registry_reader(session):
     return ExternalCheckerRegistryReader(session)
 
 
+def external_checker_registry_service(session, authority):
+    """Compose CHECKERS registration and readback with request-scoped AUTH."""
+    from app.modules.checkers.external_registry import ExternalCheckerRegistryService
+
+    return ExternalCheckerRegistryService(session, authority)
+
+
 async def external_checker_capability_projection(
     session,
 ) -> ExternalCheckerCapabilityProjection:

@@ -89,6 +89,10 @@
       "target": "backend/app/api/deps/checker_recovery.py"
     },
     {
+      "group": "artifacts",
+      "target": "backend/app/api/deps/checker_registry.py"
+    },
+    {
       "group": "lifecycle",
       "target": "backend/app/api/deps/contribution_exports.py"
     },
@@ -2069,7 +2073,7 @@
       "target": "backend/scripts/validate_test_lane_evidence.py"
     }
   ],
-  "authority_digest": "028c672a6edda2b38e672e081d1fd61164c15193fff2c80c789c15969ee9e870",
+  "authority_digest": "4b55f171c882919034621bae743350eb4f21c926f3d71ce69ce1ae7b49ec3f21",
   "protected_base_commit": "7676ce4347db0c9694962a9b587a20765e16eac6",
   "schema": "workstream.behavior-ownership-partition.v1"
 }

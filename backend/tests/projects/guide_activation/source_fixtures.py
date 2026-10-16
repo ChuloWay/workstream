@@ -288,7 +288,7 @@ async def _register_external_checker_fixture(factory, spec):
     from app.modules.authorization.checker_registry_authorization import (
         ExternalCheckerRegistryAuthorizationAdapter,
     )
-    from app.modules.checkers.api.external import make_external_checker_registration_request
+    from app.modules.checkers.api.external import ExternalCheckerRegistrationCommand
     from app.modules.checkers.external_registry import (
         ExternalCheckerRegistryReader, ExternalCheckerRegistryService,
     )
@@ -321,10 +321,9 @@ async def _register_external_checker_fixture(factory, spec):
             scope="system",
         )
         operation_id = new_record_id()
-        request = make_external_checker_registration_request(
+        command = ExternalCheckerRegistrationCommand(
             actor_profile_id=UUID(profile.id),
             operation_id=operation_id,
-            registry_entry_id=new_record_id(),
             spec=spec,
         )
         authority_context = HumanAuthorizationContext(
@@ -336,9 +335,16 @@ async def _register_external_checker_fixture(factory, spec):
             request_id=uuid4(),
             correlation_id=operation_id,
         )
+        repository = AdminAuthorizationRepository(session)
+        kernel = AuthorizationService(
+            session, authority_context, admin_repository=repository
+        )
         return await ExternalCheckerRegistryService(
             session,
             ExternalCheckerRegistryAuthorizationAdapter(
-                AuthorizationService(session, authority_context)
+                kernel,
+                PreparedAuthorizationService(
+                    session, authority_context, kernel, repository
+                ),
             ),
-        ).register(request)
+        ).register(command)
