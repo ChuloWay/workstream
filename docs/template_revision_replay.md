@@ -14,10 +14,12 @@
 - assignment-local revision round/limit:
 - original PostgreSQL requested-at/deadline:
 
-Each assignment starts at round 0. Every committed `needs_revision` starts a
+Each assignment starts at round 0. Each fixable failure with another revision remaining starts a
 fresh window under the failed attempt's locked RevisionPolicy. Only a committed
 immutable successor Submission ends it; upload, admission, repair and replay do
-not. Cap exhaustion refuses a successor while preserving the current deadline.
+not. A setup block pauses the allowance; repair resumes only the remainder.
+Final-attempt failure immediately records rejection and releases the assignment
+without another window. There is no contributor-count limit.
 At expiry, the intended shared policy retains immutable rejection evidence,
 releases the assignment and returns TASK to `ready` without synthetic Review or
 new economic facts. Human integration must use genuine Review provenance.

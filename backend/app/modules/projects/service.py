@@ -1255,7 +1255,7 @@ class ProjectService:
         if not set(review_policy.allowed_decisions).issubset(ALLOWED_REVIEW_DECISIONS):
             raise GuideActivationBlocked("review policy contains invalid decisions")
         if (
-            revision_policy.max_revision_rounds < 1
+            revision_policy.max_revision_rounds < 0
             or revision_policy.revision_deadline_hours < 1
             or not revision_policy.allowed_resubmission_states
         ):

@@ -973,21 +973,26 @@ bar.
 
 Workstream is built as durable operational infrastructure. Project rules live
 in versioned guides and policies rather than chat memory. Each active attempt
-keeps its locked governing context. Contributor-fixable checker failure freezes
-one complete revision context and change summary for the continuing assignment;
-previous Submissions and their evidence remain unchanged. A revision reruns full
-intake and acknowledges that exact preparation. Each assignment's initial
-attempt is round 0; a limit of 2 permits revisions 1 and 2. Each committed
-`needs_revision` starts a fresh PostgreSQL-time window from the failed attempt's
-locked policy. Only immutable resubmission ends it; upload, replay and PM context
-repair preserve its original window.
-At expiry, PostgreSQL-timed outbox delivery records the outstanding attempt's
-rejection, releases its assignment and returns the task to ready. The next
-claimant starts round 0 with their own allowance. Original Submissions and
-findings remain immutable; scans and retries recover work after downtime.
+keeps its locked governing context. The task's locked project RevisionPolicy
+requires an explicit nonnegative revision cap: N=2 permits submissions 0, 1 and
+2; N=0 permits only the initial Submission. A final-attempt failure immediately
+records rejection, closes its assignment and returns the task to ready, without
+another preparation or deadline. Timeout also returns the task to ready. Anyone
+eligible may claim a new assignment at round 0, including a previous claimant;
+there is no contributor-count limit or repeated-failure hold.
+
+When a revision remains, contributor-fixable failure freezes the complete
+next-attempt context and change summary. Revision reruns intake and acknowledges
+that exact preparation. A setup-blocked rebase publishes durable PM attention
+and pauses the PostgreSQL-time allowance; repair resumes only its remaining
+time. Repair of a running context preserves its deadline. Only committed
+immutable resubmission ends a running opportunity. Task state, terminal evidence,
+authorization, audit and outbox intent commit atomically. Original Submissions
+and findings remain immutable; scans and retries recover after downtime.
+Infrastructure/provider/budget failures never spend a contributor attempt.
 Checker remediation creates no Review or reviewer contribution. Live human
-Review decision composition remains #554 work under the same intended revision
-policy. Timeout creates no contribution, award or fulfillment facts.
+Review decision composition remains #554 work under the same intended policy.
+Timeout and exhaustion create no contribution, award or fulfillment facts.
 
 Lifecycle state is a ledger, not a loose label. Submitted artifacts remain
 immutable and hash-bound to their checks; findings, responses, resolutions,

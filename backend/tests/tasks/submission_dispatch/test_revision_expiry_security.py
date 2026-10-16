@@ -357,6 +357,20 @@ async def test_expiry_real_outbox_and_audit_staging_roll_back_every_owner(
                             assert await session.scalar(text(
                                 "SELECT status FROM public.task_assignments WHERE id=:assignment"
                             ), {"assignment": h.request.assignment_id}) == "revision_expired"
+                            with pytest.raises(DBAPIError) as rejected:
+                                async with session.begin_nested():
+                                    await session.execute(text(
+                                        "UPDATE public.task_assignments SET status='active' "
+                                        "WHERE id=:assignment"
+                                    ), {"assignment": h.request.assignment_id})
+                            assert rejected.value.orig.sqlstate == "23514"
+                            database_error = rejected.value.orig.__cause__
+                            assert database_error.constraint_name == (
+                                "ck_revision_expired_assignment_immutable"
+                            )
+                            assert await session.scalar(text(
+                                "SELECT status FROM public.task_assignments WHERE id=:assignment"
+                            ), {"assignment": h.request.assignment_id}) == "revision_expired"
                         staged.append(result)
                         assert await _snapshot(h) == before
                         raise ParticipantFailure("after real expiry participant staging")

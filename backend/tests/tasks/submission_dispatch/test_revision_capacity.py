@@ -45,7 +45,7 @@ async def _retain_pre_revision_source(h, source_id):
         await session.execute(text("ALTER TABLE public.task_revision_preparations ENABLE TRIGGER revision_preparation_immutable"))
 
 
-async def _fail_current_submission(h):
+async def _fail_current_submission(h, *, terminal=False):
     """Complete the actual reserved successor using controlled external work failure."""
     async with h.factory() as session, session.begin():
         reserved = await evaluation_coordinator(session).read_reserved_evaluation(
@@ -65,13 +65,20 @@ async def _fail_current_submission(h):
         ))
         h.source = {"completion_event_id": event.event_id}
     h.envelope = await invoked_completion(h)
+    if terminal:
+        from app.adapters.tasks import task_post_submit_outcome
+
+        async with h.factory() as session, session.begin():
+            return await task_post_submit_outcome(session, h.factory).apply(
+                h.envelope, current_generation=None,
+            )
     await _fixture_revision_context(h)
 
 
 async def test_two_revisions_then_public_and_sql_refusal(
     tmp_path, isolated_database_env, monkeypatch,
 ):
-    """Initial0 and revisions1/2 commit; preparation/POST/SQL cannot create round3."""
+    """Initial0 and revisions1/2 commit; the final failure closes without a window."""
     from app.modules.tasks.schemas import AdmissionBackedSubmissionResponse
     from app.modules.tasks.revision.models import TaskRevisionPreparation
 
@@ -100,16 +107,23 @@ async def test_two_revisions_then_public_and_sql_refusal(
                 h.created = AdmissionBackedSubmissionResponse.model_validate(response.json())
                 saved_payload = payload
                 saved_response = response.json()
-                await _fail_current_submission(h)
+                outcome = await _fail_current_submission(h, terminal=round_number == 2)
                 async with h.factory() as session:
-                    window = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
-                    assert window.requested_at > previous_start
-                    assert window.deadline_at - window.requested_at == window_length
-                    assert window.next_revision_round == round_number + 1
-                    previous_start = window.requested_at
+                    if round_number == 1:
+                        window = await session.get(TaskRevisionPreparation, h.revision_preparation_id)
+                        assert window.requested_at > previous_start
+                        assert window.deadline_at - window.requested_at == window_length
+                        assert window.next_revision_round == 2
+                        previous_start = window.requested_at
+                    else:
+                        from tests.tasks.submission_dispatch.test_revision_exhaustion import terminal_facts
+
+                        receipt = await terminal_facts(h, outcome, expected_round=2)
+                        assert receipt.source_submission_id == str(h.created.submission_id)
 
             before = await _creation_snapshot(h)
-            # Empty/malformed ZIP would fail archive checks if capacity were checked too late.
+            # The exhausted assignment cannot submit a new ZIP, including with
+            # its preceding preparation acknowledgement. No pending window exists.
             denied = await client.post(
                 f"/api/v1/tasks/{h.request.task_id}/submission-bundle-preparations",
                 headers={
@@ -122,7 +136,9 @@ async def test_two_revisions_then_public_and_sql_refusal(
                 }, content=b"not a zip",
             )
             assert denied.status_code == 409, denied.text
-            assert denied.json()["error"]["code"] == "revision_limit_reached"
+            assert denied.json()["error"]["code"] == "conflict"
+            assert denied.json()["error"]["message"] == "Request conflict"
+            assert denied.json()["detail"] == "submission_bundle_preparation_context_changed"
             assert await _creation_snapshot(h) == before
             replay = await client.post(route, json=saved_payload)
             assert replay.status_code == 201, replay.text
@@ -216,6 +232,7 @@ def test_revision_projection_preserves_deadline_and_distinguishes_policy_changes
     assert [change.component for change in repaired.changes] == ["guide", "contribution"]
     assert repaired.prior == prior and repaired.target == target
     row.blocked_reason = "revision_limit_reached"
+    row.next_revision_round = 3
     row.outcome = "blocked"
     assert project_revision(row, row.deadline_at).disposition == "revision_limit_reached"
 
