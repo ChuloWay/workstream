@@ -91,10 +91,12 @@ code on the host would break the established boundary.
   existing focused tests only for one narrow extension of the current
   `ArtifactScratchManager` grant:
   - before every POST external grant publication, raise that workspace's fixed
-    total reservation to the existing 512 MiB per-workspace maximum; the
-    runtime allowance is exactly that ceiling minus the verified expanded bytes;
+    total byte reservation to the existing 512 MiB per-workspace maximum and its
+    entry reservation to the manager's existing fixed maximum-entry ceiling;
+    the runtime allowances are those ceilings minus the sealed workspace and
+    grant overhead;
   - publish one empty `runtime/` sibling beside the sealed `workspace/`, bind its
-    derived allowance and existing grant owner UID/GID/mode into the
+    derived byte/entry allowances and existing grant owner UID/GID/mode into the
     request-bound grant manifest, and keep it `0700` for that same OS identity
     already shared by ART and the checker service; and
   - keep that directory under the existing workspace TTL, aggregate quota,
@@ -157,43 +159,60 @@ checker platform-manifest digest, `terminal_benchmark_build_oracle.v1` profile
 version, Kaniko/base/cache identities, and fixed phase limits. The service first
 validates the ordinary request and grant, then requires every element of this
 tuple before it accepts a continuation. It also requires the checker-returned
-plan to repeat the request digest, grant binding digest, registry entry ID and
-digest, checker image digest, configuration digest and profile version. A
-conventional image, a PRE entry, or another registered POST image returning the
-same JSON receives `invalid_output` and no builder launch. Plan fields cannot
-add commands, mounts, phases, capabilities, network or resource limits; the
-service supplies those values from the closed profile.
+plan to repeat only facts present in its ordinary stdin: the request digest,
+registry entry ID and digest, checker image digest, configuration digest and
+profile version. After parsing, the trusted service attaches the plan to its
+already verified in-memory grant ID and binding digest before continuation; it
+does not ask the checker to echo a grant fact the image never receives. A grant
+substitution fails before launch. A conventional image, a PRE entry, or another
+registered POST image returning the same JSON receives `invalid_output` and no
+builder launch. Their ordinary one-sandbox execution remains unchanged. Plan
+fields cannot add commands, mounts, phases, capabilities, network or resource
+limits; the service supplies those values from the closed profile.
 
 ### ART-owned scratch and crash recovery
 
 The build output and context use a `runtime/` directory inside the same private
 `ArtifactScratchManager` extraction workspace that already owns `workspace/`.
 Before publishing any POST external grant, ART atomically raises that
-workspace's reservation from the verified expanded-byte count to the existing
-512 MiB per-workspace maximum. The runtime allowance is therefore exactly
-`512 MiB - verified expanded bytes`; it is never caller selected and the whole
-reservation still obeys the existing aggregate byte ceiling, free-space floor,
-entry ceiling and TTL. ART then creates `runtime/` descriptor-relatively with
-no-follow checks, keeps it `0700` for the existing OS identity already shared by
-ART and the checker service, and records the allowance plus observed UID/GID and
-    modes in the signed grant manifest. The ordinary service does not mount this
-    directory into checker
-containers; only the separately authorized continuation may use it. The opaque
-grant reference remains only an ID and binding digest; neither backend nor
-response exposes a path. If the larger reservation or directory publication
-cannot be proven, the invocation stops as infrastructure failure before the
-service call.
+workspace's byte reservation from the verified expanded-byte count to the
+existing 512 MiB per-workspace maximum and raises its entry reservation to the
+manager's existing fixed maximum-entry ceiling. The runtime byte allowance is
+`512 MiB - verified expanded bytes`. The runtime entry allowance is the fixed
+entry ceiling minus the `workspace/` directory entry, every sealed member below
+it, `.external-checker-grant.json`, and the `runtime/` directory entry that the
+same no-follow cleanup walk will count. Neither value is caller selected; the
+whole reservation still obeys the existing aggregate byte ceiling, free-space
+floor, entry ceiling and TTL. ART
+then creates `runtime/` descriptor-relatively with no-follow checks, keeps it
+`0700` for the existing OS identity already shared by ART and the checker
+service, and records both allowances plus observed UID/GID and modes in the
+signed grant manifest. The ordinary service does not mount this directory into
+checker containers; only the separately authorized continuation may use it. The
+opaque grant reference remains only an ID and binding digest; neither backend
+nor response exposes a path. If either larger reservation or directory
+publication cannot be proven, the invocation stops as infrastructure failure
+before the service call.
 
-The service may write only the bound `runtime/` child and must keep the projected
-context, image tar, bounded inventory and control files within its allowance.
-The Docker builder receives a bounded writable root and an output file under
-that directory; the service rejects a size overrun independently before image
-load. Normal completion, timeout, cancellation and client disconnect terminate
-the active phase, remove owned Docker resources, and return only after ART has
-revoked the grant and no-follow deleted the workspace. A cleanup error retains
-the existing ledger ownership for retry and produces infrastructure failure.
-On service SIGKILL, the ledger reservation and workspace remain; the existing
-dead-process/TTL reaper is the filesystem cleanup owner.
+The service may write only the bound `runtime/` child. Before every directory or
+regular-file creation it charges one entry and the intended bytes to the two
+grant allowances; exact-limit creation is admitted and limit-plus-one fails
+before creating residue. The projected context, image tar, bounded inventory and
+control files all use this single meter. The Docker builder receives a bounded
+writable root and an output file under that directory; the service rejects an
+observed size overrun independently before image load.
+
+Ownership follows the existing call order. On normal completion, timeout,
+cancellation or disconnect, the Rust service settles its owned Docker resources
+before sending or closing the socket response. The live Python grant context
+then revokes the manifest and no-follow deletes the workspace before the
+materializer exposes an evaluation to CHECKERS. A grant/workspace cleanup error
+discards any already received result, retains ledger custody for retry and wins
+as infrastructure failure. A service-only SIGKILL produces adapter failure and
+the still-live Python context synchronously unwinds ART scratch; service restart
+uses the label/prefix inventory to sweep Docker residue. If the Python ART owner
+also dies, the existing TTL plus dead-owner reaper cleans the workspace. No
+service-to-ART callback or second cleanup dependency is introduced.
 
 Every service-created Docker container has exact trusted labels for deployment
 owner, request digest, grant ID, attempt nonce and resource kind. Before a
@@ -204,9 +223,12 @@ startup reaper remove containers selected by the full label set, then remove
 only inventoried images whose IDs and names still match. A scan of the fixed
 service-owned temporary repository prefix recovers an image when SIGKILL occurs
 between load and inventory update; it never removes an image outside that
-prefix. ART deletes the remaining runtime files after Docker cleanup or TTL.
-The reaper uses one cleanup deadline and leaves ambiguous resources quarantined
-as infrastructure failure rather than claiming cleanup.
+prefix. After normal Docker cleanup, ART deletes the remaining runtime files.
+Live Python unwind or dead-owner/TTL cleanup may remove those files first after
+a service crash; the label and fixed-prefix scan therefore remains sufficient
+without the inventory file. The Docker reaper uses one cleanup deadline and
+leaves ambiguous resources quarantined as infrastructure failure rather than
+claiming cleanup.
 
 ### Physical build and oracle separation
 
@@ -324,11 +346,26 @@ can safely adopt the PILOT-00 mechanism.
   container CPU/memory values and any concurrent total never exceed the immutable
   registry ceilings. All emergency cleanup shares one deadline no greater than
   the existing 60-second cleanup margin.
-- [ ] ART reserves the existing fixed 512 MiB workspace total and derives the
-  runtime allowance from verified expanded bytes before POST grant publication.
-  Cancellation cleans synchronously;
-  simulated service SIGKILL leaves owned state for dead-process/TTL cleanup; an
-  unconfirmed delete retains quota ownership and returns infrastructure failure.
+- [ ] ART reserves the existing fixed 512 MiB workspace total and manager fixed
+  maximum-entry total before POST grant publication, then binds byte and entry
+  allowances after sealed workspace/grant overhead. Exact-limit runtime creation
+  succeeds; limit-plus-one fails before residue; normal and reaper cleanup remove
+  every admitted tree without exceeding the same entry count.
+- [ ] `test_post_result_is_hidden_until_grant_workspace_cleanup_completes`
+  proves the service settles Docker resources before its socket response and the
+  Python grant/materializer revokes and deletes scratch before exposing the
+  result to CHECKERS.
+- [ ] `test_service_sigkill_fails_adapter_and_live_art_unwinds_workspace`
+  proves service death fails transport, the live Python owner synchronously
+  unwinds scratch, and restart removes only its labeled/prefixed Docker residue.
+- [ ] `test_dead_art_owner_is_reaped_after_ttl` proves Python-owner death is the
+  distinct case handled by the existing TTL plus dead-owner workspace reaper.
+- [ ] `test_art_cleanup_failure_discards_received_result_and_retains_ledger_custody`
+  proves cleanup failure wins over an already received result and preserves the
+  reservation for retry.
+- [ ] Grant substitution produces no continuation launch. Conventional and PRE
+  images continue to receive only the ordinary request stdin and cannot gain the
+  stronger profile even if their output copies its plan shape.
 - [ ] Cache tests mutate one blob and independently cover extra, missing,
   symlink/special, wrong-owner and wrong-mode entries; each fails before Docker
   create with no pull. Startup recovery removes seeded stale containers and
@@ -367,7 +404,7 @@ can safely adopt the PILOT-00 mechanism.
 | Existing owner and gap | Inspect PILOT-00, PILOT-04 service/SDK, ART grants, selected PRE/POST owners and #493/#576/#555 | The selected service has exact verified input and image custody but only one conventional checker launch; it cannot safely build a submitted Dockerfile or launch a separate oracle | Plan review and representative execution pending |
 | Platform pin feasibility | `docker buildx imagetools inspect --raw` for the proposed CPython and Kaniko digests, without pulling either image | Both proposed top-level digests are OCI indexes; linux/amd64 resolves to CPython `sha256:6e13e65c...` and Kaniko `sha256:c73ca67a...`; raw nonsecret manifests and SHA-256 commands are retained under `/tmp/workstream-493-python-*` | Trusted builder config must bind the full canonical cache inventory plus both platform manifests and config IDs |
 | Corpus dependency | Merge `4628babe4`; run `python3 pilots/terminal_benchmark/verify_corpus.py` on that reviewed #576 candidate | PASS: all five originals report three reference passes plus starter and near-miss rejection; corrected exact base recipe/platform, workspace ownership, UTF-8 and UTC-overflow inputs are present | This is explicitly `trusted_native_corpus_only`, not Docker/gVisor or production admission proof; parent assets remain outside this change's implementation diff |
-| Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, and external grant publication | Existing owner already provides aggregate quota, durable workspace ownership, failed-cleanup retention and crash recovery; the plan extends that same ledger/grant narrowly for runtime output | Focused implementation and SIGKILL/restart proof pending |
+| Scratch and cleanup owner | Inspect `ArtifactScratchManager` workspace ledger, TTL/dead-process recovery, no-follow deletion, external grant publication and selected POST call order | Existing owner already provides aggregate byte/entry quota, durable workspace ownership, failed-cleanup retention and crash recovery. Rust settles Docker before socket response; the live Python context then revokes/deletes before exposing the evaluation. Service death and Python-owner death have distinct cleanup paths | Focused exact-limit, cleanup-order, SIGKILL and dead-owner proof pending |
 | #582 ownership check | Coordinate exact paths and port ownership with the S3 activation owner | #582 does not touch `preparation.py` or `post_submit_materialization.py`; it owns provider-neutral ArtifactStore activation evidence and S3 composition, while this change reuses the separate existing ArtifactScratchManager/ledger without extending that activation port | Recheck after either branch changes its bounded files |
 | Aggregate execution budget | Inspect request resource contract, selected POST budget and service timeout constants | Immutable registry resources include CPU, memory, deadline and output; the current adapter reserves one 60-second cleanup margin and the service has one 10-second cleanup timeout | Continuation must prove it never resets these ceilings per phase/resource |
 | Rust contracts and logic | `cargo fmt --all --check && cargo test --workspace --locked` in `external_checkers/` | Future implementation proof | Does not prove Docker/runsc behavior |
@@ -385,6 +422,15 @@ Docker/startup recovery, projects an exact no-follow context, uses one absolute
 deadline/output meter with concurrent CPU/memory ceilings, and binds plus fully
 rehashes a canonical offline-cache inventory. Focused architecture and security
 plan replay is required on the frozen revision before product edits.
+
+The first replay closed physical separation, aggregate registry ceilings and
+canonical cache/Docker orphan ownership, then found three narrower wording gaps:
+the service/ART cleanup order was reversed; the runtime byte allowance omitted
+the existing entry ceiling; and the plan asked the image to echo an unseen grant
+digest. This revision follows the actual socket/grant call order, binds and
+meters both existing ART ceilings, and has the trusted service attach the parsed
+plan to its verified in-memory grant. A final scoped replay is required before
+product edits.
 
 ## Reconciliation
 
