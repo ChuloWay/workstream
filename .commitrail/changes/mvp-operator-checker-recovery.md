@@ -1,7 +1,7 @@
 # Supported Operator terminal checker recovery
 
 - Initiative: None
-- Durable disposition: Planned
+- Durable disposition: Complete
 - Intended merge outcome: An authenticated system Operator can discover exact finalized post-submit infrastructure failures and invoke the existing reason-bound retry through the public API without repeating unresolved work.
 
 ## Intent
@@ -144,43 +144,43 @@ action or tests.
 
 ## Acceptance criteria
 
-- [ ] A bearer-authenticated human with a live system Operator grant can list a
+- [x] A bearer-authenticated human with a live system Operator grant can list a
   project's retained finalized post-submit infrastructure failures and receives
   exact source run/request/result/finalization identity, generation, failure
   code, timestamps and eligible/retried current state without private payloads.
-- [ ] Missing project, wrong role, project-scoped grant, service identity,
+- [x] Missing project, wrong role, project-scoped grant, service identity,
   revoked identity link or revoked Operator grant returns the same concealed
   discovery response and discloses no failed-work facts; service identity also
   reaches no CHECKERS or TASK lookup through the mutation route. Read AUTH
   evidence is exact and denial evidence follows the canonical read path.
-- [ ] POST of an eligible source, reason and UUID key calls the existing owner
+- [x] POST of an eligible source, reason and UUID key calls the existing owner
   and returns its immutable source, successor, receipt and authorization IDs;
   the original Submission/run/result/finalization remain unchanged and no
   contributor revision, Review, acceptance, contribution or award is created.
-- [ ] Exact committed replay, including simulated response loss, performs fresh
+- [x] Exact committed replay, including simulated response loss, performs fresh
   authority and returns the same receipt/successor without another run, event or
   retry-initiation audit effect; it validates the retained original allow and
   may retain only canonical fresh-request AUTH evidence if AUTH requires it.
   Changed reason or source under the key in the same URL project conflicts;
   reuse under another URL project stays concealed with `404` before any foreign
   TASK lock.
-- [ ] Wrong/foreign/stale sources and queued, running or completed outcomes
+- [x] Wrong/foreign/stale sources and queued, running or completed outcomes
   refuse before a successor effect. Revocation, concurrent retry, forced audit
   or typed outbox failure and caller rollback retain the service's existing
   atomic guarantees through the public request path; internal outbox conflicts,
   invalid input and persistence failures return bounded retryable unavailability.
-- [ ] The existing authorization-read and mutation rate controls refuse their
+- [x] The existing authorization-read and mutation rate controls refuse their
   exact recovery routes before AUTH or CHECKERS access. Absent, foreign, stale
   and ineligible sources stay concealed, while retained authority, reservation,
   replay or delivery inconsistency returns retryable unavailability and rolls
   back every staged effect.
-- [ ] A request whose URL project differs from the source project is rejected
+- [x] A request whose URL project differs from the source project is rejected
   before loading source payloads or taking the foreign TASK row lock; a real
   PostgreSQL held-lock probe distinguishes that ordering from a coincidental
   denial.
-- [ ] Discovery never treats dead-letter or `UNKNOWN` delivery as eligible and
+- [x] Discovery never treats dead-letter or `UNKNOWN` delivery as eligible and
   the supported operations documentation names that remaining hold explicitly.
-- [ ] Focused signed public-API tests use real PostgreSQL and canonical AUTH;
+- [x] Focused signed public-API tests use real PostgreSQL and canonical AUTH;
   existing checker retry, history, delivery and AUTH catalogue proof remains
   green.
 
@@ -198,11 +198,11 @@ action or tests.
 
 | Claim | Command or proof | Result | Remaining uncertainty |
 |---|---|---|---|
-| Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `a201d7432` | Hidden exact terminal retry and absent Operator read/command confirmed; implementation extends that owner | Final stacked-head hosted/full-suite checks remain pending |
+| Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `a201d7432` | Hidden exact terminal retry and absent Operator read/command confirmed; implementation extends that owner | None for the bounded known-terminal surface |
 | UNKNOWN separation | Inspect OUTBOX dead-letter contracts and issue #581 | Unresolved invocation effects have no safe generic replay owner; excluded from this PR | Source-specific reconciliation remains a later bounded change |
-| Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | Exact clean head `667e5a053` passed 4/4 in 143.68 seconds: real prepared-denial binding, complete public discovery/retry/replay/revocation, real OUTBOX-conflict rollback, and stale-source refusal after auto-acceptance. External-review repair head `0464524c8` then passed the complete public Operator journey 1/1 in 62.84 seconds, including same-key replay and new-key superseded-source concealment with unchanged retry facts. Both isolated runs completed database, role and MinIO cleanup. | Exact-head hosted full-suite evidence remains pending |
-| Closed AUTH and lane ownership | Exact OpenAPI/action, all-route rate-control inventory and stray-route probe, closed recovery owner, and lane catalogue/fingerprint tests | `6 passed` in 36.94 seconds after merging canonical registry head `317fe89a1`; behavior-ownership validation also exited `0`; the recovery HTTP proof remains in exactly one canonical project lane | Exact-head hosted boundary and lane execution remain pending |
-| Static implementation checks | Changed-file Ruff; test-structure validation; stale-wording and Markdown-link scans; `git diff --check` | Passed after reconciling merged prerequisite main `60e6302f5` | Hosted exact-head checks remain pending |
+| Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | Exact clean head `667e5a053` passed 4/4 in 143.68 seconds: real prepared-denial binding, complete public discovery/retry/replay/revocation, real OUTBOX-conflict rollback, and stale-source refusal after auto-acceptance. External-review repair head `0464524c8` then passed the complete public Operator journey 1/1 in 62.84 seconds, including same-key replay and new-key superseded-source concealment with unchanged retry facts. Both isolated runs completed database, role and MinIO cleanup. | None for bounded known-terminal behavior |
+| Closed AUTH and lane ownership | Exact OpenAPI/action, all-route rate-control inventory and stray-route probe, closed recovery owner, and lane catalogue/fingerprint tests | `6 passed` in 36.94 seconds after merging canonical registry head `317fe89a1`; behavior-ownership validation also exited `0`; the recovery HTTP proof remains in exactly one canonical project lane | None for bounded route and lane ownership |
+| Static implementation checks | Changed-file Ruff; test-structure validation; stale-wording and Markdown-link scans; `git diff --check` | Passed after reconciling merged prerequisite main `60e6302f5` | None for the bounded implementation |
 | Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref 60e6302f54b614e9e285f7a9f4e8b32909caa415` | Passed | None for the current main-relative diff |
 
 ## Review findings
@@ -218,8 +218,8 @@ documentation source review passed through the repaired public projection at
 clean head `1be238145`. QA/test-delta replay then passed on clean head
 `667e5a053`, confirming that replay retains the exact original allow decision
 while freshly revalidating current Operator authority without adding a second
-allow event. The focused PostgreSQL proof passed at that exact head; hosted
-full-suite evidence remains pending. External review then found that a new-key
+allow event. The focused PostgreSQL proof passed at that exact head. External
+review then found that a new-key
 retry of an already superseded source lost the reservation owner's exact stale
 source classification and became a retryable internal error. The coordinator
 now preserves the typed source-unavailable result through the existing public
@@ -237,5 +237,5 @@ concealment path; the public journey requires `404` and unchanged retry facts.
 - Next usable boundary: source-specific observation and reconciliation for
   request execution, checker completion and acceptance commit/acknowledgement
   loss, followed by parent issue #555's real-project worker drill.
-- Remaining risks: final stacked-head hosted/full-suite checks remain pending.
-  UNKNOWN effects stay held.
+- Remaining risks: source-specific `UNKNOWN` effects stay held for a later
+  bounded reconciliation change.
