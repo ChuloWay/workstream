@@ -243,3 +243,10 @@ def project_guide_activation_port(
         authorization=authorization,
         registry=external_checker_registry_reader(session),
     )
+
+
+def project_summary_reader(session: AsyncSession):
+    """Read minimal identity and active guide version for an authorized project set."""
+    from app.modules.projects.project_summaries import ProjectSummaryReader
+
+    return ProjectSummaryReader(session)

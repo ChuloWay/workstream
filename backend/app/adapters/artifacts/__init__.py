@@ -676,3 +676,11 @@ def task_import_source_commands(session: AsyncSession, *, settings, context):
         identity_link_id=context.identity_link_id,
         authorization=task_import_source_authorization(session, context), runtime=runtime,
     )
+
+
+def submission_bundle_preparation_reader(session: AsyncSession):
+    """Compose ART's preparation projection over CHECKERS' retained selected runs."""
+    from app.adapters.checkers import selected_pre_submit_run_reader
+    from app.modules.artifacts.preparation_reads import SubmissionBundlePreparationReader
+
+    return SubmissionBundlePreparationReader(session, runs=selected_pre_submit_run_reader(session))

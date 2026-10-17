@@ -3,8 +3,8 @@
 from alembic import op
 from scripts.schema_baseline_sql import split_sql_statements
 
-revision = "0051_artifact_provider_proof"
-down_revision = "0050_operational_read_audit"
+revision = "0052_artifact_provider_proof"
+down_revision = "0051_operational_read_audit"
 branch_labels = None
 depends_on = None
 

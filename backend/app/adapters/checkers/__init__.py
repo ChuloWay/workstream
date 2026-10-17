@@ -385,3 +385,10 @@ def delivery_bound_post_submission_executor(
         outbox=outbox_append,
         review_modes=project_locked_policy_context_port,
     )
+
+
+def selected_pre_submit_run_reader(session):
+    """Read retained selected PRE runs for their own contributor; the caller authorizes."""
+    from app.modules.checkers.selected_pre_submit_reads import SelectedPreSubmitRunReader
+
+    return SelectedPreSubmitRunReader(session)

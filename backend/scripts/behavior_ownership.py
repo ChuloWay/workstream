@@ -104,6 +104,19 @@ AWS_ARTIFACT_ACTIVATION_TARGETS = frozenset({
 PILOT_READ_1_TARGETS = frozenset({
     "backend/app/modules/tasks/submission_attempts.py",
 })
+PILOT_READ_2_TARGETS = frozenset({
+    "backend/app/api/deps/contributor_reads.py",
+    "backend/app/api/routes/contributor_reads.py",
+    "backend/app/modules/artifacts/preparation_reads.py",
+    "backend/app/modules/authorization/api/contributor_reads.py",
+    "backend/app/modules/authorization/contributor_read.py",
+    "backend/app/modules/authorization/domain/contributor_reads.py",
+    "backend/app/modules/checkers/selected_pre_submit_reads.py",
+    "backend/app/modules/projects/api/project_summaries.py",
+    "backend/app/modules/projects/project_summaries.py",
+    "backend/app/modules/tasks/api/contributor_reads.py",
+    "backend/app/modules/tasks/contributor_reads.py",
+})
 TASK_CHECKER_CLEANUP_REMOVED_TARGETS = frozenset({
     "backend/app/core/permissions.py",
     "backend/app/modules/tasks/authorization.py",
@@ -940,6 +953,7 @@ def _validate_additive_partition_transition(
         | PILOT_08_REVISION_TARGETS
         | PILOT_READ_1_TARGETS
         | AWS_ARTIFACT_ACTIVATION_TARGETS
+        | PILOT_READ_2_TARGETS
         | CON_02B_DELIVERY_TARGETS
         | AUTH_OUTBOX_02_TARGETS
         | ARCH_03C1_TARGETS

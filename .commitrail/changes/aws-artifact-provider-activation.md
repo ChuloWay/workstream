@@ -103,7 +103,7 @@ unknown provider outcome fails closed and cannot commit success evidence.
   migration requires their normal update.
 - `backend/app/modules/checkers/external_registry.py` and
   `backend/tests/checkers/external/test_postgresql.py`: preserve the exact
-  shared `0050_operational_read_audit` prerequisite repair while stacking the
+  shared `0051_operational_read_audit` prerequisite repair while stacking the
   provider proof migration after it; no registry behavior is otherwise in
   scope.
 - `backend/scripts/test_lane_catalogue.py`,
@@ -369,7 +369,7 @@ rebinding route.
 | Normative activation contract traced | `docs/spec_artifact_storage_service.md:694-740` | Three live probes, immutable activation, per-I/O and terminal checks are current canonical requirements; the exact-role IAM inspection contradiction is resolved above | Measured AWS deadlines remain a later live-run prerequisite |
 | Offline static proof | `py_compile`; focused Ruff; `git diff --check`; stale-wording, stale artifact/authorization contract and changed-Markdown-link checks | Initial candidate passed all checks; repaired source and all five new test modules pass `py_compile`, focused Ruff and `git diff --check`; all named documentation checks pass | Full affected selection requires exact repaired-head replay |
 | Offline behavior proof | Focused activation/config/startup/factory pytest batches | Initial candidate: 230 passed and seven failed; the seven repaired cases then passed. At clean source `159003fce`, one exact-head selection covering the original affected set plus native proof transport/CLI passed 278 tests with no failures, errors or skips in 164.39 seconds; lane-catalogue contract 58 passed; all nine moved terminal-test cases pass `--setup-plan` fixture closure | PostgreSQL/migration and live AWS proof remain pending; the review repair after `159003fce` requires a focused replay before freeze |
-| Review repair proof | Focused exact trust-policy selection; direct-SQL test setup plan; Alembic graph/revision scan | Closed trust grammar and IAM placement: 14 passed, followed by the three-case issuer/account scope addendum; both direct-SQL role/digest parameters retain the complete isolated PostgreSQL fixture closure; the graph has one `0051` head through canonical `0050`, and all 51 revision IDs fit the 32-character version column | Direct-SQL and current-head schema execution await the scheduled PostgreSQL batch |
+| Review repair proof | Focused exact trust-policy selection; direct-SQL test setup plan; Alembic graph/revision scan | Closed trust grammar and IAM placement: 14 passed, followed by the three-case issuer/account scope addendum; both direct-SQL role/digest parameters retain the complete isolated PostgreSQL fixture closure; the graph has one `0052` head through canonical operational-read `0051` and contributor-read `0050`, and all 52 revision IDs fit the 32-character version column | Direct-SQL and current-head schema execution await the scheduled PostgreSQL batch |
 | CI/test metadata proof | `python -m scripts.test_structure_boundary validate ...`; `pytest -q tests/test_ci_lane_catalogue.py`; AST comparison of the three moved functions | Debt transition passes while `test_artifact_admission.py` shrinks from 2,779 to 2,596 lines; 58 lane tests pass; all three moved function ASTs are identical | CI-integrity and test-delta reviewer replay remain pending on the clean target |
 | Live proof | Three separately identified executors, credential-free coordination, then hosted public guide/Submission drill | Not authorized or run | Requires approved #583 environment and explicit live authorization |
 
@@ -431,12 +431,12 @@ read owner. These are separate failure boundaries, not one broad mock graph.
 ## Reconciliation
 
 - Current-source reconciliation: the implementation began at `34501cd64` and
-  has been reconciled against `origin/main` at `a201d743`. Issue #583 is
+  has been reconciled against `origin/main` at `d5bac1313`. Issue #583 is
   parallel and owns hosted process topology,
-  scheduling and backup execution. Merged PR #575 owns migration `0049`;
-  the canonical operational-read audit migration owns `0050`, and this
-  provider-proof migration chains after it as `0051` without making the two
-  product features depend on each other.
+  scheduling and backup execution. Merged PR #577 owns contributor-read
+  migration `0050`; the canonical operational-read audit migration owns
+  `0051`, and this provider-proof migration chains after it as `0052` without
+  making the product features depend on each other.
 - Next usable boundary: after plan approval, complete offline implementation and
   deterministic proof without AWS access; then request the precise live
   environment authorization/facts listed above and run the live probes plus the

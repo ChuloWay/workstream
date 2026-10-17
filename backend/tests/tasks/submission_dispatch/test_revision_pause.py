@@ -175,6 +175,13 @@ async def test_fresh_blocked_failure_pauses_full_budget_and_is_visible_to_pm(
             view = response.json()["task"]["revision_context"]
             assert view["clock_state"] == "paused" and view["deadline_at"] is None
             assert view["remaining_microseconds"] == root.remaining_microseconds
+            # The contributor's assignment list carries the same paused, zero-round projection.
+            mine = await client.get("/api/v1/actors/me/assignments", params={"state": "active"})
+            assert mine.status_code == 200, mine.text
+            [item] = mine.json()["items"]
+            present = {name: value for name, value in item["revision"].items() if value is not None}
+            assert present == {name: value for name, value in view.items() if value is not None}
+            assert item["next_action"] == "none"
 
 
 async def _fixture_historical_missing_root(

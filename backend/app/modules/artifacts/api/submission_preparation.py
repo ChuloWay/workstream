@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Protocol
+from datetime import datetime
+from typing import Any, Literal, Protocol
 from uuid import UUID
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.modules.authorization.api import ActorIdentityFacts
 from app.modules.checkers.api.selected_pre_submit import SelectedPreSubmitExecutionFacts
@@ -80,6 +83,23 @@ def public_pre_submission_results(
     return results
 
 
+def pre_submission_finding_counts(facts: SelectedPreSubmitExecutionFacts) -> dict[str, int]:
+    """Count the same intake findings ``public_pre_submission_results`` shows.
+
+    A failed default check blocks with its findings; external findings count by level.
+    """
+    levels = [
+        finding.level for member in facts.external_members for finding in member.result.findings
+    ]
+    return {
+        "blocking": sum(
+            item.finding_count for item in facts.workstream_default.checks if item.status == "failed"
+        ) + levels.count("error"),
+        "warning": len(facts.workstream_default.warnings) + levels.count("warning"),
+        "coverage_incomplete": levels.count("coverage_incomplete"),
+    }
+
+
 class SubmissionBundlePreparationUnavailable(RuntimeError):
     """Conceal unavailable or denied preparation authority."""
 
@@ -134,6 +154,61 @@ class SubmissionBundlePreparationResult:
     submission_bundle_preparation_status: SubmissionBundlePreparationStatus
     replayed: bool
     pre_submission_results: tuple[dict[str, object], ...]
+
+
+PreparationOutcome = Literal["pending", "passed", "failed", "infrastructure_failed"]
+PreparationState = Literal[
+    "checking", "checks_failed", "infrastructure_failed", "storing", "ready", "submitted", "stale",
+]
+_FROZEN = ConfigDict(extra="forbid", frozen=True)
+
+
+class PreparationFindingCounts(BaseModel):
+    model_config = _FROZEN
+    blocking: int = Field(ge=0)
+    warning: int = Field(ge=0)
+    coverage_incomplete: int = Field(ge=0)
+
+
+class SubmissionBundlePreparationSummary(BaseModel):
+    """One own preparation: intake outcome, storage progress and any created Submission."""
+
+    model_config = _FROZEN
+    preparation_id: UUID
+    task_id: UUID
+    assignment_id: UUID
+    outcome: PreparationOutcome
+    state: PreparationState
+    storage_status: SubmissionBundlePreparationStatus | None
+    infrastructure_failure_code: str | None
+    archive_sha256: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    archive_byte_count: int = Field(gt=0)
+    finding_counts: PreparationFindingCounts | None
+    admission_id: UUID | None
+    submission_id: UUID | None
+    created_at: AwareDatetime
+    completed_at: AwareDatetime | None
+
+
+class SubmissionBundlePreparationDetail(SubmissionBundlePreparationSummary):
+    """A preparation with every contributor-visible intake finding."""
+
+    findings: list[dict[str, Any]]
+
+
+class SubmissionBundlePreparationPage(BaseModel):
+    model_config = _FROZEN
+    items: tuple[SubmissionBundlePreparationSummary, ...]
+    next_cursor: str | None
+
+
+class SubmissionBundlePreparationReadPort(Protocol):
+    """Read the caller's own preparations for one task, newest first."""
+
+    async def read(
+        self, *, actor_profile_id: UUID, task_id: UUID, preparation_id: UUID | None,
+        limit: int, before: tuple[datetime, UUID] | None,
+    ) -> tuple[tuple[SubmissionBundlePreparationDetail, ...], bool]: ...
 
 
 class SubmissionBundlePreparationCommand(Protocol):
