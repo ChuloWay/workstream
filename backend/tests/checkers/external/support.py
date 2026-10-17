@@ -12,6 +12,7 @@ from app.modules.checkers.api.external import (
     RESULT_SCHEMA_ID,
     ExternalCheckerCapabilityDefinition,
     ExternalCheckerCapabilityProjection,
+    ExternalCheckerRegistrationCommand,
     ExternalCheckerRegistryEntry,
     ExternalCheckerRegistrySpec,
     ExternalCheckerResourceLimits,
@@ -21,7 +22,6 @@ from app.modules.checkers.api.external import (
     PreSubmitExternalCheckerMaterial,
     PreSubmitExternalCheckerIdentity,
     external_checker_json_hash,
-    make_external_checker_registration_request,
 )
 from app.modules.checkers.api.default_checker import (
     WORKSTREAM_DEFAULT_CHECKER_ID,
@@ -145,10 +145,9 @@ def capability_projection(
 
 
 def registration_request(phase: str = "pre_submit", *, actor_profile_id=None):
-    return make_external_checker_registration_request(
+    return ExternalCheckerRegistrationCommand(
         actor_profile_id=actor_profile_id or uuid4(),
         operation_id=uuid4(),
-        registry_entry_id=new_record_id(),
         spec=registry_spec(phase),
     )
 

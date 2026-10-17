@@ -9,13 +9,10 @@ import pytest
 from sqlalchemy import insert, select, text
 from sqlalchemy.exc import DBAPIError
 
+from app.adapters.auth import checker_registry_authorization
 from app.core.identifiers import new_record_id
 from app.db import session as db_session
 from app.modules.actors.models import ActorIdentityLink
-from app.modules.authorization.checker_registry_authorization import (
-    ExternalCheckerRegistryAuthorizationAdapter,
-)
-from app.modules.authorization.kernel import AuthorizationService
 from app.modules.authorization.runtime import (
     ActorKind,
     ActorStatus,
@@ -25,11 +22,13 @@ from app.modules.authorization.runtime import (
 from app.modules.checkers.api.external import (
     MAX_SCHEMA_BYTES,
     ExternalCheckerRegistrationAuthorityFacts,
+    ExternalCheckerRegistrationCommand,
+    ExternalCheckerRegistrationPreparation,
     ExternalCheckerRegistryConflict,
     ExternalCheckerSchema,
     ExternalCheckerRegistryUnavailable,
     external_checker_json_hash,
-    make_external_checker_registration_request,
+    external_checker_registration_request_digest,
 )
 from app.modules.checkers.external_registry import ExternalCheckerRegistryService
 from app.modules.checkers.models import ExternalCheckerRegistryEntryRecord
@@ -57,9 +56,7 @@ async def _context(access, operation_id):
 async def _register(access, request):
     context = await _context(access, request.operation_id)
     async with db_session.get_session_factory()() as session, session.begin():
-        authority = ExternalCheckerRegistryAuthorizationAdapter(
-            AuthorizationService(session, context)
-        )
+        authority = checker_registry_authorization(session, context)
         return await ExternalCheckerRegistryService(session, authority).register(request)
 
 
@@ -95,18 +92,25 @@ async def _snapshot() -> tuple[list[dict], list[dict]]:
     return [dict(row) for row in rows], [dict(row) for row in events]
 
 
-def _raw_values(request, authorization_decision_event_id, *, entry_digest=None):
-    spec = request.spec
+def _raw_values(
+    command,
+    registry_entry_id,
+    request_digest,
+    authorization_decision_event_id,
+    *,
+    entry_digest=None,
+):
+    spec = command.spec
     values = {
-        "id": request.registry_entry_id,
-        "registration_operation_id": request.operation_id,
-        "request_digest": request.request_digest,
+        "id": registry_entry_id,
+        "registration_operation_id": command.operation_id,
+        "request_digest": request_digest,
         "capability_id": spec.capability_id,
         "capability_version": spec.capability_version,
         "phase": spec.phase,
         "image_digest": spec.image_digest,
         "entry_digest": entry_digest or spec.spec_digest,
-        "registered_by_actor_profile_id": request.actor_profile_id,
+        "registered_by_actor_profile_id": command.actor_profile_id,
         "authorization_decision_event_id": authorization_decision_event_id,
         **spec.resources.model_dump(),
     }
@@ -131,6 +135,35 @@ def _schema_document_at_limit() -> dict:
     return {"type": "object", "description": "x" * (MAX_SCHEMA_BYTES - overhead)}
 
 
+async def _authorize_exact(session, access, command, registry_entry_id):
+    context = await _context(access, command.operation_id)
+    authority = checker_registry_authorization(session, context)
+    preparation = ExternalCheckerRegistrationPreparation(
+        actor_profile_id=command.actor_profile_id,
+        operation_id=command.operation_id,
+        entry_digest=command.spec.spec_digest,
+    )
+    prepared = await authority.prepare_registration(preparation)
+    request_digest = external_checker_registration_request_digest(
+        command, registry_entry_id
+    )
+    try:
+        receipt = await authority.consume_registration(
+            prepared,
+            preparation,
+            ExternalCheckerRegistrationAuthorityFacts(
+                actor_profile_id=command.actor_profile_id,
+                operation_id=command.operation_id,
+                registry_entry_id=registry_entry_id,
+                request_digest=request_digest,
+                entry_digest=command.spec.spec_digest,
+            ),
+        )
+    finally:
+        authority.close_registration(prepared)
+    return receipt, request_digest
+
+
 @pytest.mark.asyncio
 async def test_real_operator_registration_replay_conflict_and_rollback(admin_access) -> None:
     grant_id = await admin_access.signed.grant(
@@ -141,6 +174,7 @@ async def test_real_operator_registration_replay_conflict_and_rollback(admin_acc
     first = await _register(admin_access, request)
     replay = await _register(admin_access, request)
     assert replay == first
+    assert type(first.registry_entry_id) is UUID
     rows, events = await _snapshot()
     assert len(rows) == 1 and len(events) == 2
     assert rows[0]["authorization_decision_event_id"] == events[0]["id"]
@@ -148,6 +182,26 @@ async def test_real_operator_registration_replay_conflict_and_rollback(admin_acc
     assert all(event["permission_id"] == "operations.reconcile.run" for event in events)
     assert all(event["project_id"] is None for event in events)
     assert all(event["resource_type"] == "external_checker_registry_entry" for event in events)
+    assert all(event["resource_id"] == str(first.registry_entry_id) for event in events)
+    assert all(event["correlation_id"] == request.operation_id for event in events)
+    request_digest = external_checker_registration_request_digest(
+        request, first.registry_entry_id
+    )
+    expected_context_digest = external_checker_json_hash(
+        {
+            "resource_context": {
+                "resource_type": "external_checker_registry_entry",
+                "resource_id": str(first.registry_entry_id),
+                "operation_id": str(request.operation_id),
+                "request_digest": request_digest,
+                "entry_digest": request.spec.spec_digest,
+            }
+        }
+    )
+    assert all(
+        event["after_facts"]["resource_context_digest"] == expected_context_digest
+        for event in events
+    )
     assert all(event["after_facts"]["allowed"] is True for event in events)
 
     conflict = registration_request(actor_profile_id=admin_access.target.id)
@@ -164,9 +218,7 @@ async def test_real_operator_registration_replay_conflict_and_rollback(admin_acc
     context = await _context(admin_access, rollback.operation_id)
     with pytest.raises(RuntimeError, match="force rollback"):
         async with db_session.get_session_factory()() as session, session.begin():
-            authority = ExternalCheckerRegistryAuthorizationAdapter(
-                AuthorizationService(session, context)
-            )
+            authority = checker_registry_authorization(session, context)
             await ExternalCheckerRegistryService(session, authority).register(rollback)
             raise RuntimeError("force rollback")
     assert await _snapshot() == after_conflict
@@ -200,23 +252,17 @@ async def test_same_operation_mutations_roll_back_authority_and_preserve_facts(
         spec.model_dump()
         | {"resources": spec.resources.model_dump() | {"cpu_millis": 600}}
     )
-    for registry_entry_id, changed in (
-        (new_record_id(), spec),
-        (request.registry_entry_id, changed_image),
-        (request.registry_entry_id, changed_schema),
-        (request.registry_entry_id, changed_resources),
-    ):
-        mutation = make_external_checker_registration_request(
+    for changed in (changed_image, changed_schema, changed_resources):
+        mutation = ExternalCheckerRegistrationCommand(
             actor_profile_id=request.actor_profile_id,
             operation_id=request.operation_id,
-            registry_entry_id=registry_entry_id,
             spec=changed,
         )
         with pytest.raises(ExternalCheckerRegistryConflict):
             await _register(admin_access, mutation)
         assert await _snapshot() == baseline
 
-    assert stored.registry_entry_id == request.registry_entry_id
+    assert stored.registry_entry_id.version == 7
 
 
 @pytest.mark.asyncio
@@ -245,10 +291,9 @@ async def test_numeric_schema_and_exact_size_boundary_share_database_encoding(
             "configuration_schema": numeric_schema,
         }
     )
-    numeric_request = make_external_checker_registration_request(
+    numeric_request = ExternalCheckerRegistrationCommand(
         actor_profile_id=admin_access.target.id,
         operation_id=uuid4(),
-        registry_entry_id=new_record_id(),
         spec=numeric_spec,
     )
     assert (await _register(admin_access, numeric_request)).entry_digest == (
@@ -270,46 +315,39 @@ async def test_numeric_schema_and_exact_size_boundary_share_database_encoding(
             "configuration_schema": boundary_schema,
         }
     )
-    boundary_request = make_external_checker_registration_request(
+    boundary_request = ExternalCheckerRegistrationCommand(
         actor_profile_id=admin_access.target.id,
         operation_id=uuid4(),
-        registry_entry_id=new_record_id(),
         spec=boundary_spec,
     )
     assert (await _register(admin_access, boundary_request)).entry_digest == (
         boundary_spec.spec_digest
     )
 
-    oversized_request = make_external_checker_registration_request(
+    oversized_request = ExternalCheckerRegistrationCommand(
         actor_profile_id=admin_access.target.id,
         operation_id=uuid4(),
-        registry_entry_id=new_record_id(),
         spec=type(numeric_spec).model_validate(
             numeric_spec.model_dump() | {"capability_version": "v1.2.6"}
         ),
     )
-    context = await _context(admin_access, oversized_request.operation_id)
     with pytest.raises(DBAPIError, match="schema_documents"):
         async with db_session.get_session_factory()() as session, session.begin():
-            authority = ExternalCheckerRegistryAuthorizationAdapter(
-                AuthorizationService(session, context)
-            )
-            receipt = await authority.authorize_registration(
-                ExternalCheckerRegistrationAuthorityFacts(
-                    actor_profile_id=oversized_request.actor_profile_id,
-                    operation_id=oversized_request.operation_id,
-                    registry_entry_id=oversized_request.registry_entry_id,
-                    request_digest=oversized_request.request_digest,
-                    entry_digest=oversized_request.spec.spec_digest,
-                )
+            registry_entry_id = new_record_id()
+            receipt, request_digest = await _authorize_exact(
+                session, admin_access, oversized_request, registry_entry_id
             )
             values = _raw_values(
-                oversized_request, receipt.authorization_decision_event_id
+                oversized_request,
+                registry_entry_id,
+                request_digest,
+                receipt.authorization_decision_event_id,
             )
             values["configuration_schema_document"] = _schema_document_at_limit() | {
                 "description": _schema_document_at_limit()["description"] + "x"
             }
             await session.execute(insert(ExternalCheckerRegistryEntryRecord).values(**values))
+
 
 @pytest.mark.asyncio
 async def test_exact_concurrent_registration_serializes_to_one_row(admin_access) -> None:
@@ -327,6 +365,29 @@ async def test_exact_concurrent_registration_serializes_to_one_row(admin_access)
     rows, events = await _snapshot()
     assert len(rows) == 1
     assert len(events) == 2
+    assert all(event["resource_id"] == str(first.registry_entry_id) for event in events)
+    assert all(event["correlation_id"] == request.operation_id for event in events)
+    request_digest = external_checker_registration_request_digest(
+        request, first.registry_entry_id
+    )
+    expected_context_digest = external_checker_json_hash(
+        {
+            "resource_context": {
+                "resource_type": "external_checker_registry_entry",
+                "resource_id": str(first.registry_entry_id),
+                "operation_id": str(request.operation_id),
+                "request_digest": request_digest,
+                "entry_digest": request.spec.spec_digest,
+            }
+        }
+    )
+    assert all(
+        event["after_facts"] == {
+            "allowed": True,
+            "resource_context_digest": expected_context_digest,
+        }
+        for event in events
+    )
 
 
 @pytest.mark.asyncio
@@ -391,31 +452,23 @@ async def test_registry_rejects_update_delete_truncate_and_unauthorized_insert(
                     },
                 )
 
-    duplicate = make_external_checker_registration_request(
+    duplicate = ExternalCheckerRegistrationCommand(
         actor_profile_id=admin_access.target.id,
         operation_id=uuid4(),
-        registry_entry_id=new_record_id(),
         spec=request.spec,
     )
-    context = await _context(admin_access, duplicate.operation_id)
     with pytest.raises(DBAPIError, match="registry_identity"):
         async with db_session.get_session_factory()() as session, session.begin():
-            authority = ExternalCheckerRegistryAuthorizationAdapter(
-                AuthorizationService(session, context)
-            )
-            receipt = await authority.authorize_registration(
-                ExternalCheckerRegistrationAuthorityFacts(
-                    actor_profile_id=duplicate.actor_profile_id,
-                    operation_id=duplicate.operation_id,
-                    registry_entry_id=duplicate.registry_entry_id,
-                    request_digest=duplicate.request_digest,
-                    entry_digest=duplicate.spec.spec_digest,
-                )
+            registry_entry_id = new_record_id()
+            receipt, request_digest = await _authorize_exact(
+                session, admin_access, duplicate, registry_entry_id
             )
             await session.execute(
                 insert(ExternalCheckerRegistryEntryRecord).values(
                     **_raw_values(
                         duplicate,
+                        registry_entry_id,
+                        request_digest,
                         receipt.authorization_decision_event_id,
                     )
                 )
@@ -430,26 +483,18 @@ async def test_direct_insert_with_real_authority_but_substituted_digest_rolls_ba
         admin_access.admin, admin_access.target, role="operator"
     )
     request = registration_request(actor_profile_id=admin_access.target.id)
-    context = await _context(admin_access, request.operation_id)
-
     with pytest.raises(DBAPIError, match="registry authority closure invalid"):
         async with db_session.get_session_factory()() as session, session.begin():
-            authority = ExternalCheckerRegistryAuthorizationAdapter(
-                AuthorizationService(session, context)
-            )
-            receipt = await authority.authorize_registration(
-                ExternalCheckerRegistrationAuthorityFacts(
-                    actor_profile_id=request.actor_profile_id,
-                    operation_id=request.operation_id,
-                    registry_entry_id=request.registry_entry_id,
-                    request_digest=request.request_digest,
-                    entry_digest=request.spec.spec_digest,
-                )
+            registry_entry_id = new_record_id()
+            receipt, request_digest = await _authorize_exact(
+                session, admin_access, request, registry_entry_id
             )
             await session.execute(
                 insert(ExternalCheckerRegistryEntryRecord).values(
                     **_raw_values(
                         request,
+                        registry_entry_id,
+                        request_digest,
                         receipt.authorization_decision_event_id,
                         entry_digest="sha256:" + "0" * 64,
                     )
