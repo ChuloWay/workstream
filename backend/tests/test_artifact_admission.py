@@ -1023,8 +1023,6 @@ async def test_put_observation_unavailable_retries_then_exhausts_without_facts(
         await engine.dispose()
 
 
-
-
 async def test_scanner_uses_due_time_page_bound_and_duplicate_publication(
     admission_database_env: str,
     tmp_path: Path,
@@ -1250,6 +1248,7 @@ async def test_verification_claim_takeover_and_scanner_due_order_are_fenced(
                     "verified",
                     "sha256:" + "1" * 64,
                     1,
+                    None,
                 )
                 == "stale"
             )
@@ -1425,7 +1424,7 @@ async def test_verification_resource_drift_after_read_is_stale_without_terminal_
                 job_id = UUID(job.id)
                 await session.commit()
 
-                async def drift_job_after_claim(_provider_object_ref: str):
+                async def drift_job_after_claim(_provider_object_ref: str, **_kwargs: object):
                     async with factory() as drift_session, drift_session.begin():
                         drifted_job = await drift_session.get(
                             ArtifactVerificationJob, str(job_id), with_for_update=True
@@ -1687,7 +1686,9 @@ async def test_verification_rechecks_authorized_object_ref_after_io(
                 job_id, replica_id = UUID(job.id), attempt.replica_id
                 await session.commit()
 
-                async def drift_object_ref_during_read(_provider_object_ref: str):
+                async def drift_object_ref_during_read(
+                    _provider_object_ref: str, **_kwargs: object
+                ):
                     async with factory() as drift_session, drift_session.begin():
                         drifted_replica = await drift_session.get(
                             ArtifactReplica, replica_id, with_for_update=True
@@ -2429,10 +2430,6 @@ async def test_checker_output_requires_exact_active_fixed_service_identity(
             )
     finally:
         await engine.dispose()
-
-
-
-
 
 
 async def test_invalid_checker_slot_precedes_namespace_drift(

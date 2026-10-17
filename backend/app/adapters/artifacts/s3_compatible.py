@@ -1052,6 +1052,38 @@ def create_s3_compatible_artifact_store_bootstrap(
     return bootstrap
 
 
+def _create_s3_store_bootstrap(
+    settings: Settings,
+    *,
+    provider_profile: str,
+    endpoint_url: str | None,
+    session_factory: Callable[[], AioSession],
+    activation_guard: ArtifactProviderActivationGuard | None,
+) -> S3CompatibleArtifactStoreBootstrap:
+    """Construct the one concrete S3 adapter for either supported profile."""
+    return S3CompatibleArtifactStoreBootstrap(
+        S3CompatibleArtifactStore(
+            provider_profile=provider_profile,
+            region=_required(settings.artifact_s3_region),
+            endpoint_url=endpoint_url,
+            bucket=_required(settings.artifact_s3_bucket),
+            private_prefix=settings.artifact_s3_private_prefix,
+            addressing_style=settings.artifact_s3_addressing_style,
+            session_factory=session_factory,
+            activation_guard=activation_guard,
+            buffer_bytes=settings.artifact_stream_buffer_bytes,
+            connect_timeout_seconds=settings.artifact_s3_connect_timeout_seconds,
+            read_timeout_seconds=settings.artifact_s3_read_timeout_seconds,
+            write_timeout_seconds=settings.artifact_s3_write_timeout_seconds,
+            pool_timeout_seconds=settings.artifact_s3_pool_timeout_seconds,
+            operation_total_timeout_seconds=(
+                settings.artifact_s3_operation_total_timeout_seconds
+            ),
+            max_pool_connections=settings.artifact_s3_max_pool_connections,
+        )
+    )
+
+
 def _try_create_minio_artifact_store_bootstrap(
     settings: Settings,
 ) -> tuple[S3CompatibleArtifactStoreBootstrap | None, str | None]:
@@ -1071,26 +1103,12 @@ def _try_create_minio_artifact_store_bootstrap(
             if settings.artifact_s3_session_token is not None
             else None,
         )
-        bootstrap = S3CompatibleArtifactStoreBootstrap(
-            S3CompatibleArtifactStore(
-                provider_profile="minio",
-                region=_required(settings.artifact_s3_region),
-                endpoint_url=_required(settings.artifact_s3_endpoint_url),
-                bucket=_required(settings.artifact_s3_bucket),
-                private_prefix=settings.artifact_s3_private_prefix,
-                addressing_style=settings.artifact_s3_addressing_style,
-                session_factory=lambda: session,
-                activation_guard=None,
-                buffer_bytes=settings.artifact_stream_buffer_bytes,
-                connect_timeout_seconds=settings.artifact_s3_connect_timeout_seconds,
-                read_timeout_seconds=settings.artifact_s3_read_timeout_seconds,
-                write_timeout_seconds=settings.artifact_s3_write_timeout_seconds,
-                pool_timeout_seconds=settings.artifact_s3_pool_timeout_seconds,
-                operation_total_timeout_seconds=(
-                    settings.artifact_s3_operation_total_timeout_seconds
-                ),
-                max_pool_connections=settings.artifact_s3_max_pool_connections,
-            )
+        bootstrap = _create_s3_store_bootstrap(
+            settings,
+            provider_profile="minio",
+            endpoint_url=_required(settings.artifact_s3_endpoint_url),
+            session_factory=lambda: session,
+            activation_guard=None,
         )
     except ArtifactConfigurationError as error:
         return None, str(error)
@@ -1107,26 +1125,12 @@ def _create_aws_artifact_store_bootstrap(
     """Construct native AWS lazily so activation precedes credential inspection."""
     if settings.artifact_s3_provider_profile != "aws_s3":
         raise ArtifactConfigurationError("native AWS S3 profile is not configured")
-    return S3CompatibleArtifactStoreBootstrap(
-        S3CompatibleArtifactStore(
-            provider_profile="aws_s3",
-            region=_required(settings.artifact_s3_region),
-            endpoint_url=None,
-            bucket=_required(settings.artifact_s3_bucket),
-            private_prefix=settings.artifact_s3_private_prefix,
-            addressing_style=settings.artifact_s3_addressing_style,
-            session_factory=lambda: create_isolated_aws_workload_identity_session(settings),
-            activation_guard=activation_guard,
-            buffer_bytes=settings.artifact_stream_buffer_bytes,
-            connect_timeout_seconds=settings.artifact_s3_connect_timeout_seconds,
-            read_timeout_seconds=settings.artifact_s3_read_timeout_seconds,
-            write_timeout_seconds=settings.artifact_s3_write_timeout_seconds,
-            pool_timeout_seconds=settings.artifact_s3_pool_timeout_seconds,
-            operation_total_timeout_seconds=(
-                settings.artifact_s3_operation_total_timeout_seconds
-            ),
-            max_pool_connections=settings.artifact_s3_max_pool_connections,
-        )
+    return _create_s3_store_bootstrap(
+        settings,
+        provider_profile="aws_s3",
+        endpoint_url=None,
+        session_factory=lambda: create_isolated_aws_workload_identity_session(settings),
+        activation_guard=activation_guard,
     )
 
 

@@ -396,8 +396,8 @@ async def test_unknown_acknowledgement_recovers_through_existing_scanner_and_wor
     original = S3CompatibleArtifactStore.put
     writes = []
 
-    async def lose_acknowledgement(self, prepared):
-        result = await original(self, prepared)
+    async def lose_acknowledgement(self, prepared, **kwargs):
+        result = await original(self, prepared, **kwargs)
         writes.append(result.provider_object_ref)
         raise ArtifactStoreUnavailableError("injected uncertainty after real MinIO put")
 
@@ -563,8 +563,8 @@ async def _missing_source_put(client, monkeypatch):
     source = await _declare(client, project, raw)
     original_put, written_refs = S3CompatibleArtifactStore.put, []
 
-    async def lose_acknowledgement(self, prepared):
-        result = await original_put(self, prepared)
+    async def lose_acknowledgement(self, prepared, **kwargs):
+        result = await original_put(self, prepared, **kwargs)
         written_refs.append(result.provider_object_ref)
         raise ArtifactStoreUnavailableError("uncertainty after real MinIO put")
 

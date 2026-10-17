@@ -883,9 +883,9 @@ class ArtifactStorageOrchestrator:
                 submission_task_contexts=submission_task_contexts,
             )
         except (ArtifactStoreUnavailableError, TimeoutError):
-            return await self._record_verification_unavailable(claimed, executor_id, facts)
+            return await self._record_verification_unavailable(executor_id, facts)
         except ArtifactProviderLiveProofRequiredError:
-            return await self._record_verification_unavailable(claimed, executor_id, facts)
+            return await self._record_verification_unavailable(executor_id, facts)
         except ArtifactStoreError:
             return await self._complete_provider_verification(
                 claimed,
@@ -1436,7 +1436,6 @@ class ArtifactStorageOrchestrator:
 
     async def _record_verification_unavailable(
         self,
-        claimed: ArtifactVerificationJob,
         executor_id: UUID,
         expected_facts: ArtifactVerificationAuthorityFacts,
     ) -> str:
@@ -1448,8 +1447,12 @@ class ArtifactStorageOrchestrator:
                 phase="terminal",
                 idempotency_key=executor_id,
             )
-            job = await self._repo.lock_verification_job(claimed.id)
-            if not _matching_job_fence(job, executor_id, claimed.execution_generation):
+            job = await self._repo.lock_verification_job(str(expected_facts.resource_id))
+            if not _matching_job_fence(
+                job,
+                executor_id,
+                expected_facts.execution_generation,
+            ):
                 self._authority.discard()
                 return "stale"
             assert job is not None
@@ -1460,7 +1463,11 @@ class ArtifactStorageOrchestrator:
                 return "conflict"
             content = await self._repo.lock_content(replica.content_id)
             terminal_facts = _verification_authority_facts(
-                job, replica, attempt, executor_id, claimed.execution_generation
+                job,
+                replica,
+                attempt,
+                executor_id,
+                expected_facts.execution_generation,
             )
             if terminal_facts != expected_facts:
                 self._authority.discard()
@@ -1515,7 +1522,6 @@ class ArtifactStorageOrchestrator:
             )
         except ArtifactProviderLiveProofRequiredError:
             return await self._record_verification_unavailable(
-                claimed,
                 executor_id,
                 expected_facts,
             )

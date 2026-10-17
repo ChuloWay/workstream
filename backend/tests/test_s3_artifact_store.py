@@ -628,7 +628,13 @@ async def test_precondition_failure_requires_exact_replay_verification(
     async def fake_client() -> Any:
         yield Client()
 
-    async def verify(provider_ref: str, _commitment: object) -> None:
+    async def verify(
+        provider_ref: str,
+        _commitment: object,
+        *,
+        operation_evidence: object,
+    ) -> None:
+        assert operation_evidence is not None
         verified.append(provider_ref)
 
     monkeypatch.setattr(store, "_client", fake_client)
@@ -775,7 +781,13 @@ async def test_uncertain_transport_put_requires_independent_observation(
     async def fake_client() -> Any:
         yield Client()
 
-    async def matches(provider_ref: str, _commitment: object) -> bool:
+    async def matches(
+        provider_ref: str,
+        _commitment: object,
+        *,
+        operation_evidence: object,
+    ) -> bool:
+        assert operation_evidence is not None
         observed.append(provider_ref)
         return committed
 

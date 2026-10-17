@@ -102,6 +102,8 @@ def do_run_migrations(connection: Connection) -> None:
             ("0046_revision_expiry_retry",),
             ("0047_revision_recovery",),
             ("0048_revision_exhaustion",),
+            ("0049_attempt_outcome_findings",),
+            ("0050_operational_read_audit",),
             (_CURRENT_HEAD_REVISION,),
         ):
             raise RuntimeError(_RECREATE_GUIDANCE)
