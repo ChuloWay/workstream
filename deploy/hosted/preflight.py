@@ -510,7 +510,8 @@ def validate_compose(rendered: dict[str, Any]) -> None:
             or item.get("target") != item.get("source")
             or item.get("uid") != service_uid
             or item.get("gid") != service_gid
-            or item.get("mode") != 0o400
+            or type(item.get("mode")) not in (int, str)
+            or item.get("mode") not in (0o400, "0400")
             for item in mounted
         ):
             raise PreflightError(f"{role} mounted secrets differ from its release role")

@@ -105,7 +105,7 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 preflight.SECRET_FILE_TARGETS[key][0] for key in file_keys
             }
             self.assertEqual({item["source"] for item in mounted}, expected_role_secrets)
-            self.assertTrue(all(item["mode"] == 0o400 for item in mounted))
+            self.assertTrue(all(item["mode"] in (0o400, "0400") for item in mounted))
             for key in preflight.SECRET_FILE_KEYS:
                 if key in file_keys:
                     self.assertEqual(
@@ -115,6 +115,23 @@ class HostedReleaseConfigTests(unittest.TestCase):
                 else:
                     self.assertNotIn(key, services[name]["environment"])
         self.assertNotIn("secrets", services["checker-service"])
+
+    def test_compose_secret_mode_encodings_preserve_owner_only_read(self) -> None:
+        rendered = preflight.render_compose(self.environment_path, self.environment)
+        for mode in (0o400, "0400"):
+            candidate = copy.deepcopy(rendered)
+            for role in preflight.ROLE_SECRET_FILE_KEYS:
+                for secret in candidate["services"][role]["secrets"]:
+                    secret["mode"] = mode
+            with self.subTest(valid_mode=mode):
+                preflight.validate_compose(candidate)
+        for mode in (400, 256.0, "400", "0444", 0o444, "0600", 0o600, True, None):
+            candidate = copy.deepcopy(rendered)
+            candidate["services"]["api"]["secrets"][0]["mode"] = mode
+            with self.subTest(invalid_mode=mode), self.assertRaisesRegex(
+                preflight.PreflightError, "mounted secrets"
+            ):
+                preflight.validate_compose(candidate)
 
     def test_render_and_compose_operation_ignore_hostile_ambient_environment(self) -> None:
         hostile = {

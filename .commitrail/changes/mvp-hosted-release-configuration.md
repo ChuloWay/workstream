@@ -277,6 +277,13 @@ combined candidate now includes that canonical #582/PR #592 owner as a stacked
 dependency. Its own Settings tests precede image builds; preflight does not
 duplicate application validation. #592 remains the prerequisite human merge.
 
+Hosted Compose 2.38.2 renders the owner-read secret mode as JSON `"0400"`,
+where the local renderer emitted integer `256`. The single preflight validator
+accepts only those exact external representations of mode `0400`; different
+permissions, decimal-looking strings, floats and booleans reject. A focused
+regression and a render through the actual hosted Compose release preserve this
+boundary without changing secret access or the release topology.
+
 ## Evidence
 
 Source/configuration candidate checks:
