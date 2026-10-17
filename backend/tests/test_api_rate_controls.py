@@ -1008,6 +1008,17 @@ ESTABLISHED_AUTHORIZATION_READ_RATE_ROUTES = {
         "PUT",
         "/projects/{project_id}/contribution-policies/{policy_id}/versions/{version_id}",
     ),
+    # PILOT-READ-3 Project Manager and Finance project reads.
+    ("GET", "/projects/{project_id}/assignments"),
+    ("GET", "/projects/{project_id}/contribution-policies"),
+    ("GET", "/projects/{project_id}/guides"),
+    ("GET", "/projects/{project_id}/guides/{guide_id}"),
+    ("GET", "/projects/{project_id}/guides/{guide_id}/activation-readiness"),
+    ("GET", "/projects/{project_id}/guides/{guide_id}/documents/{document_id}/content"),
+    ("GET", "/projects/{project_id}/submission-bundle-preparations"),
+    ("GET", "/projects/{project_id}/submissions"),
+    ("GET", "/projects/{project_id}/summary"),
+    ("GET", "/projects/{project_id}/task-import-batches"),
 }
 CHECKER_REGISTRY_RATE_BINDINGS = {
     ("POST", "/operations/external-checker-registry"): {
