@@ -59,7 +59,7 @@ eligible source or call the retry through a bearer-authenticated public route.
   public recovery modules with the existing ARCH-04F4 ownership group, retain
   its closed no-parallel-runner inventory and regenerate the additive
   partition snapshot.
-- `backend/alembic/versions/0050_operational_read_audit.py`, the canonical
+- `backend/alembic/versions/0051_operational_read_audit.py`, the canonical
   head in `backend/alembic/env.py`, the existing external-checker migration
   proof, the real PostgreSQL schema fingerprint in `backend/tests/conftest.py`,
   and issue #580's bounded record: consume the byte-identical shared
@@ -199,10 +199,10 @@ action or tests.
 |---|---|---|---|
 | Existing owner and public gap | Inspect `CheckerRetryService`, adapter composition, routes, issue #581 and ARCH-04F4 tests at base `a201d7432` | Hidden exact terminal retry and absent Operator read/command confirmed; implementation extends that owner | Public PostgreSQL proof remains pending |
 | UNKNOWN separation | Inspect OUTBOX dead-letter contracts and issue #581 | Unresolved invocation effects have no safe generic replay owner; excluded from this PR | Source-specific reconciliation remains a later bounded change |
-| Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | At `17320d1d0`, 10 passed and the public denial case failed 422/404, exposing the missing closed audit target; the repair is staged for exact-head rerun | Hosted full-suite evidence remains with the lead |
-| Closed AUTH and lane ownership | Cursor/reason contracts, three exact catalogue/setup-finalization tests and three canonical CI lane inventory/ownership/fingerprint tests | `8 passed`; new tests remain in the existing checker-delivery module and lane manifest | Parallel #580 catalogue delta must be preserved when the branches reconcile |
-| Static implementation checks | Changed-file Ruff; changed Python `compileall`; `git diff --check origin/main...HEAD` | Passed on the rebased implementation | Exact-head rerun required after evidence updates |
-| Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref origin/main` | Passed | Exact-head rerun required after evidence updates |
+| Public PostgreSQL behavior | Focused signed `/api/v1` recovery tests plus existing checker retry suites | Hosted head `6faab0a5b` reproduced the public `500` and safely located the missing caller-root transaction; head `020d3d55d` contains the reviewed transaction repair | Exact-head PostgreSQL rerun and hosted full-suite evidence remain pending |
+| Closed AUTH and lane ownership | Exact catalogue, OpenAPI route/action, recovery HTTP transaction, ownership validation and running OpenAPI snapshot checks | `3 passed` in 162.42 seconds; ownership validation and exact snapshot comparison exited `0`; recovery HTTP proof remains in exactly one canonical project lane | Exact-head hosted boundary and lane execution remain pending |
+| Static implementation checks | Changed-file Ruff; conflict/stale-wording/Markdown-link/authorization-doc scans; `git diff --check` | Passed on clean stacked head `020d3d55d` | Affected review must replay after any source change |
+| Commitrail validity | `python3 scripts/check_commitrail_records.py --base-ref 2aa661bb9bb19e0970b12f05527454de77d30163` | Passed | None for the current stacked diff |
 
 ## Review findings
 
@@ -212,18 +212,19 @@ lock; a real held-lock wrong-project probe; a project/query-bound stable signed
 cursor; explicit caller-root rollback and canonical denial restaging; and clear
 separation between fresh AUTH evidence on replay and duplicate retry business
 effects. The implementation and focused tests incorporate those corrections.
-Runtime security, QA and other routed review remain pending until the focused
+Security and architecture source review passed on clean head `020d3d55d`;
+runtime and the remaining routed reviews remain pending until the focused
 PostgreSQL evidence is clean.
 
 ## Reconciliation
 
-- Current-source reconciliation: base `a201d7432`; issue #580's parallel branch
-  owns supported checker registration and a separate registry read action. This
-  change owns only terminal checker recovery and preserves the shared AUTH
-  catalogue/kernel additions. PR #589 owns and merges the canonical shared
-  audit-pair migration before #588 and #592; those dependent branches consume
-  commits `019ada270`, `ed8fe2275`, and `802a22260` byte-for-byte and introduce
-  no sibling revision.
+- Current-source reconciliation: main `d5bac1313` is an ancestor through the
+  published PR #589 head `2aa661bb9`; issue #580 owns supported checker
+  registration and a separate registry read action. This change owns only
+  terminal checker recovery and preserves both catalogue additions. PR #589
+  owns the canonical `0051_operational_read_audit` migration before #588 and
+  #592; this branch consumes its proved migration and schema fingerprint
+  byte-for-byte and introduces no sibling revision.
 - Next usable boundary: source-specific observation and reconciliation for
   request execution, checker completion and acceptance commit/acknowledgement
   loss, followed by parent issue #555's real-project worker drill.
