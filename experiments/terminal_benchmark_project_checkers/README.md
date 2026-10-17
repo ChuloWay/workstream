@@ -34,7 +34,7 @@ allocated 400 MiB write fails. It stages only the fixed nonsecret evidence
 allowlist through no-follow file descriptors. Cleanup removes the exact DIND
 and run-owned checker/registry transfer image aliases, removes the crane
 archive and binary, validates the head-and-run-bound no-follow ownership marker
-before deleting the run-named service control directory, unmounts XFS, detaches
+before deleting the run-named `/run` service control directory, unmounts XFS, detaches
 the loop device, deletes raw state, and adds a verified cleanup receipt before
 upload. A preexisting, substituted or ambiguously owned control path is never
 deleted and makes cleanup fail. The matrix validates the same custody before

@@ -383,7 +383,7 @@ service-to-ART callback or second cleanup dependency is introduced.
 
 The proof keeps only quota-subject cache, Docker state, evidence and ART scratch
 on the XFS mount. Its socket, PID and one-use barrier files live in a separate
-run-named control directory under the ephemeral runner temporary root. That
+run-named control directory directly under the ephemeral host `/run`. That
 root is atomically installed only when the target is absent, remains root-owned
 `0755`, and carries a root-owned `0600` no-follow marker bound to the head and
 run. The service and wrapper child directories use the exact service UID/GID
