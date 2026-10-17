@@ -220,10 +220,19 @@ test_delta, documentation and reuse_dedup tracks at `fcbfa9562`.
   submission or revision preparation follows from the same activity
   expression the task-stamp test exercises.
 
+- Second review (`1657511a`): the cursor digest binds `filters` for every
+  list, so continuation cursors issued before this change stop decoding; v0.1
+  is unreleased and keeps no compatibility path for development cursors.
+  Added focused proof for every preparation outcome and custody state, real
+  non-empty award totals and their exact decimal wire form, and a second
+  session committing findings during one snapshot read.
+
 ## Reconciliation
 
-- Current-source reconciliation: based on main at `a201d7432` (PR1 #575, #573
-  revision exhaustion and paused revision time, #585 lane capacity). The audit
+- Current-source reconciliation: based on main at `7b3dd58df` (PR1 #575, #573
+  revision exhaustion and paused revision time, #585 lane capacity, #586,
+  #587 and #591 unreadable-ZIP feedback, whose roadmap row keeps both changes,
+  #593 and #518). The audit
   migration is `0050_contributor_reads` after `0049_attempt_outcome_findings`;
   main's single-task revision read and this change's batch are one
   implementation; the assignment list carries #573's exhausted status and

@@ -7,8 +7,9 @@ from sqlalchemy import text
 from app.modules.checkers.selected_pre_submit_reads import SelectedPreSubmitRunReader
 from app.modules.tasks.contributor_reads import ContributorWorkReader
 from app.modules.tasks.repository import TaskRepository
+from tests.submission_fixtures import seed_retained_checker_run
 from tests.test_tasks import auth_headers
-from .support import ME, OWNER, as_actor, preparations_path, submitted_case
+from .support import ME, OWNER, as_actor, get_ok, preparations_path, submitted_case
 
 
 def _observe(owner, name, observed):
@@ -63,3 +64,24 @@ async def test_completed_preparation_without_execution_facts_is_unavailable(task
     monkeypatch.setattr(SelectedPreSubmitRunReader, "read_contributor_runs", without_execution)
     await as_actor(task_client, monkeypatch, OWNER)
     await _unavailable(task_client, preparations_path(task))
+
+
+async def test_findings_committed_by_another_session_mid_read_stay_out_of_that_response(task_client, monkeypatch):
+    _project, _task, submission = await submitted_case(task_client, monkeypatch)
+    original = ContributorWorkReader.read_submissions
+    interleaved = []
+
+    async def interleaving(reader, query):
+        await reader._session.execute(text("SELECT 1"))
+        if not interleaved:
+            # A second session commits a failed run with findings after this snapshot began.
+            interleaved.append(await seed_retained_checker_run(submission, verdict="failed", generation=2))
+        return await original(reader, query)
+
+    monkeypatch.setattr(ContributorWorkReader, "read_submissions", interleaving)
+    await as_actor(task_client, monkeypatch, OWNER)
+    [during] = (await get_ok(task_client, f"{ME}/submissions"))["items"]
+    [after] = (await get_ok(task_client, f"{ME}/submissions"))["items"]
+    assert len(interleaved) == 1
+    assert during["finding_counts"]["blocking"] == 0 < after["finding_counts"]["blocking"]
+    assert during["updated_at"] < after["updated_at"]

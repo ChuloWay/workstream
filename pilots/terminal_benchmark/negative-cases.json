@@ -1,0 +1,73 @@
+{
+  "near_miss_solutions": [
+    {
+      "external_task_id": "terminal-ledger-reconcile",
+      "package": "packages/ledger-reconcile",
+      "near_miss": {
+        "replace": "if row[\"status\"] != \"posted\" or row[\"id\"] in seen:",
+        "with": "if row[\"status\"] != \"posted\":",
+        "caught_by": "decimal-and-global-dedup"
+      }
+    },
+    {
+      "external_task_id": "terminal-event-rollup",
+      "package": "packages/event-rollup",
+      "near_miss": {
+        "replace": "stamp.astimezone(timezone.utc).date().isoformat()",
+        "with": "stamp.date().isoformat()",
+        "caught_by": "utc-boundary-and-first-id"
+      }
+    },
+    {
+      "external_task_id": "terminal-atomic-import",
+      "package": "packages/atomic-import",
+      "near_miss": {
+        "replace": "db.rollback()",
+        "with": "db.commit()",
+        "caught_by": "exact-replay-and-conflict-rollback"
+      }
+    },
+    {
+      "external_task_id": "terminal-file-inventory",
+      "package": "packages/file-inventory",
+      "near_miss": {
+        "replace": "root.rglob(\"*\")",
+        "with": "root.glob(\"*\")",
+        "caught_by": "empty-and-nested-bytes"
+      }
+    },
+    {
+      "external_task_id": "terminal-config-overlay",
+      "package": "packages/config-overlay",
+      "near_miss": {
+        "replace": "elif isinstance(value, dict):",
+        "with": "elif False:",
+        "caught_by": "nested-preservation"
+      }
+    }
+  ],
+  "package_mutations": [
+    {
+      "name": "missing-tests",
+      "remove": "tests/test_task.py",
+      "expected": "package validation rejects"
+    },
+    {
+      "name": "wrong-task-identity",
+      "field": "task.toml.external_task_id",
+      "expected": "package validation rejects"
+    },
+    {
+      "name": "ineffective-tests",
+      "replace": "tests/test_task.py",
+      "content": "print(\"passed\")\n",
+      "expected": "starter calibration unexpectedly passes, therefore verifier rejects"
+    },
+    {
+      "name": "unpinned-base",
+      "replace": "environment/Dockerfile",
+      "content": "FROM python:latest\n",
+      "expected": "package validation rejects"
+    }
+  ]
+}
