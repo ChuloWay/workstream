@@ -12,7 +12,9 @@ The matrix first pauses the trusted Docker wrapper after a labeled builder has
 been created and inspected but before the wrapper returns to the Rust service.
 It kills only the recorded service PID, observes adapter failure and live ART
 workspace unwind, releases the wrapper, and verifies restart cleanup without
-removing an unowned control. A second request must build successfully, reject
+removing an unowned control. Restart readiness requires both a new no-follow
+socket identity and the exact read-only service health receipt, so the orphan
+sweep has completed before the absence check. A second request must build successfully, reject
 the unchanged starter with exit 1, and pass three fresh reference containers
 with stable observations.
 

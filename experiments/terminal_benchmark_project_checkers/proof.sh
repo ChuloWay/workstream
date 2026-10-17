@@ -1060,6 +1060,64 @@ print(f"{value.st_dev}:{value.st_ino}:{value.st_ctime_ns}")
 PY
 }
 
+service_health_ready() {
+  run_as_owner "${BACKEND_PYTHON}" - "${SOCKET_PATH}" "${OWNER_UID}" "${DOCKER_GID}" \
+    2>/dev/null <<'PY'
+import json
+import socket
+import struct
+import sys
+
+socket_path, sandbox_uid, sandbox_gid = sys.argv[1:]
+request = json.dumps(
+    {
+        "operation": "health",
+        "protocol_version": "external_checker_service.v1",
+    },
+    separators=(",", ":"),
+    sort_keys=True,
+).encode()
+
+def receive_exact(connection: socket.socket, byte_count: int) -> bytes:
+    chunks = bytearray()
+    while len(chunks) < byte_count:
+        chunk = connection.recv(byte_count - len(chunks))
+        if not chunk:
+            raise RuntimeError("health response incomplete")
+        chunks.extend(chunk)
+    return bytes(chunks)
+
+with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+    # The listener is published before startup cleanup. Queue one bounded health
+    # frame and require its exact receipt to prove the service has entered the
+    # accept loop after cleanup, rather than treating socket bind as readiness.
+    connection.settimeout(60)
+    connection.connect(socket_path)
+    connection.sendall(struct.pack(">I", len(request)) + request)
+    response_size = struct.unpack(">I", receive_exact(connection, 4))[0]
+    if not 0 < response_size <= 4096:
+        raise RuntimeError("health response size invalid")
+    response = json.loads(receive_exact(connection, response_size))
+    if connection.recv(1):
+        raise RuntimeError("health response has trailing bytes")
+
+expected = {
+    "architecture": "amd64",
+    "cached_platform_manifests": 3,
+    "isolation_mode": "gvisor",
+    "operation": "health",
+    "operating_system": "linux",
+    "protocol_version": "external_checker_service.v1",
+    "runtime": "runsc",
+    "sandbox_gid": int(sandbox_gid),
+    "sandbox_uid": int(sandbox_uid),
+    "status": "ready",
+}
+if response != expected:
+    raise RuntimeError("health response differs")
+PY
+}
+
 start_service() {
   local log="$1"
   control_custody_valid
@@ -1091,7 +1149,13 @@ start_service() {
     current_socket_identity="$(socket_identity || true)"
     if [[ -n "${current_socket_identity}" \
       && "${current_socket_identity}" != "${prior_socket_identity}" ]]; then
-      return 0
+      if service_health_ready; then
+        return 0
+      fi
+      if kill -0 "${SERVICE_JOB_PID}" 2>/dev/null; then
+        printf 'ws493_matrix=service_health_readiness_failed\n' >&2 || true
+        return 1
+      fi
     fi
     sleep 0.2
   done

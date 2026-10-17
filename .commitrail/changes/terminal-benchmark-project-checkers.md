@@ -410,8 +410,9 @@ and match the corresponding HEAD blob. The head-bound inventory is limited to
 inventory, whose exact file set, ownership, modes, sizes and hashes are
 revalidated before the matrix and each service start;
 the run entry and each service start revalidate custody before touching control
-files, and runtime socket readiness proves that the service actually executed
-before POST starts. The POST driver restores the serialized registry entry
+files. A changed no-follow socket identity followed by an exact, bounded
+read-only health receipt proves that the service entered admission only after
+startup cleanup and actually executed before POST starts. The POST driver restores the serialized registry entry
 through the strict JSON validation boundary; a focused round-trip regression
 requires all four registry authority identifiers to return as UUID values.
 ART assembles projected entries below a grant-specific temporary directory and
