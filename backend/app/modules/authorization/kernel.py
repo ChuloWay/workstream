@@ -28,6 +28,7 @@ from app.modules.authorization.domain import adapter_bindings, checker_registry,
 from app.modules.authorization.domain.action_groups import (
     GUIDE_BOUND_PROJECT_MANAGER_ACTIONS as _GUIDE_BOUND_PROJECT_MANAGER_ACTIONS,
     CONTEXT_DIGEST_ACTIONS,
+    PROJECT_SCOPED_ADMIN_MUTATIONS,
     supports_prepared_denial,
 )
 from app.modules.authorization.domain.audit import CONTEXT_DIGEST_RESOURCE_TYPES
@@ -165,11 +166,10 @@ _SERIALIZED_ADMIN_READS = frozenset(
         ActionId.PROJECT_PRE_SUBMIT_CHECKER_POLICY_READ,
         ActionId.PROJECT_ACTIVE_GUIDE_READ,
     }
-) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS
+) | adapter_bindings.ADAPTER_BINDING_READ_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_READ_ACTIONS | checker_registry.CHECKER_REGISTRY_READ_ACTIONS
 _ADMIN_MUTATIONS = frozenset(
     {
         ActionId.REVIEW_LIFECYCLE_ACTIVATION_MANAGE,
-        ActionId.ADMIN_ROLE_GRANT_ISSUE,
         ActionId.ADMIN_ROLE_GRANT_REVOKE,
         ActionId.ACTOR_SERVICE_PROVISION,
         ActionId.ACTOR_PROFILE_SUSPEND,
@@ -177,10 +177,8 @@ _ADMIN_MUTATIONS = frozenset(
         ActionId.ACTOR_PROFILE_DEACTIVATE,
         ActionId.ACTOR_IDENTITY_LINK_REVOKE,
         ActionId.ACTOR_IDENTITY_LINK_REACTIVATE,
-        ActionId.PROJECT_ROLE_GRANT_ISSUE,
-        ActionId.PROJECT_ROLE_GRANT_REVOKE,
     }
-) | adapter_bindings.ADAPTER_BINDING_MUTATION_ACTIONS | contribution_policies.CONTRIBUTION_POLICY_MUTATION_ACTIONS | checker_registry.CHECKER_REGISTRY_ACTIONS | frozenset({ActionId.OPERATIONS_CHECKER_RETRY})
+) | PROJECT_SCOPED_ADMIN_MUTATIONS | checker_registry.CHECKER_REGISTRY_MUTATION_ACTIONS | frozenset({ActionId.OPERATIONS_CHECKER_RETRY})
 
 
 def _prepared_admin_role_locker(action_id):

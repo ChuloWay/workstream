@@ -7,15 +7,19 @@ from uuid import UUID
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.identifiers import new_record_id
 from app.modules.checkers.api.external import (
     ExternalCheckerRegistrationAuthorityFacts,
     ExternalCheckerRegistrationAuthorityPort,
-    ExternalCheckerRegistrationRequest,
+    ExternalCheckerRegistrationCommand,
+    ExternalCheckerRegistrationPreparation,
     ExternalCheckerRegistryConflict,
     ExternalCheckerRegistryEntry,
+    ExternalCheckerRegistryNotFound,
     ExternalCheckerRegistryUnavailable,
     ExternalCheckerResourceLimits,
     ExternalCheckerSchema,
+    external_checker_registration_request_digest,
 )
 from app.modules.checkers.models import ExternalCheckerRegistryEntryRecord
 
@@ -215,68 +219,115 @@ class ExternalCheckerRegistryService:
             raise ExternalCheckerRegistryUnavailable("external_checker_registry_unavailable")
 
     async def register(
-        self, request: ExternalCheckerRegistrationRequest
+        self, command: ExternalCheckerRegistrationCommand
     ) -> ExternalCheckerRegistryEntry:
         """Authorize, publish or exactly replay one immutable registry entry."""
         self._require_root_transaction()
-        request = ExternalCheckerRegistrationRequest.model_validate(request)
-        facts = ExternalCheckerRegistrationAuthorityFacts(
-            actor_profile_id=request.actor_profile_id,
-            operation_id=request.operation_id,
-            registry_entry_id=request.registry_entry_id,
-            request_digest=request.request_digest,
-            entry_digest=request.spec.spec_digest,
+        command = ExternalCheckerRegistrationCommand.model_validate(command)
+        preparation = ExternalCheckerRegistrationPreparation(
+            actor_profile_id=command.actor_profile_id,
+            operation_id=command.operation_id,
+            entry_digest=command.spec.spec_digest,
         )
         try:
-            authority = await self._authority.authorize_registration(facts)
+            prepared = await self._authority.prepare_registration(preparation)
         except ExternalCheckerRegistryUnavailable:
             raise
         except Exception as exc:
             raise ExternalCheckerRegistryUnavailable(
                 "external_checker_registry_unavailable"
             ) from exc
-        if authority.actor_profile_id != request.actor_profile_id:
-            raise ExternalCheckerRegistryUnavailable("external_checker_registry_unavailable")
-        await self._repository.lock_registration_scopes(
-            request.operation_id,
-            capability_id=request.spec.capability_id,
-            capability_version=request.spec.capability_version,
-            phase=request.spec.phase,
-        )
-        replay = await self._repository.by_operation(request.operation_id)
-        if replay is not None:
-            if not self._matches_request(replay, request):
-                raise ExternalCheckerRegistryConflict("external_checker_registry_conflict")
-            return _row_entry(replay)
-        if (
-            await self._repository.by_identity(
-                capability_id=request.spec.capability_id,
-                capability_version=request.spec.capability_version,
-                phase=request.spec.phase,
+        try:
+            await self._repository.lock_registration_scopes(
+                command.operation_id,
+                capability_id=command.spec.capability_id,
+                capability_version=command.spec.capability_version,
+                phase=command.spec.phase,
             )
-            is not None
-        ):
-            raise ExternalCheckerRegistryConflict("external_checker_registry_conflict")
-        spec = request.spec
-        values = {
-            "id": request.registry_entry_id,
-            "registration_operation_id": request.operation_id,
-            "request_digest": request.request_digest,
-            "capability_id": spec.capability_id,
-            "capability_version": spec.capability_version,
-            "phase": spec.phase,
-            "image_digest": spec.image_digest,
-            **_schema_values("configuration", spec.configuration_schema),
-            **_schema_values("input", spec.input_schema),
-            **_schema_values("output", spec.output_schema),
-            **spec.resources.model_dump(),
-            "entry_digest": spec.spec_digest,
-            "registered_by_actor_profile_id": str(request.actor_profile_id),
-            "authorization_decision_event_id": str(authority.authorization_decision_event_id),
-        }
-        row = ExternalCheckerRegistryEntryRecord(**values)
-        await self._repository.add(row)
-        return _row_entry(row)
+            replay = await self._repository.by_operation(command.operation_id)
+            registry_entry_id = (
+                UUID(str(replay.id)) if replay is not None else new_record_id()
+            )
+            request_digest = external_checker_registration_request_digest(
+                command, registry_entry_id
+            )
+            if replay is not None and not self._matches_command(
+                replay, command, request_digest
+            ):
+                raise ExternalCheckerRegistryConflict(
+                    "external_checker_registry_conflict"
+                )
+            if replay is None and (
+                await self._repository.by_identity(
+                    capability_id=command.spec.capability_id,
+                    capability_version=command.spec.capability_version,
+                    phase=command.spec.phase,
+                )
+                is not None
+            ):
+                raise ExternalCheckerRegistryConflict(
+                    "external_checker_registry_conflict"
+                )
+            facts = ExternalCheckerRegistrationAuthorityFacts(
+                actor_profile_id=command.actor_profile_id,
+                operation_id=command.operation_id,
+                registry_entry_id=registry_entry_id,
+                request_digest=request_digest,
+                entry_digest=command.spec.spec_digest,
+            )
+            authority = await self._authority.consume_registration(
+                prepared, preparation, facts
+            )
+            if authority.actor_profile_id != command.actor_profile_id:
+                raise ExternalCheckerRegistryUnavailable(
+                    "external_checker_registry_unavailable"
+                )
+            if replay is not None:
+                return _row_entry(replay)
+            spec = command.spec
+            row = ExternalCheckerRegistryEntryRecord(
+                id=registry_entry_id,
+                registration_operation_id=command.operation_id,
+                request_digest=request_digest,
+                capability_id=spec.capability_id,
+                capability_version=spec.capability_version,
+                phase=spec.phase,
+                image_digest=spec.image_digest,
+                **_schema_values("configuration", spec.configuration_schema),
+                **_schema_values("input", spec.input_schema),
+                **_schema_values("output", spec.output_schema),
+                **spec.resources.model_dump(),
+                entry_digest=spec.spec_digest,
+                registered_by_actor_profile_id=str(command.actor_profile_id),
+                authorization_decision_event_id=str(
+                    authority.authorization_decision_event_id
+                ),
+            )
+            await self._repository.add(row)
+            return _row_entry(row)
+        finally:
+            self._authority.close_registration(prepared)
+
+    async def read_authorized(
+        self, actor_profile_id: UUID, registry_entry_id: UUID,
+    ) -> ExternalCheckerRegistryEntry:
+        """Return one exact row only after current system Operator authority."""
+        self._require_root_transaction()
+        await self._authority.prepare_read(actor_profile_id)
+        row = await self._repository.by_exact_id(registry_entry_id)
+        if row is None:
+            raise ExternalCheckerRegistryNotFound("external_checker_registry_not_found")
+        entry = _row_entry(row)
+        await self._authority.authorize_read(
+            ExternalCheckerRegistrationAuthorityFacts(
+                actor_profile_id=actor_profile_id,
+                operation_id=entry.registration_operation_id,
+                registry_entry_id=entry.registry_entry_id,
+                request_digest=row.request_digest,
+                entry_digest=entry.entry_digest,
+            )
+        )
+        return entry
 
     async def read_exact(
         self, registry_entry_id: UUID, entry_digest: str
@@ -301,9 +352,10 @@ class ExternalCheckerRegistryService:
         return await ExternalCheckerRegistryReader(self._session).list_entries()
 
     @staticmethod
-    def _matches_request(
+    def _matches_command(
         row: ExternalCheckerRegistryEntryRecord,
-        request: ExternalCheckerRegistrationRequest,
+        command: ExternalCheckerRegistrationCommand,
+        request_digest: str,
     ) -> bool:
         """Compare replay against every stored request and specification fact."""
         try:
@@ -311,10 +363,9 @@ class ExternalCheckerRegistryService:
         except (TypeError, ValueError):
             return False
         return (
-            row.id == request.registry_entry_id
-            and row.request_digest == request.request_digest
-            and UUID(row.registered_by_actor_profile_id) == request.actor_profile_id
-            and entry.entry_digest == request.spec.spec_digest
+            row.request_digest == request_digest
+            and UUID(row.registered_by_actor_profile_id) == command.actor_profile_id
+            and entry.entry_digest == command.spec.spec_digest
             and ExternalCheckerRegistryEntry.model_validate(entry).model_dump(
                 mode="json",
                 exclude={
@@ -326,5 +377,5 @@ class ExternalCheckerRegistryService:
                     "created_at",
                 },
             )
-            == request.spec.model_dump(mode="json")
+            == command.spec.model_dump(mode="json")
         )
