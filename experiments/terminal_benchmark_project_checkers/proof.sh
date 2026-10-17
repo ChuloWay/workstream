@@ -1261,21 +1261,63 @@ run_matrix() {
     fi
     sleep 0.2
   done
-  [[ -f "${BARRIER_READY}" && ! -L "${BARRIER_READY}" ]]
+  if [[ ! -f "${BARRIER_READY}" || -L "${BARRIER_READY}" ]]; then
+    printf 'ws493_matrix=interrupt_barrier_unavailable\n' >&2 || true
+    report_matrix_failure >&2 || \
+      printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
+    return 1
+  fi
+  printf 'ws493_matrix=interrupt_barrier_ready\n'
   local service_pid wrapper_pid
-  read -r service_pid wrapper_pid < <(python3 - "${BARRIER_READY}" "${BARRIER_TOKEN}" <<'PY'
+  local barrier_values
+  if ! barrier_values="$(python3 - "${BARRIER_READY}" "${BARRIER_TOKEN}" 2>/dev/null <<'PY'
 import json, sys
 value=json.load(open(sys.argv[1], encoding="utf-8"))
 if value.get("token") != sys.argv[2]: raise SystemExit(1)
 print(value["service_pid"], value["wrapper_pid"])
 PY
-)
-  [[ "${service_pid}" == "$(cat "${SERVICE_PID_FILE}")" ]]
-  [[ "$(readlink -f "/proc/${service_pid}/exe")" == "$(readlink -f "${SERVICE_BINARY}")" ]]
-  kill -KILL "${service_pid}"
+)"; then
+    printf 'ws493_matrix=interrupt_barrier_invalid\n' >&2 || true
+    report_matrix_failure >&2 || \
+      printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
+    return 1
+  fi
+  read -r service_pid wrapper_pid <<<"${barrier_values}"
+  printf 'ws493_matrix=interrupt_barrier_valid\n'
+  if [[ "${service_pid}" != "$(cat "${SERVICE_PID_FILE}" 2>/dev/null)" ]] \
+    || [[ "$(readlink -f "/proc/${service_pid}/exe" 2>/dev/null)" \
+      != "$(readlink -f "${SERVICE_BINARY}" 2>/dev/null)" ]]; then
+    printf 'ws493_matrix=interrupt_service_identity_invalid\n' >&2 || true
+    report_matrix_failure >&2 || \
+      printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
+    return 1
+  fi
+  printf 'ws493_matrix=interrupt_service_identity_valid\n'
+  if ! kill -KILL "${service_pid}" 2>/dev/null; then
+    printf 'ws493_matrix=interrupt_service_kill_failed\n' >&2 || true
+    report_matrix_failure >&2 || \
+      printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
+    return 1
+  fi
+  printf 'ws493_matrix=interrupt_service_killed\n'
   wait "${first_service_job}" || true
-  wait "${executor_pid}"
-  [[ -s "${RAW_DIR}/art-interrupt.json" ]]
+  local interrupt_status=0
+  wait "${executor_pid}" || interrupt_status=$?
+  if (( interrupt_status != 0 )); then
+    printf 'ws493_matrix=interrupt_executor_unwind_failed status=%s\n' \
+      "${interrupt_status}" >&2 || true
+    report_matrix_failure >&2 || \
+      printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
+    return "${interrupt_status}"
+  fi
+  printf 'ws493_matrix=interrupt_executor_unwound\n'
+  if [[ ! -s "${RAW_DIR}/art-interrupt.json" ]]; then
+    printf 'ws493_matrix=interrupt_art_receipt_missing\n' >&2 || true
+    report_matrix_failure >&2 || \
+      printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
+    return 1
+  fi
+  printf 'ws493_matrix=interrupt_art_receipt_ready\n'
   printf '%s\n' "${BARRIER_TOKEN}" >"${BARRIER_RELEASE}"
   chown "${OWNER_UID}:${DOCKER_GID}" "${BARRIER_RELEASE}"
   chmod 0600 "${BARRIER_RELEASE}"
@@ -1283,7 +1325,13 @@ PY
     kill -0 "${wrapper_pid}" 2>/dev/null || break
     sleep 0.2
   done
-  ! kill -0 "${wrapper_pid}" 2>/dev/null
+  if kill -0 "${wrapper_pid}" 2>/dev/null; then
+    printf 'ws493_matrix=interrupt_wrapper_release_failed\n' >&2 || true
+    report_matrix_failure >&2 || \
+      printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
+    return 1
+  fi
+  printf 'ws493_matrix=interrupt_wrapper_released\n'
   rm -f "${BARRIER_ENABLE}" "${BARRIER_READY}" "${BARRIER_RELEASE}"
 
   start_service "${RAW_DIR}/service-complete.log"
