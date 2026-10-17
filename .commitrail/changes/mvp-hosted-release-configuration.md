@@ -212,7 +212,11 @@ as another release service here.
    Backend custody compares the exact regular-file inventory and per-file
    hashes read from the image's `app` and `alembic` trees, plus `uv.lock`,
    `pyproject.toml` and `alembic.ini`, against the clean PR-head source. Inventory
-   traversal refuses symlinks and bounds file counts and total bytes. The checker
+   traversal refuses symlinks and bounds file counts and total bytes. The image
+   proof also compares the separately copied
+   `/usr/local/bin/workstream-release-entrypoint` with the checkout's
+   `docker/backend/release-entrypoint.sh`, requires its intended `0555` mode,
+   and includes a substituted-loader negative control. The checker
    uses a clean, no-cache locked build of that same source; its binary must start
    and return the exact missing-configuration failure, and its Docker CLI must
    run. Negative verifier controls cover source/lock substitution, extra files,
