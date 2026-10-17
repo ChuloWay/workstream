@@ -72,6 +72,13 @@ Exact replay returns the original row; changed operation or logical-identity
 replay fails. PostgreSQL closes the authorization receipt and recomputes every
 schema, request and entry digest while denying update, delete and truncate.
 
+The supported bearer-authenticated Operator API accepts the canonical
+specification and an `Idempotency-Key`, selects the registry UUIDv7 on the
+server, and returns the complete immutable entry. Exact-ID readback requires a
+fresh system Operator decision and discloses no row after grant or identity-link
+revocation. Registration and readback do not expose REV lifecycle transitions
+or activate the registered image.
+
 Registry metadata grants no policy selection, activation, execution or routing
 authority. Consumers read an exact registry ID and digest; there is no
 "latest" lookup and no registry-driven Python plugin or callable discovery.
