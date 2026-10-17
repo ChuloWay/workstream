@@ -71,6 +71,10 @@ code on the host would break the established boundary.
     registry entry ID/digest and checker platform-manifest digest to this one
     execution profile; an arbitrary registered image or PRE entry cannot request
     builder root, added capabilities or an oracle launch;
+  - refuse to configure that stronger profile unless the service itself is in
+    `gvisor`/`runsc` mode; the development-only `docker-dev`/`runc` mode may
+    exercise ordinary checker behavior and unit seams but cannot make the
+    terminal profile available;
   - resolve exact administrator-configured Kaniko and approved base platform
     manifests without pulling;
   - run the builder as root only inside the configured sandbox with the four
@@ -94,11 +98,14 @@ code on the host would break the established boundary.
   `backend/app/modules/artifacts/post_submit_materialization.py`, and their
   existing focused tests only for one narrow extension of the current
   `ArtifactScratchManager` grant:
-  - before every POST external grant publication, raise that workspace's fixed
-    total byte reservation to the existing 512 MiB per-workspace maximum and its
-    entry reservation to the manager's existing fixed maximum-entry ceiling;
-    the runtime allowances are those ceilings minus the sealed workspace and
-    grant overhead;
+  - derive the runtime requirement only from the exact immutable registered
+    capability identity `workstream.terminal_benchmark_project`/`v1` already
+    carried by the locked POST binding and request digest. For that capability,
+    raise the workspace's fixed total byte reservation to the existing 512 MiB
+    per-workspace maximum and its entry reservation to the manager's existing
+    fixed maximum-entry ceiling; the runtime allowances are those ceilings
+    minus the sealed workspace and grant overhead. Conventional POST grants
+    retain their existing extraction reservation and receive no runtime sibling;
   - publish one empty `runtime/` sibling beside the sealed `workspace/`, bind its
     derived byte/entry allowances and existing grant owner UID/GID/mode into the
     request-bound grant manifest, and keep it `0700` for that same OS identity
@@ -571,12 +578,19 @@ can safely adopt the PILOT-00 mechanism.
   cleanup shares one 10-second deadline and separate 256 KiB output ceiling
   within the existing 60-second cleanup margin.
 - [ ] ART reserves the existing fixed 512 MiB workspace total and manager fixed
-  maximum-entry total before POST grant publication, then binds byte and entry
-  allowances after sealed workspace/grant overhead. Exact-limit runtime creation
-  succeeds; limit-plus-one fails before residue; normal and reaper cleanup remove
-  every admitted tree without exceeding the same entry count. The candidate tar
-  entry and every remaining byte are reserved before launch, and a kernel file-
-  size ceiling rejects the first excess byte inside the writer.
+  maximum-entry total before publication of an exact locked terminal-benchmark
+  POST grant, then binds byte and entry allowances after sealed workspace/grant
+  overhead. Exact-limit runtime creation succeeds; limit-plus-one fails before
+  residue; normal and reaper cleanup remove every admitted tree without
+  exceeding the same entry count. Conventional POST grants retain their prior
+  reservation and publish no runtime sibling. The candidate tar entry and every
+  remaining byte are reserved before launch, and a kernel file-size ceiling
+  rejects the first excess byte inside the writer.
+- [ ] Under a deliberately bounded aggregate ledger, one live terminal grant
+  consumes its expanded reservation, a concurrent second terminal grant fails
+  before publishing residue, and that second grant succeeds after the first is
+  released. Concurrent conventional POST grants keep only their original small
+  reservations, publish no runtime sibling and do not consume terminal capacity.
 - [ ] `test_post_result_is_hidden_until_grant_workspace_cleanup_completes`
   proves the service settles Docker resources before its socket response and the
   Python grant/materializer revokes and deletes scratch before exposing the
@@ -591,7 +605,10 @@ can safely adopt the PILOT-00 mechanism.
   reservation for retry.
 - [ ] Grant substitution produces no continuation launch. Conventional and PRE
   images continue to receive only the ordinary request stdin and cannot gain the
-  stronger profile even if their output copies its plan shape.
+  stronger profile even if their output copies its plan shape. Removing or
+  substituting the terminal capability hint cannot downgrade an exact
+  service-authorized terminal request to a conventional runtime-less grant;
+  service grant verification fails before launch.
 - [ ] Cache tests mutate one blob and independently cover extra, missing,
   symlink/special, wrong-owner and wrong-mode entries; each fails before Docker
   create with no pull. Startup recovery removes seeded stale containers and
@@ -605,8 +622,10 @@ can safely adopt the PILOT-00 mechanism.
 - [ ] Launch evidence proves no external network or host socket, exact cached
   platform identities, builder-only capabilities, non-root capability-free
   oracles, read-only inputs/root, fresh containers, fixed resources and complete
-  cleanup. Local `docker-dev` and isolated-runner DIND evidence is labeled as
-  development proof; hosted deployment remains #555/#583.
+  cleanup. Configuring the terminal profile with `docker-dev`/`runc` fails
+  before readiness; the isolated-runner positive path uses `gvisor`/`runsc`.
+  Local ordinary-checker `docker-dev` evidence remains development-only, and
+  hosted deployment remains #555/#583.
 - [ ] The path-scoped proof workflow binds the exact PR head, uses
   `pull_request` only, named `ubuntu-24.04`, `contents: read`, commit-pinned
   actions, no persisted checkout credential and no Actions cache. It receives no
@@ -749,6 +768,22 @@ reserved-name regression and static formatting checks pass locally. The new
 Rust zero-allowance and bounded-finding regressions require the hosted locked
 workspace gate on the final exact head because local memory and swap cannot
 safely support another Rust compile.
+
+The subsequent eligible human review found two broader boundary defects. ART
+was raising every conventional POST workspace to the terminal 512 MiB/entry
+ceilings and publishing runtime scratch, while the service required that
+terminal-only manifest shape from every POST grant. The same review found that
+the configured terminal profile did not itself reject `docker-dev`/`runc` even
+though all builder/oracle guarantees require `gvisor`/`runsc`. The bounded
+repair plan uses no caller-selected privilege flag: ART derives only a resource
+requirement from the exact immutable capability ID/version already carried by
+the locked registered binding and request digest, while the service remains the
+sole authority over the exact configured registry entry/digest/image tuple.
+Conventional grants keep their former reservation and omit runtime scratch; an
+exact service-authorized terminal request without that scratch fails grant
+verification rather than downgrading. Terminal-profile configuration also
+fails before readiness unless the service reports `gvisor` plus `runsc`.
+Architecture and security must approve this owner boundary before product edits.
 
 ## Reconciliation
 
