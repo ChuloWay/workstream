@@ -1047,10 +1047,25 @@ service_environment() {
     "$@"
 }
 
+socket_identity() {
+  python3 - "${SOCKET_PATH}" 2>/dev/null <<'PY'
+import os
+import stat
+import sys
+
+value = os.lstat(sys.argv[1])
+if not stat.S_ISSOCK(value.st_mode):
+    raise SystemExit(1)
+print(f"{value.st_dev}:{value.st_ino}:{value.st_ctime_ns}")
+PY
+}
+
 start_service() {
   local log="$1"
   control_custody_valid
   python_sources_valid
+  local prior_socket_identity
+  prior_socket_identity="$(socket_identity || true)"
   rm -f "${SERVICE_PID_FILE}"
   printf 'service_start_head=%s\n' "${EXPECTED_HEAD}" >"${log}"
   chown "${OWNER_UID}:${DOCKER_GID}" "${log}"
@@ -1060,7 +1075,6 @@ start_service() {
     "${SERVICE_PID_FILE}" "${SERVICE_BINARY}" "${SERVICE_CONFIG}" >>"${log}" 2>&1 &
   SERVICE_JOB_PID=$!
   for _ in $(seq 1 300); do
-    [[ -S "${SOCKET_PATH}" ]] && return 0
     if ! kill -0 "${SERVICE_JOB_PID}" 2>/dev/null; then
       local status=0
       wait "${SERVICE_JOB_PID}" || status=$?
@@ -1073,8 +1087,15 @@ start_service() {
       fi
       return "${status}"
     fi
+    local current_socket_identity
+    current_socket_identity="$(socket_identity || true)"
+    if [[ -n "${current_socket_identity}" \
+      && "${current_socket_identity}" != "${prior_socket_identity}" ]]; then
+      return 0
+    fi
     sleep 0.2
   done
+  printf 'ws493_matrix=service_socket_readiness_timeout\n' >&2 || true
   return 1
 }
 
@@ -1335,15 +1356,31 @@ PY
   rm -f "${BARRIER_ENABLE}" "${BARRIER_READY}" "${BARRIER_RELEASE}"
 
   start_service "${RAW_DIR}/service-complete.log"
+  printf 'ws493_matrix=complete_service_ready\n'
   local second_service_job="${SERVICE_JOB_PID}"
-  positive_owned_absence
-  [[ "$(inner_docker inspect "${control}" --format '{{index .Config.Labels "org.workstream.ws493.control"}}')" == "${RUN_ID}" ]]
+  if ! positive_owned_absence; then
+    printf 'ws493_matrix=restart_cleanup_incomplete\n' >&2 || true
+    report_matrix_failure >&2 || \
+      printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
+    return 1
+  fi
+  printf 'ws493_matrix=restart_cleanup_complete\n'
+  if [[ "$(inner_docker inspect "${control}" \
+    --format '{{index .Config.Labels "org.workstream.ws493.control"}}')" != "${RUN_ID}" ]]; then
+    printf 'ws493_matrix=unowned_control_invalid\n' >&2 || true
+    report_matrix_failure >&2 || \
+      printf 'ws493_matrix_diagnostic=unavailable\n' >&2 || true
+    return 1
+  fi
+  printf 'ws493_matrix=unowned_control_preserved\n'
   write_owned_json "${RAW_DIR}/restart-cleanup.json" \
     '{"owned_containers_absent":true,"owned_images_absent":true,"unowned_control_preserved":true}'
+  printf 'ws493_matrix=complete_executor_started\n'
   run_as_owner "${BACKEND_PYTHON}" "${EXECUTE_POST}" \
     --contract "${RAW_DIR}/contract.json" --package "${PACKAGE}" --scratch "${ART_ROOT}" \
     --socket "${SOCKET_PATH}" --expect complete --output "${RAW_DIR}/complete-result.json" \
     --art-output "${RAW_DIR}/art-complete.json"
+  printf 'ws493_matrix=complete_executor_finished\n'
   positive_owned_absence
   [[ "$(inner_docker inspect "${control}" --format '{{index .Config.Labels "org.workstream.ws493.control"}}')" == "${RUN_ID}" ]]
   inner_docker rm -f -v "${control}" >/dev/null
