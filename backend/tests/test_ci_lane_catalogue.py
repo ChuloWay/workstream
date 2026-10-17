@@ -269,8 +269,8 @@ def test_semantic_family_membership_has_an_independent_fingerprint() -> None:
             "22c5c14b692cf39c879be2f520721b302cb92fc5a29949e48c1281b8e497f349",
         ),
         "task": (
-            84,
-            "c3b165c03497f0ba9df25475d3a2a4293b5cbea98d18a4241aae99c9ff310a88",
+            85,
+            "b62a88a1b70b2061b220ee2ad47f0bf4e1896c909f1a07ef69365d432690b7e5",
         ),
     }
     actual = {

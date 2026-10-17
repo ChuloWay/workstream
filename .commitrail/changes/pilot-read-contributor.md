@@ -137,11 +137,18 @@ reads project; PR3 adds the Project Manager and Finance reads C1–C9 and D1).
   time that no index serves; they are bounded per-contributor sorts over the
   contributor-scoped indexes, measured by the scale test. No new index was
   needed at that scale.
-- Consistency: every response reads one REPEATABLE READ snapshot. Task
+- Consistency: every response reads one REPEATABLE READ snapshot. The
+  snapshot starts after committing the request's actor-resolution transaction,
+  so a service actor's staged last-seen touch persists even when the read is
+  then denied or unavailable, as it does for an allowed read. Task
   resolution, the AUTH decision, the page and its batched revision,
   latest-attempt, finding-count, compensation and award queries all see the
   same committed state, so summary counts and award totals agree, as in the
   contribution export.
+- Incremental A3 needs the CHECKERS evidence time in the same statement that
+  orders and filters the page, so `evidence_stamps()` is an owner port that
+  returns a selectable for TASK to join. It is a bounded exception for this
+  one read, not a pattern for other ports.
 - A per-task read for a task the caller never held is the concealed 404
   before any AUTH decision. A preparation ID on the caller's own task that
   belongs to another contributor records the task-scoped ALLOW and then
@@ -199,6 +206,9 @@ test_delta, documentation and reuse_dedup tracks at `fcbfa9562`.
   compensation entry or execution facts raised a 500 instead of the typed
   503; the chain-head rule was copied (one shared predicate); no test replayed
   a cursor as another actor; stale reconciliation and roadmap wording.
+  Replay at `47b08e1da`: an isolation-level and two retryable-503
+  regressions, the A3 order label and activity-time field descriptions were
+  added; the service-actor touch and the selectable port are recorded above.
 - Recorded, not changed: per-task decision evidence and the unlocked project
   list (Design and decisions); `state=storing` after a terminal storage
   failure (Design and decisions); preparation finding counts use the existing

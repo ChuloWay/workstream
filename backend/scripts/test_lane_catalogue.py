@@ -549,6 +549,7 @@ TASK_MODULES = (
     "tests/contributor_reads/test_authority.py",
     "tests/contributor_reads/test_pagination.py",
     "tests/contributor_reads/test_scale.py",
+    "tests/contributor_reads/test_consistency.py",
     "tests/tasks/test_task_detail.py",
     "tests/tasks/test_work_context.py",
     "tests/tasks/test_guide_documents.py",

@@ -55,7 +55,10 @@ class ContributorAssignment(BaseModel):
     latest_submission: ContributorLatestSubmission | None
     revision: ContributorRevisionContext | None
     next_action: NextAction
-    updated_at: AwareDatetime
+    updated_at: AwareDatetime = Field(description=(
+        "Activity time: the latest own assignment, submission or revision stamp, "
+        "plus the task stamp while active. Orders the list and drives updated_since."
+    ))
 
 
 class ContributorAssignmentPage(BaseModel):
@@ -78,7 +81,10 @@ class ContributorSubmission(BaseModel):
     submitted_at: AwareDatetime
     decided_at: AwareDatetime | None
     finding_counts: SubmissionFindingCounts
-    updated_at: AwareDatetime
+    updated_at: AwareDatetime = Field(description=(
+        "Activity time: the later of the submission stamp and when its current checker "
+        "run's findings changed. Orders the list and drives updated_since."
+    ))
 
 
 class ContributorSubmissionPage(BaseModel):

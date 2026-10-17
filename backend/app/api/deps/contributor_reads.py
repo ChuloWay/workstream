@@ -214,7 +214,7 @@ class ContributorReadOperation:
         self, *, project_id, task_id, status: SubmissionAttemptStatus | None, updated_since, limit, cursor,
     ):
         request = self._request("actor.submission.list", {
-            "limit": limit, "order": "updated_at_id_asc", "status": status, "task_id": _id(task_id),
+            "limit": limit, "order": "activity_at_id_asc", "status": status, "task_id": _id(task_id),
             "updated_since": _instant(updated_since),
         }, cursor=cursor, project_id=project_id)
 
