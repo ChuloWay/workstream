@@ -6,6 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from scripts import verify_hosted_release_images as proof
 
@@ -58,6 +59,53 @@ class ReleaseImageProofTests(unittest.TestCase):
             ):
                 proof.verify_backend(altered, self.source, self.packages, self.loader)
 
+    def test_duplicate_distribution_and_canonical_alias_reject(self):
+        for name in ("openai-agents", "openai_agents", "OpenAI.Agents"):
+            distributions = [
+                SimpleNamespace(metadata={"Name": "openai-agents"}, version="0.0.0"),
+                SimpleNamespace(metadata={"Name": name}, version="0.22.2"),
+            ]
+            with (
+                self.subTest(name=name),
+                patch.object(
+                    proof.importlib.metadata,
+                    "distributions",
+                    return_value=distributions,
+                ),
+                self.assertRaisesRegex(ValueError, "duplicate canonical"),
+            ):
+                proof.installed_packages()
+        with patch.object(
+            proof.importlib.metadata, "distributions", return_value=distributions[:1]
+        ):
+            self.assertEqual(proof.installed_packages(), {"openai-agents": "0.0.0"})
+
+    def test_cleanup_is_owner_qualified_and_requires_absence(self):
+        container = "a" * 64
+        with patch.object(
+            proof, "checked", side_effect=[(container + "\n").encode(), b"", b""]
+        ) as commands:
+            proof.cleanup_containers("123-1")
+        self.assertEqual(
+            commands.call_args_list[0].args[0][-1],
+            "label=workstream.release-proof=123-1",
+        )
+        self.assertEqual(
+            commands.call_args_list[1].args[0], ["docker", "rm", "--force", container]
+        )
+        self.assertEqual(commands.call_args_list[0], commands.call_args_list[2])
+        with (
+            patch.object(proof, "checked", side_effect=[b"", b"still present"]),
+            self.assertRaisesRegex(ValueError, "remain"),
+        ):
+            proof.cleanup_containers("123-1")
+        with (
+            patch.object(proof, "checked") as commands,
+            self.assertRaisesRegex(ValueError, "invalid proof owner"),
+        ):
+            proof.cleanup_containers("")
+        commands.assert_not_called()
+
     def test_loader_must_have_the_exact_nonwritable_executable_mode(self):
         with tempfile.TemporaryDirectory() as directory:
             loader = Path(directory) / "loader"
@@ -106,30 +154,52 @@ class ReleaseImageProofTests(unittest.TestCase):
                 "Cmd": ["/etc/workstream/checker-service.json"],
             },
         }
-        with patch.object(proof, "checked", return_value=json.dumps([info]).encode()):
-            self.assertEqual(proof.image_metadata("fixture", "checker"), info["Id"])
-        for key, value in (
-            ("User", "root"),
-            ("Entrypoint", ["/bin/true"]),
-            ("Cmd", []),
-        ):
-            altered = copy.deepcopy(info)
-            altered["Config"][key] = value
-            with (
-                self.subTest(key=key),
-                patch.object(
-                    proof, "checked", return_value=json.dumps([altered]).encode()
-                ),
-                self.assertRaises(ValueError),
+        for role in ("checker", "backend"):
+            if role == "backend":
+                info["Config"].update(
+                    Entrypoint=[proof.LOADER],
+                    Cmd=[
+                        "python",
+                        "-m",
+                        "uvicorn",
+                        "app.main:app",
+                        "--host",
+                        "0.0.0.0",
+                        "--port",
+                        "8000",
+                    ],
+                )
+            with patch.object(
+                proof, "checked", return_value=json.dumps([info]).encode()
             ):
-                proof.image_metadata("fixture", "checker")
+                self.assertEqual(proof.image_metadata("fixture", role), info["Id"])
+            for key, value in (
+                ("User", "root"),
+                ("Entrypoint", ["/bin/true"]),
+                ("Cmd", []),
+            ):
+                altered = copy.deepcopy(info)
+                altered["Config"][key] = value
+                with (
+                    self.subTest(role=role, key=key),
+                    patch.object(
+                        proof, "checked", return_value=json.dumps([altered]).encode()
+                    ),
+                    self.assertRaises(ValueError),
+                ):
+                    proof.image_metadata("fixture", role)
 
     def test_inventory_rejects_links_and_detects_extra_regular_file(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             for name in proof.SOURCE_PATHS:
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
                 (root / name).write_text("source")
             original = proof.source_inventory(root)
+            (root / "scripts/schema_baseline_sql.py").write_text(
+                "changed migration helper"
+            )
+            self.assertNotEqual(proof.source_inventory(root), original)
             (root / "app").unlink()
             (root / "app").mkdir()
             (root / "app/extra.py").write_text("extra")

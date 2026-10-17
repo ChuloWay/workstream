@@ -53,14 +53,16 @@ Docker client. A local build tag is build evidence only; the release file must
 contain the registry-resolved digest after publication.
 
 The scoped [release-image workflow](../../.github/workflows/release-images.yml)
-builds the exact PR head without cache, publication or deployment credentials.
+runs for release definitions and copied backend/checker source changes, building
+the exact PR head without cache, publication or deployment credentials.
 It first requires the canonical AWS Settings owner, then checks the copied
 application/migration files, lockfiles, secret loader, production dependency
 closure and default image commands. Bounded networkless containers verify the
 Docker CLI and the checker's expected missing-configuration failure; they do not
 start Workstream or run a project checker. Its fixed JSON artifact records source
 identity and local image IDs, not publishable repository digests. Full hosted
-operation remains separate evidence.
+operation remains separate evidence. An unconditional workflow cleanup verifies
+that no smoke container owned by that run remains after inspection or timeout.
 
 ## Prepare the host
 

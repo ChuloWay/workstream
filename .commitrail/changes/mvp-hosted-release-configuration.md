@@ -198,7 +198,8 @@ as another release service here.
    insufficient. One scoped workflow checks out the exact PR head without stored
    credentials, builds without publishing or cloud access, runs bounded
    networkless inspection containers, and retains only image/source identity
-   evidence. It changes no existing CI gate. Build-time package downloads are
+   evidence. Its path selection includes all copied backend and checker source,
+   their proof tests, and release definitions. It changes no existing CI gate. Build-time package downloads are
    distinct from runtime access; the inspection cannot establish deployment,
    active AWS identity or successful application operation.
    Before building, run #592's canonical Settings tests
@@ -208,10 +209,12 @@ as another release service here.
    does not duplicate Settings validation. The image verifier compares installed
    distribution names/versions with the frozen default-plus-agents export and
    runs `uv pip check`. Controls reject a missing agent dependency and an added
-   dev-only dependency while allowing legitimate production overlaps.
+   dev-only dependency while allowing legitimate production overlaps; duplicate
+   canonical distribution names also reject.
    Backend custody compares the exact regular-file inventory and per-file
    hashes read from the image's `app` and `alembic` trees, plus `uv.lock`,
-   `pyproject.toml` and `alembic.ini`, against the clean PR-head source. Inventory
+   `pyproject.toml`, `alembic.ini` and the migrations’ imported
+   `scripts/schema_baseline_sql.py`, against the clean PR-head source. Inventory
    traversal refuses symlinks and bounds file counts and total bytes. The image
    proof also compares the separately copied
    `/usr/local/bin/workstream-release-entrypoint` with the checkout's
@@ -224,6 +227,9 @@ as another release service here.
    Upload only one fixed, schema-checked regular JSON evidence file of at most
    64 KiB with source identity, lock hashes and local image IDs. Refuse symlink
    output; do not upload logs, directory trees, images or repository-digest claims.
+   Each smoke container carries this workflow run/attempt’s exact owner label.
+   An unconditional workflow cleanup step removes only matching containers and
+   verifies absence, including when the inspection process times out.
 4. Run repository formatting, Markdown-link, stale-wording and Commitrail
    checks. Assess local sheet constraints only if roadmap exports are present.
 5. Freeze one clean candidate and route architecture, security, product/ops,

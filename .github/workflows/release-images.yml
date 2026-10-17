@@ -11,10 +11,8 @@ on:
       - '.dockerignore'
       - 'deploy/hosted/**'
       - 'scripts/*hosted_release*.py'
-      - 'backend/uv.lock'
-      - 'backend/pyproject.toml'
-      - 'external_checkers/Cargo.lock'
-      - 'external_checkers/**/Cargo.toml'
+      - 'backend/**'
+      - 'external_checkers/**'
 
 permissions:
   contents: read
@@ -31,6 +29,7 @@ jobs:
       PYTHONDONTWRITEBYTECODE: '1'
       UV_COMPILE_BYTECODE: 'false'
       SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+      PROOF_OWNER: ${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -77,9 +76,17 @@ jobs:
           timeout --kill-after=30s 240s backend/.venv/bin/python \
             scripts/verify_hosted_release_images.py \
             --expected-head "$SOURCE_SHA" \
+            --container-owner "$PROOF_OWNER" \
             --backend-image workstream-backend-proof \
             --checker-image workstream-checker-proof \
             --evidence "$RUNNER_TEMP/release-image-evidence.json"
+      - name: Remove only this run's smoke containers and prove absence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout --kill-after=10s 90s python \
+            scripts/verify_hosted_release_images.py --cleanup-owner "$PROOF_OWNER"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: release-image-evidence-${{ github.event.pull_request.head.sha }}

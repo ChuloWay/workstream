@@ -18,7 +18,14 @@ import tomllib
 import uuid
 
 
-SOURCE_PATHS = ("app", "alembic", "uv.lock", "pyproject.toml", "alembic.ini")
+SOURCE_PATHS = (
+    "app",
+    "alembic",
+    "scripts/schema_baseline_sql.py",
+    "uv.lock",
+    "pyproject.toml",
+    "alembic.ini",
+)
 MAX_FILES = 4096
 MAX_BYTES = 64 * 1024 * 1024
 OUTPUT_LIMIT = 2 * 1024 * 1024
@@ -144,6 +151,15 @@ def expected_packages(root: Path) -> dict[str, str]:
     return expected
 
 
+def installed_packages() -> dict[str, str]:
+    packages = {}
+    for dist in importlib.metadata.distributions():
+        name = canonical_name(dist.metadata["Name"])
+        require(name not in packages, "duplicate canonical distribution")
+        packages[name] = dist.version
+    return packages
+
+
 def inside_backend() -> dict:
     require(os.getuid() == 10001, "backend runtime user changed")
     require(stat.S_IMODE(Path(LOADER).lstat().st_mode) == 0o555, "loader mode changed")
@@ -151,10 +167,7 @@ def inside_backend() -> dict:
     return {
         "source": source_inventory(Path("/workspace/backend")),
         "loader": file_hash(Path(LOADER)),
-        "packages": {
-            canonical_name(dist.metadata["Name"]): dist.version
-            for dist in importlib.metadata.distributions()
-        },
+        "packages": installed_packages(),
     }
 
 
@@ -228,13 +241,40 @@ def image_metadata(image: str, role: str) -> str:
     return info["Id"]
 
 
-def inspect_image(image: str, role: str) -> dict:
+def owner_label(owner: str) -> str:
+    require(re.fullmatch(r"[0-9]+-[0-9]+", owner) is not None, "invalid proof owner")
+    return "workstream.release-proof=" + owner
+
+
+def cleanup_containers(owner: str) -> None:
+    command = [
+        "docker",
+        "ps",
+        "--all",
+        "--quiet",
+        "--no-trunc",
+        "--filter",
+        "label=" + owner_label(owner),
+    ]
+    containers = checked(command).decode().splitlines()
+    for container in containers:
+        require(
+            re.fullmatch(r"[a-f0-9]{64}", container) is not None,
+            "invalid container identity",
+        )
+        checked(["docker", "rm", "--force", container])
+    require(not checked(command).strip(), "proof containers remain after cleanup")
+
+
+def inspect_image(image: str, role: str, owner: str) -> dict:
     name = "workstream-release-proof-" + uuid.uuid4().hex
     command = [
         "docker",
         "run",
         "--name",
         name,
+        "--label",
+        owner_label(owner),
         "--network",
         "none",
         "--read-only",
@@ -309,10 +349,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inside", choices=("backend", "checker"))
     parser.add_argument("--expected-head")
+    parser.add_argument("--container-owner")
+    parser.add_argument("--cleanup-owner")
     parser.add_argument("--backend-image")
     parser.add_argument("--checker-image")
     parser.add_argument("--evidence", type=Path)
     args = parser.parse_args()
+    if args.cleanup_owner:
+        cleanup_containers(args.cleanup_owner)
+        return
     if args.inside:
         print(
             json.dumps(
@@ -320,6 +365,7 @@ def main() -> None:
             )
         )
         return
+    owner_label(args.container_owner or "")
     root = Path(__file__).resolve().parents[1]
     head = checked(["git", "rev-parse", "HEAD"]).decode().strip()
     require(head == args.expected_head, "proof checkout differs from requested head")
@@ -329,8 +375,13 @@ def main() -> None:
     loader = file_hash(root / "docker/backend/release-entrypoint.sh")
     backend_id = image_metadata(args.backend_image, "backend")
     checker_id = image_metadata(args.checker_image, "checker")
-    verify_backend(inspect_image(backend_id, "backend"), inventory, packages, loader)
-    checker = inspect_image(checker_id, "checker")
+    verify_backend(
+        inspect_image(backend_id, "backend", args.container_owner),
+        inventory,
+        packages,
+        loader,
+    )
+    checker = inspect_image(checker_id, "checker", args.container_owner)
     verify_checker(checker)
     require(
         checked(["git", "rev-parse", "HEAD"]).decode().strip() == head,
