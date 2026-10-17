@@ -58,7 +58,7 @@ filters, and is the template this change follows).
   Finance grant into the decision digest: one kernel line unpacks it (the
   kernel shrinks by two lines and its frozen-debt ledger entry is
   regenerated); every other read family records the resource it was given.
-  Migration `0052_project_reads` extends the closed audit action/permission
+  Migration `0053_project_reads` extends the closed audit action/permission
   vocabulary (the `0050_contributor_reads` precedent) and adds one read index,
   `ix_selected_pre_submit_runs_project_queued` on `selected_pre_submit_runs
   (project_id, queued_at DESC, id DESC)`, mirrored on the ORM model, which the
@@ -295,7 +295,7 @@ documentation tracks at `b4b34a39a`.
 ## Reconciliation
 
 - Current-source reconciliation: stacked on PILOT-READ-2 (#577). The audit
-  migration is `0052_project_reads` after `0051_operational_read_audit` (#589); the
+  migration is `0053_project_reads` after `0052_artifact_provider_proof` (#592); the
   public schema fingerprint (`EXPECTED_PUBLIC_SCHEMA_SHA256`) is recomputed
   after the migration, including the new index, runs on PostgreSQL 16.
 - Next usable boundary: with this change the PILOT read-API issue's reads
