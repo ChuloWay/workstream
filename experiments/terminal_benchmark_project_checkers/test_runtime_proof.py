@@ -402,6 +402,56 @@ class DockerWrapperSourceTests(unittest.TestCase):
         self.assertEqual(result.returncode, 70)
         self.assertFalse((self.raw / "launches.ndjson").exists())
 
+    def test_checker_start_forwards_request_stdin_into_dind(self) -> None:
+        capture = self.root / "checker-request.json"
+        self.fake_docker.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            "[[ $# -eq 8 && $1 == exec && $2 == -i "
+            "&& $3 == ws-pilot00-test-dind && $4 == docker "
+            "&& $5 == start && $6 == -a && $7 == -i "
+            "&& $8 == ws-checker-test ]]\n"
+            'cat > "${WS493_TEST_STDIN_CAPTURE:?}"\n',
+            encoding="utf-8",
+        )
+        request = '{"schema_version":"external_checker_request.v1"}'
+        environment = {
+            **os.environ,
+            "WS493_REAL_DOCKER": str(self.fake_docker),
+            "WS493_DIND_NAME": "ws-pilot00-test-dind",
+            "WS493_RAW_DIR": str(self.raw),
+            "WS493_WRAPPER_WORK_DIR": str(self.work),
+            "WS493_SERVICE_PID_FILE": str(self.work / "service.pid"),
+            "WS493_SERVICE_BINARY": str(self.work / "service"),
+            "WS493_BARRIER_ENABLE": str(self.work / "barrier.enable"),
+            "WS493_BARRIER_READY": str(self.work / "barrier.ready"),
+            "WS493_BARRIER_RELEASE": str(self.work / "barrier.release"),
+            "WS493_BARRIER_TOKEN": "token",
+            "WS493_SANDBOX_USER": "65532:65532",
+            "WS493_ART_ROOT": str(self.art),
+            "WS493_CACHE_ROOT": str(self.cache),
+            "WS493_TEST_STDIN_CAPTURE": str(capture),
+        }
+
+        result = subprocess.run(
+            [
+                str(Path(__file__).with_name("docker-wrapper.sh")),
+                "start",
+                "-a",
+                "-i",
+                "ws-checker-test",
+            ],
+            input=request,
+            env=environment,
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(capture.read_text(), request)
+
 
 if __name__ == "__main__":
     unittest.main()

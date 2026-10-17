@@ -61,7 +61,13 @@ PY
 }
 
 append_json "${RAW_DIR}/argv.ndjson" "$@" || exit 70
-"${REAL_DOCKER}" exec "${DIND_NAME}" docker "$@"
+if [[ "$#" -eq 4 && "$1" == start && "$2" == -a && "$3" == -i ]]; then
+  # The service writes the checker request to this process. Keep stdin open
+  # across the outer DinD exec so the inner `docker start -i` receives it.
+  "${REAL_DOCKER}" exec -i "${DIND_NAME}" docker "$@"
+else
+  "${REAL_DOCKER}" exec "${DIND_NAME}" docker "$@"
+fi
 status=$?
 append_result "${status}" "$@" || exit 70
 
