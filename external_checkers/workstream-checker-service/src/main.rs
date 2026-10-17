@@ -3188,8 +3188,10 @@ exit 2
         assert!(verified.runtime.is_none());
         config.terminal_benchmark = Some(TerminalBenchmarkProfile::authorization_fixture(&request));
         assert_eq!(
-            verify_grant(&config, &request, &conventional_reference).unwrap_err(),
-            "grant runtime phase differs"
+            verify_grant(&config, &request, &conventional_reference)
+                .err()
+                .as_deref(),
+            Some("grant runtime phase differs")
         );
 
         let mut zero_allowance_manifest = manifest.clone();
@@ -3216,8 +3218,10 @@ exit 2
         };
         config.terminal_benchmark = None;
         assert_eq!(
-            verify_grant(&config, &request, &zero_reference).unwrap_err(),
-            "grant runtime phase differs"
+            verify_grant(&config, &request, &zero_reference)
+                .err()
+                .as_deref(),
+            Some("grant runtime phase differs")
         );
         config.terminal_benchmark = Some(TerminalBenchmarkProfile::authorization_fixture(&request));
         let verified = verify_grant(&config, &request, &zero_reference).unwrap();
