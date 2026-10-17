@@ -212,8 +212,8 @@ authorized cause under either mode, with no failure economics or human Review.
 04F4 adds a separate hidden Operator retry for known terminal infrastructure failure; it creates no Review, acceptance, contribution or award. Selected production request/completion composition and supported false-guide activation are implemented. A known pre-effect non-live REV refusal returns bounded OUTBOX retry after rollback; exhaustion dead-letters without automatic reopen. A setup-fault hold is future safety work because no current selected production result emits `task_setup_blocked`. Human review/revision, conditional fulfillment, operations and
 release proof remain later v0.1 work.
 
-The [independent MCP package](../mcp_server/README.md) implements nine self-service
-and administrative read tools through WS-MCP-002-03. The
+The [independent MCP package](../mcp_server/README.md) implements eleven self-service,
+administrative read and grant-mutation tools through WS-MCP-002-04. The
 [Go CLI](../cli/README.md) provides caller-profile and exact-project authorization
 reads plus human self-profile editing, exact-project inspection and manager
 task queue/detail reads, contributor ready-work/instruction reads and public
@@ -452,9 +452,10 @@ cannot be reused as post-submission review-gate evidence. See the
   caller isolation. Independent packaging and the three bounded self-service
   tools are delivered through WS-MCP-002-02: profile read, profile update and
   exact-project authorization context. WS-MCP-002-03 adds six administrative
-  reads for permission/role definitions, grants and actor/identity projections.
-  Eighteen proposed tools remain; WS-MCP-002-04 administrative grant mutations
-  are next. This remains a custom
+  reads for permission/role definitions, grants and actor/identity projections;
+  WS-MCP-002-04 adds issue/revoke grant mutations through current Workstream authority.
+  Sixteen proposed tools remain; WS-MCP-002-05 actor and identity-link lifecycle
+  is next. This remains a custom
   authentication adapter, not a public deployment or a 27-tool release.
   The [CLI foundation](../.commitrail/initiatives/WS-CLI-001/WS-CLI-001-01.md)
   provides `whoami` and `project access PROJECT_ID` through those public REST
