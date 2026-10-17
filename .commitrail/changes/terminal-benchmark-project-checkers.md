@@ -211,15 +211,19 @@ and registry
 It records the complete linux/amd64 child manifests, media types, byte counts
 and config IDs before the networkless phase.
 
-Preparation builds the checker image, warms and canonically inventories the
-approved CPython cache, loads exact images into the owned DIND daemon, and
-publishes them to the pinned registry on that daemon's loopback. The exact Kaniko
-child, approved CPython base and registry receive run-owned transfer tags only
-for save/load. The Kaniko and CPython loopback-registry pushes must reproduce
-their byte-identical verified upstream child manifests and digests or preparation
-fails; the pinned registry runs from its transferred tag, and cleanup removes and
-positively queries every transfer tag. The DIND has no external interface during
-proof execution, registers the verified gVisor binary
+Preparation builds the checker image, loads exact images into the owned DIND
+daemon, and publishes the builder, approved base and checker to the pinned
+registry on that daemon's loopback. It then warms and canonically inventories the
+approved CPython cache from that exact loopback base without a second external
+registry fetch. The exact Kaniko child, approved CPython base and registry receive
+run-owned transfer tags only for save/load. The Kaniko and CPython loopback
+pushes must reproduce their byte-identical verified upstream child manifests and
+digests or preparation fails; the pinned registry runs from its transferred tag,
+and cleanup removes and positively queries every transfer tag. The trusted cache
+warmer alone uses the DIND host network to reach that fixed plain-HTTP loopback
+registry with 1 CPU, 1 GiB, 128 pids, no added capability and no privilege
+escalation; the outer DIND itself has only loopback. The DIND registers the
+verified gVisor binary
 only as the service's fixed `runsc` key, and receives the owned state directory
 at the same absolute path used by the host service. This offline claim applies
 only to DIND and the product containers; the Actions host shell need not change

@@ -162,18 +162,7 @@ prepare_images() {
   docker build --pull=false --tag "ws493-checker:${EXPECTED_HEAD}" \
     --file "${REPOSITORY_ROOT}/external_checkers/workstream-terminal-benchmark-checker/Dockerfile" \
     "${REPOSITORY_ROOT}/external_checkers" >/dev/null
-
-  mkdir -p "${CACHE_ROOT}"
-  docker run --rm \
-    --name "${PROOF_PREFIX}-cache-warmer" \
-    --label "org.workstream.ws493.run=${RUN_ID}" \
-    --mount "type=bind,src=${CACHE_ROOT},dst=/cache" \
-    --entrypoint /kaniko/warmer \
-    "${kaniko_reference}" \
-    --cache-dir=/cache --image="${BASE_PLATFORM_IMAGE}"
-  chown -R "${OWNER_UID}:${DOCKER_GID}" "${CACHE_ROOT}"
-  find "${CACHE_ROOT}" -type d -exec chmod 0555 {} +
-  find "${CACHE_ROOT}" -type f -exec chmod 0444 {} +
+  printf 'ws493_prepare=outer_images_ready\n'
 
   docker tag "${kaniko_reference}" "${kaniko_transfer}"
   docker tag "${BASE_PLATFORM_IMAGE}" "${base_transfer}"
@@ -185,6 +174,7 @@ prepare_images() {
   inner_docker image inspect "${kaniko_transfer}" >/dev/null
   inner_docker image inspect "${base_transfer}" >/dev/null
   inner_docker image inspect "${registry_transfer}" >/dev/null
+  printf 'ws493_prepare=inner_images_loaded\n'
 
   inner_docker run -d --name "${PROOF_PREFIX}-registry" \
     --label "org.workstream.ws493.run=${RUN_ID}" --network host \
@@ -208,6 +198,8 @@ prepare_images() {
   "${REAL_DOCKER}" exec "${DIND_NAME}" wget -qO "${work}/builder-manifest.json" \
     --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
     "http://127.0.0.1:5000/v2/workstream/builder/manifests/${builder_digest}"
+  python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
+    "${work}/builder-manifest.json" "${builder_digest}" "${builder_repository}" >"${work}/builder-fact.json"
   local base_repository=127.0.0.1:5000/workstream/base
   local base_tag="${base_repository}:${EXPECTED_HEAD}"
   inner_docker tag "${base_transfer}" "${base_tag}"
@@ -220,6 +212,20 @@ prepare_images() {
   "${REAL_DOCKER}" exec "${DIND_NAME}" wget -qO "${work}/base-manifest.json" \
     --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
     "http://127.0.0.1:5000/v2/workstream/base/manifests/${base_digest}"
+  python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
+    "${work}/base-manifest.json" "${base_digest}" "${base_repository}" >"${work}/base-fact.json"
+  mkdir -p "${CACHE_ROOT}"
+  inner_docker run --rm --pull=never --name "${PROOF_PREFIX}-cache-warmer" \
+    --label "org.workstream.ws493.run=${RUN_ID}" --network host --user 0:0 \
+    --cpus 1 --memory 1g --pids-limit 128 \
+    --cap-drop ALL --security-opt no-new-privileges \
+    --mount "type=bind,src=${CACHE_ROOT},dst=/cache" \
+    --entrypoint /kaniko/warmer "${builder_reference}" \
+    --cache-dir=/cache --image="${base_reference}" \
+    --insecure-registry=127.0.0.1:5000
+  chown -R "${OWNER_UID}:${DOCKER_GID}" "${CACHE_ROOT}"
+  find "${CACHE_ROOT}" -type d -exec chmod 0555 {} +
+  find "${CACHE_ROOT}" -type f -exec chmod 0444 {} +
   local checker_repository=127.0.0.1:5000/workstream/checker
   local checker_tag="${checker_repository}:${EXPECTED_HEAD}"
   inner_docker tag "ws493-checker:${EXPECTED_HEAD}" "${checker_tag}"
@@ -231,11 +237,8 @@ prepare_images() {
   "${REAL_DOCKER}" exec "${DIND_NAME}" wget -qO "${work}/checker-manifest.json" \
     --header 'Accept: application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json' \
     "http://127.0.0.1:5000/v2/workstream/checker/manifests/${checker_digest}"
+  printf 'ws493_prepare=loopback_images_and_cache_ready\n'
 
-  python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
-    "${work}/builder-manifest.json" "${builder_digest}" "${builder_repository}" >"${work}/builder-fact.json"
-  python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
-    "${work}/base-manifest.json" "${base_digest}" "${base_repository}" >"${work}/base-fact.json"
   python3 "${SCRIPT_DIR}/image_facts.py" manifest-fact \
     "${work}/checker-manifest.json" "${checker_digest}" "${checker_repository}" >"${work}/checker-fact.json"
   python3 - "${work}" "${RAW_DIR}/image-facts.json" <<'PY'

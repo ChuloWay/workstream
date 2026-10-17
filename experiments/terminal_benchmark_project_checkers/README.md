@@ -16,8 +16,10 @@ the unchanged starter with exit 1, and pass three fresh reference containers
 with stable observations.
 
 Preparation is the only phase that uses external networking. DIND and all
-product sandboxes are externally networkless during execution. Builder and
-oracle continuation containers use `--pull=never --network none`; every
+product sandboxes are externally networkless during execution. The trusted
+cache warmer uses DIND's host network only to read the fixed loopback registry;
+the outer DIND has no external interface. Builder and oracle continuation
+containers use `--pull=never --network none`; every
 product container receives no Docker socket and is inspected for the fixed
 runtime, user, capabilities, root mode and mounts. The host shell makes no
 offline claim.
@@ -26,8 +28,8 @@ The workflow also proves the production 384 MiB writable-layer option on the
 owned XFS backing store: an allocated and fsynced 320 MiB write succeeds and an
 allocated 400 MiB write fails. It stages only the fixed nonsecret evidence
 allowlist through no-follow file descriptors. Cleanup removes the exact DIND
-and checker image, unmounts XFS, detaches the loop device, deletes raw state,
-and adds a verified cleanup receipt before upload.
+and run-owned transfer image aliases, unmounts XFS, detaches the loop device,
+deletes raw state, and adds a verified cleanup receipt before upload.
 
 The evidence, launch-source and matrix-reducer tests require no Docker
 resources:
