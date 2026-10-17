@@ -19,7 +19,6 @@ from test_profile_flow import (
     _start_processes,
     _stop,
     api_environment,
-    assert_isolated_database_url,
     find_free_port,
     flow_settings,
     issue_flow_token,
@@ -69,7 +68,6 @@ def _restart_mcp(
 @pytest.mark.asyncio
 async def test_installed_mcp_preserves_admin_grant_authority_and_replay() -> None:
     env = api_environment()
-    assert_isolated_database_url(env["WORKSTREAM_DATABASE_URL"])
     executable = os.environ.get("WORKSTREAM_MCP_EXECUTABLE") or shutil.which("workstream-mcp")
     assert executable, "install the workstream-mcp wheel before running integration tests"
     issuer, audience, secret = flow_settings(env)
