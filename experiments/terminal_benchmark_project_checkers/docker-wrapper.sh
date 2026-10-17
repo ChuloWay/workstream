@@ -140,6 +140,13 @@ art_root = Path(sys.argv[4])
 cache_root = Path(sys.argv[5])
 source_paths = {destination: Path(str(source)) for destination, source in sources.items()}
 source_identity = {}
+grant_id = labels.get("workstream.grant-id") if terminal_owned else None
+grant_root = (
+    art_root / "workspaces" / grant_id
+    if isinstance(grant_id, str)
+    and re.fullmatch(r"extract_[0-9a-f]{32}", grant_id) is not None
+    else None
+)
 source_valid = (
     canonical(art_root)
     and canonical(cache_root)
@@ -163,24 +170,20 @@ if kind == "checker" and source_valid:
     )
     source_identity = {"/work/input": "art_workspace"}
 elif terminal_owned and source_valid:
-    grant_id = labels.get("workstream.grant-id")
-    source_valid = (
-        isinstance(grant_id, str)
-        and re.fullmatch(r"extract_[0-9a-f]{32}", grant_id) is not None
-    )
-    grant_root = art_root / "workspaces" / str(grant_id)
-    expected_sources = {
-        "builder": {
-            "/cache": cache_root,
-            "/out/candidate.tar": grant_root / "runtime" / "candidate.tar",
-            "/project": grant_root / "runtime" / "build-context",
-        },
-        "candidate": {"/tests": grant_root / "workspace" / "tests"},
-        "reference": {
-            "/tests": grant_root / "workspace" / "tests",
-            "/workspace/program.py": grant_root / "workspace" / "solution" / "program.py",
-        },
-    }
+    expected_sources = None
+    if grant_root is not None:
+        expected_sources = {
+            "builder": {
+                "/cache": cache_root,
+                "/out/candidate.tar": grant_root / "runtime" / "candidate.tar",
+                "/project": grant_root / "runtime" / "build-context",
+            },
+            "candidate": {"/tests": grant_root / "workspace" / "tests"},
+            "reference": {
+                "/tests": grant_root / "workspace" / "tests",
+                "/workspace/program.py": grant_root / "workspace" / "solution" / "program.py",
+            },
+        }
     identities = {
         "builder": {
             "/cache": "sealed_cache",
@@ -193,7 +196,7 @@ elif terminal_owned and source_valid:
             "/workspace/program.py": "art_workspace_reference_solution",
         },
     }
-    source_valid = source_valid and source_paths == expected_sources.get(kind)
+    source_valid = expected_sources is not None and source_paths == expected_sources.get(kind)
     source_identity = identities.get(kind, {})
 else:
     source_valid = False
@@ -214,13 +217,32 @@ checks = {
     ),
 }
 if kind == "builder":
+    cap_add = sorted(host.get("CapAdd") or [])
     checks.update({
         "user": config.get("User") == "0:0",
-        "cap_add": sorted(host.get("CapAdd") or [])
-        == ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"],
+        "cap_add": cap_add == ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"],
+        "cap_add_count": len(cap_add) == 4,
+        "cap_chown": "CHOWN" in cap_add,
+        "cap_dac_override": "DAC_OVERRIDE" in cap_add,
+        "cap_fowner": "FOWNER" in cap_add,
+        "cap_sys_chroot": "SYS_CHROOT" in cap_add,
         "destinations": destinations == ["/cache", "/out/candidate.tar", "/project"],
         "read_write": read_write
         == {"/cache": False, "/out/candidate.tar": True, "/project": False},
+        "mount_count": len(mounts) == 3,
+        "cache_destination": "/cache" in destinations,
+        "candidate_tar_destination": "/out/candidate.tar" in destinations,
+        "project_destination": "/project" in destinations,
+        "cache_source": source_paths.get("/cache") == cache_root,
+        "candidate_tar_source": grant_root is not None
+        and source_paths.get("/out/candidate.tar")
+        == grant_root / "runtime" / "candidate.tar",
+        "project_source": grant_root is not None
+        and source_paths.get("/project")
+        == grant_root / "runtime" / "build-context",
+        "cache_read_only": read_write.get("/cache") is False,
+        "candidate_tar_read_write": read_write.get("/out/candidate.tar") is True,
+        "project_read_only": read_write.get("/project") is False,
         "read_only_root": host.get("ReadonlyRootfs") is False,
         "pids": host.get("PidsLimit") == 128,
         "memory": host.get("Memory") == 536870912,

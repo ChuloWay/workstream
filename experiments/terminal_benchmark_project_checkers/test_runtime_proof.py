@@ -109,8 +109,8 @@ class OciLayoutFactTests(unittest.TestCase):
             )
 
     def test_substituted_referenced_layer_is_rejected_before_transport(self) -> None:
-        layer = self.layout / "blobs" / "sha256" / self.layer_digest.removeprefix(
-            "sha256:"
+        layer = (
+            self.layout / "blobs" / "sha256" / self.layer_digest.removeprefix("sha256:")
         )
         layer.write_bytes(b"x" * len(self.layer_bytes))
         with self.assertRaisesRegex(ValueError, "OCI layout blob digest differs"):
@@ -119,8 +119,8 @@ class OciLayoutFactTests(unittest.TestCase):
             )
 
     def test_symlinked_referenced_blob_is_rejected(self) -> None:
-        layer = self.layout / "blobs" / "sha256" / self.layer_digest.removeprefix(
-            "sha256:"
+        layer = (
+            self.layout / "blobs" / "sha256" / self.layer_digest.removeprefix("sha256:")
         )
         target = (
             self.layout
@@ -145,9 +145,7 @@ class OciLayoutFactTests(unittest.TestCase):
     def test_index_media_type_substitution_is_rejected(self) -> None:
         index_path = self.layout / "index.json"
         index = json.loads(index_path.read_text())
-        index["manifests"][0]["mediaType"] = (
-            "application/vnd.oci.image.index.v1+json"
-        )
+        index["manifests"][0]["mediaType"] = "application/vnd.oci.image.index.v1+json"
         _write_json(index_path, index)
         with self.assertRaisesRegex(ValueError, "manifest media type differs"):
             image_facts.layout_fact(
@@ -319,42 +317,8 @@ class DockerWrapperSourceTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temporary.cleanup()
 
-    def _run(self, source: Path) -> subprocess.CompletedProcess[str]:
-        item = {
-            "Id": "candidate-id",
-            "Name": "/ws-terminal-candidate-abc",
-            "Config": {
-                "Labels": {
-                    "workstream.owner": "terminal-benchmark-checker-service-v1",
-                    "workstream.resource-kind": "candidate",
-                    "workstream.attempt": "abc",
-                    "workstream.grant-id": GRANT_ID,
-                },
-                "User": "65532:65532",
-            },
-            "HostConfig": {
-                "Runtime": "runsc",
-                "NetworkMode": "none",
-                "CapDrop": ["ALL"],
-                "CapAdd": [],
-                "SecurityOpt": ["no-new-privileges"],
-                "ReadonlyRootfs": True,
-                "PidsLimit": 32,
-                "Memory": 536_870_912,
-                "NanoCpus": 1_000_000_000,
-                "Tmpfs": {"/tmp": "rw,noexec,nosuid,nodev,size=16777216"},
-            },
-            "Mounts": [
-                {
-                    "Type": "bind",
-                    "Source": str(source),
-                    "Destination": "/tests",
-                    "RW": False,
-                }
-            ],
-        }
-        _write_json(self.inspect, [item])
-        environment = {
+    def _environment(self) -> dict[str, str]:
+        return {
             **os.environ,
             "WS493_REAL_DOCKER": str(self.fake_docker),
             "WS493_DIND_NAME": "ws-pilot00-test-dind",
@@ -371,18 +335,61 @@ class DockerWrapperSourceTests(unittest.TestCase):
             "WS493_CACHE_ROOT": str(self.cache),
             "WS493_TEST_INSPECT": str(self.inspect),
         }
+
+    def _run_item(
+        self, item: dict[str, object], name: str
+    ) -> subprocess.CompletedProcess[str]:
+        _write_json(self.inspect, [item])
         return subprocess.run(
             [
                 str(Path(__file__).with_name("docker-wrapper.sh")),
                 "create",
                 "--name",
-                "ws-terminal-candidate-abc",
+                name,
             ],
-            env=environment,
+            env=self._environment(),
             text=True,
             capture_output=True,
             timeout=5,
             check=False,
+        )
+
+    def _run(self, source: Path) -> subprocess.CompletedProcess[str]:
+        return self._run_item(
+            {
+                "Id": "candidate-id",
+                "Name": "/ws-terminal-candidate-abc",
+                "Config": {
+                    "Labels": {
+                        "workstream.owner": "terminal-benchmark-checker-service-v1",
+                        "workstream.resource-kind": "candidate",
+                        "workstream.attempt": "abc",
+                        "workstream.grant-id": GRANT_ID,
+                    },
+                    "User": "65532:65532",
+                },
+                "HostConfig": {
+                    "Runtime": "runsc",
+                    "NetworkMode": "none",
+                    "CapDrop": ["ALL"],
+                    "CapAdd": [],
+                    "SecurityOpt": ["no-new-privileges"],
+                    "ReadonlyRootfs": True,
+                    "PidsLimit": 32,
+                    "Memory": 536_870_912,
+                    "NanoCpus": 1_000_000_000,
+                    "Tmpfs": {"/tmp": "rw,noexec,nosuid,nodev,size=16777216"},
+                },
+                "Mounts": [
+                    {
+                        "Type": "bind",
+                        "Source": str(source),
+                        "Destination": "/tests",
+                        "RW": False,
+                    }
+                ],
+            },
+            "ws-terminal-candidate-abc",
         )
 
     def test_exact_art_source_is_recorded_without_raw_path(self) -> None:
@@ -408,6 +415,73 @@ class DockerWrapperSourceTests(unittest.TestCase):
         self.assertEqual(arguments[-1], ["launch_rejection:candidate:source"])
         self.assertNotIn(str(self.root), arguments[-1][0])
 
+    def test_noncanonical_builder_source_is_rejected_with_fixed_labels(self) -> None:
+        grant_root = self.art / "workspaces" / GRANT_ID
+        runtime = grant_root / "runtime"
+        runtime.mkdir(parents=True)
+        (runtime / "candidate.tar").write_bytes(b"")
+        missing_project = runtime / "missing-build-context"
+        item = {
+            "Id": "builder-id",
+            "Name": "/ws-terminal-builder-abc",
+            "Config": {
+                "Labels": {
+                    "workstream.owner": "terminal-benchmark-checker-service-v1",
+                    "workstream.resource-kind": "builder",
+                    "workstream.attempt": "abc",
+                    "workstream.grant-id": GRANT_ID,
+                },
+                "User": "0:0",
+            },
+            "HostConfig": {
+                "Runtime": "runsc",
+                "NetworkMode": "none",
+                "CapDrop": ["ALL"],
+                "CapAdd": ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SYS_CHROOT"],
+                "SecurityOpt": ["no-new-privileges"],
+                "ReadonlyRootfs": False,
+                "PidsLimit": 128,
+                "Memory": 536_870_912,
+                "NanoCpus": 1_000_000_000,
+                "StorageOpt": {"size": "402653184"},
+            },
+            "Mounts": [
+                {
+                    "Type": "bind",
+                    "Source": str(self.cache),
+                    "Destination": "/cache",
+                    "RW": False,
+                },
+                {
+                    "Type": "bind",
+                    "Source": str(runtime / "candidate.tar"),
+                    "Destination": "/out/candidate.tar",
+                    "RW": True,
+                },
+                {
+                    "Type": "bind",
+                    "Source": str(missing_project),
+                    "Destination": "/project",
+                    "RW": False,
+                },
+            ],
+        }
+
+        result = self._run_item(item, "ws-terminal-builder-abc")
+
+        self.assertEqual(result.returncode, 70, result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse((self.raw / "launches.ndjson").exists())
+        arguments = [
+            json.loads(line)["argv"]
+            for line in (self.raw / "argv.ndjson").read_text().splitlines()
+        ]
+        [rejection] = arguments[-1]
+        self.assertTrue(rejection.startswith("launch_rejection:builder:"))
+        self.assertIn("source", rejection.split(":", 2)[2].split(","))
+        self.assertIn("project_source", rejection.split(":", 2)[2].split(","))
+        self.assertNotIn(str(self.root), rejection)
+
     def test_checker_start_forwards_request_stdin_into_dind(self) -> None:
         capture = self.root / "checker-request.json"
         self.fake_docker.write_text(
@@ -421,23 +495,8 @@ class DockerWrapperSourceTests(unittest.TestCase):
             encoding="utf-8",
         )
         request = '{"schema_version":"external_checker_request.v1"}'
-        environment = {
-            **os.environ,
-            "WS493_REAL_DOCKER": str(self.fake_docker),
-            "WS493_DIND_NAME": "ws-pilot00-test-dind",
-            "WS493_RAW_DIR": str(self.raw),
-            "WS493_WRAPPER_WORK_DIR": str(self.work),
-            "WS493_SERVICE_PID_FILE": str(self.work / "service.pid"),
-            "WS493_SERVICE_BINARY": str(self.work / "service"),
-            "WS493_BARRIER_ENABLE": str(self.work / "barrier.enable"),
-            "WS493_BARRIER_READY": str(self.work / "barrier.ready"),
-            "WS493_BARRIER_RELEASE": str(self.work / "barrier.release"),
-            "WS493_BARRIER_TOKEN": "token",
-            "WS493_SANDBOX_USER": "65532:65532",
-            "WS493_ART_ROOT": str(self.art),
-            "WS493_CACHE_ROOT": str(self.cache),
-            "WS493_TEST_STDIN_CAPTURE": str(capture),
-        }
+        environment = self._environment()
+        environment["WS493_TEST_STDIN_CAPTURE"] = str(capture)
 
         result = subprocess.run(
             [
