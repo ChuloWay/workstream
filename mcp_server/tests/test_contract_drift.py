@@ -26,6 +26,17 @@ OPERATIONS = {
     "actor_identity_link_get": ("/api/v1/actors/{actor_profile_id}/identity-links", "get"),
     "admin_grants_issue": ("/api/v1/admin-role-grants", "post"),
     "admin_grants_revoke": ("/api/v1/admin-role-grants/{grant_id}/revoke", "post"),
+    "actor_suspend": ("/api/v1/actors/{actor_profile_id}/suspend", "post"),
+    "actor_reactivate": ("/api/v1/actors/{actor_profile_id}/reactivate", "post"),
+    "actor_deactivate": ("/api/v1/actors/{actor_profile_id}/deactivate", "post"),
+    "identity_link_revoke": (
+        "/api/v1/actor-identity-links/{identity_link_id}/revoke",
+        "post",
+    ),
+    "identity_link_reactivate": (
+        "/api/v1/actor-identity-links/{identity_link_id}/reactivate",
+        "post",
+    ),
 }
 
 

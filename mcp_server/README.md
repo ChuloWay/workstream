@@ -1,6 +1,6 @@
 # Workstream MCP Adapter
 
-An independently installed adapter exposing eleven tools under the caller's authority:
+An independently installed adapter exposing sixteen tools under the caller's authority:
 
 - `workstream_profile_get` calls `GET /api/v1/actors/me`.
 - `workstream_profile_update` calls the unkeyed `PATCH /api/v1/actors/me`.
@@ -17,6 +17,16 @@ An independently installed adapter exposing eleven tools under the caller's auth
 - `workstream_admin_grants_issue` calls keyed `POST /api/v1/admin-role-grants`.
 - `workstream_admin_grants_revoke` calls keyed
   `POST /api/v1/admin-role-grants/{grant_id}/revoke`.
+- `workstream_actor_suspend` calls keyed
+  `POST /api/v1/actors/{actor_profile_id}/suspend`.
+- `workstream_actor_reactivate` calls keyed
+  `POST /api/v1/actors/{actor_profile_id}/reactivate`.
+- `workstream_actor_deactivate` calls keyed
+  `POST /api/v1/actors/{actor_profile_id}/deactivate`.
+- `workstream_identity_link_revoke` calls keyed
+  `POST /api/v1/actor-identity-links/{identity_link_id}/revoke`.
+- `workstream_identity_link_reactivate` calls keyed
+  `POST /api/v1/actor-identity-links/{identity_link_id}/reactivate`.
 
 Each call forwards the caller's bearer to its fixed public Workstream operation.
 There are no MCP resources or prompts. Workstream, not the adapter, owns every
@@ -91,6 +101,12 @@ authority, self-action guards, duplicate/current-state rules and final-administr
 protection. A lost or malformed response after dispatch is reported as uncertain;
 the caller can recover by repeating the same arguments and key.
 
+Actor and identity-link lifecycle mutations use the same typed key and reason
+contract. Each takes exactly one target UUID and a closed reason body. Workstream
+alone enforces caller authority, self and final-administrator guards, current
+state, link admission and terminal actor deactivation. The adapter accepts only
+the exact bounded receipt for the requested UUID and performs no retry.
+
 ## Deployment Boundary
 
 Build from this directory only:
@@ -113,7 +129,7 @@ retries. A mutation transport failure, upstream 5xx response, or unexpected
 success/redirect response is reported as non-retryable uncertain execution.
 Connections may be pooled, but
 caller credentials and results are not shared or cached. Response validation is
-pinned to the eleven selected public contracts in `contracts/`; upstream drift
+pinned to the sixteen selected public contracts in `contracts/`; upstream drift
 must be reviewed, not silently accepted. There is no fallback service or
 backend-private import.
 
@@ -130,10 +146,10 @@ Real API tests require the repository's isolated PostgreSQL runner, controlled
 fixture identities and a separate installed adapter process. Never supply a
 production database or real user token to a test. Integration and container
 commands are recorded in the additive MCP workflow and the
-[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-04.md).
+[current chunk record](../.commitrail/initiatives/WS-MCP-002/WS-MCP-002-05.md).
 Selected schemas are compared with the running backend OpenAPI operations;
 custom admission, lifecycle and exact-project semantics are exercised separately.
 
 Local fixture evidence does not certify the deployed Flow provider, a public
-gateway or all MCP clients. The remaining 16 mapped tools belong to later
+gateway or all MCP clients. The remaining 11 mapped tools belong to later
 bounded changes in the [initiative](../.commitrail/initiatives/WS-MCP-002/OVERVIEW.md).
