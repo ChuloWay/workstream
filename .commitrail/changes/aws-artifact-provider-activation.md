@@ -167,6 +167,23 @@ policy ARNs, bucket-policy digest, nonce, proof-suite version and expiry all
 match. Database constraints/triggers reject mutation, deletion, cross-result
 activation and duplicate semantic ownership.
 
+Runtime proof is the only mode that creates and verifies the common-nonce
+challenge object. Coordination therefore also requires runtime proof to finish
+before readiness and negative-access proof start:
+`runtime.completed_at <= readiness.started_at` and
+`runtime.completed_at <= negative.started_at`. ART checks this before writing
+an activation, and the activation trigger independently rejects direct SQL that
+violates either ordering rule. This keeps known-object denial distinct from the
+missing-key `403` that S3 may return to principals without `ListBucket`.
+
+The fixed command accepts no caller-supplied observation or pass value, and no
+product/API/configuration path can create proof or activation rows. The trusted
+deployment proof process, its database writer credential and database
+administrators are the v0.1 trust root for those rows; v0.1 does not claim
+resistance to a malicious holder of that credential. A separate database role
+or external attestation mechanism would change that trust boundary and is not
+introduced here.
+
 Define a typed `ArtifactProviderActivationGuard` port in the provider-neutral
 artifact interface and inject its ART-owned implementation into the existing
 AWS bootstrap/adapter. The implementation reads PostgreSQL through its own
@@ -217,6 +234,12 @@ conditional content-addressed write, exact head/readback, replay, unconditional
 overwrite denial and missing-key 404. Negative and anonymous proof deny known-
 object read/write/delete. Evidence digests are bounded and contain no raw AWS
 response, object locator beyond the proof challenge, token or credential.
+Each five-minute group intentionally retains one 49-byte challenge in the exact
+production content-addressed namespace so the proof exercises the production
+resource policy and no-expiry lifecycle. These proof objects create no product
+binding or receipt. Hosted operations must account for approximately 105,120
+such objects and 5.15 MB of payload per year; they are not orphan-cleanup or
+retained-data deletion candidates.
 
 Final product custody proof reuses the hosted #555 public journey rather than
 adding a second lifecycle harness. #582 remains incomplete until that run shows
@@ -253,8 +276,9 @@ ContributionRecord or award.
 This is an L1 storage/security/schema change. The main risks are accepting a
 stale or mismatched proof, checking only startup while a process remains live,
 committing success after expiry, credential/provider response leakage, widening
-AWS permissions, and missing a direct-read call path. Crossed expiry and unknown
-write outcomes require real PostgreSQL concurrency tests.
+AWS permissions, accepting a known-object denial before the challenge exists,
+and missing a direct-read call path. Crossed expiry and unknown write outcomes
+require real PostgreSQL concurrency tests.
 
 ## Acceptance criteria
 
@@ -267,7 +291,12 @@ write outcomes require real PostgreSQL concurrency tests.
   covered.
 - [x] Probe and activation rows are immutable, secret-free, namespace/release/
   role/policy/time-bound and cannot be activated from mixed, replayed, expired or
-  caller-authored results.
+  public/product/configuration-authored results. The trusted proof process and
+  database writers remain an explicit v0.1 trust boundary.
+- [ ] Coordination and its database trigger require runtime proof to complete
+  before readiness and negative-access proof start, so a missing-key `403`
+  cannot satisfy known-object denial. Focused service and direct-SQL tests reject
+  both out-of-order variants and retain a valid runtime-first control.
 - [x] Every AWS SDK call requires sufficient PostgreSQL-time TTL; the first
   qualifying activation ID is retained across the operation and that same ID is
   rechecked before every provider-derived terminal fact, including success,
@@ -310,6 +339,9 @@ write outcomes require real PostgreSQL concurrency tests.
 - Human review focus: proof cannot be asserted, every direct AWS call is gated,
   terminal facts recheck the same activation, role permissions remain closed,
   and no #583 deployment ownership or #555 product lifecycle is duplicated.
+  "Proof cannot be asserted" means no public, product, CLI-argument or
+  configuration input can supply a pass; the trusted proof process and database
+  writer boundary above remains explicit.
 
 ## Resolved IAM contract clarification
 
@@ -371,6 +403,7 @@ rebinding route.
 | Offline behavior proof | Focused activation/config/startup/factory pytest batches | Initial candidate: 230 passed and seven failed; the seven repaired cases then passed. At clean source `159003fce`, one exact-head selection covering the original affected set plus native proof transport/CLI passed 278 tests with no failures, errors or skips in 164.39 seconds; lane-catalogue contract 58 passed; all nine moved terminal-test cases pass `--setup-plan` fixture closure | Exact latest-main hosted lane replay remains required; live AWS proof remains a later deployment gate |
 | Review repair proof | Focused exact trust-policy selection; direct-SQL test setup plan; Alembic graph/revision scan; isolated PostgreSQL batches | Closed trust grammar and IAM placement: 14 passed, followed by the three-case issuer/account scope addendum. At clean `2e4a71819`, the combined `0052` schema fingerprint is `0f38f0705b0aae59b40e1d873932c6710c2f56f2e58647f9911ae2f15deaf7e9`; hostile-search-path migration, two-loop guard, direct role/trust/principal SQL denials and put/missing/mismatch crossed-expiry terminal cases passed 8/8 in 292.96 seconds. Canonical repaired `0051` passed its 0049/0050 resume and downgrade-refusal selection 3/3; the stacked exact `91002c941` regression rebuilt `0051`, proved downgrade refusal without mutation and restored `0052` in 121.47 seconds. All isolated database cleanup completed. The graph has one `0052` head through canonical operational-read `0051` and contributor-read `0050`, and all 52 revision IDs fit the 32-character version column | Live AWS proof remains a later deployment gate |
 | CI/test metadata proof | `python -m scripts.test_structure_boundary validate ...`; `pytest -q tests/test_ci_lane_catalogue.py`; AST comparison of the three moved functions; ownership partition generation | Debt transition passes while `test_artifact_admission.py` shrinks from 2,779 to 2,593 lines; 58 lane tests pass; all three moved function ASTs are identical. Latest-main reconciliation retains 529 exact ownership assignments with the existing protected base and adds the three S3 targets on top of the canonical registry/main inventory | Exact latest-main CI-integrity and test-delta replay remain pending |
+| Post-review proof-order repair | Future focused nodes `test_activation_rejects_probes_started_before_runtime_completed` and `test_activation_trigger_rejects_probes_started_before_runtime_completed`, each parameterized for readiness and negative access, plus the existing runtime-first overlapping-group control | Planned: service rejects before activation construction; direct SQL reaches the activation trigger with otherwise-valid rows and is rejected; runtime-first control still activates | Requires implementation and exact-head PostgreSQL execution; no AWS call is needed |
 | Live proof | Three separately identified executors, credential-free coordination, then hosted public guide/Submission drill | Not authorized or run | Requires approved #583 environment and explicit live authorization |
 
 The terminal-custody tests moved together from the oversized admission module;

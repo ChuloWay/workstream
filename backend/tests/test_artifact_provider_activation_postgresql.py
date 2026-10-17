@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -63,15 +64,12 @@ async def _insert_group(
     omit: str | None = None,
     fail: str | None = None,
     settings_by_type: dict[str, Settings] | None = None,
+    started_at_offsets: dict[str, timedelta] | None = None,
 ) -> dict[str, UUID]:
-    principals = {
-        "readiness": settings.artifact_s3_readiness_role_arn,
-        "runtime_immutability": settings.artifact_s3_runtime_role_arn,
-        "negative_access": settings.artifact_s3_negative_role_arn,
-    }
+    probe_types = ("runtime_immutability", "readiness", "negative_access")
     ids: dict[str, UUID] = {}
     async with factory() as session, session.begin():
-        for probe_type, principal in principals.items():
+        for probe_type in probe_types:
             if probe_type == omit:
                 continue
             row_settings = (settings_by_type or {}).get(probe_type, settings)
@@ -82,6 +80,7 @@ async def _insert_group(
             }[probe_type]
             assert principal is not None
             started_at = await artifact_provider_database_time(session)
+            started_at -= (started_at_offsets or {}).get(probe_type, timedelta())
             ids[probe_type] = await record_artifact_provider_probe_result(
                 session,
                 row_settings,
@@ -96,6 +95,48 @@ async def _insert_group(
                 started_at=started_at,
             )
     return ids
+
+
+async def _insert_activation_direct(session, results: dict[str, UUID]) -> UUID:
+    """Insert an otherwise canonical activation without using the ART coordinator."""
+    activation_id = new_record_id()
+    await session.execute(
+        text(
+            """
+            INSERT INTO artifact_provider_activations (
+              id,readiness_result_id,runtime_result_id,negative_result_id,
+              supersedes_activation_id,proof_version,release_id,namespace_fingerprint,
+              aws_partition,aws_account_id,region,runtime_role_arn,
+              runtime_trust_policy_sha256,runtime_policy_arn,readiness_role_arn,
+              readiness_trust_policy_sha256,readiness_policy_arn,negative_role_arn,
+              negative_trust_policy_sha256,bootstrap_principal_arn,bucket_policy_sha256,
+              group_nonce,activated_at,expires_at)
+            SELECT :activation_id,readiness.id,runtime.id,negative.id,NULL,
+              readiness.proof_version,readiness.release_id,readiness.namespace_fingerprint,
+              readiness.aws_partition,readiness.aws_account_id,readiness.region,
+              readiness.runtime_role_arn,readiness.runtime_trust_policy_sha256,
+              readiness.runtime_policy_arn,readiness.readiness_role_arn,
+              readiness.readiness_trust_policy_sha256,readiness.readiness_policy_arn,
+              readiness.negative_role_arn,readiness.negative_trust_policy_sha256,
+              readiness.bootstrap_principal_arn,readiness.bucket_policy_sha256,
+              readiness.group_nonce,clock_timestamp(),
+              least(readiness.expires_at,runtime.expires_at,negative.expires_at)
+            FROM artifact_provider_probe_results readiness,
+                 artifact_provider_probe_results runtime,
+                 artifact_provider_probe_results negative
+            WHERE readiness.id=:readiness_id
+              AND runtime.id=:runtime_id
+              AND negative.id=:negative_id
+            """
+        ),
+        {
+            "activation_id": str(activation_id),
+            "readiness_id": str(results["readiness"]),
+            "runtime_id": str(results["runtime_immutability"]),
+            "negative_id": str(results["negative_access"]),
+        },
+    )
+    return activation_id
 
 
 @pytest.mark.asyncio
@@ -141,6 +182,83 @@ async def test_overlapping_exact_groups_activate_and_latest_is_selected_determin
                 {"id": second_id},
             )
         assert str(predecessor) == str(first_id)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("started_before_runtime", ["readiness", "negative_access"])
+async def test_activation_rejects_probes_started_before_runtime_completed(
+    isolated_database_env: str,
+    tmp_path: Path,
+    started_before_runtime: str,
+) -> None:
+    settings = _settings(tmp_path)
+    namespace = aws_s3_namespace_fingerprint(settings)
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    group_nonce = uuid4()
+    try:
+        await _insert_group(
+            factory,
+            settings,
+            namespace,
+            group_nonce,
+            started_at_offsets={started_before_runtime: timedelta(minutes=1)},
+        )
+        with pytest.raises(
+            ArtifactProviderLiveProofRequiredError,
+            match="runtime challenge was not established first",
+        ):
+            async with factory() as session, session.begin():
+                await coordinate_artifact_provider_activation(
+                    session,
+                    settings,
+                    namespace_fingerprint=namespace,
+                    group_nonce=group_nonce,
+                )
+        async with factory() as session:
+            assert (
+                await session.scalar(text("select count(*) from artifact_provider_activations"))
+                == 0
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("started_before_runtime", ["readiness", "negative_access"])
+async def test_activation_trigger_rejects_probes_started_before_runtime_completed(
+    isolated_database_env: str,
+    tmp_path: Path,
+    started_before_runtime: str,
+) -> None:
+    settings = _settings(tmp_path)
+    namespace = aws_s3_namespace_fingerprint(settings)
+    engine = create_async_engine(isolated_database_env)
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+    try:
+        invalid_results = await _insert_group(
+            factory,
+            settings,
+            namespace,
+            uuid4(),
+            started_at_offsets={started_before_runtime: timedelta(minutes=1)},
+        )
+        with pytest.raises(DBAPIError) as failure:
+            async with factory() as session, session.begin():
+                await _insert_activation_direct(session, invalid_results)
+        assert failure.value.orig.sqlstate == "23514"  # type: ignore[attr-defined]
+
+        valid_results = await _insert_group(factory, settings, namespace, uuid4())
+        async with factory() as session, session.begin():
+            activation_id = await _insert_activation_direct(session, valid_results)
+        async with factory() as session:
+            stored_id = await session.scalar(
+                text("select id from artifact_provider_activations where id=:id"),
+                {"id": str(activation_id)},
+            )
+        assert str(stored_id) == str(activation_id)
     finally:
         await engine.dispose()
 

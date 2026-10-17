@@ -34,12 +34,33 @@ python -m scripts.aws_artifact_provider_proof negative_access --group-nonce <uui
 python -m scripts.aws_artifact_provider_proof coordinate --group-nonce <uuid>
 ```
 
+The coordinator and activation-table trigger both require the runtime result's
+completion time to be no later than the readiness and negative result start
+times. An out-of-order group cannot activate even when all three rows otherwise
+match and report pass. This ensures the later denial calls target the object
+that runtime proof actually retained, rather than relying on a missing-key 403.
+
 Each proof process first binds its STS-observed caller to its configured role,
 performs only that mode's fixed calls, and writes one append-only bounded result
 using PostgreSQL time. Coordination has database access and no AWS transport;
 it accepts exactly one passing result of every type in the common group. Run
 the sequence every five minutes. Results and activations expire 15 minutes from
 their individual starts, so overlapping unexpired groups are expected.
+
+The command accepts no pass value or caller-authored observation, and product,
+API and configuration inputs cannot create these records. The deployed proof
+process, its database writer credential and database administrators are the
+v0.1 trust root for proof and activation rows. Protect that credential as
+deployment authority. v0.1 does not claim resistance to a malicious holder of
+it; a separate database role or external attestation would be a new security
+design, not evidence supplied by this command.
+
+Every new nonce intentionally leaves one immutable 49-byte challenge in the
+production content-addressed namespace. At a five-minute cadence this is
+105,120 objects and 5,150,880 payload bytes per 365-day year, before provider
+metadata and request charges. They create no product binding or receipt, but
+exercise the exact production resource policy and no-expiry lifecycle; capacity
+monitoring must include them, and orphan cleanup must not delete them.
 
 Each independently deployed executor supplies its own selected workload-identity
 method and identity environment; the common settings contract does not imply

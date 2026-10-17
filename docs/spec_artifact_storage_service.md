@@ -729,6 +729,28 @@ namespace, policy digest, nonce, proof version, time window, and unexpired pass
 results. Policy/IAM evaluation of the bootstrap principal is a fourth required
 readiness artifact; bootstrap credentials remain absent.
 
+The runtime result must complete before the readiness and negative results
+start. The coordinator and activation-table trigger both enforce
+`runtime.completed_at <= readiness.started_at` and
+`runtime.completed_at <= negative.started_at`. This makes every known-object
+denial depend on the runtime proof having already retained the common-nonce
+challenge, rather than accepting the 403 that S3 can return for a missing key
+when a principal lacks `ListBucket`.
+
+The proof command accepts no pass value or caller-authored observation, and no
+product/API/configuration input can write proof or activation rows. The trusted
+deployment proof process, its database writer credential and database
+administrators are the v0.1 trust root for those rows. v0.1 does not claim
+resistance to a malicious holder of that credential; a distinct writer role or
+external attestation would require a separately reviewed trust-boundary change.
+
+Each five-minute group retains one immutable 49-byte challenge under the exact
+production content-addressed prefix. These objects create no product binding or
+receipt, but deliberately exercise the production object policy and no-expiry
+lifecycle. At that cadence they add 105,120 objects and 5,150,880 payload bytes
+per 365-day year; hosted capacity monitoring includes them, and orphan cleanup
+does not delete them.
+
 Production startup and every AWS provider I/O load an exact matching unexpired
 activation before calling AWS. v0.1 caps probe/activation validity at 15 minutes
 and schedules all three probes plus coordination every 5 minutes. Expiry or any
