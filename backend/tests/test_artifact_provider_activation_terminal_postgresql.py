@@ -122,6 +122,7 @@ async def _assert_recoverable_verification_after_activation_expiry(
     job_id: UUID,
     replica_id: str,
     prior_replica_state: tuple[object, object, object, object],
+    unrelated_receipt_count: int,
 ) -> None:
     job = await session.get(ArtifactVerificationJob, str(job_id))
     replica = await session.get(ArtifactReplica, replica_id)
@@ -137,8 +138,20 @@ async def _assert_recoverable_verification_after_activation_expiry(
         replica.last_reconciled_at,
     ) == prior_replica_state
     assert (
-        await session.scalar(select(func.count()).select_from(ArtifactVerificationReceipt))
+        await session.scalar(
+            select(func.count())
+            .select_from(ArtifactVerificationReceipt)
+            .where(ArtifactVerificationReceipt.verification_job_id == str(job_id))
+        )
         == 0
+    )
+    assert (
+        await session.scalar(
+            select(func.count())
+            .select_from(ArtifactVerificationReceipt)
+            .where(ArtifactVerificationReceipt.verification_job_id != str(job_id))
+        )
+        == unrelated_receipt_count
     )
 
 async def test_activation_expiry_during_put_terminal_transaction_rolls_back_to_unknown(
@@ -503,6 +516,26 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
                 )
                 job_id = UUID(job.id)
                 replica_id = job.replica_id
+                assert (
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(ArtifactVerificationReceipt)
+                        .where(
+                            ArtifactVerificationReceipt.verification_job_id
+                            == str(job_id)
+                        )
+                    )
+                    == 0
+                )
+                unrelated_receipt_count = await session.scalar(
+                    select(func.count())
+                    .select_from(ArtifactVerificationReceipt)
+                    .where(
+                        ArtifactVerificationReceipt.verification_job_id != str(job_id)
+                    )
+                )
+                assert unrelated_receipt_count is not None
+                assert unrelated_receipt_count > 0
                 await session.rollback()
                 async with session.begin():
                     activation_id = await _insert_soon_expiring_activation(
@@ -540,6 +573,7 @@ async def test_expired_activation_rolls_back_provider_verification_facts(
                     job_id=job_id,
                     replica_id=replica_id,
                     prior_replica_state=prior_replica_state,
+                    unrelated_receipt_count=unrelated_receipt_count,
                 )
     finally:
         await engine.dispose()
