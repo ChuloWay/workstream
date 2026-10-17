@@ -1222,8 +1222,11 @@ The hidden 04A2 structural inspector uses the closed internal failure tokens
 `submission_archive_unsafe_entry`, `submission_archive_encrypted`,
 `submission_archive_collision`, `submission_archive_integrity_failure`, and
 `submission_archive_timeout`.
-They contain no submitted paths or parser details. Their eventual HTTP/API
-mapping remains deferred to the submission-admission route chunk.
+They contain no submitted paths or parser details. The public authorized ZIP
+preparation route maps these typed rejections to its existing non-retryable HTTP
+422 `invalid_request` envelope and returns the exact closed token as `detail`.
+Unexpected parser, programming, and infrastructure failures are not translated
+to contributor-invalid archive responses.
 
 The hidden 04A3 semantic change gate adds the closed internal failure tokens
 `submission_archive_unchanged`, `submission_manifest_unchanged`, and

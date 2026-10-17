@@ -1,0 +1,91 @@
+[
+  {
+    "name": "empty-and-nested-bytes",
+    "steps": [
+      {
+        "input": {
+          "root": "tree"
+        },
+        "expected": {
+          "files": [
+            {
+              "path": "a.txt",
+              "bytes": 0,
+              "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "path": "nested/b.txt",
+              "bytes": 3,
+              "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+            }
+          ]
+        }
+      }
+    ],
+    "files": {
+      "tree/nested/b.txt": "abc",
+      "tree/a.txt": "",
+      "tree/skip.tmp": "ignore"
+    }
+  },
+  {
+    "name": "directory-suffix-is-not-file-suffix",
+    "steps": [
+      {
+        "input": {
+          "root": "tree"
+        },
+        "expected": {
+          "files": [
+            {
+              "path": "keep.tmp/data",
+              "bytes": 3,
+              "sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+            }
+          ]
+        }
+      }
+    ],
+    "files": {
+      "tree/keep.tmp/data": "abc"
+    }
+  },
+  {
+    "name": "all-temporary",
+    "steps": [
+      {
+        "input": {
+          "root": "tree"
+        },
+        "expected": {
+          "files": []
+        }
+      }
+    ],
+    "files": {
+      "tree/skip.tmp": "x"
+    }
+  },
+  {
+    "name": "unicode-bytes",
+    "steps": [
+      {
+        "input": {
+          "root": "tree"
+        },
+        "expected": {
+          "files": [
+            {
+              "path": "café.txt",
+              "bytes": 2,
+              "sha256": "4a99557e4033c3539de2eb65472017cad5f9557f7a0625a09f1c3f6e2ba69c4c"
+            }
+          ]
+        }
+      }
+    ],
+    "files": {
+      "tree/café.txt": "é"
+    }
+  }
+]
